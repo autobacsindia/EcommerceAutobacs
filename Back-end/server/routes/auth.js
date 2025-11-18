@@ -5,6 +5,7 @@ import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateRegister, validateLogin } from "../middleware/validationMiddleware.js";
 import { authRateLimit } from "../middleware/rateLimitMiddleware.js";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
