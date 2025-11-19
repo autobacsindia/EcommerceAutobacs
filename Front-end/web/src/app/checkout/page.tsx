@@ -74,7 +74,7 @@ export default function CheckoutPage() {
       };
 
       const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData);
-      setOrderId(response.data._id);
+      setOrderId(response.order._id);
       await clearCart();
       setCurrentStep('confirmation');
     } catch (err: any) {

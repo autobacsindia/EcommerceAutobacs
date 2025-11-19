@@ -60,7 +60,7 @@ export default function OrderDetailPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}/${orderId}`);
-      setOrder(response.data);
+      setOrder(response.order);
     } catch (err: any) {
       setError(err.message || 'Failed to load order details');
     } finally {

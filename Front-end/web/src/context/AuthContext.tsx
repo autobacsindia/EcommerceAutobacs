@@ -50,15 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Verify token with backend
       const response = await apiClient.get(API_ENDPOINTS.GET_ME);
       
-      if (response.success && response.data) {
-        setUser(response.data);
+      if (response.success && response.user) {
+        setUser(response.user);
         setToken(savedToken);
       } else {
         // Invalid token
         apiClient.clearAuthToken();
       }
     } catch (err: any) {
-      console.error('Auth check failed:', err);
+      // Only log actual errors, not on expected auth failures
+      if (err.message !== 'Unauthorized') {
+        console.error('Auth check failed:', err);
+      }
       apiClient.clearAuthToken();
     } finally {
       setIsLoading(false);
@@ -75,8 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
 
-      if (response.success && response.data) {
-        const { token: authToken, user: userData } = response.data;
+      if (response.success && response.token && response.user) {
+        const { token: authToken, user: userData } = response;
         
         // Store token
         apiClient.setAuthToken(authToken);
@@ -105,8 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
 
-      if (response.success && response.data) {
-        const { token: authToken, user: userData } = response.data;
+      if (response.success && response.token && response.user) {
+        const { token: authToken, user: userData } = response;
         
         // Store token and auto-login
         apiClient.setAuthToken(authToken);

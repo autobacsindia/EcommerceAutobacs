@@ -43,7 +43,7 @@ export default function WishlistPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(API_ENDPOINTS.WISHLIST);
-      setWishlist(response.data || []);
+      setWishlist(response.wishlist || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load wishlist');
     } finally {

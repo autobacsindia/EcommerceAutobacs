@@ -45,7 +45,7 @@ export default function OrdersPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(API_ENDPOINTS.ORDERS);
-      setOrders(response.data || []);
+      setOrders(response.orders || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load orders');
     } finally {

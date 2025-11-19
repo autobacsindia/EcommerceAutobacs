@@ -32,7 +32,7 @@ export default function AdminOrdersPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}/admin/all`);
-      setOrders(response.data || []);
+      setOrders(response.orders || []);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
     } finally {

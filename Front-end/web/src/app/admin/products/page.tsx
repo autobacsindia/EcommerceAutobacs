@@ -27,7 +27,7 @@ export default function AdminProductsPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(API_ENDPOINTS.PRODUCTS);
-      setProducts(response.data.products || []);
+      setProducts(response.products || []);
     } catch (err) {
       console.error('Failed to fetch products:', err);
     } finally {

@@ -60,8 +60,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await apiClient.get(API_ENDPOINTS.CART);
 
-      if (response.success && response.data) {
-        setCart(response.data);
+      if (response.success && response.cart) {
+        setCart(response.cart);
       }
     } catch (err: any) {
       console.error('Failed to load cart:', err);
@@ -81,8 +81,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         quantity,
       });
 
-      if (response.success && response.data) {
-        setCart(response.data);
+      if (response.success && response.cart) {
+        setCart(response.cart);
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to add item to cart';
@@ -100,8 +100,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await apiClient.delete(API_ENDPOINTS.CART_REMOVE(productId));
 
-      if (response.success && response.data) {
-        setCart(response.data);
+      if (response.success && response.cart) {
+        setCart(response.cart);
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to remove item from cart';
@@ -121,8 +121,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         quantity,
       });
 
-      if (response.success && response.data) {
-        setCart(response.data);
+      if (response.success && response.cart) {
+        setCart(response.cart);
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to update cart';

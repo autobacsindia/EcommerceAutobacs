@@ -30,11 +30,11 @@ export default function AdminDashboardPage() {
       setLoading(true);
       // Fetch products count
       const productsRes = await apiClient.get(API_ENDPOINTS.PRODUCTS);
-      const products = productsRes.data.products || [];
+      const products = productsRes.products || [];
       
       // Fetch orders
       const ordersRes = await apiClient.get(`${API_ENDPOINTS.ORDERS}/admin/all`);
-      const orders = ordersRes.data || [];
+      const orders = ordersRes.orders || [];
 
       const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.totalAmount || 0), 0);
       const pendingOrders = orders.filter((order: any) => order.status === 'pending').length;
