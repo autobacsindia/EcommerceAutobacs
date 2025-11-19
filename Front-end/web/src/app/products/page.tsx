@@ -41,9 +41,11 @@ async function getProducts(searchParams: any) {
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const data = await getProducts(searchParams);
+  const resolvedSearchParams = await searchParams;
+  const data = await getProducts(resolvedSearchParams);
+
   const { products = [], pagination = {} } = data;
 
   return (
@@ -89,7 +91,7 @@ export default async function ProductsPage({
                 <select
                   id="sort"
                   className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  defaultValue={searchParams.sort as string || 'createdAt_desc'}
+                 defaultValue={resolvedSearchParams.sort as string || 'createdAt_desc'}
                 >
                   <option value="createdAt_desc">Newest First</option>
                   <option value="price_asc">Price: Low to High</option>
