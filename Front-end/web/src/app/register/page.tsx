@@ -126,6 +126,11 @@ export default function RegisterPage() {
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <p className="text-sm text-red-800">{error}</p>
+              {error.includes('wait') && (
+                <p className="text-sm text-red-700 mt-1">
+                  This is a security measure to prevent abuse. Please try again later.
+                </p>
+              )}
             </div>
           )}
 

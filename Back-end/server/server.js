@@ -23,9 +23,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Apply rate limiting to all routes
-app.use(apiRateLimit);
-
 // Test route
 app.get("/", (req, res) => {
   res.json({ 
@@ -44,14 +41,16 @@ app.get("/", (req, res) => {
   });
 });
 
-// Mount routes after middleware
+// Mount routes with specific middleware
+// Auth routes already have their own stricter rate limiting
 app.use("/auth", authRoutes);
-app.use("/products", productRoutes);
-app.use("/categories", categoryRoutes);
-app.use("/vehicles", vehicleRoutes);
-app.use("/cart", cartRoutes);
-app.use("/wishlist", wishlistRoutes);
-app.use("/orders", orderRoutes);
+// Apply general rate limiting to other routes
+app.use("/products", apiRateLimit, productRoutes);
+app.use("/categories", apiRateLimit, categoryRoutes);
+app.use("/vehicles", apiRateLimit, vehicleRoutes);
+app.use("/cart", apiRateLimit, cartRoutes);
+app.use("/wishlist", apiRateLimit, wishlistRoutes);
+app.use("/orders", apiRateLimit, orderRoutes);
 
 // MongoDB connection
 mongoose.connect(process.env.MONGO_URI)

@@ -89,7 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(response.message || 'Login failed');
       }
     } catch (err: any) {
-      const errorMessage = err.message || 'Login failed. Please try again.';
+      let errorMessage = err.message || 'Login failed. Please try again.';
+      
+      // Provide specific guidance for rate limit errors
+      if (errorMessage.includes('authentication attempts')) {
+        errorMessage = 'Too many attempts. Please wait 15 minutes before trying again.';
+      }
+      
       setError(errorMessage);
       throw err;
     } finally {
@@ -119,7 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(response.message || 'Registration failed');
       }
     } catch (err: any) {
-      const errorMessage = err.message || 'Registration failed. Please try again.';
+      let errorMessage = err.message || 'Registration failed. Please try again.';
+      
+      // Provide specific guidance for rate limit errors
+      if (errorMessage.includes('authentication attempts')) {
+        errorMessage = 'Too many registration attempts. Please wait 15 minutes before trying again.';
+      }
+      
       setError(errorMessage);
       throw err;
     } finally {
