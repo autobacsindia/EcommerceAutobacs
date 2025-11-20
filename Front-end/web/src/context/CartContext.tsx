@@ -40,19 +40,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<Cart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [isMounted, setIsMounted] = useState(false); // Track if component is mounted
 
-  // Load cart when user is authenticated
+  // Set mounted state after initial render
   useEffect(() => {
-    if (isAuthenticated) {
+    setIsMounted(true);
+  }, []);
+
+  // Load cart when user is authenticated and component is mounted
+  useEffect(() => {
+    if (isMounted && isAuthenticated) {
       refreshCart();
-    } else {
+    } else if (isMounted && !isAuthenticated) {
       setCart(null);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isMounted]);
 
   const refreshCart = async () => {
-    if (!isAuthenticated) return;
+    // Don't fetch cart if still loading auth or not authenticated
+    if (authLoading || !isAuthenticated) return;
 
     try {
       setIsLoading(true);

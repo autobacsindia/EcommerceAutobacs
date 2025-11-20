@@ -27,15 +27,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Initialize state consistently for both server and client
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Start with true to prevent UI flickering
   const [error, setError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false); // Track if component is mounted
 
-  // Check authentication status on mount
+  // Set mounted state after initial render
   useEffect(() => {
-    checkAuth();
+    setIsMounted(true);
   }, []);
+
+  // Check authentication status after mount
+  useEffect(() => {
+    if (isMounted) {
+      checkAuth();
+    }
+  }, [isMounted]);
 
   const checkAuth = async () => {
     try {

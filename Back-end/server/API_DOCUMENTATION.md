@@ -193,6 +193,106 @@ Authorization: Bearer {token}
 }
 ```
 
+### Import Products from WordPress (Admin)
+**POST** `/products/import/wordpress`
+
+**Access:** Private/Admin
+
+**Description:** Triggers a manual import of products from WordPress
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "message": "Products imported successfully",
+  "jobId": "import-1234567890-abc123",
+  "summary": {
+    "totalProducts": 150,
+    "imported": 145,
+    "failed": 5,
+    "skipped": 0
+  }
+}
+```
+
+### Get Import Status (Admin)
+**GET** `/products/import/status/:jobId`
+
+**Access:** Private/Admin
+
+**Description:** Gets the status of a specific import job
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "job": {
+    "jobId": "import-1234567890-abc123",
+    "status": "completed",
+    "totalProducts": 150,
+    "processedProducts": 150,
+    "importedProducts": 145,
+    "failedProducts": 5,
+    "skippedProducts": 0,
+    "progress": 100,
+    "startedAt": "2025-11-20T10:00:00.000Z",
+    "completedAt": "2025-11-20T10:05:00.000Z",
+    "initiatedBy": "userId"
+  }
+}
+```
+
+### Schedule Import (Admin)
+**POST** `/products/import/schedule`
+
+**Access:** Private/Admin
+
+**Body:**
+```json
+{
+  "frequency": "daily",
+  "time": "02:00"
+}
+```
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "message": "Import scheduled successfully",
+  "schedule": {
+    "id": "schedule-1234567890-abc123",
+    "frequency": "daily",
+    "time": "02:00",
+    "initiatedBy": "userId",
+    "createdAt": "2025-11-20T10:00:00.000Z",
+    "enabled": true
+  }
+}
+```
+
+### Get Scheduled Imports (Admin)
+**GET** `/products/import/schedule`
+
+**Access:** Private/Admin
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "schedules": [
+    {
+      "id": "schedule-1234567890-abc123",
+      "frequency": "daily",
+      "time": "02:00",
+      "initiatedBy": "userId",
+      "createdAt": "2025-11-20T10:00:00.000Z",
+      "enabled": true
+    }
+  ]
+}
+```
+
 ---
 
 ## Categories

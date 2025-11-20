@@ -2,18 +2,22 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import useIsMounted from '@/lib/hooks/useIsMounted';
 
 export default function SearchSuggestions() {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const isMounted = useIsMounted();
   const router = useRouter();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Handle click outside to close suggestions
   useEffect(() => {
+    if (!isMounted) return; // Don't attach listener until mounted
+
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -24,10 +28,12 @@ export default function SearchSuggestions() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isMounted]);
 
   // Fetch suggestions with debounce
   useEffect(() => {
+    if (!isMounted) return; // Don't fetch until mounted
+
     if (query.length < 2) {
       setSuggestions([]);
       setIsOpen(false);
@@ -63,7 +69,7 @@ export default function SearchSuggestions() {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [query]);
+  }, [query, isMounted]);
 
   const handleSearch = (searchQuery: string = query) => {
     if (searchQuery.trim()) {
@@ -77,6 +83,31 @@ export default function SearchSuggestions() {
     setQuery(suggestion);
     handleSearch(suggestion);
   };
+
+  // Don't render anything until mounted to prevent hydration issues
+  if (!isMounted) {
+    return (
+      <div className="relative w-full max-w-md">
+        <div className="flex">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search products..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            readOnly
+          />
+          <button 
+            className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative w-full max-w-md">

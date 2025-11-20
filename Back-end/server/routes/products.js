@@ -1,6 +1,8 @@
 import express from "express";
 import Product from "../models/Product.js";
 import SearchService from "../services/searchService.js";
+import ProductImportService from "../services/productImportService.js";
+import ScheduledImportService from "../services/scheduledImportService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateProduct } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -167,6 +169,147 @@ router.post("/:id/stock", protect, admin, asyncHandler(async (req, res) => {
     message: 'Stock updated successfully',
     product
   });
+}));
+
+// @route   POST /products/import/wordpress
+// @desc    Import products from WordPress
+// @access  Private/Admin
+router.post("/import/wordpress", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const importService = new ProductImportService();
+    
+    // Generate a unique job ID
+    const jobId = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Start import process
+    const importResult = await importService.importAllProducts(jobId, req.user._id, (progress) => {
+      // In a real implementation, we would emit progress events to the client
+      // For now, we'll just log to console
+      console.log(`Import progress: ${progress.progress}%`);
+    });
+    
+    if (importResult.success) {
+      res.status(200).json({
+        success: true,
+        message: 'Products imported successfully',
+        jobId: importResult.jobId,
+        summary: importResult.summary
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to import products',
+        jobId: importResult.jobId,
+        error: importResult.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to import products',
+      error: error.message
+    });
+  }
+}));
+
+// @route   GET /products/import/status
+// @desc    Get import status
+// @access  Private/Admin
+router.get("/import/status", protect, admin, asyncHandler(async (req, res) => {
+  // In a real implementation, we would track import jobs in a database
+  // For now, we'll return a placeholder response
+  res.json({
+    success: true,
+    status: 'No import in progress',
+    lastImport: null
+  });
+}));
+
+// @route   GET /products/import/status/:jobId
+// @desc    Get specific import job status
+// @access  Private/Admin
+router.get("/import/status/:jobId", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const importJob = await ImportJob.findOne({ jobId: req.params.jobId });
+    
+    if (!importJob) {
+      return res.status(404).json({
+        success: false,
+        message: 'Import job not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      job: importJob
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get import job status',
+      error: error.message
+    });
+  }
+}));
+
+// @route   GET /products/import/schedule
+// @desc    Get all scheduled imports
+// @access  Private/Admin
+router.get("/import/schedule", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const scheduledImportService = new ScheduledImportService();
+    const schedules = scheduledImportService.getScheduledImports();
+    
+    res.json({
+      success: true,
+      schedules
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get scheduled imports',
+      error: error.message
+    });
+  }
+}));
+
+// @route   POST /products/import/schedule
+// @desc    Schedule recurring imports
+// @access  Private/Admin
+router.post("/import/schedule", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const { frequency, time } = req.body;
+    
+    if (!frequency || !time) {
+      return res.status(400).json({
+        success: false,
+        message: 'Frequency and time are required'
+      });
+    }
+    
+    const scheduledImportService = new ScheduledImportService();
+    const result = await scheduledImportService.scheduleImport(frequency, time, req.user._id);
+    
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: 'Import scheduled successfully',
+        schedule: result.schedule
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to schedule import',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to schedule import',
+      error: error.message
+    });
+  }
 }));
 
 export default router;

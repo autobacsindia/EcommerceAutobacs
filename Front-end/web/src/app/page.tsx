@@ -1,7 +1,19 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
+import PageLoader from '@/components/layout/PageLoader';
+import useIsMounted from '@/lib/hooks/useIsMounted';
 
 export default function Home() {
+  const isMounted = useIsMounted();
+
+  // Show skeleton loader until component is mounted to prevent hydration issues
+  if (!isMounted) {
+    return <PageLoader type="home" />;
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       {/* Hero Section */}

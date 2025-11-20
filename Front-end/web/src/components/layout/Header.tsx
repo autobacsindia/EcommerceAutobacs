@@ -7,13 +7,19 @@ import { ShoppingCart, User, Menu, Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { APP_NAME, NAV_LINKS } from '@/lib/constants';
-import SearchSuggestions from './SearchSuggestions';
+import ClientSearchSuggestions from './ClientSearchSuggestions';
+import SkeletonLoader from './SkeletonLoader';
 
 export default function Header() {
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
   const { itemCount } = useCart();
   const router = useRouter();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+
+  // Show skeleton while loading auth state
+  if (authLoading) {
+    return <SkeletonLoader type="header" />;
+  }
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -43,7 +49,7 @@ export default function Header() {
           <div className="flex items-center space-x-4">
             {/* Desktop Search */}
             <div className="hidden md:block w-64">
-              <SearchSuggestions />
+              <ClientSearchSuggestions />
             </div>
 
             {/* Mobile Search Icon */}
@@ -110,7 +116,7 @@ export default function Header() {
         {/* Mobile Search Bar */}
         {showMobileSearch && (
           <div className="md:hidden py-4">
-            <SearchSuggestions />
+            <ClientSearchSuggestions />
           </div>
         )}
       </div>
