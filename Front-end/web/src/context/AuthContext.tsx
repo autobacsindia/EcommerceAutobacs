@@ -33,67 +33,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true); // Start with true to prevent UI flickering
   const [error, setError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false); // Track if component is mounted
-
+  
   // Set mounted state after initial render
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
+  
   // Check authentication status after mount
   useEffect(() => {
     if (isMounted) {
       checkAuth();
     }
   }, [isMounted]);
-
+  
+  // Enhanced checkAuth with better error handling and consistency
   const checkAuth = async () => {
     try {
       setIsLoading(true);
       const savedToken = apiClient.getAuthToken();
       
+      // If no token, ensure consistent state
       if (!savedToken) {
+        setUser(null);
+        setToken(null);
         setIsLoading(false);
         return;
       }
-
+      
       // Verify token with backend
       const response = await apiClient.get(API_ENDPOINTS.GET_ME);
       
       if (response.success && response.user) {
-        setUser(response.user);
+        // Ensure consistent user data structure
+        const userData: User = {
+          _id: response.user._id,
+          name: response.user.name,
+          email: response.user.email,
+          role: response.user.role
+        };
+        
+        setUser(userData);
         setToken(savedToken);
       } else {
-        // Invalid token
+        // Invalid token - ensure consistent cleanup
         apiClient.clearAuthToken();
+        setUser(null);
+        setToken(null);
       }
     } catch (err: any) {
       // Only log actual errors, not on expected auth failures
       if (err.message !== 'Unauthorized') {
         console.error('Auth check failed:', err);
       }
+      // Ensure consistent state on error
       apiClient.clearAuthToken();
+      setUser(null);
+      setToken(null);
     } finally {
       setIsLoading(false);
     }
   };
-
+  
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.post(API_ENDPOINTS.LOGIN, {
         email,
         password,
       });
-
+      
       if (response.success && response.token && response.user) {
         const { token: authToken, user: userData } = response;
         
         // Store token
         apiClient.setAuthToken(authToken);
         setToken(authToken);
-        setUser(userData);
+        setUser({
+          _id: userData._id,
+          name: userData.name,
+          email: userData.email,
+          role: userData.role
+        });
       } else {
         throw new Error(response.message || 'Login failed');
       }
@@ -111,25 +133,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
+  
   const register = async (name: string, email: string, password: string) => {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.post(API_ENDPOINTS.REGISTER, {
         name,
         email,
         password,
       });
-
+      
       if (response.success && response.token && response.user) {
         const { token: authToken, user: userData } = response;
         
         // Store token and auto-login
         apiClient.setAuthToken(authToken);
         setToken(authToken);
-        setUser(userData);
+        setUser({
+          _id: userData._id,
+          name: userData.name,
+          email: userData.email,
+          role: userData.role
+        });
       } else {
         throw new Error(response.message || 'Registration failed');
       }
@@ -147,18 +174,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
+  
   const logout = () => {
     apiClient.clearAuthToken();
     setUser(null);
     setToken(null);
     setError(null);
   };
-
+  
   const clearError = () => {
     setError(null);
   };
-
+  
+  // Ensure consistent value object structure
   const value: AuthContextType = {
     user,
     token,
@@ -171,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth,
     clearError,
   };
-
+  
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

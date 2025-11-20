@@ -42,12 +42,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isMounted, setIsMounted] = useState(false); // Track if component is mounted
-
+  
   // Set mounted state after initial render
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
+  
   // Load cart when user is authenticated and component is mounted
   useEffect(() => {
     if (isMounted && isAuthenticated) {
@@ -56,40 +56,78 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setCart(null);
     }
   }, [isAuthenticated, isMounted]);
-
+  
+  // Enhanced refreshCart with better error handling and consistency
   const refreshCart = async () => {
     // Don't fetch cart if still loading auth or not authenticated
     if (authLoading || !isAuthenticated) return;
-
+    
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.get(API_ENDPOINTS.CART);
-
+      
       if (response.success && response.cart) {
-        setCart(response.cart);
+        // Ensure consistent cart data structure
+        const cartData: Cart = {
+          _id: response.cart._id,
+          items: response.cart.items.map((item: any) => ({
+            product: {
+              _id: item.product._id,
+              name: item.product.name,
+              price: item.product.price,
+              images: item.product.images,
+              stock: item.product.stock
+            },
+            quantity: item.quantity
+          })),
+          total: response.cart.total
+        };
+        
+        setCart(cartData);
+      } else {
+        // Clear cart on invalid response
+        setCart(null);
       }
     } catch (err: any) {
       console.error('Failed to load cart:', err);
       setError(err.message);
+      // Ensure consistent state on error
+      setCart(null);
     } finally {
       setIsLoading(false);
     }
   };
-
+  
   const addToCart = async (productId: string, quantity: number = 1) => {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.post(API_ENDPOINTS.CART_ADD, {
         productId,
         quantity,
       });
-
+      
       if (response.success && response.cart) {
-        setCart(response.cart);
+        // Ensure consistent cart data structure
+        const cartData: Cart = {
+          _id: response.cart._id,
+          items: response.cart.items.map((item: any) => ({
+            product: {
+              _id: item.product._id,
+              name: item.product.name,
+              price: item.product.price,
+              images: item.product.images,
+              stock: item.product.stock
+            },
+            quantity: item.quantity
+          })),
+          total: response.cart.total
+        };
+        
+        setCart(cartData);
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to add item to cart';
@@ -99,16 +137,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
+  
   const removeFromCart = async (productId: string) => {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.delete(API_ENDPOINTS.CART_REMOVE(productId));
-
+      
       if (response.success && response.cart) {
-        setCart(response.cart);
+        // Ensure consistent cart data structure
+        const cartData: Cart = {
+          _id: response.cart._id,
+          items: response.cart.items.map((item: any) => ({
+            product: {
+              _id: item.product._id,
+              name: item.product.name,
+              price: item.product.price,
+              images: item.product.images,
+              stock: item.product.stock
+            },
+            quantity: item.quantity
+          })),
+          total: response.cart.total
+        };
+        
+        setCart(cartData);
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to remove item from cart';
@@ -118,18 +172,34 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
+  
   const updateQuantity = async (productId: string, quantity: number) => {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.put(API_ENDPOINTS.CART_UPDATE(productId), {
         quantity,
       });
-
+      
       if (response.success && response.cart) {
-        setCart(response.cart);
+        // Ensure consistent cart data structure
+        const cartData: Cart = {
+          _id: response.cart._id,
+          items: response.cart.items.map((item: any) => ({
+            product: {
+              _id: item.product._id,
+              name: item.product.name,
+              price: item.product.price,
+              images: item.product.images,
+              stock: item.product.stock
+            },
+            quantity: item.quantity
+          })),
+          total: response.cart.total
+        };
+        
+        setCart(cartData);
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to update cart';
@@ -139,14 +209,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
+  
   const clearCart = async () => {
     try {
       setIsLoading(true);
       setError(null);
-
+      
       const response = await apiClient.delete(API_ENDPOINTS.CART_CLEAR);
-
+      
       if (response.success) {
         setCart(null);
       }
@@ -158,9 +228,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-
+  
+  // Calculate item count consistently
   const itemCount = cart?.items?.reduce((count, item) => count + item.quantity, 0) || 0;
-
+  
+  // Ensure consistent value object structure
   const value: CartContextType = {
     cart,
     itemCount,
@@ -172,7 +244,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     clearCart,
     refreshCart,
   };
-
+  
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 

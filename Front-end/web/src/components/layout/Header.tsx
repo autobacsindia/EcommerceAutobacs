@@ -9,6 +9,7 @@ import { useCart } from '@/context/CartContext';
 import { APP_NAME, NAV_LINKS } from '@/lib/constants';
 import ClientSearchSuggestions from './ClientSearchSuggestions';
 import SkeletonLoader from './SkeletonLoader';
+import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 
 export default function Header() {
   const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
@@ -71,45 +72,64 @@ export default function Header() {
             </Link>
 
             {/* User Menu */}
-            <div className="relative">
-              {isAuthenticated ? (
+            <EnvironmentAwareComponent 
+              skeletonType="user"
+              fallback={
                 <div className="flex items-center space-x-2">
-                  <Link
-                    href="/profile"
-                    className="flex items-center space-x-1 text-gray-700 hover:text-blue-600"
-                  >
-                    <User className="h-5 w-5" />
-                    <span className="hidden sm:inline text-sm">{user?.name}</span>
-                  </Link>
-                  <button
-                    onClick={logout}
-                    className="text-sm text-gray-600 hover:text-red-600 ml-2"
-                  >
-                    Logout
-                  </button>
+                  <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
                 </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <Link
-                    href="/login"
-                    className="text-sm text-gray-700 hover:text-blue-600"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    href="/register"
-                    className="text-sm bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                  >
-                    Sign Up
-                  </Link>
-                </div>
-              )}
-            </div>
+              }
+            >
+              <div className="relative">
+                {isAuthenticated ? (
+                  <div className="flex items-center space-x-2">
+                    <Link
+                      href="/profile"
+                      className="flex items-center space-x-1 text-gray-700 hover:text-blue-600"
+                    >
+                      <User className="h-5 w-5" />
+                      <span className="hidden sm:inline text-sm">{user?.name}</span>
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="text-sm text-gray-600 hover:text-red-600 ml-2"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <Link
+                      href="/login"
+                      className="text-sm text-gray-700 hover:text-blue-600"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/register"
+                      className="text-sm bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </EnvironmentAwareComponent>
 
             {/* Mobile Menu Button */}
-            <button className="md:hidden p-2 text-gray-600">
-              <Menu className="h-6 w-6" />
-            </button>
+            <EnvironmentAwareComponent 
+              skeletonType="mobile-menu"
+              fallback={
+                <div className="md:hidden p-2">
+                  <div className="h-6 w-6 bg-gray-200 rounded animate-pulse" />
+                </div>
+              }
+            >
+              <button className="md:hidden p-2 text-gray-600">
+                <Menu className="h-6 w-6" />
+              </button>
+            </EnvironmentAwareComponent>
           </div>
         </div>
 

@@ -1,5 +1,9 @@
 import Link from 'next/link';
 import { APP_NAME, FOOTER_LINKS } from '@/lib/constants';
+import DateTimeDisplay from './DateTimeDisplay';
+
+// Use a constant year to prevent hydration issues
+const CURRENT_YEAR = new Date().getFullYear();
 
 export default function Footer() {
   return (
@@ -13,7 +17,7 @@ export default function Footer() {
               Premium automotive accessories and performance parts for your vehicle.
             </p>
           </div>
-
+          
           {/* Company Links */}
           <div>
             <h4 className="text-white font-semibold mb-4">Company</h4>
@@ -27,7 +31,7 @@ export default function Footer() {
               ))}
             </ul>
           </div>
-
+          
           {/* Support Links */}
           <div>
             <h4 className="text-white font-semibold mb-4">Support</h4>
@@ -41,7 +45,7 @@ export default function Footer() {
               ))}
             </ul>
           </div>
-
+          
           {/* Legal Links */}
           <div>
             <h4 className="text-white font-semibold mb-4">Legal</h4>
@@ -56,9 +60,11 @@ export default function Footer() {
             </ul>
           </div>
         </div>
-
+        
         <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400">
-          <p>&copy; {new Date().getFullYear()} {APP_NAME}. All rights reserved.</p>
+          <p>&copy; {CURRENT_YEAR} {APP_NAME}. All rights reserved.</p>
+          {/* Example of using DateTimeDisplay for dynamic dates if needed */}
+          {/* <p>Last updated: <DateTimeDisplay timestamp={new Date()} /></p> */}
         </div>
       </div>
     </footer>

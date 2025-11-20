@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import useIsMounted from '@/lib/hooks/useIsMounted';
+import { generateDeterministicId } from '@/lib/utils/idGenerator';
+import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 
 export default function SearchSuggestions() {
   const [query, setQuery] = useState('');
@@ -13,6 +15,11 @@ export default function SearchSuggestions() {
   const router = useRouter();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Generate deterministic IDs for list items
+  const suggestionIds = suggestions.map((_, index) => 
+    generateDeterministicId(`suggestion-${index}`)
+  );
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -84,78 +91,83 @@ export default function SearchSuggestions() {
     handleSearch(suggestion);
   };
 
-  // Don't render anything until mounted to prevent hydration issues
-  if (!isMounted) {
-    return (
-      <div className="relative w-full max-w-md">
+  // Use EnvironmentAwareComponent for consistent rendering
+  return (
+    <EnvironmentAwareComponent 
+      skeletonType="search"
+      fallback={
+        <div className="relative w-full max-w-md">
+          <div className="flex">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search products..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              readOnly
+            />
+            <button 
+              className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div ref={containerRef} className="relative w-full max-w-md">
         <div className="flex">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSearch();
+              }
+            }}
+            onFocus={() => query.length >= 2 && suggestions.length > 0 && setIsOpen(true)}
             placeholder="Search products..."
             className="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            readOnly
+            // Use deterministic ID
+            id={generateDeterministicId('search-input')}
           />
           <button 
+            onClick={() => handleSearch()}
             className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors"
+            // Use deterministic ID
+            id={generateDeterministicId('search-button')}
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </button>
         </div>
-      </div>
-    );
-  }
 
-  return (
-    <div ref={containerRef} className="relative w-full max-w-md">
-      <div className="flex">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              handleSearch();
-            }
-          }}
-          onFocus={() => query.length >= 2 && suggestions.length > 0 && setIsOpen(true)}
-          placeholder="Search products..."
-          className="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-        <button 
-          onClick={() => handleSearch()}
-          className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </button>
+        {/* Suggestions dropdown */}
+        {isOpen && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
+            {isLoading ? (
+              <div className="px-4 py-2 text-gray-500">Loading...</div>
+            ) : (
+              <ul className="py-1">
+                {suggestions.map((suggestion, index) => (
+                  <li key={suggestionIds[index]}>
+                    <button
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                    >
+                      {suggestion}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
-
-      {/* Suggestions dropdown */}
-      {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-          {isLoading ? (
-            <div className="px-4 py-2 text-gray-500">Loading...</div>
-          ) : (
-            <ul className="py-1">
-              {suggestions.map((suggestion, index) => (
-                <li key={index}>
-                  <button
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
-                  >
-                    {suggestion}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
+    </EnvironmentAwareComponent>
   );
 }
