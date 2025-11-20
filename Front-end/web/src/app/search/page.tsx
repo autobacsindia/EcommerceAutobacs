@@ -41,10 +41,9 @@ async function getProducts(searchParams: any) {
           queryParams.append('sortBy', 'averageRating');
           queryParams.append('order', 'desc');
           break;
-        case 'createdAt_desc':
+        case 'relevance':
         default:
-          queryParams.append('sortBy', 'createdAt');
-          queryParams.append('order', 'desc');
+          // Default sorting by relevance for search
           break;
       }
     }
@@ -68,14 +67,14 @@ async function getProducts(searchParams: any) {
   }
 }
 
-export default function ProductsPageClient() {
+export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
   
   // Get current sort value from URL parameters
-  const currentSort = searchParams.get('sort') || 'createdAt_desc';
+  const currentSort = searchParams.get('sort') || 'relevance';
 
   // Fetch products when search params change
   useEffect(() => {
@@ -101,7 +100,7 @@ export default function ProductsPageClient() {
     currentParams.delete('sort');
     
     // Add new sort parameter if it's not the default
-    if (sortValue !== 'createdAt_desc') {
+    if (sortValue !== 'relevance') {
       currentParams.set('sort', sortValue);
     }
     
@@ -109,17 +108,22 @@ export default function ProductsPageClient() {
     currentParams.delete('page');
     
     // Update URL which will trigger useEffect
-    router.push(`/products?${currentParams.toString()}`);
+    router.push(`/search?${currentParams.toString()}`);
   };
+
+  // Get search term from URL
+  const searchTerm = searchParams.get('search') || '';
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold mb-2">Our Products</h1>
+          <h1 className="text-4xl font-bold mb-2">Search Results</h1>
           <p className="text-blue-100">
-            Explore our premium collection of automotive accessories and performance parts
+            {searchTerm 
+              ? `Found ${pagination.total || 0} results for "${searchTerm}"` 
+              : 'Search our product catalog'}
           </p>
         </div>
       </div>
@@ -161,7 +165,7 @@ export default function ProductsPageClient() {
                   onChange={handleSortChange}
                   disabled={loading}
                 >
-                  <option value="createdAt_desc">Newest First</option>
+                  <option value="relevance">Relevance</option>
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
                   <option value="name_asc">Name: A to Z</option>
@@ -197,7 +201,7 @@ export default function ProductsPageClient() {
                   href="/products"
                   className="text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  Clear filters
+                  Browse all products
                 </Link>
               </div>
             )}
@@ -208,14 +212,14 @@ export default function ProductsPageClient() {
                 {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => {
                   const currentParams = new URLSearchParams(searchParams.toString());
                   currentParams.set('page', page.toString());
-                  const href = `/products?${currentParams.toString()}`;
+                  const href = `/search?${currentParams.toString()}`;
                   
                   return (
                     <Link
                       key={page}
                       href={href}
                       className={`px-4 py-2 rounded-md ${
-                        page === (pagination.page || 1)
+                        page === (pagination.currentPage || 1)
                           ? 'bg-blue-600 text-white'
                           : 'bg-white text-gray-700 hover:bg-gray-100'
                       }`}

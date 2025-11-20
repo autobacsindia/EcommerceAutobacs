@@ -1,9 +1,80 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 export default function ProductFilters() {
-  const [priceRange, setPriceRange] = useState([0, 100000]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Initialize state from URL parameters
+  const [priceRange, setPriceRange] = useState<[number, number]>(() => {
+    const minPrice = Number(searchParams.get('minPrice')) || 0;
+    const maxPrice = Number(searchParams.get('maxPrice')) || 100000;
+    return [minPrice, maxPrice];
+  });
+  
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    const category = searchParams.get('category');
+    return category ? [category] : [];
+  });
+  
+  const [inStockOnly, setInStockOnly] = useState<boolean>(() => {
+    return searchParams.get('inStock') === 'true';
+  });
+  
+  const [selectedRatings, setSelectedRatings] = useState<number[]>(() => {
+    const rating = searchParams.get('rating');
+    return rating ? [Number(rating)] : [];
+  });
+
+  // Update URL when filters change
+  const applyFilters = () => {
+    const currentParams = new URLSearchParams(searchParams.toString());
+    
+    // Reset to first page when applying filters
+    currentParams.delete('page');
+    
+    // Price range
+    if (priceRange[0] > 0) {
+      currentParams.set('minPrice', priceRange[0].toString());
+    } else {
+      currentParams.delete('minPrice');
+    }
+    
+    if (priceRange[1] < 100000) {
+      currentParams.set('maxPrice', priceRange[1].toString());
+    } else {
+      currentParams.delete('maxPrice');
+    }
+    
+    // In stock only
+    if (inStockOnly) {
+      currentParams.set('inStock', 'true');
+    } else {
+      currentParams.delete('inStock');
+    }
+    
+    // Update URL
+    router.push(`/products?${currentParams.toString()}`);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setPriceRange([0, 100000]);
+    setSelectedCategories([]);
+    setInStockOnly(false);
+    setSelectedRatings([]);
+    
+    const currentParams = new URLSearchParams(searchParams.toString());
+    currentParams.delete('minPrice');
+    currentParams.delete('maxPrice');
+    currentParams.delete('inStock');
+    currentParams.delete('rating');
+    currentParams.delete('page');
+    
+    router.push(`/products?${currentParams.toString()}`);
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
@@ -19,6 +90,14 @@ export default function ProductFilters() {
                 <input
                   type="checkbox"
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={selectedCategories.includes(category)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedCategories([...selectedCategories, category]);
+                    } else {
+                      setSelectedCategories(selectedCategories.filter(c => c !== category));
+                    }
+                  }}
                 />
                 <span className="ml-2 text-sm text-gray-700">{category}</span>
               </label>
@@ -30,7 +109,7 @@ export default function ProductFilters() {
       {/* Price Range */}
       <div className="mb-6">
         <h3 className="font-semibold text-gray-900 mb-3">Price Range</h3>
-        <div className="space-y-2">
+        <div className="space-y-4">
           <input
             type="range"
             min="0"
@@ -40,9 +119,17 @@ export default function ProductFilters() {
             onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
             className="w-full"
           />
-          <div className="flex justify-between text-sm text-gray-600">
-            <span>₹0</span>
-            <span>₹{priceRange[1].toLocaleString()}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-600">₹{priceRange[0].toLocaleString()}</span>
+            <span className="text-sm text-gray-600">₹{priceRange[1].toLocaleString()}</span>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={applyFilters}
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Apply
+            </button>
           </div>
         </div>
       </div>
@@ -54,6 +141,8 @@ export default function ProductFilters() {
           <input
             type="checkbox"
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            checked={inStockOnly}
+            onChange={(e) => setInStockOnly(e.target.checked)}
           />
           <span className="ml-2 text-sm text-gray-700">In Stock Only</span>
         </label>
@@ -68,6 +157,14 @@ export default function ProductFilters() {
               <input
                 type="checkbox"
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                checked={selectedRatings.includes(rating)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedRatings([...selectedRatings, rating]);
+                  } else {
+                    setSelectedRatings(selectedRatings.filter(r => r !== rating));
+                  }
+                }}
               />
               <span className="ml-2 text-sm text-gray-700 flex items-center">
                 {rating}
@@ -82,7 +179,10 @@ export default function ProductFilters() {
       </div>
 
       {/* Clear Filters */}
-      <button className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
+      <button 
+        onClick={clearFilters}
+        className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+      >
         Clear All Filters
       </button>
     </div>

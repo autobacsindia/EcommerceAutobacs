@@ -1,14 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ShoppingCart, User, Menu, Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { APP_NAME, NAV_LINKS } from '@/lib/constants';
+import SearchSuggestions from './SearchSuggestions';
 
 export default function Header() {
   const { isAuthenticated, user, logout } = useAuth();
   const { itemCount } = useCart();
+  const router = useRouter();
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -36,8 +41,16 @@ export default function Header() {
 
           {/* Right Section */}
           <div className="flex items-center space-x-4">
-            {/* Search Icon */}
-            <button className="p-2 text-gray-600 hover:text-blue-600">
+            {/* Desktop Search */}
+            <div className="hidden md:block w-64">
+              <SearchSuggestions />
+            </div>
+
+            {/* Mobile Search Icon */}
+            <button 
+              onClick={() => setShowMobileSearch(!showMobileSearch)}
+              className="md:hidden p-2 text-gray-600 hover:text-blue-600"
+            >
               <Search className="h-5 w-5" />
             </button>
 
@@ -93,6 +106,13 @@ export default function Header() {
             </button>
           </div>
         </div>
+
+        {/* Mobile Search Bar */}
+        {showMobileSearch && (
+          <div className="md:hidden py-4">
+            <SearchSuggestions />
+          </div>
+        )}
       </div>
     </header>
   );

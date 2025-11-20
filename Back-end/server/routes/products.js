@@ -1,5 +1,6 @@
 import express from "express";
 import Product from "../models/Product.js";
+import SearchService from "../services/searchService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateProduct } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -10,60 +11,26 @@ const router = express.Router();
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
 router.get("/", asyncHandler(async (req, res) => {
-  const {
-    page = 1,
-    limit = 12,
-    category,
-    brand,
-    minPrice,
-    maxPrice,
-    search,
-    vehicle,
-    isFeatured,
-    sortBy = 'createdAt',
-    order = 'desc'
-  } = req.query;
-
-  // Build query
-  const query = { isActive: true };
-
-  if (category) query.category = category;
-  if (brand) query.brand = brand;
-  if (minPrice || maxPrice) {
-    query.price = {};
-    if (minPrice) query.price.$gte = Number(minPrice);
-    if (maxPrice) query.price.$lte = Number(maxPrice);
-  }
-  if (vehicle) query.compatibleVehicles = vehicle;
-  if (isFeatured) query.isFeatured = isFeatured === 'true';
-  if (search) {
-    query.$text = { $search: search };
-  }
-
-  // Pagination
-  const skip = (Number(page) - 1) * Number(limit);
-
-  // Sorting
-  const sortOptions = {};
-  sortOptions[sortBy] = order === 'asc' ? 1 : -1;
-
-  // Execute query
-  const products = await Product.find(query)
-    .populate('category', 'name slug')
-    .populate('compatibleVehicles', 'make model year')
-    .sort(sortOptions)
-    .skip(skip)
-    .limit(Number(limit));
-
-  const total = await Product.countDocuments(query);
-
+  const searchResults = await SearchService.searchProducts(req.query);
+  
   res.json({
     success: true,
-    count: products.length,
-    total,
-    pages: Math.ceil(total / Number(limit)),
-    currentPage: Number(page),
-    products
+    count: searchResults.products.length,
+    ...searchResults.pagination,
+    products: searchResults.products
+  });
+}));
+
+// @route   GET /products/suggestions
+// @desc    Get search suggestions
+// @access  Public
+router.get("/suggestions", asyncHandler(async (req, res) => {
+  const { q, limit = 10 } = req.query;
+  const suggestions = await SearchService.getSearchSuggestions(q, parseInt(limit));
+  
+  res.json({
+    success: true,
+    suggestions
   });
 }));
 

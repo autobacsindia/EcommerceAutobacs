@@ -81,9 +81,11 @@ const ProductSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-ProductSchema.index({ name: 'text', description: 'text', tags: 'text' });
+ProductSchema.index({ name: 'text', description: 'text', tags: 'text', brand: 'text' });
 ProductSchema.index({ category: 1, isActive: 1 });
 ProductSchema.index({ price: 1 });
 ProductSchema.index({ brand: 1 });
+ProductSchema.index({ averageRating: -1 });
+ProductSchema.index({ stock: 1 });
 
 export default mongoose.model("Product", ProductSchema);
