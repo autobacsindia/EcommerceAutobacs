@@ -5,9 +5,34 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
+import ProductFetchError from '@/components/products/ProductFetchError';
+import { apiGet } from '@/lib/api';
 
-// Function to fetch products with proper sorting parameters
-async function getProducts(searchParams: any) {
+// Define types for our data
+interface Product {
+  _id: string;
+  name: string;
+  description: string;
+  price: number;
+  // Add other product properties as needed
+}
+
+interface Pagination {
+  total?: number;
+  pages?: number;
+  currentPage?: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+  page?: number;
+}
+
+interface ProductsData {
+  products: Product[];
+  pagination: Pagination;
+}
+
+// Function to fetch products with proper sorting parameters and retry logic
+async function getProducts(searchParams: any): Promise<ProductsData> {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
   
   try {
@@ -52,45 +77,64 @@ async function getProducts(searchParams: any) {
     const queryString = queryParams.toString();
     const url = `${API_URL}/products${queryString ? `?${queryString}` : ''}`;
     
-    const response = await fetch(url, {
-      cache: 'no-store', // Always fetch fresh data
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch products');
-    }
-
-    const data = await response.json();
+    const data = await apiGet(url);
     return data.data || { products: [], pagination: {} };
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    return { products: [], pagination: {} };
+  } catch (error: any) {
+    // Log error with context
+    console.error('Error fetching products:', {
+      error: error.message,
+      searchParams,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Re-throw the error for the component to handle
+    throw error;
   }
 }
 
 export default function ProductsPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState({ products: [], pagination: {} });
+  const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
+
+  // Helper functions to safely access pagination properties
+  const getPaginationTotal = (pagination: Pagination) => {
+    return 'total' in pagination ? pagination.total : undefined;
+  };
+
+  const getPaginationPages = (pagination: Pagination) => {
+    return 'pages' in pagination ? pagination.pages : undefined;
+  };
+
+  const getPaginationPage = (pagination: Pagination) => {
+    return 'page' in pagination ? pagination.page : undefined;
+  };
 
   // Fetch products when search params change
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const resolvedSearchParams = Object.fromEntries(searchParams.entries());
-      const result = await getProducts(resolvedSearchParams);
-      setData(result);
-      setLoading(false);
+      setError(null);
+      try {
+        const resolvedSearchParams = Object.fromEntries(searchParams.entries());
+        const result = await getProducts(resolvedSearchParams);
+        setData(result);
+      } catch (err: any) {
+        setError(err);
+        // Log error to analytics service
+        console.error('Failed to fetch products after all retries:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     
     fetchData();
   }, [searchParams]);
-
-  const { products = [], pagination = {} } = data;
 
   // Handle sort change
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -110,6 +154,12 @@ export default function ProductsPageClient() {
     
     // Update URL which will trigger useEffect
     router.push(`/products?${currentParams.toString()}`);
+  };
+
+  // Handle retry
+  const handleRetry = () => {
+    // Force a refetch by updating the search params (which triggers the useEffect)
+    router.refresh();
   };
 
   return (
@@ -139,10 +189,10 @@ export default function ProductsPageClient() {
               <p className="text-gray-600">
                 {loading ? (
                   'Loading products...'
-                ) : products.length > 0 ? (
+                ) : data.products.length > 0 ? (
                   <>
-                    Showing {products.length} product{products.length !== 1 ? 's' : ''}
-                    {pagination.total && ` of ${pagination.total}`}
+                    Showing {data.products.length} product{data.products.length !== 1 ? 's' : ''}
+                    {getPaginationTotal(data.pagination) && ` of ${getPaginationTotal(data.pagination)}`}
                   </>
                 ) : (
                   'No products found'
@@ -170,6 +220,11 @@ export default function ProductsPageClient() {
               </div>
             </div>
 
+            {/* Error State */}
+            {error && !loading && (
+              <ProductFetchError onRetry={handleRetry} error={error} />
+            )}
+
             {/* Loading state */}
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -188,9 +243,9 @@ export default function ProductsPageClient() {
                   </div>
                 ))}
               </div>
-            ) : products.length > 0 ? (
-              <ProductGrid products={products} />
-            ) : (
+            ) : !error && data.products.length > 0 ? (
+              <ProductGrid products={data.products} />
+            ) : !error ? (
               <div className="text-center py-12">
                 <p className="text-gray-500 text-lg mb-4">No products found matching your criteria</p>
                 <Link
@@ -200,12 +255,12 @@ export default function ProductsPageClient() {
                   Clear filters
                 </Link>
               </div>
-            )}
+            ) : null}
 
             {/* Pagination */}
-            {!loading && pagination.pages > 1 && (
+            {!loading && !error && getPaginationPages(data.pagination) && getPaginationPages(data.pagination)! > 1 && (
               <div className="mt-8 flex justify-center gap-2">
-                {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => {
+                {Array.from({ length: getPaginationPages(data.pagination)! }, (_, i) => i + 1).map((page) => {
                   const currentParams = new URLSearchParams(searchParams.toString());
                   currentParams.set('page', page.toString());
                   const href = `/products?${currentParams.toString()}`;
@@ -215,7 +270,7 @@ export default function ProductsPageClient() {
                       key={page}
                       href={href}
                       className={`px-4 py-2 rounded-md ${
-                        page === (pagination.page || 1)
+                        page === (getPaginationPage(data.pagination) || 1)
                           ? 'bg-blue-600 text-white'
                           : 'bg-white text-gray-700 hover:bg-gray-100'
                       }`}
