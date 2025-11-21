@@ -39,6 +39,5 @@ const VehicleSchema = new mongoose.Schema({
 
 // Compound index for vehicle queries
 VehicleSchema.index({ make: 1, model: 1, year: 1 });
-VehicleSchema.index({ slug: 1 });
 
 export default mongoose.model("Vehicle", VehicleSchema);

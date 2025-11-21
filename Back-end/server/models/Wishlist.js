@@ -23,7 +23,6 @@ const WishlistSchema = new mongoose.Schema({
 });
 
 // Index for user lookup
-WishlistSchema.index({ user: 1 });
 WishlistSchema.index({ 'items.product': 1 });
 
 export default mongoose.model("Wishlist", WishlistSchema);

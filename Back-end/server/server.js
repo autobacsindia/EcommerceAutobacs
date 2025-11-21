@@ -5,13 +5,21 @@ import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import orderRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
-import cartRoutes from "./routes/cart.js";
-import wishlistRoutes from "./routes/wishlist.js";
+import scheduledTasksRoutes from "./routes/scheduledTasks.js";
+import { setCronService } from "./routes/scheduledTasks.js";
 import categoryRoutes from "./routes/categories.js";
 import vehicleRoutes from "./routes/vehicles.js";
-import scheduledTasksRoutes, { setCronService } from "./routes/scheduledTasks.js";
+import cartRoutes from "./routes/cart.js";
+import wishlistRoutes from "./routes/wishlist.js";
+
+// Import database configuration
+import { connectWithRetry } from "./config/db.js";
+
+// Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { apiRateLimit, wishlistRateLimit } from "./middleware/rateLimitMiddleware.js";
+
+// Import cron service
 import CronService from "./services/cronService.js";
 
 dotenv.config();
@@ -65,25 +73,6 @@ const mongooseOptions = {
   family: 4 // Use IPv4, skip trying IPv6
 };
 
-// Connection retry logic
-const connectWithRetry = async (retries = 5, interval = 5000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
-      console.log("✓ MongoDB connected successfully");
-      return;
-    } catch (err) {
-      console.error(`✗ MongoDB connection attempt ${i + 1} failed:`, err.message);
-      if (i === retries - 1) {
-        console.error("✗ MongoDB connection failed after max retries");
-        process.exit(1);
-      }
-      console.log(`Retrying in ${interval / 1000} seconds...`);
-      await new Promise(resolve => setTimeout(resolve, interval));
-    }
-  }
-};
-
 // Connection event listeners
 mongoose.connection.on('connected', () => {
   console.log('✓ Mongoose connected to MongoDB');
@@ -110,7 +99,7 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-// Initial connection
+// Initial connection using the new retry logic
 connectWithRetry();
 
 // Error handling middleware (must be after routes)

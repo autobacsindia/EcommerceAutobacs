@@ -14,11 +14,22 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public url: string
+    public url: string,
+    public category?: string
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+// Enhanced error categorization
+export enum ErrorCategory {
+  NETWORK = 'network',
+  CLIENT = 'client',
+  SERVER = 'server',
+  TIMEOUT = 'timeout',
+  PARSING = 'parsing',
+  AUTH = 'auth'
 }
 
 // Storage key for JWT token
@@ -81,38 +92,95 @@ export class APIClient {
   }
 
   /**
-   * Handle API response
+   * Categorize error based on status code and error type
+   */
+  private categorizeError(status: number, error: any): ErrorCategory {
+    // Network errors (offline, DNS issues, CORS errors)
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return ErrorCategory.NETWORK;
+    }
+    
+    // Authentication errors
+    if (status === 401 || status === 403) {
+      return ErrorCategory.AUTH;
+    }
+    
+    // Client errors (4xx)
+    if (status >= 400 && status < 500) {
+      return ErrorCategory.CLIENT;
+    }
+    
+    // Server errors (5xx)
+    if (status >= 500 && status < 600) {
+      return ErrorCategory.SERVER;
+    }
+    
+    // Timeout errors
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return ErrorCategory.TIMEOUT;
+    }
+    
+    // Parsing errors
+    if (error instanceof SyntaxError) {
+      return ErrorCategory.PARSING;
+    }
+    
+    // Default to network for unknown errors
+    return ErrorCategory.NETWORK;
+  }
+
+  /**
+   * Handle API response with enhanced error categorization
    */
   private async handleResponse(response: Response): Promise<any> {
     const contentType = response.headers.get('content-type');
     const isJson = contentType?.includes('application/json');
-    const data = isJson ? await response.json() : await response.text();
-
-    if (!response.ok) {
-      // Handle rate limit errors
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('retry-after');
-        const resetTime = retryAfter ? Date.now() + (parseInt(retryAfter) * 1000) : Date.now() + 60000; // Default to 1 minute
+    
+    try {
+      const data = isJson ? await response.json() : await response.text();
+      
+      if (!response.ok) {
+        // Handle rate limit errors
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('retry-after');
+          const resetTime = retryAfter ? Date.now() + (parseInt(retryAfter) * 1000) : Date.now() + 60000; // Default to 1 minute
+          
+          // Don't retry rate limit errors
+          const errorMessage = typeof data === 'object' && data.message ? data.message : 'Too many requests, please try again later';
+          throw new ApiError(response.status, errorMessage, response.url, ErrorCategory.CLIENT);
+        }
         
-        // Don't retry rate limit errors
-        const errorMessage = typeof data === 'object' && data.message ? data.message : 'Too many requests, please try again later';
-        throw new ApiError(response.status, errorMessage, response.url);
+        // Handle authentication errors
+        if (response.status === 401) {
+          this.clearAuthToken();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+        }
+        
+        // Extract error message
+        const errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
+        const category = this.categorizeError(response.status, new Error(errorMessage));
+        throw new ApiError(response.status, errorMessage, response.url, category);
       }
       
-      // Handle authentication errors
-      if (response.status === 401) {
-        this.clearAuthToken();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+      return data;
+    } catch (error) {
+      // Handle parsing errors
+      if (error instanceof SyntaxError) {
+        throw new ApiError(0, 'Invalid response format', response.url, ErrorCategory.PARSING);
       }
-
-      // Extract error message
-      const errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
-      throw new Error(errorMessage);
+      
+      // Re-throw ApiError instances
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      
+      // Handle other errors
+      const category = this.categorizeError(response.status, error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      throw new ApiError(response.status, errorMessage, response.url, category);
     }
-
-    return data;
   }
 
   /**

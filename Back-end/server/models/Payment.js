@@ -69,7 +69,6 @@ const PaymentSchema = new mongoose.Schema({
 // Indexes for payment tracking
 PaymentSchema.index({ order: 1 });
 PaymentSchema.index({ user: 1 });
-PaymentSchema.index({ transactionId: 1 });
 PaymentSchema.index({ status: 1 });
 
 export default mongoose.model("Payment", PaymentSchema);

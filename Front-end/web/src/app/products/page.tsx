@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import ProductFetchError from '@/components/products/ProductFetchError';
-import apiClient from '@/lib/api';
+import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 
 // Define types for our data
 interface Product {
@@ -34,63 +34,98 @@ interface ProductsData {
   pagination: Pagination;
 }
 
-// Function to fetch products with proper sorting parameters and retry logic
-async function getProducts(searchParams: any): Promise<ProductsData> {
-  try {
-    // Build query string from search params
-    const queryParams = new URLSearchParams();
-    if (searchParams.category) queryParams.append('category', searchParams.category);
-    if (searchParams.search) queryParams.append('search', searchParams.search);
-    if (searchParams.page) queryParams.append('page', searchParams.page);
-    if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
-    if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
-    if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
-    if (searchParams.rating) queryParams.append('rating', searchParams.rating);
-    
-    // Map frontend sort values to backend parameters
-    if (searchParams.sort) {
-      const sortValue = searchParams.sort;
-      switch (sortValue) {
-        case 'price_asc':
-          queryParams.append('sortBy', 'price');
-          queryParams.append('order', 'asc');
-          break;
-        case 'price_desc':
-          queryParams.append('sortBy', 'price');
-          queryParams.append('order', 'desc');
-          break;
-        case 'name_asc':
-          queryParams.append('sortBy', 'name');
-          queryParams.append('order', 'asc');
-          break;
-        case 'rating_desc':
-          queryParams.append('sortBy', 'averageRating');
-          queryParams.append('order', 'desc');
-          break;
-        case 'createdAt_desc':
-        default:
-          queryParams.append('sortBy', 'createdAt');
-          queryParams.append('order', 'desc');
-          break;
+// Function to fetch products with proper sorting parameters and enhanced retry logic
+async function getProducts(searchParams: any, retries = 3): Promise<ProductsData> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      // Build query string from search params
+      const queryParams = new URLSearchParams();
+      if (searchParams.category) queryParams.append('category', searchParams.category);
+      if (searchParams.search) queryParams.append('search', searchParams.search);
+      if (searchParams.page) queryParams.append('page', searchParams.page);
+      if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
+      if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
+      if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
+      if (searchParams.rating) queryParams.append('rating', searchParams.rating);
+      
+      // Map frontend sort values to backend parameters
+      if (searchParams.sort) {
+        const sortValue = searchParams.sort;
+        switch (sortValue) {
+          case 'price_asc':
+            queryParams.append('sortBy', 'price');
+            queryParams.append('order', 'asc');
+            break;
+          case 'price_desc':
+            queryParams.append('sortBy', 'price');
+            queryParams.append('order', 'desc');
+            break;
+          case 'name_asc':
+            queryParams.append('sortBy', 'name');
+            queryParams.append('order', 'asc');
+            break;
+          case 'rating_desc':
+            queryParams.append('sortBy', 'averageRating');
+            queryParams.append('order', 'desc');
+            break;
+          case 'createdAt_desc':
+          default:
+            queryParams.append('sortBy', 'createdAt');
+            queryParams.append('order', 'desc');
+            break;
+        }
       }
+      
+      const queryString = queryParams.toString();
+      const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
+      
+      const data: any = await apiClient.get(endpoint);
+      return data?.data || { products: [], pagination: {} };
+    } catch (error: any) {
+      lastError = error;
+      
+      // Log error with context
+      console.error(`Error fetching products (attempt ${attempt + 1}/${retries + 1}):`, {
+        error: error.message,
+        status: error.status,
+        category: error.category,
+        searchParams,
+        timestamp: new Date().toISOString()
+      });
+      
+      // If this is the last attempt, re-throw the error
+      if (attempt === retries) {
+        throw error;
+      }
+      
+      // Calculate delay based on error category
+      let delay: number;
+      if (error instanceof ApiError && error.category === ErrorCategory.SERVER) {
+        // Server errors: longer delays
+        delay = Math.pow(2, attempt) * 2000; // 2s, 4s, 8s, etc.
+      } else if (error instanceof ApiError && error.category === ErrorCategory.NETWORK) {
+        // Network errors: standard exponential backoff
+        delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s, etc.
+      } else if (error instanceof ApiError && error.category === ErrorCategory.TIMEOUT) {
+        // Timeout errors: longer delays
+        delay = Math.pow(2, attempt) * 3000; // 3s, 6s, 12s, etc.
+      } else {
+        // Other errors: shorter delays
+        delay = Math.pow(2, attempt) * 500; // 0.5s, 1s, 2s, etc.
+      }
+      
+      // Add some randomization to prevent thundering herd
+      const randomizedDelay = delay * (0.8 + Math.random() * 0.4);
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, randomizedDelay));
     }
-    
-    const queryString = queryParams.toString();
-    const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
-    
-    const data: any = await apiClient.get(endpoint);
-    return data?.data || { products: [], pagination: {} };
-  } catch (error: any) {
-    // Log error with context
-    console.error('Error fetching products:', {
-      error: error.message,
-      searchParams,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Re-throw the error for the component to handle
-    throw error;
   }
+  
+  // This should never be reached, but just in case
+  throw lastError;
 }
 
 export default function ProductsPageClient() {

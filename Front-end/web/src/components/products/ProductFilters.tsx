@@ -3,14 +3,32 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
+// Helper function to parse price values consistently
+const parsePriceValue = (value: string | null, defaultValue: number): number => {
+  if (!value) return defaultValue;
+  const parsed = Number(value);
+  return isNaN(parsed) ? defaultValue : parsed;
+};
+
+// Helper function to format price values consistently
+const formatPriceValue = (value: number): string => {
+  // Use fixed locale to ensure consistent formatting between server and client
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0
+  }).format(value).replace('₹', '₹');
+};
+
 export default function ProductFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Initialize state from URL parameters
+  // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
-    const minPrice = Number(searchParams.get('minPrice')) || 0;
-    const maxPrice = Number(searchParams.get('maxPrice')) || 100000;
+    const minPrice = parsePriceValue(searchParams.get('minPrice'), 0);
+    const maxPrice = parsePriceValue(searchParams.get('maxPrice'), 100000);
     return [minPrice, maxPrice];
   });
   
@@ -25,7 +43,8 @@ export default function ProductFilters() {
   
   const [selectedRatings, setSelectedRatings] = useState<number[]>(() => {
     const rating = searchParams.get('rating');
-    return rating ? [Number(rating)] : [];
+    const parsedRating = rating ? parsePriceValue(rating, 0) : 0;
+    return rating ? [parsedRating] : [];
   });
 
   // Update URL when filters change
@@ -120,8 +139,8 @@ export default function ProductFilters() {
             className="w-full"
           />
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">₹{priceRange[0].toLocaleString()}</span>
-            <span className="text-sm text-gray-600">₹{priceRange[1].toLocaleString()}</span>
+            <span className="text-sm text-gray-600">{formatPriceValue(priceRange[0])}</span>
+            <span className="text-sm text-gray-600">{formatPriceValue(priceRange[1])}</span>
           </div>
           <div className="flex gap-2">
             <button 

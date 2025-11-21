@@ -74,7 +74,6 @@ const ImportJobSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-ImportJobSchema.index({ jobId: 1 });
 ImportJobSchema.index({ status: 1 });
 ImportJobSchema.index({ initiatedBy: 1 });
 ImportJobSchema.index({ createdAt: -1 });

@@ -39,6 +39,5 @@ const CategorySchema = new mongoose.Schema({
 
 // Index for hierarchical queries
 CategorySchema.index({ parent: 1 });
-CategorySchema.index({ slug: 1 });
 
 export default mongoose.model("Category", CategorySchema);

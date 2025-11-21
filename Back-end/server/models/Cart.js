@@ -47,7 +47,4 @@ CartSchema.pre('save', function(next) {
   next();
 });
 
-// Index for user lookup
-CartSchema.index({ user: 1 });
-
 export default mongoose.model("Cart", CartSchema);

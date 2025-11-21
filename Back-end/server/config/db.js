@@ -1,0 +1,75 @@
+import mongoose from "mongoose";
+
+// Mongoose connection options with retry configuration and SSL/TLS enhancements
+const mongooseOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  family: 4, // Use IPv4, skip trying IPv6
+  serverSelectionTimeoutMS: 10000, // Timeout after 10 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  
+  // SSL/TLS specific options to resolve connection error
+  tls: true,
+  tlsInsecure: false,
+  tlsAllowInvalidCertificates: false,
+  tlsAllowInvalidHostnames: false,
+  sslValidate: true,
+  
+  // Enhanced retry configuration
+  retryWrites: true,
+  maxPoolSize: 10,
+  heartbeatFrequencyMS: 10000
+};
+
+// Connection retry logic with exponential backoff
+const connectWithRetry = async (retries = 5, interval = 5000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
+      console.log("✓ MongoDB connected successfully");
+      return mongoose.connection;
+    } catch (err) {
+      console.error(`✗ MongoDB connection attempt ${i + 1} failed:`, err.message);
+      if (i === retries - 1) {
+        console.error("✗ MongoDB connection failed after max retries");
+        throw err;
+      }
+      // Exponential backoff
+      const delay = interval * Math.pow(2, i);
+      console.log(`Retrying in ${delay / 1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
+// Connection event listeners
+mongoose.connection.on('connected', () => {
+  console.log('✓ Mongoose connected to MongoDB');
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠ Mongoose disconnected from MongoDB');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('✗ Mongoose connection error:', err);
+  
+  // Specific handling for SSL/TLS errors
+  if (err.name === 'MongoNetworkError' && err.message.includes('SSL')) {
+    console.error('SSL/TLS connection issue detected. Consider checking:');
+    console.error('- Node.js version compatibility with MongoDB Atlas');
+    console.error('- Network connectivity to MongoDB servers');
+    console.error('- Firewall/proxy settings');
+    console.error('- Certificate validation requirements');
+  }
+});
+
+// Graceful shutdown handling
+process.on('SIGINT', async () => {
+  await mongoose.connection.close();
+  console.log('✓ Mongoose connection closed through app termination');
+  process.exit(0);
+});
+
+// Export connection function
+export { connectWithRetry, mongoose };
