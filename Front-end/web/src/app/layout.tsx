@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { WishlistProvider } from "@/context/WishlistContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -35,11 +36,13 @@ export default function RootLayout({
         <ErrorBoundary>
           <AuthProvider>
             <CartProvider>
-              <div className="flex flex-col min-h-screen">
-                <Header />
-                <main className="flex-1">{children}</main>
-                <Footer />
-              </div>
+              <WishlistProvider>
+                <div className="flex flex-col min-h-screen">
+                  <Header />
+                  <main className="flex-1">{children}</main>
+                  <Footer />
+                </div>
+              </WishlistProvider>
             </CartProvider>
           </AuthProvider>
         </ErrorBoundary>

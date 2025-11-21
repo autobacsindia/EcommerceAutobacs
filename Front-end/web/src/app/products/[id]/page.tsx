@@ -1,12 +1,13 @@
-import { Metadata } from 'next';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
-
-export const metadata: Metadata = {
-  title: 'Product Details | Autobacs India',
-  description: 'View detailed product information',
-};
+import { useAuth } from '@/context/AuthContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useCart } from '@/context/CartContext';
 
 async function getProduct(id: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -28,12 +29,62 @@ async function getProduct(id: string) {
   }
 }
 
-export default async function ProductDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const product = await getProduct(params.id);
+export default function ProductDetailPageClient({ product }: { product: any }) {
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { addToCart } = useCart();
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [cartLoading, setCartLoading] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      setIsWishlisted(isInWishlist(product._id));
+    }
+  }, [product, isInWishlist]);
+
+  const handleWishlistToggle = async () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    if (!product) return;
+
+    setWishlistLoading(true);
+    try {
+      if (isWishlisted) {
+        await removeFromWishlist(product._id);
+      } else {
+        await addToWishlist(product._id);
+      }
+      setIsWishlisted(!isWishlisted);
+    } catch (error: any) {
+      alert(error.message || 'Failed to update wishlist');
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
+
+  const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    if (!product) return;
+
+    setCartLoading(true);
+    try {
+      await addToCart(product._id, 1);
+      alert('Added to cart!');
+    } catch (error: any) {
+      alert(error.message || 'Failed to add to cart');
+    } finally {
+      setCartLoading(false);
+    }
+  };
 
   if (!product) {
     return (
@@ -124,12 +175,24 @@ export default async function ProductDetailPage({
 
               {/* Add to Cart */}
               <div className="flex gap-4">
-                <button className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                <button 
+                  onClick={handleAddToCart}
+                  disabled={cartLoading || product.stock === 0}
+                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
                   <ShoppingCart className="h-5 w-5" />
-                  Add to Cart
+                  {cartLoading ? 'Adding...' : 'Add to Cart'}
                 </button>
-                <button className="p-3 border border-gray-300 rounded-md hover:bg-gray-50">
-                  <Heart className="h-6 w-6 text-gray-600" />
+                <button 
+                  onClick={handleWishlistToggle}
+                  disabled={wishlistLoading}
+                  className={`p-3 border rounded-md transition-colors flex items-center justify-center ${
+                    isWishlisted 
+                      ? 'border-red-500 bg-red-50 text-red-500' 
+                      : 'border-gray-300 hover:bg-gray-50 text-gray-600 hover:text-red-500'
+                  }`}
+                >
+                  <Heart className={`h-6 w-6 ${isWishlisted ? 'fill-current' : ''}`} />
                 </button>
               </div>
             </div>
@@ -139,3 +202,15 @@ export default async function ProductDetailPage({
     </div>
   );
 }
+
+export async function ProductDetailPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const product = await getProduct(params.id);
+
+  return <ProductDetailPageClient product={product} />;
+}
+
+export default ProductDetailPage;

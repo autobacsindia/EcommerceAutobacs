@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import ProductFetchError from '@/components/products/ProductFetchError';
-import { apiGet } from '@/lib/api';
+import apiClient from '@/lib/api';
 
 // Define types for our data
 interface Product {
@@ -14,7 +14,10 @@ interface Product {
   name: string;
   description: string;
   price: number;
-  // Add other product properties as needed
+  images: string[];
+  category: { name: string };
+  rating: number;
+  stock: number;
 }
 
 interface Pagination {
@@ -33,8 +36,6 @@ interface ProductsData {
 
 // Function to fetch products with proper sorting parameters and retry logic
 async function getProducts(searchParams: any): Promise<ProductsData> {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-  
   try {
     // Build query string from search params
     const queryParams = new URLSearchParams();
@@ -75,10 +76,10 @@ async function getProducts(searchParams: any): Promise<ProductsData> {
     }
     
     const queryString = queryParams.toString();
-    const url = `${API_URL}/products${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
     
-    const data = await apiGet(url);
-    return data.data || { products: [], pagination: {} };
+    const data: any = await apiClient.get(endpoint);
+    return data?.data || { products: [], pagination: {} };
   } catch (error: any) {
     // Log error with context
     console.error('Error fetching products:', {

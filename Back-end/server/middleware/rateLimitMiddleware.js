@@ -66,3 +66,10 @@ export const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100
 });
+
+// More permissive rate limit for wishlist routes since they're frequently accessed
+export const wishlistRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // Increase limit for frequent wishlist operations
+  message: 'Too many wishlist requests, please try again later'
+});

@@ -11,7 +11,7 @@ import categoryRoutes from "./routes/categories.js";
 import vehicleRoutes from "./routes/vehicles.js";
 import scheduledTasksRoutes, { setCronService } from "./routes/scheduledTasks.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
-import { apiRateLimit } from "./middleware/rateLimitMiddleware.js";
+import { apiRateLimit, wishlistRateLimit } from "./middleware/rateLimitMiddleware.js";
 import CronService from "./services/cronService.js";
 
 dotenv.config();
@@ -54,7 +54,7 @@ app.use("/products", apiRateLimit, productRoutes);
 app.use("/categories", apiRateLimit, categoryRoutes);
 app.use("/vehicles", apiRateLimit, vehicleRoutes);
 app.use("/cart", apiRateLimit, cartRoutes);
-app.use("/wishlist", apiRateLimit, wishlistRoutes);
+app.use("/wishlist", wishlistRateLimit, wishlistRoutes);
 app.use("/orders", apiRateLimit, orderRoutes);
 app.use("/scheduled-tasks", apiRateLimit, scheduledTasksRoutes);
 

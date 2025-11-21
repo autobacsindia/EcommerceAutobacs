@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, User, Menu, Search } from 'lucide-react';
+import { ShoppingCart, User, Menu, Search, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 import { APP_NAME, NAV_LINKS } from '@/lib/constants';
 import ClientSearchSuggestions from './ClientSearchSuggestions';
 import SkeletonLoader from './SkeletonLoader';
@@ -14,6 +15,7 @@ import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 export default function Header() {
   const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
   const { itemCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const router = useRouter();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
 
@@ -60,6 +62,18 @@ export default function Header() {
             >
               <Search className="h-5 w-5" />
             </button>
+
+            {/* Wishlist */}
+            {isAuthenticated && (
+              <Link href="/wishlist" className="relative p-2 text-gray-600 hover:text-blue-600">
+                <Heart className="h-5 w-5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {/* Cart */}
             <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600">

@@ -4,27 +4,32 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ShoppingCart, Trash2, Heart } from 'lucide-react';
 
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  images?: { url: string }[];
+  stock: number;
+  isActive: boolean;
+  averageRating: number;
+}
+
 interface WishlistItem {
   _id: string;
-  productId: {
-    _id: string;
-    name: string;
-    price: number;
-    images?: string[];
-    stock: number;
-  };
+  product: Product;
+  addedAt: string;
 }
 
 export default function WishlistPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { addToCart } = useCart();
-  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { wishlistItems, loading, removeFromWishlist, fetchWishlist } = useWishlist();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,24 +42,11 @@ export default function WishlistPage() {
     if (isAuthenticated) {
       fetchWishlist();
     }
-  }, [isAuthenticated]);
-
-  const fetchWishlist = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get(API_ENDPOINTS.WISHLIST);
-      setWishlist(response.wishlist || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load wishlist');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [isAuthenticated, fetchWishlist]);
 
   const handleRemoveFromWishlist = async (productId: string) => {
     try {
-      await apiClient.delete(API_ENDPOINTS.WISHLIST_REMOVE(productId));
-      setWishlist(wishlist.filter(item => item.productId._id !== productId));
+      await removeFromWishlist(productId);
     } catch (err: any) {
       alert(err.message || 'Failed to remove item');
     }
@@ -89,7 +81,7 @@ export default function WishlistPage() {
     );
   }
 
-  if (wishlist.length === 0) {
+  if (wishlistItems.length === 0) {
     return (
       <div className="container mx-auto px-4 py-16">
         <div className="text-center">
@@ -109,16 +101,16 @@ export default function WishlistPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">My Wishlist</h1>
+      <h1 className="text-3xl font-bold mb-8">My Wishlist ({wishlistItems.length} items)</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {wishlist.map((item) => (
+        {wishlistItems.map((item: any) => (
           <div key={item._id} className="border rounded-lg p-4 hover:shadow-lg transition">
             <div className="aspect-square bg-gray-100 rounded-lg mb-4 overflow-hidden">
-              {item.productId.images && item.productId.images[0] ? (
+              {item.product?.images && item.product.images[0] ? (
                 <img
-                  src={item.productId.images[0]}
-                  alt={item.productId.name}
+                  src={item.product.images[0].url}
+                  alt={item.product.name}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -128,22 +120,22 @@ export default function WishlistPage() {
               )}
             </div>
 
-            <h3 className="font-semibold text-lg mb-2">{item.productId.name}</h3>
+            <h3 className="font-semibold text-lg mb-2">{item.product?.name || 'Product'}</h3>
             <p className="text-xl font-bold text-blue-600 mb-4">
-              ₹{item.productId.price.toFixed(2)}
+              ₹{item.product?.price ? item.product.price.toFixed(2) : '0.00'}
             </p>
 
             <div className="flex gap-2">
               <button
-                onClick={() => handleAddToCart(item.productId._id)}
-                disabled={item.productId.stock === 0}
+                onClick={() => handleAddToCart(item.product._id)}
+                disabled={item.product?.stock === 0}
                 className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <ShoppingCart className="h-4 w-4" />
-                {item.productId.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                {item.product?.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
               </button>
               <button
-                onClick={() => handleRemoveFromWishlist(item.productId._id)}
+                onClick={() => handleRemoveFromWishlist(item.product._id)}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center"
               >
                 <Trash2 className="h-4 w-4" />
