@@ -52,12 +52,22 @@ const ImportJobSchema = new mongoose.Schema({
   initiatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false // Made optional to support system-initiated jobs
   },
   source: {
     type: String,
-    enum: ['wordpress', 'manual', 'scheduled'],
+    enum: ['wordpress', 'manual', 'scheduled', 'scheduled-failed'],
     default: 'manual'
+  },
+  // New field to track if this is a re-import of failed products
+  isReimport: {
+    type: Boolean,
+    default: false
+  },
+  // Reference to the original job if this is a re-import
+  originalJobId: {
+    type: String,
+    required: false
   }
 }, { 
   timestamps: true 
@@ -68,5 +78,7 @@ ImportJobSchema.index({ jobId: 1 });
 ImportJobSchema.index({ status: 1 });
 ImportJobSchema.index({ initiatedBy: 1 });
 ImportJobSchema.index({ createdAt: -1 });
+ImportJobSchema.index({ source: 1 });
+ImportJobSchema.index({ isReimport: 1 });
 
 export default mongoose.model("ImportJob", ImportJobSchema);

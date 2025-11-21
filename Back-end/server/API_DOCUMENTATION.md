@@ -1,33 +1,86 @@
-# Autobacs India API Documentation
+# Autobacs API Documentation
 
-**Base URL:** `http://localhost:5000`
-
-**Version:** 1.0.0
-
-## Table of Contents
-- [Authentication](#authentication)
-- [Products](#products)
-- [Categories](#categories)
-- [Vehicles](#vehicles)
-- [Cart](#cart)
-- [Wishlist](#wishlist)
-- [Orders](#orders)
-
----
+## Overview
+This document provides documentation for all API endpoints available in the Autobacs e-commerce platform backend.
 
 ## Authentication
+Most endpoints require authentication. Tokens are obtained through the authentication endpoints and should be included in the Authorization header as Bearer tokens.
 
-### Register User
+## API Endpoints
+
+### Authentication
 **POST** `/auth/register`
+**POST** `/auth/login`
+**GET** `/auth/profile`
+**PUT** `/auth/profile`
+**POST** `/auth/logout`
 
+### Products
+**GET** `/products`
+**GET** `/products/:id`
+**POST** `/products`
+**PUT** `/products/:id`
+**DELETE** `/products/:id`
+**GET** `/products/featured`
+**GET** `/products/suggestions`
+**PUT** `/products/:id/stock`
+**POST** `/products/import/wordpress`
+**GET** `/products/import/status/:jobId`
+**POST** `/products/import/schedule`
+**GET** `/products/import/schedule`
+
+### Categories
+**GET** `/categories`
+**GET** `/categories/:id`
+**POST** `/categories`
+**PUT** `/categories/:id`
+**DELETE** `/categories/:id`
+
+### Vehicles
+**GET** `/vehicles`
+**GET** `/vehicles/:id`
+**POST** `/vehicles`
+**PUT** `/vehicles/:id`
+**DELETE** `/vehicles/:id`
+**GET** `/vehicles/search/:query`
+
+### Cart
+**GET** `/cart`
+**POST** `/cart`
+**PUT** `/cart/:id`
+**DELETE** `/cart/:id`
+
+### Wishlist
+**GET** `/wishlist`
+**POST** `/wishlist`
+**DELETE** `/wishlist/:id`
+
+### Orders
+**GET** `/orders`
+**GET** `/orders/:id`
+**POST** `/orders`
+**PUT** `/orders/:id`
+
+### Scheduled Tasks (Admin Only)
+**GET** `/scheduled-tasks`
+**POST** `/scheduled-tasks/cancel/:taskName`
+**POST** `/scheduled-tasks/run/:taskName`
+
+## Detailed Endpoint Documentation
+
+### Authentication Endpoints
+
+**POST** `/auth/register`
 **Access:** Public
+**Description:** Register a new user account
 
 **Body:**
 ```json
 {
   "name": "John Doe",
   "email": "john@example.com",
-  "password": "password123"
+  "password": "password123",
+  "phone": "1234567890"
 }
 ```
 
@@ -35,21 +88,20 @@
 ```json
 {
   "success": true,
-  "message": "User registered successfully",
-  "token": "eyJhbGc...",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
-    "id": "...",
+    "_id": "507f1f77bcf86cd799439011",
     "name": "John Doe",
     "email": "john@example.com",
-    "role": "customer"
+    "phone": "1234567890",
+    "isAdmin": false
   }
 }
 ```
 
-### Login
 **POST** `/auth/login`
-
 **Access:** Public
+**Description:** Login to existing account
 
 **Body:**
 ```json
@@ -63,25 +115,47 @@
 ```json
 {
   "success": true,
-  "message": "Login successful",
-  "token": "eyJhbGc...",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
-    "id": "...",
+    "_id": "507f1f77bcf86cd799439011",
     "name": "John Doe",
     "email": "john@example.com",
-    "role": "customer"
+    "phone": "1234567890",
+    "isAdmin": false
   }
 }
 ```
 
-### Get Current User Profile
-**GET** `/auth/me`
-
+**GET** `/auth/profile`
 **Access:** Private
+**Description:** Get current user profile
 
-**Headers:**
+**Response:** 200
+```json
+{
+  "success": true,
+  "user": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "phone": "1234567890",
+    "isAdmin": false,
+    "createdAt": "2025-11-20T10:00:00.000Z"
+  }
+}
 ```
-Authorization: Bearer {token}
+
+**PUT** `/auth/profile`
+**Access:** Private
+**Description:** Update current user profile
+
+**Body:**
+```json
+{
+  "name": "John Smith",
+  "email": "johnsmith@example.com",
+  "phone": "0987654321"
+}
 ```
 
 **Response:** 200
@@ -89,102 +163,172 @@ Authorization: Bearer {token}
 {
   "success": true,
   "user": {
-    "id": "...",
-    "name": "John Doe",
-    "email": "john@example.com",
-    "role": "customer"
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "John Smith",
+    "email": "johnsmith@example.com",
+    "phone": "0987654321",
+    "isAdmin": false
   }
 }
 ```
 
----
+### Product Endpoints
 
-## Products
-
-### Get All Products
-**GET** `/products?page=1&limit=12&category=...&brand=...&minPrice=...&maxPrice=...&search=...&vehicle=...&isFeatured=...&sortBy=price&order=asc`
-
+**GET** `/products`
 **Access:** Public
+**Description:** Get all products with filtering, sorting, and pagination
 
 **Query Parameters:**
-- `page` (default: 1)
-- `limit` (default: 12)
-- `category` - Category ID
-- `brand` - Brand name
-- `minPrice` - Minimum price
-- `maxPrice` - Maximum price
-- `search` - Text search
-- `vehicle` - Vehicle ID
-- `isFeatured` - true/false
-- `sortBy` - Field to sort by (default: createdAt)
-- `order` - asc/desc (default: desc)
+- `keyword` - Search keyword
+- `category` - Filter by category ID
+- `vehicle` - Filter by vehicle compatibility
+- `minPrice` - Minimum price filter
+- `maxPrice` - Maximum price filter
+- `sort` - Sort by field (price, name, createdAt)
+- `order` - Sort order (asc, desc)
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 12)
 
 **Response:** 200
 ```json
 {
   "success": true,
   "count": 12,
-  "total": 100,
-  "pages": 9,
-  "currentPage": 1,
-  "products": [...]
+  "products": [...],
+  "page": 1,
+  "pages": 3
 }
 ```
 
-### Get Featured Products
-**GET** `/products/featured?limit=6`
-
-**Access:** Public
-
-### Get Product by ID
 **GET** `/products/:id`
-
 **Access:** Public
+**Description:** Get specific product by ID
 
-### Create Product (Admin)
+**Response:** 200
+```json
+{
+  "success": true,
+  "product": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Product Name",
+    "description": "Product description",
+    "price": 99.99,
+    "category": {
+      "_id": "507f191e810c19729de860ea",
+      "name": "Category Name"
+    },
+    "images": [...],
+    "specifications": [...],
+    "compatibility": [...]
+  }
+}
+```
+
 **POST** `/products`
-
 **Access:** Private/Admin
-
-**Headers:**
-```
-Authorization: Bearer {token}
-```
+**Description:** Create a new product
 
 **Body:**
 ```json
 {
-  "name": "Product Name",
+  "name": "New Product",
   "description": "Product description",
-  "price": 999,
-  "category": "categoryId",
-  "stock": 100,
-  "brand": "Brand Name",
-  "images": [
-    {
-      "url": "https://...",
-      "alt": "Product image",
-      "isPrimary": true
-    }
-  ],
-  "compatibleVehicles": ["vehicleId1", "vehicleId2"]
+  "price": 99.99,
+  "category": "507f191e810c19729de860ea",
+  "images": [...],
+  "specifications": [...],
+  "compatibility": [...]
 }
 ```
 
-### Update Product (Admin)
+**Response:** 201
+```json
+{
+  "success": true,
+  "product": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "New Product",
+    "description": "Product description",
+    "price": 99.99,
+    "category": "507f191e810c19729de860ea",
+    "images": [...],
+    "specifications": [...],
+    "compatibility": [...]
+  }
+}
+```
+
 **PUT** `/products/:id`
-
 **Access:** Private/Admin
+**Description:** Update existing product
 
-### Delete Product (Admin)
+**Body:**
+```json
+{
+  "name": "Updated Product",
+  "price": 149.99
+}
+```
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "product": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Updated Product",
+    "price": 149.99,
+    // ... other fields
+  }
+}
+```
+
 **DELETE** `/products/:id`
-
 **Access:** Private/Admin
+**Description:** Delete product
 
-### Update Stock (Admin)
-**POST** `/products/:id/stock`
+**Response:** 200
+```json
+{
+  "success": true,
+  "message": "Product removed"
+}
+```
 
+**GET** `/products/featured`
+**Access:** Public
+**Description:** Get featured products
+
+**Query Parameters:**
+- `limit` - Number of products to return (default: 6)
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "products": [...]
+}
+```
+
+**GET** `/products/suggestions`
+**Access:** Public
+**Description:** Get search suggestions
+
+**Query Parameters:**
+- `q` - Search query
+- `limit` - Number of suggestions to return (default: 10)
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "suggestions": ["Product 1", "Product 2", ...]
+}
+```
+
+**PUT** `/products/:id/stock`
 **Access:** Private/Admin
+**Description:** Update product stock
 
 **Body:**
 ```json
@@ -193,12 +337,24 @@ Authorization: Bearer {token}
 }
 ```
 
-### Import Products from WordPress (Admin)
+**Response:** 200
+```json
+{
+  "success": true,
+  "message": "Stock updated successfully",
+  "product": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Product Name",
+    "stock": 50
+  }
+}
+```
+
+### Product Import Endpoints
+
 **POST** `/products/import/wordpress`
-
 **Access:** Private/Admin
-
-**Description:** Triggers a manual import of products from WordPress
+**Description:** Import products from WordPress
 
 **Response:** 200
 ```json
@@ -215,12 +371,9 @@ Authorization: Bearer {token}
 }
 ```
 
-### Get Import Status (Admin)
 **GET** `/products/import/status/:jobId`
-
 **Access:** Private/Admin
-
-**Description:** Gets the status of a specific import job
+**Description:** Get specific import job status
 
 **Response:** 200
 ```json
@@ -242,10 +395,9 @@ Authorization: Bearer {token}
 }
 ```
 
-### Schedule Import (Admin)
 **POST** `/products/import/schedule`
-
 **Access:** Private/Admin
+**Description:** Schedule recurring imports
 
 **Body:**
 ```json
@@ -271,431 +423,67 @@ Authorization: Bearer {token}
 }
 ```
 
-### Get Scheduled Imports (Admin)
 **GET** `/products/import/schedule`
-
 **Access:** Private/Admin
+**Description:** Get all scheduled imports
 
 **Response:** 200
 ```json
 {
   "success": true,
-  "schedules": [
+  "schedules": [...]
+}
+```
+
+### Scheduled Tasks Endpoints
+
+**GET** `/scheduled-tasks`
+**Access:** Private/Admin
+**Description:** Get all scheduled tasks
+
+**Response:** 200
+```json
+{
+  "success": true,
+  "tasks": [
     {
-      "id": "schedule-1234567890-abc123",
-      "frequency": "daily",
-      "time": "02:00",
-      "initiatedBy": "userId",
-      "createdAt": "2025-11-20T10:00:00.000Z",
-      "enabled": true
+      "name": "failedProductImport",
+      "schedule": "10 11 * * *",
+      "description": "Daily import of failed products at 11:10 AM"
     }
   ]
 }
 ```
 
----
-
-## Categories
-
-### Get All Categories
-**GET** `/categories`
-
-**Access:** Public
+**POST** `/scheduled-tasks/cancel/:taskName`
+**Access:** Private/Admin
+**Description:** Cancel a scheduled task
 
 **Response:** 200
 ```json
 {
   "success": true,
-  "count": 10,
-  "categories": [...]
+  "message": "Task cancelled successfully"
 }
 ```
 
-### Get Category by ID
-**GET** `/categories/:id`
-
-**Access:** Public
-
-### Get Category by Slug
-**GET** `/categories/slug/:slug`
-
-**Access:** Public
-
-### Create Category (Admin)
-**POST** `/categories`
-
+**POST** `/scheduled-tasks/run/:taskName`
 **Access:** Private/Admin
-
-**Body:**
-```json
-{
-  "name": "Category Name",
-  "slug": "category-name",
-  "description": "Category description",
-  "parent": "parentCategoryId",
-  "order": 1
-}
-```
-
-### Update Category (Admin)
-**PUT** `/categories/:id`
-
-**Access:** Private/Admin
-
-### Delete Category (Admin)
-**DELETE** `/categories/:id`
-
-**Access:** Private/Admin
-
----
-
-## Vehicles
-
-### Get All Vehicles
-**GET** `/vehicles?make=Toyota&model=Hilux&year=2023`
-
-**Access:** Public
-
-### Get All Makes
-**GET** `/vehicles/makes`
-
-**Access:** Public
+**Description:** Manually run a scheduled task
 
 **Response:** 200
 ```json
 {
   "success": true,
-  "count": 15,
-  "makes": ["Toyota", "Mahindra", "Isuzu", ...]
-}
-```
-
-### Get Models by Make
-**GET** `/vehicles/models/:make`
-
-**Access:** Public
-
-### Get Vehicle by ID
-**GET** `/vehicles/:id`
-
-**Access:** Public
-
-### Get Vehicle by Slug
-**GET** `/vehicles/slug/:slug`
-
-**Access:** Public
-
-### Create Vehicle (Admin)
-**POST** `/vehicles`
-
-**Access:** Private/Admin
-
-**Body:**
-```json
-{
-  "make": "Toyota",
-  "model": "Hilux",
-  "year": 2023,
-  "variant": "GR Sport",
-  "slug": "toyota-hilux-2023-gr-sport"
-}
-```
-
-### Update Vehicle (Admin)
-**PUT** `/vehicles/:id`
-
-**Access:** Private/Admin
-
-### Delete Vehicle (Admin)
-**DELETE** `/vehicles/:id`
-
-**Access:** Private/Admin
-
----
-
-## Cart
-
-### Get User's Cart
-**GET** `/cart`
-
-**Access:** Private
-
-**Headers:**
-```
-Authorization: Bearer {token}
-```
-
-**Response:** 200
-```json
-{
-  "success": true,
-  "cart": {
-    "user": "userId",
-    "items": [
-      {
-        "product": {...},
-        "quantity": 2,
-        "price": 999
-      }
-    ],
-    "totalItems": 2,
-    "totalPrice": 1998
+  "message": "Failed product import task executed successfully",
+  "result": {
+    "success": true,
+    "jobId": "failed-import-1763704254743-6stztkqvl",
+    "summary": {
+      "totalFailedProducts": 370,
+      "reimported": 259,
+      "stillFailed": 111
+    }
   }
 }
-```
-
-### Add Item to Cart
-**POST** `/cart/add`
-
-**Access:** Private
-
-**Body:**
-```json
-{
-  "productId": "productId",
-  "quantity": 1
-}
-```
-
-### Update Cart Item
-**PUT** `/cart/update/:productId`
-
-**Access:** Private
-
-**Body:**
-```json
-{
-  "quantity": 3
-}
-```
-
-### Remove Item from Cart
-**DELETE** `/cart/remove/:productId`
-
-**Access:** Private
-
-### Clear Cart
-**DELETE** `/cart/clear`
-
-**Access:** Private
-
----
-
-## Wishlist
-
-### Get User's Wishlist
-**GET** `/wishlist`
-
-**Access:** Private
-
-### Add Item to Wishlist
-**POST** `/wishlist/add`
-
-**Access:** Private
-
-**Body:**
-```json
-{
-  "productId": "productId"
-}
-```
-
-### Remove Item from Wishlist
-**DELETE** `/wishlist/remove/:productId`
-
-**Access:** Private
-
-### Clear Wishlist
-**DELETE** `/wishlist/clear`
-
-**Access:** Private
-
----
-
-## Orders
-
-### Get User's Orders
-**GET** `/orders`
-
-**Access:** Private
-
-**Response:** 200
-```json
-{
-  "success": true,
-  "count": 5,
-  "orders": [...]
-}
-```
-
-### Get Order by ID
-**GET** `/orders/:id`
-
-**Access:** Private
-
-### Create Order
-**POST** `/orders`
-
-**Access:** Private
-
-**Body:**
-```json
-{
-  "items": [
-    {
-      "product": "productId",
-      "quantity": 2
-    }
-  ],
-  "shippingAddress": {
-    "fullName": "John Doe",
-    "phone": "+91 9876543210",
-    "addressLine1": "123 Main Street",
-    "city": "Mumbai",
-    "state": "Maharashtra",
-    "postalCode": "400001",
-    "country": "India"
-  },
-  "shippingCost": 100,
-  "tax": 50,
-  "discount": 0
-}
-```
-
-**Response:** 201
-```json
-{
-  "success": true,
-  "message": "Order created successfully",
-  "order": {...}
-}
-```
-
-### Cancel Order
-**PUT** `/orders/:id/cancel`
-
-**Access:** Private
-
-**Body:**
-```json
-{
-  "reason": "Changed my mind"
-}
-```
-
-### Update Order Status (Admin)
-**PUT** `/orders/:id/status`
-
-**Access:** Private/Admin
-
-**Body:**
-```json
-{
-  "status": "shipped",
-  "trackingNumber": "TRACK123456",
-  "estimatedDelivery": "2025-11-25"
-}
-```
-
-### Get All Orders (Admin)
-**GET** `/orders/admin/all?status=pending&page=1&limit=20`
-
-**Access:** Private/Admin
-
----
-
-## Error Responses
-
-### 400 Bad Request
-```json
-{
-  "success": false,
-  "message": "Error message",
-  "errors": ["Error detail 1", "Error detail 2"]
-}
-```
-
-### 401 Unauthorized
-```json
-{
-  "success": false,
-  "message": "Not authorized, no token provided"
-}
-```
-
-### 403 Forbidden
-```json
-{
-  "success": false,
-  "message": "Not authorized as admin"
-}
-```
-
-### 404 Not Found
-```json
-{
-  "success": false,
-  "message": "Resource not found"
-}
-```
-
-### 429 Too Many Requests
-```json
-{
-  "success": false,
-  "message": "Too many requests, please try again later"
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "success": false,
-  "message": "Internal Server Error"
-}
-```
-
----
-
-## Rate Limiting
-
-- **Authentication routes** (`/auth/*`): 5 requests per 15 minutes
-- **All other routes**: 100 requests per 15 minutes
-
----
-
-## Authentication
-
-Protected routes require a JWT token in the Authorization header:
-
-```
-Authorization: Bearer {your_jwt_token}
-```
-
-Tokens are returned upon successful registration or login and expire after 7 days.
-
----
-
-## Pagination
-
-Paginated endpoints return:
-- `count`: Number of items in current response
-- `total`: Total number of items
-- `pages`: Total number of pages
-- `currentPage`: Current page number
-
----
-
-## Admin Access
-
-Admin-only endpoints require:
-1. Valid JWT token
-2. User role must be "admin"
-
-To create an admin user, manually update the user's role in the database:
-```javascript
-db.users.updateOne(
-  { email: "admin@example.com" },
-  { $set: { role: "admin" } }
-)
 ```

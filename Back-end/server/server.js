@@ -9,11 +9,16 @@ import cartRoutes from "./routes/cart.js";
 import wishlistRoutes from "./routes/wishlist.js";
 import categoryRoutes from "./routes/categories.js";
 import vehicleRoutes from "./routes/vehicles.js";
+import scheduledTasksRoutes, { setCronService } from "./routes/scheduledTasks.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { apiRateLimit } from "./middleware/rateLimitMiddleware.js";
+import CronService from "./services/cronService.js";
 
 dotenv.config();
 const app = express();
+
+// Initialize cron service
+const cronService = new CronService();
 
 // Apply middleware before routes
 app.use(cors({
@@ -51,6 +56,7 @@ app.use("/vehicles", apiRateLimit, vehicleRoutes);
 app.use("/cart", apiRateLimit, cartRoutes);
 app.use("/wishlist", apiRateLimit, wishlistRoutes);
 app.use("/orders", apiRateLimit, orderRoutes);
+app.use("/scheduled-tasks", apiRateLimit, scheduledTasksRoutes);
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {
@@ -81,6 +87,12 @@ const connectWithRetry = async (retries = 5, interval = 5000) => {
 // Connection event listeners
 mongoose.connection.on('connected', () => {
   console.log('✓ Mongoose connected to MongoDB');
+  
+  // Initialize cron jobs after database connection is established
+  cronService.initializeCronJobs();
+  
+  // Set the cron service instance for the scheduled tasks routes
+  setCronService(cronService);
 });
 
 mongoose.connection.on('disconnected', () => {

@@ -71,6 +71,15 @@ npm start
 
 (Coming soon)
 
+## Scheduled Imports
+
+The system includes automated scheduled imports for handling failed products:
+
+### Failed Product Import
+- **Schedule**: Daily at 11:10 AM
+- **Purpose**: Automatically re-attempt import of products that failed in previous import jobs
+- **Documentation**: See [SCHEDULED_IMPORTS.md](SCHEDULED_IMPORTS.md) for detailed information
+
 ## Project Structure
 
 ```
@@ -85,6 +94,9 @@ server/
 │   ├── auth.js              # Authentication routes
 │   ├── orders.js            # Order routes
 │   └── ...                  # Additional routes
+├── services/
+│   ├── cronService.js       # Scheduled task management
+│   └── ...                  # Additional services
 ├── .env                     # Environment variables
 ├── server.js                # Express app entry point
 └── package.json             # Dependencies
@@ -99,6 +111,7 @@ server/
 - `jsonwebtoken` - JWT authentication
 - `cors` - Cross-origin resource sharing
 - `dotenv` - Environment variables
+- `node-cron` - Task scheduling
 
 ### Development
 - `nodemon` - Auto-restart on file changes
