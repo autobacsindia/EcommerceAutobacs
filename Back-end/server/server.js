@@ -13,7 +13,7 @@ import cartRoutes from "./routes/cart.js";
 import wishlistRoutes from "./routes/wishlist.js";
 
 // Import database configuration
-import { connectWithRetry } from "./config/db.js";
+import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
@@ -99,17 +99,36 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-// Initial connection using the new retry logic
-connectWithRetry();
+// Initialize server with pre-flight IP check
+async function initializeServer() {
+  try {
+    // Perform pre-flight IP check
+    const ipCheckPassed = await preFlightIPCheck();
+    
+    if (!ipCheckPassed) {
+      console.warn('⚠ Warning: IP mismatch detected. Starting server anyway, but database connection may fail.');
+      console.warn('Run "npm run diagnose-ip" for assistance with IP whitelist issues.');
+    }
+    
+    // Initial connection using the new retry logic
+    await connectWithRetry();
+    
+    // Start server
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`✓ Server running on port ${PORT}`);
+      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✓ API Documentation: http://localhost:${PORT}/`);
+    });
+  } catch (error) {
+    console.error('✗ Failed to initialize server:', error.message);
+    process.exit(1);
+  }
+}
 
 // Error handling middleware (must be after routes)
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`✓ Server running on port ${PORT}`);
-  console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✓ API Documentation: http://localhost:${PORT}/`);
-});
+// Initialize server
+initializeServer();
