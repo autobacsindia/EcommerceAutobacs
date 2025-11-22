@@ -140,3 +140,11 @@ export const BREAKPOINTS = {
   xl: 1280,
   '2xl': 1536,
 };
+
+// Authentication Error Messages
+export const AUTH_ERROR_MESSAGES = {
+  RATE_LIMIT_EXCEEDED: (minutes: number) => `Too many attempts. Please try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`,
+  INVALID_CREDENTIALS: 'Invalid email or password',
+  ACCOUNT_EXISTS: 'An account with this email already exists',
+  GENERIC_AUTH_ERROR: 'Authentication failed. Please try again.',
+};

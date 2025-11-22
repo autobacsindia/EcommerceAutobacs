@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { UserPlus, Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -18,6 +19,8 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [rateLimitResetTime, setRateLimitResetTime] = useState<number | null>(null);
+  const timeUntilRetry = useRateLimitTimer(rateLimitResetTime);
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -86,7 +89,11 @@ export default function RegisterPage() {
       
       // Redirect to home after successful registration
       router.push('/');
-    } catch (err) {
+    } catch (err: any) {
+      // Capture rate limit reset time from error
+      if (err.status === 429 && err.rateLimitInfo?.resetTime) {
+        setRateLimitResetTime(err.rateLimitInfo.resetTime);
+      }
       // Error is handled by AuthContext
       console.error('Registration failed:', err);
     } finally {
@@ -126,7 +133,11 @@ export default function RegisterPage() {
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <p className="text-sm text-red-800">{error}</p>
-              {error.includes('wait') && (
+              {timeUntilRetry !== null && timeUntilRetry > 0 ? (
+                <p className="text-sm text-red-700 mt-1">
+                  Please wait {Math.floor(timeUntilRetry / 60)}:{(timeUntilRetry % 60).toString().padStart(2, '0')} before trying again.
+                </p>
+              ) : error.includes('wait') && (
                 <p className="text-sm text-red-700 mt-1">
                   This is a security measure to prevent abuse. Please try again later.
                 </p>
@@ -283,7 +294,7 @@ export default function RegisterPage() {
           <div>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (timeUntilRetry !== null && timeUntilRetry > 0)}
               className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
@@ -291,6 +302,8 @@ export default function RegisterPage() {
                   <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
                   Creating account...
                 </>
+              ) : timeUntilRetry !== null && timeUntilRetry > 0 ? (
+                `Please wait ${Math.floor(timeUntilRetry / 60)}:${(timeUntilRetry % 60).toString().padStart(2, '0')}`
               ) : (
                 'Create account'
               )}

@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { connectWithRetry } from './config/db.js';
+import mongoose from 'mongoose';
 
 // Load environment variables
 dotenv.config();
@@ -11,23 +11,40 @@ console.log('- MONGO_URI:', process.env.MONGO_URI ? 'Present' : 'Missing');
 console.log('- NODE_ENV:', process.env.NODE_ENV || 'Not set');
 
 // Test the connection
-connectWithRetry(3, 3000)
-  .then(() => {
-    console.log('✓ MongoDB connection test successful');
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error('✗ MongoDB connection test failed:', err.message);
+async function testConnection() {
+  try {
+    console.log('\n--- Testing MongoDB connection ---');
+    // Use a longer timeout for this test
+    const mongooseOptions = {
+      serverSelectionTimeoutMS: 10000, // Increased timeout
+      socketTimeoutMS: 20000,
+    };
     
-    // Additional diagnostic information
-    if (err.name === 'MongoNetworkError') {
-      console.error('\nDiagnostic suggestions:');
-      console.error('1. Check if MongoDB Atlas IP whitelist includes your current IP');
-      console.error('2. Verify MongoDB URI credentials are correct');
-      console.error('3. Ensure network connectivity to MongoDB servers');
-      console.error('4. Check if corporate firewall is blocking connection');
-      console.error('5. Try connecting with MongoDB Compass to isolate the issue');
+    try {
+      await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
+      console.log('✓ MongoDB connection test successful');
+      console.log('✓ Connected to database:', mongoose.connection.name);
+      await mongoose.connection.close();
+      process.exit(0);
+    } catch (err) {
+      console.error('✗ MongoDB connection test failed:', err.message);
+      
+      // Additional diagnostic information
+      if (err.name === 'MongoNetworkError') {
+        console.error('\nDiagnostic suggestions:');
+        console.error('1. Check if MongoDB is running');
+        console.error('2. Verify MongoDB is listening on port 27017');
+        console.error('3. Check if firewall is blocking the connection');
+        console.error('4. Verify the connection string is correct');
+        console.error('5. Try starting MongoDB with the start-mongodb-final.ps1 script');
+      }
+      
+      process.exit(1);
     }
-    
+  } catch (error) {
+    console.error('✗ Test failed:', error.message);
     process.exit(1);
-  });
+  }
+}
+
+testConnection();

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 
 interface User {
   _id: string;
@@ -120,11 +120,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(response.message || 'Login failed');
       }
     } catch (err: any) {
-      let errorMessage = err.message || 'Login failed. Please try again.';
+      let errorMessage = err.message || AUTH_ERROR_MESSAGES.GENERIC_AUTH_ERROR;
       
       // Provide specific guidance for rate limit errors
-      if (errorMessage.includes('authentication attempts')) {
-        errorMessage = 'Too many attempts. Please wait 15 minutes before trying again.';
+      if (err.status === 429 || errorMessage.includes('authentication attempts')) {
+        const retryAfter = err.rateLimitInfo?.retryAfter || 900;
+        const minutes = Math.ceil(retryAfter / 60);
+        errorMessage = AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED(minutes);
+      } else if (errorMessage.includes('Invalid email or password')) {
+        errorMessage = AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS;
       }
       
       setError(errorMessage);
@@ -161,11 +165,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(response.message || 'Registration failed');
       }
     } catch (err: any) {
-      let errorMessage = err.message || 'Registration failed. Please try again.';
+      let errorMessage = err.message || AUTH_ERROR_MESSAGES.GENERIC_AUTH_ERROR;
       
       // Provide specific guidance for rate limit errors
-      if (errorMessage.includes('authentication attempts')) {
-        errorMessage = 'Too many registration attempts. Please wait 15 minutes before trying again.';
+      if (err.status === 429 || errorMessage.includes('authentication attempts')) {
+        const retryAfter = err.rateLimitInfo?.retryAfter || 900;
+        const minutes = Math.ceil(retryAfter / 60);
+        errorMessage = AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED(minutes);
+      } else if (errorMessage.includes('already exists')) {
+        errorMessage = AUTH_ERROR_MESSAGES.ACCOUNT_EXISTS;
       }
       
       setError(errorMessage);

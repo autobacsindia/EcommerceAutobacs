@@ -54,6 +54,11 @@ app.get("/", (req, res) => {
   });
 });
 
+// Handle favicon requests to prevent 404 errors
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
+
 // Mount routes with specific middleware
 // Auth routes already have their own stricter rate limiting
 app.use("/auth", authRoutes);
@@ -111,7 +116,7 @@ async function initializeServer() {
     }
     
     // Initial connection using the new retry logic
-    await connectWithRetry();
+    const dbConnection = await connectWithRetry();
     
     // Start server
     const PORT = process.env.PORT || 5000;
@@ -119,6 +124,13 @@ async function initializeServer() {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/`);
+      
+      // Show database connection status
+      if (dbConnection) {
+        console.log('✓ Database connection established');
+      } else {
+        console.log('⚠ Database connection not available');
+      }
     });
   } catch (error) {
     console.error('✗ Failed to initialize server:', error.message);

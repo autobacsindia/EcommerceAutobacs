@@ -216,7 +216,7 @@ async function runDiagnostic(outputFormat = 'text') {
       console.log('✓ Current Public IP Address:', currentIP);
       
       // Compare with the IP in the documentation
-      const documentedIP = '27.60.133.84'; // From MongoDB_IP_Whitelist_Instructions.md
+      const documentedIP = 'localhost'; // Using localhost for local development
       const mismatchDetected = currentIP !== documentedIP;
       
       if (mismatchDetected) {

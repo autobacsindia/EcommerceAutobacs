@@ -1,0 +1,2 @@
+# Start MongoDB as a background process
+Start-Process -FilePath "C:\Program Files\MongoDB\Server\8.2\bin\mongod.exe" -ArgumentList "--config", "C:\Main project\Autobacs\Back-end\server\mongod-local.cfg" -WindowStyle Hidden -PassThru

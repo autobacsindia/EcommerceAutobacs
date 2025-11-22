@@ -10,12 +10,18 @@ interface FetchOptions extends RequestInit {
   timeout?: number;
 }
 
+interface RateLimitInfo {
+  retryAfter?: number;  // Seconds until retry allowed
+  resetTime?: number;   // Timestamp when rate limit resets
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
     public url: string,
-    public category?: string
+    public category?: string,
+    public rateLimitInfo?: RateLimitInfo
   ) {
     super(message);
     this.name = 'ApiError';
@@ -143,11 +149,18 @@ export class APIClient {
         // Handle rate limit errors
         if (response.status === 429) {
           const retryAfter = response.headers.get('retry-after');
-          const resetTime = retryAfter ? Date.now() + (parseInt(retryAfter) * 1000) : Date.now() + 60000; // Default to 1 minute
+          const resetTime = retryAfter ? Date.now() + (parseInt(retryAfter) * 1000) : Date.now() + 900000; // Default to 15 minutes
           
           // Don't retry rate limit errors
           const errorMessage = typeof data === 'object' && data.message ? data.message : 'Too many requests, please try again later';
-          throw new ApiError(response.status, errorMessage, response.url, ErrorCategory.CLIENT);
+          
+          // Include rate limit information in error
+          const rateLimitInfo = {
+            retryAfter: retryAfter ? parseInt(retryAfter) : 900,
+            resetTime
+          };
+          
+          throw new ApiError(response.status, errorMessage, response.url, ErrorCategory.CLIENT, rateLimitInfo);
         }
         
         // Handle authentication errors
