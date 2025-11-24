@@ -9,15 +9,43 @@ import ProductFetchError from '@/components/products/ProductFetchError';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 
 // Define types for our data
+interface ProductImage {
+  url: string;
+  alt?: string;
+  isPrimary?: boolean;
+  _id?: string;
+}
+
 interface Product {
   _id: string;
   name: string;
   description: string;
+  shortDescription?: string;
   price: number;
-  images: string[];
-  category: { name: string };
-  rating: number;
+  originalPrice?: number;
+  category: { 
+    _id: string;
+    name: string;
+    slug: string;
+  } | string;
+  brand?: string;
+  images: ProductImage[] | string;
   stock: number;
+  sku?: string;
+  specifications?: Array<{
+    key: string;
+    value: string;
+    _id?: string;
+  }> | string;
+  features?: string[] | string;
+  isActive: boolean;
+  isFeatured: boolean;
+  averageRating: number;
+  totalReviews: number;
+  tags?: string[] | string;
+  createdAt: string;
+  updatedAt: string;
+  __v?: number;
 }
 
 interface Pagination {
@@ -26,7 +54,7 @@ interface Pagination {
   currentPage?: number;
   hasNext?: boolean;
   hasPrev?: boolean;
-  page?: number;
+  count?: number;
 }
 
 interface ProductsData {
@@ -49,6 +77,7 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
       if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
       if (searchParams.rating) queryParams.append('rating', searchParams.rating);
+      if (searchParams.showAll === 'true') queryParams.append('limit', '500'); // Show all products (increased limit for larger catalogs)
       
       // Map frontend sort values to backend parameters
       if (searchParams.sort) {
@@ -82,7 +111,23 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
       
       const data: any = await apiClient.get(endpoint);
-      return data?.data || { products: [], pagination: {} };
+      // Fix: Backend returns pagination properties directly in response object
+      if (data && data.products) {
+        // Extract pagination properties from the response
+        const { total, pages, currentPage, hasNext, hasPrev, count } = data;
+        return {
+          products: data.products,
+          pagination: {
+            total,
+            pages,
+            currentPage,
+            hasNext,
+            hasPrev,
+            count
+          }
+        };
+      }
+      return { products: [], pagination: {} };
     } catch (error: any) {
       lastError = error;
       
@@ -137,18 +182,19 @@ export default function ProductsPageClient() {
   
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
+  const showAll = searchParams.get('showAll') === 'true';
 
   // Helper functions to safely access pagination properties
-  const getPaginationTotal = (pagination: Pagination) => {
-    return 'total' in pagination ? pagination.total : undefined;
+  const getPaginationTotal = (pagination: Pagination | undefined) => {
+    return pagination && 'total' in pagination ? pagination.total : undefined;
   };
 
-  const getPaginationPages = (pagination: Pagination) => {
-    return 'pages' in pagination ? pagination.pages : undefined;
+  const getPaginationPages = (pagination: Pagination | undefined) => {
+    return pagination && 'pages' in pagination ? pagination.pages : undefined;
   };
 
-  const getPaginationPage = (pagination: Pagination) => {
-    return 'page' in pagination ? pagination.page : undefined;
+  const getPaginationPage = (pagination: Pagination | undefined) => {
+    return pagination && 'currentPage' in pagination ? pagination.currentPage : undefined;
   };
 
   // Fetch products when search params change
@@ -185,8 +231,27 @@ export default function ProductsPageClient() {
       currentParams.set('sort', sortValue);
     }
     
-    // Reset to first page when sorting
-    currentParams.delete('page');
+    // Reset to first page when sorting (unless showing all)
+    if (!showAll) {
+      currentParams.delete('page');
+    }
+    
+    // Update URL which will trigger useEffect
+    router.push(`/products?${currentParams.toString()}`);
+  };
+
+  // Handle show all toggle
+  const handleShowAllToggle = () => {
+    const currentParams = new URLSearchParams(searchParams.toString());
+    
+    if (showAll) {
+      currentParams.delete('showAll');
+      currentParams.delete('limit');
+      // Reset to first page when switching back to paginated view
+      currentParams.delete('page');
+    } else {
+      currentParams.set('showAll', 'true');
+    }
     
     // Update URL which will trigger useEffect
     router.push(`/products?${currentParams.toString()}`);
@@ -210,6 +275,21 @@ export default function ProductsPageClient() {
         </div>
       </div>
 
+      {/* Info Banner for Sample Data */}
+      <div className="bg-yellow-50 border-b border-yellow-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex items-center">
+            <svg className="h-5 w-5 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <p className="text-yellow-800 text-sm">
+              <span className="font-medium">Note:</span> Currently displaying sample products with placeholder images. 
+              Real product data will be imported from WordPress.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
@@ -227,32 +307,55 @@ export default function ProductsPageClient() {
                   'Loading products...'
                 ) : data.products.length > 0 ? (
                   <>
-                    Showing {data.products.length} product{data.products.length !== 1 ? 's' : ''}
-                    {getPaginationTotal(data.pagination) && ` of ${getPaginationTotal(data.pagination)}`}
+                    {showAll ? (
+                      `Showing all ${data.products.length} product${data.products.length !== 1 ? 's' : ''}`
+                    ) : (
+                      <>
+                        Showing {data.products.length} product{data.products.length !== 1 ? 's' : ''}
+                        {getPaginationTotal(data.pagination) && ` of ${getPaginationTotal(data.pagination)}`}
+                      </>
+                    )}
                   </>
                 ) : (
                   'No products found'
                 )}
               </p>
 
-              {/* Sort Dropdown */}
-              <div className="flex items-center gap-2">
-                <label htmlFor="sort" className="text-sm text-gray-600">
-                  Sort by:
-                </label>
-                <select
-                  id="sort"
-                  className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={currentSort}
-                  onChange={handleSortChange}
-                  disabled={loading}
-                >
-                  <option value="createdAt_desc">Newest First</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="name_asc">Name: A to Z</option>
-                  <option value="rating_desc">Highest Rated</option>
-                </select>
+              {/* Controls */}
+              <div className="flex items-center gap-4">
+                {/* Show All Toggle */}
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="showAll"
+                    checked={showAll}
+                    onChange={handleShowAllToggle}
+                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <label htmlFor="showAll" className={`ml-2 text-sm ${showAll ? 'text-blue-600 font-medium' : 'text-gray-700'}`}>
+                    Show All {showAll && '(Active)'}
+                  </label>
+                </div>
+
+                {/* Sort Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label htmlFor="sort" className="text-sm text-gray-600">
+                    Sort by:
+                  </label>
+                  <select
+                    id="sort"
+                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={currentSort}
+                    onChange={handleSortChange}
+                    disabled={loading}
+                  >
+                    <option value="createdAt_desc">Newest First</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                    <option value="name_asc">Name: A to Z</option>
+                    <option value="rating_desc">Highest Rated</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -294,7 +397,7 @@ export default function ProductsPageClient() {
             ) : null}
 
             {/* Pagination */}
-            {!loading && !error && getPaginationPages(data.pagination) && getPaginationPages(data.pagination)! > 1 && (
+            {!loading && !error && !showAll && getPaginationPages(data.pagination) && getPaginationPages(data.pagination)! > 1 && (
               <div className="mt-8 flex justify-center gap-2">
                 {Array.from({ length: getPaginationPages(data.pagination)! }, (_, i) => i + 1).map((page) => {
                   const currentParams = new URLSearchParams(searchParams.toString());

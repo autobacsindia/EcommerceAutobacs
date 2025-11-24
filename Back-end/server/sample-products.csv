@@ -1,0 +1,6 @@
+name,description,shortDescription,price,originalPrice,category,brand,stock,sku,tags,specifications
+"Premium Brake Pads","High-performance brake pads with low dust formulation","High-quality brake pads",89.99,99.99,"Brake System","Autobacs",50,"BP-CSV-001","brake,performance,pads","Material:Ceramic,Width:120mm,Height:50mm"
+"Engine Oil Filter","High-quality oil filter for engine protection","Standard oil filter",24.99,,,"Engine Parts","Autobacs",100,"EOF-CSV-001","engine,oil,filter","Filter Type:Spin-on,Thread Size:3/4-16,Flow Rate:15 GPM"
+"Car Battery","Reliable car battery for all weather conditions","12V car battery",129.99,,,"Electronics","Autobacs",25,"CB-CSV-001","battery,electronics,power","Voltage:12V,Amp Hours:60Ah,Cold Cranking Amps:550 CCA"
+"Air Filter","High-flow air filter for improved engine performance","Engine air filter",19.99,,,"Filters","Autobacs",75,"AF-CSV-001","air,filter,engine","Filter Type:Pleated Paper,Size:8.5x3.5,Air Flow:350 CFM"
+"Spark Plugs","Iridium spark plugs for optimal ignition","Set of 4 spark plugs",39.99,,,"Engine Parts","Autobacs",60,"SP-CSV-001","spark,plugs,ignition","Plug Type:Iridium,Thread Size:14mm,Heat Range:7"

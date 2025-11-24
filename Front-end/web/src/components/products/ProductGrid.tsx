@@ -1,20 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { ShoppingCart, Heart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { formatCurrency } from '@/lib/utils';
+import ProductImage from '@/components/products/ProductImage';
+
+interface ProductImage {
+  url: string;
+  alt?: string;
+  isPrimary?: boolean;
+  _id?: string;
+}
 
 interface Product {
   _id: string;
   name: string;
-  description: string;
   price: number;
-  images: string[];
-  category: { name: string };
-  rating: number;
+  images: ProductImage[] | string;
+  category: { 
+    name: string;
+  } | string;
   stock: number;
+  averageRating: number;
+  __v?: number;
 }
 
 interface ProductGridProps {
@@ -41,17 +50,24 @@ export default function ProductGrid({ products }: ProductGridProps) {
         >
           {/* Product Image */}
           <Link href={`/products/${product._id}`} className="block relative h-48 bg-gray-200">
-            {product.images && product.images.length > 0 ? (
-              <Image
-                src={product.images[0]}
-                alt={product.name}
-                fill
-                className="object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                <span className="text-gray-400">No image</span>
-              </div>
+            {product.images && (
+              Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
+                <ProductImage
+                  src={product.images[0].url}
+                  alt={product.images[0].alt || product.name}
+                  className="object-cover w-full h-full"
+                />
+              ) : typeof product.images === 'string' && product.images !== '' ? (
+                <ProductImage
+                  src={product.images}
+                  alt={product.name}
+                  className="object-cover w-full h-full"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                  <span className="text-gray-400">No image available</span>
+                </div>
+              )
             )}
             
             {/* Wishlist Button */}
@@ -77,7 +93,7 @@ export default function ProductGrid({ products }: ProductGridProps) {
           <div className="p-4">
             {/* Category */}
             <p className="text-xs text-gray-500 uppercase mb-1">
-              {product.category?.name || 'Uncategorized'}
+              {typeof product.category === 'object' && product.category !== null ? product.category.name : typeof product.category === 'string' ? product.category : 'Uncategorized'}
             </p>
 
             {/* Product Name */}
@@ -88,14 +104,14 @@ export default function ProductGrid({ products }: ProductGridProps) {
             </Link>
 
             {/* Rating */}
-            {product.rating > 0 && (
+            {product.averageRating > 0 && (
               <div className="flex items-center gap-1 mb-2">
                 <div className="flex">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <svg
                       key={star}
                       className={`h-4 w-4 ${
-                        star <= product.rating ? 'text-yellow-400' : 'text-gray-300'
+                        star <= product.averageRating ? 'text-yellow-400' : 'text-gray-300'
                       }`}
                       fill="currentColor"
                       viewBox="0 0 20 20"
@@ -105,7 +121,7 @@ export default function ProductGrid({ products }: ProductGridProps) {
                   ))}
                 </div>
                 <span className="text-sm text-gray-600">
-                  ({product.rating.toFixed(1)})
+                  ({product.averageRating.toFixed(1)})
                 </span>
               </div>
             )}

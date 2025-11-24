@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { ShoppingCart, Heart, Star } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
+import ProductImage from '@/components/products/ProductImage';
 
 async function getProduct(id: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -22,14 +22,14 @@ async function getProduct(id: string) {
     }
 
     const data = await response.json();
-    return data.data;
+    return data.product; // Changed from data.data to data.product to match backend response
   } catch (error) {
     console.error('Error fetching product:', error);
     return null;
   }
 }
 
-export default function ProductDetailPageClient({ product }: { product: any }) {
+function ProductDetailPageClient({ product }: { product: any }) {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
@@ -99,6 +99,10 @@ export default function ProductDetailPageClient({ product }: { product: any }) {
     );
   }
 
+  // Check if this is a sample product with placeholder image
+  const hasPlaceholderImage = product.images && product.images.length > 0 && 
+    product.images[0].url && product.images[0].url.includes('example.com');
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -111,15 +115,32 @@ export default function ProductDetailPageClient({ product }: { product: any }) {
           <span className="text-gray-900">{product.name}</span>
         </nav>
 
+        {/* Info Banner for Sample Data */}
+        {hasPlaceholderImage && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg mb-6">
+            <div className="p-4">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <p className="text-yellow-800 text-sm">
+                  <span className="font-medium">Sample Product:</span> This is a sample product with a placeholder image. 
+                  Real product data will be imported from WordPress.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-lg shadow-md p-8">
           <div className="lg:grid lg:grid-cols-2 lg:gap-8">
             {/* Product Images */}
             <div>
               <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
-                {product.images && product.images[0] ? (
-                  <Image
-                    src={product.images[0]}
-                    alt={product.name}
+                {product.images && product.images.length > 0 && product.images[0].url ? (
+                  <ProductImage
+                    src={product.images[0].url}
+                    alt={product.images[0].alt || product.name}
                     width={600}
                     height={600}
                     className="object-cover w-full h-full"
@@ -143,12 +164,12 @@ export default function ProductDetailPageClient({ product }: { product: any }) {
                     <Star
                       key={star}
                       className={`h-5 w-5 ${
-                        star <= (product.rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
+                        star <= (product.averageRating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
                       }`}
                     />
                   ))}
                 </div>
-                <span className="text-gray-600">({product.rating || 0} rating)</span>
+                <span className="text-gray-600">({product.averageRating || 0} rating)</span>
               </div>
 
               {/* Price */}
@@ -156,6 +177,11 @@ export default function ProductDetailPageClient({ product }: { product: any }) {
                 <p className="text-4xl font-bold text-blue-600">
                   ₹{product.price?.toLocaleString() || 0}
                 </p>
+                {product.originalPrice && product.originalPrice > product.price && (
+                  <p className="text-lg text-gray-500 line-through">
+                    ₹{product.originalPrice?.toLocaleString()}
+                  </p>
+                )}
               </div>
 
               {/* Stock Status */}
@@ -172,6 +198,14 @@ export default function ProductDetailPageClient({ product }: { product: any }) {
                 <h2 className="font-semibold text-gray-900 mb-2">Description</h2>
                 <p className="text-gray-700">{product.description || 'No description available.'}</p>
               </div>
+
+              {/* Category */}
+              {product.category && (
+                <div className="mb-6">
+                  <h2 className="font-semibold text-gray-900 mb-2">Category</h2>
+                  <p className="text-gray-700">{product.category.name}</p>
+                </div>
+              )}
 
               {/* Add to Cart */}
               <div className="flex gap-4">
@@ -203,7 +237,7 @@ export default function ProductDetailPageClient({ product }: { product: any }) {
   );
 }
 
-export async function ProductDetailPage({
+export default async function ProductDetailPage({
   params,
 }: {
   params: { id: string };
@@ -212,5 +246,3 @@ export async function ProductDetailPage({
 
   return <ProductDetailPageClient product={product} />;
 }
-
-export default ProductDetailPage;

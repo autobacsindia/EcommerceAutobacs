@@ -9,7 +9,11 @@
     "add-ip-to-whitelist": "node utils/mongodb-ip-diagnostic.js --add-to-whitelist",
     "manage-whitelist": "node utils/mongodb-whitelist-cli.js",
     "check-ip-scheduled": "node utils/mongodb-ip-diagnostic.js --json",
-    "add-current-ip-to-mongodb-whitelist": "node utils/add-ip-to-mongodb-whitelist.js"
+    "add-current-ip-to-mongodb-whitelist": "node utils/add-ip-to-mongodb-whitelist.js",
+    "count-products": "node count-products.js",
+    "add-sample-products": "node add-sample-products.js",
+    "bulk-import-products": "node bulk-import-products.js",
+    "csv-import-products": "node csv-import-products.js"
   },
   "dependencies": {
     "axios": "^1.13.2",
