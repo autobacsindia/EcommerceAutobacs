@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateRegister, validateLogin } from "../middleware/validationMiddleware.js";
-import { authRateLimit } from "../middleware/rateLimitMiddleware.js";
+import { registerRateLimit, loginRateLimit, failedLoginRateLimit } from "../middleware/rateLimitMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -21,7 +21,7 @@ const generateToken = (user) => {
 // @route   POST /auth/register
 // @desc    Register a new user
 // @access  Public
-router.post("/register", authRateLimit, validateRegister, asyncHandler(async (req, res) => {
+router.post("/register", registerRateLimit, validateRegister, asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
   // Check if user exists
@@ -64,24 +64,30 @@ router.post("/register", authRateLimit, validateRegister, asyncHandler(async (re
 // @route   POST /auth/login
 // @desc    Authenticate user and get token
 // @access  Public
-router.post("/login", authRateLimit, validateLogin, asyncHandler(async (req, res) => {
+router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
   // Find user
   const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) {
-    return res.status(401).json({ 
-      success: false,
-      message: "Invalid email or password" 
+    // Apply failed login rate limiting
+    return failedLoginRateLimit(req, res, async () => {
+      return res.status(401).json({ 
+        success: false,
+        message: "Invalid email or password" 
+      });
     });
   }
 
   // Compare password
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
-    return res.status(401).json({ 
-      success: false,
-      message: "Invalid email or password" 
+    // Apply failed login rate limiting
+    return failedLoginRateLimit(req, res, async () => {
+      return res.status(401).json({ 
+        success: false,
+        message: "Invalid email or password" 
+      });
     });
   }
 
