@@ -17,12 +17,15 @@ interface Product {
   _id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   images: ProductImage[] | string;
   category: { 
     name: string;
   } | string;
   stock: number;
   averageRating: number;
+  isFeatured?: boolean;
+  isNew?: boolean;
   __v?: number;
 }
 
@@ -81,12 +84,29 @@ export default function ProductGrid({ products }: ProductGridProps) {
               <Heart className="h-5 w-5 text-gray-600" />
             </button>
 
-            {/* Stock Badge */}
-            {product.stock <= 0 && (
-              <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-                Out of Stock
-              </div>
-            )}
+            {/* Badges */}
+            <div className="absolute top-2 left-2 flex gap-1">
+              {product.stock <= 0 && (
+                <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                  Out of Stock
+                </div>
+              )}
+              {product.isNew && product.stock > 0 && (
+                <div className="bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                  New
+                </div>
+              )}
+              {product.originalPrice && product.originalPrice > product.price && (
+                <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                  Sale
+                </div>
+              )}
+              {product.isFeatured && product.stock > 0 && product.originalPrice && product.originalPrice <= product.price && (
+                <div className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                  Popular
+                </div>
+              )}
+            </div>
           </Link>
 
           {/* Product Info */}
@@ -129,9 +149,20 @@ export default function ProductGrid({ products }: ProductGridProps) {
             {/* Price and Actions */}
             <div className="flex items-center justify-between mt-4">
               <div>
-                <p className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(product.price)}
-                </p>
+                {product.originalPrice && product.originalPrice > product.price ? (
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-2xl font-bold text-blue-600">
+                      {formatCurrency(product.price)}
+                    </p>
+                    <p className="text-sm text-gray-500 line-through">
+                      {formatCurrency(product.originalPrice)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold text-blue-600">
+                    {formatCurrency(product.price)}
+                  </p>
+                )}
               </div>
 
               <button

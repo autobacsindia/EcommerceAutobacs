@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import ProductFetchError from '@/components/products/ProductFetchError';
+import VehicleFilterSidebar from '@/components/vehicles/VehicleFilterSidebar';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 
 // Define types for our data
@@ -77,6 +78,9 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
       if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
       if (searchParams.rating) queryParams.append('rating', searchParams.rating);
+      if (searchParams.vehicleMake) queryParams.append('vehicleMake', searchParams.vehicleMake);
+      if (searchParams.vehicleModel) queryParams.append('vehicleModel', searchParams.vehicleModel);
+      if (searchParams.brand) queryParams.append('brand', searchParams.brand);
       if (searchParams.showAll === 'true') queryParams.append('limit', '500'); // Show all products (increased limit for larger catalogs)
       
       // Map frontend sort values to backend parameters
@@ -294,7 +298,8 @@ export default function ProductsPageClient() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
-          <aside className="hidden lg:block">
+          <aside className="hidden lg:block space-y-6">
+            <VehicleFilterSidebar />
             <ProductFilters />
           </aside>
 

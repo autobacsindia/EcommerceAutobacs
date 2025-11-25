@@ -21,6 +21,12 @@ interface Category {
   updatedAt?: string;
 }
 
+// Add Brand interface
+interface Brand {
+  _id: string;
+  name: string;
+}
+
 // Helper function to parse price values consistently
 const parsePriceValue = (value: string | null, defaultValue: number): number => {
   if (!value) return defaultValue;
@@ -47,6 +53,10 @@ export default function ProductFilters() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
   
+  // State for brands
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [loadingBrands, setLoadingBrands] = useState(true);
+  
   // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
     const minPrice = parsePriceValue(searchParams.get('minPrice'), 0);
@@ -68,7 +78,12 @@ export default function ProductFilters() {
     const parsedRating = rating ? parsePriceValue(rating, 0) : 0;
     return rating ? [parsedRating] : [];
   });
-
+  
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(() => {
+    const brand = searchParams.get('brand');
+    return brand ? [brand] : [];
+  });
+  
   // Fetch categories
   useEffect(() => {
     const fetchCategories = async () => {
@@ -92,6 +107,34 @@ export default function ProductFilters() {
     };
 
     fetchCategories();
+  }, []);
+
+  // Fetch brands (for now we'll use a static list since there's no API endpoint)
+  useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        setLoadingBrands(true);
+        // For now, we'll use a static list of brands
+        // In the future, this could be fetched from an API endpoint
+        setBrands([
+          { _id: 'autobacs', name: 'Autobacs' },
+          { _id: 'thor', name: 'Thor' },
+          { _id: 'profender', name: 'Profender' },
+          { _id: 'bestwyll', name: 'Bestwyll' },
+          { _id: 'dr-nano', name: 'Dr. Nano' },
+          { _id: 'proman', name: 'Proman' },
+          { _id: 'windbooster', name: 'Windbooster' },
+          { _id: 'comeup', name: 'ComeUp' },
+          { _id: 'unicorn', name: 'Unicorn' },
+        ]);
+      } catch (err) {
+        console.error('Failed to fetch brands:', err);
+      } finally {
+        setLoadingBrands(false);
+      }
+    };
+
+    fetchBrands();
   }, []);
 
   // Update URL when filters change
@@ -121,6 +164,13 @@ export default function ProductFilters() {
       currentParams.delete('category');
     }
     
+    // Brands
+    if (selectedBrands.length > 0) {
+      currentParams.set('brand', selectedBrands[0]); // For now, only support one brand
+    } else {
+      currentParams.delete('brand');
+    }
+    
     // In stock only
     if (inStockOnly) {
       currentParams.set('inStock', 'true');
@@ -145,11 +195,13 @@ export default function ProductFilters() {
     setSelectedCategories([]);
     setInStockOnly(false);
     setSelectedRatings([]);
+    setSelectedBrands([]);
     
     const currentParams = new URLSearchParams(searchParams.toString());
     currentParams.delete('minPrice');
     currentParams.delete('maxPrice');
     currentParams.delete('category');
+    currentParams.delete('brand');
     currentParams.delete('inStock');
     currentParams.delete('rating');
     currentParams.delete('page');
@@ -266,6 +318,41 @@ export default function ProductFilters() {
             </label>
           ))}
         </div>
+      </div>
+
+      {/* Brand Filter */}
+      <div className="mb-6">
+        <h3 className="font-semibold text-gray-900 mb-3">Brand</h3>
+        {loadingBrands ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, index) => (
+              <div key={index} className="flex items-center animate-pulse">
+                <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {brands.map((brand) => (
+              <label key={brand._id} className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={selectedBrands.includes(brand._id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedBrands([brand._id]); // Only allow one brand for now
+                    } else {
+                      setSelectedBrands([]);
+                    }
+                  }}
+                />
+                <span className="ml-2 text-sm text-gray-700">{brand.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Clear Filters */}

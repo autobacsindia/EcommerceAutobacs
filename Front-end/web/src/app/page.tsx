@@ -5,9 +5,19 @@ import Link from 'next/link';
 import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
 import PageLoader from '@/components/layout/PageLoader';
 import useIsMounted from '@/lib/hooks/useIsMounted';
+import dynamic from 'next/dynamic';
+import FeaturedProducts from '@/components/products/FeaturedProducts';
+
+// Dynamically import VehicleSelector to avoid SSR issues
+const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { ssr: false });
 
 export default function Home() {
   const isMounted = useIsMounted();
+  const [selectedVehicle, setSelectedVehicle] = useState({ make: '', model: '' });
+
+  const handleVehicleSelect = (make: string, model: string) => {
+    setSelectedVehicle({ make, model });
+  };
 
   // Show skeleton loader until component is mounted to prevent hydration issues
   if (!isMounted) {
@@ -80,6 +90,36 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Vehicle Selector Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Find Parts for Your Vehicle</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Select your vehicle to see compatible parts and accessories
+            </p>
+          </div>
+          
+          <div className="max-w-2xl mx-auto">
+            <VehicleSelector onVehicleSelect={handleVehicleSelect} />
+            
+            {selectedVehicle.make && selectedVehicle.model && (
+              <div className="mt-6 text-center">
+                <Link 
+                  href={`/products?vehicleMake=${encodeURIComponent(selectedVehicle.make)}&vehicleModel=${encodeURIComponent(selectedVehicle.model)}`}
+                  className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  View {selectedVehicle.make} {selectedVehicle.model} Parts
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Products Section */}
+      <FeaturedProducts />
 
       {/* Popular Categories */}
       <section className="py-16">
