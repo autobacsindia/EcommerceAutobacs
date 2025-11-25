@@ -2,6 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import apiClient from '@/lib/api';
+
+// Define the Category interface inline to avoid import issues
+interface Category {
+  _id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  parent?: any;
+  image?: {
+    url: string;
+    alt?: string;
+  };
+  isActive: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 // Helper function to parse price values consistently
 const parsePriceValue = (value: string | null, defaultValue: number): number => {
@@ -25,6 +43,10 @@ export default function ProductFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
+  // State for categories
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  
   // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
     const minPrice = parsePriceValue(searchParams.get('minPrice'), 0);
@@ -47,6 +69,31 @@ export default function ProductFilters() {
     return rating ? [parsedRating] : [];
   });
 
+  // Fetch categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        const response: any = await apiClient.get('/categories');
+        setCategories(response.categories || []);
+      } catch (err) {
+        console.error('Failed to fetch categories:', err);
+        // Fallback to hardcoded categories if API fails
+        setCategories([
+          { _id: '1', name: 'Body Kits', slug: 'body-kits' } as Category,
+          { _id: '2', name: 'Performance Parts', slug: 'performance-parts' } as Category,
+          { _id: '3', name: 'Suspension', slug: 'suspension' } as Category,
+          { _id: '4', name: 'Exhaust Systems', slug: 'exhaust-systems' } as Category,
+          { _id: '5', name: 'Lighting', slug: 'lighting' } as Category,
+        ]);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
   // Update URL when filters change
   const applyFilters = () => {
     const currentParams = new URLSearchParams(searchParams.toString());
@@ -67,11 +114,25 @@ export default function ProductFilters() {
       currentParams.delete('maxPrice');
     }
     
+    // Categories
+    if (selectedCategories.length > 0) {
+      currentParams.set('category', selectedCategories[0]); // For now, only support one category
+    } else {
+      currentParams.delete('category');
+    }
+    
     // In stock only
     if (inStockOnly) {
       currentParams.set('inStock', 'true');
     } else {
       currentParams.delete('inStock');
+    }
+    
+    // Ratings
+    if (selectedRatings.length > 0) {
+      currentParams.set('rating', selectedRatings[0].toString()); // For now, only support one rating
+    } else {
+      currentParams.delete('rating');
     }
     
     // Update URL
@@ -88,6 +149,7 @@ export default function ProductFilters() {
     const currentParams = new URLSearchParams(searchParams.toString());
     currentParams.delete('minPrice');
     currentParams.delete('maxPrice');
+    currentParams.delete('category');
     currentParams.delete('inStock');
     currentParams.delete('rating');
     currentParams.delete('page');
@@ -102,27 +164,36 @@ export default function ProductFilters() {
       {/* Categories */}
       <div className="mb-6">
         <h3 className="font-semibold text-gray-900 mb-3">Categories</h3>
-        <div className="space-y-2">
-          {['Body Kits', 'Performance Parts', 'Suspension', 'Exhaust Systems', 'Lighting'].map(
-            (category) => (
-              <label key={category} className="flex items-center">
+        {loadingCategories ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, index) => (
+              <div key={index} className="flex items-center animate-pulse">
+                <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {categories.map((category) => (
+              <label key={category._id} className="flex items-center">
                 <input
                   type="checkbox"
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={selectedCategories.includes(category)}
+                  checked={selectedCategories.includes(category._id)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedCategories([...selectedCategories, category]);
+                      setSelectedCategories([category._id]); // Only allow one category for now
                     } else {
-                      setSelectedCategories(selectedCategories.filter(c => c !== category));
+                      setSelectedCategories([]);
                     }
                   }}
                 />
-                <span className="ml-2 text-sm text-gray-700">{category}</span>
+                <span className="ml-2 text-sm text-gray-700">{category.name}</span>
               </label>
-            )
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Price Range */}
@@ -179,9 +250,9 @@ export default function ProductFilters() {
                 checked={selectedRatings.includes(rating)}
                 onChange={(e) => {
                   if (e.target.checked) {
-                    setSelectedRatings([...selectedRatings, rating]);
+                    setSelectedRatings([rating]); // Only allow one rating for now
                   } else {
-                    setSelectedRatings(selectedRatings.filter(r => r !== rating));
+                    setSelectedRatings([]);
                   }
                 }}
               />
