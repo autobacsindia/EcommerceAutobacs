@@ -66,6 +66,12 @@ Most endpoints require authentication. Tokens are obtained through the authentic
 **POST** `/scheduled-tasks/cancel/:taskName`
 **POST** `/scheduled-tasks/run/:taskName`
 
+### Users (Admin Only)
+**GET** `/users`
+**GET** `/users/:id`
+**PUT** `/users/:id`
+**DELETE** `/users/:id`
+
 ## Detailed Endpoint Documentation
 
 ### Authentication Endpoints

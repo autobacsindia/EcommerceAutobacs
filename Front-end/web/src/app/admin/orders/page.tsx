@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Eye, Search } from 'lucide-react';
+import Link from 'next/link';
 
 interface Order {
   _id: string;
@@ -16,6 +17,15 @@ interface Order {
     email: string;
   };
   items: any[];
+}
+
+interface OrdersResponse {
+  success: boolean;
+  count: number;
+  orders: Order[];
+  total?: number;
+  pages?: number;
+  currentPage?: number;
 }
 
 export default function AdminOrdersPage() {
@@ -31,7 +41,7 @@ export default function AdminOrdersPage() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}/admin/all`);
+      const response = await apiClient.get<OrdersResponse>(`${API_ENDPOINTS.ORDERS}/admin/all`);
       setOrders(response.orders || []);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
@@ -169,9 +179,9 @@ export default function AdminOrdersPage() {
                   </select>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900">
+                  <Link href={`/admin/orders/${order._id}`} className="text-blue-600 hover:text-blue-900">
                     <Eye className="h-4 w-4" />
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

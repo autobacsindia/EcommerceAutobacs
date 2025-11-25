@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import Link from 'next/link';
 
 interface Product {
   _id: string;
@@ -12,6 +13,14 @@ interface Product {
   stock: number;
   category?: { name: string };
   featured: boolean;
+}
+
+interface ProductsResponse {
+  success: boolean;
+  count: number;
+  products: Product[];
+  page?: number;
+  pages?: number;
 }
 
 export default function AdminProductsPage() {
@@ -26,7 +35,7 @@ export default function AdminProductsPage() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(API_ENDPOINTS.PRODUCTS);
+      const response = await apiClient.get<ProductsResponse>(API_ENDPOINTS.PRODUCTS);
       setProducts(response.products || []);
     } catch (err) {
       console.error('Failed to fetch products:', err);
@@ -59,10 +68,10 @@ export default function AdminProductsPage() {
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Products Management</h1>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+        <Link href="/admin/products/create" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
           <Plus className="h-4 w-4" />
           Add Product
-        </button>
+        </Link>
       </div>
 
       <div className="mb-6">
@@ -130,9 +139,9 @@ export default function AdminProductsPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex gap-2">
-                    <button className="text-blue-600 hover:text-blue-900">
+                    <Link href={`/admin/products/edit/${product._id}`} className="text-blue-600 hover:text-blue-900">
                       <Edit className="h-4 w-4" />
-                    </button>
+                    </Link>
                     <button
                       onClick={() => handleDelete(product._id)}
                       className="text-red-600 hover:text-red-900"
