@@ -21,7 +21,7 @@ interface Product {
   shortDescription?: string;
   price: number;
   originalPrice?: number;
-  category: { 
+  category: {
     _id: string;
     name: string;
     slug: string;
@@ -69,14 +69,14 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
     try {
       // Build query string from search params
       const queryParams = new URLSearchParams();
-      if (searchParams.vehicleMake) queryParams.append('vehicleMake', searchParams.vehicleMake);
-      if (searchParams.vehicleModel) queryParams.append('vehicleModel', searchParams.vehicleModel);
+      if (searchParams.category) queryParams.append('category', searchParams.category);
+      if (searchParams.search) queryParams.append('search', searchParams.search);
       if (searchParams.page) queryParams.append('page', searchParams.page);
       if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
       if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
       if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
       if (searchParams.rating) queryParams.append('rating', searchParams.rating);
-      if (searchParams.category) queryParams.append('category', searchParams.category);
+      if (searchParams.vehicleMake) queryParams.append('vehicleMake', searchParams.vehicleMake);
       if (searchParams.brand) queryParams.append('brand', searchParams.brand);
       
       // Map frontend sort values to backend parameters
@@ -179,7 +179,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  
+
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
 
@@ -205,6 +205,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
         const resolvedSearchParams = Object.fromEntries(searchParams.entries());
         // Add vehicle make to search params
         resolvedSearchParams.vehicleMake = decodeURIComponent(params.make);
+        
         const result = await getProducts(resolvedSearchParams);
         setData(result);
       } catch (err: any) {
@@ -367,7 +368,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
                   const currentParams = new URLSearchParams(searchParams.toString());
                   currentParams.set('page', page.toString());
                   const href = `/vehicles/${params.make}?${currentParams.toString()}`;
-                  
+
                   return (
                     <Link
                       key={page}

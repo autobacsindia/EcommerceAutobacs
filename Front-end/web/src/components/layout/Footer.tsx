@@ -14,7 +14,7 @@ export default function Footer() {
           <div>
             <h3 className="text-white text-lg font-bold mb-4">{APP_NAME}</h3>
             <p className="text-sm text-gray-400">
-              Premium automotive accessories and performance parts for your vehicle.
+              Premium automotive accessories and performance parts for your car.
             </p>
           </div>
           

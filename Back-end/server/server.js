@@ -39,7 +39,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Test route
 app.get("/", (req, res) => {
-  res.json({ 
+  res.json({
     success: true,
     message: "Autobacs India API is running",
     version: "1.0.0",
@@ -83,10 +83,10 @@ const mongooseOptions = {
 // Connection event listeners
 mongoose.connection.on('connected', () => {
   console.log('✓ Mongoose connected to MongoDB');
-  
+
   // Initialize cron jobs after database connection is established
   cronService.initializeCronJobs();
-  
+
   // Set the cron service instance for the scheduled tasks routes
   setCronService(cronService);
 });
@@ -111,22 +111,22 @@ async function initializeServer() {
   try {
     // Perform pre-flight IP check
     const ipCheckPassed = await preFlightIPCheck();
-    
+
     if (!ipCheckPassed) {
       console.warn('⚠ Warning: IP mismatch detected. Starting server anyway, but database connection may fail.');
       console.warn('Run "npm run diagnose-ip" for assistance with IP whitelist issues.');
     }
-    
+
     // Initial connection using the new retry logic
     const dbConnection = await connectWithRetry();
-    
+
     // Start server
-    const PORT = process.env.PORT || 5000;
+    const PORT = process.env.PORT || 5001;  // Changed from 5000 to 5001 to avoid conflicts
     app.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/`);
-      
+
       // Show database connection status
       if (dbConnection) {
         console.log('✓ Database connection established');

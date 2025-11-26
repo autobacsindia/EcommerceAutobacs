@@ -46,23 +46,13 @@ curl http://localhost:5000/products
 curl http://localhost:5000/categories
 ```
 
-### 7. Get All Vehicles
-```bash
-curl http://localhost:5000/vehicles
-```
-
-### 8. Get Vehicle Makes
-```bash
-curl http://localhost:5000/vehicles/makes
-```
-
-### 9. Get User Cart (Authenticated)
+### 7. Get User Cart (Authenticated)
 ```bash
 curl http://localhost:5000/cart \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
-### 10. Get User Wishlist (Authenticated)
+### 8. Get User Wishlist (Authenticated)
 ```bash
 curl http://localhost:5000/wishlist \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
@@ -137,7 +127,7 @@ Invoke-RestMethod -Uri "http://localhost:5000/products" -Method Get
 
 5. **Test authenticated endpoints** using the token
 
-6. **Test public endpoints** (products, categories, vehicles)
+6. **Test public endpoints** (products, categories)
 
 ## Expected Results
 

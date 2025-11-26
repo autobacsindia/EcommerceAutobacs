@@ -53,19 +53,16 @@ export default function VehicleFilterSidebar() {
     fetchMakes();
   }, []);
 
-  // Fetch models when make is selected or when current make changes
+  // Fetch models when make is selected
   useEffect(() => {
     const fetchModels = async () => {
-      if (!selectedMake && !currentVehicleMake) {
+      if (!selectedMake) {
         setModels([]);
         return;
       }
 
-      const makeToUse = selectedMake || currentVehicleMake;
-      if (!makeToUse) return;
-
       try {
-        const response: any = await apiClient.get(`/vehicles/models/${makeToUse}`);
+        const response: any = await apiClient.get(`/vehicles/models/${selectedMake}`);
         const modelData = response.models.map((model: string) => ({
           _id: model,
           name: model,
@@ -79,9 +76,9 @@ export default function VehicleFilterSidebar() {
     };
 
     fetchModels();
-  }, [selectedMake, currentVehicleMake]);
+  }, [selectedMake]);
 
-  // Set initial values from URL
+  // Initialize selected values from URL params
   useEffect(() => {
     setSelectedMake(currentVehicleMake);
     setSelectedModel(currentVehicleModel);
@@ -91,26 +88,25 @@ export default function VehicleFilterSidebar() {
     const make = e.target.value;
     setSelectedMake(make);
     setSelectedModel('');
-    
-    // Update URL with new make filter
+
+    // Update URL with new vehicle make filter
     const currentParams = new URLSearchParams(searchParams.toString());
     if (make) {
       currentParams.set('vehicleMake', make);
-      currentParams.delete('vehicleModel');
       currentParams.delete('page'); // Reset to first page
     } else {
       currentParams.delete('vehicleMake');
       currentParams.delete('vehicleModel');
     }
-    
+
     router.push(`/products?${currentParams.toString()}`);
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const model = e.target.value;
     setSelectedModel(model);
-    
-    // Update URL with new model filter
+
+    // Update URL with new vehicle model filter
     const currentParams = new URLSearchParams(searchParams.toString());
     if (model) {
       currentParams.set('vehicleModel', model);
@@ -118,20 +114,20 @@ export default function VehicleFilterSidebar() {
     } else {
       currentParams.delete('vehicleModel');
     }
-    
+
     router.push(`/products?${currentParams.toString()}`);
   };
 
   const clearVehicleFilters = () => {
     setSelectedMake('');
     setSelectedModel('');
-    
+
     // Remove vehicle filters from URL
     const currentParams = new URLSearchParams(searchParams.toString());
     currentParams.delete('vehicleMake');
     currentParams.delete('vehicleModel');
     currentParams.delete('page'); // Reset to first page
-    
+
     router.push(`/products?${currentParams.toString()}`);
   };
 
@@ -163,7 +159,7 @@ export default function VehicleFilterSidebar() {
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-semibold text-gray-900">Filter by Vehicle</h3>
         {(currentVehicleMake || currentVehicleModel) && (
-          <button 
+          <button
             onClick={clearVehicleFilters}
             className="text-sm text-blue-600 hover:text-blue-800"
           >
@@ -171,7 +167,7 @@ export default function VehicleFilterSidebar() {
           </button>
         )}
       </div>
-      
+
       <div className="space-y-4">
         <div>
           <label htmlFor="sidebar-vehicle-make" className="block text-sm font-medium text-gray-700 mb-1">
@@ -212,7 +208,7 @@ export default function VehicleFilterSidebar() {
           </select>
         </div>
       </div>
-      
+
       {(currentVehicleMake || currentVehicleModel) && (
         <div className="mt-4 pt-4 border-t border-gray-200">
           <h4 className="text-sm font-medium text-gray-900 mb-2">Active Filters</h4>

@@ -9,15 +9,8 @@ const router = express.Router();
 // @desc    Get all active vehicles
 // @access  Public
 router.get("/", asyncHandler(async (req, res) => {
-  const { make, model, year } = req.query;
-  
-  const query = { isActive: true };
-  if (make) query.make = new RegExp(make, 'i');
-  if (model) query.model = new RegExp(model, 'i');
-  if (year) query.year = Number(year);
-
-  const vehicles = await Vehicle.find(query)
-    .sort({ make: 1, model: 1, year: -1 });
+  const vehicles = await Vehicle.find({ isActive: true })
+    .sort({ make: 1, model: 1, year: 1 });
 
   res.json({
     success: true,
@@ -27,15 +20,15 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 // @route   GET /vehicles/makes
-// @desc    Get all unique makes
+// @desc    Get all vehicle makes
 // @access  Public
 router.get("/makes", asyncHandler(async (req, res) => {
-  const makes = await Vehicle.distinct('make', { isActive: true });
+  const makes = await Vehicle.distinct("make", { isActive: true }).sort();
 
   res.json({
     success: true,
     count: makes.length,
-    makes: makes.sort()
+    makes
   });
 }));
 
@@ -43,16 +36,15 @@ router.get("/makes", asyncHandler(async (req, res) => {
 // @desc    Get all models for a specific make
 // @access  Public
 router.get("/models/:make", asyncHandler(async (req, res) => {
-  const models = await Vehicle.distinct('model', { 
-    make: new RegExp(req.params.make, 'i'),
+  const models = await Vehicle.distinct("model", { 
+    make: req.params.make, 
     isActive: true 
-  });
+  }).sort();
 
   res.json({
     success: true,
-    make: req.params.make,
     count: models.length,
-    models: models.sort()
+    models
   });
 }));
 
@@ -61,25 +53,6 @@ router.get("/models/:make", asyncHandler(async (req, res) => {
 // @access  Public
 router.get("/:id", asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
-
-  if (!vehicle) {
-    return res.status(404).json({
-      success: false,
-      message: 'Vehicle not found'
-    });
-  }
-
-  res.json({
-    success: true,
-    vehicle
-  });
-}));
-
-// @route   GET /vehicles/slug/:slug
-// @desc    Get vehicle by slug
-// @access  Public
-router.get("/slug/:slug", asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findOne({ slug: req.params.slug, isActive: true });
 
   if (!vehicle) {
     return res.status(404).json({

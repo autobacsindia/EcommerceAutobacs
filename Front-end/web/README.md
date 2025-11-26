@@ -1,237 +1,163 @@
-# Autobacs India - Next.js Frontend
+# Autobacs India Frontend
 
-Modern Next.js 16 application for the Autobacs India automotive e-commerce platform, built with TypeScript, Tailwind CSS, and the App Router.
+## Project Overview
 
-## Tech Stack
+Modern e-commerce frontend for Autobacs India, built with Next.js 14, React, and TypeScript.
 
-- **Framework:** Next.js 16.0.3 (App Router)
-- **UI Library:** React 19.2.0
-- **Language:** TypeScript 5
-- **Styling:** Tailwind CSS 4.1
-- **Icons:** Lucide React, React Icons
-- **Forms:** React Hook Form + Zod validation
-- **State Management:** React Context API
-- **HTTP Client:** Native Fetch API
+## Features
+
+### Core Functionality
+- **User Authentication:** Secure login/register with JWT
+- **Product Catalog:** Browse and search thousands of automotive products
+- **Shopping Cart:** Add/remove items, adjust quantities
+- **Wishlist:** Save favorite products for later
+- **Checkout Process:** Secure order placement with multiple payment options
+- **Order History:** Track past purchases and order status
+- **User Profile:** Manage account details and preferences
+
+### UI/UX Features
+- **Responsive Design:** Mobile-first approach with Tailwind CSS
+- **Product Filtering:** Advanced search and filtering options
+- **Product Comparison:** Compare similar products side-by-side
+- **Image Gallery:** High-quality product images with zoom functionality
+- **Customer Reviews:** Read and submit product reviews
+- **Real-time Updates:** Live inventory and pricing information
+
+### Technical Features
+- **TypeScript:** Strong typing for improved code quality
+- **Next.js App Router:** Modern routing with server components
+- **API Integration:** RESTful API consumption with error handling
+- **State Management:** Context API for global state
+- **Performance Optimizations:** Image optimization, code splitting
+- **SEO Friendly:** Metadata and structured data implementation
 
 ## Project Structure
 
 ```
 src/
-├── app/                      # Next.js App Router pages
-│   ├── layout.tsx           # Root layout with providers
-│   ├── page.tsx             # Home page
-│   └── globals.css          # Global styles
-├── components/
-│   └── layout/
-│       ├── Header.tsx       # Header component
-│       └── Footer.tsx       # Footer component
-├── context/
-│   ├── AuthContext.tsx      # Authentication state
-│   └── CartContext.tsx      # Shopping cart state
-└── lib/
-    ├── api.ts               # API client
-    ├── utils.ts             # Utility functions
-    └── constants.ts         # App constants
+├── app/                 # Next.js app router pages
+│   ├── admin/          # Admin dashboard pages
+│   ├── api/            # API route handlers
+│   ├── auth/           # Authentication pages
+│   ├── cart/           # Shopping cart page
+│   ├── categories/     # Product categories pages
+│   ├── checkout/       # Checkout flow pages
+│   ├── orders/         # Order history pages
+│   ├── products/       # Product listing and detail pages
+│   ├── profile/        # User profile pages
+│   ├── search/         # Search results pages
+│   └── wishlist/       # Wishlist page
+├── components/         # Reusable UI components
+│   ├── categories/     # Category-related components
+│   ├── layout/         # Layout components (header, footer, etc.)
+│   ├── products/       # Product-related components
+│   └── ui/             # Generic UI components
+├── context/            # React context providers
+├── hooks/              # Custom React hooks
+├── lib/                # Utility functions and helpers
+│   ├── api/            # API client and utilities
+│   └── types/          # TypeScript type definitions
+└── styles/             # Global styles and Tailwind config
 ```
 
 ## Getting Started
 
 ### Prerequisites
-
-- Node.js 20+ recommended
-- Backend API running on http://localhost:5000
+- Node.js 18+ installed
+- npm or yarn package manager
 
 ### Installation
+1. Navigate to the frontend directory:
+   ```bash
+   cd "C:\Main project\Autobacs\Front-end\web"
+   ```
 
-```bash
-# Install dependencies
-npm install
-```
-
-### Environment Variables
-
-Create a `.env.local` file:
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:5000
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
 ### Development
-
+Start the development server:
 ```bash
-# Run development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+The application will be available at `http://localhost:3000`.
 
-### Build for Production
-
+### Production Build
+Create an optimized production build:
 ```bash
 npm run build
+```
+
+Start the production server:
+```bash
 npm start
 ```
 
-## Features Implemented
+## Available Scripts
 
-### ✅ Phase 1 & 2 Complete
-
-- [x] Next.js 16 setup with App Router
-- [x] TypeScript configuration
-- [x] Tailwind CSS 4.1 styling
-- [x] API client with JWT authentication
-- [x] Authentication context (login, register, logout)
-- [x] Shopping cart context
-- [x] Responsive header with cart count
-- [x] Professional footer
-- [x] Home page with hero and features
-
-### 🔄 In Development
-
-- [ ] Login/Register pages
-- [ ] Product catalog
-- [ ] Product detail pages
-- [ ] Shopping cart page
-- [ ] Checkout flow
-- [ ] User dashboard
-- [ ] Admin panel
+- `npm run dev` - Start development server
+- `npm run build` - Create production build
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run type-check` - Run TypeScript type checking
 
 ## API Integration
 
-### Backend Connection
-
-The app connects to the Express backend at `http://localhost:5000`.
+The frontend communicates with the backend API at `http://localhost:5000`.
 
 ### API Endpoints
 
-All endpoints are defined in `src/lib/constants.ts`:
+#### Authentication (`/auth`)
+- `POST /auth/register` - Register new user
+- `POST /auth/login` - Login user
+- `GET /auth/profile` - Get authenticated user profile
+- `PUT /auth/profile` - Update user profile
 
-- **Auth:** `/auth/login`, `/auth/register`, `/auth/me`
-- **Products:** `/products`, `/products/:id`
-- **Cart:** `/cart`, `/cart/add`, `/cart/update/:id`
-- **Orders:** `/orders`, `/orders/:id`
-- **Categories:** `/categories`, `/categories/:id`
-- **Vehicles:** `/vehicles`, `/vehicles/:id`
+#### Products (`/products`)
+- `GET /products` - List products with filtering/pagination
+- `GET /products/:id` - Get product by ID
+- `GET /products/featured` - Get featured products
+- `GET /products/search-suggestions` - Get search suggestions
 
-### Authentication Flow
+#### Categories (`/categories`)
+- `GET /categories` - List categories
+- `GET /categories/:id` - Get category by ID
+- `GET /categories/:slug` - Get category by slug
+- `GET /categories/hierarchical` - Get hierarchical category tree
 
-1. User logs in via login page
-2. Backend returns JWT token
-3. Token stored in localStorage
-4. Token attached to all API requests
-5. AuthContext manages user state
+#### Cart (`/cart`)
+- `GET /cart` - Get user's cart
+- `POST /cart/add` - Add item to cart
+- `PUT /cart/update` - Update cart item quantity
+- `DELETE /cart/remove` - Remove item from cart
+- `DELETE /cart/clear` - Clear entire cart
 
-## Development Guidelines
+#### Wishlist (`/wishlist`)
+- `GET /wishlist` - Get user's wishlist
+- `POST /wishlist/add` - Add item to wishlist
+- `DELETE /wishlist/remove` - Remove item from wishlist
+- `DELETE /wishlist/clear` - Clear entire wishlist
 
-### Adding New Pages
+## Environment Variables
 
-```tsx
-// app/new-page/page.tsx
-export default function NewPage() {
-  return <div>Content</div>;
-}
+Create a `.env.local` file in the root directory with the following variables:
+
 ```
-
-### Using API Client
-
-```tsx
-import { apiClient } from '@/lib/api';
-
-// GET request
-const products = await apiClient.get('/products');
-
-// POST request with auth
-const order = await apiClient.post('/orders', { items: [...] });
+NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_APP_NAME=Autobacs India
 ```
-
-### Using Auth Context
-
-```tsx
-'use client';
-
-import { useAuth } from '@/context/AuthContext';
-
-export default function Component() {
-  const { user, login, logout, isAuthenticated } = useAuth();
-  
-  // Use authentication state
-}
-```
-
-### Using Cart Context
-
-```tsx
-'use client';
-
-import { useCart } from '@/context/CartContext';
-
-export default function Component() {
-  const { cart, itemCount, addToCart } = useCart();
-  
-  // Use cart operations
-}
-```
-
-## Utility Functions
-
-Located in `src/lib/utils.ts`:
-
-- `formatCurrency(amount)` - Format price in INR
-- `formatDate(date)` - Format date strings
-- `truncateText(text, length)` - Truncate long text
-- `debounce(func, wait)` - Debounce function calls
-- `cn(...)` - Merge Tailwind classes
-
-## Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm start` - Start production server
-- `npm run lint` - Run ESLint
-
-## Browser Support
-
-- Chrome (latest)
-- Firefox (latest)
-- Safari (latest)
-- Edge (latest)
 
 ## Contributing
 
-This is the frontend for Autobacs India e-commerce platform. The backend API is located in `../../Back-end/server/`.
-
-## Migration Notes
-
-This Next.js app replaces the previous Create React App. The old app is preserved in `../client/` as backup.
-
-**Key Improvements:**
-- Server-side rendering for SEO
-- Better performance with automatic code splitting
-- Modern React 19 features
-- TypeScript for type safety
-- Improved developer experience
-
-## Troubleshooting
-
-### Port Already in Use
-```bash
-# Kill process on port 3000
-npx kill-port 3000
-```
-
-### Clear Cache
-```bash
-rm -rf .next
-npm run dev
-```
-
-### Module Not Found
-```bash
-rm -rf node_modules
-npm install
-```
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a pull request
 
 ## License
 
-Copyright © 2025 Autobacs India. All rights reserved.
+This project is proprietary and confidential. All rights reserved.

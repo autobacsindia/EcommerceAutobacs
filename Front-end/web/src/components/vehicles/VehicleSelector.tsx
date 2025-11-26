@@ -15,10 +15,10 @@ interface VehicleModel {
   slug: string;
 }
 
-export default function VehicleSelector({ 
-  onVehicleSelect 
-}: { 
-  onVehicleSelect: (make: string, model: string) => void 
+export default function VehicleSelector({
+  onVehicleSelect
+}: {
+  onVehicleSelect: (make: string, model: string) => void
 }) {
   const [makes, setMakes] = useState<VehicleMake[]>([]);
   const [models, setModels] = useState<VehicleModel[]>([]);

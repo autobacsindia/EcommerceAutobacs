@@ -131,7 +131,7 @@ export default function Home() {
                 <div className="h-48 bg-gradient-to-br from-blue-400 to-blue-600"></div>
                 <div className="p-6">
                   <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Body Kits</h3>
-                  <p className="text-gray-600">Enhance your vehicle's appearance</p>
+                  <p className="text-gray-600">Enhance your car's appearance</p>
                 </div>
               </div>
             </Link>

@@ -79,7 +79,7 @@ export default function VehiclesPage() {
               </div>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Vehicles</h2>
               <p className="text-gray-600 mb-6">{error}</p>
-              <button 
+              <button
                 onClick={() => window.location.reload()}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
               >
@@ -90,8 +90,8 @@ export default function VehiclesPage() {
         ) : makes.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
             {makes.map((make) => (
-              <Link 
-                key={make._id} 
+              <Link
+                key={make._id}
                 href={`/vehicles/${encodeURIComponent(make.name)}`}
                 className="group block bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
               >
@@ -112,8 +112,8 @@ export default function VehiclesPage() {
           <div className="text-center py-12">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">No Vehicles Found</h2>
             <p className="text-gray-600 mb-6">There are currently no vehicles available.</p>
-            <Link 
-              href="/products" 
+            <Link
+              href="/products"
               className="text-blue-600 hover:text-blue-700 font-medium"
             >
               Browse all products

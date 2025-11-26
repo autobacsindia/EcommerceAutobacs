@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 
 const VehicleSchema = new mongoose.Schema({
-  make: { 
-    type: String, 
+  make: {
+    type: String,
     required: true,
     trim: true
   },
-  model: { 
-    type: String, 
+  model: {
+    type: String,
     required: true,
     trim: true
   },
@@ -33,8 +33,8 @@ const VehicleSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 // Compound index for vehicle queries

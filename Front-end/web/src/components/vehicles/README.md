@@ -6,7 +6,6 @@ This directory contains components related to vehicle-based navigation and filte
 
 ### VehicleSelector
 A dropdown component that allows users to select a vehicle make and model. It fetches vehicle data from the backend API and provides real-time filtering capabilities.
-
 **Props:**
 - `onVehicleSelect`: Function called when a vehicle is selected
 
@@ -19,7 +18,6 @@ import VehicleSelector from '@/components/vehicles/VehicleSelector';
 
 ### VehicleFilterSidebar
 A sidebar component for filtering products by vehicle make and model. It integrates with the existing ProductFilters component and shows active filters with clear functionality.
-
 **Usage:**
 ```tsx
 import VehicleFilterSidebar from '@/components/vehicles/VehicleFilterSidebar';
