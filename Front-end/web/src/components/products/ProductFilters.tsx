@@ -65,8 +65,12 @@ export default function ProductFilters() {
   });
   
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
-    const category = searchParams.get('category');
-    return category ? [category] : [];
+    // Parse multiple categories from URL
+    const categoryParam = searchParams.get('category');
+    if (categoryParam) {
+      return categoryParam.split(',').filter(Boolean);
+    }
+    return [];
   });
   
   const [inStockOnly, setInStockOnly] = useState<boolean>(() => {
@@ -74,14 +78,21 @@ export default function ProductFilters() {
   });
   
   const [selectedRatings, setSelectedRatings] = useState<number[]>(() => {
-    const rating = searchParams.get('rating');
-    const parsedRating = rating ? parsePriceValue(rating, 0) : 0;
-    return rating ? [parsedRating] : [];
+    // Parse multiple ratings from URL
+    const ratingParam = searchParams.get('rating');
+    if (ratingParam) {
+      return ratingParam.split(',').map(Number).filter(n => !isNaN(n));
+    }
+    return [];
   });
   
   const [selectedBrands, setSelectedBrands] = useState<string[]>(() => {
-    const brand = searchParams.get('brand');
-    return brand ? [brand] : [];
+    // Parse multiple brands from URL
+    const brandParam = searchParams.get('brand');
+    if (brandParam) {
+      return brandParam.split(',').filter(Boolean);
+    }
+    return [];
   });
   
   // Fetch categories
@@ -157,16 +168,16 @@ export default function ProductFilters() {
       currentParams.delete('maxPrice');
     }
     
-    // Categories
+    // Categories - support multiple
     if (selectedCategories.length > 0) {
-      currentParams.set('category', selectedCategories[0]); // For now, only support one category
+      currentParams.set('category', selectedCategories.join(','));
     } else {
       currentParams.delete('category');
     }
     
-    // Brands
+    // Brands - support multiple
     if (selectedBrands.length > 0) {
-      currentParams.set('brand', selectedBrands[0]); // For now, only support one brand
+      currentParams.set('brand', selectedBrands.join(','));
     } else {
       currentParams.delete('brand');
     }
@@ -178,9 +189,9 @@ export default function ProductFilters() {
       currentParams.delete('inStock');
     }
     
-    // Ratings
+    // Ratings - support multiple
     if (selectedRatings.length > 0) {
-      currentParams.set('rating', selectedRatings[0].toString()); // For now, only support one rating
+      currentParams.set('rating', selectedRatings.join(','));
     } else {
       currentParams.delete('rating');
     }
@@ -235,9 +246,9 @@ export default function ProductFilters() {
                   checked={selectedCategories.includes(category._id)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedCategories([category._id]); // Only allow one category for now
+                      setSelectedCategories([...selectedCategories, category._id]);
                     } else {
-                      setSelectedCategories([]);
+                      setSelectedCategories(selectedCategories.filter(id => id !== category._id));
                     }
                   }}
                 />
@@ -302,9 +313,9 @@ export default function ProductFilters() {
                 checked={selectedRatings.includes(rating)}
                 onChange={(e) => {
                   if (e.target.checked) {
-                    setSelectedRatings([rating]); // Only allow one rating for now
+                    setSelectedRatings([...selectedRatings, rating]);
                   } else {
-                    setSelectedRatings([]);
+                    setSelectedRatings(selectedRatings.filter(r => r !== rating));
                   }
                 }}
               />
@@ -342,9 +353,9 @@ export default function ProductFilters() {
                   checked={selectedBrands.includes(brand._id)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedBrands([brand._id]); // Only allow one brand for now
+                      setSelectedBrands([...selectedBrands, brand._id]);
                     } else {
-                      setSelectedBrands([]);
+                      setSelectedBrands(selectedBrands.filter(id => id !== brand._id));
                     }
                   }}
                 />

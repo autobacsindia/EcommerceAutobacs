@@ -14,13 +14,27 @@ async function getProducts(searchParams: any) {
   try {
     // Build query string from search params
     const queryParams = new URLSearchParams();
-    if (searchParams.category) queryParams.append('category', searchParams.category);
+    
+    // Handle multiple categories
+    if (searchParams.category) {
+      queryParams.append('category', searchParams.category);
+    }
+    
     if (searchParams.search) queryParams.append('search', searchParams.search);
     if (searchParams.page) queryParams.append('page', searchParams.page);
     if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
     if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
     if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
-    if (searchParams.rating) queryParams.append('rating', searchParams.rating);
+    
+    // Handle multiple ratings
+    if (searchParams.rating) {
+      queryParams.append('rating', searchParams.rating);
+    }
+    
+    // Handle multiple brands
+    if (searchParams.brand) {
+      queryParams.append('brand', searchParams.brand);
+    }
     
     // Map frontend sort values to backend parameters
     if (searchParams.sort) {
@@ -61,7 +75,7 @@ async function getProducts(searchParams: any) {
     }
 
     const data = await response.json();
-    return data.data || { products: [], pagination: {} };
+    return data; // Return the entire response object
   } catch (error) {
     console.error('Error fetching products:', error);
     return { products: [], pagination: {} };

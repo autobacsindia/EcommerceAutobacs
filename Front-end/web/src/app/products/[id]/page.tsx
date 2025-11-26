@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart, Heart, Star } from 'lucide-react';
+import { ShoppingCart, Heart, Star, GitCompare } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
@@ -31,18 +31,24 @@ async function getProduct(id: string) {
 
 function ProductDetailPageClient({ product }: { product: any }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCart } = useCart();
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
+  const [isCompared, setIsCompared] = useState(false);
+
+  // Get currently compared products from URL
+  const comparedProductIds = searchParams.get('compare')?.split(',') || [];
 
   useEffect(() => {
     if (product) {
       setIsWishlisted(isInWishlist(product._id));
+      setIsCompared(comparedProductIds.includes(product._id));
     }
-  }, [product, isInWishlist]);
+  }, [product, isInWishlist, comparedProductIds]);
 
   const handleWishlistToggle = async () => {
     if (!isAuthenticated) {
@@ -86,6 +92,45 @@ function ProductDetailPageClient({ product }: { product: any }) {
     }
   };
 
+  const toggleCompare = () => {
+    if (!product) return;
+    
+    const currentParams = new URLSearchParams(searchParams.toString());
+    const compareList = [...comparedProductIds];
+    
+    if (compareList.includes(product._id)) {
+      // Remove from comparison
+      const index = compareList.indexOf(product._id);
+      compareList.splice(index, 1);
+    } else {
+      // Add to comparison (limit to 4 products)
+      if (compareList.length >= 4) {
+        alert('You can only compare up to 4 products at a time.');
+        return;
+      }
+      compareList.push(product._id);
+    }
+    
+    if (compareList.length > 0) {
+      currentParams.set('compare', compareList.join(','));
+    } else {
+      currentParams.delete('compare');
+    }
+    
+    // Update URL without reloading the page
+    const newUrl = `${window.location.pathname}?${currentParams.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+    setIsCompared(!isCompared);
+  };
+
+  const viewComparison = () => {
+    if (comparedProductIds.length < 2) {
+      alert('Please select at least 2 products to compare.');
+      return;
+    }
+    router.push(`/compare?ids=${comparedProductIds.join(',')}`);
+  };
+
   if (!product) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -105,6 +150,42 @@ function ProductDetailPageClient({ product }: { product: any }) {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* Compare Bar */}
+      {comparedProductIds.length > 0 && (
+        <div className="bg-blue-50 border-b border-blue-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center">
+                <GitCompare className="h-5 w-5 text-blue-600 mr-2" />
+                <span className="text-blue-800 font-medium">
+                  {comparedProductIds.length} product{comparedProductIds.length !== 1 ? 's' : ''} selected for comparison
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const currentParams = new URLSearchParams(searchParams.toString());
+                    currentParams.delete('compare');
+                    const newUrl = `${window.location.pathname}?${currentParams.toString()}`;
+                    window.history.replaceState({}, '', newUrl);
+                    setIsCompared(false);
+                  }}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={viewComparison}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Compare Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
         <nav className="mb-6 text-sm text-gray-600">
@@ -207,8 +288,8 @@ function ProductDetailPageClient({ product }: { product: any }) {
                 </div>
               )}
 
-              {/* Add to Cart */}
-              <div className="flex gap-4">
+              {/* Add to Cart and Compare */}
+              <div className="flex flex-col sm:flex-row gap-4">
                 <button 
                   onClick={handleAddToCart}
                   disabled={cartLoading || product.stock === 0}
@@ -217,6 +298,19 @@ function ProductDetailPageClient({ product }: { product: any }) {
                   <ShoppingCart className="h-5 w-5" />
                   {cartLoading ? 'Adding...' : 'Add to Cart'}
                 </button>
+                
+                <button 
+                  onClick={toggleCompare}
+                  className={`px-6 py-3 border rounded-md transition-colors flex items-center justify-center gap-2 ${
+                    isCompared 
+                      ? 'border-blue-500 bg-blue-50 text-blue-500' 
+                      : 'border-gray-300 hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <GitCompare className="h-5 w-5" />
+                  {isCompared ? 'Added to Compare' : 'Compare'}
+                </button>
+                
                 <button 
                   onClick={handleWishlistToggle}
                   disabled={wishlistLoading}
@@ -237,12 +331,40 @@ function ProductDetailPageClient({ product }: { product: any }) {
   );
 }
 
-export default async function ProductDetailPage({
+export default function ProductDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string }; // Accept both Promise and resolved object
 }) {
-  const product = await getProduct(params.id);
+  // Use React.use() to unwrap the Promise if it's a Promise
+  const unwrappedParams = use(params);
+  const productId = unwrappedParams.id;
+  
+  // Use state and effect to handle async data fetching
+  const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchProduct() {
+      setLoading(true);
+      const fetchedProduct = await getProduct(productId);
+      setProduct(fetchedProduct);
+      setLoading(false);
+    }
+    
+    fetchProduct();
+  }, [productId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading product...</p>
+        </div>
+      </div>
+    );
+  }
 
   return <ProductDetailPageClient product={product} />;
 }

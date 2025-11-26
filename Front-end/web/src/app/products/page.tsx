@@ -72,16 +72,31 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
     try {
       // Build query string from search params
       const queryParams = new URLSearchParams();
-      if (searchParams.category) queryParams.append('category', searchParams.category);
+      
+      // Handle multiple categories
+      if (searchParams.category) {
+        queryParams.append('category', searchParams.category);
+      }
+      
       if (searchParams.search) queryParams.append('search', searchParams.search);
       if (searchParams.page) queryParams.append('page', searchParams.page);
       if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
       if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
       if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
-      if (searchParams.rating) queryParams.append('rating', searchParams.rating);
+      
+      // Handle multiple ratings
+      if (searchParams.rating) {
+        queryParams.append('rating', searchParams.rating);
+      }
+      
       if (searchParams.vehicleMake) queryParams.append('vehicleMake', searchParams.vehicleMake);
       if (searchParams.vehicleModel) queryParams.append('vehicleModel', searchParams.vehicleModel);
-      if (searchParams.brand) queryParams.append('brand', searchParams.brand);
+      
+      // Handle multiple brands
+      if (searchParams.brand) {
+        queryParams.append('brand', searchParams.brand);
+      }
+      
       if (searchParams.showAll === 'true') queryParams.append('limit', '500'); // Show all products (increased limit for larger catalogs)
       
       // Map frontend sort values to backend parameters
@@ -115,7 +130,13 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       const queryString = queryParams.toString();
       const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
       
-      const data: any = await apiClient.get(endpoint);
+      // Add timeout to the request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const data: any = await apiClient.get(endpoint, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       // Fix: Backend returns pagination properties directly in response object
       if (data && data.products) {
         // Extract pagination properties from the response
@@ -147,6 +168,10 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       
       // If this is the last attempt, re-throw the error
       if (attempt === retries) {
+        // Provide a more user-friendly error message
+        if (error.category === 'network' || error.status === 0) {
+          throw new Error('Unable to connect to the server. Please make sure the backend server is running on port 5000.');
+        }
         throw error;
       }
       

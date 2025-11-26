@@ -26,8 +26,21 @@ class SearchService {
     // Build query
     const query = { isActive: true };
 
-    if (category) query.category = category;
-    if (brand) query.brand = brand;
+    // Support multiple categories
+    if (category) {
+      const categories = Array.isArray(category) ? category : category.split(',');
+      if (categories.length > 0) {
+        query.category = { $in: categories };
+      }
+    }
+    
+    // Support multiple brands
+    if (brand) {
+      const brands = Array.isArray(brand) ? brand : brand.split(',');
+      if (brands.length > 0) {
+        query.brand = { $in: brands };
+      }
+    }
     
     // Price range filtering
     if (minPrice || maxPrice) {
@@ -44,9 +57,15 @@ class SearchService {
       query.stock = { $gt: 0 };
     }
     
-    // Rating filtering
+    // Support multiple ratings (find products with rating >= any of the specified ratings)
     if (rating) {
-      query.averageRating = { $gte: Number(rating) };
+      const ratings = Array.isArray(rating) ? rating : rating.split(',').map(Number);
+      const validRatings = ratings.filter(r => !isNaN(r));
+      if (validRatings.length > 0) {
+        // Find products with rating >= the highest specified rating
+        const maxRating = Math.max(...validRatings);
+        query.averageRating = { $gte: maxRating };
+      }
     }
     
     // Text search
@@ -103,7 +122,7 @@ class SearchService {
    * Get search suggestions based on partial text
    * @param {string} query - Partial search query
    * @param {number} limit - Maximum number of suggestions
-   * @returns {Array} Array of search suggestions
+   * @returns {Array} Array of search suggestions with additional metadata
    */
   static async getSearchSuggestions(query, limit = 10) {
     if (!query || query.length < 2) {
@@ -118,19 +137,52 @@ class SearchService {
       ],
       isActive: true
     })
-    .select('name brand')
-    .limit(limit);
+    .select('name brand category images')
+    .populate('category', 'name')
+    .limit(limit * 2); // Get more results to allow for deduplication
 
     // Extract unique suggestions
-    const suggestions = new Set();
+    const suggestions = [];
+    const seenNames = new Set();
+    const seenBrands = new Set();
+
+    // Add product suggestions
     products.forEach(product => {
-      suggestions.add(product.name);
-      if (product.brand) {
-        suggestions.add(product.brand);
+      // Add product name suggestion
+      if (!seenNames.has(product.name.toLowerCase())) {
+        seenNames.add(product.name.toLowerCase());
+        
+        // Get primary image if available
+        let imageUrl = null;
+        if (Array.isArray(product.images) && product.images.length > 0) {
+          const primaryImage = product.images.find(img => img.isPrimary) || product.images[0];
+          imageUrl = primaryImage ? primaryImage.url : null;
+        } else if (typeof product.images === 'string') {
+          imageUrl = product.images;
+        }
+        
+        suggestions.push({
+          id: `product-${product._id}`,
+          text: product.name,
+          type: 'product',
+          category: product.category ? product.category.name : null,
+          imageUrl: imageUrl
+        });
+      }
+
+      // Add brand suggestion
+      if (product.brand && !seenBrands.has(product.brand.toLowerCase())) {
+        seenBrands.add(product.brand.toLowerCase());
+        suggestions.push({
+          id: `brand-${product.brand.toLowerCase().replace(/\s+/g, '-')}`,
+          text: product.brand,
+          type: 'brand'
+        });
       }
     });
 
-    return Array.from(suggestions).slice(0, limit);
+    // Limit to requested number of suggestions
+    return suggestions.slice(0, limit);
   }
 }
 
