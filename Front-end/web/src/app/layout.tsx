@@ -7,6 +7,7 @@ import { WishlistProvider } from "@/context/WishlistContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,6 +43,7 @@ export default function RootLayout({
                   <main className="flex-1">{children}</main>
                   <Footer />
                 </div>
+                <Toaster position="top-right" />
               </WishlistProvider>
             </CartProvider>
           </AuthProvider>

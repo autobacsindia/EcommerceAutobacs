@@ -189,10 +189,22 @@ export class APIClient {
         throw error;
       }
       
-      // Handle other errors
+      // Handle other errors with more context
       const category = this.categorizeError(response.status, error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      throw new ApiError(response.status, errorMessage, response.url, category);
+      let errorMessage = 'An unknown error occurred';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // Add more context for network errors
+      if (category === ErrorCategory.NETWORK) {
+        errorMessage = `Network error: Unable to connect to the server. Please make sure the backend server is running on port 5001. Details: ${errorMessage}`;
+      }
+      
+      throw new ApiError(response.status || 0, errorMessage, response.url || '', category);
     }
   }
 

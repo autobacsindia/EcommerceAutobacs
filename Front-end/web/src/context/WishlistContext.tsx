@@ -115,8 +115,25 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       setWishlistItems(response.wishlist?.items || []);
       // Invalidate cache after successful mutation
       setLastFetched(null);
-    } catch (error) {
-      throw error;
+    } catch (error: any) {
+      // Check if it's the "already in wishlist" error
+      if (error.message && error.message.includes('already in wishlist')) {
+        // If product is already in wishlist, remove it
+        try {
+          await removeFromWishlist(productId);
+          // Return a special indicator that we removed the item
+          throw new Error('ITEM_REMOVED');
+        } catch (removeError) {
+          if (removeError.message !== 'ITEM_REMOVED') {
+            console.error('Failed to remove from wishlist:', removeError);
+            throw removeError;
+          }
+          // If it's our special indicator, rethrow it
+          throw removeError;
+        }
+      } else {
+        throw error;
+      }
     }
   };
 
@@ -138,7 +155,20 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   };
 
   const isInWishlist = (productId: string) => {
-    return wishlistItems.some(item => item.product === productId);
+    // Check if the wishlist items contain a product with the given ID
+    // The item.product could be either:
+    // 1. A string (product ID) - older format
+    // 2. An object with _id property - populated format
+    const result = wishlistItems.some(item => {
+      if (typeof item.product === 'string') {
+        return item.product === productId;
+      } else if (typeof item.product === 'object' && item.product !== null) {
+        return item.product._id === productId;
+      }
+      return false;
+    });
+    
+    return result;
   };
 
   useEffect(() => {

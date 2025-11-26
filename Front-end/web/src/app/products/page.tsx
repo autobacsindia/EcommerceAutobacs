@@ -157,20 +157,21 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
     } catch (error: any) {
       lastError = error;
       
-      // Log error with context
+      // Log error with more detailed context
       console.error(`Error fetching products (attempt ${attempt + 1}/${retries + 1}):`, {
-        error: error.message,
+        error: error.message || error.toString(),
         status: error.status,
         category: error.category,
         searchParams,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        errorObject: JSON.stringify(error, Object.getOwnPropertyNames(error)) // More detailed error info
       });
       
       // If this is the last attempt, re-throw the error
       if (attempt === retries) {
         // Provide a more user-friendly error message
         if (error.category === 'network' || error.status === 0) {
-          throw new Error('Unable to connect to the server. Please make sure the backend server is running on port 5000.');
+          throw new Error('Unable to connect to the server. Please make sure the backend server is running on port 5001.');
         }
         throw error;
       }

@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShoppingCart, Heart, GitCompare } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/lib/utils';
 import ProductImage from '@/components/products/ProductImage';
+import { toast } from 'react-hot-toast';
 
 interface ProductImage {
   url: string;
@@ -38,6 +42,9 @@ export default function ProductGrid({ products }: ProductGridProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
+  const { isInWishlist, addToWishlist, removeFromWishlist, wishlistItems } = useWishlist();
+  const [animatingItems, setAnimatingItems] = useState<Record<string, boolean>>({});
 
   // Get currently compared products from URL
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
@@ -47,6 +54,55 @@ export default function ProductGrid({ products }: ProductGridProps) {
       await addToCart(productId, 1);
     } catch (error) {
       console.error('Failed to add to cart:', error);
+    }
+  };
+
+  const handleToggleWishlist = async (productId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    // Trigger animation
+    setAnimatingItems(prev => ({ ...prev, [productId]: true }));
+    
+    try {
+      if (isInWishlist(productId)) {
+        await removeFromWishlist(productId);
+        toast.success('Removed from wishlist');
+      } else {
+        await addToWishlist(productId);
+        toast.success('Added to wishlist');
+      }
+    } catch (error: any) {
+      // Check if it's the "already in wishlist" error
+      if (error.message && error.message.includes('already in wishlist')) {
+        // If product is already in wishlist, remove it
+        try {
+          await removeFromWishlist(productId);
+          toast.success('Removed from wishlist');
+        } catch (removeError) {
+          console.error('Failed to remove from wishlist:', removeError);
+          toast.error('Failed to update wishlist');
+        }
+      } else if (error.message === 'ITEM_REMOVED') {
+        // Special case: item was removed in the addToWishlist function
+        toast.success('Removed from wishlist');
+      } else {
+        console.error('Failed to toggle wishlist:', error);
+        toast.error('Failed to update wishlist');
+      }
+    } finally {
+      // Remove animation after delay
+      setTimeout(() => {
+        setAnimatingItems(prev => {
+          const newState = { ...prev };
+          delete newState[productId];
+          return newState;
+        });
+      }, 300);
     }
   };
 
@@ -169,13 +225,16 @@ export default function ProductGrid({ products }: ProductGridProps) {
               
               {/* Wishlist Button */}
               <button
-                className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors"
-                onClick={(e) => {
-                  e.preventDefault();
-                  // TODO: Add to wishlist
-                }}
+                className={`absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors ${
+                  animatingItems[product._id] ? 'animate-pulse' : ''
+                }`}
+                onClick={(e) => handleToggleWishlist(product._id, e)}
               >
-                <Heart className="h-5 w-5 text-gray-600" />
+                <Heart className={`h-5 w-5 transition-colors duration-200 ${
+                  isInWishlist(product._id) 
+                    ? 'text-red-500 fill-current' 
+                    : 'text-gray-600'
+                }`} />
               </button>
 
               {/* Badges */}
