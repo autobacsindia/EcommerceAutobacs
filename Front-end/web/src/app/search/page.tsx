@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
+import Pagination from '@/components/layout/Pagination';
 
 // Function to fetch products with proper sorting parameters
 async function getProducts(searchParams: any) {
@@ -113,6 +114,7 @@ export default function SearchPage() {
 
   // Get search term from URL
   const searchTerm = searchParams.get('search') || '';
+  const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -208,27 +210,12 @@ export default function SearchPage() {
 
             {/* Pagination */}
             {!loading && pagination.pages > 1 && (
-              <div className="mt-8 flex justify-center gap-2">
-                {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => {
-                  const currentParams = new URLSearchParams(searchParams.toString());
-                  currentParams.set('page', page.toString());
-                  const href = `/search?${currentParams.toString()}`;
-                  
-                  return (
-                    <Link
-                      key={page}
-                      href={href}
-                      className={`px-4 py-2 rounded-md ${
-                        page === (pagination.currentPage || 1)
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      {page}
-                    </Link>
-                  );
-                })}
-              </div>
+              <Pagination
+                pagination={pagination}
+                currentPage={currentPage}
+                basePath="/search"
+                searchParams={searchParams}
+              />
             )}
           </div>
         </div>

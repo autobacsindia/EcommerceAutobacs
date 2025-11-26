@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
-import CategoryCard from '@/components/categories/CategoryCard';
+import OrganizedCategoryGrid from '@/components/categories/OrganizedCategoryGrid';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -98,7 +98,7 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -123,20 +123,7 @@ export default function CategoriesPage() {
             </Link>
           </div>
         ) : (
-          <>
-            <div className="mb-8 text-center">
-              <p className="text-gray-600 max-w-3xl mx-auto">
-                Discover the perfect automotive parts and accessories for your vehicle. 
-                Each category is carefully organized to help you find exactly what you need.
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {categories.map((category) => (
-                <CategoryCard key={category._id} category={category} />
-              ))}
-            </div>
-          </>
+          <OrganizedCategoryGrid categories={categories} />
         )}
       </div>
     </div>

@@ -4,13 +4,14 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
+import { ProductImage } from '@/lib/types';
 
 interface CartItem {
   product: {
     _id: string;
     name: string;
     price: number;
-    images: string[];
+    images: ProductImage[] | string;
     stock: number;
   };
   quantity: number;

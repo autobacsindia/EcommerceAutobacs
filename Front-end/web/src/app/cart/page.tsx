@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { formatCurrency } from '@/lib/utils';
+import EnhancedImage from '@/components/layout/EnhancedImage';
+import { ProductImage } from '@/lib/types';
 
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, isLoading } = useCart();
@@ -64,6 +65,26 @@ export default function CartPage() {
     );
   }
 
+  // Helper function to get the first image URL
+  const getFirstImageUrl = (images: ProductImage[] | string | undefined): string | null => {
+    if (!images) return null;
+    
+    if (typeof images === 'string') {
+      return images;
+    }
+    
+    if (Array.isArray(images) && images.length > 0) {
+      const firstImage = images[0];
+      if (typeof firstImage === 'string') {
+        return firstImage;
+      } else if (firstImage && typeof firstImage === 'object' && 'url' in firstImage) {
+        return (firstImage as ProductImage).url;
+      }
+    }
+    
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -98,19 +119,14 @@ export default function CartPage() {
                         href={`/products/${item.product._id}`}
                         className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded-md overflow-hidden"
                       >
-                        {item.product.images && item.product.images[0] ? (
-                          <Image
-                            src={item.product.images[0]}
-                            alt={item.product.name}
-                            width={96}
-                            height={96}
-                            className="object-cover w-full h-full"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-gray-400 text-xs">No image</span>
-                          </div>
-                        )}
+                        <EnhancedImage
+                          src={getFirstImageUrl(item.product.images)}
+                          alt={item.product.name}
+                          width={96}
+                          height={96}
+                          context="product"
+                          className="object-cover w-full h-full"
+                        />
                       </Link>
 
                       {/* Product Details */}

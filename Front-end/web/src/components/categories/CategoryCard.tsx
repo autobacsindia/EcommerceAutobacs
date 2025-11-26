@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import EnhancedImage from '@/components/layout/EnhancedImage';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -32,16 +33,13 @@ export default function CategoryCard({ category }: CategoryCardProps) {
       {/* Category Image */}
       <div className="h-48 bg-gradient-to-br from-blue-400 to-blue-600 relative overflow-hidden">
         {category.image?.url ? (
-          <img 
-            src={category.image.url} 
-            alt={category.image.alt || category.name} 
+          <EnhancedImage
+            src={category.image.url}
+            alt={category.image.alt || category.name}
+            width={300}
+            height={192}
             className="w-full h-full object-cover"
-            onError={(e) => {
-              // Handle image loading errors by showing a gradient background
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              target.parentElement!.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            }}
+            context="category"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
