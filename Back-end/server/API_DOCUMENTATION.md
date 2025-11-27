@@ -52,10 +52,18 @@ API endpoints are rate-limited to prevent abuse:
 - `DELETE /cart/clear` - Clear entire cart
 
 ### Wishlist Routes (`/wishlist`)
-- `GET /wishlist` - Get user's wishlist
-- `POST /wishlist/add` - Add item to wishlist
-- `DELETE /wishlist/remove` - Remove item from wishlist
-- `DELETE /wishlist/clear` - Clear entire wishlist
+- `GET /wishlist` - Get all user's wishlists
+- `GET /wishlist/:id` - Get specific wishlist
+- `POST /wishlist` - Create new wishlist
+- `PUT /wishlist/:id` - Update wishlist details
+- `DELETE /wishlist/:id` - Delete wishlist
+- `POST /wishlist/:id/items` - Add item to wishlist
+- `DELETE /wishlist/:id/items/:productId` - Remove item from wishlist
+- `DELETE /wishlist/:id/clear` - Clear entire wishlist
+- `POST /wishlist/:id/share` - Share wishlist with users or make public
+- `DELETE /wishlist/:id/share/:userId` - Revoke user access to shared wishlist
+- `GET /wishlist/:id/export` - Export wishlist as JSON
+- `POST /wishlist/import` - Import wishlist from JSON
 
 ## Admin Endpoints
 

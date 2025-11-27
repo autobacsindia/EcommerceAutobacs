@@ -8,6 +8,17 @@ import { API_ENDPOINTS } from '@/lib/constants';
 interface WishlistItem {
   product: string;
   addedAt: string;
+  notes?: string;
+}
+
+interface Wishlist {
+  _id: string;
+  name: string;
+  description?: string;
+  items: WishlistItem[];
+  privacy?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface WishlistData {
@@ -16,8 +27,10 @@ interface WishlistData {
 
 interface WishlistResponse {
   wishlist?: WishlistData;
+  wishlists?: Wishlist[];
   success: boolean;
   message?: string;
+  count?: number;
 }
 
 interface WishlistContextType {
@@ -28,12 +41,18 @@ interface WishlistContextType {
   removeFromWishlist: (productId: string) => Promise<void>;
   isInWishlist: (productId: string) => boolean;
   fetchWishlist: () => Promise<void>;
+  wishlists: Wishlist[];
+  activeWishlist: Wishlist | null;
+  createWishlist: (name: string, description?: string) => Promise<Wishlist>;
+  setActiveWishlist: (wishlistId: string) => Promise<void>;
 }
 
 const WishlistContext = createContext<WishlistContextType | undefined>(undefined);
 
 export function WishlistProvider({ children }: { children: ReactNode }) {
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [wishlists, setWishlists] = useState<Wishlist[]>([]);
+  const [activeWishlist, setActiveWishlistState] = useState<Wishlist | null>(null);
   const [loading, setLoading] = useState(true);
   const { isAuthenticated } = useAuth();
   
@@ -60,6 +79,8 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     
     if (!isAuthenticated) {
       setWishlistItems([]);
+      setWishlists([]);
+      setActiveWishlistState(null);
       setLoading(false);
       return;
     }
@@ -67,7 +88,18 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       const response: WishlistResponse = await apiClient.get<WishlistResponse>(API_ENDPOINTS.WISHLIST);
-      setWishlistItems(response.wishlist?.items || []);
+      
+      // Set all wishlists
+      const userWishlists = response.wishlists || [];
+      setWishlists(userWishlists);
+      
+      // Set active wishlist (first one or null if none exist)
+      const firstWishlist = userWishlists.length > 0 ? userWishlists[0] : null;
+      setActiveWishlistState(firstWishlist);
+      
+      // Set items from active wishlist
+      setWishlistItems(firstWishlist?.items || []);
+      
       setLastFetched(Date.now());
       // Reset rate limit status on successful fetch
       isRateLimited.current = false;
@@ -86,6 +118,8 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       }
       
       setWishlistItems([]);
+      setWishlists([]);
+      setActiveWishlistState(null);
     } finally {
       setLoading(false);
     }
@@ -107,15 +141,114 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       throw new Error('You must be logged in to add items to wishlist');
     }
 
+    // Validate productId
+    if (!productId || typeof productId !== 'string' || productId.trim() === '') {
+      throw new Error('Invalid product ID provided');
+    }
+    
+    // Ensure productId is a valid format (MongoDB ObjectId is 24 hex characters)
+    if (productId.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(productId)) {
+      console.warn('Product ID may not be in valid MongoDB ObjectId format:', productId);
+    }
+
+    // Ensure we have an active wishlist
+    let wishlistToUse = activeWishlist;
+    if (!wishlistToUse) {
+      // Try to fetch wishlists first
+      await fetchWishlist();
+      
+      // Get the updated active wishlist after fetch
+      // We need to get the current value from state, not the previous reference
+      wishlistToUse = activeWishlist;
+      
+      // If still no wishlist, create a default one
+      if (!wishlistToUse) {
+        try {
+          wishlistToUse = await createWishlist('My Wishlist', 'My default wishlist');
+          setActiveWishlistState(wishlistToUse);
+        } catch (createError) {
+          console.error('Failed to create default wishlist:', createError);
+          throw new Error('Unable to add item to wishlist. Please try again.');
+        }
+      }
+    }
+    
+    // Ensure we have a valid wishlist with an ID
+    if (!wishlistToUse || !wishlistToUse._id) {
+      console.error('No valid wishlist found:', { wishlistToUse, activeWishlist, wishlists });
+      throw new Error('Unable to add item to wishlist. No valid wishlist found.');
+    }
+
     try {
+      // Validate that we have a valid wishlist ID
+      if (!wishlistToUse || !wishlistToUse._id) {
+        throw new Error('Invalid wishlist ID');
+      }
+      
+      // Validate that we have a valid product ID
+      if (!productId || typeof productId !== 'string' || productId.trim() === '') {
+        throw new Error('Invalid product ID');
+      }
+      
+      // Log the request for debugging
+      console.log('Adding item to wishlist:', { wishlistId: wishlistToUse._id, productId });
+      
+      // Validate productId format before sending
+      if (!productId || typeof productId !== 'string') {
+        console.error('Invalid productId format:', productId);
+        throw new Error('Invalid product ID format');
+      }
+      
+      // Check if productId is a valid MongoDB ObjectId
+      if (productId.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(productId)) {
+        console.warn('ProductId may not be a valid MongoDB ObjectId:', productId);
+        // Still proceed with the request but log the warning
+      }
+      
+      console.log('Sending request to API:', {
+        url: API_ENDPOINTS.WISHLIST_ADD_ITEM(wishlistToUse._id),
+        method: 'POST',
+        body: { productId }
+      });
+      
       const response: WishlistResponse = await apiClient.post<WishlistResponse>(
-        API_ENDPOINTS.WISHLIST_ADD, 
+        API_ENDPOINTS.WISHLIST_ADD_ITEM(wishlistToUse._id), 
         { productId }
       );
-      setWishlistItems(response.wishlist?.items || []);
+      
+      console.log('Received response from API:', response);
+      
+      // Update the active wishlist and items
+      if (response.wishlist) {
+        const updatedWishlist = {
+          ...wishlistToUse,
+          items: response.wishlist.items
+        };
+        setActiveWishlistState(updatedWishlist);
+        setWishlistItems(response.wishlist.items);
+        
+        // Update the wishlists array
+        setWishlists(prev => prev.map(w => 
+          w._id === wishlistToUse._id ? updatedWishlist : w
+        ));
+      }
+      
       // Invalidate cache after successful mutation
       setLastFetched(null);
     } catch (error: any) {
+      // Log more detailed error information for debugging
+      console.error('Failed to add to wishlist - detailed error info:', {
+        error,
+        errorName: error?.name,
+        errorMessage: error?.message,
+        errorStatus: error?.status,
+        errorStack: error?.stack,
+        productId,
+        wishlistId: wishlistToUse?._id,
+        isAuthenticated,
+        wishlistToUse
+      });
+      
       // Check if it's the "already in wishlist" error
       if (error.message && error.message.includes('already in wishlist')) {
         // If product is already in wishlist, remove it
@@ -132,7 +265,30 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
           throw removeError;
         }
       } else {
-        throw error;
+        // Provide more specific error messages based on error type
+        if (error.status === 400) {
+          // This is likely a validation error
+          const validationMessage = error.message || 'Invalid request data';
+          // Avoid duplicating "Validation Error" in the message
+          if (validationMessage.includes('Validation Error')) {
+            throw new Error(validationMessage);
+          } else if (validationMessage === 'Validation Error' || validationMessage === 'Validation error') {
+            // If we only have a generic validation error, provide a more descriptive message
+            throw new Error('Validation failed. Please check your input and try again.');
+          } else {
+            throw new Error(`Validation Error: ${validationMessage}`);
+          }
+        } else if (error.status === 404) {
+          throw new Error('Wishlist or product not found');
+        } else if (error.status === 409) {
+          throw new Error('Product already in wishlist');
+        } else if (error instanceof Error) {
+          // Pass through the original error message
+          throw error;
+        } else {
+          // Handle any other error types
+          throw new Error('Failed to add item to wishlist. Please try again.');
+        }
       }
     }
   };
@@ -142,11 +298,31 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       throw new Error('You must be logged in to remove items from wishlist');
     }
 
+    // Ensure we have an active wishlist
+    if (!activeWishlist) {
+      throw new Error('No active wishlist found');
+    }
+
     try {
       const response: WishlistResponse = await apiClient.delete<WishlistResponse>(
-        API_ENDPOINTS.WISHLIST_REMOVE(productId)
+        API_ENDPOINTS.WISHLIST_REMOVE_ITEM(activeWishlist._id, productId)
       );
-      setWishlistItems(response.wishlist?.items || []);
+      
+      // Update the active wishlist and items
+      if (response.wishlist) {
+        const updatedWishlist = {
+          ...activeWishlist,
+          items: response.wishlist.items
+        };
+        setActiveWishlistState(updatedWishlist);
+        setWishlistItems(response.wishlist.items);
+        
+        // Update the wishlists array
+        setWishlists(prev => prev.map(w => 
+          w._id === activeWishlist._id ? updatedWishlist : w
+        ));
+      }
+      
       // Invalidate cache after successful mutation
       setLastFetched(null);
     } catch (error) {
@@ -169,6 +345,73 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     });
     
     return result;
+  };
+
+  const createWishlist = async (name: string, description?: string): Promise<Wishlist> => {
+    if (!isAuthenticated) {
+      throw new Error('You must be logged in to create a wishlist');
+    }
+    
+    // Log the wishlist creation attempt
+    console.log('Creating wishlist:', { name, description });
+
+    try {
+      const response: WishlistResponse = await apiClient.post<WishlistResponse>(
+        API_ENDPOINTS.WISHLIST,
+        { name, description }
+      );
+      
+      // The backend returns the full wishlist object directly
+      // Check if response is the wishlist object itself or nested
+      const wishlistData = response.wishlist || response as any;
+      
+      if (wishlistData && wishlistData._id) {
+        const newWishlist: Wishlist = {
+          _id: wishlistData._id,
+          name: wishlistData.name || name,
+          description: wishlistData.description || description,
+          items: wishlistData.items || [],
+          privacy: wishlistData.privacy,
+          createdAt: wishlistData.createdAt || new Date().toISOString(),
+          updatedAt: wishlistData.updatedAt || new Date().toISOString()
+        };
+        
+        // Update wishlists array
+        setWishlists(prev => [...prev, newWishlist]);
+        
+        // If this is the first wishlist, set it as active
+        if (wishlists.length === 0) {
+          setActiveWishlistState(newWishlist);
+          setWishlistItems(newWishlist.items);
+        }
+        
+        return newWishlist;
+      }
+      
+      throw new Error('Failed to create wishlist: No wishlist data returned');
+    } catch (error: any) {
+      console.error('Failed to create wishlist:', error);
+      
+      // Provide more specific error messages
+      if (error.status === 400) {
+        const validationMessage = error.message || 'Invalid wishlist data';
+        throw new Error(`Validation Error: ${validationMessage}`);
+      } else if (error.status === 409) {
+        throw new Error('A wishlist with this name already exists');
+      } else {
+        throw new Error('Failed to create wishlist. Please try again.');
+      }
+    }
+  };
+
+  const setActiveWishlist = async (wishlistId: string): Promise<void> => {
+    const wishlist = wishlists.find(w => w._id === wishlistId);
+    if (wishlist) {
+      setActiveWishlistState(wishlist);
+      setWishlistItems(wishlist.items);
+    } else {
+      throw new Error('Wishlist not found');
+    }
   };
 
   useEffect(() => {
@@ -198,7 +441,11 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         addToWishlist,
         removeFromWishlist,
         isInWishlist,
-        fetchWishlist
+        fetchWishlist,
+        wishlists,
+        activeWishlist,
+        createWishlist,
+        setActiveWishlist
       }}
     >
       {children}

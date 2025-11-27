@@ -142,8 +142,21 @@ export class APIClient {
     const contentType = response.headers.get('content-type');
     const isJson = contentType?.includes('application/json');
     
+    console.log('API Response:', {
+      status: response.status,
+      statusText: response.statusText,
+      url: response.url,
+      contentType: contentType,
+      isJson: isJson
+    });
+    
     try {
       const data = isJson ? await response.json() : await response.text();
+      
+      console.log('API Response Data:', {
+        data: data,
+        type: typeof data
+      });
       
       if (!response.ok) {
         // Handle rate limit errors
@@ -162,7 +175,7 @@ export class APIClient {
           
           throw new ApiError(response.status, errorMessage, response.url, ErrorCategory.CLIENT, rateLimitInfo);
         }
-        
+      
         // Handle authentication errors
         if (response.status === 401) {
           this.clearAuthToken();
@@ -170,41 +183,88 @@ export class APIClient {
             window.location.href = '/login';
           }
         }
-        
+      
         // Extract error message
-        const errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
+        let errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
+      
+        // Include validation errors in the message if they exist
+        if (typeof data === 'object' && data.errors && Array.isArray(data.errors)) {
+          const validationErrors = data.errors.map((err: any) => {
+            // Handle different error formats
+            if (err.msg) return err.msg;
+            if (err.message) return err.message;
+            if (err.param && err.msg) return `${err.param}: ${err.msg}`;
+            return 'Validation error';
+          }).join(', ');
+        
+          // Only add validation errors if they provide additional information
+          if (validationErrors && validationErrors !== 'Validation error' && validationErrors !== 'validation error') {
+            errorMessage = `${errorMessage}: ${validationErrors}`;
+          } else if (validationErrors) {
+            // If we only have generic validation errors, use a more descriptive message
+            if (validationErrors === 'Validation error' || validationErrors === 'validation error') {
+              // If we have a general error message, use it with more context
+              if (data.message && data.message !== 'Validation failed') {
+                errorMessage = data.message;
+              } else {
+                errorMessage = 'Validation failed. Please check your input and try again.';
+              }
+            } else {
+              errorMessage = validationErrors;
+            }
+          }
+        }
+      
         const category = this.categorizeError(response.status, new Error(errorMessage));
-        throw new ApiError(response.status, errorMessage, response.url, category);
+        const apiError = new ApiError(response.status, errorMessage, response.url, category);
+      
+        // Add raw response data to error for debugging
+        (apiError as any).rawData = data;
+        (apiError as any).responseStatus = response.status;
+      
+        throw apiError;
       }
       
       return data;
     } catch (error) {
+      console.error('API Response Error:', {
+        error: error,
+        name: error?.name,
+        message: error?.message,
+        stack: error?.stack
+      });
+      
       // Handle parsing errors
       if (error instanceof SyntaxError) {
         throw new ApiError(0, 'Invalid response format', response.url, ErrorCategory.PARSING);
       }
-      
+  
       // Re-throw ApiError instances
       if (error instanceof ApiError) {
         throw error;
       }
-      
+  
       // Handle other errors with more context
       const category = this.categorizeError(response.status, error);
       let errorMessage = 'An unknown error occurred';
-      
+  
       if (error instanceof Error) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
-      
+  
       // Add more context for network errors
       if (category === ErrorCategory.NETWORK) {
         errorMessage = `Network error: Unable to connect to the server. Please make sure the backend server is running on port 5001. Details: ${errorMessage}`;
       }
-      
-      throw new ApiError(response.status || 0, errorMessage, response.url || '', category);
+  
+      const apiError = new ApiError(response.status || 0, errorMessage, response.url || '', category);
+  
+      // Add error details for debugging
+      (apiError as any).originalError = error;
+  
+      throw apiError;
     }
   }
 
@@ -280,6 +340,9 @@ const apiClient = new APIClient();
 
 // Export the instance as default
 export default apiClient;
+
+// Export classes and enums for external use
+export { ApiError, ErrorCategory };
 
 // Export individual functions for backward compatibility
 // export { apiGet, apiPost, apiPut, apiDelete, fetchWithRetry }; // Commented out to avoid conflicts

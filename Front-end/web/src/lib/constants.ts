@@ -35,9 +35,9 @@ export const API_ENDPOINTS = {
   
   // Wishlist
   WISHLIST: '/wishlist',
-  WISHLIST_ADD: '/wishlist/add',
-  WISHLIST_REMOVE: (productId: string) => `/wishlist/remove/${productId}`,
-  WISHLIST_CLEAR: '/wishlist/clear',
+  WISHLIST_ADD_ITEM: (wishlistId: string) => `/wishlist/${wishlistId}/items`,
+  WISHLIST_REMOVE_ITEM: (wishlistId: string, productId: string) => `/wishlist/${wishlistId}/items/${productId}`,
+  WISHLIST_CLEAR: (wishlistId: string) => `/wishlist/${wishlistId}/clear`,
   
   // Orders
   ORDERS: '/orders',
