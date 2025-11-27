@@ -218,7 +218,7 @@ export default function CreateCategoryPage() {
                     .filter(cat => cat._id !== '') // Filter out invalid categories
                     .map((category) => (
                       <option key={category._id} value={category._id}>
-                        {category.name}
+                        {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
                       </option>
                     ))}
                 </select>

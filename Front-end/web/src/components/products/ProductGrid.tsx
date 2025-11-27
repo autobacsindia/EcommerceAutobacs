@@ -266,7 +266,7 @@ export default function ProductGrid({ products }: ProductGridProps) {
             <div className="p-4">
               {/* Category */}
               <p className="text-xs text-gray-500 uppercase mb-1">
-                {typeof product.category === 'object' && product.category !== null ? product.category.name : typeof product.category === 'string' ? product.category : 'Uncategorized'}
+                {typeof product.category === 'object' && product.category !== null ? (product.category.name === 'Suspension' ? 'SUSPENSION' : product.category.name) : typeof product.category === 'string' ? product.category : 'Uncategorized'}
               </p>
 
               {/* Product Name */}

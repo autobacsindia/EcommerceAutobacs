@@ -39,7 +39,7 @@ export default function CategoryBreadcrumbs({ category, className = '' }: Catego
       </Link>
       <span className="text-gray-400">/</span>
       <span className="text-gray-900 truncate max-w-xs" title={category.name}>
-        {category.name}
+        {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
       </span>
     </nav>
   );

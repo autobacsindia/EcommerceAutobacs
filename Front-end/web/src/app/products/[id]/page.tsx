@@ -284,7 +284,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
               {product.category && (
                 <div className="mb-6">
                   <h2 className="font-semibold text-gray-900 mb-2">Category</h2>
-                  <p className="text-gray-700">{product.category.name}</p>
+                  <p className="text-gray-700">{product.category.name === 'Suspension' ? 'SUSPENSION' : product.category.name}</p>
                 </div>
               )}
 

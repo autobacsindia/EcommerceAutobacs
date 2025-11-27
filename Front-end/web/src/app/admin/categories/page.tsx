@@ -162,7 +162,7 @@ export default function AdminCategoriesPage() {
                       </div>
                     )}
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900">{category.name}</h3>
+                      <h3 className="text-lg font-medium text-gray-900">{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</h3>
                       {category.description && (
                         <p className="text-gray-500 text-sm mt-1">{category.description}</p>
                       )}

@@ -314,7 +314,7 @@ export default function EditCategoryPage() {
                     .filter(cat => cat._id !== categoryId) // Don't allow category to be its own parent
                     .map((category) => (
                       <option key={category._id} value={category._id}>
-                        {category.name}
+                        {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
                       </option>
                     ))}
                 </select>

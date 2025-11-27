@@ -6,6 +6,7 @@ import ScheduledImportService from "../services/scheduledImportService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateProduct } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { cleanupWordPressProducts } from "../utils/wordpressProductCleanup.js";
 
 const router = express.Router();
 
@@ -310,6 +311,51 @@ router.post("/import/schedule", protect, admin, asyncHandler(async (req, res) =>
       error: error.message
     });
   }
+}));
+
+// @route   POST /products/cleanup/wordpress
+// @desc    Clean up WordPress imported products (remove HTML tags and categorize)
+// @access  Private/Admin
+router.post("/cleanup/wordpress", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const { batchSize } = req.body || {};
+    
+    // Start cleanup process
+    const cleanupResult = await cleanupWordPressProducts(batchSize);
+    
+    if (cleanupResult.success) {
+      res.status(200).json({
+        success: true,
+        message: 'WordPress products cleaned up successfully',
+        summary: cleanupResult
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to clean up WordPress products',
+        error: cleanupResult.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clean up WordPress products',
+      error: error.message
+    });
+  }
+}));
+
+// @route   GET /products/cleanup/status
+// @desc    Get cleanup status
+// @access  Private/Admin
+router.get("/cleanup/status", protect, admin, asyncHandler(async (req, res) => {
+  // In a more advanced implementation, we would track cleanup jobs in a database
+  // For now, we'll return a placeholder response
+  res.json({
+    success: true,
+    status: 'Ready to start cleanup',
+    lastCleanup: null
+  });
 }));
 
 export default router;

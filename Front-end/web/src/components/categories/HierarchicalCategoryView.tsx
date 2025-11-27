@@ -150,7 +150,7 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-medium text-gray-900 truncate hover:text-blue-600">
-              {node.category.name}
+              {node.category.name === 'Suspension' ? 'SUSPENSION' : node.category.name}
             </h3>
             {node.category.description && (
               <p className="text-sm text-gray-500 truncate mt-1">

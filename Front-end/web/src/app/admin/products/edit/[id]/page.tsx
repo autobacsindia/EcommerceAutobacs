@@ -334,7 +334,7 @@ export default function EditProductPage() {
                 <option value="">Select a category</option>
                 {categories.map(category => (
                   <option key={category._id} value={category._id}>
-                    {category.name}
+                    {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
                   </option>
                 ))}
               </select>

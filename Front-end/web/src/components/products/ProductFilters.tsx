@@ -108,8 +108,7 @@ export default function ProductFilters() {
         setCategories([
           { _id: '1', name: 'Body Kits', slug: 'body-kits' } as Category,
           { _id: '2', name: 'Performance Parts', slug: 'performance-parts' } as Category,
-          { _id: '3', name: 'Suspension', slug: 'suspension' } as Category,
-          { _id: '4', name: 'Exhaust Systems', slug: 'exhaust-systems' } as Category,
+          { _id: '3', name: 'SUSPENSION', slug: 'suspension' } as Category,
           { _id: '5', name: 'Lighting', slug: 'lighting' } as Category,
         ]);
       } finally {
@@ -238,23 +237,26 @@ export default function ProductFilters() {
           </div>
         ) : (
           <div className="space-y-2">
-            {categories.map((category) => (
-              <label key={category._id} className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={selectedCategories.includes(category._id)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedCategories([...selectedCategories, category._id]);
-                    } else {
-                      setSelectedCategories(selectedCategories.filter(id => id !== category._id));
-                    }
-                  }}
-                />
-                <span className="ml-2 text-sm text-gray-700">{category.name}</span>
-              </label>
-            ))}
+            {categories
+              .filter(category => !['Brake System', 'Electronics', 'Engine Parts', 'Exhaust', 'Filters'].includes(category.name))
+              .map((category) => (
+                <label key={category._id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    checked={selectedCategories.includes(category._id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedCategories([...selectedCategories, category._id]);
+                      } else {
+                        setSelectedCategories(selectedCategories.filter(id => id !== category._id));
+                      }
+                    }}
+                  />
+                  <span className="ml-2 text-sm text-gray-700">{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</span>
+                </label>
+              ))
+            }
           </div>
         )}
       </div>

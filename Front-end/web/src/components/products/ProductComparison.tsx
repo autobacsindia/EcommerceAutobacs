@@ -298,7 +298,7 @@ export default function ProductComparison() {
                 {products.map((product) => (
                   <div key={`${product._id}-category`} className="text-center">
                     {typeof product.category === 'object' && product.category !== null 
-                      ? product.category.name 
+                      ? (product.category.name === 'Suspension' ? 'SUSPENSION' : product.category.name)
                       : typeof product.category === 'string' 
                         ? product.category 
                         : 'Uncategorized'}

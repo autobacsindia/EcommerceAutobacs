@@ -53,7 +53,7 @@ export default function CategoryCard({ category }: CategoryCardProps) {
       {/* Category Info */}
       <div className="p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-          {category.name}
+          {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
         </h2>
         {category.description && (
           <p className="text-gray-600 mb-4 line-clamp-2">
