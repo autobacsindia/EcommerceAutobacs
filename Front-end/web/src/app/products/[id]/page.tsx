@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import ProductImage from '@/components/products/ProductImage';
+import { Reviews } from '@/components/reviews';
 
 async function getProduct(id: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -325,6 +326,14 @@ function ProductDetailPageClient({ product }: { product: any }) {
               </div>
             </div>
           </div>
+          
+          {/* Reviews Section */}
+          <div className="mt-12">
+            <Reviews 
+              productId={product._id} 
+              isAuthenticated={isAuthenticated} 
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -334,7 +343,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
 export default function ProductDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string }; // Accept both Promise and resolved object
+  params: Promise<{ id: string }> | { id: string };
 }) {
   // Use React.use() to unwrap the Promise if it's a Promise
   const unwrappedParams = use(params);

@@ -1,0 +1,67 @@
+.reviewList {
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.reviewListHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.reviewListHeader h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.5rem;
+}
+
+.sortContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sortContainer label {
+  color: #666;
+  font-weight: 500;
+}
+
+.sortSelect {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.sortSelect:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.reviewItems {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 768px) {
+  .reviewListHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .sortContainer {
+    width: 100%;
+  }
+  
+  .sortSelect {
+    flex: 1;
+  }
+}

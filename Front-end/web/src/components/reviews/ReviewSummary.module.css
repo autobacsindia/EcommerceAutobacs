@@ -1,0 +1,103 @@
+.reviewSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.overallRating {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: center;
+}
+
+.ratingValue {
+  display: flex;
+  align-items: baseline;
+}
+
+.averageRating {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.maxRating {
+  font-size: 1.5rem;
+  color: #999;
+  margin-left: 4px;
+}
+
+.starsAndCount {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.totalReviews {
+  color: #666;
+  font-size: 1rem;
+}
+
+.ratingDistribution {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.distributionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.starLabel {
+  width: 60px;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.progressBarContainer {
+  flex: 1;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background-color: #f0c04a;
+  border-radius: 4px;
+}
+
+.count {
+  width: 40px;
+  text-align: right;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+  .overallRating {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .distributionRow {
+    gap: 8px;
+  }
+  
+  .starLabel {
+    width: 50px;
+  }
+  
+  .count {
+    width: 30px;
+  }
+}

@@ -66,3 +66,45 @@ export interface ProductsData {
   products: Product[];
   pagination: Pagination;
 }
+
+// Review interfaces
+export interface ReviewUser {
+  id: string;
+  name: string;
+}
+
+export interface ReviewImage {
+  url: string;
+  alt?: string;
+}
+
+export interface Review {
+  id: string;
+  user: ReviewUser;
+  rating: number;
+  title?: string;
+  comment: string;
+  images?: ReviewImage[];
+  isVerifiedPurchase: boolean;
+  helpfulCount: number;
+  isApproved: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ReviewSummary {
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: {
+    '5': number;
+    '4': number;
+    '3': number;
+    '2': number;
+    '1': number;
+  };
+}
+
+export interface PaginatedReviews {
+  reviews: Review[];
+  pagination: Pagination;
+}
