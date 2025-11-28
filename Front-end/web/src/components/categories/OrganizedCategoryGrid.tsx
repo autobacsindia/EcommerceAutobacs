@@ -58,9 +58,33 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
     }
   ];
 
-  // Find categories by slug
-  const findCategoryBySlug = (slug: string) => {
-    return categories.find(cat => cat.slug?.toLowerCase() === slug.toLowerCase());
+  // Find categories by slug, name, or variations
+  const findCategoryFlexible = (slug: string, name: string) => {
+    // First try to find by slug
+    let category = categories.find(cat => cat.slug?.toLowerCase() === slug.toLowerCase());
+    
+    // If not found by slug, try to find by exact name match (case insensitive)
+    if (!category) {
+      category = categories.find(cat => cat.name?.toUpperCase() === name.toUpperCase());
+    }
+    
+    // If still not found, try to find by partial name match for body kits
+    if (!category && name.toUpperCase() === "BODYKIT") {
+      category = categories.find(cat => {
+        const categoryName = cat.name?.toUpperCase() || "";
+        return categoryName.includes("BODY") && categoryName.includes("KIT");
+      });
+    }
+    
+    // If still not found, try alternative spellings for body kit
+    if (!category && name.toUpperCase() === "BODYKIT") {
+      category = categories.find(cat => {
+        const categoryName = cat.name?.toUpperCase() || "";
+        return categoryName === "BODY KIT" || categoryName === "BODY-KIT" || categoryName === "BODY_KIT";
+      });
+    }
+    
+    return category;
   };
 
   // Find subcategories of a parent category
@@ -75,7 +99,7 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
   return (
     <div className="space-y-12">
       {categoryHierarchy.map((mainCategory) => {
-        const category = findCategoryBySlug(mainCategory.slug);
+        const category = findCategoryFlexible(mainCategory.slug, mainCategory.name);
         
         // If main category doesn't exist, skip it
         if (!category) return null;
@@ -83,7 +107,7 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
         // Get subcategories
         const subcategories = mainCategory.subcategories 
           ? mainCategory.subcategories
-              .map(sub => findCategoryBySlug(sub.slug))
+              .map(sub => findCategoryFlexible(sub.slug, sub.name))
               .filter((sub): sub is Category => sub !== undefined)
           : findSubcategories(category._id);
         
@@ -119,31 +143,6 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
           </div>
         );
       })}
-      
-      {/* Uncategorized Categories */}
-      {categories.length > 0 && (
-        <div className="space-y-6">
-          <div className="border-b border-gray-200 pb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Other Categories</h2>
-            <p className="text-gray-600 mt-1">Additional product categories</p>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {categories
-              .filter(cat => {
-                // Filter out categories that are already displayed in the hierarchy
-                const slugs = categoryHierarchy.flatMap(cat => [
-                  cat.slug,
-                  ...(cat.subcategories?.map(sub => sub.slug) || [])
-                ]);
-                return !slugs.includes(cat.slug || '');
-              })
-              .map((category) => (
-                <CategoryCard key={category._id} category={category} />
-              ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

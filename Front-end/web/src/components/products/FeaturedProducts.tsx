@@ -37,14 +37,18 @@ export default function FeaturedProducts() {
     const fetchFeaturedProducts = async () => {
       try {
         setLoading(true);
-        // For now, we'll fetch all products and filter for featured ones
-        // In the future, we might want a dedicated endpoint for featured products
-        const response: any = await apiClient.get('/products?limit=6');
-        const featured = response.products.filter((product: Product) => product.isFeatured).slice(0, 6);
-        setProducts(featured);
-      } catch (err) {
+        // Use the dedicated endpoint for featured products
+        const response: any = await apiClient.get('/products/featured?limit=6');
+        setProducts(response.products);
+      } catch (err: any) {
         console.error('Failed to fetch featured products:', err);
-        setError('Failed to load featured products');
+        // Handle rate limit errors specifically
+        if (err.status === 429) {
+          setError('Too many requests. Please try again in a moment.');
+          // Optionally implement exponential backoff or show a countdown
+        } else {
+          setError('Failed to load featured products');
+        }
       } finally {
         setLoading(false);
       }

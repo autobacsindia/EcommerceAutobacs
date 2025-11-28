@@ -15,21 +15,33 @@ interface RateLimitInfo {
   resetTime?: number;   // Timestamp when rate limit resets
 }
 
-export class ApiError extends Error {
+class ApiError extends Error {
+  status: number;
+  url: string;
+  category?: string;
+  rateLimitInfo?: RateLimitInfo;
+  rawData?: any;
+  responseStatus?: number;
+  originalError?: any;
+
   constructor(
-    public status: number,
+    status: number,
     message: string,
-    public url: string,
-    public category?: string,
-    public rateLimitInfo?: RateLimitInfo
+    url: string,
+    category?: string,
+    rateLimitInfo?: RateLimitInfo
   ) {
     super(message);
     this.name = 'ApiError';
+    this.status = status;
+    this.url = url;
+    this.category = category;
+    this.rateLimitInfo = rateLimitInfo;
   }
 }
 
 // Enhanced error categorization
-export enum ErrorCategory {
+enum ErrorCategory {
   NETWORK = 'network',
   CLIENT = 'client',
   SERVER = 'server',
@@ -44,7 +56,7 @@ const TOKEN_KEY = 'autobacs_auth_token';
 /**
  * API Client class for managing all backend communications
  */
-export class APIClient {
+class APIClient {
   private token: string | null = null;
 
   constructor() {
@@ -164,7 +176,7 @@ export class APIClient {
           const retryAfter = response.headers.get('retry-after');
           const resetTime = retryAfter ? Date.now() + (parseInt(retryAfter) * 1000) : Date.now() + 900000; // Default to 15 minutes
           
-          // Don't retry rate limit errors
+          // Don't retry rate limit errors immediately
           const errorMessage = typeof data === 'object' && data.message ? data.message : 'Too many requests, please try again later';
           
           // Include rate limit information in error
@@ -219,8 +231,8 @@ export class APIClient {
         const apiError = new ApiError(response.status, errorMessage, response.url, category);
       
         // Add raw response data to error for debugging
-        (apiError as any).rawData = data;
-        (apiError as any).responseStatus = response.status;
+        apiError.rawData = data;
+        apiError.responseStatus = response.status;
       
         throw apiError;
       }
@@ -229,9 +241,9 @@ export class APIClient {
     } catch (error) {
       console.error('API Response Error:', {
         error: error,
-        name: error?.name,
-        message: error?.message,
-        stack: error?.stack
+        name: (error as any)?.name,
+        message: (error as any)?.message,
+        stack: (error as any)?.stack
       });
       
       // Handle parsing errors
@@ -262,76 +274,188 @@ export class APIClient {
       const apiError = new ApiError(response.status || 0, errorMessage, response.url || '', category);
   
       // Add error details for debugging
-      (apiError as any).originalError = error;
+      apiError.originalError = error;
   
       throw apiError;
     }
   }
 
   /**
-   * GET request
+   * GET request with retry logic for rate limiting
    */
-  async get<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(finalUrl, {
-      method: 'GET',
-      headers: this.getHeaders(options?.headers),
-      ...options
-    });
+    
+    // Default retry settings
+    const retries = options?.retries ?? 3;
+    const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    
+    let lastError: any;
+    
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(finalUrl, {
+          method: 'GET',
+          headers: this.getHeaders(options?.headers),
+          ...options
+        });
 
-    return this.handleResponse(response);
+        return await this.handleResponse(response);
+      } catch (error: any) {
+        lastError = error;
+        
+        // If it's a rate limit error and we have retries left, wait and retry
+        if (error.status === 429 && i < retries) {
+          // Use retry-after header if available, otherwise use default delay with exponential backoff
+          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
+          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
+        }
+        
+        // For all other errors or if we're out of retries, throw the error
+        throw error;
+      }
+    }
+    
+    // If we get here, we've exhausted all retries
+    throw lastError;
   }
 
   /**
-   * POST request
+   * POST request with retry logic for rate limiting
    */
-  async post<T>(endpoint: string, data: any, options?: RequestInit): Promise<T> {
+  async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(finalUrl, {
-      method: 'POST',
-      headers: this.getHeaders(options?.headers),
-      body: JSON.stringify(data),
-      ...options
-    });
+    
+    // Default retry settings
+    const retries = options?.retries ?? 3;
+    const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    
+    let lastError: any;
+    
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(finalUrl, {
+          method: 'POST',
+          headers: this.getHeaders(options?.headers),
+          body: JSON.stringify(data),
+          ...options
+        });
 
-    return this.handleResponse(response);
+        return await this.handleResponse(response);
+      } catch (error: any) {
+        lastError = error;
+        
+        // If it's a rate limit error and we have retries left, wait and retry
+        if (error.status === 429 && i < retries) {
+          // Use retry-after header if available, otherwise use default delay with exponential backoff
+          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
+          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
+        }
+        
+        // For all other errors or if we're out of retries, throw the error
+        throw error;
+      }
+    }
+    
+    // If we get here, we've exhausted all retries
+    throw lastError;
   }
 
   /**
-   * PUT request
+   * PUT request with retry logic for rate limiting
    */
-  async put<T>(endpoint: string, data: any, options?: RequestInit): Promise<T> {
+  async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(finalUrl, {
-      method: 'PUT',
-      headers: this.getHeaders(options?.headers),
-      body: JSON.stringify(data),
-      ...options
-    });
+    
+    // Default retry settings
+    const retries = options?.retries ?? 3;
+    const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    
+    let lastError: any;
+    
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(finalUrl, {
+          method: 'PUT',
+          headers: this.getHeaders(options?.headers),
+          body: JSON.stringify(data),
+          ...options
+        });
 
-    return this.handleResponse(response);
+        return await this.handleResponse(response);
+      } catch (error: any) {
+        lastError = error;
+        
+        // If it's a rate limit error and we have retries left, wait and retry
+        if (error.status === 429 && i < retries) {
+          // Use retry-after header if available, otherwise use default delay with exponential backoff
+          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
+          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
+        }
+        
+        // For all other errors or if we're out of retries, throw the error
+        throw error;
+      }
+    }
+    
+    // If we get here, we've exhausted all retries
+    throw lastError;
   }
 
   /**
-   * DELETE request
+   * DELETE request with retry logic for rate limiting
    */
-  async delete<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(finalUrl, {
-      method: 'DELETE',
-      headers: this.getHeaders(options?.headers),
-      ...options
-    });
+    
+    // Default retry settings
+    const retries = options?.retries ?? 3;
+    const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    
+    let lastError: any;
+    
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const response = await fetch(finalUrl, {
+          method: 'DELETE',
+          headers: this.getHeaders(options?.headers),
+          ...options
+        });
 
-    return this.handleResponse(response);
+        return await this.handleResponse(response);
+      } catch (error: any) {
+        lastError = error;
+        
+        // If it's a rate limit error and we have retries left, wait and retry
+        if (error.status === 429 && i < retries) {
+          // Use retry-after header if available, otherwise use default delay with exponential backoff
+          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
+          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
+        }
+        
+        // For all other errors or if we're out of retries, throw the error
+        throw error;
+      }
+    }
+    
+    // If we get here, we've exhausted all retries
+    throw lastError;
   }
 }
 
@@ -343,6 +467,3 @@ export default apiClient;
 
 // Export classes and enums for external use
 export { ApiError, ErrorCategory };
-
-// Export individual functions for backward compatibility
-// export { apiGet, apiPost, apiPut, apiDelete, fetchWithRetry }; // Commented out to avoid conflicts

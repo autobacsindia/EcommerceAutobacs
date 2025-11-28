@@ -25,6 +25,9 @@ interface CategoryCardProps {
 }
 
 export default function CategoryCard({ category }: CategoryCardProps) {
+  // Convert category name to uppercase for consistent display
+  const displayName = category.name.toUpperCase();
+
   return (
     <Link 
       href={`/products?category=${category._id}`}
@@ -53,7 +56,7 @@ export default function CategoryCard({ category }: CategoryCardProps) {
       {/* Category Info */}
       <div className="p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-          {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
+          {displayName}
         </h2>
         {category.description && (
           <p className="text-gray-600 mb-4 line-clamp-2">

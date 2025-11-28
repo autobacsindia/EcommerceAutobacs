@@ -23,15 +23,8 @@ function removeHtmlTags(html) {
   // Remove all other HTML tags
   sanitized = sanitized.replace(/<[^>]*>/g, '');
   
-  // Decode HTML entities
-  sanitized = escapeHtml.decode(sanitized);
-  
   // Trim extra whitespace
-  sanitized = sanitized.replace(/
-\s*
-/g, '
-
-').trim();
+  sanitized = sanitized.replace(/\s+/g, '\n').trim();
   
   return sanitized;
 }

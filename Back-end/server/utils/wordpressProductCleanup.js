@@ -106,10 +106,8 @@ async function cleanupWordPressProducts(batchSize = 50) {
   }
 }
 
-/**
- * CLI entry point
- */
-if (require.main === module) {
+// CLI entry point - check if this file is being run directly
+if (process.argv[1] && process.argv[1].endsWith('wordpressProductCleanup.js')) {
   const batchSize = process.argv[2] ? parseInt(process.argv[2]) : 50;
   cleanupWordPressProducts(batchSize)
     .then(result => {

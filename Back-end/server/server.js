@@ -12,6 +12,7 @@ import vehicleRoutes from "./routes/vehicles.js";
 import cartRoutes from "./routes/cart.js";
 import wishlistRoutes from "./routes/wishlist.js";
 import userRoutes from "./routes/users.js";
+import reviewRoutes from "./routes/reviews.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -72,6 +73,7 @@ app.use("/wishlist", wishlistRateLimit, wishlistRoutes);
 app.use("/orders", apiRateLimit, orderRoutes);
 app.use("/scheduled-tasks", apiRateLimit, scheduledTasksRoutes);
 app.use("/users", apiRateLimit, userRoutes);
+app.use("/reviews", apiRateLimit, reviewRoutes);
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {

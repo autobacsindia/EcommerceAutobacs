@@ -28,6 +28,14 @@ API endpoints are rate-limited to prevent abuse:
 - `GET /products/featured` - Get featured products
 - `GET /products/search-suggestions` - Get search suggestions
 
+### Review Routes (`/reviews`)
+- `GET /reviews/products/:productId` - Get all approved reviews for a product
+- `GET /reviews/products/:productId/summary` - Get review summary for a product
+- `POST /reviews/products/:productId` - Submit a new review for a product
+- `PUT /reviews/:reviewId` - Update own review
+- `DELETE /reviews/:reviewId` - Delete own review
+- `POST /reviews/:reviewId/helpful` - Mark a review as helpful
+
 ### Category Routes (`/categories`)
 - `GET /categories` - List categories
 - `GET /categories/:id` - Get category by ID
@@ -92,6 +100,12 @@ API endpoints are rate-limited to prevent abuse:
 - `GET /users/:id` - Get user by ID
 - `PUT /users/:id` - Update user
 - `DELETE /users/:id` - Delete user
+
+### Review Management (`/reviews`)
+- `GET /reviews/admin` - Get all reviews (admin)
+- `PUT /reviews/:reviewId/approve` - Approve a review (admin)
+- `PUT /reviews/:reviewId/reject` - Reject a review (admin)
+- `DELETE /reviews/:reviewId/admin` - Delete any review (admin)
 
 ## Error Responses
 All error responses follow this format:
