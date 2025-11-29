@@ -7,6 +7,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateProduct } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { cleanupWordPressProducts } from "../utils/wordpressProductCleanup.js";
+import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
 
 const router = express.Router();
 
@@ -20,7 +21,8 @@ router.get("/", asyncHandler(async (req, res) => {
     success: true,
     count: searchResults.products.length,
     ...searchResults.pagination,
-    products: searchResults.products
+    products: searchResults.products,
+    facets: searchResults.facets // Include facets in response when using Elasticsearch
   });
 }));
 
@@ -34,6 +36,24 @@ router.get("/suggestions", asyncHandler(async (req, res) => {
   res.json({
     success: true,
     suggestions
+  });
+}));
+
+// @route   GET /products/analytics
+// @desc    Get search analytics
+// @access  Private/Admin
+router.get("/analytics", protect, admin, asyncHandler(async (req, res) => {
+  const { startDate, endDate } = req.query;
+  
+  // Default to last 30 days if no dates provided
+  const end = endDate ? new Date(endDate) : new Date();
+  const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  const analytics = await SearchService.getSearchAnalytics(start, end);
+  
+  res.json({
+    success: true,
+    analytics
   });
 }));
 
@@ -82,13 +102,16 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res) => {
   const product = new Product(req.body);
   const savedProduct = await product.save();
+  
+  // Store product in response locals for middleware
+  res.locals.product = savedProduct;
 
   res.status(201).json({
     success: true,
     message: 'Product created successfully',
     product: savedProduct
   });
-}));
+}), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   PUT /products/:id
 // @desc    Update product
@@ -108,13 +131,16 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
     req.body,
     { new: true, runValidators: true }
   );
+  
+  // Store product in response locals for middleware
+  res.locals.product = updatedProduct;
 
   res.json({
     success: true,
     message: 'Product updated successfully',
     product: updatedProduct
   });
-}));
+}), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   DELETE /products/:id
 // @desc    Delete product (soft delete by setting isActive to false)
@@ -132,12 +158,15 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
   // Soft delete
   product.isActive = false;
   await product.save();
+  
+  // Store product in response locals for middleware
+  res.locals.product = product;
 
   res.json({
     success: true,
     message: 'Product deleted successfully'
   });
-}));
+}), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   POST /products/:id/stock
 // @desc    Update product stock
@@ -157,6 +186,9 @@ router.post("/:id/stock", protect, admin, asyncHandler(async (req, res) => {
     { stock },
     { new: true }
   );
+  
+  // Store product in response locals for middleware
+  res.locals.product = product;
 
   if (!product) {
     return res.status(404).json({
@@ -170,7 +202,7 @@ router.post("/:id/stock", protect, admin, asyncHandler(async (req, res) => {
     message: 'Stock updated successfully',
     product
   });
-}));
+}), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   POST /products/import/wordpress
 // @desc    Import products from WordPress

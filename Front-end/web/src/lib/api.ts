@@ -268,7 +268,7 @@ class APIClient {
   
       // Add more context for network errors
       if (category === ErrorCategory.NETWORK) {
-        errorMessage = `Network error: Unable to connect to the server. Please make sure the backend server is running on port 5001. Details: ${errorMessage}`;
+        errorMessage = `Network error: Unable to connect to the server. Please make sure the backend server is running on port 5002. Details: ${errorMessage}`;
       }
   
       const apiError = new ApiError(response.status || 0, errorMessage, response.url || '', category);
@@ -284,7 +284,7 @@ class APIClient {
    * GET request with retry logic for rate limiting
    */
   async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
@@ -328,7 +328,7 @@ class APIClient {
    * POST request with retry logic for rate limiting
    */
   async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
@@ -373,7 +373,7 @@ class APIClient {
    * PUT request with retry logic for rate limiting
    */
   async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
@@ -418,7 +418,7 @@ class APIClient {
    * DELETE request with retry logic for rate limiting
    */
   async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     

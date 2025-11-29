@@ -26,7 +26,7 @@ API endpoints are rate-limited to prevent abuse:
 - `GET /products` - List products with filtering/pagination
 - `GET /products/:id` - Get product by ID
 - `GET /products/featured` - Get featured products
-- `GET /products/search-suggestions` - Get search suggestions
+- `GET /products/suggestions` - Get search suggestions
 
 ### Review Routes (`/reviews`)
 - `GET /reviews/products/:productId` - Get all approved reviews for a product
@@ -79,6 +79,7 @@ API endpoints are rate-limited to prevent abuse:
 - `POST /products` - Create new product
 - `PUT /products/:id` - Update product
 - `DELETE /products/:id` - Delete product
+- `GET /products/analytics` - Get search analytics
 
 ### Category Management (`/categories`)
 - `POST /categories` - Create new category
@@ -106,6 +107,104 @@ API endpoints are rate-limited to prevent abuse:
 - `PUT /reviews/:reviewId/approve` - Approve a review (admin)
 - `PUT /reviews/:reviewId/reject` - Reject a review (admin)
 - `DELETE /reviews/:reviewId/admin` - Delete any review (admin)
+
+## Search and Filtering Endpoints
+
+### Enhanced Product Search (`/products`)
+The `/products` endpoint now supports advanced search capabilities when Elasticsearch is available:
+- Full-text search with relevance scoring
+- Faceted filtering by category, brand, price range, rating, and availability
+- Aggregation results for building filter UI components
+
+#### Query Parameters
+- `q` - Search query string
+- `category` - Filter by category (comma-separated for multiple)
+- `brand` - Filter by brand (comma-separated for multiple)
+- `minPrice` - Minimum price filter
+- `maxPrice` - Maximum price filter
+- `inStock` - Filter for in-stock items only (`true`/`false`)
+- `rating` - Minimum rating filter (comma-separated for multiple)
+- `sortBy` - Sort field (`createdAt`, `price`, `averageRating`, etc.)
+- `order` - Sort order (`asc`/`desc`)
+- `page` - Page number for pagination (default: 1)
+- `limit` - Results per page (default: 12)
+
+#### Response Format
+When Elasticsearch is available, the response includes faceted search data:
+```json
+{
+  "success": true,
+  "count": 12,
+  "total": 125,
+  "pages": 11,
+  "currentPage": 1,
+  "hasNext": true,
+  "hasPrev": false,
+  "products": [...],
+  "facets": {
+    "categories": [...],
+    "brands": [...],
+    "priceRanges": [...],
+    "ratingRanges": [...],
+    "availability": [...]
+  }
+}
+```
+
+### Search Suggestions (`/products/suggestions`)
+Provides autocomplete suggestions for search queries.
+
+#### Query Parameters
+- `q` - Partial search query (required)
+- `limit` - Maximum number of suggestions (default: 10)
+
+#### Response Format
+```json
+{
+  "success": true,
+  "suggestions": [
+    {
+      "id": "product-123",
+      "text": "Product Name",
+      "type": "product",
+      "category": "Category Name"
+    },
+    {
+      "id": "brand-nike",
+      "text": "Nike",
+      "type": "brand"
+    }
+  ]
+}
+```
+
+### Search Analytics (`/products/analytics`)
+Provides insights into search behavior (Admin only).
+
+#### Query Parameters
+- `startDate` - Analytics start date (ISO format)
+- `endDate` - Analytics end date (ISO format)
+
+#### Response Format
+```json
+{
+  "success": true,
+  "analytics": {
+    "popularTerms": [
+      {
+        "term": "running shoes",
+        "count": 42
+      }
+    ],
+    "searchesOverTime": [
+      {
+        "date": "2023-01-01T00:00:00.000Z",
+        "count": 15
+      }
+    ]
+  }
+}
+```
 
 ## Error Responses
 All error responses follow this format:

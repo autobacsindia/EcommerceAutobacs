@@ -171,7 +171,7 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       if (attempt === retries) {
         // Provide a more user-friendly error message
         if (error.category === 'network' || error.status === 0) {
-          throw new Error('Unable to connect to the server. Please make sure the backend server is running on port 5001.');
+          throw new Error('Unable to connect to the server. Please make sure the backend server is running on port 5002.');
         }
         throw error;
       }

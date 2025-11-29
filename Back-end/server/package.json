@@ -16,9 +16,13 @@
     "csv-import-products": "node csv-import-products.js",
     "cleanup-wordpress-products": "node utils/wordpressProductCleanup.js",
     "test-wordpress-cleanup": "node test-wordpress-cleanup.js",
-    "check-html-products": "node check-html-products.js"
+    "check-html-products": "node check-html-products.js",
+    "setup-elasticsearch": "node setup-elasticsearch.js",
+    "test-elasticsearch": "node test-elasticsearch.js",
+    "reindex-products": "node reindex-products.js"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^8.15.0",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "bson": "^7.0.0",

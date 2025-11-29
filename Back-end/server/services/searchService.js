@@ -1,4 +1,5 @@
 import Product from "../models/Product.js";
+import elasticsearchService from "./elasticsearchService.js";
 
 class SearchService {
   /**
@@ -7,6 +8,16 @@ class SearchService {
    * @returns {Object} Search results with products and pagination info
    */
   static async searchProducts(params) {
+    // Check if Elasticsearch is available
+    if (await elasticsearchService.isConnected()) {
+      try {
+        return await elasticsearchService.searchProducts(params);
+      } catch (error) {
+        console.error('Elasticsearch search failed, falling back to MongoDB:', error);
+      }
+    }
+    
+    // Fallback to MongoDB implementation
     const {
       page = 1,
       limit = 12,
@@ -125,6 +136,16 @@ class SearchService {
    * @returns {Array} Array of search suggestions with additional metadata
    */
   static async getSearchSuggestions(query, limit = 10) {
+    // Check if Elasticsearch is available
+    if (await elasticsearchService.isConnected()) {
+      try {
+        return await elasticsearchService.getSearchSuggestions(query, limit);
+      } catch (error) {
+        console.error('Elasticsearch suggestions failed, falling back to MongoDB:', error);
+      }
+    }
+    
+    // Fallback to MongoDB implementation
     if (!query || query.length < 2) {
       return [];
     }
@@ -183,6 +204,29 @@ class SearchService {
 
     // Limit to requested number of suggestions
     return suggestions.slice(0, limit);
+  }
+  
+  /**
+   * Get search analytics
+   * @param {string} startDate - Start date for analytics
+   * @param {string} endDate - End date for analytics
+   * @returns {Object} Search analytics data
+   */
+  static async getSearchAnalytics(startDate, endDate) {
+    // Check if Elasticsearch is available
+    if (await elasticsearchService.isConnected()) {
+      try {
+        return await elasticsearchService.getSearchAnalytics(startDate, endDate);
+      } catch (error) {
+        console.error('Elasticsearch analytics failed:', error);
+      }
+    }
+    
+    // Return empty analytics if not available
+    return {
+      popularTerms: [],
+      searchesOverTime: []
+    };
   }
 }
 
