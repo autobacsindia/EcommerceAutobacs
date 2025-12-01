@@ -108,3 +108,95 @@ export interface PaginatedReviews {
   reviews: Review[];
   pagination: Pagination;
 }
+
+// User profile interfaces
+export interface Address {
+  fullName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  isDefault: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  addresses: Address[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OrderItem {
+  product: {
+    _id: string;
+    name: string;
+    images: ProductImage[];
+  };
+  quantity: number;
+  price: number;
+  name: string;
+  image: string;
+}
+
+export interface Order {
+  _id: string;
+  user: string;
+  items: OrderItem[];
+  shippingAddress: {
+    fullName: string;
+    phone: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+  payment: string;
+  subtotal: number;
+  shippingCost: number;
+  tax: number;
+  discount: number;
+  totalAmount: number;
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+  trackingNumber?: string;
+  estimatedDelivery?: string;
+  deliveredAt?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedOrders {
+  orders: Order[];
+  pagination: Pagination;
+  count: number;
+}
+
+export interface CardDetails {
+  brand: string;
+  last4: string;
+  expiryMonth: number;
+  expiryYear: number;
+}
+
+export interface PaymentMethod {
+  id: string;
+  paymentMethod: string;
+  paymentGateway: string;
+  card?: CardDetails;
+  createdAt: string;
+}
+
+export interface PaymentMethodsData {
+  paymentMethods: PaymentMethod[];
+  count: number;
+}

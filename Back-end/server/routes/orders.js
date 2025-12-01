@@ -9,17 +9,31 @@ import { protect, admin } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 // @route   GET /orders
-// @desc    Get all orders for logged-in user
+// @desc    Get all orders for logged-in user with pagination
 // @access  Private
 router.get("/", protect, asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+  const skip = (Number(page) - 1) * Number(limit);
+
   const orders = await Order.find({ user: req.user.id })
     .populate('items.product', 'name images')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit));
 
+  const total = await Order.countDocuments({ user: req.user.id });
+  
   res.json({
     success: true,
     count: orders.length,
-    orders
+    orders,
+    pagination: {
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
+      totalOrders: total,
+      hasNext: Number(page) < Math.ceil(total / Number(limit)),
+      hasPrev: Number(page) > 1
+    }
   });
 }));
 

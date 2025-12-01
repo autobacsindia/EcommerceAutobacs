@@ -13,6 +13,8 @@ import cartRoutes from "./routes/cart.js";
 import wishlistRoutes from "./routes/wishlist.js";
 import userRoutes from "./routes/users.js";
 import reviewRoutes from "./routes/reviews.js";
+import profileRoutes from "./routes/profile.js";
+import paymentMethodRoutes from "./routes/paymentMethods.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -74,6 +76,8 @@ app.use("/orders", apiRateLimit, orderRoutes);
 app.use("/scheduled-tasks", apiRateLimit, scheduledTasksRoutes);
 app.use("/users", apiRateLimit, userRoutes);
 app.use("/reviews", apiRateLimit, reviewRoutes);
+app.use("/profile", apiRateLimit, profileRoutes);
+app.use("/payment-methods", apiRateLimit, paymentMethodRoutes);
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {
