@@ -357,7 +357,8 @@ class ElasticsearchService {
    */
   async getSearchSuggestions(query, limit = 10) {
     try {
-      const result = await this.client.search({
+      // First, get product and brand suggestions
+      const productBrandResult = await this.client.search({
         index: this.indexName,
         body: {
           query: {
@@ -373,12 +374,81 @@ class ElasticsearchService {
         }
       });
 
+      // Then, get category suggestions
+      const categoryResult = await this.client.search({
+        index: this.indexName,
+        body: {
+          query: {
+            multi_match: {
+              query: query,
+              fields: ['category.name^3'], // Higher boost for categories
+              fuzziness: 'AUTO',
+              operator: 'and'
+            }
+          },
+          _source: ['category.name'],
+          size: limit
+        }
+      });
+
+      // Get spelling corrections
+      const correctionResult = await this.client.search({
+        index: this.indexName,
+        body: {
+          query: {
+            multi_match: {
+              query: query,
+              fields: ['name', 'brand', 'category.name'],
+              fuzziness: 'AUTO:4,7', // More aggressive fuzziness for corrections
+              operator: 'or'
+            }
+          },
+          suggest: {
+            text: query,
+            name_suggest: {
+              phrase: {
+                field: "name",
+                size: 1,
+                gram_size: 2,
+                direct_generator: [{
+                  field: "name",
+                  suggest_mode: "always"
+                }],
+                highlight: {
+                  pre_tag: "<em>",
+                  post_tag: "</em>"
+                }
+              }
+            },
+            brand_suggest: {
+              phrase: {
+                field: "brand",
+                size: 1,
+                gram_size: 2,
+                direct_generator: [{
+                  field: "brand",
+                  suggest_mode: "always"
+                }],
+                highlight: {
+                  pre_tag: "<em>",
+                  post_tag: "</em>"
+                }
+              }
+            }
+          },
+          _source: ['name', 'brand'],
+          size: 0 // We only need suggestions, not actual documents
+        }
+      });
+
       // Extract unique suggestions
       const suggestions = [];
       const seenNames = new Set();
       const seenBrands = new Set();
+      const seenCategories = new Set();
 
-      result.hits.hits.forEach(hit => {
+      // Process product and brand suggestions
+      productBrandResult.hits.hits.forEach(hit => {
         const source = hit._source;
         
         // Add product name suggestion
@@ -403,8 +473,55 @@ class ElasticsearchService {
         }
       });
 
+      // Process category suggestions
+      categoryResult.hits.hits.forEach(hit => {
+        const source = hit._source;
+        
+        if (source.category && source.category.name && !seenCategories.has(source.category.name.toLowerCase())) {
+          seenCategories.add(source.category.name.toLowerCase());
+          suggestions.push({
+            id: `category-${source.category.name.toLowerCase().replace(/\s+/g, '-')}`,
+            text: source.category.name,
+            type: 'category'
+          });
+        }
+      });
+
+      // Extract spelling corrections
+      const corrections = [];
+      if (correctionResult.suggest) {
+        // Process name suggestions
+        if (correctionResult.suggest.name_suggest && correctionResult.suggest.name_suggest.length > 0) {
+          correctionResult.suggest.name_suggest[0].options.forEach(option => {
+            if (option.text && option.text.toLowerCase() !== query.toLowerCase()) {
+              corrections.push({
+                original: query,
+                suggested: option.text,
+                confidence: option.score
+              });
+            }
+          });
+        }
+        
+        // Process brand suggestions
+        if (correctionResult.suggest.brand_suggest && correctionResult.suggest.brand_suggest.length > 0) {
+          correctionResult.suggest.brand_suggest[0].options.forEach(option => {
+            if (option.text && option.text.toLowerCase() !== query.toLowerCase()) {
+              corrections.push({
+                original: query,
+                suggested: option.text,
+                confidence: option.score
+              });
+            }
+          });
+        }
+      }
+
       // Limit to requested number of suggestions
-      return suggestions.slice(0, limit);
+      return {
+        suggestions: suggestions.slice(0, limit),
+        corrections: corrections.slice(0, 3) // Limit corrections to 3
+      };
     } catch (error) {
       console.error('Error getting search suggestions:', error);
       throw error;

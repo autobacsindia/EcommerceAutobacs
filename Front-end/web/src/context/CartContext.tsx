@@ -67,7 +67,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response = await apiClient.get(API_ENDPOINTS.CART);
+      const response: any = await apiClient.get(API_ENDPOINTS.CART);
       
       if (response.success && response.cart) {
         // Ensure consistent cart data structure
@@ -106,7 +106,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response = await apiClient.post(API_ENDPOINTS.CART_ADD, {
+      const response: any = await apiClient.post(API_ENDPOINTS.CART_ADD, {
         productId,
         quantity,
       });
@@ -144,7 +144,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response = await apiClient.delete(API_ENDPOINTS.CART_REMOVE(productId));
+      const response: any = await apiClient.deleteRequest(API_ENDPOINTS.CART_REMOVE(productId));
       
       if (response.success && response.cart) {
         // Ensure consistent cart data structure
@@ -179,7 +179,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response = await apiClient.put(API_ENDPOINTS.CART_UPDATE(productId), {
+      const response: any = await apiClient.put(API_ENDPOINTS.CART_UPDATE(productId), {
         quantity,
       });
       
@@ -216,7 +216,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response = await apiClient.delete(API_ENDPOINTS.CART_CLEAR);
+      const response: any = await apiClient.deleteRequest(API_ENDPOINTS.CART_CLEAR);
       
       if (response.success) {
         setCart(null);

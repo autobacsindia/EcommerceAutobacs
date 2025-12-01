@@ -1,4 +1,5 @@
 import Product from "../models/Product.js";
+import Category from "../models/Category.js";
 import elasticsearchService from "./elasticsearchService.js";
 
 class SearchService {
@@ -147,7 +148,10 @@ class SearchService {
     
     // Fallback to MongoDB implementation
     if (!query || query.length < 2) {
-      return [];
+      return {
+        suggestions: [],
+        corrections: []
+      };
     }
 
     // Find products matching the query in name or brand
@@ -162,10 +166,17 @@ class SearchService {
     .populate('category', 'name')
     .limit(limit * 2); // Get more results to allow for deduplication
 
+    // Find categories matching the query
+    const categories = await Category.find({
+      name: { $regex: query, $options: 'i' },
+      isActive: true
+    }).limit(limit);
+
     // Extract unique suggestions
     const suggestions = [];
     const seenNames = new Set();
     const seenBrands = new Set();
+    const seenCategories = new Set();
 
     // Add product suggestions
     products.forEach(product => {
@@ -202,8 +213,23 @@ class SearchService {
       }
     });
 
+    // Add category suggestions
+    categories.forEach(category => {
+      if (!seenCategories.has(category.name.toLowerCase())) {
+        seenCategories.add(category.name.toLowerCase());
+        suggestions.push({
+          id: `category-${category.name.toLowerCase().replace(/\s+/g, '-')}`,
+          text: category.name,
+          type: 'category'
+        });
+      }
+    });
+
     // Limit to requested number of suggestions
-    return suggestions.slice(0, limit);
+    return {
+      suggestions: suggestions.slice(0, limit),
+      corrections: [] // No corrections in MongoDB fallback
+    };
   }
   
   /**
@@ -227,6 +253,51 @@ class SearchService {
       popularTerms: [],
       searchesOverTime: []
     };
+  }
+
+  /**
+   * Add a search term to history
+   * @param {string} term - The search term
+   * @param {number} resultsCount - Number of results returned
+   * @param {string} userId - User ID (optional)
+   * @returns {Object} Success status
+   */
+  static async addToSearchHistory(term, resultsCount = 0, userId = null) {
+    try {
+      // For now, we'll just log the search query using Elasticsearch if available
+      // In a more advanced implementation, we would store this in a database
+      if (await elasticsearchService.isConnected()) {
+        await elasticsearchService.logSearchQuery(term, userId);
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding to search history:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get recent search history
+   * @param {string} userId - User ID (optional)
+   * @param {number} limit - Maximum number of history items to return
+   * @returns {Array} Array of recent search terms
+   */
+  static async getSearchHistory(userId = null, limit = 10) {
+    // For now, we'll return an empty array since we're not persisting history on the server
+    // In a more advanced implementation, we would query a search_history collection
+    return [];
+  }
+
+  /**
+   * Clear search history
+   * @param {string} userId - User ID (optional)
+   * @returns {Object} Success status
+   */
+  static async clearSearchHistory(userId = null) {
+    // For now, we'll just return success since we're not persisting history on the server
+    // In a more advanced implementation, we would delete entries from a search_history collection
+    return { success: true };
   }
 }
 

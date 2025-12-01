@@ -10,13 +10,27 @@ export default function TestSearch() {
   const testSearch = async () => {
     setLoading(true);
     try {
-      // Test basic search
-      const response = await fetch('/api/products/suggestions?q=test&limit=5');
+      // Test basic search with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const response = await fetch('/api/products/suggestions?q=test&limit=5', {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
       const data = await response.json();
       setTestResults(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Test failed:', error);
-      setTestResults({ error: 'Test failed' });
+      
+      // Handle timeout specifically
+      if (error.name === 'AbortError') {
+        setTestResults({ error: 'Request timeout exceeded' });
+      } else {
+        setTestResults({ error: 'Test failed' });
+      }
     } finally {
       setLoading(false);
     }

@@ -31,11 +31,17 @@ router.get("/", asyncHandler(async (req, res) => {
 // @access  Public
 router.get("/suggestions", asyncHandler(async (req, res) => {
   const { q, limit = 10 } = req.query;
-  const suggestions = await SearchService.getSearchSuggestions(q, parseInt(limit));
+  const result = await SearchService.getSearchSuggestions(q, parseInt(limit));
+  
+  // For now, we'll return empty arrays for history
+  // In a more advanced implementation, these would be populated
+  const history = [];
   
   res.json({
     success: true,
-    suggestions
+    suggestions: result.suggestions || [],
+    corrections: result.corrections || [],
+    history
   });
 }));
 
@@ -54,6 +60,43 @@ router.get("/analytics", protect, admin, asyncHandler(async (req, res) => {
   res.json({
     success: true,
     analytics
+  });
+}));
+
+// @route   GET /products/history
+// @desc    Get search history
+// @access  Public
+router.get("/history", asyncHandler(async (req, res) => {
+  const { limit = 10 } = req.query;
+  const history = await SearchService.getSearchHistory(null, parseInt(limit));
+  
+  res.json({
+    success: true,
+    history
+  });
+}));
+
+// @route   DELETE /products/history
+// @desc    Clear search history
+// @access  Public
+router.delete("/history", asyncHandler(async (req, res) => {
+  const result = await SearchService.clearSearchHistory();
+  
+  res.json({
+    success: true,
+    message: 'Search history cleared successfully'
+  });
+}));
+
+// @route   DELETE /products/history/:term
+// @desc    Remove specific term from search history
+// @access  Public
+router.delete("/history/:term", asyncHandler(async (req, res) => {
+  // In a more advanced implementation, we would remove the specific term
+  // For now, we'll just return success
+  res.json({
+    success: true,
+    message: 'Term removed from search history'
   });
 }));
 

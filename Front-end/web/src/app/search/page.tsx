@@ -6,79 +6,106 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import Pagination from '@/components/layout/Pagination';
+import apiClient from '@/lib/api';
 
 // Function to fetch products with proper sorting parameters
 async function getProducts(searchParams: any) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  // Build query string from search params
+  const queryParams = new URLSearchParams();
+  
+  // Handle multiple categories
+  if (searchParams.category) {
+    queryParams.append('category', searchParams.category);
+  }
+  
+  if (searchParams.search) queryParams.append('search', searchParams.search);
+  if (searchParams.page) queryParams.append('page', searchParams.page);
+  if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
+  if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
+  if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
+  
+  // Handle multiple ratings
+  if (searchParams.rating) {
+    queryParams.append('rating', searchParams.rating);
+  }
+  
+  // Handle multiple brands
+  if (searchParams.brand) {
+    queryParams.append('brand', searchParams.brand);
+  }
+  
+  // Map frontend sort values to backend parameters
+  if (searchParams.sort) {
+    const sortValue = searchParams.sort;
+    switch (sortValue) {
+      case 'price_asc':
+        queryParams.append('sortBy', 'price');
+        queryParams.append('order', 'asc');
+        break;
+      case 'price_desc':
+        queryParams.append('sortBy', 'price');
+        queryParams.append('order', 'desc');
+        break;
+      case 'name_asc':
+        queryParams.append('sortBy', 'name');
+        queryParams.append('order', 'asc');
+        break;
+      case 'rating_desc':
+        queryParams.append('sortBy', 'averageRating');
+        queryParams.append('order', 'desc');
+        break;
+      case 'relevance':
+      default:
+        // Default sorting by relevance for search
+        break;
+    }
+  }
+  
+  const queryString = queryParams.toString();
+  const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
   
   try {
-    // Build query string from search params
-    const queryParams = new URLSearchParams();
-    
-    // Handle multiple categories
-    if (searchParams.category) {
-      queryParams.append('category', searchParams.category);
-    }
-    
-    if (searchParams.search) queryParams.append('search', searchParams.search);
-    if (searchParams.page) queryParams.append('page', searchParams.page);
-    if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
-    if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
-    if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
-    
-    // Handle multiple ratings
-    if (searchParams.rating) {
-      queryParams.append('rating', searchParams.rating);
-    }
-    
-    // Handle multiple brands
-    if (searchParams.brand) {
-      queryParams.append('brand', searchParams.brand);
-    }
-    
-    // Map frontend sort values to backend parameters
-    if (searchParams.sort) {
-      const sortValue = searchParams.sort;
-      switch (sortValue) {
-        case 'price_asc':
-          queryParams.append('sortBy', 'price');
-          queryParams.append('order', 'asc');
-          break;
-        case 'price_desc':
-          queryParams.append('sortBy', 'price');
-          queryParams.append('order', 'desc');
-          break;
-        case 'name_asc':
-          queryParams.append('sortBy', 'name');
-          queryParams.append('order', 'asc');
-          break;
-        case 'rating_desc':
-          queryParams.append('sortBy', 'averageRating');
-          queryParams.append('order', 'desc');
-          break;
-        case 'relevance':
-        default:
-          // Default sorting by relevance for search
-          break;
-      }
-    }
-    
-    const queryString = queryParams.toString();
-    const url = `${API_URL}/products${queryString ? `?${queryString}` : ''}`;
-    
-    const response = await fetch(url, {
-      cache: 'no-store', // Always fetch fresh data
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch products');
-    }
-
-    const data = await response.json();
+    const data: any = await apiClient.get(endpoint);
     return data; // Return the entire response object
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    return { products: [], pagination: {} };
+  } catch (error: any) {
+    // Don't log abort errors as they're expected during cleanup
+    if (error.name !== 'AbortError') {
+      console.error('Error fetching products:', {
+        error: error.message || error.toString(),
+        name: error.name,
+        stack: error.stack,
+        endpoint: endpoint,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Re-throw the error to be handled by the calling function
+    throw error;
+  }
+}
+
+// Function to fetch search suggestions including corrections
+async function getSearchCorrections(searchTerm: string) {
+  try {
+    const data: any = await apiClient.get(`/products/suggestions?q=${encodeURIComponent(searchTerm)}&limit=3`);
+    
+    if (data.success && data.corrections && data.corrections.length > 0) {
+      return data.corrections;
+    }
+    
+    return [];
+  } catch (error: any) {
+    // Don't log abort errors as they're expected during cleanup
+    if (error.name !== 'AbortError') {
+      console.error('Error fetching search corrections:', {
+        error: error.message || error.toString(),
+        name: error.name,
+        stack: error.stack,
+        endpoint: `/products/suggestions?q=${encodeURIComponent(searchTerm)}&limit=3`,
+        timestamp: new Date().toISOString()
+      });
+    }
+    return [];
   }
 }
 
@@ -87,21 +114,67 @@ export default function SearchPage() {
   const searchParams = useSearchParams();
   const [data, setData] = useState({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
+  const [corrections, setCorrections] = useState<any[]>([]);
   
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'relevance';
 
   // Fetch products when search params change
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchData = async () => {
+      if (!isMounted) return;
+      
       setLoading(true);
       const resolvedSearchParams = Object.fromEntries(searchParams.entries());
-      const result = await getProducts(resolvedSearchParams);
-      setData(result);
-      setLoading(false);
+      
+      try {
+        const result = await getProducts(resolvedSearchParams);
+        if (isMounted) {
+          setData(result);
+          
+          // Fetch corrections if there's a search term and no results
+          const searchTerm = searchParams.get('search') || '';
+          if (searchTerm && result.products && result.products.length === 0) {
+            const correctionResults = await getSearchCorrections(searchTerm);
+            if (isMounted) {
+              setCorrections(correctionResults);
+            }
+          } else {
+            if (isMounted) {
+              setCorrections([]);
+            }
+          }
+        }
+      } catch (error: any) {
+        // Don't log abort errors as they're expected during cleanup
+        if (error.name !== 'AbortError') {
+          if (isMounted) {
+            // Better error serialization to avoid empty {}
+            const errorInfo = {
+              message: error.message || 'Unknown error',
+              name: error.name,
+              stack: error.stack,
+              timestamp: new Date().toISOString()
+            };
+            console.error('Error in search page:', errorInfo);
+            setData({ products: [], pagination: {} });
+            setCorrections([]);
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     };
     
     fetchData();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams]);
 
   const { products = [], pagination = {} } = data;
@@ -123,6 +196,13 @@ export default function SearchPage() {
     currentParams.delete('page');
     
     // Update URL which will trigger useEffect
+    router.push(`/search?${currentParams.toString()}`);
+  };
+
+  // Handle correction click
+  const handleCorrectionClick = (correctedTerm: string) => {
+    const currentParams = new URLSearchParams(searchParams.toString());
+    currentParams.set('search', correctedTerm);
     router.push(`/search?${currentParams.toString()}`);
   };
 
@@ -154,6 +234,26 @@ export default function SearchPage() {
 
           {/* Products Grid */}
           <div className="lg:col-span-3">
+            {/* "Did you mean?" suggestions */}
+            {corrections.length > 0 && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-md">
+                <p className="text-blue-800 font-medium">
+                  Did you mean: 
+                  {corrections.map((correction, index) => (
+                    <span key={index}>
+                      {index > 0 && ', '}
+                      <button
+                        onClick={() => handleCorrectionClick(correction.suggested)}
+                        className="underline text-blue-600 hover:text-blue-800 ml-1"
+                      >
+                        {correction.suggested}
+                      </button>
+                    </span>
+                  ))}?
+                </p>
+              </div>
+            )}
+
             {/* Results Header */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <p className="text-gray-600">

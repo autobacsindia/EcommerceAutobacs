@@ -123,7 +123,7 @@ async function initializeServer() {
     const dbConnection = await connectWithRetry();
 
     // Start server
-    const PORT = process.env.PORT || 5002;  // Changed from 5001 to 5002 to avoid conflicts
+    const PORT = process.env.PORT || 5000;  // Default to 5000 to match frontend expectations
     app.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);

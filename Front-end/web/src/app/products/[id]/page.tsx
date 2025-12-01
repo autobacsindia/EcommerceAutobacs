@@ -9,21 +9,13 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import ProductImage from '@/components/products/ProductImage';
 import { Reviews } from '@/components/reviews';
+import apiClient from '@/lib/api';
 
-async function getProduct(id: string) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-  
+async function getProduct(id: string): Promise<any> {
   try {
-    const response = await fetch(`${API_URL}/products/${id}`, {
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    return data.product; // Changed from data.data to data.product to match backend response
+    // Use the API client which has proper timeout handling
+    const response: any = await apiClient.get(`/products/${id}`);
+    return response?.product || null; // Changed from data.data to data.product to match backend response
   } catch (error) {
     console.error('Error fetching product:', error);
     return null;
@@ -346,6 +338,7 @@ export default function ProductDetailPage({
   params: Promise<{ id: string }> | { id: string };
 }) {
   // Use React.use() to unwrap the Promise if it's a Promise
+  // @ts-ignore
   const unwrappedParams = use(params);
   const productId = unwrappedParams.id;
   

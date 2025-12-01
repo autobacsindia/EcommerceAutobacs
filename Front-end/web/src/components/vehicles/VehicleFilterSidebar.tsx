@@ -42,9 +42,15 @@ export default function VehicleFilterSidebar() {
           slug: make.toLowerCase().replace(/\s+/g, '-')
         }));
         setMakes(makeData);
-      } catch (err) {
-        console.error('Failed to fetch vehicle makes:', err);
-        setError('Failed to load vehicle makes');
+      } catch (err: any) {
+        // Better error logging
+        console.error('Failed to fetch vehicle makes:', {
+          message: err.message || 'Unknown error',
+          name: err.name,
+          stack: err.stack,
+          timestamp: new Date().toISOString()
+        });
+        setError('Failed to load vehicle makes. Please make sure the backend server is running on port 5000.');
       } finally {
         setLoading(false);
       }
@@ -69,9 +75,15 @@ export default function VehicleFilterSidebar() {
           slug: model.toLowerCase().replace(/\s+/g, '-')
         }));
         setModels(modelData);
-      } catch (err) {
-        console.error('Failed to fetch vehicle models:', err);
-        setError('Failed to load vehicle models');
+      } catch (err: any) {
+        // Better error logging
+        console.error('Failed to fetch vehicle models:', {
+          message: err.message || 'Unknown error',
+          name: err.name,
+          stack: err.stack,
+          timestamp: new Date().toISOString()
+        });
+        setError('Failed to load vehicle models. Please make sure the backend server is running on port 5000.');
       }
     };
 

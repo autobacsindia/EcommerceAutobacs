@@ -45,6 +45,31 @@ const formatPriceValue = (value: number): string => {
   }).format(value).replace('₹', '₹');
 };
 
+// Helper function to save filter preferences to localStorage
+const saveFilterPreferences = (preferences: any) => {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('productFilterPreferences', JSON.stringify(preferences));
+    } catch (e) {
+      console.error('Failed to save filter preferences', e);
+    }
+  }
+};
+
+// Helper function to load filter preferences from localStorage
+const loadFilterPreferences = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const savedPreferences = localStorage.getItem('productFilterPreferences');
+      return savedPreferences ? JSON.parse(savedPreferences) : null;
+    } catch (e) {
+      console.error('Failed to load filter preferences', e);
+      return null;
+    }
+  }
+  return null;
+};
+
 export default function ProductFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -94,6 +119,53 @@ export default function ProductFilters() {
     }
     return [];
   });
+  
+  // Load saved filter preferences on mount
+  useEffect(() => {
+    const savedPreferences = loadFilterPreferences();
+    if (savedPreferences) {
+      // Only apply saved preferences if URL doesn't already have filter parameters
+      const hasUrlFilters = searchParams.toString() && (
+        searchParams.has('minPrice') || 
+        searchParams.has('maxPrice') || 
+        searchParams.has('category') || 
+        searchParams.has('brand') || 
+        searchParams.has('inStock') || 
+        searchParams.has('rating')
+      );
+      
+      if (!hasUrlFilters) {
+        // Apply saved preferences
+        if (savedPreferences.priceRange) {
+          setPriceRange(savedPreferences.priceRange);
+        }
+        if (savedPreferences.selectedCategories) {
+          setSelectedCategories(savedPreferences.selectedCategories);
+        }
+        if (savedPreferences.inStockOnly !== undefined) {
+          setInStockOnly(savedPreferences.inStockOnly);
+        }
+        if (savedPreferences.selectedRatings) {
+          setSelectedRatings(savedPreferences.selectedRatings);
+        }
+        if (savedPreferences.selectedBrands) {
+          setSelectedBrands(savedPreferences.selectedBrands);
+        }
+      }
+    }
+  }, []);
+  
+  // Save filter preferences whenever they change
+  useEffect(() => {
+    const filterPreferences = {
+      priceRange,
+      selectedCategories,
+      inStockOnly,
+      selectedRatings,
+      selectedBrands
+    };
+    saveFilterPreferences(filterPreferences);
+  }, [priceRange, selectedCategories, inStockOnly, selectedRatings, selectedBrands]);
   
   // Fetch categories
   useEffect(() => {

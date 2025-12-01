@@ -114,7 +114,7 @@ class APIClient {
    */
   private categorizeError(status: number, error: any): ErrorCategory {
     // Network errors (offline, DNS issues, CORS errors)
-    if (error instanceof TypeError && error.message.includes('fetch')) {
+    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
       return ErrorCategory.NETWORK;
     }
     
@@ -134,7 +134,7 @@ class APIClient {
     }
     
     // Timeout errors
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
       return ErrorCategory.TIMEOUT;
     }
     
@@ -239,16 +239,35 @@ class APIClient {
       
       return data;
     } catch (error) {
-      console.error('API Response Error:', {
-        error: error,
-        name: (error as any)?.name,
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
+      // Handle abort errors specifically - don't wrap them in ApiError
+      if ((error as any).name === 'AbortError') {
+        // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
+        // Instead, we re-throw the original error which will be caught by the calling function
+        // Only log if there's a meaningful reason
+        if ((error as any).message && (error as any).message !== 'signal is aborted without reason') {
+          console.debug(`Request intentionally aborted for ${(response as any).url}: ${(error as any).message}`);
+        }
+        throw error;
+      }
+      
+      // Better error serialization to avoid empty objects
+      const errorDetails = {
+        errorType: typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : undefined,
+        errorStack: error instanceof Error ? error.stack : undefined,
+        // For ApiError instances
+        status: (error as any)?.status,
+        url: (error as any)?.url,
+        category: (error as any)?.category,
+        responseStatus: (error as any)?.responseStatus
+      };
+      
+      console.error('API Response Error:', errorDetails);
       
       // Handle parsing errors
       if (error instanceof SyntaxError) {
-        throw new ApiError(0, 'Invalid response format', response.url, ErrorCategory.PARSING);
+        throw new ApiError(0, 'Invalid response format', (response as any).url, ErrorCategory.PARSING);
       }
   
       // Re-throw ApiError instances
@@ -257,7 +276,7 @@ class APIClient {
       }
   
       // Handle other errors with more context
-      const category = this.categorizeError(response.status, error);
+      const category = this.categorizeError((response as any).status, error);
       let errorMessage = 'An unknown error occurred';
   
       if (error instanceof Error) {
@@ -268,10 +287,11 @@ class APIClient {
   
       // Add more context for network errors
       if (category === ErrorCategory.NETWORK) {
-        errorMessage = `Network error: Unable to connect to the server. Please make sure the backend server is running on port 5002. Details: ${errorMessage}`;
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+        errorMessage = `Network error: Unable to connect to the server at ${API_BASE_URL}. Please make sure the backend server is running. Details: ${errorMessage}`;
       }
   
-      const apiError = new ApiError(response.status || 0, errorMessage, response.url || '', category);
+      const apiError = new ApiError((response as any).status || 0, errorMessage, (response as any).url || '', category);
   
       // Add error details for debugging
       apiError.originalError = error;
@@ -283,27 +303,64 @@ class APIClient {
   /**
    * GET request with retry logic for rate limiting
    */
-  async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
+  async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
-    // Default retry settings
+    // Default settings
     const retries = options?.retries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    const timeout = options?.timeout ?? 30000; // 30 seconds default
     
     let lastError: any;
     
     for (let i = 0; i <= retries; i++) {
+      // Create abort controller for timeout handling
+      let controller: AbortController | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       try {
-        const response = await fetch(finalUrl, {
+        // Use provided signal if available, otherwise create our own timeout controller
+        let signal;
+        
+        if (options?.signal) {
+          // Use the provided signal directly
+          signal = options.signal;
+        } else {
+          // Create our own timeout controller
+          controller = new AbortController();
+          timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
+          signal = controller.signal;
+        }
+        
+        const fetchOptions = {
           method: 'GET',
           headers: this.getHeaders(options?.headers),
+          signal,
           ...options
-        });
-
+        };
+        
+        const response = await fetch(finalUrl, fetchOptions);
+        if (timeoutId) clearTimeout(timeoutId);
+        
         return await this.handleResponse(response);
       } catch (error: any) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Handle abort errors specifically
+        if (error.name === 'AbortError') {
+          // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
+          // Instead, we re-throw the original error which will be caught by the calling function
+          // Only log if there's a meaningful reason
+          if (error.message && error.message !== 'signal is aborted without reason') {
+            console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+          }
+          
+          // Don't retry aborted requests, just re-throw the original AbortError
+          throw error;
+        }
+        
         lastError = error;
         
         // If it's a rate limit error and we have retries left, wait and retry
@@ -327,28 +384,65 @@ class APIClient {
   /**
    * POST request with retry logic for rate limiting
    */
-  async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
+  async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
-    // Default retry settings
+    // Default settings
     const retries = options?.retries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    const timeout = options?.timeout ?? 30000; // 30 seconds default
     
     let lastError: any;
     
     for (let i = 0; i <= retries; i++) {
+      // Create abort controller for timeout handling
+      let controller: AbortController | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       try {
-        const response = await fetch(finalUrl, {
+        // Use provided signal if available, otherwise create our own timeout controller
+        let signal;
+        
+        if (options?.signal) {
+          // Use the provided signal directly
+          signal = options.signal;
+        } else {
+          // Create our own timeout controller
+          controller = new AbortController();
+          timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
+          signal = controller.signal;
+        }
+        
+        const fetchOptions = {
           method: 'POST',
           headers: this.getHeaders(options?.headers),
           body: JSON.stringify(data),
+          signal,
           ...options
-        });
-
+        };
+        
+        const response = await fetch(finalUrl, fetchOptions);
+        if (timeoutId) clearTimeout(timeoutId);
+        
         return await this.handleResponse(response);
       } catch (error: any) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Handle abort errors specifically
+        if (error.name === 'AbortError') {
+          // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
+          // Instead, we re-throw the original error which will be caught by the calling function
+          // Only log if there's a meaningful reason
+          if (error.message && error.message !== 'signal is aborted without reason') {
+            console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+          }
+          
+          // Don't retry aborted requests, just re-throw the original AbortError
+          throw error;
+        }
+        
         lastError = error;
         
         // If it's a rate limit error and we have retries left, wait and retry
@@ -372,28 +466,66 @@ class APIClient {
   /**
    * PUT request with retry logic for rate limiting
    */
-  async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
+  async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
-    // Default retry settings
+    // Default settings
     const retries = options?.retries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    const timeout = options?.timeout ?? 30000; // 30 seconds default
     
     let lastError: any;
     
     for (let i = 0; i <= retries; i++) {
+      // Create abort controller for timeout handling
+      let controller: AbortController | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       try {
-        const response = await fetch(finalUrl, {
+        // Use provided signal if available, otherwise create our own timeout controller
+        let signal;
+        
+        if (options?.signal) {
+          // Use the provided signal directly
+          signal = options.signal;
+        } else {
+          // Create our own timeout controller
+          controller = new AbortController();
+          timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
+          signal = controller.signal;
+        }
+        
+        const fetchOptions = {
           method: 'PUT',
           headers: this.getHeaders(options?.headers),
           body: JSON.stringify(data),
+          signal,
           ...options
-        });
-
+        };
+        
+        const response = await fetch(finalUrl, fetchOptions);
+        if (timeoutId) clearTimeout(timeoutId);
+        
         return await this.handleResponse(response);
       } catch (error: any) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Handle abort errors specifically
+        if (error.name === 'AbortError') {
+          // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
+          // Instead, we re-throw the original error which will be caught by the calling function
+          // Only log if there's a meaningful reason
+          if (error.message && error.message !== 'signal is aborted without reason') {
+            console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+          }
+          
+          // Don't retry aborted requests, just re-throw the original AbortError
+          throw error;
+        }
+      
+        
         lastError = error;
         
         // If it's a rate limit error and we have retries left, wait and retry
@@ -417,27 +549,64 @@ class APIClient {
   /**
    * DELETE request with retry logic for rate limiting
    */
-  async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number }): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
+  async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
     
-    // Default retry settings
+    // Default settings
     const retries = options?.retries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    const timeout = options?.timeout ?? 30000; // 30 seconds default
     
     let lastError: any;
     
     for (let i = 0; i <= retries; i++) {
+      // Create abort controller for timeout handling
+      let controller: AbortController | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       try {
-        const response = await fetch(finalUrl, {
+        // Use provided signal if available, otherwise create our own timeout controller
+        let signal;
+        
+        if (options?.signal) {
+          // Use the provided signal directly
+          signal = options.signal;
+        } else {
+          // Create our own timeout controller
+          controller = new AbortController();
+          timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
+          signal = controller.signal;
+        }
+        
+        const fetchOptions = {
           method: 'DELETE',
           headers: this.getHeaders(options?.headers),
+          signal,
           ...options
-        });
-
+        };
+        
+        const response = await fetch(finalUrl, fetchOptions);
+        if (timeoutId) clearTimeout(timeoutId);
+        
         return await this.handleResponse(response);
       } catch (error: any) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Handle abort errors specifically
+        if (error.name === 'AbortError') {
+          // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
+          // Instead, we re-throw the original error which will be caught by the calling function
+          // Only log if there's a meaningful reason
+          if (error.message && error.message !== 'signal is aborted without reason') {
+            console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+          }
+          
+          // Don't retry aborted requests, just re-throw the original AbortError
+          throw error;
+        }
+        
         lastError = error;
         
         // If it's a rate limit error and we have retries left, wait and retry

@@ -40,7 +40,7 @@ export default function AdminUsersPage() {
     if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
     
     try {
-      await apiClient.delete(`/users/${id}`);
+      await apiClient.deleteRequest(`/users/${id}`);
       setUsers(users.filter(u => u._id !== id));
       alert('User deleted successfully');
     } catch (err: any) {

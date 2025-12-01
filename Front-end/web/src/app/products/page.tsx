@@ -130,12 +130,8 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       const queryString = queryParams.toString();
       const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
       
-      // Add timeout to the request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      const data: any = await apiClient.get(endpoint, { signal: controller.signal });
-      clearTimeout(timeoutId);
+      // Use the API client which has the increased timeout (30 seconds)
+      const data: any = await apiClient.get(endpoint);
       
       // Fix: Backend returns pagination properties directly in response object
       if (data && data.products) {
@@ -158,14 +154,27 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       lastError = error;
       
       // Log error with more detailed context
-      console.error(`Error fetching products (attempt ${attempt + 1}/${retries + 1}):`, {
-        error: error.message || error.toString(),
+      // Serialize error object properly to avoid empty {}
+      const errorInfo = {
+        message: error.message || error.toString(),
+        name: error.name,
         status: error.status,
         category: error.category,
         searchParams,
         timestamp: new Date().toISOString(),
-        errorObject: JSON.stringify(error, Object.getOwnPropertyNames(error)) // More detailed error info
-      });
+        // Properly serialize error object
+        errorDetails: {
+          message: error.message,
+          name: error.name,
+          stack: error.stack,
+          // For ApiError instances
+          url: error.url,
+          responseStatus: error.responseStatus,
+          rawData: error.rawData
+        }
+      };
+      
+      console.error(`Error fetching products (attempt ${attempt + 1}/${retries + 1}):`, errorInfo);
       
       // If this is the last attempt, re-throw the error
       if (attempt === retries) {
@@ -231,23 +240,50 @@ export default function ProductsPageClient() {
 
   // Fetch products when search params change
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchData = async () => {
-      setLoading(true);
-      setError(null);
+      if (!isMounted) return;
+      
+      if (isMounted) {
+        setLoading(true);
+        setError(null);
+      }
+      
       try {
         const resolvedSearchParams = Object.fromEntries(searchParams.entries());
         const result = await getProducts(resolvedSearchParams);
-        setData(result);
+        if (isMounted) {
+          setData(result);
+        }
       } catch (err: any) {
-        setError(err);
-        // Log error to analytics service
-        console.error('Failed to fetch products after all retries:', err);
+        if (isMounted) {
+          setError(err);
+          // Log error to analytics service with better serialization
+          const errorInfo = {
+            message: err.message || 'Unknown error',
+            name: err.name,
+            stack: err.stack,
+            timestamp: new Date().toISOString(),
+            // For ApiError instances
+            status: err.status,
+            url: err.url,
+            category: err.category
+          };
+          console.error('Failed to fetch products after all retries:', errorInfo);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     
     fetchData();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams]);
 
   // Handle sort change
