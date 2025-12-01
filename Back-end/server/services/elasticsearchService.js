@@ -3,14 +3,56 @@ import Product from '../models/Product.js';
 
 class ElasticsearchService {
   constructor() {
+    // Check if Elasticsearch is enabled
+    this.enabled = process.env.ELASTICSEARCH_ENABLED === 'true';
+    this.connectionStatus = {
+      available: false,
+      lastChecked: null,
+      lastError: null,
+      cacheTimeout: 30000 // 30 seconds cache
+    };
+    
+    // Circuit breaker state
+    this.circuitBreaker = {
+      failures: 0,
+      threshold: 5,
+      resetTimeout: 60000, // 1 minute
+      state: 'closed' // closed, open, half-open
+    };
+    
+    if (!this.enabled) {
+      console.log('ℹ Elasticsearch is disabled. Using MongoDB for search operations.');
+      console.log('  To enable: Set ELASTICSEARCH_ENABLED=true in .env file');
+      this.client = null;
+      return;
+    }
+    
+    // Validate configuration
+    const node = process.env.ELASTICSEARCH_NODE || 'http://localhost:9200';
+    const username = process.env.ELASTICSEARCH_USERNAME || 'elastic';
+    const password = process.env.ELASTICSEARCH_PASSWORD || 'changeme';
+    const retryTimeout = parseInt(process.env.ELASTICSEARCH_RETRY_TIMEOUT || '5000');
+    
     // Initialize Elasticsearch client
-    this.client = new Client({
-      node: process.env.ELASTICSEARCH_NODE || 'http://localhost:9200',
-      auth: {
-        username: process.env.ELASTICSEARCH_USERNAME || 'elastic',
-        password: process.env.ELASTICSEARCH_PASSWORD || 'changeme'
-      }
-    });
+    try {
+      this.client = new Client({
+        node: node,
+        auth: {
+          username: username,
+          password: password
+        },
+        requestTimeout: retryTimeout,
+        maxRetries: 3
+      });
+      
+      console.log('ℹ Elasticsearch client initialized');
+      console.log(`  Node: ${node}`);
+      console.log(`  Timeout: ${retryTimeout}ms`);
+    } catch (error) {
+      console.error('✗ Failed to initialize Elasticsearch client:', error.message);
+      this.client = null;
+      this.enabled = false;
+    }
     
     this.indexName = 'products';
   }
@@ -19,13 +61,135 @@ class ElasticsearchService {
    * Check if Elasticsearch is connected
    */
   async isConnected() {
-    try {
-      const info = await this.client.info();
-      return info.statusCode === 200;
-    } catch (error) {
-      console.error('Elasticsearch connection error:', error);
+    // If Elasticsearch is disabled, return false immediately
+    if (!this.enabled || !this.client) {
       return false;
     }
+    
+    // Check circuit breaker state
+    if (this.circuitBreaker.state === 'open') {
+      // Check if it's time to try half-open
+      const timeSinceLastFailure = Date.now() - this.circuitBreaker.lastFailureTime;
+      if (timeSinceLastFailure < this.circuitBreaker.resetTimeout) {
+        return false;
+      }
+      // Try half-open state
+      this.circuitBreaker.state = 'half-open';
+    }
+    
+    // Use cached status if available and fresh
+    const now = Date.now();
+    if (this.connectionStatus.lastChecked && 
+        (now - this.connectionStatus.lastChecked) < this.connectionStatus.cacheTimeout) {
+      return this.connectionStatus.available;
+    }
+    
+    // Perform actual connection check
+    try {
+      const info = await this.client.info();
+      const isAvailable = info.statusCode === 200;
+      
+      // Update connection status
+      this.connectionStatus.available = isAvailable;
+      this.connectionStatus.lastChecked = now;
+      this.connectionStatus.lastError = null;
+      
+      // Reset circuit breaker on success
+      if (isAvailable) {
+        if (this.circuitBreaker.state === 'half-open') {
+          console.log('✓ Elasticsearch connection restored');
+        }
+        this.circuitBreaker.failures = 0;
+        this.circuitBreaker.state = 'closed';
+      }
+      
+      return isAvailable;
+    } catch (error) {
+      // Update connection status
+      this.connectionStatus.available = false;
+      this.connectionStatus.lastChecked = now;
+      this.connectionStatus.lastError = error.message;
+      
+      // Update circuit breaker
+      this.circuitBreaker.failures++;
+      this.circuitBreaker.lastFailureTime = now;
+      
+      if (this.circuitBreaker.failures >= this.circuitBreaker.threshold) {
+        if (this.circuitBreaker.state !== 'open') {
+          console.warn('⚠ Elasticsearch connection failed multiple times. Opening circuit breaker.');
+          console.warn(`  Error: ${error.message}`);
+          console.warn('  Falling back to MongoDB for search operations.');
+        }
+        this.circuitBreaker.state = 'open';
+      } else if (this.circuitBreaker.failures === 1) {
+        // Only log on first failure to avoid spam
+        console.warn('⚠ Elasticsearch connection unavailable. Falling back to MongoDB.');
+      }
+      
+      return false;
+    }
+  }
+
+  /**
+   * Test initial connection at startup
+   */
+  async testConnection() {
+    if (!this.enabled || !this.client) {
+      return {
+        connected: false,
+        enabled: this.enabled,
+        message: 'Elasticsearch is disabled'
+      };
+    }
+    
+    try {
+      const info = await this.client.info();
+      
+      if (info.statusCode === 200) {
+        console.log('✓ Elasticsearch connection successful');
+        console.log(`  Cluster: ${info.cluster_name}`);
+        console.log(`  Version: ${info.version.number}`);
+        
+        this.connectionStatus.available = true;
+        this.connectionStatus.lastChecked = Date.now();
+        
+        return {
+          connected: true,
+          enabled: true,
+          clusterName: info.cluster_name,
+          version: info.version.number
+        };
+      }
+    } catch (error) {
+      console.warn('⚠ Elasticsearch connection failed at startup');
+      console.warn(`  Error: ${error.message}`);
+      console.warn('  The application will use MongoDB for search operations.');
+      console.warn('  To fix: Ensure Elasticsearch is running and accessible.');
+      
+      this.connectionStatus.available = false;
+      this.connectionStatus.lastChecked = Date.now();
+      this.connectionStatus.lastError = error.message;
+      
+      return {
+        connected: false,
+        enabled: true,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get connection status information
+   */
+  getConnectionStatus() {
+    return {
+      enabled: this.enabled,
+      available: this.connectionStatus.available,
+      lastChecked: this.connectionStatus.lastChecked,
+      lastError: this.connectionStatus.lastError,
+      circuitBreakerState: this.circuitBreaker.state,
+      failures: this.circuitBreaker.failures
+    };
   }
 
   /**

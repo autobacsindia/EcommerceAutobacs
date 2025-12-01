@@ -198,16 +198,17 @@ export default function ProductFilters() {
         setLoadingBrands(true);
         // For now, we'll use a static list of brands
         // In the future, this could be fetched from an API endpoint
+        // Note: Using brand names (not IDs) to match the Product model's brand field
         setBrands([
-          { _id: 'autobacs', name: 'Autobacs' },
-          { _id: 'thor', name: 'Thor' },
-          { _id: 'profender', name: 'Profender' },
-          { _id: 'bestwyll', name: 'Bestwyll' },
-          { _id: 'dr-nano', name: 'Dr. Nano' },
-          { _id: 'proman', name: 'Proman' },
-          { _id: 'windbooster', name: 'Windbooster' },
-          { _id: 'comeup', name: 'ComeUp' },
-          { _id: 'unicorn', name: 'Unicorn' },
+          { _id: 'Autobacs', name: 'Autobacs' },
+          { _id: 'Thor', name: 'Thor' },
+          { _id: 'Profender', name: 'Profender' },
+          { _id: 'Bestwyll', name: 'Bestwyll' },
+          { _id: 'Dr. Nano', name: 'Dr. Nano' },
+          { _id: 'Proman', name: 'Proman' },
+          { _id: 'Windbooster', name: 'Windbooster' },
+          { _id: 'ComeUp', name: 'ComeUp' },
+          { _id: 'Unicorn', name: 'Unicorn' },
         ]);
       } catch (err) {
         console.error('Failed to fetch brands:', err);

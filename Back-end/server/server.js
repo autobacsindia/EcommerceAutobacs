@@ -26,6 +26,9 @@ import { apiRateLimit, wishlistRateLimit } from "./middleware/rateLimitMiddlewar
 // Import cron service
 import CronService from "./services/cronService.js";
 
+// Import Elasticsearch service for connection check
+import elasticsearchService from "./services/elasticsearchService.js";
+
 dotenv.config();
 const app = express();
 
@@ -125,6 +128,17 @@ async function initializeServer() {
 
     // Initial connection using the new retry logic
     const dbConnection = await connectWithRetry();
+
+    // Test Elasticsearch connection
+    console.log('\n--- Elasticsearch Connection Check ---');
+    const esStatus = await elasticsearchService.testConnection();
+    
+    if (esStatus.connected) {
+      console.log('✓ Elasticsearch features enabled');
+    } else if (esStatus.enabled) {
+      console.log('⚠ Elasticsearch enabled but not connected - using MongoDB fallback');
+    }
+    console.log('---------------------------------------\n');
 
     // Start server
     const PORT = process.env.PORT || 5000;  // Default to 5000 to match frontend expectations
