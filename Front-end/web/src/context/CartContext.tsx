@@ -144,7 +144,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response: any = await apiClient.deleteRequest(API_ENDPOINTS.CART_REMOVE(productId));
+      const response: any = await apiClient.delete(API_ENDPOINTS.CART_REMOVE(productId));
       
       if (response.success && response.cart) {
         // Ensure consistent cart data structure
@@ -216,7 +216,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
       
-      const response: any = await apiClient.deleteRequest(API_ENDPOINTS.CART_CLEAR);
+      const response: any = await apiClient.delete(API_ENDPOINTS.CART_CLEAR);
       
       if (response.success) {
         setCart(null);

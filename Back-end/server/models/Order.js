@@ -40,6 +40,14 @@ const OrderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Payment"
   },
+  assignedWarehouse: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Warehouse"
+  },
+  deliveryZone: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "DeliveryZone"
+  },
   subtotal: {
     type: Number,
     required: true
@@ -65,11 +73,124 @@ const OrderSchema = new mongoose.Schema({
     enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"], 
     default: "pending" 
   },
+  statusHistory: [{
+    status: {
+      type: String,
+      required: true
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    reason: String,
+    notes: String,
+    metadata: mongoose.Schema.Types.Mixed
+  }],
   trackingNumber: String,
+  carrier: {
+    name: String,
+    code: String,
+    trackingUrl: String
+  },
+  trackingEvents: [{
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    status: String,
+    location: String,
+    description: String,
+    scannedBy: String
+  }],
+  estimatedDeliveryDate: Date,
+  actualDeliveryDate: Date,
   estimatedDelivery: Date,
   deliveredAt: Date,
   cancelledAt: Date,
   cancellationReason: String,
+  fulfillmentMetrics: {
+    confirmedAt: Date,
+    processingStartedAt: Date,
+    shippedAt: Date,
+    deliveredAt: Date,
+    timeToShip: Number, // hours from confirmation to shipping
+    timeToDeliver: Number // hours from shipping to delivery
+  },
+  returnRequest: {
+    requestedAt: Date,
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    reason: {
+      type: String,
+      enum: ["defective", "wrong_item", "not_as_described", "changed_mind", "other"]
+    },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "item_received", "refund_processed"],
+      default: "pending"
+    },
+    items: [{
+      product: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product"
+      },
+      quantity: Number,
+      reason: String
+    }],
+    images: [{
+      url: String,
+      description: String
+    }],
+    adminNotes: String,
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    approvedAt: Date,
+    rejectedReason: String,
+    returnShippingLabel: String,
+    itemReceivedAt: Date,
+    inspectionNotes: String
+  },
+  refundDetails: {
+    requestedAt: Date,
+    amount: Number,
+    refundType: {
+      type: String,
+      enum: ["full", "partial"]
+    },
+    refundMethod: {
+      type: String,
+      enum: ["original_payment", "store_credit", "bank_transfer"]
+    },
+    itemsRefunded: [{
+      product: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product"
+      },
+      quantity: Number,
+      amount: Number
+    }],
+    status: {
+      type: String,
+      enum: ["pending", "processing", "completed", "failed"],
+      default: "pending"
+    },
+    processedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    processedAt: Date,
+    transactionId: String,
+    failureReason: String,
+    notes: String
+  },
   notes: String
 }, { 
   timestamps: true 
@@ -79,5 +200,53 @@ const OrderSchema = new mongoose.Schema({
 OrderSchema.index({ user: 1, createdAt: -1 });
 OrderSchema.index({ status: 1 });
 OrderSchema.index({ trackingNumber: 1 });
+OrderSchema.index({ 'returnRequest.status': 1 });
+OrderSchema.index({ 'refundDetails.status': 1 });
 
-export default mongoose.model("Order", OrderSchema);
+// Pre-save middleware to add initial status to history
+OrderSchema.pre('save', function(next) {
+  // Only add to history if this is a new document or status changed
+  if (this.isNew || this.isModified('status')) {
+    // Initialize statusHistory if it doesn't exist
+    if (!this.statusHistory) {
+      this.statusHistory = [];
+    }
+    
+    // Add current status to history if not already there
+    const lastHistoryStatus = this.statusHistory.length > 0 
+      ? this.statusHistory[this.statusHistory.length - 1].status 
+      : null;
+    
+    if (lastHistoryStatus !== this.status) {
+      this.statusHistory.push({
+        status: this.status,
+        timestamp: new Date()
+      });
+    }
+  }
+  next();
+});
+
+// Method to get valid next statuses
+OrderSchema.methods.getValidNextStatuses = function() {
+  const transitions = {
+    'pending': ['confirmed', 'cancelled'],
+    'confirmed': ['processing', 'cancelled'],
+    'processing': ['shipped', 'cancelled'],
+    'shipped': ['delivered'],
+    'delivered': ['refunded'],
+    'cancelled': [],
+    'refunded': []
+  };
+  return transitions[this.status] || [];
+};
+
+// Method to check if status transition is valid
+OrderSchema.methods.canTransitionTo = function(newStatus) {
+  const validStatuses = this.getValidNextStatuses();
+  return validStatuses.includes(newStatus);
+};
+
+const Order = mongoose.model("Order", OrderSchema);
+
+export default Order;

@@ -5,6 +5,9 @@ import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateOrder } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import orderStatusService from "../services/orderStatusService.js";
+import orderTrackingService from "../services/orderTrackingService.js";
+import { validateCancellation } from "../middleware/orderStatusMiddleware.js";
 
 const router = express.Router();
 
@@ -147,31 +150,24 @@ router.post("/", protect, validateOrder, asyncHandler(async (req, res) => {
 }));
 
 // @route   PUT /orders/:id/cancel
-// @desc    Cancel an order
+// @desc    Cancel an order with validation
 // @access  Private
-router.put("/:id/cancel", protect, asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id);
+router.put("/:id/cancel", protect, validateCancellation, asyncHandler(async (req, res) => {
+  const order = req.order; // Attached by validateCancellation middleware
+  const { reason } = req.body;
 
-  if (!order) {
-    return res.status(404).json({
-      success: false,
-      message: 'Order not found'
-    });
-  }
+  // Use status service to update to cancelled
+  const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'cancelled', {
+    userId: req.user.id,
+    isAdmin: req.user.role === 'admin',
+    reason: reason || 'customer_request',
+    notes: req.body.notes
+  });
 
-  // Ensure user can only cancel their own orders
-  if (order.user.toString() !== req.user.id) {
-    return res.status(403).json({
-      success: false,
-      message: 'Not authorized to cancel this order'
-    });
-  }
-
-  // Only allow cancellation if order is pending or confirmed
-  if (!['pending', 'confirmed'].includes(order.status)) {
+  if (!result.success) {
     return res.status(400).json({
       success: false,
-      message: `Cannot cancel order with status: ${order.status}`
+      message: result.message
     });
   }
 
@@ -182,33 +178,60 @@ router.put("/:id/cancel", protect, asyncHandler(async (req, res) => {
     });
   }
 
-  order.status = 'cancelled';
-  order.cancelledAt = new Date();
-  order.cancellationReason = req.body.reason || 'Cancelled by user';
-  await order.save();
-
   res.json({
     success: true,
     message: 'Order cancelled successfully',
-    order
+    order: result.order
   });
 }));
 
 // @route   PUT /orders/:id/status
-// @desc    Update order status (Admin only)
+// @desc    Update order status with validation (Admin only)
 // @access  Private/Admin
 router.put("/:id/status", protect, admin, asyncHandler(async (req, res) => {
-  const { status, trackingNumber, estimatedDelivery } = req.body;
+  const { status, reason, notes, trackingNumber, estimatedDelivery, metadata } = req.body;
 
-  const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
-  
-  if (!validStatuses.includes(status)) {
+  if (!status) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid status'
+      message: 'Status is required'
     });
   }
 
+  // Update status using the service
+  const result = await orderStatusService.updateOrderStatus(req.params.id, status, {
+    userId: req.user.id,
+    isAdmin: true,
+    reason,
+    notes,
+    metadata
+  });
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  const order = result.order;
+  
+  // Update additional fields if provided
+  if (trackingNumber) order.trackingNumber = trackingNumber;
+  if (estimatedDelivery) order.estimatedDelivery = estimatedDelivery;
+  await order.save();
+
+  res.json({
+    success: true,
+    message: result.message,
+    order
+  });
+}));
+
+// @route   GET /orders/:id/status-history
+// @desc    Get status history for an order
+// @access  Private
+router.get("/:id/status-history", protect, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
 
   if (!order) {
@@ -218,18 +241,321 @@ router.put("/:id/status", protect, admin, asyncHandler(async (req, res) => {
     });
   }
 
-  order.status = status;
-  
-  if (trackingNumber) order.trackingNumber = trackingNumber;
-  if (estimatedDelivery) order.estimatedDelivery = estimatedDelivery;
-  if (status === 'delivered') order.deliveredAt = new Date();
+  // Ensure user can only access their own orders (unless admin)
+  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized to access this order'
+    });
+  }
 
-  await order.save();
+  const result = await orderStatusService.getStatusHistory(req.params.id);
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
 
   res.json({
     success: true,
-    message: 'Order status updated successfully',
-    order
+    currentStatus: result.currentStatus,
+    history: result.history
+  });
+}));
+
+// @route   GET /orders/:id/valid-transitions
+// @desc    Get valid next statuses for an order
+// @access  Private
+router.get("/:id/valid-transitions", protect, asyncHandler(async (req, res) => {
+  const order = await Order.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      message: 'Order not found'
+    });
+  }
+
+  // Ensure user can only access their own orders (unless admin)
+  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized to access this order'
+    });
+  }
+
+  const isAdmin = req.user.role === 'admin';
+  const validStatuses = orderStatusService.getValidNextStatuses(order.status, isAdmin);
+  const validReasons = {};
+
+  // Get valid reasons for each possible next status
+  validStatuses.forEach(status => {
+    validReasons[status] = orderStatusService.getValidReasons(status);
+  });
+
+  res.json({
+    success: true,
+    currentStatus: order.status,
+    validNextStatuses: validStatuses,
+    validReasons: validReasons
+  });
+}));
+
+// @route   GET /orders/analytics/status-stats
+// @desc    Get order status statistics (Admin only)
+// @access  Private/Admin
+router.get("/analytics/status-stats", protect, admin, asyncHandler(async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  const filter = {};
+  if (startDate || endDate) {
+    filter.createdAt = {};
+    if (startDate) filter.createdAt.$gte = new Date(startDate);
+    if (endDate) filter.createdAt.$lte = new Date(endDate);
+  }
+
+  const result = await orderStatusService.getStatusStatistics(filter);
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    statistics: result.statistics
+  });
+}));
+
+// @route   GET /orders/analytics/fulfillment-metrics
+// @desc    Get fulfillment performance metrics (Admin only)
+// @access  Private/Admin
+router.get("/analytics/fulfillment-metrics", protect, admin, asyncHandler(async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  const filter = {};
+  if (startDate || endDate) {
+    filter.createdAt = {};
+    if (startDate) filter.createdAt.$gte = new Date(startDate);
+    if (endDate) filter.createdAt.$lte = new Date(endDate);
+  }
+
+  const result = await orderStatusService.getFulfillmentMetrics(filter);
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    metrics: result.metrics
+  });
+}));
+
+// ========================================
+// TRACKING ENDPOINTS
+// ========================================
+
+// @route   POST /orders/:id/tracking
+// @desc    Add tracking information to order (Admin only)
+// @access  Private/Admin
+router.post("/:id/tracking", protect, admin, asyncHandler(async (req, res) => {
+  const { trackingNumber, carrierCode, notes } = req.body;
+
+  if (!carrierCode) {
+    return res.status(400).json({
+      success: false,
+      message: 'Carrier code is required'
+    });
+  }
+
+  // Generate tracking number if not provided
+  const finalTrackingNumber = trackingNumber || 
+    orderTrackingService.generateTrackingNumber(carrierCode, req.params.id);
+
+  const result = await orderTrackingService.addTrackingInfo(req.params.id, {
+    trackingNumber: finalTrackingNumber,
+    carrierCode,
+    notes
+  });
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Tracking information added successfully',
+    trackingNumber: finalTrackingNumber,
+    trackingUrl: result.trackingUrl,
+    estimatedDelivery: result.estimatedDelivery,
+    order: result.order
+  });
+}));
+
+// @route   GET /orders/:id/tracking
+// @desc    Get tracking history for an order
+// @access  Private
+router.get("/:id/tracking", protect, asyncHandler(async (req, res) => {
+  const order = await Order.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      message: 'Order not found'
+    });
+  }
+
+  // Ensure user can only access their own orders (unless admin)
+  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized to access this order'
+    });
+  }
+
+  const result = await orderTrackingService.getTrackingHistory(req.params.id);
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    ...result
+  });
+}));
+
+// @route   POST /orders/:id/tracking/events
+// @desc    Add tracking event to order (Admin only)
+// @access  Private/Admin
+router.post("/:id/tracking/events", protect, admin, asyncHandler(async (req, res) => {
+  const { status, location, description, scannedBy, timestamp } = req.body;
+
+  if (!status) {
+    return res.status(400).json({
+      success: false,
+      message: 'Status is required'
+    });
+  }
+
+  const result = await orderTrackingService.addTrackingEvent(req.params.id, {
+    status,
+    location,
+    description,
+    scannedBy,
+    timestamp
+  });
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Tracking event added successfully',
+    event: result.event,
+    order: result.order
+  });
+}));
+
+// @route   GET /orders/track/:trackingNumber
+// @desc    Public tracking lookup by tracking number
+// @access  Public
+router.get("/track/:trackingNumber", asyncHandler(async (req, res) => {
+  const result = await orderTrackingService.trackByNumber(req.params.trackingNumber);
+
+  if (!result.success) {
+    return res.status(404).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    ...result
+  });
+}));
+
+// @route   GET /orders/tracking/carriers
+// @desc    Get list of supported carriers
+// @access  Public
+router.get("/tracking/carriers", asyncHandler(async (req, res) => {
+  const carriers = orderTrackingService.getSupportedCarriers();
+
+  res.json({
+    success: true,
+    carriers
+  });
+}));
+
+// @route   POST /orders/:id/tracking/simulate
+// @desc    Simulate tracking events for testing (Admin only)
+// @access  Private/Admin
+router.post("/:id/tracking/simulate", protect, admin, asyncHandler(async (req, res) => {
+  const { scenario } = req.body;
+
+  const result = await orderTrackingService.simulateTracking(
+    req.params.id,
+    scenario || 'normal_delivery'
+  );
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    message: result.message,
+    eventsAdded: result.eventsAdded
+  });
+}));
+
+// @route   GET /orders/analytics/tracking-stats
+// @desc    Get tracking statistics by carrier (Admin only)
+// @access  Private/Admin
+router.get("/analytics/tracking-stats", protect, admin, asyncHandler(async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  const filter = {};
+  if (startDate || endDate) {
+    filter.createdAt = {};
+    if (startDate) filter.createdAt.$gte = new Date(startDate);
+    if (endDate) filter.createdAt.$lte = new Date(endDate);
+  }
+
+  const result = await orderTrackingService.getTrackingStatistics(filter);
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    statistics: result.statistics
   });
 }));
 

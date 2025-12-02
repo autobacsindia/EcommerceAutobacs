@@ -48,7 +48,7 @@ export default function AdminProductsPage() {
     if (!confirm('Are you sure you want to delete this product?')) return;
     
     try {
-      await apiClient.deleteRequest(`${API_ENDPOINTS.PRODUCTS}/${id}`);
+      await apiClient.delete(`${API_ENDPOINTS.PRODUCTS}/${id}`);
       setProducts(products.filter(p => p._id !== id));
       alert('Product deleted successfully');
     } catch (err: any) {

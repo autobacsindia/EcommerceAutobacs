@@ -9,7 +9,30 @@ const AddressSchema = new mongoose.Schema({
   state: { type: String, required: true },
   postalCode: { type: String, required: true },
   country: { type: String, default: "India" },
-  isDefault: { type: Boolean, default: false }
+  isDefault: { type: Boolean, default: false },
+  coordinates: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      default: "Point"
+    },
+    coordinates: {
+      type: [Number],
+      validate: {
+        validator: function(v) {
+          return v.length === 2 && 
+                 v[0] >= -180 && v[0] <= 180 && // longitude
+                 v[1] >= -90 && v[1] <= 90;      // latitude
+        },
+        message: "Coordinates must be [longitude, latitude] with valid ranges"
+      }
+    }
+  },
+  placeId: { type: String },
+  deliveryZone: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "DeliveryZone" 
+  }
 }, { _id: false });
 
 const UserSchema = new mongoose.Schema({

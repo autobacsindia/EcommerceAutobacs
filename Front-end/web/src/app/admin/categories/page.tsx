@@ -50,7 +50,7 @@ export default function AdminCategoriesPage() {
     }
 
     try {
-      await apiClient.deleteRequest(`/categories/${id}`);
+      await apiClient.delete(`/categories/${id}`);
       // Refresh the list
       fetchCategories();
     } catch (err) {

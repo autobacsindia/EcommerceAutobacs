@@ -53,6 +53,40 @@ export const admin = (req, res, next) => {
   }
 };
 
+// Optional auth middleware - populate req.user if token exists, but don't reject if missing
+export const optionalAuth = asyncHandler(async (req, res, next) => {
+  let token;
+
+  // Check for token in Authorization header
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  // If no token, just continue without setting req.user
+  if (!token) {
+    return next();
+  }
+
+  try {
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Get user from token (exclude password)
+    req.user = await User.findById(decoded.id).select('-passwordHash');
+
+    // If user not found, just continue without req.user
+    if (!req.user) {
+      return next();
+    }
+
+    next();
+  } catch (error) {
+    // If token is invalid, just continue without req.user
+    console.warn('Invalid token in optional auth:', error.message);
+    next();
+  }
+});
+
 // Legacy middleware (kept for backward compatibility)
 export const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;

@@ -152,7 +152,7 @@ export default function AdminReviewsPage() {
     
     try {
       const endpoint = `/reviews/${reviewId}/admin`;
-      await apiClient.deleteRequest(endpoint);
+      await apiClient.delete(endpoint);
       
       // Remove from UI immediately
       setReviews(reviews.filter(review => review._id !== reviewId));

@@ -11,6 +11,7 @@ import { APP_NAME, NAV_LINKS } from '@/lib/constants';
 import ClientSearchSuggestions from './ClientSearchSuggestions';
 import SkeletonLoader from './SkeletonLoader';
 import EnvironmentAwareComponent from './EnvironmentAwareComponent';
+import LocationDisplay from '@/components/location/LocationDisplay';
 
 export default function Header() {
   const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
@@ -33,6 +34,11 @@ export default function Header() {
             <Link href="/" className="text-2xl font-bold text-blue-600">
               {APP_NAME}
             </Link>
+          </div>
+
+          {/* Location Display - Shows user's delivery location */}
+          <div className="hidden lg:block">
+            <LocationDisplay compact={true} />
           </div>
 
           {/* Desktop Navigation */}

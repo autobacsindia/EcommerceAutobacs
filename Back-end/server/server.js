@@ -15,6 +15,9 @@ import userRoutes from "./routes/users.js";
 import reviewRoutes from "./routes/reviews.js";
 import profileRoutes from "./routes/profile.js";
 import paymentMethodRoutes from "./routes/paymentMethods.js";
+import locationRoutes from "./routes/location.js";
+import warehouseRoutes from "./routes/warehouses.js";
+import deliveryZoneRoutes from "./routes/deliveryZones.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -56,7 +59,10 @@ app.get("/", (req, res) => {
       vehicles: "/vehicles",
       cart: "/cart",
       wishlist: "/wishlist",
-      orders: "/orders"
+      orders: "/orders",
+      location: "/location",
+      warehouses: "/warehouses",
+      deliveryZones: "/delivery-zones"
     }
   });
 });
@@ -81,6 +87,9 @@ app.use("/users", apiRateLimit, userRoutes);
 app.use("/reviews", apiRateLimit, reviewRoutes);
 app.use("/profile", apiRateLimit, profileRoutes);
 app.use("/payment-methods", apiRateLimit, paymentMethodRoutes);
+app.use("/location", apiRateLimit, locationRoutes);
+app.use("/warehouses", apiRateLimit, warehouseRoutes);
+app.use("/delivery-zones", apiRateLimit, deliveryZoneRoutes);
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {

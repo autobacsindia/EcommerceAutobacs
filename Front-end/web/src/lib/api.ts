@@ -263,7 +263,13 @@ class APIClient {
         responseStatus: (error as any)?.responseStatus
       };
       
-      console.error('API Response Error:', errorDetails);
+      // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
+      const isLocationEndpoint = (response as any).url?.includes('/location/current');
+      const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
+      
+      if (!isLocationEndpoint || !is404Error) {
+        console.error('API Response Error:', errorDetails);
+      }
       
       // Handle parsing errors
       if (error instanceof SyntaxError) {
@@ -415,12 +421,21 @@ class APIClient {
           signal = controller.signal;
         }
         
+        // Separate headers from other options to prevent conflicts
+        const { headers: optionHeaders, ...restOptions } = options || {};
+        
+        // DEBUG: Log headers being sent
+        console.log('API.post() headers debug:', JSON.stringify({
+          optionHeaders,
+          mergedHeaders: this.getHeaders(optionHeaders)
+        }, null, 2));
+        
         const fetchOptions = {
+          ...restOptions,
           method: 'POST',
-          headers: this.getHeaders(options?.headers),
+          headers: this.getHeaders(optionHeaders),
           body: JSON.stringify(data),
-          signal,
-          ...options
+          signal
         };
         
         const response = await fetch(finalUrl, fetchOptions);
@@ -497,12 +512,15 @@ class APIClient {
           signal = controller.signal;
         }
         
+        // Separate headers from other options to prevent conflicts
+        const { headers: optionHeaders, ...restOptions } = options || {};
+        
         const fetchOptions = {
+          ...restOptions,
           method: 'PUT',
-          headers: this.getHeaders(options?.headers),
+          headers: this.getHeaders(optionHeaders),
           body: JSON.stringify(data),
-          signal,
-          ...options
+          signal
         };
         
         const response = await fetch(finalUrl, fetchOptions);
@@ -580,11 +598,14 @@ class APIClient {
           signal = controller.signal;
         }
         
+        // Separate headers from other options to prevent conflicts
+        const { headers: optionHeaders, ...restOptions } = options || {};
+        
         const fetchOptions = {
+          ...restOptions,
           method: 'DELETE',
-          headers: this.getHeaders(options?.headers),
-          signal,
-          ...options
+          headers: this.getHeaders(optionHeaders),
+          signal
         };
         
         const response = await fetch(finalUrl, fetchOptions);
