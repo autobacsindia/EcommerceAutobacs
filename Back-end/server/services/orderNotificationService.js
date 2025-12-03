@@ -3,6 +3,10 @@
  * Handles email and SMS notifications for order events
  */
 
+import emailHandler from './emailHandler.js';
+import smsHandler from './smsHandler.js';
+import notificationLogger from './notificationLogger.js';
+
 class OrderNotificationService {
   /**
    * Send order placed notification
@@ -13,10 +17,20 @@ class OrderNotificationService {
     const emailSubject = `Order Confirmation - Order #${order._id}`;
     const emailBody = this._generateOrderPlacedEmail(order, user);
     
-    await this._sendEmail({
+    const emailResult = await this._sendEmail({
       to: user.email,
       subject: emailSubject,
       body: emailBody
+    });
+    
+    // Log notification attempt
+    await notificationLogger.logEmail({
+      orderId: order._id,
+      userId: user._id || user.id,
+      event: 'order_placed',
+      recipient: user.email,
+      result: emailResult,
+      subject: emailSubject
     });
     
     return { success: true, message: 'Order placed notification sent' };
@@ -31,10 +45,20 @@ class OrderNotificationService {
     const emailSubject = `Payment Confirmed - Order #${order._id}`;
     const emailBody = this._generateOrderConfirmedEmail(order, user);
     
-    await this._sendEmail({
+    const emailResult = await this._sendEmail({
       to: user.email,
       subject: emailSubject,
       body: emailBody
+    });
+    
+    // Log notification attempt
+    await notificationLogger.logEmail({
+      orderId: order._id,
+      userId: user._id || user.id,
+      event: 'order_confirmed',
+      recipient: user.email,
+      result: emailResult,
+      subject: emailSubject
     });
     
     return { success: true };
@@ -49,16 +73,37 @@ class OrderNotificationService {
     const emailSubject = `Your Order Has Shipped - Order #${order._id}`;
     const emailBody = this._generateOrderShippedEmail(order, user);
     
-    await this._sendEmail({
+    const emailResult = await this._sendEmail({
       to: user.email,
       subject: emailSubject,
       body: emailBody
     });
     
+    // Log email notification
+    await notificationLogger.logEmail({
+      orderId: order._id,
+      userId: user._id || user.id,
+      event: 'order_shipped',
+      recipient: user.email,
+      result: emailResult,
+      subject: emailSubject
+    });
+    
     // Also send SMS for critical event
-    await this._sendSMS({
+    const smsMessage = `Your order #${order._id} has shipped! Track: ${order.trackingNumber}. Estimated delivery: ${this._formatDate(order.estimatedDelivery)}`;
+    const smsResult = await this._sendSMS({
       to: order.shippingAddress.phone,
-      message: `Your order #${order._id} has shipped! Track: ${order.trackingNumber}. Estimated delivery: ${this._formatDate(order.estimatedDelivery)}`
+      message: smsMessage
+    });
+    
+    // Log SMS notification
+    await notificationLogger.logSms({
+      orderId: order._id,
+      userId: user._id || user.id,
+      event: 'order_shipped',
+      recipient: order.shippingAddress.phone,
+      result: smsResult,
+      messagePreview: smsMessage.substring(0, 100)
     });
     
     return { success: true };
@@ -73,15 +118,36 @@ class OrderNotificationService {
     const emailSubject = `Order Delivered - Order #${order._id}`;
     const emailBody = this._generateOrderDeliveredEmail(order, user);
     
-    await this._sendEmail({
+    const emailResult = await this._sendEmail({
       to: user.email,
       subject: emailSubject,
       body: emailBody
     });
     
-    await this._sendSMS({
+    // Log email notification
+    await notificationLogger.logEmail({
+      orderId: order._id,
+      userId: user._id || user.id,
+      event: 'order_delivered',
+      recipient: user.email,
+      result: emailResult,
+      subject: emailSubject
+    });
+    
+    const smsMessage = `Your order #${order._id} has been delivered! We hope you enjoy your purchase.`;
+    const smsResult = await this._sendSMS({
       to: order.shippingAddress.phone,
-      message: `Your order #${order._id} has been delivered! We hope you enjoy your purchase.`
+      message: smsMessage
+    });
+    
+    // Log SMS notification
+    await notificationLogger.logSms({
+      orderId: order._id,
+      userId: user._id || user.id,
+      event: 'order_delivered',
+      recipient: order.shippingAddress.phone,
+      result: smsResult,
+      messagePreview: smsMessage
     });
     
     return { success: true };
@@ -487,45 +553,74 @@ Autobacs Team
   // ============================================
 
   /**
-   * Send email (Mock implementation - integrate with SendGrid, AWS SES, etc.)
+   * Send email using SendGrid
    */
   async _sendEmail({ to, subject, body }) {
-    // Mock implementation
-    console.log(`
+    try {
+      // Attempt to send via email handler
+      const result = await emailHandler.sendEmail({
+        to,
+        subject,
+        text: body
+      });
+      
+      // Fallback to console if service not enabled
+      if (result.fallbackToConsole) {
+        console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📧 EMAIL NOTIFICATION
+📧 EMAIL NOTIFICATION (Mock - Service Disabled)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 To: ${to}
 Subject: ${subject}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${body}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    `);
-    
-    // In production, replace with actual email service:
-    // await sendgridMail.send({ to, from: 'noreply@autobacs.com', subject, text: body });
-    
-    return true;
+        `);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('[OrderNotificationService] Email send error:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        provider: 'sendgrid'
+      };
+    }
   }
 
   /**
-   * Send SMS (Mock implementation - integrate with Twilio, AWS SNS, etc.)
+   * Send SMS using Twilio
    */
   async _sendSMS({ to, message }) {
-    // Mock implementation
-    console.log(`
+    try {
+      // Attempt to send via SMS handler
+      const result = await smsHandler.sendSms({
+        to,
+        message
+      });
+      
+      // Fallback to console if service not enabled
+      if (result.fallbackToConsole) {
+        console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📱 SMS NOTIFICATION
+📱 SMS NOTIFICATION (Mock - Service Disabled)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 To: ${to}
 Message: ${message}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    `);
-    
-    // In production, replace with actual SMS service:
-    // await twilioClient.messages.create({ to, from: process.env.TWILIO_PHONE, body: message });
-    
-    return true;
+        `);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('[OrderNotificationService] SMS send error:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        provider: 'twilio'
+      };
+    }
   }
 
   // ============================================
