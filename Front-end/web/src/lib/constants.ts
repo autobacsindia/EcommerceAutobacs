@@ -43,6 +43,7 @@ export const API_ENDPOINTS = {
   ORDERS: '/orders',
   ORDER_DETAIL: (id: string) => `/orders/${id}`,
   ORDER_CANCEL: (id: string) => `/orders/${id}/cancel`,
+  ORDER_RETURN: (id: string) => `/orders/${id}/return`,
   ADMIN_ORDERS: '/orders/admin/all',
   ORDER_UPDATE_STATUS: (id: string) => `/orders/${id}/status`,
 };
@@ -148,3 +149,36 @@ export const AUTH_ERROR_MESSAGES = {
   ACCOUNT_EXISTS: 'An account with this email already exists',
   GENERIC_AUTH_ERROR: 'Authentication failed. Please try again.',
 };
+
+// Cancellation Reasons
+export const CANCELLATION_REASONS = [
+  { value: 'customer_request', label: 'Changed my mind' },
+  { value: 'customer_request', label: 'Found better price elsewhere' },
+  { value: 'duplicate_order', label: 'Ordered by mistake' },
+  { value: 'payment_failed', label: 'Payment issues' },
+  { value: 'customer_request', label: 'Other' },
+] as const;
+
+// Return Reasons
+export const RETURN_REASONS = [
+  { value: 'defective', label: 'Defective or damaged', description: 'Item has defects or arrived damaged' },
+  { value: 'wrong_item', label: 'Wrong item received', description: 'Received incorrect product' },
+  { value: 'not_as_described', label: 'Not as described', description: 'Item doesn\'t match description' },
+  { value: 'changed_mind', label: 'Changed my mind', description: 'No longer need this item' },
+  { value: 'other', label: 'Other reason', description: 'Please specify your reason' },
+] as const;
+
+export const RETURN_POLICY_POINTS = [
+  'Items must be unused and in original packaging',
+  'Return shipping label will be provided after approval',
+  'Refund processed within 5-7 days after item received',
+  'Shipping costs may not be refunded',
+];
+
+// Image Upload Constants
+export const IMAGE_UPLOAD = {
+  MAX_FILES: 5,
+  MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB in bytes
+  ACCEPTED_FORMATS: ['image/jpeg', 'image/png', 'image/webp'],
+  ACCEPTED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp'],
+} as const;

@@ -10,6 +10,8 @@ import {
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle, 
   XCircle, Clock, AlertCircle, Download, RotateCcw, X 
 } from 'lucide-react';
+import CancelOrderModal from '@/components/orders/CancelOrderModal';
+import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
 
 interface OrderDetail {
   _id: string;
@@ -74,6 +76,12 @@ interface OrderDetail {
     amount: number;
     status: string;
     refundMethod: string;
+  };
+  fulfillmentMetrics?: {
+    deliveredAt?: string;
+    confirmedAt?: string;
+    processingStartedAt?: string;
+    shippedAt?: string;
   };
 }
 
@@ -553,40 +561,32 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Cancel Dialog Placeholder */}
-      {showCancelDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Cancel Order</h3>
-            <p className="text-gray-600 mb-4">
-              Cancellation feature will be implemented in the next phase.
-            </p>
-            <button
-              onClick={() => setShowCancelDialog(false)}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {/* Cancel Order Modal */}
+      {showCancelDialog && order && (
+        <CancelOrderModal
+          orderId={order._id}
+          orderNumber={order._id.slice(-8).toUpperCase()}
+          totalAmount={order.totalAmount}
+          hasPayment={!!order.payment}
+          onClose={() => setShowCancelDialog(false)}
+          onSuccess={() => {
+            fetchOrderDetail();
+          }}
+        />
       )}
 
-      {/* Return Dialog Placeholder */}
-      {showReturnDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Request Return</h3>
-            <p className="text-gray-600 mb-4">
-              Return request feature will be implemented in the next phase.
-            </p>
-            <button
-              onClick={() => setShowReturnDialog(false)}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+      {/* Return Request Modal */}
+      {showReturnDialog && order && (
+        <ReturnRequestModal
+          orderId={order._id}
+          orderNumber={order._id.slice(-8).toUpperCase()}
+          items={order.items}
+          deliveredAt={order.deliveredAt || order.fulfillmentMetrics?.deliveredAt || ''}
+          onClose={() => setShowReturnDialog(false)}
+          onSuccess={() => {
+            fetchOrderDetail();
+          }}
+        />
       )}
     </div>
   );
