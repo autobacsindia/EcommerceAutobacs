@@ -24,6 +24,11 @@ class GoogleMapsService {
    */
   async geocodeAddress(address) {
     try {
+      // Check if API key is configured
+      if (!this.serverKey || this.serverKey === 'your_server_key_here') {
+        throw new Error('GOOGLE_MAPS_API_NOT_CONFIGURED');
+      }
+
       // Check cache first
       const cacheKey = `geocode_${address}`;
       const cached = this.getCached(cacheKey);
@@ -44,6 +49,7 @@ class GoogleMapsService {
       );
 
       if (response.data.status !== "OK") {
+        console.error('Google Maps API Response:', response.data);
         throw new Error(`Geocoding failed: ${response.data.status}`);
       }
 
@@ -64,6 +70,14 @@ class GoogleMapsService {
       return geocoded;
     } catch (error) {
       console.error("Geocoding error:", error.message);
+      
+      // Provide specific error messages
+      if (error.message === 'GOOGLE_MAPS_API_NOT_CONFIGURED') {
+        throw new Error('Location services not configured');
+      } else if (error.response?.status === 403) {
+        throw new Error('Location services unavailable');
+      }
+      
       throw new Error("Failed to geocode address");
     }
   }
@@ -76,6 +90,11 @@ class GoogleMapsService {
    */
   async reverseGeocode(latitude, longitude) {
     try {
+      // Check if API key is configured
+      if (!this.serverKey || this.serverKey === 'your_server_key_here') {
+        throw new Error('GOOGLE_MAPS_API_NOT_CONFIGURED');
+      }
+
       const cacheKey = `reverse_${latitude}_${longitude}`;
       const cached = this.getCached(cacheKey);
       if (cached) {
@@ -95,6 +114,7 @@ class GoogleMapsService {
       );
 
       if (response.data.status !== "OK") {
+        console.error('Google Maps API Response:', response.data);
         throw new Error(`Reverse geocoding failed: ${response.data.status}`);
       }
 
@@ -109,11 +129,26 @@ class GoogleMapsService {
         addressComponents: this.parseAddressComponents(result.address_components)
       };
 
+      // Verify postal code exists
+      if (!geocoded.addressComponents.postalCode) {
+        throw new Error('NO_POSTAL_CODE_FOUND');
+      }
+
       this.setCached(cacheKey, geocoded);
 
       return geocoded;
     } catch (error) {
       console.error("Reverse geocoding error:", error.message);
+      
+      // Provide specific error messages
+      if (error.message === 'GOOGLE_MAPS_API_NOT_CONFIGURED') {
+        throw new Error('Location services not configured. Please enter PIN code manually.');
+      } else if (error.message === 'NO_POSTAL_CODE_FOUND') {
+        throw new Error('Unable to determine PIN code from location. Please enter it manually.');
+      } else if (error.response?.status === 403) {
+        throw new Error('Location services unavailable. Please enter PIN code manually.');
+      }
+      
       throw new Error("Failed to reverse geocode coordinates");
     }
   }

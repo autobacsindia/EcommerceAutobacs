@@ -10,6 +10,7 @@ import type {
   LocationSelectRequest,
   LocationValidateResponse,
 } from '@/types/location';
+import { addToLocationHistory } from '@/utils/locationHistory';
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
 
@@ -99,6 +100,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setCurrentLocation(response.location);
       setDeliveryZone(response.deliveryZone);
       setDeliveryEstimate(response.deliveryEstimate);
+
+      // Add to location history
+      addToLocationHistory(response.location);
 
       return response;
     } catch (err: any) {

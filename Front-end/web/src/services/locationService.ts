@@ -361,14 +361,18 @@ class LocationService {
   }
 
   /**
-   * Get zone badge color
+   * Get zone badge color with improved visual hierarchy
+   * - Emerald (green) for Metro: Fastest delivery
+   * - Sky (blue) for Tier-1: Fast delivery
+   * - Amber (orange) for Tier-2: Standard delivery
+   * - Rose (red) for Remote: Extended delivery
    */
   getZoneBadgeColor(type: string): string {
     const colors: Record<string, string> = {
-      metro: 'bg-green-100 text-green-800',
-      tier1: 'bg-blue-100 text-blue-800',
-      tier2: 'bg-yellow-100 text-yellow-800',
-      remote: 'bg-gray-100 text-gray-800'
+      metro: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+      tier1: 'bg-sky-100 text-sky-800 border border-sky-300',
+      tier2: 'bg-amber-100 text-amber-900 border border-amber-300',
+      remote: 'bg-rose-100 text-rose-800 border border-rose-300'
     };
     return colors[type] || colors.remote;
   }

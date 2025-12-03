@@ -126,7 +126,7 @@ export default function DeliveryEstimate({
 
         {/* Zone Badge */}
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${zoneColor}`}>
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-badge ${zoneColor}`}>
             {locationService.getZoneTypeDisplay(deliveryInfo.zone.type)} Zone
           </span>
           

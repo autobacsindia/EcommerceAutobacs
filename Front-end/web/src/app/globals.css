@@ -38,6 +38,124 @@ body {
   animation: pulse 0.3s ease-in-out;
 }
 
+/* Location change animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleBounce {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Animation classes */
+.animate-fadeIn {
+  animation: fadeIn 250ms ease-in-out;
+}
+
+.animate-fadeOut {
+  animation: fadeOut 250ms ease-in-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 200ms ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 200ms ease-in;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 300ms ease-in-out;
+}
+
+.animate-scaleBounce {
+  animation: scaleBounce 400ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Transition utilities */
+.transition-location {
+  transition: all 250ms ease-in-out;
+}
+
+.transition-badge {
+  transition: all 300ms ease-in-out;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .animate-fadeIn,
+  .animate-fadeOut,
+  .animate-slideDown,
+  .animate-slideUp,
+  .animate-scaleIn,
+  .animate-scaleBounce {
+    animation: none !important;
+  }
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;

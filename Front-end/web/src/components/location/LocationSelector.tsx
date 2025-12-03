@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, MapPin, Loader2, Navigation2, CheckCircle } from 'lucide-react';
 import { useLocation } from '@/contexts/LocationContext';
+import { LocationSelectRequest } from '@/types/location';
 import toast from 'react-hot-toast';
 
 interface LocationSelectorProps {
@@ -59,28 +60,32 @@ export default function LocationSelector({
   const handleConfirmLocation = async () => {
     try {
       // Use the zone data we got from validation to construct proper address
+      let requestData: LocationSelectRequest;
+      
       if (validationResult?.zone) {
         // Extract city and state from zone if available
         const city = validationResult.zone.cities?.[0] || 'Unknown';
         const state = validationResult.zone.states?.[0] || 'India';
         
-        await selectLocation({
+        requestData = {
           address: {
             city,
             state,
             postalCode: pinCode,
             country: 'India',
           },
-        });
+        };
       } else {
         // Fallback: just send postal code for backend to resolve
-        await selectLocation({
+        requestData = {
           address: {
             postalCode: pinCode,
             country: 'India',
           },
-        });
+        };
       }
+      
+      await selectLocation(requestData);
       
       toast.success('Location updated successfully!');
       onLocationSelected?.();
@@ -97,13 +102,27 @@ export default function LocationSelector({
       // Get current coordinates
       const coords = await new Promise<GeolocationCoordinates>((resolve, reject) => {
         if (!navigator.geolocation) {
-          reject(new Error('Geolocation not supported'));
+          reject(new Error('Geolocation not supported by your browser'));
           return;
         }
 
         navigator.geolocation.getCurrentPosition(
           (position) => resolve(position.coords),
-          (error) => reject(error),
+          (error) => {
+            let message = 'Failed to get location';
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                message = 'Location permission denied. Please enable location access.';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                message = 'Location information unavailable.';
+                break;
+              case error.TIMEOUT:
+                message = 'Location request timed out.';
+                break;
+            }
+            reject(new Error(message));
+          },
           { enableHighAccuracy: true, timeout: 10000 }
         );
       });
@@ -120,15 +139,30 @@ export default function LocationSelector({
       onLocationSelected?.();
       handleClose();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to detect location');
+      console.error('Current location error:', error);
+      
+      // Show user-friendly error message
+      let errorMessage = error.message || 'Failed to detect location';
+      
+      // Check if it's a geocoding error
+      if (errorMessage.includes('PIN code manually') || 
+          errorMessage.includes('reverse geocode') ||
+          errorMessage.includes('not configured')) {
+        toast.error(
+          'Unable to detect location automatically. Please enter your PIN code manually.',
+          { duration: 4000 }
+        );
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setUseCurrentLocation(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-scaleIn">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
@@ -146,7 +180,7 @@ export default function LocationSelector({
         {/* Content */}
         <div className="p-6">
           {step === 'input' ? (
-            <>
+            <div className="animate-fadeIn">
               {/* PIN Code Input */}
               <div className="mb-4">
                 <label htmlFor="pincode" className="block text-sm font-medium text-gray-700 mb-2">
@@ -217,9 +251,9 @@ export default function LocationSelector({
                   </>
                 )}
               </button>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="animate-fadeIn">
               {/* Confirmation */}
               <div className="mb-6">
                 <div className="flex items-start gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
@@ -282,7 +316,7 @@ export default function LocationSelector({
                   )}
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

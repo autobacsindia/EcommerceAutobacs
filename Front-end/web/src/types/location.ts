@@ -114,7 +114,12 @@ export interface ProductAvailability {
 
 export interface LocationSelectRequest {
   placeId?: string;
-  address?: string;
+  address?: string | {
+    city?: string;
+    state?: string;
+    postalCode: string;
+    country?: string;
+  };
   coordinates?: {
     latitude: number;
     longitude: number;
@@ -221,7 +226,7 @@ export interface LocationContextType {
   deliveryEstimate: DeliveryEstimate | null;
   isLoading: boolean;
   error: string | null;
-  selectLocation: (data: LocationSelectRequest) => Promise<void>;
+  selectLocation: (data: LocationSelectRequest) => Promise<LocationSelectResponse>;
   clearLocation: () => Promise<void>;
   validateAddress: (postalCode: string) => Promise<LocationValidateResponse>;
   refreshLocation: () => Promise<void>;
