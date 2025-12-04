@@ -50,13 +50,9 @@ class LocationService {
         const pinCode = locationData.postalCode || locationData.address.postalCode;
         const deliveryZone = await DeliveryZone.findByPinCode(pinCode);
         
-        if (!deliveryZone) {
-          throw new Error(`Delivery not available for PIN code: ${pinCode}`);
-        }
-
         // Use zone data to construct address
-        const city = locationData.address?.city || deliveryZone.cities?.[0] || 'Unknown';
-        const state = locationData.address?.state || deliveryZone.states?.[0] || 'India';
+        const city = locationData.address?.city || deliveryZone?.cities?.[0] || 'Unknown';
+        const state = locationData.address?.state || deliveryZone?.states?.[0] || 'India';
         
         addressComponents = {
           street: locationData.address?.street || '',
@@ -87,17 +83,27 @@ class LocationService {
         throw new Error("Invalid location data provided");
       }
 
-      // Find delivery zone by PIN code (if not already found)
+      // Find delivery zone by PIN code or assign based on city
       let deliveryZone;
       if (!locationData.postalCode && !(locationData.address && locationData.address.postalCode)) {
         deliveryZone = await DeliveryZone.findByPinCode(addressComponents.postalCode);
         
+        // If no specific PIN code match, assign zone based on city tier
         if (!deliveryZone) {
-          throw new Error(`Delivery not available for PIN code: ${addressComponents.postalCode}`);
+          deliveryZone = await this.assignZoneByCity(addressComponents.city, addressComponents.state);
         }
       } else {
-        // Already found zone in the PIN code-only path
+        // Check for PIN code match first
         deliveryZone = await DeliveryZone.findByPinCode(addressComponents.postalCode);
+        
+        // If no specific PIN code match, assign zone based on city tier
+        if (!deliveryZone) {
+          deliveryZone = await this.assignZoneByCity(addressComponents.city, addressComponents.state);
+        }
+      }
+      
+      if (!deliveryZone) {
+        throw new Error(`Unable to determine delivery zone for this location`);
       }
 
       // Find nearest warehouse
@@ -250,6 +256,53 @@ class LocationService {
       return await UserLocation.cleanupExpired(expiryDays);
     } catch (error) {
       console.error("Cleanup expired locations error:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Assign delivery zone based on city tier
+   * @param {string} city
+   * @param {string} state  
+   * @returns {Promise<Object>} Assigned delivery zone
+   */
+  async assignZoneByCity(city, state) {
+    try {
+      // Define metro cities
+      const metroCities = ['delhi', 'mumbai', 'bangalore', 'bengaluru', 'kolkata', 'chennai', 'hyderabad', 'pune', 'ahmedabad'];
+      
+      // Define tier 1 cities
+      const tier1Cities = ['kochi', 'ernakulam', 'jaipur', 'lucknow', 'chandigarh', 'nagpur', 'indore', 'coimbatore', 'visakhapatnam', 'surat', 'kanpur', 'bhopal', 'patna', 'vadodara', 'ludhiana'];
+      
+      const cityLower = city?.toLowerCase() || '';
+      
+      // Determine zone type based on city
+      let zoneType;
+      if (metroCities.some(metro => cityLower.includes(metro))) {
+        zoneType = 'metro';
+      } else if (tier1Cities.some(tier1 => cityLower.includes(tier1))) {
+        zoneType = 'tier1';
+      } else {
+        // For all other cities and towns, use tier2 as default
+        zoneType = 'tier2';
+      }
+      
+      // Find the appropriate zone
+      let zone = await DeliveryZone.findOne({ type: zoneType });
+      
+      // If specific zone not found, fallback to remote zone
+      if (!zone) {
+        zone = await DeliveryZone.findOne({ type: 'remote' });
+      }
+      
+      // If still no zone found, fallback to any available zone
+      if (!zone) {
+        zone = await DeliveryZone.findOne({ isServiceable: true }).sort({ priority: 1 });
+      }
+      
+      return zone;
+    } catch (error) {
+      console.error("Assign zone by city error:", error);
       throw error;
     }
   }
