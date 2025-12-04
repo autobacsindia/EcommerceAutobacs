@@ -36,6 +36,10 @@ interface Stats {
   pendingOrders: number;
   lowStockProducts: number;
   completedOrders: number;
+  averageOrderValue: number;
+  cancellationRate: number;
+  returnRate: number;
+  avgFulfillmentTime: number;
 }
 
 interface Product {
@@ -77,6 +81,10 @@ export default function AdminDashboardPage() {
     pendingOrders: 0,
     lowStockProducts: 0,
     completedOrders: 0,
+    averageOrderValue: 0,
+    cancellationRate: 0,
+    returnRate: 0,
+    avgFulfillmentTime: 0,
   });
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -107,6 +115,20 @@ export default function AdminDashboardPage() {
       const pendingOrders = orders.filter((order: any) => order.status === 'pending').length;
       const completedOrders = orders.filter((order: any) => order.status === 'delivered').length;
       const lowStockProducts = products.filter((product: any) => product.stock < 10).length;
+      const cancelledOrders = orders.filter((order: any) => order.status === 'cancelled').length;
+      const ordersWithReturns = orders.filter((order: any) => order.returnRequest).length;
+      
+      // Calculate average order value
+      const averageOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
+      
+      // Calculate cancellation rate
+      const cancellationRate = orders.length > 0 ? (cancelledOrders / orders.length) * 100 : 0;
+      
+      // Calculate return rate
+      const returnRate = completedOrders > 0 ? (ordersWithReturns / completedOrders) * 100 : 0;
+      
+      // Calculate average fulfillment time (mock calculation - should use actual fulfillment metrics)
+      const avgFulfillmentTime = 48; // hours - placeholder
       
       setStats({
         totalProducts: products.length,
@@ -115,6 +137,10 @@ export default function AdminDashboardPage() {
         pendingOrders,
         lowStockProducts,
         completedOrders,
+        averageOrderValue,
+        cancellationRate,
+        returnRate,
+        avgFulfillmentTime,
       });
       
       // Set products (low stock first)
@@ -180,36 +206,70 @@ export default function AdminDashboardPage() {
       label: 'Total Products',
       value: stats.totalProducts,
       color: 'bg-blue-500',
+      trend: null,
     },
     {
       icon: ShoppingCart,
       label: 'Total Orders',
       value: stats.totalOrders,
       color: 'bg-green-500',
+      trend: null,
     },
     {
       icon: DollarSign,
       label: 'Total Revenue',
       value: `₹${stats.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
       color: 'bg-purple-500',
+      trend: null,
     },
     {
       icon: TrendingUp,
+      label: 'Avg Order Value',
+      value: `₹${stats.averageOrderValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      color: 'bg-indigo-500',
+      trend: null,
+    },
+    {
+      icon: CheckCircle,
       label: 'Completed Orders',
       value: stats.completedOrders,
       color: 'bg-teal-500',
+      trend: `${stats.totalOrders > 0 ? ((stats.completedOrders / stats.totalOrders) * 100).toFixed(1) : 0}%`,
     },
     {
       icon: Clock,
       label: 'Pending Orders',
       value: stats.pendingOrders,
       color: 'bg-orange-500',
+      trend: null,
+    },
+    {
+      icon: XCircle,
+      label: 'Cancellation Rate',
+      value: `${stats.cancellationRate.toFixed(1)}%`,
+      color: 'bg-red-500',
+      trend: null,
+    },
+    {
+      icon: Truck,
+      label: 'Return Rate',
+      value: `${stats.returnRate.toFixed(1)}%`,
+      color: 'bg-yellow-500',
+      trend: null,
+    },
+    {
+      icon: Clock,
+      label: 'Avg Fulfillment Time',
+      value: `${stats.avgFulfillmentTime}h`,
+      color: 'bg-cyan-500',
+      trend: null,
     },
     {
       icon: AlertTriangle,
       label: 'Low Stock Items',
       value: stats.lowStockProducts,
-      color: 'bg-red-500',
+      color: 'bg-rose-500',
+      trend: null,
     },
   ];
 
@@ -233,11 +293,11 @@ export default function AdminDashboardPage() {
       <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
-            <div key={card.label} className="bg-white rounded-lg shadow p-6">
+            <div key={card.label} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
               <div className="flex items-center justify-between mb-4">
                 <div className={`${card.color} p-3 rounded-lg`}>
                   <Icon className="h-6 w-6 text-white" />
@@ -245,6 +305,9 @@ export default function AdminDashboardPage() {
               </div>
               <h3 className="text-gray-600 text-sm mb-1">{card.label}</h3>
               <p className="text-2xl font-bold">{card.value}</p>
+              {card.trend && (
+                <p className="text-xs text-gray-500 mt-1">Completion: {card.trend}</p>
+              )}
             </div>
           );
         })}
