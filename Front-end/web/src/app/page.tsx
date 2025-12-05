@@ -7,7 +7,10 @@ import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
 import PageLoader from '@/components/layout/PageLoader';
 import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
-import FeaturedProducts from '@/components/products/FeaturedProducts';
+
+import FastMovingProducts from '@/components/products/FastMovingProducts';
+import ProductCollectionsRow from '@/components/products/ProductCollectionsRow';
+import SuperCarsBanner from '@/components/layout/SuperCarsBanner';
 import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 
@@ -236,6 +239,37 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Fast-Moving Products Section */}
+      <FastMovingProducts limit={4} />
+
+      {/* Super Cars Premium Banner */}
+      <SuperCarsBanner />
+
+      {/* Product Collections Row - Three Columns */}
+      <ProductCollectionsRow
+        collections={[
+          {
+            title: "Style that",
+            subtitle: "speaks louder",
+            searchKeyword: "speaker exhaust",
+            viewAllLink: "/products?search=speaker exhaust"
+          },
+          {
+            title: "Built for",
+            subtitle: "thrill-seekers",
+            searchKeyword: "suspension",
+            viewAllLink: "/products?search=suspension"
+          },
+          {
+            title: "more than",
+            subtitle: "ordinary",
+            searchKeyword: "body kit bumper",
+            viewAllLink: "/products?search=body kit"
+          }
+        ]}
+        productsPerCollection={3}
+      />
+
       {/* Features Section */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -274,9 +308,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* Featured Products Section */}
-      <FeaturedProducts />
 
       {/* Popular Categories */}
       <section className="py-16">

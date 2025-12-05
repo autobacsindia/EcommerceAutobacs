@@ -83,17 +83,17 @@ export default function LocationDisplay({
           <div className="relative">
             <button
               onClick={handleToggleHistory}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors group"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors group"
               aria-label="Change delivery location"
             >
-              <MapPin className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <MapPin className="h-4 w-4 text-green-400 flex-shrink-0" />
               <div className="flex flex-col items-start min-w-0">
-                <span className="text-xs text-gray-500">Deliver to</span>
+                <span className="text-xs text-gray-300">Deliver to</span>
                 <div className="flex items-center gap-1">
-                  <span className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
+                  <span className="text-sm font-medium text-white truncate max-w-[150px]">
                     {locationText}
                   </span>
-                  <ChevronDown className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                  <ChevronDown className="h-3 w-3 text-gray-300 flex-shrink-0" />
                 </div>
               </div>
             </button>
