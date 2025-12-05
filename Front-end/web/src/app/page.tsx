@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
 import PageLoader from '@/components/layout/PageLoader';
 import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
 import FeaturedProducts from '@/components/products/FeaturedProducts';
+import HeroBanner from '@/components/layout/HeroBanner';
+import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 
 // Dynamically import VehicleSelector to avoid SSR issues
 const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { ssr: false });
@@ -26,28 +29,209 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-6">
-            Premium Automotive Accessories
-          </h1>
-          <p className="text-xl md:text-2xl mb-8 text-blue-100">
-            Transform your ride with high-quality body kits, performance parts, and accessories
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/products"
-              className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
-            >
-              Shop Now
-            </Link>
-            <Link
-              href="/categories"
-              className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors"
-            >
-              Browse Categories
-            </Link>
+      {/* Hero Banner */}
+      <HeroBanner />
+
+      {/* Vehicle Selector Section */}
+      <section className="py-12 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Find Parts for Your Vehicle</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Select your vehicle to see compatible parts and accessories
+            </p>
+          </div>
+          
+          <div className="max-w-2xl mx-auto">
+            <VehicleSelector onVehicleSelect={handleVehicleSelect} />
+            
+            {selectedVehicle.make && selectedVehicle.model && (
+              <div className="mt-6 text-center">
+                <Link 
+                  href={`/products?vehicleMake=${encodeURIComponent(selectedVehicle.make)}&vehicleModel=${encodeURIComponent(selectedVehicle.model)}`}
+                  className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  View {selectedVehicle.make} {selectedVehicle.model} Parts
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Vehicle Images Row - 4 cars + See More */}
+          <div className="mt-12">
+            <div className="grid grid-cols-5 gap-4">
+              {FEATURED_VEHICLES.slice(0, 4).map((vehicle) => (
+                <Link 
+                  key={vehicle.id} 
+                  href={`/vehicles/${vehicle.make}`} 
+                  className="group"
+                >
+                  <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">
+                    <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                      {vehicle.image && (
+                        <Image
+                          src={vehicle.image}
+                          alt={vehicle.name}
+                          width={300}
+                          height={300}
+                          className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
+                        />
+                      )}
+                    </div>
+                    <div className="p-3 text-center bg-gray-50">
+                      <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                        {vehicle.name}
+                      </h3>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+              
+              {/* See More Card */}
+              <Link href="/vehicles" className="group">
+                <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center p-6">
+                  <div className="text-white text-center">
+                    <svg 
+                      className="w-12 h-12 mx-auto mb-3 group-hover:scale-110 transition-transform" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M9 5l7 7-7 7" 
+                      />
+                    </svg>
+                    <h3 className="text-lg font-bold mb-1">See More</h3>
+                    <p className="text-sm text-blue-100">View all vehicles</p>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Brand Logos Slider */}
+          <div className="mt-16 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-12 bg-gradient-to-br from-gray-50 to-gray-100">
+            <div className="text-center mb-8">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Trusted Brands</h3>
+              <p className="text-gray-600">Premium automotive parts from world-class manufacturers</p>
+            </div>
+            <div className="relative overflow-hidden py-8">
+              <div className="flex animate-scroll space-x-12 items-center">
+                {/* First set of logos */}
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
+                    alt="Profender"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
+                    alt="Bushranger"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
+                    alt="Ironman"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
+                    alt="Dr. Nano"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
+                    alt="Lightforce"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
+                    alt="Option"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                {/* Duplicate set for seamless loop */}
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
+                    alt="Profender"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
+                    alt="Bushranger"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
+                    alt="Ironman"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
+                    alt="Dr. Nano"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
+                    alt="Lightforce"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                  <Image
+                    src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
+                    alt="Option"
+                    width={180}
+                    height={80}
+                    className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -87,33 +271,6 @@ export default function Home() {
               <h3 className="text-lg font-semibold mb-2">Expert Support</h3>
               <p className="text-gray-600">Dedicated customer service team</p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Vehicle Selector Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Find Parts for Your Vehicle</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Select your vehicle to see compatible parts and accessories
-            </p>
-          </div>
-          
-          <div className="max-w-2xl mx-auto">
-            <VehicleSelector onVehicleSelect={handleVehicleSelect} />
-            
-            {selectedVehicle.make && selectedVehicle.model && (
-              <div className="mt-6 text-center">
-                <Link 
-                  href={`/products?vehicleMake=${encodeURIComponent(selectedVehicle.make)}&vehicleModel=${encodeURIComponent(selectedVehicle.model)}`}
-                  className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  View {selectedVehicle.make} {selectedVehicle.model} Parts
-                </Link>
-              </div>
-            )}
           </div>
         </div>
       </section>

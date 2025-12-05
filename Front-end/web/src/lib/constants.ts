@@ -118,12 +118,14 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   [PAYMENT_METHODS.COD]: 'Cash on Delivery',
 };
 
-// Navigation Links
+// Navigation Links - Bottom Row (Main Navigation)
 export const NAV_LINKS = [
-  { href: '/', label: 'Home' },
-  { href: '/products', label: 'Products' },
+  { href: '/shop', label: 'Shop' },
+  { href: '/brands', label: 'Brand' },
+  { href: '/vehicles', label: 'Vehicle' },
   { href: '/categories', label: 'Categories' },
-  { href: '/vehicles', label: 'Vehicles' },
+  { href: '/wishlist', label: 'Wishlist' },
+  { href: '/offers', label: 'Offers' },
 ];
 
 // Footer Links

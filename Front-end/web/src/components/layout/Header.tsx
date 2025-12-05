@@ -2,23 +2,28 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { ShoppingCart, User, Menu, Search, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
-import { APP_NAME, NAV_LINKS } from '@/lib/constants';
+import { NAV_LINKS } from '@/lib/constants';
 import ClientSearchSuggestions from './ClientSearchSuggestions';
 import SkeletonLoader from './SkeletonLoader';
 import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 import LocationDisplay from '@/components/location/LocationDisplay';
+import BrandLogo from './BrandLogo';
+import CurrencySwitcher from './CurrencySwitcher';
+import MobileMenu from './MobileMenu';
 
 export default function Header() {
   const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
   const { itemCount } = useCart();
   const { wishlistCount } = useWishlist();
   const router = useRouter();
+  const pathname = usePathname();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Show skeleton while loading auth state
   if (authLoading) {
@@ -26,63 +31,89 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-black sticky top-0 z-50 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        {/* Top Row - Primary Actions Bar */}
+        <div className="flex items-center justify-between h-16 border-b border-gray-800">
           {/* Logo */}
-          <div className="flex-shrink-0">
-            <Link href="/" className="text-2xl font-bold text-blue-600">
-              {APP_NAME}
-            </Link>
+          <div className="flex-shrink-0 mr-6">
+            <BrandLogo variant="full" />
           </div>
 
           {/* Location Display - Shows user's delivery location */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block mr-4">
             <LocationDisplay compact={true} />
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex space-x-8">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-gray-700 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          {/* Search Bar - Desktop */}
+          <div className="hidden md:block flex-1 mr-2">
+            <ClientSearchSuggestions />
+          </div>
 
           {/* Right Section */}
-          <div className="flex items-center space-x-4">
-            {/* Desktop Search */}
-            <div className="hidden md:block w-64">
-              <ClientSearchSuggestions />
+          <div className="flex items-center space-x-3 text-white">
+            {/* Currency Switcher */}
+            <div className="hidden sm:block">
+              <CurrencySwitcher />
             </div>
 
             {/* Mobile Search Icon */}
             <button 
               onClick={() => setShowMobileSearch(!showMobileSearch)}
-              className="md:hidden p-2 text-gray-600 hover:text-blue-600"
+              className="md:hidden p-2 text-white hover:text-green-200 transition-colors"
+              aria-label="Toggle search"
             >
               <Search className="h-5 w-5" />
             </button>
 
-            {/* Wishlist */}
-            {isAuthenticated && (
-              <Link href="/wishlist" className="relative p-2 text-gray-600 hover:text-blue-600">
-                <Heart className="h-5 w-5" />
-                {wishlistCount > 0 && (
-                  <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {wishlistCount}
-                  </span>
+            {/* User Menu - Desktop */}
+            <EnvironmentAwareComponent 
+              skeletonType="user"
+              fallback={
+                <div className="hidden md:flex items-center space-x-2">
+                  <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+                </div>
+              }
+            >
+              <div className="hidden md:flex items-center space-x-2">
+                {isAuthenticated ? (
+                  <>
+                    <Link
+                      href="/profile"
+                      className="flex items-center space-x-1 text-white hover:text-green-200 transition-colors"
+                    >
+                      <User className="h-5 w-5" />
+                      <span className="hidden lg:inline text-sm">{user?.name}</span>
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="text-sm text-white hover:text-green-200 transition-colors"
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      className="text-sm text-white hover:text-green-200 transition-colors"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/register"
+                      className="text-sm bg-white text-green-700 px-4 py-2 rounded-md hover:bg-green-50 transition-colors font-medium"
+                    >
+                      Sign Up
+                    </Link>
+                  </>
                 )}
-              </Link>
-            )}
+              </div>
+            </EnvironmentAwareComponent>
 
             {/* Cart */}
-            <Link href="/cart" className="relative p-2 text-gray-600 hover:text-blue-600">
+            <Link href="/cart" className="relative p-2 text-white hover:text-green-200 transition-colors">
               <ShoppingCart className="h-5 w-5" />
               {itemCount > 0 && (
                 <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -91,75 +122,52 @@ export default function Header() {
               )}
             </Link>
 
-            {/* User Menu */}
-            <EnvironmentAwareComponent 
-              skeletonType="user"
-              fallback={
-                <div className="flex items-center space-x-2">
-                  <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
-                  <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
-                </div>
-              }
-            >
-              <div className="relative">
-                {isAuthenticated ? (
-                  <div className="flex items-center space-x-2">
-                    <Link
-                      href="/profile"
-                      className="flex items-center space-x-1 text-gray-700 hover:text-blue-600"
-                    >
-                      <User className="h-5 w-5" />
-                      <span className="hidden sm:inline text-sm">{user?.name}</span>
-                    </Link>
-                    <button
-                      onClick={logout}
-                      className="text-sm text-gray-600 hover:text-red-600 ml-2"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    <Link
-                      href="/login"
-                      className="text-sm text-gray-700 hover:text-blue-600"
-                    >
-                      Login
-                    </Link>
-                    <Link
-                      href="/register"
-                      className="text-sm bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                    >
-                      Sign Up
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </EnvironmentAwareComponent>
-
             {/* Mobile Menu Button */}
-            <EnvironmentAwareComponent 
-              skeletonType="mobile-menu"
-              fallback={
-                <div className="md:hidden p-2">
-                  <div className="h-6 w-6 bg-gray-200 rounded animate-pulse" />
-                </div>
-              }
+            <button 
+              onClick={() => setShowMobileMenu(true)}
+              className="md:hidden p-2 text-white hover:text-green-200 transition-colors"
+              aria-label="Open menu"
             >
-              <button className="md:hidden p-2 text-gray-600">
-                <Menu className="h-6 w-6" />
-              </button>
-            </EnvironmentAwareComponent>
+              <Menu className="h-6 w-6" />
+            </button>
           </div>
         </div>
 
+        {/* Bottom Row - Navigation Menu */}
+        <nav className="hidden md:flex items-center justify-between h-12">
+          {NAV_LINKS.map((link, index) => {
+            const isActive = pathname === link.href || 
+              (link.href !== '/' && pathname.startsWith(link.href));
+            
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`text-sm font-medium transition-colors relative py-1 flex-1 text-center ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-white hover:text-green-200'
+                }`}
+              >
+                {link.label}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
         {/* Mobile Search Bar */}
         {showMobileSearch && (
-          <div className="md:hidden py-4">
+          <div className="md:hidden py-4 border-t border-gray-800">
             <ClientSearchSuggestions />
           </div>
         )}
       </div>
+
+      {/* Mobile Menu */}
+      <MobileMenu isOpen={showMobileMenu} onClose={() => setShowMobileMenu(false)} />
     </header>
   );
 }

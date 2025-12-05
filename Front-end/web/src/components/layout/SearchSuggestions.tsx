@@ -258,7 +258,7 @@ export default function SearchSuggestions() {
       }
     >
       <div ref={containerRef} className="relative w-full max-w-md">
-        <div className="flex">
+        <div className="flex rounded-md overflow-hidden shadow-sm">
           <input
             ref={inputRef}
             type="text"
@@ -271,11 +271,11 @@ export default function SearchSuggestions() {
               }
             }}
             placeholder="Search products, brands, categories..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 bg-white text-gray-900 placeholder-gray-500 border-0 focus:outline-none focus:ring-2 focus:ring-white"
           />
           <button 
             onClick={() => handleSearch()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors"
+            className="bg-white text-green-800 px-4 py-2 hover:bg-gray-50 transition-colors border-l border-gray-200"
           >
             <Search className="h-5 w-5" />
           </button>

@@ -5,6 +5,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { LocationProvider } from "@/contexts/LocationContext";
+import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -40,12 +41,14 @@ export default function RootLayout({
             <CartProvider>
               <WishlistProvider>
                 <LocationProvider>
-                  <div className="flex flex-col min-h-screen">
-                    <Header />
-                    <main className="flex-1">{children}</main>
-                    <Footer />
-                  </div>
-                  <Toaster position="top-right" />
+                  <CurrencyProvider>
+                    <div className="flex flex-col min-h-screen">
+                      <Header />
+                      <main className="flex-1">{children}</main>
+                      <Footer />
+                    </div>
+                    <Toaster position="top-right" />
+                  </CurrencyProvider>
                 </LocationProvider>
               </WishlistProvider>
             </CartProvider>
