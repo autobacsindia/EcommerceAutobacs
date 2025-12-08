@@ -264,10 +264,15 @@ class APIClient {
       };
       
       // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
+      // or category endpoints (category might not exist)
       const isLocationEndpoint = (response as any).url?.includes('/location/current');
+      const isCategoryEndpoint = (response as any).url?.includes('/categories/slug/');
       const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
       
-      if (!isLocationEndpoint || !is404Error) {
+      // Also check if the error is an ApiError with 404 status
+      const isApiError404 = error instanceof ApiError && error.status === 404;
+      
+      if ((!isLocationEndpoint && !isCategoryEndpoint) || (!is404Error && !isApiError404)) {
         console.error('API Response Error:', errorDetails);
       }
       

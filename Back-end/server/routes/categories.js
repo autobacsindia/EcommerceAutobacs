@@ -41,11 +41,36 @@ router.get("/:id", asyncHandler(async (req, res) => {
 }));
 
 // @route   GET /categories/slug/:slug
-// @desc    Get category by slug
+// @desc    Get category by slug (supports both hyphenated and non-hyphenated versions)
 // @access  Public
 router.get("/slug/:slug", asyncHandler(async (req, res) => {
-  const category = await Category.findOne({ slug: req.params.slug, isActive: true })
+  let category = await Category.findOne({ slug: req.params.slug, isActive: true })
     .populate('parent', 'name slug');
+
+  // If not found, try with hyphenated version for common cases
+  if (!category) {
+    // Simple transformations for known cases
+    let hyphenatedSlug = req.params.slug;
+    
+    if (req.params.slug === 'bodykit') {
+      hyphenatedSlug = 'body-kit';
+    } else if (req.params.slug === 'lights') {
+      hyphenatedSlug = 'light-s';
+    }
+    
+    // Only search if we actually transformed the slug
+    if (hyphenatedSlug !== req.params.slug) {
+      category = await Category.findOne({ slug: hyphenatedSlug, isActive: true })
+        .populate('parent', 'name slug');
+    }
+  }
+  
+  // If still not found, try with non-hyphenated version (for hyphenated inputs like 'body-kit')
+  if (!category) {
+    const nonHyphenatedSlug = req.params.slug.replace(/-/g, '');
+    category = await Category.findOne({ slug: nonHyphenatedSlug, isActive: true })
+      .populate('parent', 'name slug');
+  }
 
   if (!category) {
     return res.status(404).json({
