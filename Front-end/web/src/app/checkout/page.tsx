@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { Check, CreditCard, MapPin, Package } from 'lucide-react';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
@@ -36,7 +36,7 @@ export default function CheckoutPage() {
     phone: '',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'UPI' | 'Card'>('COD');
+  const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.COD);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -74,13 +74,90 @@ export default function CheckoutPage() {
       };
 
       const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData);
-      setOrderId(response.order._id);
-      await clearCart();
-      setCurrentStep('confirmation');
+      
+      // If Razorpay is selected, initiate Razorpay checkout
+      if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
+        await handleRazorpayCheckout(response.order._id, response.order.totalAmount);
+      } else {
+        // For other payment methods (COD), proceed normally
+        setOrderId(response.order._id);
+        await clearCart();
+        setCurrentStep('confirmation');
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to place order');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRazorpayCheckout = async (orderId: string, amount: number) => {
+    try {
+      // Create Razorpay order
+      const razorpayResponse = await apiClient.post('/razorpay/create-order', {
+        orderId,
+        amount: Math.round(amount * 100), // Convert to paise
+        currency: 'INR'
+      });
+
+      if (!razorpayResponse.success) {
+        throw new Error('Failed to create Razorpay order');
+      }
+
+      const razorpayOptions = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: razorpayResponse.data.amount,
+        currency: razorpayResponse.data.currency,
+        name: 'Autobacs India',
+        description: `Order #${orderId}`,
+        order_id: razorpayResponse.data.orderId,
+        handler: async function (response: any) {
+          try {
+            // Verify payment
+            const verifyResponse = await apiClient.post('/razorpay/verify-payment', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            });
+
+            if (verifyResponse.success) {
+              // Payment successful, update UI
+              setOrderId(orderId);
+              await clearCart();
+              setCurrentStep('confirmation');
+            } else {
+              alert('Payment verification failed');
+            }
+          } catch (err: any) {
+            alert(err.message || 'Payment verification failed');
+          }
+        },
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        theme: {
+          color: '#3399cc'
+        }
+      };
+
+      // Load Razorpay SDK dynamically
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      document.body.appendChild(script);
+
+      script.onload = () => {
+        // @ts-ignore
+        const rzp = new window.Razorpay(razorpayOptions);
+        rzp.open();
+      };
+
+      script.onerror = () => {
+        alert('Failed to load Razorpay SDK. Please try again.');
+      };
+    } catch (err: any) {
+      alert(err.message || 'Failed to initiate Razorpay payment');
     }
   };
 
@@ -247,17 +324,20 @@ export default function CheckoutPage() {
         <div className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">Payment Method</h2>
           <div className="space-y-4 mb-8">
-            {['COD', 'UPI', 'Card'].map((method) => (
-              <label key={method} className="flex items-center gap-4 border rounded-lg p-4 cursor-pointer hover:bg-gray-50">
+            {[
+              { value: PAYMENT_METHODS.COD, label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.COD] },
+              { value: PAYMENT_METHODS.RAZORPAY, label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.RAZORPAY] }
+            ].map((method) => (
+              <label key={method.value} className="flex items-center gap-4 border rounded-lg p-4 cursor-pointer hover:bg-gray-50">
                 <input
                   type="radio"
                   name="payment"
-                  value={method}
-                  checked={paymentMethod === method}
-                  onChange={(e) => setPaymentMethod(e.target.value as any)}
+                  value={method.value}
+                  checked={paymentMethod === method.value}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
                   className="w-4 h-4"
                 />
-                <span className="font-medium">{method === 'COD' ? 'Cash on Delivery' : method}</span>
+                <span className="font-medium">{method.label}</span>
               </label>
             ))}
           </div>
@@ -283,7 +363,7 @@ export default function CheckoutPage() {
             </div>
             <div>
               <h3 className="font-bold mb-2">Payment Method</h3>
-              <p>{paymentMethod === 'COD' ? 'Cash on Delivery' : paymentMethod}</p>
+              <p>{PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod}</p>
             </div>
             <div>
               <h3 className="font-bold mb-2">Order Total</h3>

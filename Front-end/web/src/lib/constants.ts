@@ -123,8 +123,14 @@ export const NAV_LINKS = [
   { href: '/shop', label: 'Shop' },
   { href: '/brands', label: 'Brand' },
   { href: '/vehicles', label: 'Vehicle' },
-  { href: '/categories', label: 'Categories' },
-  { href: '/wishlist', label: 'Wishlist' },
+  { href: '/categories/accessories', label: 'Accessories' },
+  { href: '/categories/exterior', label: 'Exterior' },
+  { href: '/categories/interior', label: 'Interior' },
+  { href: '/categories/bodykit', label: 'Body Kits' },
+  { href: '/categories/performance', label: 'Performance' },
+  { href: '/categories/suspension', label: 'Suspension' },
+  { href: '/categories/audio', label: 'Audio' },
+  { href: '/categories/lights', label: 'Lights' },
   { href: '/offers', label: 'Offers' },
 ];
 

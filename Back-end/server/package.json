@@ -5,6 +5,7 @@
     "dev": "nodemon server.js",
     "test-db": "node test-mongodb-connection.js",
     "test-preflight": "node test-preflight-check.js",
+    "test-razorpay": "node test-razorpay.js",
     "diagnose-ip": "node utils/mongodb-ip-diagnostic.js",
     "add-ip-to-whitelist": "node utils/mongodb-ip-diagnostic.js --add-to-whitelist",
     "manage-whitelist": "node utils/mongodb-whitelist-cli.js",
@@ -35,6 +36,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.6.1",
     "node-cron": "^4.2.1",
+    "razorpay": "^2.9.6",
     "twilio": "^5.10.6",
     "uuid": "^13.0.0"
   },

@@ -13,7 +13,7 @@ import SkeletonLoader from './SkeletonLoader';
 import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 import LocationDisplay from '@/components/location/LocationDisplay';
 import BrandLogo from './BrandLogo';
-import CurrencySwitcher from './CurrencySwitcher';
+import CurrencySwitcherDropdown from './CurrencySwitcherDropdown';
 import MobileMenu from './MobileMenu';
 
 export default function Header() {
@@ -54,7 +54,7 @@ export default function Header() {
           <div className="flex items-center space-x-3 text-white">
             {/* Currency Switcher */}
             <div className="hidden sm:block">
-              <CurrencySwitcher />
+              <CurrencySwitcherDropdown />
             </div>
 
             {/* Mobile Search Icon */}
@@ -111,6 +111,16 @@ export default function Header() {
                 )}
               </div>
             </EnvironmentAwareComponent>
+
+            {/* Wishlist */}
+            <Link href="/wishlist" className="relative p-2 text-white hover:text-green-200 transition-colors">
+              <Heart className="h-5 w-5" />
+              {wishlistCount > 0 && (
+                <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
 
             {/* Cart */}
             <Link href="/cart" className="relative p-2 text-white hover:text-green-200 transition-colors">

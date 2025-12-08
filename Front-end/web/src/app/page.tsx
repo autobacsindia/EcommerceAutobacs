@@ -9,7 +9,8 @@ import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
 
 import FastMovingProducts from '@/components/products/FastMovingProducts';
-import ProductCollectionsRow from '@/components/products/ProductCollectionsRow';
+import CuratedCollections from '@/components/products/CuratedCollections';
+import KeepShoppingWidget from '@/components/products/KeepShoppingWidget';
 import SuperCarsBanner from '@/components/layout/SuperCarsBanner';
 import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
@@ -245,30 +246,33 @@ export default function Home() {
       {/* Super Cars Premium Banner */}
       <SuperCarsBanner />
 
-      {/* Product Collections Row - Three Columns */}
-      <ProductCollectionsRow
-        collections={[
-          {
-            title: "Style that",
-            subtitle: "speaks louder",
-            searchKeyword: "speaker exhaust",
-            viewAllLink: "/products?search=speaker exhaust"
-          },
-          {
-            title: "Built for",
-            subtitle: "thrill-seekers",
-            searchKeyword: "suspension",
-            viewAllLink: "/products?search=suspension"
-          },
-          {
-            title: "more than",
-            subtitle: "ordinary",
-            searchKeyword: "body kit bumper",
-            viewAllLink: "/products?search=body kit"
-          }
-        ]}
-        productsPerCollection={3}
-      />
+      {/* Curated Collections - Three "Keep Shopping For" Widgets */}
+      <div className="bg-gray-50 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Widget 1: Keep shopping for */}
+            <KeepShoppingWidget
+              title="Keep shopping for"
+              searchKeyword="suspension performance"
+              viewAllLink="/products?search=suspension performance"
+            />
+
+            {/* Widget 2: Revamp your ride in style */}
+            <KeepShoppingWidget
+              title="Revamp your ride in style"
+              searchKeyword="body kit styling"
+              viewAllLink="/products?search=body kit styling"
+            />
+
+            {/* Widget 3: Transform your vehicle */}
+            <KeepShoppingWidget
+              title="Transform your vehicle"
+              searchKeyword="exhaust speaker accessories"
+              viewAllLink="/products?search=exhaust accessories"
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Features Section */}
       <section className="py-16 bg-gray-50">
