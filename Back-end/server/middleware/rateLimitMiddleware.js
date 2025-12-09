@@ -29,6 +29,12 @@ export const rateLimit = (options = {}) => {
         count: 1,
         resetTime: now
       });
+      
+      // Add rate limit headers for successful requests
+      res.set('X-RateLimit-Limit', max.toString());
+      res.set('X-RateLimit-Remaining', (max - 1).toString());
+      res.set('X-RateLimit-Reset', new Date(now + windowMs).toISOString());
+      
       return next();
     }
 
@@ -38,6 +44,12 @@ export const rateLimit = (options = {}) => {
     if (now - record.resetTime > windowMs) {
       record.count = 1;
       record.resetTime = now;
+      
+      // Add rate limit headers for successful requests
+      res.set('X-RateLimit-Limit', max.toString());
+      res.set('X-RateLimit-Remaining', (max - 1).toString());
+      res.set('X-RateLimit-Reset', new Date(now + windowMs).toISOString());
+      
       return next();
     }
 
@@ -50,6 +62,11 @@ export const rateLimit = (options = {}) => {
       const retryAfter = Math.ceil((record.resetTime + windowMs - now) / 1000);
       res.set('Retry-After', retryAfter.toString());
       
+      // Add additional rate limit headers
+      res.set('X-RateLimit-Limit', max.toString());
+      res.set('X-RateLimit-Remaining', '0');
+      res.set('X-RateLimit-Reset', new Date(record.resetTime + windowMs).toISOString());
+      
       return res.status(429).json({
         success: false,
         message,
@@ -59,6 +76,11 @@ export const rateLimit = (options = {}) => {
         }
       });
     }
+    
+    // Add rate limit headers for successful requests
+    res.set('X-RateLimit-Limit', max.toString());
+    res.set('X-RateLimit-Remaining', (max - record.count).toString());
+    res.set('X-RateLimit-Reset', new Date(record.resetTime + windowMs).toISOString());
 
     next();
   };

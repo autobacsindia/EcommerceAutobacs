@@ -4,6 +4,11 @@
 
 // API utility functions with retry logic and error handling
 
+// Note: To use rate limit notifications, wrap your app with RateLimitProvider
+// and call showRateLimitNotification from the useRateLimit hook when catching ApiError with status 429
+
+import rateLimitLogger from './rateLimitLogger';
+
 interface FetchOptions extends RequestInit {
   retries?: number;
   retryDelay?: number;
@@ -376,9 +381,16 @@ class APIClient {
         
         // If it's a rate limit error and we have retries left, wait and retry
         if (error.status === 429 && i < retries) {
-          // Use retry-after header if available, otherwise use default delay with exponential backoff
-          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
-          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
+          const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
+          // Add jitter to prevent thundering herd problem
+          const jitter = Math.random() * 0.25 * baseDelay;
+          const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+          console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          
+          // Log rate limiting event for monitoring
+          rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+          
           await new Promise(resolve => setTimeout(resolve, retryAfter));
           continue;
         }
@@ -467,9 +479,16 @@ class APIClient {
         
         // If it's a rate limit error and we have retries left, wait and retry
         if (error.status === 429 && i < retries) {
-          // Use retry-after header if available, otherwise use default delay with exponential backoff
-          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
-          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
+          const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
+          // Add jitter to prevent thundering herd problem
+          const jitter = Math.random() * 0.25 * baseDelay;
+          const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+          console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          
+          // Log rate limiting event for monitoring
+          rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+          
           await new Promise(resolve => setTimeout(resolve, retryAfter));
           continue;
         }
@@ -553,9 +572,16 @@ class APIClient {
         
         // If it's a rate limit error and we have retries left, wait and retry
         if (error.status === 429 && i < retries) {
-          // Use retry-after header if available, otherwise use default delay with exponential backoff
-          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
-          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
+          const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
+          // Add jitter to prevent thundering herd problem
+          const jitter = Math.random() * 0.25 * baseDelay;
+          const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+          console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          
+          // Log rate limiting event for monitoring
+          rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+          
           await new Promise(resolve => setTimeout(resolve, retryAfter));
           continue;
         }
@@ -637,9 +663,16 @@ class APIClient {
         
         // If it's a rate limit error and we have retries left, wait and retry
         if (error.status === 429 && i < retries) {
-          // Use retry-after header if available, otherwise use default delay with exponential backoff
-          const retryAfter = error.rateLimitInfo?.retryAfter || (retryDelay * Math.pow(2, i));
-          console.log(`Rate limited. Waiting ${retryAfter}ms before retry ${i + 1}/${retries}`);
+          // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
+          const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
+          // Add jitter to prevent thundering herd problem
+          const jitter = Math.random() * 0.25 * baseDelay;
+          const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+          console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          
+          // Log rate limiting event for monitoring
+          rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+          
           await new Promise(resolve => setTimeout(resolve, retryAfter));
           continue;
         }

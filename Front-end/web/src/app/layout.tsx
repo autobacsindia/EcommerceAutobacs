@@ -6,6 +6,7 @@ import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { LocationProvider } from "@/contexts/LocationContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
+import { RateLimitProvider } from "@/context/RateLimitContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -42,12 +43,14 @@ export default function RootLayout({
               <WishlistProvider>
                 <LocationProvider>
                   <CurrencyProvider>
-                    <div className="flex flex-col min-h-screen">
-                      <Header />
-                      <main className="flex-1">{children}</main>
-                      <Footer />
-                    </div>
-                    <Toaster position="top-right" />
+                    <RateLimitProvider>
+                      <div className="flex flex-col min-h-screen">
+                        <Header />
+                        <main className="flex-1">{children}</main>
+                        <Footer />
+                      </div>
+                      <Toaster position="top-right" />
+                    </RateLimitProvider>
                   </CurrencyProvider>
                 </LocationProvider>
               </WishlistProvider>
