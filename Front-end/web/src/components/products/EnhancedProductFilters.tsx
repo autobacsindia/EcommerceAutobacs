@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
-import WoofCategoryList from './WoofCategoryList';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -71,12 +70,19 @@ const loadFilterPreferences = () => {
   return null;
 };
 
-export default function ProductFilters() {
+export default function EnhancedProductFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
   // State for categories
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [categorySearch, setCategorySearch] = useState('');
+  
+  // State for brands
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [loadingBrands, setLoadingBrands] = useState(true);
+  const [brandSearch, setBrandSearch] = useState('');
   
   // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
@@ -107,6 +113,44 @@ export default function ProductFilters() {
     return [];
   });
   
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(() => {
+    // Parse multiple brands from URL
+    const brandParam = searchParams.get('brand');
+    if (brandParam) {
+      return brandParam.split(',').filter(Boolean);
+    }
+    return [];
+  });
+  
+  // Filtered categories based on search
+  const filteredCategories = useMemo(() => {
+    return categories.filter(category => 
+      ![
+        'Brake System', 
+        'Electronics', 
+        'Engine Parts', 
+        'Exhaust', 
+        'Filters',
+        'SUSPENSION',
+        'AUDIO',
+        'BODY KIT',
+        'EXTERIOR',
+        'INTERIOR',
+        'LIGHTS',
+        'PERFORMANCE',
+        'ACCESSORIES'
+      ].includes(category.name.toUpperCase()) &&
+      category.name.toLowerCase().includes(categorySearch.toLowerCase())
+    );
+  }, [categories, categorySearch]);
+  
+  // Filtered brands based on search
+  const filteredBrands = useMemo(() => {
+    return brands.filter(brand => 
+      brand.name.toLowerCase().includes(brandSearch.toLowerCase())
+    );
+  }, [brands, brandSearch]);
+  
   // Load saved filter preferences on mount
   useEffect(() => {
     const savedPreferences = loadFilterPreferences();
@@ -116,6 +160,7 @@ export default function ProductFilters() {
         searchParams.has('minPrice') || 
         searchParams.has('maxPrice') || 
         searchParams.has('category') || 
+        searchParams.has('brand') || 
         searchParams.has('inStock') || 
         searchParams.has('rating')
       );
@@ -134,6 +179,9 @@ export default function ProductFilters() {
         if (savedPreferences.selectedRatings) {
           setSelectedRatings(savedPreferences.selectedRatings);
         }
+        if (savedPreferences.selectedBrands) {
+          setSelectedBrands(savedPreferences.selectedBrands);
+        }
       }
     }
   }, []);
@@ -144,10 +192,11 @@ export default function ProductFilters() {
       priceRange,
       selectedCategories,
       inStockOnly,
-      selectedRatings
+      selectedRatings,
+      selectedBrands
     };
     saveFilterPreferences(filterPreferences);
-  }, [priceRange, selectedCategories, inStockOnly, selectedRatings]);
+  }, [priceRange, selectedCategories, inStockOnly, selectedRatings, selectedBrands]);
   
   // Fetch categories
   useEffect(() => {
@@ -155,14 +204,51 @@ export default function ProductFilters() {
       try {
         setLoadingCategories(true);
         const response: any = await apiClient.get('/categories');
+        setCategories(response.categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);
+        // Fallback to hardcoded categories if API fails
+        setCategories([
+          { _id: '1', name: 'Body Kits', slug: 'body-kits' } as Category,
+          { _id: '2', name: 'Performance Parts', slug: 'performance-parts' } as Category,
+          { _id: '3', name: 'SUSPENSION', slug: 'suspension' } as Category,
+          { _id: '5', name: 'Lighting', slug: 'lighting' } as Category,
+        ]);
       } finally {
         setLoadingCategories(false);
       }
     };
 
     fetchCategories();
+  }, []);
+
+  // Fetch brands (for now we'll use a static list since there's no API endpoint)
+  useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        setLoadingBrands(true);
+        // For now, we'll use a static list of brands
+        // In the future, this could be fetched from an API endpoint
+        // Note: Using brand names (not IDs) to match the Product model's brand field
+        setBrands([
+          { _id: 'Autobacs', name: 'Autobacs' },
+          { _id: 'Thor', name: 'Thor' },
+          { _id: 'Profender', name: 'Profender' },
+          { _id: 'Bestwyll', name: 'Bestwyll' },
+          { _id: 'Dr. Nano', name: 'Dr. Nano' },
+          { _id: 'Proman', name: 'Proman' },
+          { _id: 'Windbooster', name: 'Windbooster' },
+          { _id: 'ComeUp', name: 'ComeUp' },
+          { _id: 'Unicorn', name: 'Unicorn' },
+        ]);
+      } catch (err) {
+        console.error('Failed to fetch brands:', err);
+      } finally {
+        setLoadingBrands(false);
+      }
+    };
+
+    fetchBrands();
   }, []);
 
   // Update URL when filters change
@@ -192,6 +278,13 @@ export default function ProductFilters() {
       currentParams.delete('category');
     }
     
+    // Brands - support multiple
+    if (selectedBrands.length > 0) {
+      currentParams.set('brand', selectedBrands.join(','));
+    } else {
+      currentParams.delete('brand');
+    }
+    
     // In stock only
     if (inStockOnly) {
       currentParams.set('inStock', 'true');
@@ -216,11 +309,15 @@ export default function ProductFilters() {
     setSelectedCategories([]);
     setInStockOnly(false);
     setSelectedRatings([]);
+    setSelectedBrands([]);
+    setCategorySearch('');
+    setBrandSearch('');
     
     const currentParams = new URLSearchParams(searchParams.toString());
     currentParams.delete('minPrice');
     currentParams.delete('maxPrice');
     currentParams.delete('category');
+    currentParams.delete('brand');
     currentParams.delete('inStock');
     currentParams.delete('rating');
     currentParams.delete('page');
@@ -245,10 +342,42 @@ export default function ProductFilters() {
             ))}
           </div>
         ) : (
-          <WoofCategoryList 
-            selectedCategories={selectedCategories}
-            onCategoryChange={setSelectedCategories}
-          />
+          <div className="space-y-3">
+            {/* Category Search */}
+            <div className="mb-2">
+              <input
+                type="text"
+                placeholder="Search categories..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+              />
+            </div>
+            
+            <div className="max-h-60 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              {filteredCategories.length > 0 ? (
+                filteredCategories.map((category) => (
+                  <label key={category._id} className="flex items-center py-1">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={selectedCategories.includes(category._id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCategories([...selectedCategories, category._id]);
+                        } else {
+                          setSelectedCategories(selectedCategories.filter(id => id !== category._id));
+                        }
+                      }}
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{category.name}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 py-2">No categories found</p>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -323,6 +452,66 @@ export default function ProductFilters() {
           ))}
         </div>
       </div>
+
+      {/* Brand Filter */}
+      <div className="mb-6">
+        <h3 className="font-semibold text-gray-900 mb-3">Brand</h3>
+        {loadingBrands ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, index) => (
+              <div key={index} className="flex items-center animate-pulse">
+                <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Brand Search */}
+            <div className="mb-2">
+              <input
+                type="text"
+                placeholder="Search brands..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                value={brandSearch}
+                onChange={(e) => setBrandSearch(e.target.value)}
+              />
+            </div>
+            
+            <div className="max-h-60 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              {filteredBrands.length > 0 ? (
+                filteredBrands.map((brand) => (
+                  <label key={brand._id} className="flex items-center py-1">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={selectedBrands.includes(brand._id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedBrands([...selectedBrands, brand._id]);
+                        } else {
+                          setSelectedBrands(selectedBrands.filter(id => id !== brand._id));
+                        }
+                      }}
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{brand.name}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 py-2">No brands found</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Clear Filters */}
+      <button 
+        onClick={clearFilters}
+        className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+      >
+        Clear All Filters
+      </button>
     </div>
   );
 }

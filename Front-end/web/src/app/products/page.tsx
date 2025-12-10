@@ -363,7 +363,6 @@ export default function ProductsPageClient() {
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
           <aside className="hidden lg:block space-y-6">
-            <VehicleFilterSidebar />
             <ProductFilters />
           </aside>
 

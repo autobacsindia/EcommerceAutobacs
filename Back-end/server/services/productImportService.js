@@ -3,6 +3,7 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import ImportJob from '../models/ImportJob.js';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
+import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
 
 class ProductImportService {
   constructor() {
@@ -38,7 +39,8 @@ class ProductImportService {
           page,
           per_page: perPage,
           status: 'publish' // Only import published products
-        }
+        },
+        timeout: 30000 // 30 second timeout
       });
       
       return response.data;
@@ -62,7 +64,8 @@ class ProductImportService {
         },
         params: {
           per_page: 1
-        }
+        },
+        timeout: 30000 // 30 second timeout
       });
       
       // Get total count from headers
@@ -82,8 +85,8 @@ class ProductImportService {
     // Map basic fields
     const transformedProduct = {
       name: wpProduct.name,
-      description: wpProduct.description,
-      shortDescription: wpProduct.short_description || wpProduct.name,
+      description: removeHtmlTags(wpProduct.description),
+      shortDescription: truncateString(removeHtmlTags(wpProduct.short_description || wpProduct.name), 200),
       price: parseFloat(wpProduct.regular_price) || 0,
       originalPrice: wpProduct.sale_price && parseFloat(wpProduct.sale_price) > 0 
         ? parseFloat(wpProduct.regular_price) 
@@ -146,16 +149,27 @@ class ProductImportService {
    */
   async findOrCreateCategory(wpCategory) {
     try {
-      // Try to find existing category by name
+      // Try to find existing category by name or slug
       let category = await Category.findOne({ 
-        name: wpCategory.name 
+        $or: [
+          { name: wpCategory.name },
+          { slug: wpCategory.slug }
+        ]
       });
       
       // If not found, create new category
       if (!category) {
+        // Ensure slug is unique by appending a counter if needed
+        let slug = wpCategory.slug;
+        let counter = 1;
+        while (await Category.findOne({ slug: slug })) {
+          slug = `${wpCategory.slug}-${counter}`;
+          counter++;
+        }
+        
         category = new Category({
           name: wpCategory.name,
-          slug: wpCategory.slug,
+          slug: slug,
           description: wpCategory.description || `Category for ${wpCategory.name}`
         });
         await category.save();

@@ -4,7 +4,7 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 
 // Load environment variables
-dotenv.config({ path: '../.env' });
+dotenv.config();
 
 // Connect to MongoDB
 const connectDB = async () => {
