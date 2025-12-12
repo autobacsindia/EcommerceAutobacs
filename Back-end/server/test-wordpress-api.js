@@ -1,41 +1,90 @@
 import dotenv from 'dotenv';
-import ProductImportService from './services/productImportService.js';
+import axios from 'axios';
 
 // Load environment variables
 dotenv.config();
 
 async function testWordPressAPI() {
   try {
-    console.log('Testing WordPress API connectivity...\n');
+    console.log('Testing WordPress API connection...');
     
-    // Initialize the product import service
-    const importService = new ProductImportService();
+    const wordpressSiteUrl = process.env.WORDPRESS_SITE_URL;
+    const wordpressApiKey = process.env.WORDPRESS_API_KEY;
+    const wordpressApiSecret = process.env.WORDPRESS_API_SECRET;
+    const wordpressApiVersion = process.env.WORDPRESS_API_VERSION || 'wc/v3';
     
-    // Test fetching total product count
-    console.log('Fetching total product count...');
-    const totalCount = await importService.getTotalProductCount();
-    console.log(`Total products in WordPress: ${totalCount}\n`);
-    
-    // Test fetching first page of products
-    console.log('Fetching first batch of products...');
-    const products = await importService.fetchProductsFromWordPress(1, 5);
-    console.log(`Retrieved ${products.length} products:\n`);
-    
-    // Display first product details
-    if (products.length > 0) {
-      console.log('First product details:');
-      console.log(`- Name: ${products[0].name}`);
-      console.log(`- SKU: ${products[0].sku || 'N/A'}`);
-      console.log(`- Price: ${products[0].regular_price || 'N/A'}`);
-      console.log(`- Stock: ${products[0].stock_quantity || 'N/A'}`);
-      console.log(`- Categories: ${products[0].categories ? products[0].categories.map(c => c.name).join(', ') : 'None'}`);
+    if (!wordpressSiteUrl || !wordpressApiKey || !wordpressApiSecret) {
+      console.error('Missing WordPress API credentials in environment variables');
+      process.exit(1);
     }
     
-    console.log('\n✓ WordPress API test completed successfully');
+    // Test basic connection to WordPress API
+    console.log('Testing basic WordPress API connection...');
+    const testUrl = `${wordpressSiteUrl}/wp-json/${wordpressApiVersion}/products`;
     
+    const response = await axios.get(testUrl, {
+      auth: {
+        username: wordpressApiKey,
+        password: wordpressApiSecret
+      },
+      params: {
+        per_page: 5,
+        status: 'publish'
+      },
+      timeout: 30000
+    });
+    
+    console.log(`✅ Connected successfully! Found ${response.data.length} products`);
+    
+    // Now test fetching products by brand
+    console.log('Testing brand-specific product fetch...');
+    const brandTestUrl = `${wordpressSiteUrl}/wp-json/${wordpressApiVersion}/products`;
+    
+    const brandResponse = await axios.get(brandTestUrl, {
+      auth: {
+        username: wordpressApiKey,
+        password: wordpressApiSecret
+      },
+      params: {
+        per_page: 10,
+        status: 'publish',
+        attribute: 'brand',
+        attribute_term: 'Profender'
+      },
+      timeout: 30000
+    });
+    
+    console.log(`✅ Brand search successful! Found ${brandResponse.data.length} Profender products`);
+    
+    // Display some product information
+    if (brandResponse.data.length > 0) {
+      console.log('\nFirst Profender product:');
+      const firstProduct = brandResponse.data[0];
+      console.log(`- Name: ${firstProduct.name}`);
+      console.log(`- Price: ${firstProduct.price}`);
+      console.log(`- SKU: ${firstProduct.sku || 'N/A'}`);
+      
+      // Check if brand attribute is present
+      if (firstProduct.attributes && firstProduct.attributes.length > 0) {
+        console.log('- Attributes:');
+        firstProduct.attributes.forEach(attr => {
+          console.log(`  * ${attr.name}: ${Array.isArray(attr.options) ? attr.options.join(', ') : attr.options}`);
+        });
+      }
+    }
+    
+    return { 
+      success: true, 
+      totalProducts: brandResponse.data.length,
+      products: brandResponse.data.slice(0, 3) // Return first 3 products
+    };
   } catch (error) {
-    console.error('Error testing WordPress API:', error.message);
-    process.exit(1);
+    console.error('❌ Error testing WordPress API:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    return { success: false, error: error.message };
   }
 }
 

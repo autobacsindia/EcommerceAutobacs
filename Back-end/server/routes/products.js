@@ -2,6 +2,7 @@ import express from "express";
 import Product from "../models/Product.js";
 import SearchService from "../services/searchService.js";
 import ProductImportService from "../services/productImportService.js";
+import BrandProductImportService from "../services/brandProductImportService.js";
 import ScheduledImportService from "../services/scheduledImportService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateProduct } from "../middleware/validationMiddleware.js";
@@ -283,6 +284,48 @@ router.post("/import/wordpress", protect, admin, asyncHandler(async (req, res) =
     res.status(500).json({
       success: false,
       message: 'Failed to import products',
+      error: error.message
+    });
+  }
+}));
+
+// @route   POST /products/import/brand/:brandName
+// @desc    Import products for a specific brand from WordPress
+// @access  Private/Admin
+router.post("/import/brand/:brandName", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const { brandName } = req.params;
+    const importService = new BrandProductImportService();
+    
+    // Generate a unique job ID
+    const jobId = `import-brand-${brandName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Start import process
+    const importResult = await importService.importBrandProducts(jobId, brandName, req.user._id, (progress) => {
+      // In a real implementation, we would emit progress events to the client
+      // For now, we'll just log to console
+      console.log(`Import progress for ${brandName}: ${progress.progress}%`);
+    });
+    
+    if (importResult.success) {
+      res.status(200).json({
+        success: true,
+        message: `Products for brand ${brandName} imported successfully`,
+        jobId: importResult.jobId,
+        summary: importResult.summary
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: `Failed to import products for brand ${brandName}`,
+        jobId: importResult.jobId,
+        error: importResult.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to import brand products',
       error: error.message
     });
   }

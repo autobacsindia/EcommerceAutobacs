@@ -125,7 +125,7 @@ export default function Home() {
             <div className="relative overflow-hidden py-8">
               <div className="flex animate-scroll space-x-12 items-center">
                 {/* First set of logos */}
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                <Link href="/brands/profender" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
                     alt="Profender"
@@ -133,8 +133,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/bushranger" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
                     alt="Bushranger"
@@ -142,8 +142,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/ironman" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -151,8 +151,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/dr-nano" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
@@ -160,8 +160,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/lightforce" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
                     alt="Lightforce"
@@ -169,8 +169,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/option" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -178,9 +178,9 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
+                </Link>
                 {/* Duplicate set for seamless loop */}
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                <Link href="/brands/profender" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
                     alt="Profender"
@@ -188,8 +188,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/bushranger" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
                     alt="Bushranger"
@@ -197,8 +197,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/ironman" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -206,8 +206,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/dr-nano" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
@@ -215,8 +215,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/lightforce" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
                     alt="Lightforce"
@@ -224,8 +224,8 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
-                <div className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4">
+                </Link>
+                <Link href="/brands/option" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -233,7 +233,7 @@ export default function Home() {
                     height={80}
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
-                </div>
+                </Link>
               </div>
             </div>
           </div>
