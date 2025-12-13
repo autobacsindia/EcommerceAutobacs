@@ -134,3 +134,10 @@ export const wishlistRateLimit = rateLimit({
   max: 200, // Increase limit for frequent wishlist operations
   message: 'Too many wishlist requests, please try again later'
 });
+
+// Special rate limiter for location routes with higher limits
+export const locationRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Higher limit for location endpoints
+  message: 'Too many location requests, please try again later'
+});

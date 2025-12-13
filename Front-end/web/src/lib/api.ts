@@ -58,6 +58,9 @@ enum ErrorCategory {
 // Storage key for JWT token
 const TOKEN_KEY = 'autobacs_auth_token';
 
+// Define location-related endpoints that need special rate limit handling
+const locationEndpoints = ['/location/current', '/location/select', '/location/estimate'];
+
 /**
  * API Client class for managing all backend communications
  */
@@ -335,9 +338,15 @@ async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retry
   console.log('Making GET request to:', finalUrl);
   
   // Default settings
-  const retries = options?.retries ?? 3;
-  const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+  let retries = options?.retries ?? 3;
+  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
   const timeout = options?.timeout ?? 30000; // 30 seconds default
+  
+  // Increase retries and delay for location endpoints
+  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
+    retries = 5; // More retries for location endpoints
+    retryDelay = 2000; // Longer initial delay
+  }
   
   let lastError: any;
   
@@ -406,7 +415,7 @@ async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retry
         const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
         // Add jitter to prevent thundering herd problem
         const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
         console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
         
         // Log rate limiting event for monitoring
@@ -434,9 +443,15 @@ async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: n
   const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
   
   // Default settings
-  const retries = options?.retries ?? 3;
-  const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+  let retries = options?.retries ?? 3;
+  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
   const timeout = options?.timeout ?? 30000; // 30 seconds default
+  
+  // Increase retries and delay for location endpoints
+  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
+    retries = 5; // More retries for location endpoints
+    retryDelay = 2000; // Longer initial delay
+  }
   
   let lastError: any;
   
@@ -504,7 +519,7 @@ async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: n
         const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
         // Add jitter to prevent thundering herd problem
         const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
         console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
         
         // Log rate limiting event for monitoring
@@ -532,9 +547,15 @@ async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: nu
   const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
   
   // Default settings
-  const retries = options?.retries ?? 3;
-  const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+  let retries = options?.retries ?? 3;
+  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
   const timeout = options?.timeout ?? 30000; // 30 seconds default
+  
+  // Increase retries and delay for location endpoints
+  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
+    retries = 5; // More retries for location endpoints
+    retryDelay = 2000; // Longer initial delay
+  }
   
   let lastError: any;
   
@@ -596,7 +617,7 @@ async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: nu
         const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
         // Add jitter to prevent thundering herd problem
         const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
         console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
         
         // Log rate limiting event for monitoring
@@ -624,9 +645,15 @@ async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, re
   const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
   
   // Default settings
-  const retries = options?.retries ?? 3;
-  const retryDelay = options?.retryDelay ?? 1000; // 1 second default
+  let retries = options?.retries ?? 3;
+  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
   const timeout = options?.timeout ?? 30000; // 30 seconds default
+  
+  // Increase retries and delay for location endpoints
+  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
+    retries = 5; // More retries for location endpoints
+    retryDelay = 2000; // Longer initial delay
+  }
   
   let lastError: any;
   
@@ -687,7 +714,7 @@ async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, re
         const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
         // Add jitter to prevent thundering herd problem
         const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 30000); // Cap at 30 seconds
+        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
         console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
         
         // Log rate limiting event for monitoring

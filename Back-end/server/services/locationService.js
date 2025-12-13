@@ -3,6 +3,10 @@ import DeliveryZone from "../models/DeliveryZone.js";
 import Warehouse from "../models/Warehouse.js";
 import googleMapsService from "./googleMapsService.js";
 
+// Simple in-memory cache for location data
+const locationCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Location Service for managing user locations and delivery zones
  */
@@ -136,6 +140,18 @@ class LocationService {
       // Save location
       const savedLocation = await UserLocation.upsertLocation(identifier, locationPayload);
 
+      // Cache the location data
+      const cacheKey = identifier.userId ? `user:${identifier.userId}` : `session:${identifier.sessionId}`;
+      locationCache.set(cacheKey, {
+        data: {
+          location: savedLocation,
+          deliveryZone: deliveryZone,
+          nearestWarehouse: nearestWarehouses.length > 0 ? nearestWarehouses[0] : null,
+          deliveryEstimate: deliveryZone.estimateDeliveryDate()
+        },
+        timestamp: Date.now()
+      });
+
       return {
         location: savedLocation,
         deliveryZone: deliveryZone,
@@ -155,6 +171,16 @@ class LocationService {
    */
   async getCurrentLocation(identifier) {
     try {
+      // Check cache first
+      const cacheKey = identifier.userId ? `user:${identifier.userId}` : `session:${identifier.sessionId}`;
+      const cached = locationCache.get(cacheKey);
+      
+      // Return cached data if it's still valid
+      if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+        console.log('Returning cached location data');
+        return cached.data;
+      }
+      
       let location;
       
       if (identifier.userId) {
@@ -170,13 +196,27 @@ class LocationService {
       // Touch location to update last used timestamp
       await location.touch();
 
+      // Get delivery zone and warehouse details
+      const deliveryZone = location.deliveryZone;
+      const nearestWarehouse = location.nearestWarehouse;
+      const deliveryEstimate = deliveryZone ? deliveryZone.estimateDeliveryDate() : null;
+
+      // Cache the data
+      locationCache.set(cacheKey, {
+        data: {
+          location,
+          deliveryZone,
+          nearestWarehouse,
+          deliveryEstimate
+        },
+        timestamp: Date.now()
+      });
+
       return {
         location,
-        deliveryZone: location.deliveryZone,
-        nearestWarehouse: location.nearestWarehouse,
-        deliveryEstimate: location.deliveryZone 
-          ? location.deliveryZone.estimateDeliveryDate() 
-          : null
+        deliveryZone,
+        nearestWarehouse,
+        deliveryEstimate
       };
     } catch (error) {
       console.error("Get current location error:", error);
@@ -239,6 +279,11 @@ class LocationService {
         : { sessionId: identifier.sessionId };
 
       await UserLocation.updateMany(query, { isActive: false });
+      
+      // Clear cache
+      const cacheKey = identifier.userId ? `user:${identifier.userId}` : `session:${identifier.sessionId}`;
+      locationCache.delete(cacheKey);
+      
       return true;
     } catch (error) {
       console.error("Clear location error:", error);
@@ -261,59 +306,11 @@ class LocationService {
   }
 
   /**
-   * Assign delivery zone based on city tier
-   * @param {string} city
-   * @param {string} state  
-   * @returns {Promise<Object>} Assigned delivery zone
-   */
-  async assignZoneByCity(city, state) {
-    try {
-      // Define metro cities
-      const metroCities = ['delhi', 'mumbai', 'bangalore', 'bengaluru', 'kolkata', 'chennai', 'hyderabad', 'pune', 'ahmedabad'];
-      
-      // Define tier 1 cities
-      const tier1Cities = ['kochi', 'ernakulam', 'jaipur', 'lucknow', 'chandigarh', 'nagpur', 'indore', 'coimbatore', 'visakhapatnam', 'surat', 'kanpur', 'bhopal', 'patna', 'vadodara', 'ludhiana'];
-      
-      const cityLower = city?.toLowerCase() || '';
-      
-      // Determine zone type based on city
-      let zoneType;
-      if (metroCities.some(metro => cityLower.includes(metro))) {
-        zoneType = 'metro';
-      } else if (tier1Cities.some(tier1 => cityLower.includes(tier1))) {
-        zoneType = 'tier1';
-      } else {
-        // For all other cities and towns, use tier2 as default
-        zoneType = 'tier2';
-      }
-      
-      // Find the appropriate zone
-      let zone = await DeliveryZone.findOne({ type: zoneType });
-      
-      // If specific zone not found, fallback to remote zone
-      if (!zone) {
-        zone = await DeliveryZone.findOne({ type: 'remote' });
-      }
-      
-      // If still no zone found, fallback to any available zone
-      if (!zone) {
-        zone = await DeliveryZone.findOne({ isServiceable: true }).sort({ priority: 1 });
-      }
-      
-      return zone;
-    } catch (error) {
-      console.error("Assign zone by city error:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get delivery estimate for a location
+   * Get delivery estimate for a postal code
    * @param {string} postalCode 
-   * @param {Date} orderDate 
    * @returns {Promise<Object>} Delivery estimate
    */
-  async getDeliveryEstimate(postalCode, orderDate = new Date()) {
+  async getDeliveryEstimate(postalCode) {
     try {
       const deliveryZone = await DeliveryZone.findByPinCode(postalCode);
 
@@ -321,17 +318,35 @@ class LocationService {
         throw new Error(`Delivery zone not found for PIN code: ${postalCode}`);
       }
 
-      const estimate = deliveryZone.estimateDeliveryDate(orderDate);
-
       return {
         zone: deliveryZone,
-        estimate,
-        zoneType: deliveryZone.type,
-        deliveryDays: `${deliveryZone.deliveryTime.minDays}-${deliveryZone.deliveryTime.maxDays} days`
+        estimate: deliveryZone.estimateDeliveryDate()
       };
     } catch (error) {
       console.error("Get delivery estimate error:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Assign zone by city and state when PIN code lookup fails
+   * @param {string} city 
+   * @param {string} state 
+   * @returns {Promise<Object|null>} Delivery zone or null
+   */
+  async assignZoneByCity(city, state) {
+    try {
+      // This is a simplified implementation - in a real app, you'd have more sophisticated logic
+      // For now, we'll just find any zone that serves this state
+      const zones = await DeliveryZone.find({
+        states: state,
+        isServiceable: true
+      }).sort({ priority: -1 });
+      
+      return zones.length > 0 ? zones[0] : null;
+    } catch (error) {
+      console.error("Assign zone by city error:", error);
+      return null;
     }
   }
 }

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { locationService } from '@/services/locationService';
+import { useRateLimit } from '@/context/RateLimitContext'; // Import rate limit context
 import type {
   UserLocation,
   DeliveryZone,
@@ -12,6 +13,30 @@ import type {
 } from '@/types/location';
 import { addToLocationHistory } from '@/utils/locationHistory';
 
+// Simple throttle function since lodash is not directly imported
+function throttle(func: (...args: any[]) => any, wait: number) {
+  let timeout: NodeJS.Timeout | null = null;
+  let lastExecTime = 0;
+  
+  return function (...args: any[]) {
+    const now = Date.now();
+    
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    
+    if (now - lastExecTime > wait) {
+      func(...args);
+      lastExecTime = now;
+    } else {
+      timeout = setTimeout(() => {
+        func(...args);
+        lastExecTime = Date.now();
+      }, wait - (now - lastExecTime));
+    }
+  };
+}
+
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
 
 export function LocationProvider({ children }: { children: React.ReactNode }) {
@@ -20,6 +45,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showRateLimitNotification } = useRateLimit(); // Use rate limit context
 
   /**
    * Load location on mount
@@ -31,7 +57,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   /**
    * Load current location from cache or API
    */
-  const loadLocation = useCallback(async () => { try {
+  const loadLocation = useCallback(throttle(async () => { 
+    try {
       setIsLoading(true);
       setError(null);
 
@@ -60,9 +87,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err: any) {
+      // Handle rate limit errors specifically
+      if (err.status === 429 && err.rateLimitInfo?.retryAfter) {
+        showRateLimitNotification(err.rateLimitInfo.retryAfter);
+      }
       // Don't log error if it's just "no location set" (expected for first-time users)
       // Only set error state for actual errors that aren't 404s
-      if (err.status !== 404) {
+      else if (err.status !== 404) {
         console.error('Load location error:', err);
         setError(err.message || 'Failed to load location');
       }
@@ -70,7 +101,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, 5000), []); // 5-second minimum interval between calls
 
   /**
    * Refresh delivery information
@@ -82,8 +113,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         setDeliveryZone(estimate.zone as any);
         setDeliveryEstimate(estimate.estimate);
       }
-    } catch (err) {
-      console.error('Refresh delivery info error:', err);
+    } catch (err: any) {
+      // Handle rate limit errors specifically
+      if (err.status === 429 && err.rateLimitInfo?.retryAfter) {
+        showRateLimitNotification(err.rateLimitInfo.retryAfter);
+      } else {
+        console.error('Refresh delivery info error:', err);
+      }
     }
   }, []);
 
@@ -106,8 +142,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
 
       return response;
     } catch (err: any) {
-      console.error('Select location error:', err);
-      setError(err.message || 'Failed to select location');
+      // Handle rate limit errors specifically
+      if (err.status === 429 && err.rateLimitInfo?.retryAfter) {
+        showRateLimitNotification(err.rateLimitInfo.retryAfter);
+      } else {
+        console.error('Select location error:', err);
+        setError(err.message || 'Failed to select location');
+      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -128,8 +169,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setDeliveryZone(null);
       setDeliveryEstimate(null);
     } catch (err: any) {
-      console.error('Clear location error:', err);
-      setError(err.message || 'Failed to clear location');
+      // Handle rate limit errors specifically
+      if (err.status === 429 && err.rateLimitInfo?.retryAfter) {
+        showRateLimitNotification(err.rateLimitInfo.retryAfter);
+      } else {
+        console.error('Clear location error:', err);
+        setError(err.message || 'Failed to clear location');
+      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -144,8 +190,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       return await locationService.validateAddress(postalCode);
     } catch (err: any) {
-      console.error('Validate address error:', err);
-      setError(err.message || 'Failed to validate address');
+      // Handle rate limit errors specifically
+      if (err.status === 429 && err.rateLimitInfo?.retryAfter) {
+        showRateLimitNotification(err.rateLimitInfo.retryAfter);
+      } else {
+        console.error('Validate address error:', err);
+        setError(err.message || 'Failed to validate address');
+      }
       throw err;
     }
   }, []);
