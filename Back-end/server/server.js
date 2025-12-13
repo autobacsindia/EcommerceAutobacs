@@ -25,7 +25,7 @@ import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
-import { apiRateLimit, wishlistRateLimit } from "./middleware/rateLimitMiddleware.js";
+import { apiRateLimit, wishlistRateLimit, frequentAccessRateLimit } from "./middleware/rateLimitMiddleware.js";
 
 // Import cron service
 import CronService from "./services/cronService.js";
@@ -81,7 +81,7 @@ app.use("/auth", authRoutes);
 app.use("/products", apiRateLimit, productRoutes);
 app.use("/categories", apiRateLimit, categoryRoutes);
 app.use("/vehicles", apiRateLimit, vehicleRoutes);
-app.use("/cart", apiRateLimit, cartRoutes);
+app.use("/cart", frequentAccessRateLimit, cartRoutes);  // Use higher limit for cart
 app.use("/wishlist", wishlistRateLimit, wishlistRoutes);
 app.use("/orders", apiRateLimit, orderRoutes);
 app.use("/scheduled-tasks", apiRateLimit, scheduledTasksRoutes);

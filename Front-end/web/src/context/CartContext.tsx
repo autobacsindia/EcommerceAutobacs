@@ -61,13 +61,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Enhanced refreshCart with better error handling and consistency
   const refreshCart = async () => {
     // Don't fetch cart if still loading auth or not authenticated
-    if (authLoading || !isAuthenticated) return;
+    if (authLoading || !isAuthenticated) {
+      console.log('Skipping cart refresh - not authenticated or still loading auth');
+      return;
+    }
     
     try {
       setIsLoading(true);
       setError(null);
+      console.log('Refreshing cart...');
       
       const response: any = await apiClient.get(API_ENDPOINTS.CART);
+      console.log('Cart response:', response);
       
       if (response.success && response.cart) {
         // Ensure consistent cart data structure
@@ -93,6 +98,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     } catch (err: any) {
       console.error('Failed to load cart:', err);
+      // Handle rate limit errors specifically
+      if (err.status === 429) {
+        setError('Too many requests. Please wait a moment before trying again.');
+        // Don't clear the cart on rate limit errors
+        return;
+      }
       setError(err.message);
       // Ensure consistent state on error
       setCart(null);

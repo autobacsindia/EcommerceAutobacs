@@ -19,24 +19,58 @@ interface ProductsResponse {
   success: boolean;
   count: number;
   products: Product[];
-  page?: number;
+  total?: number;
   pages?: number;
+  currentPage?: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
 }
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [limit] = useState(50); // Show 50 products per page
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchTerm]);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    fetchProducts(currentPage);
+  }, [currentPage, debouncedSearchTerm]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (page: number = 1) => {
     try {
       setLoading(true);
-      const response = await apiClient.get<ProductsResponse>(API_ENDPOINTS.PRODUCTS);
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('limit', limit.toString());
+      
+      if (debouncedSearchTerm) {
+        params.append('search', debouncedSearchTerm);
+      }
+      
+      const response = await apiClient.get<ProductsResponse>(
+        `${API_ENDPOINTS.PRODUCTS}?${params.toString()}`
+      );
+      
       setProducts(response.products || []);
+      setTotalCount(response.total || response.count || 0);
+      setTotalPages(response.pages || Math.ceil((response.total || response.count || 0) / limit));
     } catch (err) {
       console.error('Failed to fetch products:', err);
     } finally {
@@ -56,9 +90,11 @@ export default function AdminProductsPage() {
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
 
   if (loading) {
     return <div className="p-8">Loading...</div>;
@@ -112,7 +148,7 @@ export default function AdminProductsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredProducts.map((product) => (
+            {products.map((product) => (
               <tr key={product._id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{product.name}</div>
@@ -156,7 +192,57 @@ export default function AdminProductsPage() {
         </table>
       </div>
 
-      {filteredProducts.length === 0 && (
+      {/* Pagination Controls */}
+      <div className="mt-6 flex items-center justify-between">
+        <div className="text-sm text-gray-700">
+          Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, totalCount)} of {totalCount} products
+        </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className={`px-4 py-2 text-sm rounded ${
+              currentPage === 1
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Previous
+          </button>
+          
+          {/* Page numbers */}
+          {[...Array(Math.min(5, totalPages))].map((_, i) => {
+            const pageNum = Math.max(1, Math.min(currentPage - 2, totalPages - 4)) + i;
+            return (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                className={`px-4 py-2 text-sm rounded ${
+                  currentPage === pageNum
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+          
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className={`px-4 py-2 text-sm rounded ${
+              currentPage === totalPages
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      {products.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           No products found
         </div>

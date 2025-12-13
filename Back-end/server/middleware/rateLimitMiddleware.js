@@ -118,7 +118,14 @@ export const authRateLimit = rateLimit({
 // Standard rate limit for API routes
 export const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 200  // Increased from 100 to 200 requests per 15 minutes
+});
+
+// More permissive rate limit for frequently accessed routes
+export const frequentAccessRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Much higher limit for frequently accessed routes
+  message: 'Too many requests, please try again later'
 });
 
 // More permissive rate limit for wishlist routes since they're frequently accessed

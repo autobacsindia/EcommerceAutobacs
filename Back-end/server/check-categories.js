@@ -1,34 +1,31 @@
-// Check categories in database
-import dotenv from 'dotenv';
-import mongoose from 'mongoose';
-import Category from './models/Category.js';
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import Category from "./models/Category.js";
 
-// Load environment variables
 dotenv.config();
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 async function checkCategories() {
   try {
-    console.log('🔍 Connecting to MongoDB...');
-    
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('✅ Connected to MongoDB');
-    
-    console.log('🔍 Checking categories in database...');
-    const categories = await Category.find({});
-    console.log(`📊 Found ${categories.length} categories:`);
-    
-    categories.forEach((category, index) => {
-      console.log(`${index + 1}. ${category.name} (${category.slug})`);
-    });
-    
-    await mongoose.connection.close();
-    console.log('🔌 Disconnected from MongoDB');
-  } catch (error) {
-    console.error('💥 Error checking categories:', error.message);
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.close();
+    const categories = await Category.find();
+    console.log('Categories count:', categories.length);
+    if (categories.length > 0) {
+      console.log('Sample categories:');
+      categories.slice(0, 5).forEach(category => {
+        console.log(`- ${category.name} (${category._id})`);
+      });
     }
+    mongoose.connection.close();
+  } catch (error) {
+    console.error('Error checking categories:', error.message);
+    mongoose.connection.close();
   }
 }
 
