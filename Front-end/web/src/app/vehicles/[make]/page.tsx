@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import * as React from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProductGrid from '@/components/products/ProductGrid';
@@ -173,12 +174,15 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
   throw lastError;
 }
 
-export default function VehicleProductsPage({ params }: { params: { make: string } }) {
+export default function VehicleProductsPage({ params }: { params: Promise<{ make: string }> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+
+  // Unwrap the params Promise using React.use()
+  const { make } = React.use(params);
 
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
@@ -204,7 +208,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
       try {
         const resolvedSearchParams = Object.fromEntries(searchParams.entries());
         // Add vehicle make to search params
-        resolvedSearchParams.vehicleMake = decodeURIComponent(params.make);
+        resolvedSearchParams.vehicleMake = decodeURIComponent(make);
         
         const result = await getProducts(resolvedSearchParams);
         setData(result);
@@ -218,7 +222,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
     };
     
     fetchData();
-  }, [searchParams, params.make]);
+  }, [searchParams, make]);
 
   // Handle sort change
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -237,7 +241,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
     currentParams.delete('page');
     
     // Update URL which will trigger useEffect
-    router.push(`/vehicles/${params.make}?${currentParams.toString()}`);
+    router.push(`/vehicles/${make}?${currentParams.toString()}`);
   };
 
   // Handle retry
@@ -251,9 +255,9 @@ export default function VehicleProductsPage({ params }: { params: { make: string
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold mb-2">{decodeURIComponent(params.make)} Parts & Accessories</h1>
+          <h1 className="text-4xl font-bold mb-2">{decodeURIComponent(make)} Parts & Accessories</h1>
           <p className="text-blue-100">
-            Find the perfect parts and accessories for your {decodeURIComponent(params.make)}
+            Find the perfect parts and accessories for your {decodeURIComponent(make)}
           </p>
         </div>
       </div>
@@ -265,7 +269,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
           <span className="mx-2">/</span>
           <Link href="/vehicles" className="hover:text-blue-600">Vehicles</Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-900">{decodeURIComponent(params.make)}</span>
+          <span className="text-gray-900">{decodeURIComponent(make)}</span>
         </nav>
       </div>
 
@@ -277,7 +281,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
             <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
               <h2 className="text-lg font-bold mb-4">Filters</h2>
               <p className="text-gray-600 text-sm">
-                Vehicle-specific filters coming soon. For now, browse all {decodeURIComponent(params.make)} parts.
+                Vehicle-specific filters coming soon. For now, browse all {decodeURIComponent(make)} parts.
               </p>
             </div>
           </aside>
@@ -293,7 +297,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
                   <>
                     Showing {data.products.length} product{data.products.length !== 1 ? 's' : ''}
                     {getPaginationTotal(data.pagination) && ` of ${getPaginationTotal(data.pagination)}`}
-                    {' '}for {decodeURIComponent(params.make)}
+                    {' '}for {decodeURIComponent(make)}
                   </>
                 ) : (
                   'No products found'
@@ -351,7 +355,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
               <ProductGrid products={data.products} />
             ) : !error ? (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found for {decodeURIComponent(params.make)}</p>
+                <p className="text-gray-500 text-lg mb-4">No products found for {decodeURIComponent(make)}</p>
                 <Link
                   href="/products"
                   className="text-blue-600 hover:text-blue-700 font-medium"
@@ -367,7 +371,7 @@ export default function VehicleProductsPage({ params }: { params: { make: string
                 {Array.from({ length: getPaginationPages(data.pagination)! }, (_, i) => i + 1).map((page) => {
                   const currentParams = new URLSearchParams(searchParams.toString());
                   currentParams.set('page', page.toString());
-                  const href = `/vehicles/${params.make}?${currentParams.toString()}`;
+                  const href = `/vehicles/${make}?${currentParams.toString()}`;
 
                   return (
                     <Link
