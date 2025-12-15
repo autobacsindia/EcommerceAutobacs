@@ -1,0 +1,49 @@
+{
+  "metrics": {
+    "totalImports": 1,
+    "totalProductsProcessed": 850,
+    "totalProductsCreated": 840,
+    "totalProductsUpdated": 0,
+    "totalFailures": 10,
+    "averageProcessingTime": 91723,
+    "errorRates": []
+  },
+  "importHistory": [
+    {
+      "id": "import-1765789659610",
+      "startTime": "2025-12-15T09:07:39.613Z",
+      "config": {
+        "batchSize": 50,
+        "delayBetweenBatches": 1000
+      },
+      "productsProcessed": 850,
+      "productsCreated": 840,
+      "productsUpdated": 0,
+      "failures": 10,
+      "status": "completed",
+      "endTime": "2025-12-15T09:09:11.336Z",
+      "duration": 91723,
+      "results": {
+        "success": true,
+        "created": 840,
+        "updated": 0,
+        "failed": 10,
+        "duration": 91718
+      }
+    }
+  ],
+  "alerts": [
+    {
+      "id": "1765789665879",
+      "timestamp": "2025-12-15T09:07:45.879Z",
+      "type": "HIGH_ERROR_RATE",
+      "data": {
+        "errorRate": "10.00",
+        "threshold": 5,
+        "productsProcessed": 50,
+        "failures": 5
+      },
+      "importId": "import-1765789659610"
+    }
+  ]
+}

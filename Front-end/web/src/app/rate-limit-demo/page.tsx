@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import apiClient, { ApiError } from '@/lib/api';
-import { useRateLimit } from '@/context/RateLimitContext';
+import { useRateLimit } from '@/contexts/RateLimitContext';
 
 const RateLimitDemoPage = () => {
   const [loading, setLoading] = useState(false);

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { locationService } from '@/services/locationService';
-import { useRateLimit } from '@/context/RateLimitContext'; // Import rate limit context
+import { useRateLimit } from '@/contexts/RateLimitContext'; // Import rate limit context
 import type {
   UserLocation,
   DeliveryZone,
@@ -45,7 +45,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { showRateLimitNotification } = useRateLimit(); // Use rate limit context
+  const rateLimitContext = useRateLimit(); // Use rate limit context
+  const showRateLimitNotification = rateLimitContext?.showRateLimitNotification || ((retryAfter: number) => {});
 
   /**
    * Load location on mount
