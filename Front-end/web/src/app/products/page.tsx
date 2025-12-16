@@ -25,11 +25,16 @@ interface Product {
   shortDescription?: string;
   price: number;
   originalPrice?: number;
-  category: { 
+  category?: { 
     _id: string;
     name: string;
     slug: string;
   } | string;
+  categories?: Array<{ 
+    _id: string;
+    name: string;
+    slug: string;
+  }>;
   brand?: string;
   images: ProductImage[] | string;
   stock: number;

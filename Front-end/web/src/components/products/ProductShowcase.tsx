@@ -15,6 +15,15 @@ const ProductCard = ({ product }: ProductCardProps) => {
     ? product.images.find(img => img.isPrimary)?.url || product.images[0]?.url
     : '/images/fallback-product.png';
 
+  // Get category name for display
+  const categoryName = product.categories && product.categories.length > 0 
+    ? product.categories[0].name 
+    : typeof product.category === 'object' && product.category !== null 
+      ? (product.category as any).name 
+      : typeof product.category === 'string' 
+        ? product.category 
+        : 'Uncategorized';
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
       <div className="aspect-square overflow-hidden">
@@ -29,6 +38,9 @@ const ProductCard = ({ product }: ProductCardProps) => {
         />
       </div>
       <div className="p-4">
+        <div className="text-xs text-gray-500 uppercase mb-1">
+          {categoryName === 'Suspension' ? 'SUSPENSION' : categoryName}
+        </div>
         <h3 className="font-semibold text-lg mb-1 line-clamp-2">{product.name}</h3>
         <p className="text-gray-600 text-sm mb-2 line-clamp-2">
           {product.shortDescription || product.description.substring(0, 100) + '...'}

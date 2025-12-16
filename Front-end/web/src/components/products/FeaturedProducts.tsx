@@ -18,9 +18,14 @@ interface Product {
   price: number;
   originalPrice?: number;
   images: ProductImage[] | string;
-  category: { 
+  category?: { 
     name: string;
   } | string;
+  categories?: Array<{ 
+    _id: string;
+    name: string;
+    slug: string;
+  }>;
   stock: number;
   averageRating: number;
   isFeatured?: boolean;

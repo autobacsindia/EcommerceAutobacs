@@ -36,7 +36,8 @@ export interface Product {
   shortDescription?: string;
   price: number;
   originalPrice?: number;
-  category: Category | string;
+  category?: Category | string;
+  categories?: Category[];
   brand?: string;
   images: ProductImage[] | string;
   stock: number;

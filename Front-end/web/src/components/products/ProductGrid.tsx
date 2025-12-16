@@ -24,9 +24,14 @@ interface Product {
   price: number;
   originalPrice?: number;
   images: ProductImage[] | string;
-  category: { 
+  category?: { 
     name: string;
   } | string;
+  categories?: Array<{ 
+    _id: string;
+    name: string;
+    slug: string;
+  }>;
   stock: number;
   averageRating: number;
   isFeatured?: boolean;
@@ -266,7 +271,11 @@ export default function ProductGrid({ products }: ProductGridProps) {
             <div className="p-4">
               {/* Category */}
               <p className="text-xs text-gray-500 uppercase mb-1">
-                {typeof product.category === 'object' && product.category !== null ? (product.category.name === 'Suspension' ? 'SUSPENSION' : product.category.name) : typeof product.category === 'string' ? product.category : 'Uncategorized'}
+                {product.categories && product.categories.length > 0 ? (
+                  product.categories[0].name === 'Suspension' ? 'SUSPENSION' : product.categories[0].name
+                ) : typeof product.category === 'object' && product.category !== null ? (
+                  (product.category as { name: string }).name === 'Suspension' ? 'SUSPENSION' : (product.category as { name: string }).name
+                ) : typeof product.category === 'string' ? product.category : 'Uncategorized'}
               </p>
 
               {/* Product Name */}
