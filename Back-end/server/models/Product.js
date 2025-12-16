@@ -23,11 +23,10 @@ const ProductSchema = new mongoose.Schema({
     type: Number,
     min: 0
   },
-  category: { 
+  categories: [{ 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: "Category",
-    required: true 
-  },
+    ref: "Category"
+  }],
   brand: {
     type: String,
     trim: true
@@ -82,7 +81,7 @@ const ProductSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 ProductSchema.index({ name: 'text', description: 'text', tags: 'text', brand: 'text' });
-ProductSchema.index({ category: 1, isActive: 1 });
+ProductSchema.index({ categories: 1, isActive: 1 });
 ProductSchema.index({ price: 1 });
 ProductSchema.index({ brand: 1 });
 ProductSchema.index({ averageRating: -1 });

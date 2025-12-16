@@ -29,7 +29,7 @@ async function checkProfenderByCategories() {
       isActive: true,
       $or: [
         { name: { $regex: 'lift.*kit|suspension|performance|exterior|control arm|coil|nitro gas', $options: 'i' } },
-        { 'category.name': { $in: relevantCategories } }
+        { 'categories.name': { $in: relevantCategories } }
       ]
     });
     
@@ -38,7 +38,9 @@ async function checkProfenderByCategories() {
     profenderProducts.forEach((product, index) => {
       console.log(`${index + 1}. ${product.name}`);
       if (product.category) {
-        console.log(`   Category: ${typeof product.category === 'object' ? product.category.name : product.category}`);
+        if (product.categories && product.categories.length > 0) {
+          console.log(`   Categories: ${product.categories.map(cat => typeof cat === 'object' ? cat.name : cat).join(', ')}`);
+        }
       }
     });
     

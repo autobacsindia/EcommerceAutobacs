@@ -56,7 +56,7 @@ async function addSampleProducts() {
         shortDescription: 'High-quality brake pads',
         price: 89.99,
         originalPrice: 99.99,
-        category: categoryIds[1], // Brake System
+        categories: [categoryIds[1]], // Brake System
         brand: 'Autobacs',
         stock: 50,
         sku: 'BP-001',
@@ -75,7 +75,7 @@ async function addSampleProducts() {
         description: 'High-quality oil filter for engine protection with synthetic media',
         shortDescription: 'Standard oil filter',
         price: 24.99,
-        category: categoryIds[0], // Engine Parts
+        categories: [categoryIds[0]], // Engine Parts
         brand: 'Autobacs',
         stock: 100,
         sku: 'EOF-001',
@@ -94,7 +94,7 @@ async function addSampleProducts() {
         description: 'Reliable car battery for all weather conditions with 3-year warranty',
         shortDescription: '12V car battery',
         price: 129.99,
-        category: categoryIds[2], // Electronics
+        categories: [categoryIds[2]], // Electronics
         brand: 'Autobacs',
         stock: 25,
         sku: 'CB-001',
@@ -113,7 +113,7 @@ async function addSampleProducts() {
         description: 'High-flow air filter for improved engine performance and fuel efficiency',
         shortDescription: 'Engine air filter',
         price: 19.99,
-        category: categoryIds[3], // Filters
+        categories: [categoryIds[3]], // Filters
         brand: 'Autobacs',
         stock: 75,
         sku: 'AF-001',
@@ -132,7 +132,7 @@ async function addSampleProducts() {
         description: 'Iridium spark plugs for optimal ignition and extended life',
         shortDescription: 'Set of 4 spark plugs',
         price: 39.99,
-        category: categoryIds[0], // Engine Parts
+        categories: [categoryIds[0]], // Engine Parts
         brand: 'Autobacs',
         stock: 60,
         sku: 'SP-001',
@@ -152,7 +152,7 @@ async function addSampleProducts() {
         description: 'High-efficiency fuel filter to protect fuel injection systems',
         shortDescription: 'Fuel system filter',
         price: 34.99,
-        category: categoryIds[3], // Filters
+        categories: [categoryIds[3]], // Filters
         brand: 'Autobacs',
         stock: 40,
         sku: 'FF-001',
@@ -171,7 +171,7 @@ async function addSampleProducts() {
         description: 'Activated carbon cabin air filter for allergen and odor protection',
         shortDescription: 'HVAC cabin filter',
         price: 29.99,
-        category: categoryIds[3], // Filters
+        categories: [categoryIds[3]], // Filters
         brand: 'Autobacs',
         stock: 80,
         sku: 'CAF-001',
@@ -190,7 +190,7 @@ async function addSampleProducts() {
         description: 'Gas-filled shock absorbers for improved ride comfort and handling',
         shortDescription: 'Front shock absorbers',
         price: 149.99,
-        category: categoryIds[4], // Suspension
+        categories: [categoryIds[4]], // Suspension
         brand: 'Autobacs',
         stock: 30,
         sku: 'SA-001',
@@ -209,7 +209,7 @@ async function addSampleProducts() {
         description: 'Stainless steel muffler for reduced exhaust noise',
         shortDescription: 'Universal fit muffler',
         price: 89.99,
-        category: categoryIds[5], // Exhaust
+        categories: [categoryIds[5]], // Exhaust
         brand: 'Autobacs',
         stock: 20,
         sku: 'MUF-001',
@@ -228,7 +228,7 @@ async function addSampleProducts() {
         description: 'Universal oxygen sensor for emissions control and fuel efficiency',
         shortDescription: 'O2 sensor',
         price: 69.99,
-        category: categoryIds[2], // Electronics
+        categories: [categoryIds[2]], // Electronics
         brand: 'Autobacs',
         stock: 35,
         sku: 'O2S-001',
@@ -247,7 +247,7 @@ async function addSampleProducts() {
         description: 'High-output alternator for reliable electrical system performance',
         shortDescription: '12V automotive alternator',
         price: 199.99,
-        category: categoryIds[2], // Electronics
+        categories: [categoryIds[2]], // Electronics
         brand: 'Autobacs',
         stock: 15,
         sku: 'ALT-001',
@@ -266,7 +266,7 @@ async function addSampleProducts() {
         description: 'Aluminum radiator for efficient engine cooling',
         shortDescription: 'Engine cooling radiator',
         price: 249.99,
-        category: categoryIds[0], // Engine Parts
+        categories: [categoryIds[0]], // Engine Parts
         brand: 'Autobacs',
         stock: 12,
         sku: 'RAD-001',
@@ -285,7 +285,7 @@ async function addSampleProducts() {
         description: 'Premium quality brake rotors for smooth braking performance',
         shortDescription: 'Front brake rotors',
         price: 79.99,
-        category: categoryIds[1], // Brake System
+        categories: [categoryIds[1]], // Brake System
         brand: 'Autobacs',
         stock: 45,
         sku: 'BR-001',
@@ -304,7 +304,7 @@ async function addSampleProducts() {
         description: 'High-quality transmission filter for automatic transmissions',
         shortDescription: 'Automatic transmission filter',
         price: 42.99,
-        category: categoryIds[3], // Filters
+        categories: [categoryIds[3]], // Filters
         brand: 'Autobacs',
         stock: 38,
         sku: 'TF-001',
@@ -323,7 +323,7 @@ async function addSampleProducts() {
         description: 'Rebuilt steering rack for precise steering control',
         shortDescription: 'Power steering rack',
         price: 299.99,
-        category: categoryIds[4], // Suspension
+        categories: [categoryIds[4]], // Suspension
         brand: 'Autobacs',
         stock: 8,
         sku: 'SR-001',

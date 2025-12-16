@@ -32,7 +32,7 @@ const cleanDuplicateProducts = async (categorySlug, dryRun = true) => {
     
     // Find all products in this category
     const products = await Product.find({ 
-      category: category._id, 
+      categories: category._id, 
       isActive: true 
     }).sort({ name: 1, createdAt: 1 }); // Sort by name and creation date
     

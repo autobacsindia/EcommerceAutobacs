@@ -35,7 +35,7 @@ const exportCategoryProducts = async (categorySlug) => {
       category: category._id, 
       isActive: true 
     })
-    .populate('category', 'name slug')
+    .populate('categories', 'name slug')
     .sort({ name: 1 });
     
     console.log(`Found ${products.length} products in category '${category.name}'`);

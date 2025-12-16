@@ -38,7 +38,7 @@ async function generateReport() {
     // 2. Profender Product Organization Report
     console.log('\n=== PROFENDER PRODUCT ORGANIZATION REPORT ===');
     const profenderProducts = await Product.find({ brand: 'Profender' })
-      .populate('category', 'name slug parent')
+      .populate('categories', 'name slug parent')
       .sort({ name: 1 });
     
     console.log(`Total Profender products: ${profenderProducts.length}`);

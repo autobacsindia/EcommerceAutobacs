@@ -42,7 +42,7 @@ class SearchService {
     if (category) {
       const categories = Array.isArray(category) ? category : category.split(',');
       if (categories.length > 0) {
-        query.category = { $in: categories };
+        query.categories = { $in: categories };
       }
     }
     
@@ -102,7 +102,7 @@ class SearchService {
 
     // Execute query
     let productQuery = Product.find(query)
-      .populate('category', 'name slug')
+      .populate('categories', 'name slug')
       .populate('compatibleVehicles', 'make model year');
       
     // When searching, include text score for sorting
@@ -162,8 +162,8 @@ class SearchService {
       ],
       isActive: true
     })
-    .select('name brand category images')
-    .populate('category', 'name')
+    .select('name brand categories images')
+    .populate('categories', 'name')
     .limit(limit * 2); // Get more results to allow for deduplication
 
     // Find categories matching the query
@@ -197,7 +197,7 @@ class SearchService {
           id: `product-${product._id}`,
           text: product.name,
           type: 'product',
-          category: product.category ? product.category.name : null,
+          category: product.categories && product.categories.length > 0 ? product.categories[0].name : null,
           imageUrl: imageUrl
         });
       }

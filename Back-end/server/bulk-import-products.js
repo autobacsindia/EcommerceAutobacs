@@ -148,7 +148,7 @@ function generateProductData(categoryId, index, categoryName) {
   // Add category and images to the template
   return {
     ...template,
-    category: categoryId,
+    categories: [categoryId],
     images: [{ 
       url: `https://example.com/${categoryName.toLowerCase().replace(' ', '-')}-${index}.jpg`, 
       alt: `${template.name} image` 
@@ -235,7 +235,7 @@ async function bulkImportProducts() {
     // Show category breakdown
     console.log('\n--- Category Breakdown ---');
     for (const category of categories) {
-      const count = await Product.countDocuments({ category: category._id });
+      const count = await Product.countDocuments({ categories: category._id });
       console.log(`${category.name}: ${count} products`);
     }
     

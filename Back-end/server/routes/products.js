@@ -108,7 +108,7 @@ router.get("/featured", asyncHandler(async (req, res) => {
   const { limit = 6 } = req.query;
 
   const products = await Product.find({ isActive: true, isFeatured: true })
-    .populate('category', 'name slug')
+    .populate('categories', 'name slug')
     .limit(Number(limit))
     .sort({ createdAt: -1 });
 
@@ -124,7 +124,7 @@ router.get("/featured", asyncHandler(async (req, res) => {
 // @access  Public
 router.get("/:id", asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id)
-    .populate('category', 'name slug description')
+    .populate('categories', 'name slug description')
     .populate('compatibleVehicles', 'make model year variant');
 
   if (!product) {

@@ -38,7 +38,7 @@ async function analyzeCategoryStructure() {
     // Show product-category mapping
     console.log('\n🔗 Product-Category Mapping:');
     const products = await Product.find({ brand: 'Profender' })
-      .populate('category', 'name slug')
+      .populate('categories', 'name slug')
       .sort({ name: 1 });
     
     console.log(`\n📦 Profender products (${products.length}):`);

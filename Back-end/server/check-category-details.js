@@ -21,11 +21,11 @@ async function checkCategoryDetails() {
     console.log('\n--- Sample Products ---');
     
     // Get a few sample products with their categories populated
-    const sampleProducts = await Product.find({}).limit(10).populate('category');
+    const sampleProducts = await Product.find({}).limit(10).populate('categories');
     
     sampleProducts.forEach((product, index) => {
       console.log(`\n${index + 1}. ${product.name}`);
-      console.log(`   Category: ${product.category ? product.category.name : 'None'} (${product.category ? product.category._id : 'None'})`);
+      console.log(`   Categories: ${product.categories && product.categories.length > 0 ? product.categories.map(cat => cat.name).join(', ') : 'None'}`);
       console.log(`   Description preview: ${product.description.substring(0, 50)}...`);
     });
     

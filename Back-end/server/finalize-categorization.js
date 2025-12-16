@@ -41,7 +41,7 @@ async function finalizeCategorization() {
         { category: null },
         { category: { $nin: Object.values(categoryMap) } }
       ]
-    }).populate('category');
+    }).populate('categories');
     
     // Also get products in the old "Suspension" category
     const suspensionCategory = await Category.findOne({ name: 'Suspension' });

@@ -92,13 +92,13 @@ db.once('open', async () => {
     console.log('\n📊 Database Categories:');
     // We need to populate the category information
     const dbProductsWithCategories = await Product.find({ brand: 'Profender' })
-      .populate('category', 'name')
+      .populate('categories', 'name')
       .sort({ name: 1 });
     
     const dbCategories = new Set();
     dbProductsWithCategories.forEach(product => {
-      if (product.category) {
-        dbCategories.add(product.category.name);
+      if (product.categories && product.categories.length > 0) {
+        product.categories.forEach(cat => dbCategories.add(cat.name));
       }
     });
     

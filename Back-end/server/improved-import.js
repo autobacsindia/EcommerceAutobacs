@@ -211,7 +211,7 @@ async function importProfenderWithBetterCategories() {
     
     // Final verification
     console.log('\n🔍 Verifying import...');
-    const profenderProducts = await Product.find({ brand: 'Profender' }).populate('category', 'name');
+    const profenderProducts = await Product.find({ brand: 'Profender' }).populate('categories', 'name');
     console.log(`📊 Final count of Profender products: ${profenderProducts.length}`);
     
     // Show category distribution

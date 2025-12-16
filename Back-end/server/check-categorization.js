@@ -11,7 +11,7 @@ async function checkCategorization() {
     
     const totalProducts = await Product.countDocuments({});
     const productsWithCategory = await Product.countDocuments({ 
-      category: { $exists: true, $ne: null } 
+      categories: { $exists: true, $ne: null } 
     });
     
     console.log('Total products:', totalProducts);

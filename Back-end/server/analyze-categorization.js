@@ -33,7 +33,7 @@ async function analyzeCategorization() {
     console.log('Standard categories found:', Object.keys(categoryMap));
     
     // Get all products with their current categories
-    const products = await Product.find({}).populate('category');
+    const products = await Product.find({}).populate('categories');
     
     console.log(`Analyzing ${products.length} products for categorization...`);
     
@@ -42,7 +42,7 @@ async function analyzeCategorization() {
     const standardCategoryCounts = {};
     
     for (const product of products) {
-      const currentCategory = product.category ? product.category.name : 'Uncategorized';
+      const currentCategory = product.categories && product.categories.length > 0 ? product.categories[0].name : 'Uncategorized';
       categoryCounts[currentCategory] = (categoryCounts[currentCategory] || 0) + 1;
       
       // Combine product attributes for analysis
@@ -145,9 +145,10 @@ async function analyzeCategorization() {
         );
         
         // Check if the product's current category matches the best category
-        if (!product.category || product.category.name !== bestCategory) {
+        const currentCategory = product.categories && product.categories.length > 0 ? product.categories[0] : null;
+        if (!currentCategory || currentCategory.name !== bestCategory) {
           console.log(`\nProduct: ${product.name}`);
-          console.log(`  Current category: ${product.category ? product.category.name : 'None'}`);
+          console.log(`  Current category: ${currentCategory ? currentCategory.name : 'None'}`);
           console.log(`  Suggested category: ${bestCategory}`);
           console.log(`  Confidence score: ${categoryScores[bestCategory]}`);
           sampleCount++;

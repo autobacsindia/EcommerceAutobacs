@@ -290,7 +290,7 @@ class ElasticsearchService {
     try {
       // Fetch all active products from MongoDB
       const products = await Product.find({ isActive: true })
-        .populate('category', 'name slug')
+        .populate('categories', 'name slug')
         .lean();
 
       // Index each product

@@ -48,9 +48,9 @@ async function analyzeProductCounts() {
     const featuredCount = await Product.countDocuments({ isFeatured: true });
     console.log(`\nFeatured products: ${featuredCount}`);
     
-    // Products without category
-    const noCategoryCount = await Product.countDocuments({ category: { $exists: false } });
-    console.log(`Products without category: ${noCategoryCount}`);
+    // Products without categories
+    const noCategoryCount = await Product.countDocuments({ categories: { $exists: false } });
+    console.log(`Products without categories: ${noCategoryCount}`);
     
     // Products with external ID
     const withExternalIdCount = await Product.countDocuments({ externalId: { $exists: true } });

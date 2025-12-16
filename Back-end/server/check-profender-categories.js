@@ -19,7 +19,7 @@ async function checkProfenderCategories() {
     
     // Get all Profender products with their categories
     const profenderProducts = await Product.find({ brand: 'Profender' })
-      .populate('category', 'name slug')
+      .populate('categories', 'name slug')
       .sort({ name: 1 });
     
     console.log(`📊 Found ${profenderProducts.length} Profender products`);

@@ -45,9 +45,9 @@ async function updateProductCategoryMappings() {
     for (const product of products) {
       console.log(`\n📦 Processing: ${product.name}`);
       
-      // Get current category
-      if (product.category) {
-        const currentCategory = await Category.findById(product.category);
+      // Get current category (first one if multiple)
+      if (product.categories && product.categories.length > 0) {
+        const currentCategory = await Category.findById(product.categories[0]);
         if (currentCategory) {
           console.log(`   Current category: ${currentCategory.name}`);
           
@@ -57,16 +57,15 @@ async function updateProductCategoryMappings() {
             const newCategoryName = CATEGORY_MAPPING[currentCategory.name];
             const newCategory = await Category.findOne({ name: newCategoryName });
             
-            if (newCategory && newCategory._id.toString() !== product.category.toString()) {
-              // Update the product's category
-              product.category = newCategory._id;
-              await product.save();
-              console.log(`   🔄 Updated category: ${currentCategory.name} → ${newCategory.name}`);
-              updatedCount++;
+            // Update the product's first category (keeping other categories)
+            if (product.categories && product.categories.length > 0) {
+              product.categories[0] = newCategory._id;
             } else {
-              console.log(`   ✅ Category is already correct: ${currentCategory.name}`);
-              skippedCount++;
+              product.categories = [newCategory._id];
             }
+            await product.save();
+            console.log(`   🔄 Updated category: ${currentCategory.name} → ${newCategory.name}`);
+            updatedCount++;
           } else {
             console.log(`   ⚠️  No mapping found for category: ${currentCategory.name}`);
             skippedCount++;
@@ -88,16 +87,18 @@ async function updateProductCategoryMappings() {
     // Show final product-category mapping
     console.log('\n📊 Final Product-Category Mapping:');
     const updatedProducts = await Product.find({ brand: 'Profender' })
-      .populate('category', 'name')
+      .populate('categories', 'name')
       .sort({ name: 1 });
     
     const categoryProductCount = {};
     updatedProducts.forEach(product => {
-      const categoryName = product.category ? product.category.name : 'Uncategorized';
-      if (!categoryProductCount[categoryName]) {
-        categoryProductCount[categoryName] = [];
+      const categoryNames = product.categories && product.categories.length > 0 
+        ? product.categories.map(cat => cat.name).join(', ')
+        : 'Uncategorized';
+      if (!categoryProductCount[categoryNames]) {
+        categoryProductCount[categoryNames] = [];
       }
-      categoryProductCount[categoryName].push(product.name);
+      categoryProductCount[categoryNames].push(product.name);
     });
     
     Object.entries(categoryProductCount).forEach(([category, productNames]) => {

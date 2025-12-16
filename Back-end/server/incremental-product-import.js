@@ -110,44 +110,37 @@ async function fetchWordPressProducts(sinceDate = null, page = 1) {
 // Transform WordPress product to our product model
 async function transformProduct(wpProduct, categoryMap) {
   try {
-    // Handle categories - automatically create missing categories
-    let categoryId = null;
+    // Handle categories - automatically create missing categories and assign all
+    let categoryIds = [];
     
     if (wpProduct.categories && wpProduct.categories.length > 0) {
-      // Try to match the first category
-      const primaryCategory = wpProduct.categories[0];
-      let matchedCategory = categoryMap.findCategory(primaryCategory.name);
-      
-      if (matchedCategory) {
-        categoryId = matchedCategory._id;
-        console.log(`   📂 Assigned to existing category: ${matchedCategory.name}`);
-      } else {
-        console.log(`   ⚠️  Category "${primaryCategory.name}" not found, creating it...`);
-        // Create the missing category
-        const newCategory = await categoryMap.createCategory(primaryCategory.name);
-        categoryId = newCategory._id;
-        console.log(`   ➕ Created and assigned to new category: ${newCategory.name}`);
-      }
-      
-      // For debugging, let's also create all categories in the product
-      for (const category of wpProduct.categories) {
-        const existingCategory = categoryMap.findCategory(category.name);
-        if (!existingCategory) {
-          console.log(`   ➕ Auto-creating missing category: ${category.name}`);
-          await categoryMap.createCategory(category.name);
+      // Process all categories for this product
+      for (const wpCategory of wpProduct.categories) {
+        let matchedCategory = categoryMap.findCategory(wpCategory.name);
+        
+        if (matchedCategory) {
+          categoryIds.push(matchedCategory._id);
+          console.log(`   📂 Added to existing category: ${matchedCategory.name}`);
+        } else {
+          console.log(`   ⚠️  Category "${wpCategory.name}" not found, creating it...`);
+          // Create the missing category
+          const newCategory = await categoryMap.createCategory(wpCategory.name);
+          categoryIds.push(newCategory._id);
+          console.log(`   ➕ Created and added to new category: ${newCategory.name}`);
         }
       }
+      console.log(`   📂 Assigned to ${categoryIds.length} categories`);
     } else {
       // No categories in WordPress product, use default "Other" category
       const otherCategory = categoryMap.findCategory('Other');
       if (otherCategory) {
-        categoryId = otherCategory._id;
+        categoryIds.push(otherCategory._id);
         console.log(`   📂 Assigned to default category: ${otherCategory.name}`);
       } else {
         // If no "Other" category, try to find any available category
         const categories = await Category.find({}).limit(1);
         if (categories.length > 0) {
-          categoryId = categories[0]._id;
+          categoryIds.push(categories[0]._id);
           console.log(`   📂 Assigned to fallback category: ${categories[0].name}`);
         } else {
           console.error(`   ❌ No categories available in database!`);
@@ -192,7 +185,7 @@ async function transformProduct(wpProduct, categoryMap) {
       sku: wpProduct.sku || `WP-${wpProduct.id}`,
       stock: parseInt(wpProduct.stock_quantity) || 0,
       brand: brand,
-      category: categoryId,
+      categories: categoryIds,
       images: images,
       isActive: wpProduct.status === 'publish',
       isFeatured: wpProduct.featured || false,

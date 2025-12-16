@@ -60,7 +60,7 @@ async function analyzeCategories() {
     console.log('\n📊 Database Categories:');
     // We need to populate the category information
     const dbProductsWithCategories = await Product.find({ brand: 'Profender' })
-      .populate('category', 'name')
+      .populate('categories', 'name')
       .sort({ name: 1 });
     
     const dbCategories = new Set();

@@ -211,7 +211,7 @@ async function debugSingleProductImport(wpProduct) {
       sku: wpProduct.sku || `WP-${wpProduct.id}`,
       stock: parseInt(wpProduct.stock_quantity) || 0,
       brand: brand,
-      category: categoryId,
+      categories: [categoryId],
       images: wpProduct.images ? wpProduct.images.map(img => img.src) : [],
       isActive: wpProduct.status === 'publish',
       isFeatured: wpProduct.featured || false,
@@ -229,7 +229,7 @@ async function debugSingleProductImport(wpProduct) {
     console.log(`      Price: ${productData.price}`);
     console.log(`      SKU: ${productData.sku}`);
     console.log(`      Brand: ${productData.brand}`);
-    console.log(`      Category ID: ${productData.category || 'None'}`);
+    console.log(`      Category ID: ${productData.categories && productData.categories.length > 0 ? productData.categories[0] : 'None'}`);
     
     // Test database save
     console.log('   💾 Testing database save...');

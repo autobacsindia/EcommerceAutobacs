@@ -27,7 +27,7 @@ async function checkHtmlProducts() {
       products.slice(0, 3).forEach((product, index) => {
         console.log(`${index + 1}. ${product.name}`);
         console.log(`   Description: ${product.description.substring(0, 100)}...`);
-        console.log(`   Current category: ${product.category || 'None'}`);
+        console.log(`   Current categories: ${product.categories && product.categories.length > 0 ? product.categories.map(c => c.name).join(', ') : 'None'}`);
         console.log('---');
       });
     } else {

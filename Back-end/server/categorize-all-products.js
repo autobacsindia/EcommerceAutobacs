@@ -37,9 +37,10 @@ async function categorizeAllProducts() {
     // Get all uncategorized products
     const uncategorizedProducts = await Product.find({
       $or: [
-        { category: { $exists: false } },
-        { category: null },
-        { category: { $exists: true, $eq: null } }
+        { categories: { $exists: false } },
+        { categories: null },
+        { categories: { $exists: true, $eq: null } },
+        { categories: { $size: 0 } }
       ]
     });
     
@@ -99,7 +100,7 @@ async function categorizeAllProducts() {
           bulkOps.push({
             updateOne: {
               filter: { _id: product._id },
-              update: { $set: { category: bestCategoryId } }
+              update: { $set: { categories: [bestCategoryId] } }
             }
           });
         }

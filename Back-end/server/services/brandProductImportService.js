@@ -238,11 +238,14 @@ class BrandProductImportService {
       // Transform WordPress product data to our format
       const productData = this.transformProductData(wpProduct);
       
-      // Handle category mapping
+      // Handle category mapping - support multiple categories
       if (wpProduct.categories && wpProduct.categories.length > 0) {
-        // Use the first category for now (can be enhanced to handle multiple categories)
-        const categoryId = await this.findOrCreateCategory(wpProduct.categories[0]);
-        productData.category = categoryId;
+        const categoryIds = [];
+        for (const wpCategory of wpProduct.categories) {
+          const categoryId = await this.findOrCreateCategory(wpCategory);
+          categoryIds.push(categoryId);
+        }
+        productData.categories = categoryIds;
       }
       
       // Check if product already exists (by SKU)

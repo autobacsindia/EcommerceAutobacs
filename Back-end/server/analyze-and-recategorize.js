@@ -35,7 +35,7 @@ async function analyzeAndRecategorize() {
     console.log('Standard categories found:', Object.keys(categoryMap));
     
     // Get all products with their current categories
-    const products = await Product.find({}).populate('category');
+    const products = await Product.find({}).populate('categories');
     
     console.log(`Analyzing ${products.length} products for potential re-categorization...`);
     
@@ -87,10 +87,11 @@ async function analyzeAndRecategorize() {
       const bestCategoryId = categoryMap[bestCategory];
       
       // Check if the product's current category matches the best category
-      if (product.category && product.category._id.toString() !== bestCategoryId.toString()) {
+      const currentCategory = product.categories && product.categories.length > 0 ? product.categories[0] : null;
+      if (currentCategory && currentCategory._id.toString() !== bestCategoryId.toString()) {
         // The product should be re-categorized
         console.log(`\nProduct: ${product.name}`);
-        console.log(`  Current category: ${product.category ? product.category.name : 'None'}`);
+        console.log(`  Current category: ${currentCategory ? currentCategory.name : 'None'}`);
         console.log(`  Suggested category: ${bestCategory}`);
         console.log(`  Confidence score: ${categoryScores[bestCategory]}`);
         
@@ -98,7 +99,7 @@ async function analyzeAndRecategorize() {
         bulkOps.push({
           updateOne: {
             filter: { _id: product._id },
-            update: { $set: { category: bestCategoryId } }
+            update: { $set: { categories: [bestCategoryId] } }
           }
         });
         
