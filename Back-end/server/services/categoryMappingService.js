@@ -153,6 +153,48 @@ class CategoryMappingService {
   }
   
   /**
+   * Get all child categories for a given category ID
+   * @param {string} categoryId - The ID of the parent category
+   * @returns {Array} Array of all child categories
+   */
+  async getChildCategories(categoryId) {
+    const childCategories = [];
+    
+    // Find direct children
+    for (const [key, category] of this.categoryCache.entries()) {
+      // Check if this is a category object and has the matching parent
+      if (category && category.parent && category.parent === categoryId) {
+        childCategories.push(category);
+        
+        // Recursively get grandchildren
+        const grandChildren = await this.getChildCategories(category._id.toString());
+        childCategories.push(...grandChildren);
+      }
+    }
+    
+    return childCategories;
+  }
+  
+  /**
+   * Get all category IDs including child categories
+   * @param {string} categoryId - The ID of the parent category
+   * @returns {Array} Array of all category IDs including the parent and children
+   */
+  async getAllCategoryIdsIncludingChildren(categoryId) {
+    const allCategoryIds = [categoryId];
+    
+    // Get child categories
+    const childCategories = await this.getChildCategories(categoryId);
+    
+    // Add child category IDs
+    childCategories.forEach(child => {
+      allCategoryIds.push(child._id.toString());
+    });
+    
+    return allCategoryIds;
+  }
+  
+  /**
    * Ensure a category exists, creating it if necessary
    * @param {string} categoryName - The name of the category to ensure exists
    * @returns {Object} The category (existing or newly created)

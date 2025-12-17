@@ -4,23 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import OrganizedCategoryGrid from '@/components/categories/OrganizedCategoryGrid';
-
-// Define the Category interface inline to avoid import issues
-interface Category {
-  _id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  parent?: any;
-  image?: {
-    url: string;
-    alt?: string;
-  };
-  isActive: boolean;
-  order: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
+import { Category } from '@/lib/types';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);

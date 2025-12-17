@@ -1,6 +1,7 @@
 import Product from "../models/Product.js";
 import Category from "../models/Category.js";
 import elasticsearchService from "./elasticsearchService.js";
+import categoryMappingService from "./categoryMappingService.js";
 
 class SearchService {
   /**
@@ -38,11 +39,33 @@ class SearchService {
     // Build query
     const query = { isActive: true };
 
-    // Support multiple categories
+    // Support multiple categories and include child categories
     if (category) {
       const categories = Array.isArray(category) ? category : category.split(',');
       if (categories.length > 0) {
-        query.categories = { $in: categories };
+        // For each category, get all child categories
+        const allCategoryIds = [];
+        for (const catIdentifier of categories) {
+          // Make sure category mapping service is initialized
+          if (!categoryMappingService.initialized) {
+            await categoryMappingService.initialize();
+          }
+          
+          // First try to find the category by slug or name, then get its ID
+          const foundCategory = categoryMappingService.findCategory(catIdentifier);
+          if (foundCategory) {
+            const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(foundCategory._id.toString());
+            allCategoryIds.push(...childCategoryIds);
+          } else {
+            // If not found by name/slug, treat as ID directly
+            const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(catIdentifier);
+            allCategoryIds.push(...childCategoryIds);
+          }
+        }
+        
+        if (allCategoryIds.length > 0) {
+          query.categories = { $in: allCategoryIds };
+        }
       }
     }
     

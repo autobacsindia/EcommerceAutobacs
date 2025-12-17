@@ -2,104 +2,17 @@
 
 import { Category } from '@/lib/types';
 import CategoryCard from '@/components/categories/CategoryCard';
+import { CATEGORY_HIERARCHY, findCategoryFlexible, findSubcategories } from '@/lib/categoryMapping';
 
 interface OrganizedCategoryGridProps {
   categories: Category[];
 }
 
 export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryGridProps) {
-  // Define the desired category organization
-  const categoryHierarchy = [
-    {
-      name: "ACCESSORIES",
-      slug: "accessories",
-      description: "General automotive accessories and parts"
-    },
-    {
-      name: "EXTERIOR",
-      slug: "exterior",
-      description: "Exterior styling and body parts",
-      subcategories: [
-        {
-          name: "BODYKIT",
-          slug: "bodykit",
-          description: "Complete body kits and styling packages"
-        },
-        {
-          name: "LIGHTS",
-          slug: "lights",
-          description: "Headlights, taillights, and lighting accessories"
-        }
-      ]
-    },
-    {
-      name: "INTERIOR",
-      slug: "interior",
-      description: "Interior styling and comfort upgrades",
-      subcategories: [
-        {
-          name: "AUDIO",
-          slug: "audio",
-          description: "Car audio systems and sound enhancement"
-        }
-      ]
-    },
-    {
-      name: "PERFORMANCE",
-      slug: "performance",
-      description: "Performance upgrades and tuning parts",
-      subcategories: [
-        {
-          name: "SUSPENSION",
-          slug: "suspension",
-          description: "Suspension systems and handling upgrades"
-        }
-      ]
-    }
-  ];
-
-  // Find categories by slug, name, or variations
-  const findCategoryFlexible = (slug: string, name: string) => {
-    // First try to find by slug
-    let category = categories.find(cat => cat.slug?.toLowerCase() === slug.toLowerCase());
-    
-    // If not found by slug, try to find by exact name match (case insensitive)
-    if (!category) {
-      category = categories.find(cat => cat.name?.toUpperCase() === name.toUpperCase());
-    }
-    
-    // If still not found, try to find by partial name match for body kits
-    if (!category && name.toUpperCase() === "BODYKIT") {
-      category = categories.find(cat => {
-        const categoryName = cat.name?.toUpperCase() || "";
-        return categoryName.includes("BODY") && categoryName.includes("KIT");
-      });
-    }
-    
-    // If still not found, try alternative spellings for body kit
-    if (!category && name.toUpperCase() === "BODYKIT") {
-      category = categories.find(cat => {
-        const categoryName = cat.name?.toUpperCase() || "";
-        return categoryName === "BODY KIT" || categoryName === "BODY-KIT" || categoryName === "BODY_KIT";
-      });
-    }
-    
-    return category;
-  };
-
-  // Find subcategories of a parent category
-  const findSubcategories = (parentId: string) => {
-    return categories.filter(cat => 
-      cat.parent && 
-      typeof cat.parent === 'string' && 
-      cat.parent === parentId
-    );
-  };
-
   return (
     <div className="space-y-12">
-      {categoryHierarchy.map((mainCategory) => {
-        const category = findCategoryFlexible(mainCategory.slug, mainCategory.name);
+      {CATEGORY_HIERARCHY.map((mainCategory) => {
+        const category = findCategoryFlexible(mainCategory.slug, categories);
         
         // If main category doesn't exist, skip it
         if (!category) return null;
@@ -107,9 +20,9 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
         // Get subcategories
         const subcategories = mainCategory.subcategories 
           ? mainCategory.subcategories
-              .map(sub => findCategoryFlexible(sub.slug, sub.name))
-              .filter((sub): sub is Category => sub !== undefined)
-          : findSubcategories(category._id);
+              .map(sub => findCategoryFlexible(sub.slug, categories))
+              .filter((sub): sub is Category => sub !== null)
+          : findSubcategories(category._id, categories);
         
         return (
           <div key={category._id} className="space-y-6">

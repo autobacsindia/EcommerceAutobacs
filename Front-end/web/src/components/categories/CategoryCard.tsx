@@ -2,23 +2,7 @@
 
 import Link from 'next/link';
 import EnhancedImage from '@/components/layout/EnhancedImage';
-
-// Define the Category interface inline to avoid import issues
-interface Category {
-  _id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  parent?: any;
-  image?: {
-    url: string;
-    alt?: string;
-  };
-  isActive: boolean;
-  order: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
+import { Category } from '@/lib/types';
 
 interface CategoryCardProps {
   category: Category;
@@ -30,7 +14,7 @@ export default function CategoryCard({ category }: CategoryCardProps) {
 
   return (
     <Link 
-      href={`/products?category=${category._id}`}
+      href={`/categories/${category.slug}`}
       className="group block bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
     >
       {/* Category Image */}

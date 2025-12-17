@@ -9,6 +9,7 @@ import ProductFilters from '@/components/products/ProductFilters';
 import VehicleFilterSidebar from '@/components/vehicles/VehicleFilterSidebar';
 import Pagination from '@/components/layout/Pagination';
 import Breadcrumb from '@/components/layout/Breadcrumb';
+import { getMainCategory } from '@/lib/categoryMapping';
 
 // Define types for our data
 interface ProductImage {

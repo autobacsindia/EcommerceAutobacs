@@ -272,10 +272,10 @@ export default function ProductGrid({ products }: ProductGridProps) {
               {/* Category */}
               <p className="text-xs text-gray-500 uppercase mb-1">
                 {product.categories && product.categories.length > 0 ? (
-                  product.categories[0].name === 'Suspension' ? 'SUSPENSION' : product.categories[0].name
+                  product.categories[0].name.toUpperCase()
                 ) : typeof product.category === 'object' && product.category !== null ? (
-                  (product.category as { name: string }).name === 'Suspension' ? 'SUSPENSION' : (product.category as { name: string }).name
-                ) : typeof product.category === 'string' ? product.category : 'Uncategorized'}
+                  (product.category as { name: string }).name.toUpperCase()
+                ) : typeof product.category === 'string' ? product.category.toUpperCase() : 'UNCATEGORIZED'}
               </p>
 
               {/* Product Name */}
