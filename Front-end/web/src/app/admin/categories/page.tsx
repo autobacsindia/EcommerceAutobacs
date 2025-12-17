@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, FolderOpen } from 'lucide-react';
 import apiClient from '@/lib/api';
 
 // Define the Category interface inline to avoid import issues

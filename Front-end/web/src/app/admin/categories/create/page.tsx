@@ -30,13 +30,10 @@ export default function CreateCategoryPage() {
     name: '',
     slug: '',
     description: '',
-    parent: '',
+    parent: undefined as string | undefined,
     isActive: true,
     order: 0,
-    image: {
-      url: '',
-      alt: '',
-    },
+    image: undefined as { url: string; alt?: string } | undefined,
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,7 +66,7 @@ export default function CreateCategoryPage() {
       setFormData(prev => ({
         ...prev,
         image: {
-          ...prev.image,
+          ...(prev.image || { url: '', alt: '' }),
           [imageField]: value
         }
       }));
@@ -93,7 +90,7 @@ export default function CreateCategoryPage() {
       setFormData(prev => ({
         ...prev,
         image: {
-          ...prev.image,
+          ...(prev.image || { url: '', alt: '' }),
           url: previewUrl
         }
       }));
@@ -120,13 +117,13 @@ export default function CreateCategoryPage() {
       
       // Remove image fields if they're empty
       const dataToSend = { ...formData };
-      if (!dataToSend.image.url) {
-        delete dataToSend.image;
+      if (!dataToSend.image?.url) {
+        delete dataToSend['image'];
       }
       
       // Remove parent field if it's empty
       if (!dataToSend.parent) {
-        delete dataToSend.parent;
+        delete dataToSend['parent'];
       }
       
       await apiClient.post('/categories', dataToSend);
@@ -291,7 +288,7 @@ export default function CreateCategoryPage() {
                   type="text"
                   id="imageAlt"
                   name="image.alt"
-                  value={formData.image.alt}
+                  value={formData.image?.alt}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter alternative text for the image"

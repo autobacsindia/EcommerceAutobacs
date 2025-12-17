@@ -188,7 +188,7 @@ export default function TrackOrderPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </section>
         ) : (
           /* Tracking Results Section */
           <section aria-labelledby="results-heading">
@@ -267,7 +267,7 @@ export default function TrackOrderPage() {
                 />
               </div>
             </div>
-          </div>
+          </section>
         )}
       </main>
     </div>

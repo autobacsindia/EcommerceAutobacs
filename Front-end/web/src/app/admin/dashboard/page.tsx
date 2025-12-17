@@ -71,6 +71,7 @@ interface RevenueData {
 interface OrderStatusData {
   name: string;
   value: number;
+  [key: string]: any; // Allow additional properties for Recharts
 }
 
 export default function AdminDashboardPage() {
@@ -102,13 +103,13 @@ export default function AdminDashboardPage() {
       setLoading(true);
       
       // Fetch all data in parallel
-      const [productsRes, ordersRes] = await Promise.all([
+      const [productsRes, ordersRes]: [any, any] = await Promise.all([
         apiClient.get(API_ENDPOINTS.PRODUCTS),
         apiClient.get(`${API_ENDPOINTS.ADMIN_ORDERS}?limit=100`)
       ]);
       
-      const products = productsRes.products || [];
-      const orders = ordersRes.orders || [];
+      const products = productsRes?.products || [];
+      const orders = ordersRes?.orders || [];
       
       // Calculate stats
       const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.totalAmount || 0), 0);
@@ -366,7 +367,7 @@ export default function AdminDashboardPage() {
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name}: ${(percent ? percent * 100 : 0).toFixed(0)}%`}
                 >
                   {orderStatusData.map((entry, index) => (
                     <Cell 

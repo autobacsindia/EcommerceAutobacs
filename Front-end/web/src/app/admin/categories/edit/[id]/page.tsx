@@ -34,13 +34,10 @@ export default function EditCategoryPage() {
     name: '',
     slug: '',
     description: '',
-    parent: '',
+    parent: undefined as string | undefined,
     isActive: true,
     order: 0,
-    image: {
-      url: '',
-      alt: '',
-    },
+    image: undefined as { url: string; alt?: string } | undefined,
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,13 +78,13 @@ export default function EditCategoryPage() {
         name: categoryData.name || '',
         slug: categoryData.slug || '',
         description: categoryData.description || '',
-        parent: categoryData.parent?._id || categoryData.parent || '',
+        parent: categoryData.parent?._id || categoryData.parent || undefined,
         isActive: categoryData.isActive !== undefined ? categoryData.isActive : true,
         order: categoryData.order || 0,
-        image: {
-          url: categoryData.image?.url || '',
-          alt: categoryData.image?.alt || '',
-        },
+        image: categoryData.image ? {
+          url: categoryData.image.url || '',
+          alt: categoryData.image.alt || ''
+        } : undefined,
       });
       
       // Set image preview if there's an existing image
@@ -112,7 +109,7 @@ export default function EditCategoryPage() {
       setFormData(prev => ({
         ...prev,
         image: {
-          ...prev.image,
+          ...(prev.image || { url: '', alt: '' }),
           [imageField]: value
         }
       }));
@@ -136,7 +133,7 @@ export default function EditCategoryPage() {
       setFormData(prev => ({
         ...prev,
         image: {
-          ...prev.image,
+          ...(prev.image || { url: '', alt: '' }),
           url: previewUrl
         }
       }));
@@ -163,13 +160,13 @@ export default function EditCategoryPage() {
       
       // Remove image fields if they're empty
       const dataToSend = { ...formData };
-      if (!dataToSend.image.url) {
-        delete dataToSend.image;
+      if (!dataToSend.image?.url) {
+        delete dataToSend['image'];
       }
       
       // Remove parent field if it's empty
       if (!dataToSend.parent) {
-        delete dataToSend.parent;
+        delete dataToSend['parent'];
       }
       
       await apiClient.put(`/categories/${categoryId}`, dataToSend);
@@ -391,7 +388,7 @@ export default function EditCategoryPage() {
                   type="text"
                   id="imageAlt"
                   name="image.alt"
-                  value={formData.image.alt}
+                  value={formData.image?.alt}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter alternative text for the image"
