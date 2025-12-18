@@ -1,21 +1,32 @@
 import mongoose from 'mongoose';
-import Product from './models/Product.js';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 async function testConnection() {
   try {
-    console.log('Connecting to MongoDB...');
-    await mongoose.connect('mongodb://localhost:27017/autobacs');
-    console.log('Connected successfully!');
+    console.log('🔍 Testing MongoDB connection...');
+    console.log('MongoDB URI:', process.env.MONGO_URI);
     
-    // Count products
-    const count = await Product.countDocuments();
-    console.log(`Found ${count} products`);
+    // Try to connect with a shorter timeout
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000, // 5 second timeout
+      socketTimeoutMS: 5000,
+    });
     
-    // Close connection
+    console.log('✅ Connected to MongoDB successfully!');
+    
+    // Test a simple operation
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    console.log('📋 Available collections:', collections.map(c => c.name));
+    
     await mongoose.connection.close();
-    console.log('Connection closed');
+    console.log('🔌 Disconnected from MongoDB');
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('❌ MongoDB connection failed:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error name:', error.name);
   }
 }
 

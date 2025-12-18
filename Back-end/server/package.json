@@ -22,11 +22,9 @@
     "test-elasticsearch": "node test-elasticsearch.js",
     "test-elasticsearch-connection": "node test-elasticsearch-connection.js",
     "reindex-products": "node reindex-products.js",
-    "import-wordpress-products": "node import-wordpress-products.js",
-    "diagnose-wordpress-import": "node diagnose-wordpress-import.js",
-    "test-improved-import": "node test-improved-import.js",
-    "test-wordpress-connection": "node test-wordpress-connection.js",
-    "verify-wordpress-config": "node verify-wordpress-config.js"
+    "clear-products-and-categories": "node clear-products-and-categories.js",
+    "verify-migrated-data": "node verify-migrated-data.js",
+    "import-migrated-data": "node import-migrated-data.js"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",
