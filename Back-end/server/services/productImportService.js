@@ -4,6 +4,7 @@ import Category from '../models/Category.js';
 import ImportJob from '../models/ImportJob.js';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
+import WooCommerceApiClient from './woocommerceApiClient.js';
 
 class ProductImportService {
   constructor() {
@@ -18,6 +19,9 @@ class ProductImportService {
     if (!this.wordpressSiteUrl || !this.wordpressApiKey || !this.wordpressApiSecret) {
       throw new Error('Missing required WordPress API configuration');
     }
+    
+    // Initialize WooCommerce API client
+    this.apiClient = new WooCommerceApiClient();
   }
 
   /**
@@ -28,22 +32,7 @@ class ProductImportService {
    */
   async fetchProductsFromWordPress(page = 1, perPage = this.importBatchSize) {
     try {
-      const url = `${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products`;
-      
-      const response = await axios.get(url, {
-        auth: {
-          username: this.wordpressApiKey,
-          password: this.wordpressApiSecret
-        },
-        params: {
-          page,
-          per_page: perPage,
-          status: 'publish' // Only import published products
-        },
-        timeout: 30000 // 30 second timeout
-      });
-      
-      return response.data;
+      return await this.apiClient.fetchProducts(page, perPage);
     } catch (error) {
       throw new Error(`Failed to fetch products from WordPress: ${error.message}`);
     }
@@ -55,22 +44,7 @@ class ProductImportService {
    */
   async getTotalProductCount() {
     try {
-      const url = `${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products`;
-      
-      const response = await axios.get(url, {
-        auth: {
-          username: this.wordpressApiKey,
-          password: this.wordpressApiSecret
-        },
-        params: {
-          per_page: 1
-        },
-        timeout: 30000 // 30 second timeout
-      });
-      
-      // Get total count from headers
-      const totalCount = response.headers['x-wp-total'] || response.data.length;
-      return parseInt(totalCount);
+      return await this.apiClient.getProductCount();
     } catch (error) {
       throw new Error(`Failed to get product count from WordPress: ${error.message}`);
     }
@@ -97,7 +71,8 @@ class ProductImportService {
       isActive: wpProduct.status === 'publish',
       isFeatured: wpProduct.featured || false,
       tags: wpProduct.tags ? wpProduct.tags.map(tag => tag.name) : [],
-      features: wpProduct.features || []
+      features: wpProduct.features || [],
+      externalId: wpProduct.id.toString() // Store WooCommerce product ID
     };
 
     // Handle images
@@ -149,13 +124,18 @@ class ProductImportService {
    */
   async findOrCreateCategory(wpCategory) {
     try {
-      // Try to find existing category by name or slug
-      let category = await Category.findOne({ 
-        $or: [
-          { name: wpCategory.name },
-          { slug: wpCategory.slug }
-        ]
-      });
+      // Try to find existing category by WooCommerce ID (stored in externalId)
+      let category = await Category.findOne({ externalId: wpCategory.id });
+      
+      if (!category) {
+        // Try to find existing category by name or slug
+        category = await Category.findOne({ 
+          $or: [
+            { name: wpCategory.name },
+            { slug: wpCategory.slug }
+          ]
+        });
+      }
       
       // If not found, create new category
       if (!category) {
@@ -170,8 +150,15 @@ class ProductImportService {
         category = new Category({
           name: wpCategory.name,
           slug: slug,
-          description: wpCategory.description || `Category for ${wpCategory.name}`
+          description: wpCategory.description || `Category for ${wpCategory.name}`,
+          externalId: wpCategory.id // Store WooCommerce ID for future reference
         });
+        await category.save();
+      } else {
+        // Update existing category with latest data
+        category.name = wpCategory.name;
+        category.description = wpCategory.description || `Category for ${wpCategory.name}`;
+        category.externalId = wpCategory.id;
         await category.save();
       }
       
@@ -202,9 +189,14 @@ class ProductImportService {
         productData.categories = categoryIds;
       }
       
-      // Check if product already exists (by SKU)
+      // Check if product already exists (by external ID first, then SKU)
       let existingProduct = null;
-      if (productData.sku) {
+      if (productData.externalId) {
+        existingProduct = await Product.findOne({ externalId: productData.externalId });
+      }
+      
+      // If not found by external ID, try SKU
+      if (!existingProduct && productData.sku) {
         existingProduct = await Product.findOne({ sku: productData.sku });
       }
       

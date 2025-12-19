@@ -74,7 +74,12 @@ const ProductSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  tags: [String]
+  tags: [String],
+  externalId: {
+    type: String,
+    unique: true,
+    sparse: true
+  }
 }, { 
   timestamps: true 
 });

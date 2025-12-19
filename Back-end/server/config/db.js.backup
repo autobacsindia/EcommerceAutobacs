@@ -1,28 +1,27 @@
 import mongoose from "mongoose";
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
-// Mongoose connection options with retry configuration and SSL/TLS enhancements
+const execPromise = promisify(exec);
+
+// Mongoose connection options adjusted for direct IP connection
 const mongooseOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  family: 4, // Use IPv4, skip trying IPv6
-  serverSelectionTimeoutMS: 10000, // Timeout after 10 seconds
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
+  socketTimeoutMS: 10000, // Close sockets after 10 seconds of inactivity
   
-  // SSL/TLS specific options to resolve connection error
-  // Removed tlsInsecure to resolve conflict with tlsAllowInvalidCertificates
-  tls: true,
-  tlsAllowInvalidCertificates: false,
+  // SSL/TLS specific options - disabled for direct IP connection
+  tls: process.env.MONGO_TLS === 'true',
+  tlsAllowInvalidCertificates: process.env.MONGO_TLS_ALLOW_INVALID_CERTIFICATES === 'true',
   tlsAllowInvalidHostnames: false,
-  sslValidate: true,
   
   // Enhanced retry configuration
   retryWrites: true,
   maxPoolSize: 10,
-  heartbeatFrequencyMS: 10000
+  heartbeatFrequencyMS: 5000
 };
 
-// Connection retry logic with exponential backoff
-const connectWithRetry = async (retries = 5, interval = 5000) => {
+// Connection retry logic with exponential backoff (reduced retries for faster feedback)
+const connectWithRetry = async (retries = 3, interval = 2000) => {
   for (let i = 0; i < retries; i++) {
     try {
       await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
@@ -30,9 +29,23 @@ const connectWithRetry = async (retries = 5, interval = 5000) => {
       return mongoose.connection;
     } catch (err) {
       console.error(`✗ MongoDB connection attempt ${i + 1} failed:`, err.message);
+      
+      // Specific error handling for common issues
+      if (err.message.includes('ECONNREFUSED')) {
+        console.error('Connection Refused:');
+        console.error('- Make sure MongoDB is running on the specified IP and port.');
+        console.error('- Check firewall settings to ensure port 27017 is accessible.');
+        console.error('- Verify the IP address and port are correct.');
+      } else if (err.message.includes('authentication') || err.message.includes('Auth')) {
+        console.error('Authentication Issue Detected:');
+        console.error('- Verify MongoDB URI credentials are correct');
+        console.error('- Check if the user exists and has proper permissions');
+      }
+      
       if (i === retries - 1) {
         console.error("✗ MongoDB connection failed after max retries");
-        throw err;
+        console.warn("⚠ Warning: Starting server without database connection. Some features may not work properly.");
+        return null; // Return null instead of throwing error
       }
       // Exponential backoff
       const delay = interval * Math.pow(2, i);
@@ -54,15 +67,21 @@ mongoose.connection.on('disconnected', () => {
 mongoose.connection.on('error', (err) => {
   console.error('✗ Mongoose connection error:', err);
   
-  // Specific handling for SSL/TLS errors
-  if (err.name === 'MongoNetworkError' && err.message.includes('SSL')) {
-    console.error('SSL/TLS connection issue detected. Consider checking:');
-    console.error('- Node.js version compatibility with MongoDB Atlas');
-    console.error('- Network connectivity to MongoDB servers');
-    console.error('- Firewall/proxy settings');
-    console.error('- Certificate validation requirements');
+  // Specific handling for common errors
+  if (err.name === 'MongoNetworkError' && err.message.includes('ECONNREFUSED')) {
+    console.error('Connection Refused: Make sure MongoDB is running on the specified IP and port.');
+    console.error('Check firewall settings to ensure port 27017 is accessible.');
+  } else if (err.message.includes('authentication') || err.message.includes('Auth')) {
+    console.error('Authentication Issue: Verify MongoDB URI credentials are correct.');
   }
 });
+
+// Pre-flight IP check is not needed for direct IP connections
+async function preFlightIPCheck() {
+  // For direct IP connections, we don't need to check Atlas IP whitelisting
+  console.log('Direct IP connection - skipping Atlas IP whitelist check');
+  return true;
+}
 
 // Graceful shutdown handling
 process.on('SIGINT', async () => {
@@ -72,5 +91,4 @@ process.on('SIGINT', async () => {
 });
 
 // Export connection function
-export { connectWithRetry, mongoose };
-
+export { connectWithRetry, mongoose, preFlightIPCheck };

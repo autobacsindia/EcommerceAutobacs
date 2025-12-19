@@ -318,9 +318,11 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-center mb-12">Popular Categories</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <Link href="/categories" className="group">
+            <Link href="/categories/bodykit" className="group">
               <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-blue-400 to-blue-600"></div>
+                <div className="h-48 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                  <span className="text-white text-2xl font-bold">Body Kits</span>
+                </div>
                 <div className="p-6">
                   <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Body Kits</h3>
                   <p className="text-gray-600">Enhance your car's appearance</p>
@@ -328,9 +330,11 @@ export default function Home() {
               </div>
             </Link>
 
-            <Link href="/categories" className="group">
+            <Link href="/categories/performance" className="group">
               <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-red-400 to-red-600"></div>
+                <div className="h-48 bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center">
+                  <span className="text-white text-2xl font-bold">Performance</span>
+                </div>
                 <div className="p-6">
                   <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Performance Parts</h3>
                   <p className="text-gray-600">Boost your engine's power</p>
@@ -338,9 +342,11 @@ export default function Home() {
               </div>
             </Link>
 
-            <Link href="/categories" className="group">
+            <Link href="/categories/suspension" className="group">
               <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-green-400 to-green-600"></div>
+                <div className="h-48 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                  <span className="text-white text-2xl font-bold">Suspension</span>
+                </div>
                 <div className="p-6">
                   <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Suspension Systems</h3>
                   <p className="text-gray-600">Improve ride quality and handling</p>

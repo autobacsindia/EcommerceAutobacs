@@ -335,13 +335,23 @@ router.post("/import/brand/:brandName", protect, admin, asyncHandler(async (req,
 // @desc    Get import status
 // @access  Private/Admin
 router.get("/import/status", protect, admin, asyncHandler(async (req, res) => {
-  // In a real implementation, we would track import jobs in a database
-  // For now, we'll return a placeholder response
-  res.json({
-    success: true,
-    status: 'No import in progress',
-    lastImport: null
-  });
+  try {
+    // Get recent import jobs, sorted by creation date
+    const importJobs = await ImportJob.find({})
+      .sort({ createdAt: -1 })
+      .limit(10);
+    
+    res.json({
+      success: true,
+      jobs: importJobs
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get import status',
+      error: error.message
+    });
+  }
 }));
 
 // @route   GET /products/import/status/:jobId
@@ -426,6 +436,90 @@ router.post("/import/schedule", protect, admin, asyncHandler(async (req, res) =>
     res.status(500).json({
       success: false,
       message: 'Failed to schedule import',
+      error: error.message
+    });
+  }
+}));
+
+// @route   POST /products/import/wordpress/full
+// @desc    Import all products and categories from WordPress
+// @access  Private/Admin
+router.post("/import/wordpress/full", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const MigrationOrchestrationService = (await import('../services/migrationOrchestrationService.js')).default;
+    const migrationService = new MigrationOrchestrationService();
+    
+    // Generate a unique job ID
+    const jobId = `import-full-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Start full migration process
+    const migrationResult = await migrationService.executeFullMigration(jobId, req.user._id, (progress) => {
+      // In a real implementation, we would emit progress events to the client
+      // For now, we'll just log to console
+      console.log(`Migration progress - ${progress.phase}: ${progress.message}`);
+    });
+    
+    if (migrationResult.success) {
+      res.status(200).json({
+        success: true,
+        message: 'Full migration completed successfully',
+        jobId: migrationResult.jobId,
+        summary: migrationResult.summary
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to complete full migration',
+        jobId: migrationResult.jobId,
+        error: migrationResult.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to execute full migration',
+      error: error.message
+    });
+  }
+}));
+
+// @route   POST /products/import/wordpress/categories
+// @desc    Import only categories from WordPress
+// @access  Private/Admin
+router.post("/import/wordpress/categories", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const MigrationOrchestrationService = (await import('../services/migrationOrchestrationService.js')).default;
+    const migrationService = new MigrationOrchestrationService();
+    
+    // Generate a unique job ID
+    const jobId = `import-categories-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Start category migration process
+    const migrationResult = await migrationService.executeCategoryMigration(jobId, req.user._id, (progress) => {
+      // In a real implementation, we would emit progress events to the client
+      // For now, we'll just log to console
+      console.log(`Category migration progress: ${progress.message}`);
+    });
+    
+    if (migrationResult.success) {
+      res.status(200).json({
+        success: true,
+        message: 'Category migration completed successfully',
+        jobId: migrationResult.jobId,
+        summary: migrationResult.summary
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to complete category migration',
+        jobId: migrationResult.jobId,
+        error: migrationResult.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to execute category migration',
       error: error.message
     });
   }
