@@ -104,12 +104,15 @@ export default function AdminDashboardPage() {
       
       // Fetch all data in parallel
       const [productsRes, ordersRes]: [any, any] = await Promise.all([
-        apiClient.get(API_ENDPOINTS.PRODUCTS),
+        apiClient.get(`${API_ENDPOINTS.PRODUCTS}?limit=1000`),
         apiClient.get(`${API_ENDPOINTS.ADMIN_ORDERS}?limit=100`)
       ]);
       
       const products = productsRes?.products || [];
       const orders = ordersRes?.orders || [];
+      
+      // Get total product count from pagination info
+      const totalProductsCount = productsRes?.total || products.length;
       
       // Calculate stats
       const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.totalAmount || 0), 0);
@@ -132,7 +135,7 @@ export default function AdminDashboardPage() {
       const avgFulfillmentTime = 48; // hours - placeholder
       
       setStats({
-        totalProducts: products.length,
+        totalProducts: totalProductsCount,
         totalOrders: orders.length,
         totalRevenue,
         pendingOrders,

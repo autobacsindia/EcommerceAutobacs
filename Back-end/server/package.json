@@ -27,7 +27,11 @@
     "verify-migrated-data": "node verify-migrated-data.js",
     "import-migrated-data": "node import-migrated-data.js",
     "woocommerce-migration": "node woocommerceMigrationCli.js",
-    "test-migration": "node testMigrationSystem.js"
+    "test-migration": "node testMigrationSystem.js",
+    "validate-categories": "node validate-product-categories.js",
+    "validate-categories-with-mapping": "node validate-product-categories-with-mapping.js",
+    "assign-header-nav-categories": "node assign-header-categories.js",
+    "test-validate-categories": "node test-validate-product-categories.js"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",

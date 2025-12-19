@@ -1,0 +1,80 @@
+PRODUCT CATEGORY VALIDATION SUMMARY REPORT (WITH MAPPING)
+=====================================================
+
+Total Products Validated: 852
+Valid Assignments: 815
+Invalid Assignments: 37
+Validation Success Rate: 95.66%
+
+Category Distribution:
+  Accessories: 356
+  Exterior: 11
+  Interior: 3
+  Body Kits: 372
+  Performance: 3
+  Suspension: 12
+  Audio: 0
+  Lights: 58
+  INVALID/MISSING: 37
+
+Mappings Applied: 426
+  1. "Autobacs India" → "Accessories" (Toyota Hilux Smoked LED Tail Light)
+  2. "Exterior Accessories" → "Exterior" (Scorpio N bonnet light mount)
+  3. "Body kit car bumber" → "Body Kits" (Toyota Hilux Tundra Kit Full Upgrade Bundle)
+  4. "auxbeam" → "Lights" (Auxbeam 5D Series Combo Curved Dual Row LED Light Bars)
+  5. "Autobacs India" → "Accessories" (Honda Civic Type R Bodykit – Premium Conversion Kit for 2019–2020 Civic)
+  6. "Autobacs India" → "Accessories" (Mini Cooper JCW Body kit with spoiler)
+  7. "Autobacs India" → "Accessories" (Lumma Wide Body Kit for Land Rover Defender 110)
+  8. "Autobacs India" → "Accessories" (BMW 3 Series GT F34 Body Kit with M4 style Front Bumper, Rear Bumper &amp; Side Skirts)
+  9. "Autobacs India" → "Accessories" (Toyota Hilux to LC300 Front Conversion Kit)
+  10. "Autobacs India" → "Accessories" (Toyota Fortuner Type 3/4 to LC300 Front Conversion Kit)
+  11. "Awning" → "Accessories" (M.A.R.K. SPORTS Side Awning)
+  12. "Autobacs India" → "Accessories" (BMW 3 Series F30 / F35 M3 Body Kit)
+  13. "cross bar" → "Accessories" (M.A.R.K Sports Universal Cross bar and Roof box COMBO)
+  14. "M.A.R.K. Sport" → "Accessories" (M.A.R.K. Sports Roof Box 600L)
+  15. "Autobacs India" → "Accessories" (Prado Style Carbon Fibre Design Steering Wheel for Toyota Hilux, Fortuner & Crysta)
+  16. "Autobacs India" → "Accessories" (Mahindra Thar King Kong Style Headlight)
+  17. "Autobacs India" → "Accessories" (Armando Roll Bar for Toyota Hilux)
+  18. "Autobacs India" → "Accessories" (Toyota innova hycross maybach grill)
+  19. "ARMORO" → "Accessories" (Mahindra Thar 2020 overhead storage mesh)
+  20. "ARMORO" → "Accessories" (Mahindra Thar 2020 Overhead Storage Net)
+  ... and 406 more mappings
+
+Invalid/Missing Category Assignments:
+  1. Aozoom LED Headlights for Mahindra Thar & Jeep (ID: 6944eb2ab290d5ed4ba2a710) - Assigned: AOZOOM
+  2. BAZARD Floor Mat for Hilux (ID: 6944eb34b290d5ed4ba2a9fd) - Assigned: Bazard
+  3. CPL FILTER FOR 70MAI A810 DASHCAM (ID: 6944eb42b290d5ed4ba2ad14) - Assigned: 70MAI
+  4. CPL Filter for 70mai A510, A500S & A200 (ID: 6944eb42b290d5ed4ba2ad2a) - Assigned: 70MAI
+  5. 70mai A510 HDR Dual Dashcam (ID: 6944eb43b290d5ed4ba2ad3c) - Assigned: 70MAI
+  6. 70MAI REARVIEW DASH CAM S500 3K DUAL HDR (ID: 6944eb43b290d5ed4ba2ad9e) - Assigned: 70MAI
+  7. 70mai Pro Plus+ Dash Cam A500S Front and Rear (ID: 6944eb43b290d5ed4ba2adfb) - Assigned: 70MAI
+  8. WARN VR EVO 12 and 12-S winch (ID: 6944eb4eb290d5ed4ba2b389) - Assigned: warn
+  9. WARN  VR EVO 10 and 10-S  winch (ID: 6944eb4eb290d5ed4ba2b394) - Assigned: warn
+  10. valvetronic Exhaust for Jeep Wrangler (ID: 6944eb53b290d5ed4ba2b4d4) - Assigned: Remus
+  11. Tri-Fold Cover for Toyota Hilux – Durable, Weather-Resistant Bed Cover (ID: 6944eb5ab290d5ed4ba2b925) - Assigned: JCBL
+  12. armado Roll Bar for Toyota Hilux (ID: 6944eb5ab290d5ed4ba2b99b) - Assigned: armado
+  13. Dr. Nano Foam Cell Shock Absorbers with 2” Lift for Toyota Hilux (ID: 6944eb5fb290d5ed4ba2bba2) - Assigned: Dr. Nano
+  14. Dr. Nano Lowering Coil Springs for Hyundai i20 Elite (ID: 6944eb5fb290d5ed4ba2bc00) - Assigned: Dr. Nano
+  15. Jmax Engineering Snorkel for Toyota Hilux (ID: 6944eb5fb290d5ed4ba2bc66) - Assigned: Jmax
+  16. Niaoguichao Shackle Hook (ID: 6944eb64b290d5ed4ba2bd7d) - Assigned: Niaoguichao
+  17. BITA Trailer Arm (ID: 6944eb64b290d5ed4ba2bda3) - Assigned: BITA
+  18. BITA Winch Hook Rope Guide (ID: 6944eb64b290d5ed4ba2bdb0) - Assigned: BITA
+  19. Overland Manual Roller Shutter For Toyota Hilux (ID: 6944eb65b290d5ed4ba2be3e) - Assigned: Overland
+  20. Armrest Console with USB and C Type Charging Ports for Mahindra Thar 2020+ (ID: 6944eb66b290d5ed4ba2bf55) - Assigned: Armrest Console
+  21. Armrest Console with USB Charging Ports for Mahindra Thar 2020+ (ID: 6944eb66b290d5ed4ba2bf62) - Assigned: Armrest Console
+  22. Tesla Style Android Screen For Ford Endeavour Including 360 Camera (ID: 6944eb6db290d5ed4ba2bfd7) - Assigned: Android Screen
+  23. Dr Nano Upper Control Arms for Toyota Fortuner and Hilux 2005+ (ID: 6944eb6db290d5ed4ba2c0a3) - Assigned: Dr. Nano
+  24. Borla Single Tip Valvetronic Exhaust With Vacuum Valve (ID: 6944eb6eb290d5ed4ba2c150) - Assigned: Borla
+  25. Borla Double Tip Valvetronic Exhaust With Vacuum Valve (ID: 6944eb6eb290d5ed4ba2c15d) - Assigned: Borla
+  26. Safari Armax Snorkel For Toyota Hilux (ID: 6944eb6eb290d5ed4ba2c193) - Assigned: Safari Snorkels
+  27. Dr. Nano 12000 Lbs Synthetic Rope Off-road Winch (ID: 6944eb74b290d5ed4ba2c246) - Assigned: Dr. Nano
+  28. Dr. Nano Nitro Gas Shock Absorbers For Mahindra Bolero (ID: 6944eb74b290d5ed4ba2c2ae) - Assigned: Dr. Nano
+  29. Bullhorn Roof Carrier Classic Pipe for Mahindra Thar (ID: 6944eb75b290d5ed4ba2c34b) - Assigned: Bullhorn
+  30. Bullhorn Roof Carrier Matrix Sheet for Mahindra Thar (ID: 6944eb75b290d5ed4ba2c358) - Assigned: Bullhorn
+  31. Bullhorn Door Hinge For Mahindra Thar (ID: 6944eb75b290d5ed4ba2c39b) - Assigned: Bullhorn
+  32. Baseus 20000mAh CarPower Bank 2000A 12VBattery Charger (ID: 6944eb76b290d5ed4ba2c437) - Assigned: Baseus
+  33. OUTLANDER Matrix Model Roof Rack with LED Lights (ID: 6944eb7cb290d5ed4ba2c559) - Assigned: OUTLANDER
+  34. Mahindra Thar Grill Bullhorn 2024 Style (ID: 6944eb7cb290d5ed4ba2c5ce) - Assigned: Bullhorn
+  35. Mercedes-Benz E-Class W212 (2009–2013) to 2023 AMG Body Kit (ID: 6944eb84b290d5ed4ba2c8b8) - Assigned: AMG
+  36. Mercedes C-Class W205 (2014-2018) AMG Facelift Conversion Kit (ID: 6944eb85b290d5ed4ba2c942) - Assigned: AMG
+  37. Mahindra Thar UFO LED Roof Marker Lights (ID: 6944eb8bb290d5ed4ba2cc37) - Assigned: Car Lighting

@@ -53,9 +53,11 @@ router.get("/slug/:slug", asyncHandler(async (req, res) => {
     let hyphenatedSlug = req.params.slug;
     
     if (req.params.slug === 'bodykit') {
-      hyphenatedSlug = 'body-kit';
+      hyphenatedSlug = 'body-kits';
     } else if (req.params.slug === 'lights') {
-      hyphenatedSlug = 'light-s';
+      hyphenatedSlug = 'lighting';
+    } else if (req.params.slug === 'audio') {
+      hyphenatedSlug = 'speaker';
     }
     
     // Only search if we actually transformed the slug
