@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Loader2, Navigation2 } from 'lucide-react';
+import { X, Loader2, Navigation2, MapPin } from 'lucide-react';
 import { useLocation } from '@/contexts/LocationContext';
 import { LocationSelectRequest } from '@/types/location';
 import toast from 'react-hot-toast';
+import ManualLocationForm from './ManualLocationForm';
 
 interface LocationSelectorProps {
   isOpen: boolean;
@@ -19,17 +20,30 @@ export default function LocationSelector({
 }: LocationSelectorProps) {
   const { selectLocation, isLoading } = useLocation();
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const maxRetries = 3;
 
   if (!isOpen) return null;
 
   const handleClose = () => {
     setUseCurrentLocation(false);
+    setRetryCount(0);
+    setShowManualForm(false);
     onClose();
   };
 
+  // Validate coordinates
+  const isValidCoordinates = (latitude: number, longitude: number): boolean => {
+    return (
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180
+    );
+  };
 
-
-  const handleUseCurrentLocation = async () => {
+  const handleUseCurrentLocation = async (retryAttempt = 0) => {
     try {
       setUseCurrentLocation(true);
       
@@ -57,9 +71,18 @@ export default function LocationSelector({
             }
             reject(new Error(message));
           },
-          { enableHighAccuracy: true, timeout: 10000 }
+          { 
+            enableHighAccuracy: true, 
+            timeout: 10000,
+            maximumAge: retryAttempt > 0 ? 0 : 300000 // Force fresh data on retries
+          }
         );
       });
+
+      // Validate coordinates
+      if (!isValidCoordinates(coords.latitude, coords.longitude)) {
+        throw new Error('Invalid coordinates received from device.');
+      }
 
       // Select location using coordinates
       await selectLocation({
@@ -70,17 +93,69 @@ export default function LocationSelector({
       });
 
       toast.success('Location detected successfully!');
+      setRetryCount(0); // Reset retry count on success
       onLocationSelected?.();
       handleClose();
     } catch (error: any) {
       console.error('Current location error:', error);
       
+      // Check if this is a reverse geocode error and we can retry
+      const isReverseGeocodeError = error.message && error.message.includes('Failed to reverse geocode coordinates');
+      
+      if (isReverseGeocodeError && retryAttempt < maxRetries) {
+        // Exponential backoff retry
+        const retryDelay = Math.pow(2, retryAttempt) * 1000; // 1s, 2s, 4s
+        toast.loading(`Retrying... (${retryAttempt + 1}/${maxRetries})`);
+        
+        setTimeout(() => {
+          toast.dismiss();
+          handleUseCurrentLocation(retryAttempt + 1);
+        }, retryDelay);
+        
+        setRetryCount(retryAttempt + 1);
+        return;
+      }
+      
       // Show user-friendly error message
       let errorMessage = error.message || 'Failed to detect location';
       
+      // Provide more specific guidance for reverse geocode errors
+      if (isReverseGeocodeError) {
+        errorMessage = 'Unable to determine your address from location.';
+        // Offer manual entry option
+        toast((t) => (
+          <div className="flex flex-col space-y-2">
+            <span>{errorMessage}</span>
+            <div className="flex space-x-2 pt-1">
+              <button 
+                className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  setShowManualForm(true);
+                }}
+              >
+                Enter Manually
+              </button>
+              <button 
+                className="px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded"
+                onClick={() => toast.dismiss(t.id)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ), { duration: 10000 });
+        return; // Don't show the regular error toast
+      }
+      
       toast.error(errorMessage);
+      
+      // Reset retry count after final attempt
+      setRetryCount(0);
     } finally {
-      setUseCurrentLocation(false);
+      if (retryCount === 0 || retryCount >= maxRetries) {
+        setUseCurrentLocation(false);
+      }
     }
   };
 
@@ -111,23 +186,39 @@ export default function LocationSelector({
               </p>
             </div>
             
-            <button
-              onClick={handleUseCurrentLocation}
-              disabled={useCurrentLocation}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-            >
-              {useCurrentLocation ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Detecting Location...
-                </>
-              ) : (
-                <>
-                  <Navigation2 className="h-5 w-5" />
-                  Use My Current Location
-                </>
-              )}
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={handleUseCurrentLocation}
+                disabled={useCurrentLocation}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {useCurrentLocation ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Detecting Location...
+                  </>
+                ) : (
+                  <>
+                    <Navigation2 className="h-5 w-5" />
+                    Use My Current Location
+                  </>
+                )}
+              </button>
+              
+              <div className="relative flex items-center justify-center">
+                <div className="border-t border-gray-300 flex-grow"></div>
+                <span className="mx-4 text-gray-500 text-sm">OR</span>
+                <div className="border-t border-gray-300 flex-grow"></div>
+              </div>
+              
+              <button
+                onClick={() => setShowManualForm(true)}
+                className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <MapPin className="h-5 w-5" />
+                Enter Location Manually
+              </button>
+            </div>
             
             <p className="mt-4 text-xs text-center text-gray-500">
               🇮🇳 We deliver anywhere in India
@@ -135,6 +226,16 @@ export default function LocationSelector({
           </div>
         </div>
       </div>
+      
+      <ManualLocationForm 
+        isOpen={showManualForm}
+        onClose={() => setShowManualForm(false)}
+        onLocationSelected={() => {
+          setShowManualForm(false);
+          onLocationSelected?.();
+          handleClose();
+        }}
+      />
     </div>
   );
 }

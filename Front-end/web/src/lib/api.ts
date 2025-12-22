@@ -207,6 +207,12 @@ class APIClient {
       // Extract error message
       let errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
     
+      // Provide more specific handling for reverse geocode errors
+      if (response.url && response.url.includes('/location/select') && 
+          errorMessage && errorMessage.toLowerCase().includes('reverse geocode')) {
+        errorMessage = 'Failed to reverse geocode coordinates';
+      }
+    
       // Include validation errors in the message if they exist
       if (typeof data === 'object' && data.errors && Array.isArray(data.errors)) {
         const validationErrors = data.errors.map((err: any) => {

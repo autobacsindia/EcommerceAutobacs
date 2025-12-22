@@ -69,14 +69,40 @@ class LocationService {
   }
 
   /**
+   * Validate coordinate values
+   */
+  private isValidCoordinates(latitude: number, longitude: number): boolean {
+    return (
+      !isNaN(latitude) &&
+      !isNaN(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180
+    );
+  }
+
+  /**
    * Select and save a delivery location
    */
   async selectLocation(data: LocationSelectRequest): Promise<LocationSelectResponse> {
     try {
+      // Validate coordinates if present
+      if (data.coordinates) {
+        if (!this.isValidCoordinates(data.coordinates.latitude, data.coordinates.longitude)) {
+          throw new Error('Invalid coordinates provided');
+        }
+      }
+      
       const response = await apiClient.post<LocationSelectResponse>(
         `${this.baseUrl}/select`,
         data,
-        { headers: this.getHeaders() }
+        { 
+          headers: this.getHeaders(),
+          timeout: 15000, // 15 second timeout
+          retries: 2,
+          retryDelay: 1000
+        }
       );
       
       // Store location in local storage for quick access
@@ -85,8 +111,14 @@ class LocationService {
       }
       
       return response;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Select location error:', error);
+      
+      // Provide more specific error for reverse geocode failures
+      if (error.message && error.message.includes('reverse geocode')) {
+        throw new Error('Failed to reverse geocode coordinates. Please try entering your location manually.');
+      }
+      
       throw error;
     }
   }
@@ -302,19 +334,39 @@ class LocationService {
     return new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
+          // Validate coordinates before resolving
+          const { latitude, longitude } = position.coords;
+          if (this.isValidCoordinates(latitude, longitude)) {
+            resolve({
+              latitude,
+              longitude
+            });
+          } else {
+            reject(new Error('Invalid coordinates received from device'));
+          }
         },
         (error) => {
           console.error('Get current coordinates error:', error);
-          reject(new Error('Unable to retrieve your location'));
+          let message = 'Unable to retrieve your location';
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              message = 'Location permission denied. Please enable location access in your browser settings.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              message = 'Location information unavailable. Please ensure location services are enabled.';
+              break;
+            case error.TIMEOUT:
+              message = 'Location request timed out. Please try again.';
+              break;
+          }
+          
+          reject(new Error(message));
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
+          timeout: 15000, // Increased timeout
+          maximumAge: 300000 // 5 minutes
         }
       );
     });
