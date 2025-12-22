@@ -46,17 +46,21 @@ src/
 │   ├── products/       # Product listing and detail pages
 │   ├── profile/        # User profile pages
 │   ├── search/         # Search results pages
+│   ├── vehicles/       # Vehicle-to-product mapping pages
 │   └── wishlist/       # Wishlist page
 ├── components/         # Reusable UI components
 │   ├── categories/     # Category-related components
 │   ├── layout/         # Layout components (header, footer, etc.)
 │   ├── products/       # Product-related components
+│   ├── vehicles/       # Vehicle-related components
 │   └── ui/             # Generic UI components
 ├── context/            # React context providers
 ├── hooks/              # Custom React hooks
 ├── lib/                # Utility functions and helpers
 │   ├── api/            # API client and utilities
 │   └── types/          # TypeScript type definitions
+├── services/           # External service integrations
+│   └── wordpressService.ts  # WordPress API service
 └── styles/             # Global styles and Tailwind config
 ```
 
@@ -106,7 +110,28 @@ npm start
 
 ## API Integration
 
-The frontend communicates with the backend API at `http://localhost:5000`.
+The frontend communicates with multiple APIs:
+
+1. **Backend API** at `http://localhost:5000`
+2. **WordPress/WooCommerce API** for vehicle-to-product mapping
+
+### WordPress Integration
+
+The vehicle-to-product mapping system integrates with WordPress and WooCommerce through the REST API.
+See `VEHICLE_PRODUCT_MAPPING_IMPLEMENTATION.md` for detailed setup instructions.
+
+#### Required Environment Variables
+
+To enable WordPress integration, uncomment and configure the following variables in your `.env.local` file:
+
+```
+#NEXT_PUBLIC_WORDPRESS_SITE_URL=https://yourdomain.com
+#NEXT_PUBLIC_WORDPRESS_API_VERSION=wc/v3
+#NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY=your_consumer_key
+#NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET=your_consumer_secret
+```
+
+Then replace the placeholder values with your actual WordPress site URL and API credentials.
 
 ### API Endpoints
 
@@ -140,6 +165,15 @@ The frontend communicates with the backend API at `http://localhost:5000`.
 - `POST /wishlist/add` - Add item to wishlist
 - `DELETE /wishlist/remove` - Remove item from wishlist
 - `DELETE /wishlist/clear` - Clear entire wishlist
+
+#### Vehicles (`/vehicles`) - WordPress Integration
+- `GET /wp-json/wp/v2/vehicle` - List all vehicle terms
+- `GET /wp-json/wc/v3/products?vehicle={slug}` - Products for specific vehicle
+- `GET /wp-json/wc/v3/products?vehicle={slug}&category={slug}` - Filtered products for vehicle
+
+##### Debugging Routes
+- `/vehicles/test-connectivity` - Test WordPress API connectivity
+- `/vehicles/test-wordpress` - Test WordPress data fetching
 
 ## Environment Variables
 
