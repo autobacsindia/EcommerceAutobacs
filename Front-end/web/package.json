@@ -12,10 +12,12 @@
     "test-wordpress": "node scripts/test-wordpress-api.js",
     "test-makes": "node scripts/test-vehicle-makes.js",
     "analyze-products": "node scripts/analyze-products.js",
-    "extract-vehicles": "node scripts/extract-vehicles.js"
+    "extract-vehicles": "node scripts/extract-vehicles.js",
+    "import-vehicle-images": "node scripts/download-vehicle-images.js"
   },
   "dependencies": {
     "axios": "^1.13.2",
+    "cheerio": "^1.1.2",
     "clsx": "^2.1.1",
     "firebase": "^12.5.0",
     "lucide-react": "^0.554.0",
