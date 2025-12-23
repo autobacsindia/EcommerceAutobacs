@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { use, useSearchParams, useRouter } from 'next/navigation';
+import { useState, useEffect, use } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingCart, Heart, Filter } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
@@ -40,19 +40,19 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
     const fetchData = async () => {
       setLoading(true);
       setError(null);
-      
+        
       try {
         // Fetch product categories
         const categoriesData = await wordpressService.getProductCategories();
         setCategories(categoriesData);
-        
+          
         // Fetch products for the vehicle
         const productsData = await wordpressService.getProductsByVehicle(
           make, 
           selectedCategory || undefined
         );
         setProducts(productsData);
-        
+          
         // Show a warning if no data is found and WordPress API might not be configured
         if (categoriesData.length === 0 && productsData.length === 0) {
           const isWordPressConfigured = process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL && 
@@ -72,7 +72,7 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
         setLoading(false);
       }
     };
-
+  
     fetchData();
   }, [make, selectedCategory]);
 
