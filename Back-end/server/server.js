@@ -153,7 +153,7 @@ async function initializeServer() {
     console.log('---------------------------------------\n');
 
     // Start server
-    const PORT = process.env.PORT || 5000;  // Default to 5000 to match frontend expectations
+    const PORT = process.env.PORT || 5001;  // Default to 5001 to avoid conflicts
     app.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);

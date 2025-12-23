@@ -17,7 +17,7 @@
   
   <!-- Vehicle name text -->
   <text x="200" y="60" font-family="Arial, sans-serif" font-size="24" fill="#333333" text-anchor="middle" font-weight="bold">
-    Maruti Jimny
+    Kia Seltos
   </text>
   
   <!-- Placeholder label -->

@@ -115,45 +115,31 @@ export default function VehiclesPage() {
             <p className="text-gray-500 text-lg">No vehicles found.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {vehicles.map((vehicle) => (
               <Link
                 key={vehicle._id}
                 href={`/vehicles/${encodeURIComponent(vehicle.slug)}`}
-                className="group block bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100"
+                className="group block"
               >
-                <div className="h-32 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative overflow-hidden">
-                  <img 
-                    src={vehicle.image?.url || `/images/vehicles/${vehicle.slug}.jpg`} 
-                    alt={vehicle.name}
-                    className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      // Try SVG version if JPG fails
-                      if (target.src.includes(vehicle.slug)) {
-                        if (target.src.endsWith('.jpg')) {
-                          target.src = target.src.replace('.jpg', '.svg');
-                        } else {
-                          target.src = '/images/fallback-product.png';
-                        }
-                      } else {
+                <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">
+                  <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={vehicle.image?.url || `/images/vehicles/${vehicle.slug}.jpg`} 
+                      alt={vehicle.name}
+                      className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        // Use fallback if image fails to load
                         target.src = '/images/fallback-product.png';
-                      }
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <h3 className="text-xl font-bold text-white text-center px-2">
+                      }}
+                    />
+                  </div>
+                  <div className="p-3 text-center bg-gray-50">
+                    <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                       {vehicle.name}
                     </h3>
                   </div>
-                  <h3 className="absolute bottom-0 left-0 right-0 text-xl font-bold text-gray-800 bg-white bg-opacity-90 p-2 text-center truncate">
-                    {vehicle.name}
-                  </h3>
-                </div>
-                <div className="p-5 bg-white border-t border-gray-100">
-                  <p className="text-sm text-gray-500 text-center">
-                    Products
-                  </p>
                 </div>
               </Link>
             ))}

@@ -21,7 +21,8 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
   // Unwrap the params Promise
-  const { make } = use(params);
+  const paramsValue = use(params);
+  const { make } = paramsValue;
   const vehicleName = decodeURIComponent(make);
   
   const [products, setProducts] = useState<WordPressProduct[]>([]);
