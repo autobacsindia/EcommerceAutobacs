@@ -97,12 +97,22 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
                 <div className="h-48 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative overflow-hidden">
                   <img 
                     src={vehicle.image?.url || `/images/vehicles/${vehicle.slug}.jpg`} 
-                    alt={`${vehicle.make} ${vehicle.model}`}
+                    alt={vehicle.image?.alt || `${vehicle.make} ${vehicle.model}` || vehicle.name}
                     className="object-cover w-full h-full"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
-                      target.src = '/images/vehicles/placeholder.jpg'; // fallback image
+                      // First try SVG fallback, then generic fallback
+                      if (target.src.includes('.jpg')) {
+                        target.src = `/images/vehicles/${vehicle.slug}.svg`;
+                        // Set up another error handler in case SVG also fails
+                        target.onerror = () => {
+                          target.src = '/images/fallback-product.png';
+                        };
+                      } else {
+                        target.src = '/images/fallback-product.png';
+                      }
                     }}
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300">
                     <span className="text-white text-lg font-semibold">View Details</span>

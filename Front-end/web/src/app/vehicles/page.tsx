@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import WordPressDiagnostics from '@/components/vehicles/WordPressDiagnostics';
 import { vehicleService, type Vehicle } from '@/services/vehicleService';
 
 export default function VehiclesPage() {
@@ -30,7 +29,6 @@ export default function VehiclesPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white">
-        <WordPressDiagnostics />
         
         {/* Hero Section */}
         <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
@@ -89,7 +87,6 @@ export default function VehiclesPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <WordPressDiagnostics />
       
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
@@ -126,13 +123,22 @@ export default function VehiclesPage() {
                   <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
                     <img 
                       src={vehicle.image?.url || `/images/vehicles/${vehicle.slug}.jpg`} 
-                      alt={vehicle.name}
+                      alt={vehicle.name || vehicle.make + ' ' + vehicle.model}
                       className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
-                        // Use fallback if image fails to load
-                        target.src = '/images/fallback-product.png';
+                        // First try SVG fallback, then generic fallback
+                        if (target.src.includes('.jpg')) {
+                          target.src = `/images/vehicles/${vehicle.slug}.svg`;
+                          // Set up another error handler in case SVG also fails
+                          target.onerror = () => {
+                            target.src = '/images/fallback-product.png';
+                          };
+                        } else {
+                          target.src = '/images/fallback-product.png';
+                        }
                       }}
+                      loading="lazy"
                     />
                   </div>
                   <div className="p-3 text-center bg-gray-50">

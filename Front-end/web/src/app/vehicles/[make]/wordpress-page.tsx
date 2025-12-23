@@ -11,7 +11,6 @@ import { formatCurrency } from '@/lib/utils';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
-import WordPressDiagnostics from '@/components/vehicles/WordPressDiagnostics';
 
 export default function WordPressVehicleProductsPage({ params }: { params: Promise<{ make: string }> }) {
   const router = useRouter();
@@ -150,7 +149,7 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
 
   return (
     <div className="min-h-screen bg-white">
-      <WordPressDiagnostics />
+      
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

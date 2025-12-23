@@ -5,6 +5,7 @@ interface Vehicle {
   year: number;
   variant?: string;
   slug: string;
+  name: string;  // Added to match service implementation
   image?: {
     url: string;
     alt: string;
@@ -57,18 +58,25 @@ export const vehicleService = {
     try {
       const response = await vehicleApi.get('/vehicles') as VehicleApiResponse;
       if (response.success && response.vehicles) {
-        return response.vehicles.map(vehicle => ({
-          ...vehicle,
-          name: vehicle.make + ' ' + vehicle.model,
-          image: vehicle.image || { 
-            url: getVehicleImageUrl(vehicle.slug), 
-            alt: vehicle.make + ' ' + vehicle.model 
-          }
-        }));
+        return response.vehicles.map(vehicle => {
+          // Use the API-provided image if available, otherwise use mapping function
+          const imageUrl = vehicle.image?.url || getVehicleImageUrl(vehicle.slug);
+          const imageAlt = vehicle.image?.alt || (vehicle.make + ' ' + vehicle.model);
+          
+          return {
+            ...vehicle,
+            name: vehicle.make + ' ' + vehicle.model,
+            image: {
+              url: imageUrl,
+              alt: imageAlt
+            }
+          };
+        });
       }
       return [];
     } catch (error) {
       console.error('Error fetching vehicles:', error);
+      console.error('Failed to fetch vehicles from API');
       return [];
     }
   },
@@ -103,11 +111,24 @@ export const vehicleService = {
     try {
       const response = await vehicleApi.get('/vehicles/' + id) as VehicleApiResponse;
       if (response.success && response.vehicle) {
-        return response.vehicle;
+        const vehicle = response.vehicle;
+        // Ensure the vehicle has the name and proper image structure
+        const imageUrl = vehicle.image?.url || getVehicleImageUrl(vehicle.slug);
+        const imageAlt = vehicle.image?.alt || (vehicle.make + ' ' + vehicle.model);
+        
+        return {
+          ...vehicle,
+          name: vehicle.make + ' ' + vehicle.model,
+          image: {
+            url: imageUrl,
+            alt: imageAlt
+          }
+        };
       }
       return null;
     } catch (error) {
       console.error('Error fetching vehicle with ID ' + id + ':', error);
+      console.error('Failed to fetch vehicle from API');
       return null;
     }
   }

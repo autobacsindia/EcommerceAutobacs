@@ -102,7 +102,6 @@ export default function VehicleMappingDocumentation() {
               <ul className="list-disc pl-5 space-y-3 text-gray-700">
                 <li><code>wordpressService.ts</code> - API communication layer</li>
                 <li><code>VehicleProducts.tsx</code> - Product display component</li>
-                <li><code>WordPressDiagnostics.tsx</code> - Configuration status component</li>
                 <li>TypeScript interfaces for data validation</li>
               </ul>
             </div>

@@ -11,7 +11,6 @@ import { formatCurrency } from '@/lib/utils';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
-import WordPressDiagnostics from '@/components/vehicles/WordPressDiagnostics';
 
 interface VehicleProductsProps {
   vehicleSlug: string;
@@ -150,7 +149,7 @@ export default function VehicleProducts({ vehicleSlug, vehicleName }: VehiclePro
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <WordPressDiagnostics />
+      
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
