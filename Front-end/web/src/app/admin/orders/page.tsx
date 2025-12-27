@@ -45,7 +45,7 @@ export default function AdminOrdersPage() {
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState<{ total: number; pages: number; currentPage: number; hasNext?: boolean; hasPrev?: boolean }>({ total: 0, pages: 0, currentPage: 1 });
+  const [pagination, setPagination] = useState<{ total: number; pages: number; currentPage: number; hasNext?: boolean; hasPrev?: boolean }>({ total: 0, pages: 0, currentPage: 1, hasNext: false, hasPrev: false });
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [pageSize, setPageSize] = useState(20);
@@ -93,6 +93,15 @@ export default function AdminOrdersPage() {
       setOrders(response.orders || []);
       if (response.pagination) {
         setPagination(response.pagination);
+      } else {
+        // If no pagination data, set defaults based on current data
+        setPagination({
+          total: response.orders?.length || 0,
+          pages: 1,
+          currentPage: 1,
+          hasNext: false,
+          hasPrev: false
+        });
       }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
