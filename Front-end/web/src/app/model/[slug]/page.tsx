@@ -12,7 +12,7 @@ import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 
-export default function WordPressVehicleProductsPage({ params }: { params: Promise<{ make: string }> }) {
+export default function VehicleModelPage({ params }: { params: Promise<{ slug: string }> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addToCart } = useCart();
@@ -21,8 +21,8 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
   
   // Unwrap the params Promise
   const paramsValue = use(params);
-  const { make } = paramsValue;
-  const vehicleName = decodeURIComponent(make);
+  const { slug } = paramsValue;
+  const vehicleName = decodeURIComponent(slug);
   
   const [products, setProducts] = useState<WordPressProduct[]>([]);
   const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
@@ -47,7 +47,7 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
           
         // Fetch products for the vehicle
         let productsData = await wordpressService.getProductsByVehicle(
-          make
+          slug
         );
         
         // If a category is selected, filter products by that category
@@ -78,9 +78,9 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
         setLoading(false);
       }
     };
-  
+
     fetchData();
-  }, [make, selectedCategory]);
+  }, [slug, selectedCategory]);
 
   const handleAddToCart = async (product: WordPressProduct) => {
     try {
@@ -140,7 +140,7 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
     }
     
     // Update URL which will trigger useEffect
-    router.push(`/vehicles/${make}/wordpress-page?${currentParams.toString()}`);
+    router.push(`/model/${slug}?${currentParams.toString()}`);
   };
 
   const handleCategoryChange = (categorySlug: string) => {
@@ -160,9 +160,11 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold mb-6">{vehicleName} Parts & Accessories</h1>
+          <h1 className="text-5xl font-bold mb-6">{vehicleName.replace(/-/g, ' ').split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} Parts & Accessories</h1>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Find the perfect parts and accessories for your {vehicleName}
+            Find the perfect parts and accessories for your {vehicleName.replace(/-/g, ' ')
+              .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
           </p>
         </div>
       </div>
@@ -174,7 +176,8 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
           <span className="mx-2">/</span>
           <Link href="/vehicles" className="hover:text-blue-600 transition-colors">Vehicles</Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-900 font-medium">{vehicleName}</span>
+          <span className="text-gray-900 font-medium">{vehicleName.replace(/-/g, ' ')
+            .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
         </nav>
       </div>
 
@@ -245,7 +248,8 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
                   <>
                     Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
                     {selectedCategory && ` in ${categories.find(c => c.slug === selectedCategory)?.name || selectedCategory}`}
-                    {' '}for {vehicleName}
+                    {' '}for {vehicleName.replace(/-/g, ' ')
+                      .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </>
                 ) : (
                   'No products found'
@@ -439,7 +443,8 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName}</p>
+                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName.replace(/-/g, ' ')
+                  .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
                 <button
                   onClick={() => handleCategoryChange('')}
                   className="text-blue-600 hover:text-blue-700 font-medium"

@@ -45,7 +45,7 @@ export default function AdminOrdersPage() {
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ total: 0, pages: 0, currentPage: 1 });
+  const [pagination, setPagination] = useState<{ total: number; pages: number; currentPage: number; hasNext?: boolean; hasPrev?: boolean }>({ total: 0, pages: 0, currentPage: 1 });
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [pageSize, setPageSize] = useState(20);
@@ -436,14 +436,14 @@ export default function AdminOrdersPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }))}
-              disabled={!pagination.hasPrev}
+              disabled={pagination.hasPrev === false}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             <button
               onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage + 1 }))}
-              disabled={!pagination.hasNext}
+              disabled={pagination.hasNext === false}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next

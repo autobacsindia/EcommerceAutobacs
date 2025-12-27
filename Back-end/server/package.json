@@ -36,6 +36,7 @@
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",
     "@sendgrid/mail": "^8.1.6",
+    "@woocommerce/woocommerce-rest-api": "^1.0.2",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "bson": "^7.0.0",

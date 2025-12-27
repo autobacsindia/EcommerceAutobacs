@@ -2,28 +2,52 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { vehicleService, type Vehicle } from '@/services/vehicleService';
+
+// Define the Vehicle type
+interface Vehicle {
+  _id: string;
+  make: string;
+  model: string;
+  year: number;
+  variant?: string;
+  slug: string;
+  name: string;
+  image?: {
+    url: string;
+    alt: string;
+  };
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+import { ALL_VEHICLES } from '@/lib/vehicleData';
+
+// Convert ALL_VEHICLES to our Vehicle format
+const staticVehicles: Vehicle[] = ALL_VEHICLES.map(vehicle => ({
+  _id: vehicle.id.toString(),
+  make: vehicle.make,
+  model: vehicle.name.replace(vehicle.make + ' ', ''), // Extract model by removing make from name
+  year: 2022, // Default year
+  slug: vehicle.slug,
+  name: vehicle.name,
+  isActive: true,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  image: {
+    url: vehicle.image,
+    alt: vehicle.name
+  }
+}));
 
 export default function VehiclesPage() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(staticVehicles);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Initialize with static data
   useEffect(() => {
-    const fetchVehicles = async () => {
-      try {
-        setLoading(true);
-        const vehicleData = await vehicleService.getAllVehicles();
-        setVehicles(vehicleData);
-      } catch (err) {
-        console.error('Error fetching vehicles:', err);
-        setError('Failed to load vehicles. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchVehicles();
+    setVehicles(staticVehicles);
   }, []);
 
   if (loading) {
@@ -116,7 +140,7 @@ export default function VehiclesPage() {
             {vehicles.map((vehicle) => (
               <Link
                 key={vehicle._id}
-                href={`/vehicles/${encodeURIComponent(vehicle.slug)}`}
+                href={`/model/${encodeURIComponent(vehicle.slug)}`}
                 className="group block"
               >
                 <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">

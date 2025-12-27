@@ -29,67 +29,55 @@ class BrandProductImportService {
    */
   async fetchProductsByBrandFromWordPress(brand, page = 1, perPage = this.importBatchSize) {
     try {
-      // First, we need to find the brand attribute ID
-      // For WooCommerce, we typically need to search by attribute
       const url = `${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products`;
+      
+      // First, try to find the category ID for the brand to use API filtering
+      let categoryId = null;
+      try {
+        const categoriesResponse = await axios.get(`${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products/categories`, {
+          auth: {
+            username: this.wordpressApiKey,
+            password: this.wordpressApiSecret
+          },
+          params: {
+            slug: brand.toLowerCase().replace(/\s+/g, '-')
+          },
+          timeout: 30000
+        });
+        
+        if (categoriesResponse.data && categoriesResponse.data.length > 0) {
+          categoryId = categoriesResponse.data[0].id;
+        }
+      } catch (categoryError) {
+        console.log(`Could not find category for brand "${brand}", falling back to manual filtering:`, categoryError.message);
+      }
+      
+      // Use category ID for API filtering if found, otherwise fetch all and filter manually
+      const params = {
+        page,
+        per_page: perPage,
+        status: 'publish' // Only import published products
+      };
+      
+      if (categoryId) {
+        params.category = categoryId;
+        console.log(`Using category ID ${categoryId} for brand "${brand}" filtering`);
+      }
       
       const response = await axios.get(url, {
         auth: {
           username: this.wordpressApiKey,
           password: this.wordpressApiSecret
         },
-        params: {
-          page,
-          per_page: perPage,
-          status: 'publish', // Only import published products
-          attribute: 'brand', // Filter by brand attribute
-          attribute_term: brand // Filter by specific brand
-        },
+        params,
         timeout: 30000 // 30 second timeout
       });
       
-      return response.data;
+      // Apply comprehensive filtering as a secondary check to ensure accuracy
+      const filteredProducts = this.filterByBrand(response.data, brand);
+      return filteredProducts;
     } catch (error) {
-      // If attribute filtering fails, try alternative approach
-      try {
-        // Fetch all products and filter manually
-        const url = `${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products`;
-        
-        const response = await axios.get(url, {
-          auth: {
-            username: this.wordpressApiKey,
-            password: this.wordpressApiSecret
-          },
-          params: {
-            page,
-            per_page: perPage,
-            status: 'publish'
-          },
-          timeout: 30000
-        });
-        
-        // Filter products by brand in the response
-        const filteredProducts = response.data.filter(product => {
-          if (product.attributes && Array.isArray(product.attributes)) {
-            const brandAttribute = product.attributes.find(attr => 
-              attr.name.toLowerCase() === 'brand' || attr.name.toLowerCase() === 'manufacturer'
-            );
-            
-            if (brandAttribute && brandAttribute.options && brandAttribute.options.length > 0) {
-              const productBrand = Array.isArray(brandAttribute.options) 
-                ? brandAttribute.options[0] 
-                : brandAttribute.options;
-                
-              return productBrand.toLowerCase() === brand.toLowerCase();
-            }
-          }
-          return false;
-        });
-        
-        return filteredProducts;
-      } catch (fallbackError) {
-        throw new Error(`Failed to fetch products for brand "${brand}" from WordPress: ${error.message}`);
-      }
+      throw new Error(`Failed to fetch products for brand "${brand}" from WordPress: ${error.message}`);
     }
   }
 
@@ -102,22 +90,51 @@ class BrandProductImportService {
     try {
       const url = `${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products`;
       
+      // First, try to find the category ID for the brand to use API filtering
+      let categoryId = null;
+      try {
+        const categoriesResponse = await axios.get(`${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/products/categories`, {
+          auth: {
+            username: this.wordpressApiKey,
+            password: this.wordpressApiSecret
+          },
+          params: {
+            slug: brand.toLowerCase().replace(/\s+/g, '-')
+          },
+          timeout: 30000
+        });
+        
+        if (categoriesResponse.data && categoriesResponse.data.length > 0) {
+          categoryId = categoriesResponse.data[0].id;
+        }
+      } catch (categoryError) {
+        console.log(`Could not find category for brand "${brand}" when getting count, falling back to manual filtering:`, categoryError.message);
+      }
+      
+      // Use category ID for API filtering if found, otherwise fetch all and filter manually
+      const params = {
+        per_page: 100, // Get more products to properly count after filtering
+        page: 1,
+        status: 'publish' // Only import published products
+      };
+      
+      if (categoryId) {
+        params.category = categoryId;
+        console.log(`Using category ID ${categoryId} for brand "${brand}" count`);
+      }
+      
       const response = await axios.get(url, {
         auth: {
           username: this.wordpressApiKey,
           password: this.wordpressApiSecret
         },
-        params: {
-          per_page: 1,
-          attribute: 'brand',
-          attribute_term: brand
-        },
+        params,
         timeout: 30000
       });
       
-      // Get total count from headers
-      const totalCount = response.headers['x-wp-total'] || response.data.length;
-      return parseInt(totalCount);
+      // Apply brand filtering to get accurate count
+      const filteredProducts = this.filterByBrand(response.data, brand);
+      return filteredProducts.length;
     } catch (error) {
       throw new Error(`Failed to get product count for brand "${brand}" from WordPress: ${error.message}`);
     }
@@ -246,6 +263,28 @@ class BrandProductImportService {
           categoryIds.push(categoryId);
         }
         productData.categories = categoryIds;
+      }
+      
+      // Handle brand mapping - create brand record if needed
+      if (productData.brand) {
+        const Brand = (await import('../models/Brand.js')).default;
+        const slug = productData.brand.toLowerCase().replace(/\s+/g, '-');
+        
+        // Find or create brand document
+        let brandDoc = await Brand.findOne({ slug });
+        if (!brandDoc) {
+          brandDoc = new Brand({
+            name: productData.brand,
+            slug: slug
+          });
+          await brandDoc.save();
+        }
+        
+        // Set external ID if available in WordPress product
+        if (wpProduct.id) {
+          brandDoc.externalId = wpProduct.id.toString();
+          await brandDoc.save();
+        }
       }
       
       // Check if product already exists (by SKU)
@@ -412,6 +451,52 @@ class BrandProductImportService {
         error: error.message
       };
     }
+  }
+
+  /**
+   * Filter products by brand attribute
+   * @param {Array} products - Array of products from WordPress
+   * @param {string} brandName - Brand name to filter by
+   * @returns {Array} Filtered products array
+   */
+  filterByBrand(products, brandName) {
+    const brandLower = brandName.toLowerCase();
+    
+    return products.filter(p =>
+      // Check in product name (most common for Profender)
+      (p.name && p.name.toLowerCase().includes(brandLower)) ||
+      
+      // Check in categories (found that Profender has dedicated category)
+      (p.categories && Array.isArray(p.categories) &&
+        p.categories.some(cat => 
+          cat.slug.toLowerCase() === brandLower || 
+          cat.name.toLowerCase().includes(brandLower)
+        )) ||
+      
+      // Check in tags
+      (p.tags && Array.isArray(p.tags) &&
+        p.tags.some(tag => 
+          tag.slug.toLowerCase() === brandLower || 
+          tag.name.toLowerCase().includes(brandLower)
+        )) ||
+      
+      // Check in attributes
+      (p.attributes && Array.isArray(p.attributes) &&
+        p.attributes.some(attr =>
+          (attr.name.toLowerCase() === 'brand' || attr.name.toLowerCase() === 'manufacturer') &&
+          attr.options &&
+          (Array.isArray(attr.options) ?
+            attr.options.map(o => o.toLowerCase()).includes(brandLower) :
+            String(attr.options).toLowerCase().includes(brandLower))
+        )) ||
+      
+      // Check in meta_data
+      (p.meta_data && Array.isArray(p.meta_data) &&
+        p.meta_data.some(meta =>
+          (meta.key === '_brand' || meta.key.toLowerCase().includes('brand')) &&
+          String(meta.value).toLowerCase().includes(brandLower)
+        ))
+    );
   }
 }
 

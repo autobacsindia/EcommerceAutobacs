@@ -63,55 +63,28 @@ interface ProductsData {
   pagination: Pagination;
 }
 
-// Brand configuration
-const BRANDS = [
-  {
-    name: 'Profender',
-    slug: 'profender',
-    logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp',
-    description: 'Premium automotive accessories and performance parts'
-  },
-  {
-    name: 'Bushranger',
-    slug: 'bushranger',
-    logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp',
-    description: 'High-quality automotive protection and accessories'
-  },
-  {
-    name: 'Ironman',
-    slug: 'ironman',
-    logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp',
-    description: 'Performance suspension and handling solutions'
-  },
-  {
-    name: 'Dr. Nano',
-    slug: 'dr-nano',
-    logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp',
-    description: 'Advanced automotive care and maintenance products'
-  },
-  {
-    name: 'Lightforce',
-    slug: 'lightforce',
-    logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp',
-    description: 'High-performance lighting solutions'
-  },
-  {
-    name: 'Option',
-    slug: 'option',
-    logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp',
-    description: 'Custom automotive accessories and styling products'
+// Function to fetch brand details
+async function getBrandDetails(slug: string): Promise<any> {
+  try {
+    // Use the dedicated brand details endpoint
+    const response: any = await apiClient.get(`/products/brands/${slug}/details`);
+    
+    if (response && response.success && response.brand) {
+      return response.brand;
+    }
+    
+    return null;
+  } catch (error: any) {
+    console.error('Error fetching brand details:', error);
+    throw error;
   }
-];
+}
 
 // Function to fetch products for a specific brand
 async function getBrandProducts(brandName: string, page: number = 1, limit: number = 12): Promise<ProductsData> {
   try {
-    const queryParams = new URLSearchParams();
-    queryParams.append('brand', brandName);
-    queryParams.append('page', page.toString());
-    queryParams.append('limit', limit.toString());
-    
-    const endpoint = `/products?${queryParams.toString()}`;
+    // Use the new endpoint: /products/brands/{brandName}
+    const endpoint = `/products/brands/${encodeURIComponent(brandName)}?page=${page}&limit=${limit}`;
     const data: any = await apiClient.get(endpoint);
     
     if (data && data.products) {
@@ -142,39 +115,42 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
+  const [brandLoading, setBrandLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [brand, setBrand] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  
-  // Find the brand by slug
-  const brand = BRANDS.find(b => b.slug === slug);
   
   // Get current page from URL parameters
   const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
 
-  // Fetch products when brand or page changes
+  // Fetch brand details and products when slug changes
   useEffect(() => {
-    if (!brand) {
-      setError('Brand not found');
-      setLoading(false);
-      return;
-    }
-    
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      
+    const fetchBrandAndProducts = async () => {
       try {
-        const result = await getBrandProducts(brand.name, currentPage);
+        // Fetch brand details
+        const brandDetails = await getBrandDetails(slug);
+        if (!brandDetails) {
+          setError('Brand not found');
+          setBrandLoading(false);
+          setLoading(false);
+          return;
+        }
+        setBrand(brandDetails);
+        setBrandLoading(false);
+        
+        // Fetch products for the brand
+        setLoading(true);
+        const result = await getBrandProducts(slug, currentPage);
         setData(result);
       } catch (err: any) {
-        setError(err.message || 'Failed to fetch products');
+        setError(err.message || 'Failed to fetch brand or products');
       } finally {
         setLoading(false);
       }
     };
     
-    fetchData();
-  }, [brand, currentPage]);
+    fetchBrandAndProducts();
+  }, [slug, currentPage]);
 
   // Handle page change
   const handlePageChange = (newPage: number) => {

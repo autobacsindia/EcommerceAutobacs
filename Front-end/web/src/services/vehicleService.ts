@@ -26,6 +26,7 @@ interface VehicleApiResponse {
 }
 
 import apiClient from '@/lib/api';
+import { wordpressService } from './wordpressService';
 
 // Use the main API client instead of creating a separate axios instance
 const vehicleApi = apiClient;
@@ -55,6 +56,7 @@ function getVehicleImageUrl(slug: string): string {
 
 export const vehicleService = {
   async getAllVehicles(): Promise<Vehicle[]> {
+    // First try to get vehicles from the local API
     try {
       const response = await vehicleApi.get('/vehicles') as VehicleApiResponse;
       if (response.success && response.vehicles) {
@@ -73,12 +75,42 @@ export const vehicleService = {
           };
         });
       }
-      return [];
     } catch (error) {
-      console.error('Error fetching vehicles:', error);
-      console.error('Failed to fetch vehicles from API');
-      return [];
+      console.error('Error fetching vehicles from local API:', error);
     }
+
+    // If local API fails, try to extract vehicles from WordPress API
+    try {
+      const wordpressVehicles = await wordpressService.getAllVehicles();
+      if (wordpressVehicles.length > 0) {
+        // Convert WordPress vehicles to our Vehicle format
+        return wordpressVehicles.map((wpVehicle, index) => {
+          // Use the image mapping function for consistency with other vehicle images
+          const imageUrl = getVehicleImageUrl(wpVehicle.slug);
+          
+          return {
+            _id: wpVehicle.id.toString(),
+            make: wpVehicle.name.split(' ')[0] || wpVehicle.name,
+            model: wpVehicle.name.split(' ').slice(1).join(' ') || '',
+            year: new Date().getFullYear(),
+            slug: wpVehicle.slug,
+            name: wpVehicle.name,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            image: {
+              url: imageUrl,
+              alt: wpVehicle.name
+            }
+          };
+        });
+      }
+    } catch (error) {
+      console.error('Error extracting vehicles from WordPress:', error);
+    }
+
+    // Return empty array if both methods fail
+    return [];
   },
 
   async getVehicleMakes(): Promise<string[]> {

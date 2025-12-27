@@ -40,7 +40,7 @@ export default function CreateProductPage() {
   const fetchCategories = async () => {
     try {
       const response = await apiClient.get('/categories');
-      setCategories(response.categories || []);
+      setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
     } finally {

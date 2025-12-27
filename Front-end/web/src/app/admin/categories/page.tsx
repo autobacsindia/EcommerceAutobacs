@@ -34,8 +34,8 @@ export default function AdminCategoriesPage() {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response: any = await apiClient.get('/categories');
-      setCategories(response.categories || []);
+      const response = await apiClient.get('/categories');
+      setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
       setError('Failed to load categories. Please try again later.');

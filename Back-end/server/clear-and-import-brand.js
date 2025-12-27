@@ -2,12 +2,11 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import BrandProductImportService from './services/brandProductImportService.js';
 import User from './models/User.js';
+import Product from './models/Product.js';
 
 dotenv.config();
 
-console.log('Brand product import script initialized...');
-
-async function importBrandProducts(brandName) {
+async function clearAndImportBrand(brandName) {
   try {
     // Connect to MongoDB
     await mongoose.connect(process.env.MONGO_URI, {
@@ -17,11 +16,13 @@ async function importBrandProducts(brandName) {
     
     console.log('✓ Connected to MongoDB');
     
+    // Clear existing products for this brand
+    console.log(`Clearing existing ${brandName} products...`);
+    const deletedCount = await Product.deleteMany({ brand: { $regex: new RegExp(brandName, 'i') } });
+    console.log(`Deleted ${deletedCount.deletedCount} existing ${brandName} products`);
+    
     // Create import service
     const importService = new BrandProductImportService();
-    
-    // Generate a unique job ID
-    const jobId = `import-brand-${brandName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     // For command line usage, we need to either find an admin user or create a system user
     let adminUser = await User.findOne({ role: 'admin' });
@@ -39,6 +40,9 @@ async function importBrandProducts(brandName) {
       });
     }
     const userId = adminUser._id;
+    
+    // Generate a unique job ID
+    const jobId = `import-brand-${brandName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     console.log(`Starting import for brand: ${brandName}`);
     
@@ -65,7 +69,7 @@ async function importBrandProducts(brandName) {
     console.log('\n✓ Disconnected from MongoDB');
     
   } catch (error) {
-    console.error('✗ Error importing brand products:', error.message);
+    console.error('✗ Error clearing and importing brand products:', error.message);
     console.error('Error stack:', error.stack);
     process.exit(1);
   }
@@ -75,9 +79,13 @@ async function importBrandProducts(brandName) {
 const brandName = process.argv[2];
 
 if (!brandName) {
-  console.log('Usage: node import-brand-products.js <brand-name>');
-  console.log('Example: node import-brand-products.js Profender');
+  console.log('Usage: node clear-and-import-brand.js <brand-name>');
+  console.log('Example: node clear-and-import-brand.js Profender');
   process.exit(1);
 }
 
-importBrandProducts(brandName);
+// Execute the import
+clearAndImportBrand(brandName).catch(error => {
+  console.error('Unhandled error:', error);
+  process.exit(1);
+});
