@@ -44,7 +44,7 @@ export default function CreateCategoryPage() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await apiClient.get('/categories');
+        const response = await apiClient.get<{ data?: Category[]; categories?: Category[] }>('/categories');
         setCategories(response.data || response.categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);

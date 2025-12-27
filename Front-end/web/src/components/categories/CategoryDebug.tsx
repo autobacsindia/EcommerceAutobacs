@@ -13,7 +13,7 @@ export default function CategoryDebug() {
     const fetchCategories = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
+        const response = await apiClient.get<{ data?: Category[]; categories?: Category[] }>('/categories');
         setCategories(response.data || response.categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);
@@ -57,7 +57,7 @@ export default function CategoryDebug() {
                 <p>Name: {bodyKitsCategory.name}</p>
                 <p>Slug: {bodyKitsCategory.slug}</p>
                 <p>Has Parent: {bodyKitsCategory.parent ? 'Yes' : 'No'}</p>
-                {bodyKitsCategory.parent && <p>Parent ID: {bodyKitsCategory.parent}</p>}
+                {bodyKitsCategory.parent && <p>Parent ID: {typeof bodyKitsCategory.parent === 'string' ? bodyKitsCategory.parent : bodyKitsCategory.parent._id}</p>}
               </div>
             ) : (
               <p className="text-red-500">Not found</p>
@@ -72,7 +72,7 @@ export default function CategoryDebug() {
                 <p>Name: {audioCategory.name}</p>
                 <p>Slug: {audioCategory.slug}</p>
                 <p>Has Parent: {audioCategory.parent ? 'Yes' : 'No'}</p>
-                {audioCategory.parent && <p>Parent ID: {audioCategory.parent}</p>}
+                {audioCategory.parent && <p>Parent ID: {typeof audioCategory.parent === 'string' ? audioCategory.parent : audioCategory.parent._id}</p>}
               </div>
             ) : (
               <p className="text-red-500">Not found</p>
@@ -87,7 +87,7 @@ export default function CategoryDebug() {
                 <p>Name: {lightsCategory.name}</p>
                 <p>Slug: {lightsCategory.slug}</p>
                 <p>Has Parent: {lightsCategory.parent ? 'Yes' : 'No'}</p>
-                {lightsCategory.parent && <p>Parent ID: {lightsCategory.parent}</p>}
+                {lightsCategory.parent && <p>Parent ID: {typeof lightsCategory.parent === 'string' ? lightsCategory.parent : lightsCategory.parent._id}</p>}
               </div>
             ) : (
               <p className="text-red-500">Not found</p>
@@ -105,7 +105,7 @@ export default function CategoryDebug() {
                 <p className="font-medium">{category.name}</p>
                 <p className="text-sm text-gray-600">ID: {category._id}</p>
                 <p className="text-sm text-gray-600">Slug: {category.slug}</p>
-                <p className="text-sm text-gray-600">Parent: {category.parent}</p>
+                <p className="text-sm text-gray-600">Parent: {category.parent ? (typeof category.parent === 'string' ? category.parent : category.parent._id) : 'None'}</p>
               </div>
             ))}
           </div>
