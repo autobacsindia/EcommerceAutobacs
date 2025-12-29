@@ -219,48 +219,134 @@ export const wordpressService = {
     }
   },
   
-  // Fetch products and filter by vehicle mention
-  async getProductsByVehicle(vehicleSlug: string): Promise<WordPressProduct[]> {
+  // Fetch products by vehicle using more comprehensive search
+  async getProductsByVehicle(vehicleSlug: string, page: number = 1, perPage: number = 20): Promise<{ products: WordPressProduct[], total: number }> {
     // Return empty array if WordPress API is not configured
+    if (!wordpressApi) {
+      console.warn('WordPress API not configured. Returning empty products array.');
+      return { products: [], total: 0 };
+    }
+      
+    try {
+      // Decode the vehicle slug to get the actual vehicle name
+      const vehicleName = decodeURIComponent(vehicleSlug).toLowerCase();
+        
+      // Approach: Get all products that match the vehicle across all pages, then paginate
+      // First, get all products matching the vehicle
+      const allVehicleProducts = await this.getAllVehicleProducts(vehicleName);
+        
+      // Calculate total number of products for this vehicle
+      const totalVehicleProducts = allVehicleProducts.length;
+        
+      // Calculate start index for the requested page
+      const startIndex = (page - 1) * perPage;
+        
+      // Slice the products for the requested page
+      const paginatedProducts = allVehicleProducts.slice(startIndex, startIndex + perPage);
+        
+      return { products: paginatedProducts, total: totalVehicleProducts };
+    } catch (error) {
+      console.error(`Error fetching products for vehicle ${vehicleSlug}:`, error);
+      // Return empty array instead of throwing error to prevent app crash
+      return { products: [], total: 0 };
+    }
+  },
+    
+  // Helper method to fetch all products matching a vehicle across all pages
+  async getAllVehicleProducts(vehicleName: string): Promise<WordPressProduct[]> {
     if (!wordpressApi) {
       console.warn('WordPress API not configured. Returning empty products array.');
       return [];
     }
-    
-    try {
-      // Decode the vehicle slug to get the actual vehicle name
-      const vehicleName = decodeURIComponent(vehicleSlug).toLowerCase();
       
-      // Get products that mention this vehicle
-      const response = await wordpressApi.get<WordPressProduct[]>(
+    const perPage = 50; // Fetch more per page to reduce API calls
+    let allProducts: WordPressProduct[] = [];
+    let currentPage = 1;
+    let totalPages = 1; // We'll update this after first request
+      
+    // First, try to get an estimate of total pages by fetching first page
+    try {
+      const firstPageResponse = await wordpressApi.get<WordPressProduct[]>(
         `/${WORDPRESS_API_VERSION}/products`,
         {
           params: {
-            per_page: 50
+            per_page: 1, // Just get 1 to check total
+            page: 1
           }
         }
       );
-      
-      // Filter products that mention the vehicle
-      const filteredProducts = response.data.filter(product => {
-        const productName = (product.name || '').toLowerCase();
-        const productTags = product.tags && Array.isArray(product.tags) 
-          ? product.tags.map(tag => (tag.name || '').toLowerCase()).join(' ')
-          : '';
-        const productCategories = product.categories && Array.isArray(product.categories)
-          ? product.categories.map(cat => (cat.name || '').toLowerCase()).join(' ')
-          : '';
         
-        const searchText = `${productName} ${productTags} ${productCategories}`;
-        return searchText.includes(vehicleName);
-      });
-      
-      return filteredProducts;
-    } catch (error) {
-      console.error(`Error filtering products for vehicle ${vehicleSlug}:`, error);
-      // Return empty array instead of throwing error to prevent app crash
-      return [];
+      const headers = firstPageResponse.headers;
+      const totalProductsHeader = headers['x-wp-total'] || headers['X-WP-Total'];
+      const totalProducts = totalProductsHeader ? parseInt(totalProductsHeader as string) : 100; // Default to 100 if not available
+      totalPages = Math.ceil(totalProducts / perPage);
+      totalPages = Math.min(totalPages, 10); // Limit to 10 pages to prevent too many API calls
+    } catch (countError) {
+      console.warn('Could not fetch total product count, using default:', countError);
+      totalPages = 5; // Default to 5 pages if we can't get the count
     }
+      
+    // Fetch all pages up to the calculated total
+    for (currentPage = 1; currentPage <= totalPages; currentPage++) {
+      try {
+        const response = await wordpressApi.get<WordPressProduct[]>(
+          `/${WORDPRESS_API_VERSION}/products`,
+          {
+            params: {
+              per_page: perPage,
+              page: currentPage
+            }
+          }
+        );
+          
+        // Filter products that mention the vehicle
+        const vehicleProducts = response.data.filter(product => {
+          const productName = (product.name || '').toLowerCase();
+          const productTags = product.tags && Array.isArray(product.tags) 
+            ? product.tags.map(tag => (tag.name || '').toLowerCase()).join(' ')
+            : '';
+          const productCategories = product.categories && Array.isArray(product.categories)
+            ? product.categories.map(cat => (cat.name || '').toLowerCase()).join(' ')
+            : '';
+          
+          const searchText = `${productName} ${productTags} ${productCategories}`;
+          
+          // Check for multiple variations of the vehicle name
+          const vehicleNameVariations = [
+            vehicleName, // original form like 'toyota-hilux'
+            vehicleName.replace(/-/g, ' '), // 'toyota hilux'
+            vehicleName.replace(/-/g, ''), // 'toyotahilux'
+            vehicleName.replace(/-/g, ' ').split(' ').reverse().join(' ') // 'hilux toyota' (if applicable)
+          ];
+          
+          // Also add variations with proper capitalization that might exist in the data
+          const vehicleNameSpaceSeparated = vehicleName.replace(/-/g, ' ');
+          const additionalVariations = [
+            vehicleNameSpaceSeparated.replace(/\b\w/g, l => l.toUpperCase()), // 'Toyota Hilux'
+            vehicleNameSpaceSeparated.toUpperCase(), // 'TOYOTA HILUX'
+            vehicleNameSpaceSeparated.toLowerCase(), // 'toyota hilux'
+          ];
+          
+          const allVariations = [...vehicleNameVariations, ...additionalVariations];
+          
+          return allVariations.some(variation => searchText.includes(variation));
+        });
+          
+        // Add only the vehicle-specific products to our collection
+        allProducts = allProducts.concat(vehicleProducts);
+          
+        // Small delay to be respectful to the API
+        await new Promise(resolve => setTimeout(resolve, 100));
+          
+        // If this page returned no products, we might be past the last relevant page
+        // But we'll continue to ensure we don't miss any
+      } catch (pageError) {
+        console.warn(`Error fetching page ${currentPage}, continuing with available data:`, pageError);
+        break; // Stop if we encounter an error
+      }
+    }
+      
+    return allProducts;
   },
   
   // Fetch product categories (unchanged)

@@ -7,7 +7,7 @@ import { ShoppingCart, Heart, Star, GitCompare } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
-import ProductImage from '@/components/products/ProductImage';
+import ImageGallery from '@/components/products/ImageGallery';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 
@@ -210,21 +210,18 @@ function ProductDetailPageClient({ product }: { product: any }) {
           <div className="lg:grid lg:grid-cols-2 lg:gap-8">
             {/* Product Images */}
             <div>
-              <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
-                {product.images && product.images.length > 0 && product.images[0].url ? (
-                  <ProductImage
-                    src={product.images[0].url}
-                    alt={product.images[0].alt || product.name}
-                    width={600}
-                    height={600}
-                    className="object-cover w-full h-full"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-gray-400">No image available</span>
-                  </div>
-                )}
-              </div>
+              <ImageGallery
+                images={product.images && product.images.length > 0 
+                  ? product.images.map((img: any, index: number) => ({
+                      id: img._id || index,
+                      src: img.url,
+                      alt: img.alt || `${product.name} image ${index + 1}`,
+                      name: img.alt
+                    }))
+                  : []
+                }
+                className="mb-4"
+              />
             </div>
 
             {/* Product Info */}
@@ -278,6 +275,37 @@ function ProductDetailPageClient({ product }: { product: any }) {
                 <div className="mb-6">
                   <h2 className="font-semibold text-gray-900 mb-2">Category</h2>
                   <p className="text-gray-700">{product.category.name === 'Suspension' ? 'SUSPENSION' : product.category.name}</p>
+                </div>
+              )}
+
+              {/* Brand */}
+              {product.brand && (
+                <div className="mb-6">
+                  <h2 className="font-semibold text-gray-900 mb-2">Brand</h2>
+                  <p className="text-gray-700">{product.brand}</p>
+                </div>
+              )}
+
+              {/* SKU */}
+              {product.sku && (
+                <div className="mb-6">
+                  <h2 className="font-semibold text-gray-900 mb-2">SKU</h2>
+                  <p className="text-gray-700">{product.sku}</p>
+                </div>
+              )}
+
+              {/* Specifications */}
+              {product.specifications && product.specifications.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="font-semibold text-gray-900 mb-2">Specifications</h2>
+                  <div className="grid grid-cols-2 gap-2">
+                    {product.specifications.map((spec: any, index: number) => (
+                      <div key={index} className="flex justify-between border-b border-gray-100 py-1">
+                        <span className="text-gray-600">{spec.key}:</span>
+                        <span className="text-gray-900 font-medium">{spec.value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

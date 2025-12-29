@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X } from 'lucide-react';
+import Link from 'next/link';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address, PaginatedOrders, PaymentMethod } from '@/lib/types';
 
@@ -453,7 +454,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <div className="flex space-x-3">
+          <div className="flex flex-wrap gap-3">
             {editing ? (
               <>
                 <button
@@ -477,6 +478,16 @@ export default function ProfilePage() {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Profile
               </button>
+            )}
+            {/* Admin Dashboard Link - Only show for admin users */}
+            {user?.role === 'admin' && (
+              <Link
+                href="/admin/dashboard"
+                className="flex items-center bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition"
+              >
+                <Shield className="h-4 w-4 mr-2" />
+                Admin Dashboard
+              </Link>
             )}
             <button
               onClick={logout}

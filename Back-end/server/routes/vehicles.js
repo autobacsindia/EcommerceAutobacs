@@ -51,8 +51,50 @@ router.get("/models/:make", asyncHandler(async (req, res) => {
 // @route   GET /vehicles/:id
 // @desc    Get vehicle by ID
 // @access  Public
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get('/:id', asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  res.json({
+    success: true,
+    vehicle
+  });
+}));
+
+// @route   GET /vehicles/slug/:slug
+// @desc    Get vehicle by slug
+// @access  Public
+router.get('/slug/:slug', asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findOne({ slug: req.params.slug, isActive: true });
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  res.json({
+    success: true,
+    vehicle
+  });
+}));
+
+// @route   GET /vehicles/make-model/:make/:model
+// @desc    Get vehicle by make and model
+// @access  Public
+router.get('/make-model/:make/:model', asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findOne({ 
+    make: req.params.make, 
+    model: req.params.model, 
+    isActive: true 
+  });
 
   if (!vehicle) {
     return res.status(404).json({

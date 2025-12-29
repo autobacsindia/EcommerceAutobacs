@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingCart, Heart, Filter } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
@@ -14,17 +14,17 @@ import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import apiClient from '@/lib/api';
 
-export default function VehicleModelPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function VehicleModelPage({ params }: { params: Promise<{ slug: string; page: string }> }) {
   // All hooks in consistent order
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
   // Unwrap the params Promise - must be consistent across all renders
-  const { slug } = use(params);
+  const { slug, page } = use(params);
   const vehicleName = decodeURIComponent(slug);
+  const pageNumber = parseInt(page) || 1;
   
   // State hooks
   const [products, setProducts] = useState<WordPressProduct[]>([]);
@@ -40,15 +40,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   // Get current sort value - default to 'date' for newest first
   const [currentSort, setCurrentSort] = useState<string>('date');
 
-  // For path-based pagination, we'll use state for sort instead of URL params
-  // const currentSort = searchParams.get('sort') || 'date';
-  
   const itemsPerPage = 12; // Number of products per page
-  
-  // Get current page from URL parameters
-  const currentPage = parseInt(searchParams.get('page') || '1') || 1;
 
-  // Fetch products, categories, and vehicle data when vehicleSlug, selectedCategory, currentSort, or currentPage changes
+  // Fetch products, categories, and vehicle data when vehicleSlug, selectedCategory, currentSort, or pageNumber changes
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -62,7 +56,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         // Fetch products for the vehicle with pagination
         const productsResponse = await wordpressService.getProductsByVehicle(
           slug,
-          currentPage,
+          pageNumber,
           itemsPerPage
         );
         let productsData = productsResponse.products || [];
@@ -129,7 +123,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     };
 
     fetchData();
-  }, [slug, selectedCategory, currentSort, currentPage]);
+  }, [slug, selectedCategory, currentSort, pageNumber]);
 
   const handleAddToCart = async (product: WordPressProduct) => {
     try {
@@ -176,16 +170,16 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     }
   };
 
+  const handleCategoryChange = (categorySlug: string) => {
+    setSelectedCategory(categorySlug);
+  };
+
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const sortValue = e.target.value;
     setCurrentSort(sortValue);
     
-    // For path-based pagination, we'll just update the state
-    // In a full implementation, you might want to update the URL with sort parameters
-  };
-
-  const handleCategoryChange = (categorySlug: string) => {
-    setSelectedCategory(categorySlug);
+    // Navigate to the same page with the new sort parameter
+    // For now, we'll just update the state, but in a real implementation you might want to update the URL
   };
 
   // Filter products based on selected category
@@ -194,16 +188,14 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         product.categories.some(cat => cat.slug === selectedCategory)
       )
     : products;
-  
+
   // Calculate pagination based on API total, not filtered products
   const totalPages = Math.ceil(totalProductsFromAPI / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+  const startIndex = (pageNumber - 1) * itemsPerPage;
   const endIndex = Math.min(startIndex + itemsPerPage, totalProductsFromAPI);
-  
+
   // Use the products from API which are already paginated
   const paginatedProducts = filteredProducts;
-  
-
 
   return (
     <div className="min-h-screen bg-white">
@@ -253,8 +245,11 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           <span className="mx-2">/</span>
           <Link href="/vehicles" className="hover:text-blue-600 transition-colors">Vehicles</Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-900 font-medium">{vehicleName.replace(/-/g, ' ')
-            .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+          <Link href={`/model/${slug}`} className="hover:text-blue-600 transition-colors">
+            {vehicleName.replace(/-/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+          </Link>
+          <span className="mx-2">/</span>
+          <span className="text-gray-900 font-medium">Page {pageNumber}</span>
         </nav>
       </div>
 
@@ -536,14 +531,14 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     <nav className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          if (currentPage > 1) {
-                            const newPage = currentPage - 1;
+                          if (pageNumber > 1) {
+                            const newPage = pageNumber - 1;
                             const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
                             router.push(baseUrl);
                           }
                         }}
-                        disabled={currentPage === 1}
-                        className={`px-4 py-2 rounded-md border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                        disabled={pageNumber === 1}
+                        className={`px-4 py-2 rounded-md border ${pageNumber === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
                       >
                         Previous
                       </button>
@@ -554,15 +549,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         if (totalPages <= 5) {
                           // Show all pages
                           pageNum = i + 1;
-                        } else if (currentPage <= 3) {
+                        } else if (pageNumber <= 3) {
                           // Show first 5 pages
                           pageNum = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
+                        } else if (pageNumber >= totalPages - 2) {
                           // Show last 5 pages
                           pageNum = totalPages - 4 + i;
                         } else {
                           // Show pages around current page
-                          pageNum = currentPage - 2 + i;
+                          pageNum = pageNumber - 2 + i;
                         }
                         
                         return (
@@ -572,7 +567,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               const baseUrl = pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`;
                               router.push(baseUrl);
                             }}
-                            className={`px-4 py-2 rounded-md border ${currentPage === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                            className={`px-4 py-2 rounded-md border ${pageNumber === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
                           >
                             {pageNum}
                           </button>
@@ -581,14 +576,14 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       
                       <button
                         onClick={() => {
-                          if (currentPage < totalPages) {
-                            const newPage = currentPage + 1;
+                          if (pageNumber < totalPages) {
+                            const newPage = pageNumber + 1;
                             const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
                             router.push(baseUrl);
                           }
                         }}
-                        disabled={currentPage === totalPages}
-                        className={`px-4 py-2 rounded-md border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                        disabled={pageNumber === totalPages}
+                        className={`px-4 py-2 rounded-md border ${pageNumber === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
                       >
                         Next
                       </button>
@@ -600,12 +595,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               <div className="text-center py-12">
                 <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName.replace(/-/g, ' ')
                   .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
-                <button
-                  onClick={() => handleCategoryChange('')}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
+                <Link href={`/model/${slug}`} className="text-blue-600 hover:text-blue-700 font-medium">
                   View all products
-                </button>
+                </Link>
               </div>
             )}
           </div>

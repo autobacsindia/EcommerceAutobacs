@@ -57,6 +57,8 @@ export interface Product {
 export interface Pagination {
   total?: number;
   pages?: number;
+  totalPages?: number;
+  totalReviews?: number;
   currentPage?: number;
   hasNext?: boolean;
   hasPrev?: boolean;
