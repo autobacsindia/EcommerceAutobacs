@@ -20,8 +20,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
   // Unwrap the params Promise
-  const paramsValue = use(params);
-  const { slug } = paramsValue;
+  const { slug } = use(params);
   const vehicleName = decodeURIComponent(slug);
   
   const [products, setProducts] = useState<WordPressProduct[]>([]);
