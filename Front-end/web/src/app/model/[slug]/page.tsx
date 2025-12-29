@@ -13,16 +13,18 @@ import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string }> }) {
+  // All hooks in consistent order
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
-  // Unwrap the params Promise
+  // Unwrap the params Promise - must be consistent across all renders
   const { slug } = use(params);
   const vehicleName = decodeURIComponent(slug);
   
+  // State hooks
   const [products, setProducts] = useState<WordPressProduct[]>([]);
   const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
