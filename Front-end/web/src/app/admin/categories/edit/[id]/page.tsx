@@ -49,7 +49,7 @@ export default function EditCategoryPage() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await apiClient.get('/categories');
+        const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
         setCategories(response.data || response.categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);

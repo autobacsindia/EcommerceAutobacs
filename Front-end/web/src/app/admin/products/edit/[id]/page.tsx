@@ -63,7 +63,7 @@ export default function EditProductPage() {
 
   const fetchCategories = async () => {
     try {
-      const response = await apiClient.get('/categories');
+      const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
       setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
@@ -72,7 +72,7 @@ export default function EditProductPage() {
 
   const fetchProduct = async () => {
     try {
-      const response = await apiClient.get(`/products/${productId}`);
+      const response: any = await apiClient.get(`/products/${productId}`);
       const productData = response.product;
       
       setProduct(productData);
