@@ -272,7 +272,7 @@ class APIClient {
       errorStack: error instanceof Error ? error.stack : undefined,
       // For ApiError instances
       status: (error as any)?.status,
-      url: (error as any)?.url,
+      url: (response as any).url,
       category: (error as any)?.category,
       responseStatus: (error as any)?.responseStatus
     };
@@ -281,6 +281,7 @@ class APIClient {
     // or category endpoints (category might not exist)
     const isLocationEndpoint = (response as any).url?.includes('/location/current');
     const isCategoryEndpoint = (response as any).url?.includes('/categories/slug/');
+    const isVehiclesEndpoint = (response as any).url?.includes('/vehicles/slug/');
     const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
     
     // Also check if the error is an ApiError with 404 status
@@ -289,7 +290,7 @@ class APIClient {
     // Only log non-rate limit errors to reduce console spam
     const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
     
-    if ((!isLocationEndpoint && !isCategoryEndpoint) || (!is404Error && !isApiError404)) {
+    if ((!isLocationEndpoint && !isCategoryEndpoint && !isVehiclesEndpoint) || (!is404Error && !isApiError404)) {
       // Only log non-rate limit errors to reduce console spam
       if (!isRateLimitError) {
         console.error('API Response Error:', errorDetails);

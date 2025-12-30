@@ -15,16 +15,14 @@ import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterS
 import apiClient from '@/lib/api';
 
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string }> }) {
-  // All hooks in consistent order
+  // Navigation hooks
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // Context hooks
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
-  
-  // Unwrap the params Promise - must be consistent across all renders
-  const { slug } = use(params);
-  const vehicleName = decodeURIComponent(slug);
   
   // State hooks
   const [products, setProducts] = useState<WordPressProduct[]>([]);
@@ -36,12 +34,11 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const [vehicle, setVehicle] = useState<any>(null);
   const [relatedVehicles, setRelatedVehicles] = useState<any[]>([]);
   const [totalProductsFromAPI, setTotalProductsFromAPI] = useState<number>(0);
-
-  // Get current sort value - default to 'date' for newest first
   const [currentSort, setCurrentSort] = useState<string>('date');
-
-  // For path-based pagination, we'll use state for sort instead of URL params
-  // const currentSort = searchParams.get('sort') || 'date';
+  
+  // Unwrap the params Promise - must be consistent across all renders
+  const { slug } = use(params);
+  const vehicleName = decodeURIComponent(slug);
   
   const itemsPerPage = 12; // Number of products per page
   
