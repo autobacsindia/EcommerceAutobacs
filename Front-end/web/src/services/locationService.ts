@@ -114,9 +114,18 @@ class LocationService {
     } catch (error: any) {
       console.error('Select location error:', error);
       
-      // Provide more specific error for reverse geocode failures
+      // Enhanced error handling for reverse geocode failures
       if (error.message && error.message.includes('reverse geocode')) {
-        throw new Error('Failed to reverse geocode coordinates. Please try entering your location manually.');
+        // Categorize the specific type of reverse geocode error
+        if (error.message.includes('zero results')) {
+          throw new Error('No address found for the provided coordinates. Please try entering your location manually.');
+        } else if (error.message.includes('timeout') || error.status === 408) {
+          throw new Error('Geocoding service is temporarily unavailable. Please try entering your location manually or try again later.');
+        } else if (error.status >= 500) {
+          throw new Error('Geocoding service is currently unavailable. Please try entering your location manually.');
+        } else {
+          throw new Error('Failed to determine your address from location. Please try entering your location manually.');
+        }
       }
       
       throw error;
@@ -185,7 +194,9 @@ class LocationService {
     try {
       const response = await apiClient.get<{ locations: UserLocation[] }>(
         `${this.baseUrl}/recent`,
-        { params: { limit } }
+        {
+          params: { limit }
+        }
       );
       return response.locations || [];
     } catch (error) {
@@ -217,7 +228,9 @@ class LocationService {
     try {
       return await apiClient.get<DeliveryEstimateResponse>(
         `${this.baseUrl}/estimate`,
-        { params: { postalCode: data.pinCode } }
+        {
+          params: { postalCode: data.pinCode }
+        }
       );
     } catch (error) {
       console.error('Get delivery estimate error:', error);
@@ -427,6 +440,129 @@ class LocationService {
       remote: 'bg-rose-100 text-rose-800 border border-rose-300'
     };
     return colors[type] || colors.remote;
+  }
+
+  /**
+   * Enhanced reverse geocode error recovery with multiple fallback options
+   */
+  async handleReverseGeocodeError(
+    coordinates: { latitude: number; longitude: number },
+    fallbackAction?: 'manual_entry' | 'map_picker' | 'previous_location'
+  ): Promise<{ success: boolean; message?: string; location?: UserLocation }> {
+    try {
+      // Store coordinates as fallback if manual entry also fails
+      if (coordinates) {
+        localStorage.setItem('autobacs_last_coordinates', JSON.stringify(coordinates));
+      }
+      
+      switch (fallbackAction) {
+        case 'manual_entry':
+          // Return indication that manual entry is needed
+          return { 
+            success: false, 
+            message: 'Please enter your location manually.' 
+          };
+          
+        case 'previous_location':
+          // Try to retrieve and use previous location if available
+          const previousLocation = this.getCachedLocation();
+          if (previousLocation) {
+            return { 
+              success: true, 
+              location: previousLocation,
+              message: 'Using your previous location.'
+            };
+          }
+          return { 
+            success: false, 
+            message: 'Please enter your location manually.' 
+          };
+          
+        case 'map_picker':
+        default:
+          // Default to manual entry option
+          return { 
+            success: false, 
+            message: 'Please enter your location manually.' 
+          };
+      }
+    } catch (error) {
+      console.error('Error in reverse geocode error recovery:', error);
+      return { 
+        success: false, 
+        message: 'Failed to recover from location error. Please try again.' 
+      };
+    }
+  }
+
+  /**
+   * Get last known coordinates from local storage
+   */
+  getLastKnownCoordinates(): { latitude: number; longitude: number } | null {
+    try {
+      const coordsStr = localStorage.getItem('autobacs_last_coordinates');
+      return coordsStr ? JSON.parse(coordsStr) : null;
+    } catch (error) {
+      console.error('Error getting last known coordinates:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Retry reverse geocoding with exponential backoff
+   */
+  async retryReverseGeocode(data: LocationSelectRequest, maxRetries: number = 3): Promise<LocationSelectResponse> {
+    let lastError: any;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Validate coordinates if present
+        if (data.coordinates) {
+          if (!this.isValidCoordinates(data.coordinates.latitude, data.coordinates.longitude)) {
+            throw new Error('Invalid coordinates provided');
+          }
+        }
+        
+        const response = await apiClient.post<LocationSelectResponse>(
+          `${this.baseUrl}/select`,
+          data,
+          { 
+            headers: this.getHeaders(),
+            timeout: 15000, // 15 second timeout
+            retries: 0, // Disable internal retries for this specific flow
+            retryDelay: 1000
+          }
+        );
+        
+        // Store location in local storage for quick access
+        if (response.location) {
+          localStorage.setItem('autobacs_current_location', JSON.stringify(response.location));
+        }
+        
+        return response;
+      } catch (error: any) {
+        lastError = error;
+        
+        // Check if this is a reverse geocode error that we should retry
+        const isReverseGeocodeError = error.message && error.message.includes('reverse geocode');
+        
+        if (isReverseGeocodeError && attempt < maxRetries - 1) {
+          // Exponential backoff: 1s, 2s, 4s, etc.
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`Reverse geocode attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+          
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // If it's not a reverse geocode error or we're out of retries, break
+        break;
+      }
+    }
+    
+    // If all retries failed, throw the last error
+    throw lastError;
   }
 }
 

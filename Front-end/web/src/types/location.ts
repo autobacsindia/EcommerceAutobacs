@@ -230,6 +230,7 @@ export interface LocationContextType {
   clearLocation: () => Promise<void>;
   validateAddress: (postalCode: string) => Promise<LocationValidateResponse>;
   refreshLocation: () => Promise<void>;
+  retryReverseGeocode: (data: LocationSelectRequest, maxRetries?: number) => Promise<LocationSelectResponse>;
 }
 
 // Component prop types

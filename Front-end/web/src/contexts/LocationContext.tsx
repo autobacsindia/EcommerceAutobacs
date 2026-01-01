@@ -156,6 +156,35 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const retryReverseGeocode = useCallback(async (data: LocationSelectRequest, maxRetries?: number) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await locationService.retryReverseGeocode(data, maxRetries);
+      
+      setCurrentLocation(response.location);
+      setDeliveryZone(response.deliveryZone);
+      setDeliveryEstimate(response.deliveryEstimate);
+
+      // Add to location history
+      addToLocationHistory(response.location);
+
+      return response;
+    } catch (err: any) {
+      // Handle rate limit errors specifically
+      if (err.status === 429 && err.rateLimitInfo?.retryAfter) {
+        showRateLimitNotification(err.rateLimitInfo.retryAfter);
+      } else {
+        console.error('Retry reverse geocode error:', err);
+        setError(err.message || 'Failed to reverse geocode location');
+      }
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   /**
    * Clear current location
    */
@@ -219,6 +248,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     clearLocation,
     validateAddress,
     refreshLocation,
+    retryReverseGeocode,
   };
 
   return (

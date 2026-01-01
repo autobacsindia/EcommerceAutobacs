@@ -13,6 +13,7 @@ interface FetchOptions extends RequestInit {
   retries?: number;
   retryDelay?: number;
   timeout?: number;
+  params?: Record<string, any>;
 }
 
 interface RateLimitInfo {
@@ -207,12 +208,26 @@ class APIClient {
       // Extract error message
       let errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
     
-      // Provide more specific handling for reverse geocode errors
+      // Categorize reverse geocode errors specifically
+      let category: ErrorCategory;
       if (response.url && response.url.includes('/location/select') && 
           errorMessage && errorMessage.toLowerCase().includes('reverse geocode')) {
         errorMessage = 'Failed to reverse geocode coordinates';
+              
+        if (errorMessage.toLowerCase().includes('zero results')) {
+          category = ErrorCategory.CLIENT; // Invalid coordinates with no address match
+        } else if (errorMessage.toLowerCase().includes('timeout') || response.status === 408) {
+          category = ErrorCategory.TIMEOUT; // Service timeout
+        } else if (response.status >= 500) {
+          category = ErrorCategory.SERVER; // Service unavailable
+        } else {
+          category = ErrorCategory.CLIENT; // General geocoding failure
+        }
+      } else {
+        // For non-reverse geocode errors, use default categorization
+        category = this.categorizeError(response.status, new Error(errorMessage));
       }
-    
+            
       // Include validation errors in the message if they exist
       if (typeof data === 'object' && data.errors && Array.isArray(data.errors)) {
         const validationErrors = data.errors.map((err: any) => {
@@ -222,7 +237,7 @@ class APIClient {
           if (err.param && err.msg) return `${err.param}: ${err.msg}`;
           return 'Validation error';
         }).join(', ');
-      
+            
         // Only add validation errors if they provide additional information
         if (validationErrors && validationErrors !== 'Validation error' && validationErrors !== 'validation error') {
           errorMessage = `${errorMessage}: ${validationErrors}`;
@@ -240,14 +255,13 @@ class APIClient {
           }
         }
       }
-    
-      const category = this.categorizeError(response.status, new Error(errorMessage));
+          
       const apiError = new ApiError(response.status, errorMessage, response.url, category);
-    
+          
       // Add raw response data to error for debugging
       apiError.rawData = data;
       apiError.responseStatus = response.status;
-    
+          
       throw apiError;
     }
     
@@ -337,10 +351,17 @@ class APIClient {
 /**
  * GET request with retry logic for rate limiting
  */
-async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
   const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  
+  // Handle query parameters
+  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  if (options?.params) {
+    const params = new URLSearchParams(options.params);
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    finalUrl = `${finalUrl}${separator}${params.toString()}`;
+  }
   
   console.log('Making GET request to:', finalUrl);
   
@@ -376,11 +397,14 @@ async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retry
         signal = controller.signal;
       }
       
+      // Remove params from options to avoid passing it to fetch
+      const { params, ...fetchOptionsWithoutParams } = options || {};
+      
       const fetchOptions = {
         method: 'GET',
-        headers: this.getHeaders(options?.headers),
+        headers: this.getHeaders(fetchOptionsWithoutParams?.headers),
         signal,
-        ...options
+        ...fetchOptionsWithoutParams
       };
       
       console.log('Fetch options:', {
@@ -444,10 +468,17 @@ async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retry
 /**
  * POST request with retry logic for rate limiting
  */
-async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
   const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  
+  // Handle query parameters
+  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  if (options?.params) {
+    const params = new URLSearchParams(options.params);
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    finalUrl = `${finalUrl}${separator}${params.toString()}`;
+  }
   
   // Default settings
   let retries = options?.retries ?? 3;
@@ -481,8 +512,11 @@ async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: n
         signal = controller.signal;
       }
       
+      // Remove params from options to avoid passing it to fetch
+      const { params, ...fetchOptionsWithoutParams } = options || {};
+      
       // Separate headers from other options to prevent conflicts
-      const { headers: optionHeaders, ...restOptions } = options || {};
+      const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
       
       // DEBUG: Log headers being sent
       console.log('API.post() headers debug:', JSON.stringify({
@@ -548,10 +582,17 @@ async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: n
 /**
  * PUT request with retry logic for rate limiting
  */
-async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
   const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  
+  // Handle query parameters
+  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  if (options?.params) {
+    const params = new URLSearchParams(options.params);
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    finalUrl = `${finalUrl}${separator}${params.toString()}`;
+  }
   
   // Default settings
   let retries = options?.retries ?? 3;
@@ -585,8 +626,11 @@ async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: nu
         signal = controller.signal;
       }
       
+      // Remove params from options to avoid passing it to fetch
+      const { params, ...fetchOptionsWithoutParams } = options || {};
+      
       // Separate headers from other options to prevent conflicts
-      const { headers: optionHeaders, ...restOptions } = options || {};
+      const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
       
       const fetchOptions = {
         ...restOptions,
@@ -646,10 +690,17 @@ async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: nu
 /**
  * DELETE request with retry logic for rate limiting
  */
-async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number }): Promise<T> {
+async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
   const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  const finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  
+  // Handle query parameters
+  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+  if (options?.params) {
+    const params = new URLSearchParams(options.params);
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    finalUrl = `${finalUrl}${separator}${params.toString()}`;
+  }
   
   // Default settings
   let retries = options?.retries ?? 3;
@@ -683,8 +734,11 @@ async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, re
         signal = controller.signal;
       }
       
+      // Remove params from options to avoid passing it to fetch
+      const { params, ...fetchOptionsWithoutParams } = options || {};
+      
       // Separate headers from other options to prevent conflicts
-      const { headers: optionHeaders, ...restOptions } = options || {};
+      const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
       
       const fetchOptions = {
         ...restOptions,
