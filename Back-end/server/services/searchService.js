@@ -69,11 +69,17 @@ class SearchService {
       }
     }
     
-    // Support multiple brands
+    // Support multiple brands with case-insensitive matching
+    // This allows URL slugs (e.g., 'ironman') to match database values (e.g., 'Ironman')
     if (brand) {
       const brands = Array.isArray(brand) ? brand : brand.split(',');
       if (brands.length > 0) {
-        query.brand = { $in: brands };
+        // Use case-insensitive regex for each brand to match regardless of case
+        // Escape special regex characters in brand names to prevent regex injection
+        const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        query.brand = { 
+          $in: brands.map(b => new RegExp('^' + escapeRegex(b.trim()) + '$', 'i')) 
+        };
       }
     }
     
