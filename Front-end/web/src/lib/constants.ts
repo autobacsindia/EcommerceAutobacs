@@ -59,6 +59,17 @@ export const API_ENDPOINTS = {
   // Refunds
   REFUNDS_LIST: '/orders/refunds',
   REFUND_PROCESS: (orderId: string) => `/orders/${orderId}/refund`,
+  
+  // Brands
+  BRANDS: '/brands',
+  BRAND_DETAIL: (id: string) => `/brands/${id}`,
+  BRAND_CREATE: '/brands',
+  BRAND_UPDATE: (id: string) => `/brands/${id}`,
+  BRAND_DELETE: (id: string) => `/brands/${id}`,
+  BRAND_PRODUCTS: (id: string) => `/brands/${id}/products`,
+  BRAND_MAP_PRODUCTS: (id: string) => `/brands/${id}/products`,
+  BRAND_UNMAP_PRODUCT: (brandId: string, productId: string) => `/brands/${brandId}/products/${productId}`,
+  BRAND_TOGGLE_STATUS: (id: string) => `/brands/${id}/toggle-status`,
 };
 
 // Order Status
