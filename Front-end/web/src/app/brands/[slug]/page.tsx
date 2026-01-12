@@ -66,14 +66,26 @@ interface ProductsData {
 // Function to fetch brand details
 async function getBrandDetails(slug: string): Promise<any> {
   try {
-    // Use the dedicated brand details endpoint
-    const response: any = await apiClient.get(`/products/brands/${slug}/details`);
+    // Decode URL-encoded slug
+    const decodedSlug = decodeURIComponent(slug);
     
-    if (response && response.success && response.brand) {
+    // Use the dedicated brand details endpoint
+    const response: any = await apiClient.get(`/products/brands/${encodeURIComponent(decodedSlug)}/details`);
+    
+    // Validate response
+    if (!response || typeof response !== 'object') {
+      throw new Error('Invalid response format');
+    }
+    
+    if (response.success === false) {
+      throw new Error(response.message || 'Failed to fetch brand details');
+    }
+    
+    if (response.brand && response.brand.name && response.brand.slug) {
       return response.brand;
     }
     
-    return null;
+    throw new Error('Invalid brand data structure');
   } catch (error: any) {
     console.error('Error fetching brand details:', error);
     throw error;
@@ -127,6 +139,9 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
   useEffect(() => {
     const fetchBrandAndProducts = async () => {
       try {
+        setLoading(true);
+        setError(null);
+        
         // Fetch brand details
         const brandDetails = await getBrandDetails(slug);
         if (!brandDetails) {
@@ -138,12 +153,23 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
         setBrand(brandDetails);
         setBrandLoading(false);
         
-        // Fetch products for the brand
-        setLoading(true);
-        const result = await getBrandProducts(slug, currentPage);
+        // Fetch products for the brand using the actual brand slug
+        const brandSlug = brandDetails.slug || slug;
+        const result = await getBrandProducts(brandSlug, currentPage);
         setData(result);
       } catch (err: any) {
-        setError(err.message || 'Failed to fetch brand or products');
+        const errorMessage = err.message || 'Failed to fetch brand or products';
+        
+        // Check if it's a 404 error
+        if (err.status === 404 || errorMessage.toLowerCase().includes('not found')) {
+          setError('Brand not found');
+        } else if (err.status === 500) {
+          setError('Server error. Please try again later.');
+        } else {
+          setError(errorMessage);
+        }
+        
+        setBrandLoading(false);
       } finally {
         setLoading(false);
       }
@@ -159,19 +185,38 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
     router.push(`/brands/${slug}?${currentParams.toString()}`);
   };
 
-  if (!brand) {
+  if (!brand && !brandLoading && error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Brand Not Found</h1>
-          <p className="text-gray-600 mb-6">The requested brand could not be found.</p>
-          <Link 
-            href="/brands" 
-            className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Brands
-          </Link>
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="bg-red-50 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+            <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            {error === 'Brand not found' ? 'Brand Not Found' : 'Error Loading Brand'}
+          </h1>
+          <p className="text-gray-600 mb-6">
+            {error === 'Brand not found' 
+              ? "The brand you're looking for doesn't exist or has been removed."
+              : error}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link 
+              href="/brands" 
+              className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Brands
+            </Link>
+            <Link 
+              href="/products" 
+              className="inline-flex items-center justify-center px-6 py-3 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Browse Products
+            </Link>
+          </div>
         </div>
       </div>
     );

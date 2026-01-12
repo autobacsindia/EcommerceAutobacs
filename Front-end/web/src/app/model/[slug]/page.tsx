@@ -52,57 +52,52 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       setError(null);
         
       try {
-        // Fetch product categories
-        const categoriesData = await wordpressService.getProductCategories();
+        // Fetch categories, products, and vehicle data in parallel for better performance
+        const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
+          wordpressService.getProductCategories(),
+          wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage),
+          apiClient.get(`/vehicles/slug/${slug}`).catch(err => {
+            console.warn('Could not fetch vehicle data:', err);
+            return { success: false };
+          })
+        ]);
+        
+        const vehicleResponse: any = vehicleResponseRaw;
+        
+        // Set categories
         setCategories(categoriesData);
-          
-        // Fetch products for the vehicle with pagination
-        const productsResponse = await wordpressService.getProductsByVehicle(
-          slug,
-          currentPage,
-          itemsPerPage
-        );
+        
+        // Set products
         let productsData = productsResponse.products || [];
         const totalProductsFromAPI = productsResponse.total;
-        
-        // Store all products from API
         setProducts(productsData);
         setTotalProductsFromAPI(totalProductsFromAPI);
         
-        // If a category is selected, we'll handle filtering in the UI
-        
-        // Fetch specific vehicle data
-        try {
-          const vehicleResponse: any = await apiClient.get(`/vehicles/slug/${slug}`);
-          if (vehicleResponse.success && vehicleResponse.vehicle) {
-            setVehicle(vehicleResponse.vehicle);
-            
-            // Fetch related vehicles (same make, different models)
-            if (vehicleResponse.vehicle.make) {
+        // Set vehicle data and fetch related vehicles if available
+        if (vehicleResponse.success && vehicleResponse.vehicle) {
+          setVehicle(vehicleResponse.vehicle);
+          
+          // Fetch related vehicles (same make, different models)
+          if (vehicleResponse.vehicle.make) {
+            try {
               const relatedResponse: any = await apiClient.get(`/vehicles/models/${vehicleResponse.vehicle.make}`);
               if (relatedResponse.success && relatedResponse.models) {
-                // Get full vehicle data for related models
-                const relatedVehiclesData = [];
-                for (const model of relatedResponse.models) {
-                  if (model.toLowerCase() !== vehicleResponse.vehicle.model.toLowerCase()) {
-                    // Try to find a vehicle with this model
-                    try {
-                      const relatedVehicleResponse: any = await apiClient.get(`/vehicles/make-model/${vehicleResponse.vehicle.make}/${model}`);
-                      if (relatedVehicleResponse.success && relatedVehicleResponse.vehicle) {
-                        relatedVehiclesData.push(relatedVehicleResponse.vehicle);
-                      }
-                    } catch (err) {
-                      console.warn(`Could not fetch related vehicle ${vehicleResponse.vehicle.make} ${model}:`, err);
-                    }
-                  }
-                }
+                // Get full vehicle data for related models in parallel
+                const relatedVehiclePromises = relatedResponse.models
+                  .filter((model: string) => model.toLowerCase() !== vehicleResponse.vehicle.model.toLowerCase())
+                  .map((model: string) => 
+                    apiClient.get(`/vehicles/make-model/${vehicleResponse.vehicle.make}/${model}`)
+                      .then((res: any) => res.success && res.vehicle ? res.vehicle : null)
+                      .catch(() => null)
+                  );
+                
+                const relatedVehiclesData = (await Promise.all(relatedVehiclePromises)).filter(v => v !== null);
                 setRelatedVehicles(relatedVehiclesData);
               }
+            } catch (err) {
+              console.warn('Could not fetch related vehicles:', err);
             }
           }
-        } catch (vehicleErr) {
-          console.warn('Could not fetch vehicle data:', vehicleErr);
-          // Continue without vehicle data
         }
           
         // Show a warning if no data is found and WordPress API might not be configured

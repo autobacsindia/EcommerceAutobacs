@@ -120,6 +120,198 @@ router.get("/featured", asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   GET /products/brands
+// @desc    Get all available brands
+// @access  Public
+router.get('/brands', asyncHandler(async (req, res) => {
+  try {
+    // Get all unique brands from products
+    const brandNames = await Product.distinct('brand', { 
+      brand: { $exists: true, $ne: null, $ne: '' },
+      isActive: true
+    });
+    
+    // Create or get brand documents to ensure consistent ObjectIds
+    const Brand = (await import('../models/Brand.js')).default;
+    
+    // Use aggregation to get product counts efficiently
+    const productCounts = await Product.aggregate([
+      {
+        $match: {
+          brand: { $exists: true, $ne: null, $ne: '' },
+          isActive: true
+        }
+      },
+      {
+        $group: {
+          _id: '$brand',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Create a map for quick count lookups
+    const countMap = {};
+    productCounts.forEach(item => {
+      countMap[item._id] = item.count;
+    });
+    
+    // Process each brand to ensure it exists in the Brand collection
+    const brandInfo = [];
+    for (const brandName of brandNames) {
+      const slug = brandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      
+      // Find or create brand document to get consistent ObjectId
+      let brandDoc = await Brand.findOne({ slug });
+      if (!brandDoc) {
+        // Create new brand document if it doesn't exist
+        brandDoc = new Brand({
+          name: brandName,
+          slug: slug,
+          isActive: true
+        });
+        await brandDoc.save();
+      }
+      
+      // Get product count from the map
+      const productCount = countMap[brandName] || 0;
+      
+      // Only include brands with products
+      if (productCount > 0) {
+        brandInfo.push({
+          id: brandDoc._id.toString(), // Proper ObjectId string
+          name: brandName,
+          slug: slug,
+          productCount: productCount,
+          logo: brandDoc.logo || null,
+          description: brandDoc.description || null
+        });
+      }
+    }
+    
+    // Sort brands alphabetically by name
+    brandInfo.sort((a, b) => a.name.localeCompare(b.name));
+    
+    res.json({
+      success: true,
+      brands: brandInfo
+    });
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch brands',
+      error: error.message
+    });
+  }
+}));
+
+// @route   GET /products/brands/:brandName
+// @desc    Get products for a specific brand
+// @access  Public
+router.get('/brands/:brandName', asyncHandler(async (req, res) => {
+  const { brandName } = req.params;
+  
+  try {
+    // Use the search service to find products by brand
+    const searchResults = await SearchService.searchProducts({
+      brand: brandName,
+      page: req.query.page || 1,
+      limit: req.query.limit || 12
+    });
+    
+    res.json({
+      success: true,
+      count: searchResults.products.length,
+      ...searchResults.pagination,
+      products: searchResults.products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch brand products',
+      error: error.message
+    });
+  }
+}));
+
+// @route   GET /products/brands/:brandName/details
+// @desc    Get details for a specific brand
+// @access  Public
+router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
+  const { brandName } = req.params;
+  
+  try {
+    const Brand = (await import('../models/Brand.js')).default;
+    
+    // Normalize the slug
+    const normalizedSlug = brandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    
+    // Find brand by name or slug
+    let brandDoc = await Brand.findOne({ 
+      $or: [
+        { name: { $regex: new RegExp(`^${brandName}$`, 'i') } },
+        { slug: normalizedSlug }
+      ]
+    });
+    
+    if (!brandDoc) {
+      // Check if any products exist with this brand name
+      const productCount = await Product.countDocuments({
+        brand: { $regex: new RegExp(`^${brandName}$`, 'i') },
+        isActive: true
+      });
+      
+      if (productCount === 0) {
+        // Brand doesn't exist anywhere
+        return res.status(404).json({
+          success: false,
+          message: 'Brand not found'
+        });
+      }
+      
+      // Brand exists in products but not in Brand collection - create placeholder
+      // Find the exact brand name from products
+      const product = await Product.findOne({
+        brand: { $regex: new RegExp(`^${brandName}$`, 'i') },
+        isActive: true
+      });
+      
+      const actualBrandName = product ? product.brand : brandName;
+      const slug = actualBrandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      
+      return res.json({
+        success: true,
+        brand: {
+          id: null,
+          name: actualBrandName,
+          slug: slug,
+          logo: `https://via.placeholder.com/150?text=${encodeURIComponent(actualBrandName)}`,
+          description: 'Premium automotive accessories and performance parts'
+        }
+      });
+    }
+    
+    res.json({
+      success: true,
+      brand: {
+        id: brandDoc._id.toString(),
+        name: brandDoc.name,
+        slug: brandDoc.slug,
+        logo: brandDoc.logo || `https://via.placeholder.com/150?text=${encodeURIComponent(brandDoc.name)}`,
+        description: brandDoc.description || 'Premium automotive accessories and performance parts'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching brand details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch brand details',
+      error: error.message
+    });
+  }
+}));
+
 // @route   GET /products/:id
 // @desc    Get product by ID
 // @access  Public
@@ -569,140 +761,6 @@ router.get("/cleanup/status", protect, admin, asyncHandler(async (req, res) => {
     status: 'Ready to start cleanup',
     lastCleanup: null
   });
-}));
-
-// @route   GET /products/brands
-// @desc    Get all available brands
-// @access  Public
-router.get('/brands', asyncHandler(async (req, res) => {
-  try {
-    // Get all unique brands from products
-    const brandNames = await Product.distinct('brand', { 
-      brand: { $exists: true, $ne: null, $ne: '' },
-      isActive: true
-    });
-    
-    // Create or get brand documents to ensure consistent ObjectIds
-    const Brand = (await import('../models/Brand.js')).default;
-    
-    // Process each brand to ensure it exists in the Brand collection
-    const brandInfo = [];
-    for (const brandName of brandNames) {
-      const slug = brandName.toLowerCase().replace(/\s+/g, '-');
-      
-      // Find or create brand document to get consistent ObjectId
-      let brandDoc = await Brand.findOne({ slug });
-      if (!brandDoc) {
-        // Create new brand document if it doesn't exist
-        brandDoc = new Brand({
-          name: brandName,
-          slug: slug
-        });
-        await brandDoc.save();
-      }
-      
-      brandInfo.push({
-        id: brandDoc._id.toString(), // Proper ObjectId string
-        name: brandName,
-        slug: slug,
-        productCount: 0 // We could add count if needed
-      });
-    }
-    
-    res.json({
-      success: true,
-      brands: brandInfo
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch brands',
-      error: error.message
-    });
-  }
-}));
-
-// @route   GET /products/brands/:brandName
-// @desc    Get products for a specific brand
-// @access  Public
-router.get('/brands/:brandName', asyncHandler(async (req, res) => {
-  const { brandName } = req.params;
-  
-  try {
-    // Use the search service to find products by brand
-    const searchResults = await SearchService.searchProducts({
-      brand: brandName,
-      page: req.query.page || 1,
-      limit: req.query.limit || 12
-    });
-    
-    res.json({
-      success: true,
-      count: searchResults.products.length,
-      ...searchResults.pagination,
-      products: searchResults.products
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch brand products',
-      error: error.message
-    });
-  }
-}));
-
-// @route   GET /products/brands/:brandName/details
-// @desc    Get details for a specific brand
-// @access  Public
-router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
-  const { brandName } = req.params;
-  
-  try {
-    const Brand = (await import('../models/Brand.js')).default;
-    
-    // Find brand by name or slug
-    let brandDoc = await Brand.findOne({ 
-      $or: [
-        { name: { $regex: new RegExp(brandName, 'i') } },
-        { slug: brandName.toLowerCase().replace(/\s+/g, '-') }
-      ]
-    });
-    
-    if (!brandDoc) {
-      // If brand doesn't exist in Brand collection, create a basic response
-      // using the brand name from the request
-      const slug = brandName.toLowerCase().replace(/\s+/g, '-');
-      
-      return res.json({
-        success: true,
-        brand: {
-          id: null, // Don't generate a temporary ID, let frontend handle this case
-          name: brandName,
-          slug: slug,
-          // Using default logo for now, would come from API in real implementation
-          logo: `https://via.placeholder.com/150?text=${encodeURIComponent(brandName)}`,
-          description: 'Premium automotive accessories and performance parts'
-        }
-      });
-    }
-    
-    res.json({
-      success: true,
-      brand: {
-        id: brandDoc._id.toString(),
-        name: brandDoc.name,
-        slug: brandDoc.slug,
-        logo: brandDoc.logo || `https://via.placeholder.com/150?text=${encodeURIComponent(brandDoc.name)}`,
-        description: brandDoc.description || 'Premium automotive accessories and performance parts'
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch brand details',
-      error: error.message
-    });
-  }
 }));
 
 export default router;

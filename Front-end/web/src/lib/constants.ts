@@ -25,6 +25,14 @@ export const API_ENDPOINTS = {
   VEHICLE_DETAIL: (id: string) => `/vehicles/${id}`,
   VEHICLE_MAKES: '/vehicles/makes',
   VEHICLE_MODELS: (make: string) => `/vehicles/models/${make}`,
+  VEHICLES_ADMIN: '/vehicles/admin/all',
+  VEHICLE_CREATE: '/vehicles',
+  VEHICLE_UPDATE: (id: string) => `/vehicles/${id}`,
+  VEHICLE_DELETE: (id: string) => `/vehicles/${id}`,
+  VEHICLE_TOGGLE_STATUS: (id: string) => `/vehicles/${id}/toggle-status`,
+  VEHICLE_PRODUCTS: (id: string) => `/vehicles/${id}/products`,
+  VEHICLE_MAP_PRODUCTS: (id: string) => `/vehicles/${id}/products/map`,
+  VEHICLE_UNMAP_PRODUCT: (vehicleId: string, productId: string) => `/vehicles/${vehicleId}/products/${productId}`,
   
   // Cart
   CART: '/cart',
@@ -70,6 +78,11 @@ export const API_ENDPOINTS = {
   BRAND_MAP_PRODUCTS: (id: string) => `/brands/${id}/products`,
   BRAND_UNMAP_PRODUCT: (brandId: string, productId: string) => `/brands/${brandId}/products/${productId}`,
   BRAND_TOGGLE_STATUS: (id: string) => `/brands/${id}/toggle-status`,
+  
+  // WordPress (Proxy)
+  WORDPRESS_CATEGORIES: '/wordpress/categories',
+  WORDPRESS_PRODUCTS: '/wordpress/products',
+  WORDPRESS_PRODUCT_DETAIL: (id: string) => `/wordpress/products/${id}`,
 };
 
 // Order Status

@@ -1,5 +1,6 @@
 import express from "express";
 import Vehicle from "../models/Vehicle.js";
+import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 
@@ -181,6 +182,202 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Vehicle deleted successfully'
+  });
+}));
+
+// @route   GET /vehicles/admin/all
+// @desc    Get all vehicles (including inactive) for admin
+// @access  Private/Admin
+router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const search = req.query.search || '';
+
+  const query = search
+    ? {
+        $or: [
+          { make: { $regex: search, $options: 'i' } },
+          { model: { $regex: search, $options: 'i' } },
+          { variant: { $regex: search, $options: 'i' } }
+        ]
+      }
+    : {};
+
+  const total = await Vehicle.countDocuments(query);
+  const vehicles = await Vehicle.find(query)
+    .sort({ make: 1, model: 1, year: 1 })
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  // Get product counts for each vehicle
+  const vehiclesWithCounts = await Promise.all(
+    vehicles.map(async (vehicle) => {
+      const productCount = await Product.countDocuments({
+        compatibleVehicles: vehicle._id,
+        isActive: true
+      });
+      return {
+        ...vehicle.toObject(),
+        productCount
+      };
+    })
+  );
+
+  res.json({
+    success: true,
+    vehicles: vehiclesWithCounts,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit,
+      hasNext: page < Math.ceil(total / limit),
+      hasPrev: page > 1
+    }
+  });
+}));
+
+// @route   PATCH /vehicles/:id/toggle-status
+// @desc    Toggle vehicle active status
+// @access  Private/Admin
+router.patch("/:id/toggle-status", protect, admin, asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findById(req.params.id);
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  vehicle.isActive = !vehicle.isActive;
+  await vehicle.save();
+
+  res.json({
+    success: true,
+    message: `Vehicle ${vehicle.isActive ? 'activated' : 'deactivated'} successfully`,
+    vehicle
+  });
+}));
+
+// @route   GET /vehicles/:id/products
+// @desc    Get products mapped to a vehicle
+// @access  Private/Admin
+router.get("/:id/products", protect, admin, asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findById(req.params.id);
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+
+  const total = await Product.countDocuments({
+    compatibleVehicles: vehicle._id,
+    isActive: true
+  });
+
+  const products = await Product.find({
+    compatibleVehicles: vehicle._id,
+    isActive: true
+  })
+    .select('name price images brand')
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  res.json({
+    success: true,
+    vehicle: {
+      id: vehicle._id,
+      name: `${vehicle.make} ${vehicle.model}`,
+      slug: vehicle.slug,
+      productCount: total
+    },
+    products,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit
+    }
+  });
+}));
+
+// @route   POST /vehicles/:id/products/map
+// @desc    Map products to a vehicle
+// @access  Private/Admin
+router.post("/:id/products/map", protect, admin, asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findById(req.params.id);
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  const { productIds } = req.body;
+
+  if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Product IDs array is required'
+    });
+  }
+
+  // Add vehicle to products' compatibleVehicles array
+  const result = await Product.updateMany(
+    {
+      _id: { $in: productIds },
+      compatibleVehicles: { $ne: vehicle._id }
+    },
+    {
+      $addToSet: { compatibleVehicles: vehicle._id }
+    }
+  );
+
+  res.json({
+    success: true,
+    message: `Successfully mapped ${result.modifiedCount} products to ${vehicle.make} ${vehicle.model}`,
+    modifiedCount: result.modifiedCount
+  });
+}));
+
+// @route   DELETE /vehicles/:id/products/:productId
+// @desc    Unmap a product from a vehicle
+// @access  Private/Admin
+router.delete("/:id/products/:productId", protect, admin, asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findById(req.params.id);
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  const product = await Product.findById(req.params.productId);
+
+  if (!product) {
+    return res.status(404).json({
+      success: false,
+      message: 'Product not found'
+    });
+  }
+
+  // Remove vehicle from product's compatibleVehicles array
+  product.compatibleVehicles = product.compatibleVehicles.filter(
+    vehicleId => vehicleId.toString() !== vehicle._id.toString()
+  );
+  await product.save();
+
+  res.json({
+    success: true,
+    message: 'Product unmapped successfully'
   });
 }));
 

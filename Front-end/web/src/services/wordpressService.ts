@@ -1,35 +1,10 @@
-// Temporary WordPress service that extracts vehicles from product data
-// This bypasses the missing vehicle taxonomy by parsing product names/tags
+// WordPress service that proxies through backend API
+// This avoids CORS issues by routing all WordPress API calls through our backend
 
-import axios from 'axios';
-import wordpressDebug from '@/lib/wordpressDebug';
+import apiClient from '@/lib/api';
+import { API_ENDPOINTS } from '@/lib/constants';
 
-// WordPress API configuration
-const WORDPRESS_SITE_URL = process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL || '';
-const WORDPRESS_API_VERSION = process.env.NEXT_PUBLIC_WORDPRESS_API_VERSION || 'wc/v3';
-const WORDPRESS_CONSUMER_KEY = process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY || '';
-const WORDPRESS_CONSUMER_SECRET = process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET || '';
 
-// Create axios instance with default configuration
-const createWordpressApi = () => {
-  // Don't create the API instance if we don't have all required configuration
-  if (!WORDPRESS_SITE_URL || !WORDPRESS_CONSUMER_KEY || !WORDPRESS_CONSUMER_SECRET) {
-    // Log debug information
-    wordpressDebug.logConfig();
-    return null;
-  }
-  
-  return axios.create({
-    baseURL: `${WORDPRESS_SITE_URL}/wp-json`,
-    auth: {
-      username: WORDPRESS_CONSUMER_KEY,
-      password: WORDPRESS_CONSUMER_SECRET
-    },
-    timeout: 30000
-  });
-};
-
-const wordpressApi = createWordpressApi();
 
 // WordPress API response types
 interface WordPressProductImage {
@@ -184,26 +159,20 @@ function extractVehiclesFromProducts(products: WordPressProduct[]): string[] {
 
 // Service functions
 export const wordpressService = {
-  // Extract vehicles from product data instead of using taxonomy
+  // Extract vehicles from product data instead of using taxonomy (now via proxy)
   async getAllVehicles(): Promise<{ id: number; name: string; slug: string; count: number }[]> {
-    // Return empty array if WordPress API is not configured
-    if (!wordpressApi) {
-      console.warn('WordPress API not configured. Returning empty vehicles array.');
-      return [];
-    }
-    
     try {
       // Get a sample of products to extract vehicles from
-      const response = await wordpressApi.get<WordPressProduct[]>(
-        `/${WORDPRESS_API_VERSION}/products`,
-        {
-          params: {
-            per_page: 100 // Get enough products to identify vehicles
-          }
-        }
-      );
+      const response: any = await apiClient.get(API_ENDPOINTS.WORDPRESS_PRODUCTS, {
+        params: { per_page: 100 }
+      });
       
-      const vehicleNames = extractVehiclesFromProducts(response.data);
+      if (!response.success || !response.products) {
+        console.warn('Failed to fetch WordPress products');
+        return [];
+      }
+      
+      const vehicleNames = extractVehiclesFromProducts(response.products);
       
       // Convert to expected format
       return vehicleNames.map((name, index) => ({
@@ -214,19 +183,12 @@ export const wordpressService = {
       }));
     } catch (error) {
       console.error('Error extracting vehicles:', error);
-      // Return empty array instead of throwing error to prevent app crash
       return [];
     }
   },
   
-  // Fetch products by vehicle using more comprehensive search
+  // Fetch products by vehicle using more comprehensive search (now via proxy)
   async getProductsByVehicle(vehicleSlug: string, page: number = 1, perPage: number = 20): Promise<{ products: WordPressProduct[], total: number }> {
-    // Return empty array if WordPress API is not configured
-    if (!wordpressApi) {
-      console.warn('WordPress API not configured. Returning empty products array.');
-      return { products: [], total: 0 };
-    }
-      
     try {
       // Decode the vehicle slug to get the actual vehicle name
       const vehicleName = decodeURIComponent(vehicleSlug).toLowerCase();
@@ -247,18 +209,12 @@ export const wordpressService = {
       return { products: paginatedProducts, total: totalVehicleProducts };
     } catch (error) {
       console.error(`Error fetching products for vehicle ${vehicleSlug}:`, error);
-      // Return empty array instead of throwing error to prevent app crash
       return { products: [], total: 0 };
     }
   },
     
-  // Helper method to fetch all products matching a vehicle across all pages
+  // Helper method to fetch all products matching a vehicle across all pages (now via proxy)
   async getAllVehicleProducts(vehicleName: string): Promise<WordPressProduct[]> {
-    if (!wordpressApi) {
-      console.warn('WordPress API not configured. Returning empty products array.');
-      return [];
-    }
-      
     const perPage = 50; // Fetch more per page to reduce API calls
     let allProducts: WordPressProduct[] = [];
     let currentPage = 1;
@@ -266,21 +222,20 @@ export const wordpressService = {
       
     // First, try to get an estimate of total pages by fetching first page
     try {
-      const firstPageResponse = await wordpressApi.get<WordPressProduct[]>(
-        `/${WORDPRESS_API_VERSION}/products`,
-        {
-          params: {
-            per_page: 1, // Just get 1 to check total
-            page: 1
-          }
+      const firstPageResponse: any = await apiClient.get(API_ENDPOINTS.WORDPRESS_PRODUCTS, {
+        params: {
+          per_page: 1,
+          page: 1
         }
-      );
+      });
         
-      const headers = firstPageResponse.headers;
-      const totalProductsHeader = headers['x-wp-total'] || headers['X-WP-Total'];
-      const totalProducts = totalProductsHeader ? parseInt(totalProductsHeader as string) : 100; // Default to 100 if not available
-      totalPages = Math.ceil(totalProducts / perPage);
-      totalPages = Math.min(totalPages, 10); // Limit to 10 pages to prevent too many API calls
+      if (firstPageResponse.success && firstPageResponse.total) {
+        const totalProducts = firstPageResponse.total;
+        totalPages = Math.ceil(totalProducts / perPage);
+        totalPages = Math.min(totalPages, 10); // Limit to 10 pages to prevent too many API calls
+      } else {
+        totalPages = 5; // Default to 5 pages if we can't get the count
+      }
     } catch (countError) {
       console.warn('Could not fetch total product count, using default:', countError);
       totalPages = 5; // Default to 5 pages if we can't get the count
@@ -289,18 +244,20 @@ export const wordpressService = {
     // Fetch all pages up to the calculated total
     for (currentPage = 1; currentPage <= totalPages; currentPage++) {
       try {
-        const response = await wordpressApi.get<WordPressProduct[]>(
-          `/${WORDPRESS_API_VERSION}/products`,
-          {
-            params: {
-              per_page: perPage,
-              page: currentPage
-            }
+        const response: any = await apiClient.get(API_ENDPOINTS.WORDPRESS_PRODUCTS, {
+          params: {
+            per_page: perPage,
+            page: currentPage
           }
-        );
+        });
+        
+        if (!response.success || !response.products) {
+          console.warn(`Failed to fetch page ${currentPage}`);
+          break;
+        }
           
         // Filter products that mention the vehicle
-        const vehicleProducts = response.data.filter(product => {
+        const vehicleProducts = response.products.filter((product: WordPressProduct) => {
           const productName = (product.name || '').toLowerCase();
           const productTags = product.tags && Array.isArray(product.tags) 
             ? product.tags.map(tag => (tag.name || '').toLowerCase()).join(' ')
@@ -337,9 +294,6 @@ export const wordpressService = {
           
         // Small delay to be respectful to the API
         await new Promise(resolve => setTimeout(resolve, 100));
-          
-        // If this page returned no products, we might be past the last relevant page
-        // But we'll continue to ensure we don't miss any
       } catch (pageError) {
         console.warn(`Error fetching page ${currentPage}, continuing with available data:`, pageError);
         break; // Stop if we encounter an error
@@ -349,28 +303,21 @@ export const wordpressService = {
     return allProducts;
   },
   
-  // Fetch product categories (unchanged)
+  // Fetch product categories via backend proxy
   async getProductCategories(): Promise<WordPressProductCategory[]> {
-    // Return empty array if WordPress API is not configured
-    if (!wordpressApi) {
-      console.warn('WordPress API not configured. Returning empty categories array.');
-      return [];
-    }
-    
     try {
-      const response = await wordpressApi.get<WordPressProductCategory[]>(
-        `/${WORDPRESS_API_VERSION}/products/categories`,
-        {
-          params: {
-            per_page: 100
-          }
-        }
-      );
+      const response: any = await apiClient.get(API_ENDPOINTS.WORDPRESS_CATEGORIES, {
+        params: { per_page: 100 }
+      });
       
-      return response.data;
-    } catch (error) {
+      if (response.success) {
+        return response.categories || [];
+      }
+      
+      console.warn('WordPress API returned unsuccessful response');
+      return [];
+    } catch (error: any) {
       console.error('Error fetching product categories:', error);
-      // Return empty array instead of throwing error to prevent app crash
       return [];
     }
   }

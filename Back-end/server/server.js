@@ -20,6 +20,7 @@ import warehouseRoutes from "./routes/warehouses.js";
 import deliveryZoneRoutes from "./routes/deliveryZones.js";
 import razorpayRoutes from "./routes/razorpay.js";
 import brandRoutes from "./routes/brands.js";
+import wordpressRoutes from "./routes/wordpress.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -66,7 +67,8 @@ app.get("/", (req, res) => {
       warehouses: "/warehouses",
       deliveryZones: "/delivery-zones",
       razorpay: "/razorpay",
-      brands: "/brands"
+      brands: "/brands",
+      wordpress: "/wordpress"
     }
   });
 });
@@ -96,6 +98,7 @@ app.use("/warehouses", apiRateLimit, warehouseRoutes);
 app.use("/delivery-zones", apiRateLimit, deliveryZoneRoutes);
 app.use("/razorpay", apiRateLimit, razorpayRoutes);
 app.use("/brands", apiRateLimit, brandRoutes);
+app.use("/wordpress", apiRateLimit, wordpressRoutes);
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {
