@@ -1,0 +1,182 @@
+{
+  "timestamp": "2026-01-12T10:36:40.139Z",
+  "database": {
+    "totalProducts": 2832,
+    "productsWithVehicles": 585,
+    "productsWithoutVehicles": 2247,
+    "totalVehicles": 15,
+    "activeVehicles": 15
+  },
+  "vehicleStats": [
+    {
+      "id": "694a55b5c5309918a46326f3",
+      "name": "Toyota Hilux",
+      "slug": "toyota-hilux",
+      "make": "Toyota",
+      "model": "Hilux",
+      "productCount": 209
+    },
+    {
+      "id": "694a55b5c5309918a46326f4",
+      "name": "Mahindra Thar",
+      "slug": "mahindra-thar",
+      "make": "Mahindra",
+      "model": "Thar",
+      "productCount": 126
+    },
+    {
+      "id": "694a55b5c5309918a46326f5",
+      "name": "Isuzu D-Max",
+      "slug": "isuzu-d-max",
+      "make": "Isuzu",
+      "model": "D-Max",
+      "productCount": 38
+    },
+    {
+      "id": "694a55b5c5309918a46326f6",
+      "name": "Maruti Jimny",
+      "slug": "maruti-jimny",
+      "make": "Maruti",
+      "model": "Jimny",
+      "productCount": 29
+    },
+    {
+      "id": "694a55b5c5309918a46326f7",
+      "name": "Jeep Wrangler",
+      "slug": "jeep-wrangler",
+      "make": "Jeep",
+      "model": "Wrangler",
+      "productCount": 31
+    },
+    {
+      "id": "694a55b5c5309918a46326f8",
+      "name": "Toyota Fortuner",
+      "slug": "toyota-fortuner",
+      "make": "Toyota",
+      "model": "Fortuner",
+      "productCount": 86
+    },
+    {
+      "id": "694a55b5c5309918a46326f9",
+      "name": "Volkswagen Polo",
+      "slug": "volkswagen-polo",
+      "make": "Volkswagen",
+      "model": "Polo",
+      "productCount": 22
+    },
+    {
+      "id": "694a55b5c5309918a46326fa",
+      "name": "Hyundai Creta",
+      "slug": "hyundai-creta",
+      "make": "Hyundai",
+      "model": "Creta",
+      "productCount": 22
+    },
+    {
+      "id": "694a55b5c5309918a46326fb",
+      "name": "Kia Seltos",
+      "slug": "kia-seltos",
+      "make": "Kia",
+      "model": "Seltos",
+      "productCount": 5
+    },
+    {
+      "id": "694a55b5c5309918a46326fc",
+      "name": "Ford Endeavour",
+      "slug": "ford-endeavour",
+      "make": "Ford",
+      "model": "Endeavour",
+      "productCount": 62
+    },
+    {
+      "id": "694a55b5c5309918a46326fd",
+      "name": "Audi Q7",
+      "slug": "audi-q7",
+      "make": "Audi",
+      "model": "Q7",
+      "productCount": 6
+    },
+    {
+      "id": "694a55b5c5309918a46326fe",
+      "name": "BMW X5",
+      "slug": "bmw-x5",
+      "make": "BMW",
+      "model": "X5",
+      "productCount": 40
+    },
+    {
+      "id": "694a55b5c5309918a46326ff",
+      "name": "Ford Ranger",
+      "slug": "ford-ranger",
+      "make": "Ford",
+      "model": "Ranger",
+      "productCount": 13
+    },
+    {
+      "id": "694a55b5c5309918a4632700",
+      "name": "Land Rover Defender",
+      "slug": "land-rover-defender",
+      "make": "Land Rover",
+      "model": "Defender",
+      "productCount": 40
+    },
+    {
+      "id": "694a55b5c5309918a4632701",
+      "name": "Mercedes-Benz G-Class",
+      "slug": "mercedes-benz-g-class",
+      "make": "Mercedes-Benz",
+      "model": "G-Class",
+      "productCount": 12
+    }
+  ],
+  "productStats": {
+    "minVehiclesPerProduct": 1,
+    "maxVehiclesPerProduct": 6,
+    "avgVehiclesPerProduct": "1.27"
+  },
+  "coverage": {
+    "vehiclesWithProducts": 15,
+    "vehiclesWithoutProducts": 0,
+    "percentageVehiclesCovered": "100.00",
+    "percentageProductsMapped": "20.66"
+  },
+  "issues": {
+    "vehiclesWithZeroProducts": [],
+    "vehiclesWithLowProducts": [
+      {
+        "id": "694a55b5c5309918a46326fb",
+        "name": "Kia Seltos",
+        "slug": "kia-seltos",
+        "make": "Kia",
+        "model": "Seltos",
+        "productCount": 5
+      },
+      {
+        "id": "694a55b5c5309918a46326fd",
+        "name": "Audi Q7",
+        "slug": "audi-q7",
+        "make": "Audi",
+        "model": "Q7",
+        "productCount": 6
+      },
+      {
+        "id": "694a55b5c5309918a46326ff",
+        "name": "Ford Ranger",
+        "slug": "ford-ranger",
+        "make": "Ford",
+        "model": "Ranger",
+        "productCount": 13
+      },
+      {
+        "id": "694a55b5c5309918a4632701",
+        "name": "Mercedes-Benz G-Class",
+        "slug": "mercedes-benz-g-class",
+        "make": "Mercedes-Benz",
+        "model": "G-Class",
+        "productCount": 12
+      }
+    ],
+    "productsWithAllVehicles": [],
+    "orphanedProducts": []
+  }
+}

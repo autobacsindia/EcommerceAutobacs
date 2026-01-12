@@ -163,6 +163,46 @@ export const vehicleService = {
       console.error('Failed to fetch vehicle from API');
       return null;
     }
+  },
+
+  /**
+   * Get products compatible with a specific vehicle
+   * @param vehicleId - Vehicle ID or slug
+   * @param options - Query options (page, limit, filters)
+   */
+  async getVehicleProducts(vehicleId: string, options: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    brand?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    sortBy?: string;
+    order?: 'asc' | 'desc';
+    inStock?: boolean;
+  } = {}): Promise<any> {
+    try {
+      const params = new URLSearchParams();
+      
+      if (options.page) params.append('page', options.page.toString());
+      if (options.limit) params.append('limit', options.limit.toString());
+      if (options.category) params.append('category', options.category);
+      if (options.brand) params.append('brand', options.brand);
+      if (options.minPrice) params.append('minPrice', options.minPrice.toString());
+      if (options.maxPrice) params.append('maxPrice', options.maxPrice.toString());
+      if (options.sortBy) params.append('sortBy', options.sortBy);
+      if (options.order) params.append('order', options.order);
+      if (options.inStock !== undefined) params.append('inStock', options.inStock.toString());
+      
+      const queryString = params.toString();
+      const url = `/products/by-vehicle/${vehicleId}${queryString ? '?' + queryString : ''}`;
+      
+      const response = await vehicleApi.get(url);
+      return response;
+    } catch (error) {
+      console.error('Error fetching vehicle products:', error);
+      throw error;
+    }
   }
 };
 

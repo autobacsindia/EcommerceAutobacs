@@ -52,21 +52,6 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         // Fetch product categories
         const categoriesData = await wordpressService.getProductCategories();
         setCategories(categoriesData);
-          
-        // Fetch products for the vehicle with pagination
-        const productsResponse = await wordpressService.getProductsByVehicle(
-          slug,
-          pageNumber,
-          itemsPerPage
-        );
-        let productsData = productsResponse.products || [];
-        const totalProductsFromAPI = productsResponse.total;
-        
-        // Store all products from API
-        setProducts(productsData);
-        setTotalProductsFromAPI(totalProductsFromAPI);
-        
-        // If a category is selected, we'll handle filtering in the UI
         
         // Fetch specific vehicle data
         try {
@@ -102,8 +87,52 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           // Continue without vehicle data
         }
           
+        // Fetch products for the vehicle using LOCAL API instead of WordPress
+        try {
+          const productsResponse: any = await apiClient.get(`/products/by-vehicle/${slug}`, {
+            params: {
+              page: pageNumber,
+              limit: itemsPerPage,
+              category: selectedCategory || undefined,
+              sortBy: currentSort === 'date' ? 'createdAt' : currentSort === 'price_asc' ? 'price' : currentSort === 'price_desc' ? 'price' : currentSort === 'name_asc' ? 'name' : 'averageRating',
+              order: currentSort === 'price_asc' || currentSort === 'name_asc' ? 'asc' : 'desc'
+            }
+          });
+          
+          if (productsResponse.success && productsResponse.products) {
+            setProducts(productsResponse.products);
+            setTotalProductsFromAPI(productsResponse.total || productsResponse.products.length);
+            console.log(`Loaded ${productsResponse.products.length} products for ${slug} from local API`);
+          } else {
+            // Fallback to WordPress if local API fails
+            console.warn('Local API returned no products, falling back to WordPress');
+            const wpResponse = await wordpressService.getProductsByVehicle(
+              slug,
+              pageNumber,
+              itemsPerPage
+            );
+            setProducts(wpResponse.products || []);
+            setTotalProductsFromAPI(wpResponse.total || 0);
+          }
+        } catch (apiError) {
+          console.error('Error fetching from local API, trying WordPress:', apiError);
+          // Fallback to WordPress
+          try {
+            const wpResponse = await wordpressService.getProductsByVehicle(
+              slug,
+              pageNumber,
+              itemsPerPage
+            );
+            setProducts(wpResponse.products || []);
+            setTotalProductsFromAPI(wpResponse.total || 0);
+          } catch (wpError) {
+            console.error('WordPress fallback also failed:', wpError);
+            toast.error('Failed to load products');
+          }
+        }
+          
         // Show a warning if no data is found and WordPress API might not be configured
-        if (categoriesData.length === 0 && productsData.length === 0) {
+        if (categoriesData.length === 0 && products.length === 0) {
           const isWordPressConfigured = process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL && 
             process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY && 
             process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET;

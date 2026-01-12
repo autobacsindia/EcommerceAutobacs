@@ -13,6 +13,25 @@ import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import apiClient from '@/lib/api';
+import { vehicleService } from '@/services/vehicleService';
+
+// Extended product type to handle both local and WordPress products
+interface LocalProductImage {
+  id?: number;
+  src?: string;
+  url?: string;
+  name?: string;
+  alt?: string;
+}
+
+interface ExtendedProduct extends Omit<WordPressProduct, 'images'> {
+  _id?: string;
+  stock?: number;
+  isFeatured?: boolean;
+  averageRating?: number;
+  originalPrice?: number;
+  images: LocalProductImage[];
+}
 
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string }> }) {
   // Navigation hooks
@@ -25,12 +44,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
   // State hooks
-  const [products, setProducts] = useState<WordPressProduct[]>([]);
+  const [products, setProducts] = useState<ExtendedProduct[]>([]);
   const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [animatingItems, setAnimatingItems] = useState<Record<number, boolean>>({});
+  const [animatingItems, setAnimatingItems] = useState<Record<string | number, boolean>>({});
   const [vehicle, setVehicle] = useState<any>(null);
   const [relatedVehicles, setRelatedVehicles] = useState<any[]>([]);
   const [totalProductsFromAPI, setTotalProductsFromAPI] = useState<number>(0);
@@ -45,6 +64,24 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   // Get current page from URL parameters
   const currentPage = parseInt(searchParams.get('page') || '1') || 1;
 
+  // Helper function to map sort values to API format
+  const mapSortBy = (sortValue: string): string => {
+    const sortMap: Record<string, string> = {
+      'date': 'createdAt',
+      'price-asc': 'price',
+      'price-desc': 'price',
+      'rating': 'rating',
+      'popularity': 'popularity'
+    };
+    return sortMap[sortValue] || 'createdAt';
+  };
+
+  const getSortOrder = (sortValue: string): 'asc' | 'desc' => {
+    if (sortValue === 'price-asc') return 'asc';
+    if (sortValue === 'price-desc') return 'desc';
+    return 'desc';
+  };
+
   // Fetch products, categories, and vehicle data when vehicleSlug, selectedCategory, currentSort, or currentPage changes
   useEffect(() => {
     const fetchData = async () => {
@@ -53,9 +90,20 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         
       try {
         // Fetch categories, products, and vehicle data in parallel for better performance
+        // Using local API instead of WordPress for better performance and control
         const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
           wordpressService.getProductCategories(),
-          wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage),
+          vehicleService.getVehicleProducts(slug, {
+            page: currentPage,
+            limit: itemsPerPage,
+            category: selectedCategory || undefined,
+            sortBy: mapSortBy(currentSort),
+            order: getSortOrder(currentSort)
+          }).catch((err: any) => {
+            console.warn('Local API failed, falling back to WordPress:', err);
+            // Fallback to WordPress if local API fails
+            return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage);
+          }),
           apiClient.get(`/vehicles/slug/${slug}`).catch(err => {
             console.warn('Could not fetch vehicle data:', err);
             return { success: false };
@@ -67,9 +115,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         // Set categories
         setCategories(categoriesData);
         
-        // Set products
+        // Set products - handle both local API and WordPress fallback responses
         let productsData = productsResponse.products || [];
-        const totalProductsFromAPI = productsResponse.total;
+        const totalProductsFromAPI = productsResponse.pagination?.total || productsResponse.total || 0;
         setProducts(productsData);
         setTotalProductsFromAPI(totalProductsFromAPI);
         
@@ -123,7 +171,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     fetchData();
   }, [slug, selectedCategory, currentSort, currentPage]);
 
-  const handleAddToCart = async (product: WordPressProduct) => {
+  const handleAddToCart = async (product: ExtendedProduct) => {
     try {
       // For WordPress products, we would typically add to cart via WooCommerce API
       // For now, we'll just show a toast
@@ -134,7 +182,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     }
   };
 
-  const handleToggleWishlist = async (product: WordPressProduct, e: React.MouseEvent) => {
+  const handleToggleWishlist = async (product: ExtendedProduct, e: React.MouseEvent) => {
     e.preventDefault();
     
     if (!isAuthenticated) {
@@ -142,15 +190,25 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       return;
     }
 
+    const productId = (product._id || product.id)?.toString();
+    if (!productId) {
+      console.error('Product has no valid ID');
+      return;
+    }
+
     // Trigger animation
-    setAnimatingItems(prev => ({ ...prev, [product.id]: true }));
+    const productKey = product._id || product.id;
+    const animationKey = productKey?.toString() || String(productKey || '');
+    if (animationKey) {
+      setAnimatingItems(prev => ({ ...prev, [animationKey]: true }));
+    }
     
     try {
-      if (isInWishlist(product.id.toString())) {
-        await removeFromWishlist(product.id.toString());
+      if (isInWishlist(productId)) {
+        await removeFromWishlist(productId);
         toast.success('Removed from wishlist');
       } else {
-        await addToWishlist(product.id.toString());
+        await addToWishlist(productId);
         toast.success('Added to wishlist');
       }
     } catch (error: any) {
@@ -159,11 +217,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     } finally {
       // Remove animation after delay
       setTimeout(() => {
-        setAnimatingItems(prev => {
-          const newState = { ...prev };
-          delete newState[product.id];
-          return newState;
-        });
+        const productKey = product._id || product.id;
+        const animationKey = productKey?.toString() || String(productKey || '');
+        if (animationKey) {
+          setAnimatingItems(prev => {
+            const newState = { ...prev };
+            delete newState[animationKey];
+            return newState;
+          });
+        }
       }, 300);
     }
   };
@@ -394,15 +456,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                   {paginatedProducts.map((product) => (
                     <div
-                      key={product.id}
+                      key={product._id || product.id || `product-${product.sku}`}
                       className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
                     >
                       {/* Product Image */}
-                      <Link href={product.permalink} className="block relative h-52 bg-gray-100">
-                        {product.images && product.images.length > 0 ? (
+                      <Link href={`/products/${product._id || product.id}`} className="block relative h-52 bg-gray-100">
+                        {(product.images && product.images.length > 0) ? (
                           <ProductImage
-                            src={product.images[0].src}
-                            alt={product.images[0].alt || product.name}
+                            src={typeof product.images[0] === 'object' ? product.images[0].src || product.images[0].url : product.images[0]}
+                            alt={(typeof product.images[0] === 'object' ? product.images[0].alt : null) || product.name}
                             className="object-cover w-full h-full"
                           />
                         ) : (
@@ -414,12 +476,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         {/* Wishlist Button */}
                         <button
                           className={`absolute top-3 right-3 p-2 bg-white rounded-full shadow-md hover:bg-gray-50 transition-all duration-200 ${
-                            animatingItems[product.id] ? 'animate-pulse' : ''
+                            animatingItems[String((product._id || product.id) || '')] ? 'animate-pulse' : ''
                           }`}
                           onClick={(e) => handleToggleWishlist(product, e)}
                         >
                           <Heart className={`h-5 w-5 transition-colors duration-200 ${
-                            isInWishlist(product.id.toString()) 
+                            isInWishlist((product._id || product.id)?.toString() || '') 
                               ? 'text-red-500 fill-current' 
                               : 'text-gray-500'
                           }`} />
@@ -427,17 +489,17 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
                         {/* Badges */}
                         <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
-                          {product.stock_status !== 'instock' && (
+                          {(product.stock_status === 'outofstock' || (product.stock !== undefined && product.stock <= 0)) && (
                             <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Out of Stock
                             </div>
                           )}
-                          {product.featured && product.stock_status === 'instock' && (
+                          {(product.featured || product.isFeatured) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
                             <div className="bg-blue-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Popular
                             </div>
                           )}
-                          {product.on_sale && product.stock_status === 'instock' && (
+                          {(product.on_sale || product.originalPrice) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
                             <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Sale
                             </div>
@@ -454,25 +516,27 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       <div className="p-5">
                         {/* Categories */}
                         <p className="text-xs text-gray-500 uppercase mb-2">
-                          {product.categories.map(cat => cat.name).join(', ') || 'Uncategorized'}
+                          {Array.isArray(product.categories) && product.categories.length > 0
+                            ? product.categories.map(cat => typeof cat === 'object' ? cat.name : cat).filter(Boolean).join(', ')
+                            : 'Uncategorized'}
                         </p>
 
                         {/* Product Name */}
-                        <Link href={product.permalink}>
+                        <Link href={`/products/${product._id || product.id}`}>
                           <h3 className="font-bold text-gray-900 mb-3 line-clamp-2 hover:text-blue-600 transition-colors">
                             {product.name}
                           </h3>
                         </Link>
 
                         {/* Rating */}
-                        {parseFloat(product.average_rating) > 0 && (
+                        {((product.average_rating && parseFloat(product.average_rating) > 0) || (product.averageRating && product.averageRating > 0)) && (
                           <div className="flex items-center gap-2 mb-3">
                             <div className="flex">
                               {[1, 2, 3, 4, 5].map((star) => (
                                 <svg
                                   key={star}
                                   className={`h-4 w-4 ${
-                                    star <= parseFloat(product.average_rating) 
+                                    star <= (product.averageRating || parseFloat(product.average_rating || '0'))
                                       ? 'text-yellow-400' 
                                       : 'text-gray-300'
                                   }`}
@@ -484,7 +548,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               ))}
                             </div>
                             <span className="text-sm text-gray-600">
-                              ({parseFloat(product.average_rating).toFixed(1)})
+                              ({(product.averageRating || parseFloat(product.average_rating || '0')).toFixed(1)})
                             </span>
                           </div>
                         )}
@@ -492,13 +556,13 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         {/* Price and Actions */}
                         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                           <div>
-                            {product.on_sale && product.regular_price !== product.price ? (
+                            {((product.on_sale && product.regular_price !== product.price) || product.originalPrice) ? (
                               <div className="flex items-baseline gap-2">
                                 <p className="text-xl font-bold text-blue-600">
                                   {formatCurrency(parseFloat(product.price))}
                                 </p>
                                 <p className="text-sm text-gray-500 line-through">
-                                  {formatCurrency(parseFloat(product.regular_price))}
+                                  {formatCurrency(parseFloat(product.regular_price || product.originalPrice?.toString() || '0'))}
                                 </p>
                               </div>
                             ) : (
@@ -510,7 +574,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
                           <button
                             onClick={() => handleAddToCart(product)}
-                            disabled={product.stock_status !== 'instock'}
+                            disabled={product.stock_status === 'outofstock' || product.stock === 0}
                             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                           >
                             <ShoppingCart className="h-4 w-4" />

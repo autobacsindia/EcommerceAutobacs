@@ -120,6 +120,72 @@ router.get("/featured", asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   GET /products/by-vehicle/:vehicleId
+// @desc    Get products compatible with a specific vehicle
+// @access  Public
+router.get('/by-vehicle/:vehicleId', asyncHandler(async (req, res) => {
+  const { vehicleId } = req.params;
+  
+  try {
+    // Check if vehicleId is a valid MongoDB ObjectId or could be a slug
+    let vehicle;
+    
+    if (mongoose.Types.ObjectId.isValid(vehicleId)) {
+      // It's a valid ObjectId, query by ID
+      const Vehicle = (await import('../models/Vehicle.js')).default;
+      vehicle = await Vehicle.findById(vehicleId);
+    } else {
+      // It might be a slug, query by slug
+      const Vehicle = (await import('../models/Vehicle.js')).default;
+      vehicle = await Vehicle.findOne({ slug: vehicleId, isActive: true });
+    }
+    
+    if (!vehicle) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vehicle not found'
+      });
+    }
+    
+    // Use SearchService to get products with vehicle filter
+    const searchResults = await SearchService.searchProducts({
+      vehicle: vehicle._id.toString(),
+      page: req.query.page || 1,
+      limit: req.query.limit || 12,
+      category: req.query.category,
+      brand: req.query.brand,
+      minPrice: req.query.minPrice,
+      maxPrice: req.query.maxPrice,
+      sortBy: req.query.sortBy || 'createdAt',
+      order: req.query.order || 'desc',
+      inStock: req.query.inStock
+    });
+    
+    res.json({
+      success: true,
+      vehicle: {
+        _id: vehicle._id,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        slug: vehicle.slug,
+        name: `${vehicle.make} ${vehicle.model}`
+      },
+      count: searchResults.products.length,
+      ...searchResults.pagination,
+      products: searchResults.products,
+      facets: searchResults.facets
+    });
+  } catch (error) {
+    console.error('Error fetching products by vehicle:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products for vehicle',
+      error: error.message
+    });
+  }
+}));
+
 // @route   GET /products/brands
 // @desc    Get all available brands
 // @access  Public

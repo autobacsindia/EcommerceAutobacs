@@ -279,17 +279,31 @@ class APIClient {
     }
     
     // Better error serialization to avoid empty objects
-    const errorDetails = {
+    const errorDetails: Record<string, any> = {
       errorType: typeof error,
       errorMessage: error instanceof Error ? error.message : String(error),
       errorName: error instanceof Error ? error.name : undefined,
-      errorStack: error instanceof Error ? error.stack : undefined,
-      // For ApiError instances
-      status: (error as any)?.status,
-      url: (response as any).url,
-      category: (error as any)?.category,
-      responseStatus: (error as any)?.responseStatus
+      isApiError: error instanceof ApiError
     };
+    
+    // Add stack trace only if available
+    if (error instanceof Error && error.stack) {
+      errorDetails.errorStack = error.stack;
+    }
+    
+    // Add API-specific error details
+    if ((error as any)?.status !== undefined) {
+      errorDetails.status = (error as any).status;
+    }
+    if ((response as any)?.url) {
+      errorDetails.url = (response as any).url;
+    }
+    if ((error as any)?.category) {
+      errorDetails.category = (error as any).category;
+    }
+    if ((error as any)?.responseStatus !== undefined) {
+      errorDetails.responseStatus = (error as any).responseStatus;
+    }
     
     // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
     // or category endpoints (category might not exist)
@@ -304,7 +318,11 @@ class APIClient {
     // Only log non-rate limit errors to reduce console spam
     const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
     
-    if ((!isLocationEndpoint && !isCategoryEndpoint && !isVehiclesEndpoint) || (!is404Error && !isApiError404)) {
+    // Log the error UNLESS it's a special endpoint AND it's a 404 error
+    // This suppresses expected 404s from location, category, and vehicle endpoints
+    const shouldSuppressLog = (isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404);
+    
+    if (!shouldSuppressLog) {
       // Only log non-rate limit errors to reduce console spam
       if (!isRateLimitError) {
         console.error('API Response Error:', errorDetails);
