@@ -43,7 +43,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
-  // State hooks
+  // State hooks - MUST be called before any conditional returns
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
   const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,8 +56,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const [currentSort, setCurrentSort] = useState<string>('date');
   
   // Unwrap the params Promise - must be consistent across all renders
-  const { slug } = use(params);
-  const vehicleName = decodeURIComponent(slug);
+  const unwrappedParams = use(params);
+  const { slug } = unwrappedParams || {};
+  
+  const vehicleName = slug ? decodeURIComponent(slug) : '';
   
   const itemsPerPage = 12; // Number of products per page
   
@@ -84,6 +86,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
   // Fetch products, categories, and vehicle data when vehicleSlug, selectedCategory, currentSort, or currentPage changes
   useEffect(() => {
+    // Validate slug exists, redirect if not
+    if (!slug) {
+      router.push('/vehicles');
+      return;
+    }
+    
     const fetchData = async () => {
       setLoading(true);
       setError(null);
@@ -96,7 +104,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           vehicleService.getVehicleProducts(slug, {
             page: currentPage,
             limit: itemsPerPage,
-            category: selectedCategory || undefined,
+            ...(selectedCategory && { category: selectedCategory }),
             sortBy: mapSortBy(currentSort),
             order: getSortOrder(currentSort)
           }).catch((err: any) => {
@@ -245,14 +253,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
     ? products.filter(product => 
-        product.categories.some(cat => cat.slug === selectedCategory)
+        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === selectedCategory)
       )
     : products;
   
   // Calculate pagination based on API total, not filtered products
-  const totalPages = Math.ceil(totalProductsFromAPI / itemsPerPage);
+  const safeTotal = totalProductsFromAPI || 0;
+  const totalPages = Math.max(0, Math.ceil(safeTotal / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, totalProductsFromAPI);
+  const endIndex = Math.min(startIndex + itemsPerPage, safeTotal);
   
   // Use the products from API which are already paginated
   const paginatedProducts = filteredProducts;
@@ -265,11 +274,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold mb-6">{vehicleName.replace(/-/g, ' ').split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} Parts & Accessories</h1>
+          <h1 className="text-5xl font-bold mb-6">{vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
+              .filter(word => word)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'} Parts & Accessories</h1>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Find the perfect parts and accessories for your {vehicleName.replace(/-/g, ' ')
-              .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+            Find the perfect parts and accessories for your {vehicleName ? vehicleName.replace(/-/g, ' ')
+              .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
           </p>
           
           {/* Vehicle Details */}
@@ -307,8 +317,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           <span className="mx-2">/</span>
           <Link href="/vehicles" className="hover:text-blue-600 transition-colors">Vehicles</Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-900 font-medium">{vehicleName.replace(/-/g, ' ')
-            .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+          <span className="text-gray-900 font-medium">{vehicleName ? vehicleName.replace(/-/g, ' ')
+            .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'}</span>
         </nav>
       </div>
 
@@ -343,10 +353,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         All Categories
                       </button>
                     </li>
-                    {categories.map((category) => {
+                    {categories.filter(cat => cat && cat.id).map((category) => {
                       // Calculate count of products in this category
                       const categoryProductCount = products.filter(product => 
-                        product.categories.some(cat => cat.slug === category.slug)
+                        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === category.slug)
                       ).length;
                       
                       // Only show categories that have products
@@ -382,10 +392,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                   'Loading products...'
                 ) : filteredProducts.length > 0 ? (
                   <>
-                    Showing {(startIndex + 1)}-{Math.min(endIndex, totalProductsFromAPI)} of {totalProductsFromAPI} product{filteredProducts.length !== 1 ? 's' : ''}
+                    Showing {(startIndex + 1)}-{Math.min(endIndex, safeTotal)} of {safeTotal} product{filteredProducts.length !== 1 ? 's' : ''}
                     {selectedCategory && ` in ${categories.find(c => c.slug === selectedCategory)?.name || selectedCategory}`}
-                    {' '}for {vehicleName.replace(/-/g, ' ')
-                      .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    {' '}for {vehicleName ? vehicleName.replace(/-/g, ' ')
+                      .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
                   </>
                 ) : (
                   'No products found'
@@ -454,7 +464,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             ) : paginatedProducts.length > 0 ? (
               <div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {paginatedProducts.map((product) => (
+                  {paginatedProducts.filter(p => p && (p._id || p.id)).map((product) => (
                     <div
                       key={product._id || product.id || `product-${product.sku}`}
                       className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
@@ -506,8 +516,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           )}
                           {/* Vehicle Compatibility Badge */}
                           <div className="bg-green-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
-                            Fits {vehicleName.replace(/-/g, ' ').split(' ')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                            Fits {vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
+                              .filter(word => word)
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'}
                           </div>
                         </div>
                       </Link>
@@ -517,7 +528,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         {/* Categories */}
                         <p className="text-xs text-gray-500 uppercase mb-2">
                           {Array.isArray(product.categories) && product.categories.length > 0
-                            ? product.categories.map(cat => typeof cat === 'object' ? cat.name : cat).filter(Boolean).join(', ')
+                            ? product.categories.filter(cat => cat).map(cat => typeof cat === 'object' ? cat.name : cat).filter(Boolean).join(', ')
                             : 'Uncategorized'}
                         </p>
 
@@ -592,7 +603,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     <nav className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          if (currentPage > 1) {
+                          if (currentPage > 1 && slug) {
                             const newPage = currentPage - 1;
                             const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
                             router.push(baseUrl);
@@ -605,7 +616,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       </button>
                       
                       {/* Page numbers */}
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      {slug && totalPages > 0 && Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                         let pageNum;
                         if (totalPages <= 5) {
                           // Show all pages
@@ -621,12 +632,17 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           pageNum = currentPage - 2 + i;
                         }
                         
+                        // Ensure pageNum is valid before rendering
+                        if (!pageNum || pageNum < 1) return null;
+                        
                         return (
                           <button
                             key={i}
                             onClick={() => {
-                              const baseUrl = pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`;
-                              router.push(baseUrl);
+                              if (slug && pageNum) {
+                                const baseUrl = pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`;
+                                router.push(baseUrl);
+                              }
                             }}
                             className={`px-4 py-2 rounded-md border ${currentPage === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
                           >
@@ -637,7 +653,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       
                       <button
                         onClick={() => {
-                          if (currentPage < totalPages) {
+                          if (currentPage < totalPages && slug) {
                             const newPage = currentPage + 1;
                             const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
                             router.push(baseUrl);
@@ -654,8 +670,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName.replace(/-/g, ' ')
-                  .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
+                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName ? vehicleName.replace(/-/g, ' ')
+                  .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'this vehicle'}</p>
                 <button
                   onClick={() => handleCategoryChange('')}
                   className="text-blue-600 hover:text-blue-700 font-medium"
@@ -668,12 +684,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         </div>
         
         {/* Related Vehicles Section */}
-        {relatedVehicles.length > 0 && (
+        {Array.isArray(relatedVehicles) && relatedVehicles.length > 0 && (
           <section className="mt-16">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Related {vehicle?.make || 'Vehicles'}</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                {relatedVehicles.slice(0, 5).map((relatedVehicle) => (
+                {relatedVehicles.filter(v => v && v._id && v.slug).slice(0, 5).map((relatedVehicle) => (
                   <Link 
                     key={relatedVehicle._id}
                     href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}

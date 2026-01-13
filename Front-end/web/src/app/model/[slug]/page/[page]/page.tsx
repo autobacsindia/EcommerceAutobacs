@@ -22,9 +22,11 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
   // Unwrap the params Promise - must be consistent across all renders
-  const { slug, page } = use(params);
-  const vehicleName = decodeURIComponent(slug);
-  const pageNumber = parseInt(page) || 1;
+  const unwrappedParams = use(params);
+  const { slug, page } = unwrappedParams || {};
+  
+  const vehicleName = slug ? decodeURIComponent(slug) : '';
+  const pageNumber = Math.max(1, parseInt(page) || 1); // Ensure minimum value of 1
   
   // State hooks
   const [products, setProducts] = useState<WordPressProduct[]>([]);
@@ -44,6 +46,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
   // Fetch products, categories, and vehicle data when vehicleSlug, selectedCategory, currentSort, or pageNumber changes
   useEffect(() => {
+    // Validate slug exists, redirect if not
+    if (!slug) {
+      router.push('/vehicles');
+      return;
+    }
+    
     const fetchData = async () => {
       setLoading(true);
       setError(null);
@@ -214,29 +222,41 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
     ? products.filter(product => 
-        product.categories.some(cat => cat.slug === selectedCategory)
+        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === selectedCategory)
       )
     : products;
 
-  // Calculate pagination based on API total, not filtered products
-  const totalPages = Math.ceil(totalProductsFromAPI / itemsPerPage);
+  // Phase 2: Protect Pagination Rendering - Calculate pagination based on API total, not filtered products
+  const safeTotal = totalProductsFromAPI || 0;
+  const totalPages = Math.max(0, Math.ceil(safeTotal / itemsPerPage));
   const startIndex = (pageNumber - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, totalProductsFromAPI);
+  const endIndex = Math.min(startIndex + itemsPerPage, safeTotal);
 
   // Use the products from API which are already paginated
   const paginatedProducts = filteredProducts;
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Show loading state if slug is not yet available */}
+      {!slug ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        <>
       
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold mb-6">{vehicleName.replace(/-/g, ' ').split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} Parts & Accessories</h1>
+          <h1 className="text-5xl font-bold mb-6">{vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
+              .filter(word => word)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'} Parts & Accessories</h1>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Find the perfect parts and accessories for your {vehicleName.replace(/-/g, ' ')
-              .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+            Find the perfect parts and accessories for your {vehicleName ? vehicleName.replace(/-/g, ' ')
+              .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
           </p>
           
           {/* Vehicle Details */}
@@ -274,8 +294,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           <span className="mx-2">/</span>
           <Link href="/vehicles" className="hover:text-blue-600 transition-colors">Vehicles</Link>
           <span className="mx-2">/</span>
-          <Link href={`/model/${slug}`} className="hover:text-blue-600 transition-colors">
-            {vehicleName.replace(/-/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+          <Link href={slug ? `/model/${slug}` : '/vehicles'} className="hover:text-blue-600 transition-colors">
+            {vehicleName ? vehicleName.replace(/-/g, ' ').split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'}
           </Link>
           <span className="mx-2">/</span>
           <span className="text-gray-900 font-medium">Page {pageNumber}</span>
@@ -316,7 +336,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     {categories.map((category) => {
                       // Calculate count of products in this category
                       const categoryProductCount = products.filter(product => 
-                        product.categories.some(cat => cat.slug === category.slug)
+                        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === category.slug)
                       ).length;
                       
                       // Only show categories that have products
@@ -352,10 +372,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                   'Loading products...'
                 ) : filteredProducts.length > 0 ? (
                   <>
-                    Showing {(startIndex + 1)}-{Math.min(endIndex, totalProductsFromAPI)} of {totalProductsFromAPI} product{filteredProducts.length !== 1 ? 's' : ''}
+                    Showing {(startIndex + 1)}-{Math.min(endIndex, safeTotal)} of {safeTotal} product{filteredProducts.length !== 1 ? 's' : ''}
                     {selectedCategory && ` in ${categories.find(c => c.slug === selectedCategory)?.name || selectedCategory}`}
-                    {' '}for {vehicleName.replace(/-/g, ' ')
-                      .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    {' '}for {vehicleName ? vehicleName.replace(/-/g, ' ')
+                      .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
                   </>
                 ) : (
                   'No products found'
@@ -486,7 +506,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       <div className="p-5">
                         {/* Categories */}
                         <p className="text-xs text-gray-500 uppercase mb-2">
-                          {product.categories.map(cat => cat.name).join(', ') || 'Uncategorized'}
+                          {product.categories && Array.isArray(product.categories) && product.categories.length > 0
+                            ? product.categories.filter(cat => cat && cat.name).map(cat => cat.name).join(', ')
+                            : 'Uncategorized'}
                         </p>
 
                         {/* Product Name */}
@@ -560,7 +582,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     <nav className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          if (pageNumber > 1) {
+                          if (pageNumber > 1 && slug) {
                             const newPage = pageNumber - 1;
                             const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
                             router.push(baseUrl);
@@ -572,8 +594,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         Previous
                       </button>
                       
-                      {/* Page numbers */}
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      {/* Phase 3: Secure Template Strings - Page numbers */}
+                      {slug && totalPages > 0 && Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                         let pageNum;
                         if (totalPages <= 5) {
                           // Show all pages
@@ -589,12 +611,17 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           pageNum = pageNumber - 2 + i;
                         }
                         
+                        // Ensure pageNum is valid before rendering
+                        if (!pageNum || pageNum < 1) return null;
+                        
                         return (
                           <button
                             key={i}
                             onClick={() => {
-                              const baseUrl = pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`;
-                              router.push(baseUrl);
+                              if (slug && pageNum) {
+                                const baseUrl = pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`;
+                                router.push(baseUrl);
+                              }
                             }}
                             className={`px-4 py-2 rounded-md border ${pageNumber === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
                           >
@@ -605,7 +632,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       
                       <button
                         onClick={() => {
-                          if (pageNumber < totalPages) {
+                          if (pageNumber < totalPages && slug) {
                             const newPage = pageNumber + 1;
                             const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
                             router.push(baseUrl);
@@ -620,11 +647,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName.replace(/-/g, ' ')
-                  .split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</p>
-                <Link href={`/model/${slug}`} className="text-blue-600 hover:text-blue-700 font-medium">
+            ) : (              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName ? vehicleName.replace(/-/g, ' ')
+                  .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'this vehicle'}</p>
+                <Link href={slug ? `/model/${slug}` : '/vehicles'} className="text-blue-600 hover:text-blue-700 font-medium">
                   View all products
                 </Link>
               </div>
@@ -632,13 +658,16 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           </div>
         </div>
         
-        {/* Related Vehicles Section */}
-        {relatedVehicles.length > 0 && (
+        {/* Phase 4: Validate Related Vehicles - Related Vehicles Section */}
+        {Array.isArray(relatedVehicles) && relatedVehicles.length > 0 && (
           <section className="mt-16">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Related {vehicle?.make || 'Vehicles'}</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                {relatedVehicles.slice(0, 5).map((relatedVehicle) => (
+                {relatedVehicles
+                  .filter(v => v && v._id && v.slug)
+                  .slice(0, 5)
+                  .map((relatedVehicle) => (
                   <Link 
                     key={relatedVehicle._id}
                     href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}
@@ -676,6 +705,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           </section>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

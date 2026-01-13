@@ -148,18 +148,33 @@ router.get('/by-vehicle/:vehicleId', asyncHandler(async (req, res) => {
     }
     
     // Use SearchService to get products with vehicle filter
-    const searchResults = await SearchService.searchProducts({
+    // Filter out undefined, null, or 'undefined' string values from query parameters
+    const queryParams = {
       vehicle: vehicle._id.toString(),
       page: req.query.page || 1,
       limit: req.query.limit || 12,
-      category: req.query.category,
-      brand: req.query.brand,
-      minPrice: req.query.minPrice,
-      maxPrice: req.query.maxPrice,
       sortBy: req.query.sortBy || 'createdAt',
-      order: req.query.order || 'desc',
-      inStock: req.query.inStock
-    });
+      order: req.query.order || 'desc'
+    };
+    
+    // Only add optional parameters if they have valid values
+    if (req.query.category && req.query.category !== 'undefined' && req.query.category !== 'null') {
+      queryParams.category = req.query.category;
+    }
+    if (req.query.brand && req.query.brand !== 'undefined' && req.query.brand !== 'null') {
+      queryParams.brand = req.query.brand;
+    }
+    if (req.query.minPrice && req.query.minPrice !== 'undefined' && req.query.minPrice !== 'null') {
+      queryParams.minPrice = req.query.minPrice;
+    }
+    if (req.query.maxPrice && req.query.maxPrice !== 'undefined' && req.query.maxPrice !== 'null') {
+      queryParams.maxPrice = req.query.maxPrice;
+    }
+    if (req.query.inStock && req.query.inStock !== 'undefined' && req.query.inStock !== 'null') {
+      queryParams.inStock = req.query.inStock;
+    }
+    
+    const searchResults = await SearchService.searchProducts(queryParams);
     
     res.json({
       success: true,

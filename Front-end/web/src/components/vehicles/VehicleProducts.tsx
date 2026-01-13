@@ -355,7 +355,9 @@ export default function VehicleProducts({ vehicleSlug, vehicleName }: VehiclePro
                     <div className="p-4">
                       {/* Categories */}
                       <p className="text-xs text-gray-500 uppercase mb-1">
-                        {product.categories.map(cat => cat.name).join(', ') || 'Uncategorized'}
+                        {product.categories && Array.isArray(product.categories) && product.categories.length > 0
+                          ? product.categories.filter(cat => cat && cat.name).map(cat => cat.name).join(', ')
+                          : 'Uncategorized'}
                       </p>
 
                       {/* Product Name */}

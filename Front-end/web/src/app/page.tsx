@@ -26,6 +26,13 @@ export default function Home() {
     setSelectedVehicle({ make, model });
   };
 
+  // Helper function to generate vehicle slug from make and model
+  const generateVehicleSlug = (make: string, model: string): string => {
+    const makeSlug = make.toLowerCase().replace(/\s+/g, '-');
+    const modelSlug = model.toLowerCase().replace(/\s+/g, '-');
+    return `${makeSlug}-${modelSlug}`;
+  };
+
   // Show skeleton loader until component is mounted to prevent hydration issues
   if (!isMounted) {
     return <PageLoader type="home" />;
@@ -52,7 +59,7 @@ export default function Home() {
             {selectedVehicle.make && selectedVehicle.model && (
               <div className="mt-6 text-center">
                 <Link 
-                  href={`/products?vehicleMake=${encodeURIComponent(selectedVehicle.make)}&vehicleModel=${encodeURIComponent(selectedVehicle.model)}`}
+                  href={`/model/${generateVehicleSlug(selectedVehicle.make, selectedVehicle.model)}`}
                   className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
                 >
                   View {selectedVehicle.make} {selectedVehicle.model} Parts
@@ -67,7 +74,7 @@ export default function Home() {
               {FEATURED_VEHICLES.slice(0, 4).map((vehicle) => (
                 <Link 
                   key={vehicle.id} 
-                  href={`/vehicles/${vehicle.make}`} 
+                  href={`/model/${vehicle.slug}`} 
                   className="group"
                 >
                   <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">

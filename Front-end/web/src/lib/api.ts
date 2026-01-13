@@ -294,9 +294,11 @@ class APIClient {
     
     // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
     // or category endpoints (category might not exist)
+    // or vehicle product endpoints (will fallback to WordPress)
     const isLocationEndpoint = (response as any).url?.includes('/location/current');
     const isCategoryEndpoint = (response as any).url?.includes('/categories/slug/');
     const isVehiclesEndpoint = (response as any).url?.includes('/vehicles/slug/');
+    const isVehicleProductsEndpoint = (response as any).url?.includes('/products/by-vehicle/');
     const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
     
     // Also check if the error is an ApiError with 404 status
@@ -305,9 +307,10 @@ class APIClient {
     // Only log non-rate limit errors to reduce console spam
     const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
     
-    // Log the error UNLESS it's a special endpoint AND it's a 404 error
+    // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint
     // This suppresses expected 404s from location, category, and vehicle endpoints
-    const shouldSuppressLog = (isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404);
+    // Also suppress all errors from vehicle products endpoint as it has WordPress fallback
+    const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint;
     
     if (!shouldSuppressLog) {
       // Only log non-rate limit errors to reduce console spam

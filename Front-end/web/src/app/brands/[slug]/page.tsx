@@ -185,6 +185,18 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
     router.push(`/brands/${slug}?${currentParams.toString()}`);
   };
 
+  // Show loading state if brand is still loading
+  if (brandLoading || !brand) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading brand...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!brand && !brandLoading && error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">

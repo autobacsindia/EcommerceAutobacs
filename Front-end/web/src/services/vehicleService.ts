@@ -200,7 +200,8 @@ export const vehicleService = {
       const response = await vehicleApi.get(url);
       return response;
     } catch (error) {
-      console.error('Error fetching vehicle products:', error);
+      // Don't log error here - let the calling code decide how to handle it
+      // This prevents duplicate error logging when fallback succeeds
       throw error;
     }
   }

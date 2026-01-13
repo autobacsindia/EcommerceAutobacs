@@ -370,7 +370,9 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
                     <div className="p-5">
                       {/* Categories */}
                       <p className="text-xs text-gray-500 uppercase mb-2">
-                        {product.categories.map(cat => cat.name).join(', ') || 'Uncategorized'}
+                        {product.categories && Array.isArray(product.categories) && product.categories.length > 0
+                          ? product.categories.filter(cat => cat && cat.name).map(cat => cat.name).join(', ')
+                          : 'Uncategorized'}
                       </p>
 
                       {/* Product Name */}
