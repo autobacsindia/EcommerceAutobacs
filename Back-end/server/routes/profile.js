@@ -31,12 +31,14 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 router.put("/", protect, [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Valid email is required'),
-  body('addresses.*.fullName').notEmpty().withMessage('Full name is required for address'),
-  body('addresses.*.phone').notEmpty().withMessage('Phone is required for address'),
-  body('addresses.*.addressLine1').notEmpty().withMessage('Address line 1 is required'),
-  body('addresses.*.city').notEmpty().withMessage('City is required'),
-  body('addresses.*.state').notEmpty().withMessage('State is required'),
-  body('addresses.*.postalCode').notEmpty().withMessage('Postal code is required')
+  // Conditional validation for addresses - only validate if addresses array exists and has items
+  body('addresses').optional().isArray().withMessage('Addresses must be an array'),
+  body('addresses.*.fullName').optional().notEmpty().withMessage('Full name is required for address'),
+  body('addresses.*.phone').optional().notEmpty().withMessage('Phone is required for address'),
+  body('addresses.*.addressLine1').optional().notEmpty().withMessage('Address line 1 is required'),
+  body('addresses.*.city').optional().notEmpty().withMessage('City is required'),
+  body('addresses.*.state').optional().notEmpty().withMessage('State is required'),
+  body('addresses.*.postalCode').optional().notEmpty().withMessage('Postal code is required')
 ], asyncHandler(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -91,9 +93,11 @@ router.put("/", protect, [
       }
     });
   } catch (error) {
+    console.error('Profile update error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while updating profile'
+      message: 'Server error while updating profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 }));

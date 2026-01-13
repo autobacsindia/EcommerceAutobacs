@@ -13,13 +13,15 @@ const AddressSchema = new mongoose.Schema({
   coordinates: {
     type: {
       type: String,
-      enum: ["Point"],
-      default: "Point"
+      enum: ["Point"]
     },
     coordinates: {
       type: [Number],
       validate: {
         validator: function(v) {
+          // Allow empty array or undefined (optional coordinates)
+          if (!v || v.length === 0) return true;
+          // If provided, must be valid [longitude, latitude]
           return v.length === 2 && 
                  v[0] >= -180 && v[0] <= 180 && // longitude
                  v[1] >= -90 && v[1] <= 90;      // latitude
