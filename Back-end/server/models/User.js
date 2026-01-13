@@ -42,7 +42,37 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ["customer", "admin"], default: "customer" },
-  addresses: [AddressSchema]
+  addresses: [AddressSchema],
+  
+  // Email verification fields
+  isVerified: { type: Boolean, default: false },
+  verificationToken: String,
+  verificationTokenExpire: Date,
+  verifiedAt: Date,
+  
+  // Password reset fields
+  resetPasswordToken: String,
+  resetPasswordExpire: Date,
+  resetPasswordUsed: { type: Boolean, default: false },
+  
+  // Refresh token fields for session management
+  refreshTokens: [{
+    token: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+    deviceInfo: String,
+    ipAddress: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
+  
+  // Security audit fields
+  lastLoginAt: Date,
+  lastLoginIp: String,
+  loginAttempts: [{
+    timestamp: { type: Date, default: Date.now },
+    ipAddress: String,
+    success: Boolean,
+    userAgent: String
+  }]
 }, { timestamps: true });
 
 export default mongoose.model("User", UserSchema);

@@ -8,8 +8,13 @@ import { protect, admin } from "../middleware/authMiddleware.js";
 import orderStatusService from "../services/orderStatusService.js";
 import orderTrackingService from "../services/orderTrackingService.js";
 import { validateCancellation } from "../middleware/orderStatusMiddleware.js";
+import { checkoutSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
 
 const router = express.Router();
+
+// Apply session keep-alive middleware to checkout routes (order creation)
+router.use(checkoutSessionKeepAlive);
+router.use(attachTokenRefreshInfo);
 
 // @route   GET /orders
 // @desc    Get all orders for logged-in user with pagination

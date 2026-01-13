@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // Verify token with backend
-      const response = await apiClient.get(API_ENDPOINTS.GET_ME);
+      const response = await apiClient.get(API_ENDPOINTS.GET_ME) as any;
       
       if (response.success && response.user) {
         // Ensure consistent user data structure
@@ -102,16 +102,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiClient.post(API_ENDPOINTS.LOGIN, {
         email,
         password,
-      });
+      }) as any;
       
-      if (response.success && response.token && response.user) {
-        const { token: authToken, user: userData } = response;
+      if (response.success && response.accessToken && response.user) {
+        const { accessToken: authToken, user: userData } = response;
         
         // Store token
         apiClient.setAuthToken(authToken);
         setToken(authToken);
         setUser({
-          _id: userData._id,
+          _id: userData.id || userData._id,
           name: userData.name,
           email: userData.email,
           role: userData.role
@@ -147,16 +147,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name,
         email,
         password,
-      });
+      }) as any;
       
-      if (response.success && response.token && response.user) {
-        const { token: authToken, user: userData } = response;
+      if (response.success && response.accessToken && response.user) {
+        const { accessToken: authToken, user: userData } = response;
         
         // Store token and auto-login
         apiClient.setAuthToken(authToken);
         setToken(authToken);
         setUser({
-          _id: userData._id,
+          _id: userData.id || userData._id,
           name: userData.name,
           email: userData.email,
           role: userData.role

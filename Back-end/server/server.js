@@ -21,19 +21,33 @@ import deliveryZoneRoutes from "./routes/deliveryZones.js";
 import razorpayRoutes from "./routes/razorpay.js";
 import brandRoutes from "./routes/brands.js";
 import wordpressRoutes from "./routes/wordpress.js";
+import tokenIntrospectionRoutes from "./routes/tokenIntrospection.js";
+import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
+import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
-import { apiRateLimit, wishlistRateLimit, frequentAccessRateLimit } from "./middleware/rateLimitMiddleware.js";
+import { 
+  apiRateLimit, 
+  wishlistRateLimit, 
+  frequentAccessRateLimit,
+  publicBrowsingRateLimit,
+  authenticatedUserRateLimit,
+  checkoutRateLimit,
+  adminRateLimit
+} from "./middleware/rateLimitMiddleware.js";
 
 // Import cron service
 import CronService from "./services/cronService.js";
 
 // Import Elasticsearch service for connection check
 import elasticsearchService from "./services/elasticsearchService.js";
+
+// Import adaptive throttling service
+import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
 
 dotenv.config();
 const app = express();
@@ -68,7 +82,12 @@ app.get("/", (req, res) => {
       deliveryZones: "/delivery-zones",
       razorpay: "/razorpay",
       brands: "/brands",
-      wordpress: "/wordpress"
+      wordpress: "/wordpress",
+      admin: {
+        tokenIntrospection: "/admin/token",
+        rateLimitDashboard: "/admin/rate-limits/dashboard",
+        adaptiveThrottling: "/admin/adaptive-throttling"
+      }
     }
   });
 });
@@ -78,27 +97,45 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 });
 
-// Mount routes with specific middleware
-// Auth routes already have their own stricter rate limiting
+// Mount routes with specific e-commerce rate limiting strategy
+// Auth routes already have their own stricter rate limiting (5 req/min)
 app.use("/auth", authRoutes);
-// Apply general rate limiting to other routes
-app.use("/products", apiRateLimit, productRoutes);
-app.use("/categories", apiRateLimit, categoryRoutes);
-app.use("/vehicles", apiRateLimit, vehicleRoutes);
-app.use("/cart", frequentAccessRateLimit, cartRoutes);  // Use higher limit for cart
-app.use("/wishlist", wishlistRateLimit, wishlistRoutes);
-app.use("/orders", apiRateLimit, orderRoutes);
-app.use("/scheduled-tasks", apiRateLimit, scheduledTasksRoutes);
-app.use("/users", apiRateLimit, userRoutes);
-app.use("/reviews", apiRateLimit, reviewRoutes);
-app.use("/profile", apiRateLimit, profileRoutes);
-app.use("/payment-methods", apiRateLimit, paymentMethodRoutes);
+
+// Public browsing endpoints (300 req/min, burst 100) - catalog, products, categories
+app.use("/products", publicBrowsingRateLimit, productRoutes);
+app.use("/categories", publicBrowsingRateLimit, categoryRoutes);
+app.use("/vehicles", publicBrowsingRateLimit, vehicleRoutes);
+app.use("/brands", publicBrowsingRateLimit, brandRoutes);
+
+// Authenticated user endpoints (600 req/min, burst 200) - cart, profile, wishlist
+app.use("/cart", authenticatedUserRateLimit, cartRoutes);
+app.use("/wishlist", authenticatedUserRateLimit, wishlistRoutes);
+app.use("/profile", authenticatedUserRateLimit, profileRoutes);
+app.use("/users", authenticatedUserRateLimit, userRoutes);
+app.use("/reviews", authenticatedUserRateLimit, reviewRoutes);
+
+// Checkout/Payment endpoints (60 req/min, burst 20) - prevent duplicate orders
+app.use("/orders", checkoutRateLimit, orderRoutes);
+app.use("/razorpay", checkoutRateLimit, razorpayRoutes);
+app.use("/payment-methods", checkoutRateLimit, paymentMethodRoutes);
+
+// Admin/Management endpoints (120 req/min) - warehouses, delivery zones, scheduled tasks
+app.use("/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
+app.use("/warehouses", adminRateLimit, warehouseRoutes);
+app.use("/delivery-zones", adminRateLimit, deliveryZoneRoutes);
+app.use("/wordpress", adminRateLimit, wordpressRoutes);
+
+// Admin-only token introspection endpoints (separate rate limiting inside routes)
+app.use("/admin/token", tokenIntrospectionRoutes);
+
+// Admin-only rate limit dashboard endpoints
+app.use("/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
+
+// Admin-only adaptive throttling endpoints
+app.use("/admin/adaptive-throttling", adaptiveThrottlingRoutes);
+
+// Location service (general rate limiting)
 app.use("/location", apiRateLimit, locationRoutes);
-app.use("/warehouses", apiRateLimit, warehouseRoutes);
-app.use("/delivery-zones", apiRateLimit, deliveryZoneRoutes);
-app.use("/razorpay", apiRateLimit, razorpayRoutes);
-app.use("/brands", apiRateLimit, brandRoutes);
-app.use("/wordpress", apiRateLimit, wordpressRoutes);
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {
@@ -116,6 +153,11 @@ mongoose.connection.on('connected', () => {
 
   // Set the cron service instance for the scheduled tasks routes
   setCronService(cronService);
+  
+  // Initialize adaptive throttling service
+  adaptiveThrottlingService.initialize().catch(err => {
+    console.error('Failed to initialize adaptive throttling service:', err);
+  });
 });
 
 mongoose.connection.on('disconnected', () => {

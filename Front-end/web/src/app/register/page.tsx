@@ -21,6 +21,7 @@ export default function RegisterPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [rateLimitResetTime, setRateLimitResetTime] = useState<number | null>(null);
   const timeUntilRetry = useRateLimitTimer(rateLimitResetTime);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -87,8 +88,13 @@ export default function RegisterPage() {
       setIsLoading(true);
       await register(formData.name, formData.email, formData.password);
       
-      // Redirect to home after successful registration
-      router.push('/');
+      // Set registration success flag to show verification notice
+      setRegistrationSuccess(true);
+      
+      // Redirect to home after 5 seconds
+      setTimeout(() => {
+        router.push('/');
+      }, 5000);
     } catch (err: any) {
       // Capture rate limit reset time from error
       if (err.status === 429 && err.rateLimitInfo?.resetTime) {
@@ -129,6 +135,25 @@ export default function RegisterPage() {
 
         {/* Form */}
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {/* Registration Success Notice */}
+          {registrationSuccess && (
+            <div className="rounded-md bg-green-50 border border-green-200 p-4">
+              <div className="flex">
+                <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-green-800">Registration Successful!</h3>
+                  <div className="mt-2 text-sm text-green-700">
+                    <p>Your account has been created successfully. Please check your email to verify your account.</p>
+                    <p className="mt-2"><strong>Important:</strong> You need to verify your email to access all features.</p>
+                  </div>
+                  <p className="mt-2 text-xs text-green-600">Redirecting to home page in 5 seconds...</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* API Error Message */}
           {error && (
             <div className="rounded-md bg-red-50 p-4">

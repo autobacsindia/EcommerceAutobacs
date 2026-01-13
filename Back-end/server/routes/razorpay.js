@@ -4,8 +4,13 @@ import { protect } from "../middleware/authMiddleware.js";
 import { body, validationResult } from "express-validator";
 import razorpayService from "../services/razorpayService.js";
 import Order from "../models/Order.js";
+import { paymentSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
 
 const router = express.Router();
+
+// Apply session keep-alive and token refresh middleware to all payment routes
+router.use(paymentSessionKeepAlive);
+router.use(attachTokenRefreshInfo);
 
 // @route   POST /razorpay/create-order
 // @desc    Create a Razorpay order

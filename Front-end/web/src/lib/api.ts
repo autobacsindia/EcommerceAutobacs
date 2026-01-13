@@ -163,21 +163,8 @@ class APIClient {
     const contentType = response.headers.get('content-type');
     const isJson = contentType?.includes('application/json');
     
-    console.log('API Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      url: response.url,
-      contentType: contentType,
-      isJson: isJson
-    });
-    
     try {
       const data = isJson ? await response.json() : await response.text();
-      
-      console.log('API Response Data:', {
-        data: data,
-        type: typeof data
-      });
       
       if (!response.ok) {
         // Handle rate limit errors
@@ -381,8 +368,6 @@ async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retry
     finalUrl = `${finalUrl}${separator}${params.toString()}`;
   }
   
-  console.log('Making GET request to:', finalUrl);
-  
   // Default settings
   let retries = options?.retries ?? 3;
   let retryDelay = options?.retryDelay ?? 1000; // 1 second default
@@ -425,17 +410,7 @@ async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retry
         ...fetchOptionsWithoutParams
       };
       
-      console.log('Fetch options:', {
-        method: fetchOptions.method,
-        headers: fetchOptions.headers
-      });
-      
       const response = await fetch(finalUrl, fetchOptions);
-      console.log('Fetch response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
       
       if (timeoutId) clearTimeout(timeoutId);
       
@@ -535,12 +510,6 @@ async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: n
       
       // Separate headers from other options to prevent conflicts
       const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
-      
-      // DEBUG: Log headers being sent
-      console.log('API.post() headers debug:', JSON.stringify({
-        optionHeaders,
-        mergedHeaders: this.getHeaders(optionHeaders)
-      }, null, 2));
       
       const fetchOptions = {
         ...restOptions,

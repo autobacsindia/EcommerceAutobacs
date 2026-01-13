@@ -16,6 +16,13 @@ export default function ProfilePage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<{
+    isVerified: boolean;
+    email: string;
+    verifiedAt?: string;
+  } | null>(null);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -49,15 +56,28 @@ export default function ProfilePage() {
   const loadProfileData = async () => {
     try {
       setLoading(true);
-      const [profileData, ordersData, paymentMethodsData] = await Promise.all([
+      const [profileData, ordersData, paymentMethodsData, verificationData] = await Promise.all([
         profileService.getProfile(),
         profileService.getOrders(currentPage),
-        profileService.getPaymentMethods()
+        profileService.getPaymentMethods(),
+        fetch('/api/auth/verification-status', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }).then(res => res.json()).catch(() => ({ success: false }))
       ]);
 
       setProfile(profileData);
       setOrders(ordersData);
       setPaymentMethods(paymentMethodsData.paymentMethods);
+      
+      if (verificationData.success) {
+        setVerificationStatus({
+          isVerified: verificationData.isVerified,
+          email: verificationData.email,
+          verifiedAt: verificationData.verifiedAt
+        });
+      }
 
       setFormData({
         name: profileData.name,
@@ -170,6 +190,34 @@ export default function ProfilePage() {
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      setIsResendingVerification(true);
+      setResendMessage(null);
+
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setResendMessage('Verification email sent! Please check your inbox.');
+      } else {
+        setResendMessage(data.message || 'Failed to send verification email');
+      }
+    } catch (error) {
+      console.error('Error resending verification:', error);
+      setResendMessage('Failed to send verification email. Please try again later.');
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -225,6 +273,58 @@ export default function ProfilePage() {
               </p>
             </div>
           </div>
+
+          {/* Email Verification Status Banner */}
+          {verificationStatus && !verificationStatus.isVerified && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg className="h-5 w-5 text-yellow-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-sm font-medium text-yellow-800">Email Not Verified</h3>
+                  <p className="mt-1 text-sm text-yellow-700">
+                    Please verify your email address to access all features. Check your inbox for the verification email.
+                  </p>
+                  {resendMessage && (
+                    <p className={`mt-2 text-sm ${
+                      resendMessage.includes('sent') ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      {resendMessage}
+                    </p>
+                  )}
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={isResendingVerification}
+                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-300 text-sm font-medium rounded text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isResendingVerification ? 'Sending...' : 'Resend Verification Email'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {verificationStatus && verificationStatus.isVerified && (
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg className="h-5 w-5 text-green-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-green-800">Email Verified ✓</h3>
+                  <p className="mt-1 text-sm text-green-700">
+                    Your email address has been verified.
+                    {verificationStatus.verifiedAt && (
+                      <span className="ml-1">
+                        (Verified on {new Date(verificationStatus.verifiedAt).toLocaleDateString()})
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {editing ? (
             <div className="mb-6">
