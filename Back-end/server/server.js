@@ -24,6 +24,7 @@ import wordpressRoutes from "./routes/wordpress.js";
 import tokenIntrospectionRoutes from "./routes/tokenIntrospection.js";
 import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
 import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
+import dashboardRoutes from "./routes/dashboard.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -86,7 +87,8 @@ app.get("/", (req, res) => {
       admin: {
         tokenIntrospection: "/admin/token",
         rateLimitDashboard: "/admin/rate-limits/dashboard",
-        adaptiveThrottling: "/admin/adaptive-throttling"
+        adaptiveThrottling: "/admin/adaptive-throttling",
+        dashboard: "/dashboard"
       }
     }
   });
@@ -134,8 +136,13 @@ app.use("/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
 // Admin-only adaptive throttling endpoints
 app.use("/admin/adaptive-throttling", adaptiveThrottlingRoutes);
 
+// Dashboard endpoints (requires admin authentication)
+app.use("/dashboard", adminRateLimit, dashboardRoutes);
+
 // Location service (general rate limiting)
 app.use("/location", apiRateLimit, locationRoutes);
+
+
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {

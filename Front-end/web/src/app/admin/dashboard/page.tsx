@@ -1,484 +1,411 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
-import { 
-  Package, 
-  ShoppingCart, 
-  DollarSign, 
-  TrendingUp, 
-  AlertTriangle,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Truck,
-  User,
-  BarChart3
-} from 'lucide-react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { useSSE } from '@/hooks/useSSE';
 
-interface Stats {
-  totalProducts: number;
-  totalOrders: number;
-  totalRevenue: number;
-  pendingOrders: number;
-  lowStockProducts: number;
-  completedOrders: number;
-  averageOrderValue: number;
-  cancellationRate: number;
-  returnRate: number;
-  avgFulfillmentTime: number;
-}
-
-interface Product {
-  _id: string;
-  name: string;
-  stock: number;
-  price: number;
-  category: {
-    name: string;
+// Types
+interface HealthMetrics {
+  timestamp: number;
+  overall: {
+    score: number;
+    status: 'healthy' | 'degraded' | 'warning' | 'critical' | 'unknown';
+  };
+  dimensions: {
+    infrastructure: DimensionHealth;
+    database: DimensionHealth;
+    application: DimensionHealth;
+    business: DimensionHealth;
   };
 }
 
-interface Order {
-  _id: string;
-  orderNumber: string;
-  user: {
-    name: string;
-  };
-  totalAmount: number;
+interface DimensionHealth {
+  score: number;
   status: string;
+  metrics: any;
+}
+
+interface Analytics {
+  timestamp: number;
+  sales: {
+    revenueToday: number;
+    revenueWeek: number;
+    revenueMonth: number;
+    ordersToday: number;
+    ordersWeek: number;
+    ordersMonth: number;
+    averageOrderValue: number;
+    conversionRate: number;
+  };
+  orders: {
+    statusBreakdown: {
+      pending: number;
+      confirmed: number;
+      processing: number;
+      shipped: number;
+      delivered: number;
+      cancelled: number;
+      refunded: number;
+    };
+    pendingOldOrders: number;
+    recentOrders: RecentOrder[];
+  };
+  customers: {
+    newToday: number;
+    activeLast24h: number;
+    total: number;
+  };
+  system: {
+    inventory: {
+      lowStock: number;
+      outOfStock: number;
+    };
+    apiRequests: number;
+    errorRate: number;
+  };
+}
+
+interface RecentOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  amount: number;
+  customerName: string;
   createdAt: string;
 }
 
-interface RevenueData {
-  date: string;
-  amount: number;
+interface Alert {
+  type: string;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  timestamp: number;
+  data?: any;
 }
 
-interface OrderStatusData {
-  name: string;
-  value: number;
-  [key: string]: any; // Allow additional properties for Recharts
-}
+type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<Stats>({
-    totalProducts: 0,
-    totalOrders: 0,
-    totalRevenue: 0,
-    pendingOrders: 0,
-    lowStockProducts: 0,
-    completedOrders: 0,
-    averageOrderValue: 0,
-    cancellationRate: 0,
-    returnRate: 0,
-    avgFulfillmentTime: 0,
-  });
-  
-  const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
-  const [orderStatusData, setOrderStatusData] = useState<OrderStatusData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const { user, token, isAuthenticated, isLoading: authLoading } = useAuth();
+  const [health, setHealth] = useState<HealthMetrics | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
+  // Redirect if not authenticated or not admin
   useEffect(() => {
-    fetchData();
+    if (!authLoading && (!isAuthenticated || user?.role !== 'admin')) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, user, authLoading, router]);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+  const sseUrl = `${apiUrl}/dashboard/stream`;
+
+  // Handle SSE messages
+  const handleMessage = useCallback((message: any) => {
+    setLastUpdate(new Date());
+
+    switch (message.type) {
+      case 'connected':
+        console.log('Connection confirmed:', message.message);
+        break;
+      case 'health':
+        setHealth(message.data);
+        break;
+      case 'analytics':
+        setAnalytics(message.data);
+        break;
+      case 'alerts':
+        setAlerts(message.data);
+        break;
+      case 'heartbeat':
+        // Connection is alive
+        break;
+      default:
+        console.log('Unknown message type:', message.type);
+    }
   }, []);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch all data in parallel
-      const [productsRes, ordersRes]: [any, any] = await Promise.all([
-        apiClient.get(`${API_ENDPOINTS.PRODUCTS}?limit=1000`),
-        apiClient.get(`${API_ENDPOINTS.ADMIN_ORDERS}?limit=100`)
-      ]);
-      
-      const products = productsRes?.products || [];
-      const orders = ordersRes?.orders || [];
-      
-      // Get total product count from pagination info
-      const totalProductsCount = productsRes?.total || products.length;
-      
-      // Calculate stats
-      const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.totalAmount || 0), 0);
-      const pendingOrders = orders.filter((order: any) => order.status === 'pending').length;
-      const completedOrders = orders.filter((order: any) => order.status === 'delivered').length;
-      const lowStockProducts = products.filter((product: any) => product.stock < 10).length;
-      const cancelledOrders = orders.filter((order: any) => order.status === 'cancelled').length;
-      const ordersWithReturns = orders.filter((order: any) => order.returnRequest).length;
-      
-      // Calculate average order value
-      const averageOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
-      
-      // Calculate cancellation rate
-      const cancellationRate = orders.length > 0 ? (cancelledOrders / orders.length) * 100 : 0;
-      
-      // Calculate return rate
-      const returnRate = completedOrders > 0 ? (ordersWithReturns / completedOrders) * 100 : 0;
-      
-      // Calculate average fulfillment time (mock calculation - should use actual fulfillment metrics)
-      const avgFulfillmentTime = 48; // hours - placeholder
-      
-      setStats({
-        totalProducts: totalProductsCount,
-        totalOrders: orders.length,
-        totalRevenue,
-        pendingOrders,
-        lowStockProducts,
-        completedOrders,
-        averageOrderValue,
-        cancellationRate,
-        returnRate,
-        avgFulfillmentTime,
-      });
-      
-      // Set products (low stock first)
-      const sortedProducts = [...products].sort((a, b) => a.stock - b.stock);
-      setProducts(sortedProducts.slice(0, 5));
-      
-      // Set recent orders
-      const sortedOrders = [...orders].sort((a: any, b: any) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      setOrders(sortedOrders.slice(0, 5));
-      
-      // Prepare revenue data for last 30 days
-      const revenueByDate: Record<string, number> = {};
-      const today = new Date();
-      
-      // Initialize last 30 days with 0 revenue
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateString = date.toISOString().split('T')[0];
-        revenueByDate[dateString] = 0;
-      }
-      
-      // Aggregate revenue by date
-      orders.forEach((order: any) => {
-        const orderDate = new Date(order.createdAt).toISOString().split('T')[0];
-        if (revenueByDate.hasOwnProperty(orderDate)) {
-          revenueByDate[orderDate] += order.totalAmount || 0;
-        }
-      });
-      
-      // Convert to array format for chart
-      const revenueChartData = Object.entries(revenueByDate).map(([date, amount]) => ({
-        date,
-        amount
-      }));
-      
-      setRevenueData(revenueChartData);
-      
-      // Prepare order status data for pie chart
-      const statusCounts: Record<string, number> = {};
-      orders.forEach((order: any) => {
-        statusCounts[order.status] = (statusCounts[order.status] || 0) + 1;
-      });
-      
-      const statusChartData = Object.entries(statusCounts).map(([name, value]) => ({
-        name,
-        value
-      }));
-      
-      setOrderStatusData(statusChartData);
-    } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
-    } finally {
-      setLoading(false);
-    }
+  const handleError = useCallback((error: Error) => {
+    console.error('SSE Error:', error);
+  }, []);
+
+  const handleConnect = useCallback(() => {
+    console.log('Dashboard SSE connected successfully');
+  }, []);
+
+  // Use the custom SSE hook
+  const { connectionState } = useSSE({
+    url: sseUrl,
+    token,
+    enabled: isAuthenticated && user?.role === 'admin', // Only connect if authenticated as admin
+    onMessage: handleMessage,
+    onError: handleError,
+    onConnect: handleConnect
+  });
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(amount);
   };
 
-  const statCards = [
-    {
-      icon: Package,
-      label: 'Total Products',
-      value: stats.totalProducts,
-      color: 'bg-blue-500',
-      trend: null,
-    },
-    {
-      icon: ShoppingCart,
-      label: 'Total Orders',
-      value: stats.totalOrders,
-      color: 'bg-green-500',
-      trend: null,
-    },
-    {
-      icon: DollarSign,
-      label: 'Total Revenue',
-      value: `₹${stats.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
-      color: 'bg-purple-500',
-      trend: null,
-    },
-    {
-      icon: TrendingUp,
-      label: 'Avg Order Value',
-      value: `₹${stats.averageOrderValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
-      color: 'bg-indigo-500',
-      trend: null,
-    },
-    {
-      icon: CheckCircle,
-      label: 'Completed Orders',
-      value: stats.completedOrders,
-      color: 'bg-teal-500',
-      trend: `${stats.totalOrders > 0 ? ((stats.completedOrders / stats.totalOrders) * 100).toFixed(1) : 0}%`,
-    },
-    {
-      icon: Clock,
-      label: 'Pending Orders',
-      value: stats.pendingOrders,
-      color: 'bg-orange-500',
-      trend: null,
-    },
-    {
-      icon: XCircle,
-      label: 'Cancellation Rate',
-      value: `${stats.cancellationRate.toFixed(1)}%`,
-      color: 'bg-red-500',
-      trend: null,
-    },
-    {
-      icon: Truck,
-      label: 'Return Rate',
-      value: `${stats.returnRate.toFixed(1)}%`,
-      color: 'bg-yellow-500',
-      trend: null,
-    },
-    {
-      icon: Clock,
-      label: 'Avg Fulfillment Time',
-      value: `${stats.avgFulfillmentTime}h`,
-      color: 'bg-cyan-500',
-      trend: null,
-    },
-    {
-      icon: AlertTriangle,
-      label: 'Low Stock Items',
-      value: stats.lowStockProducts,
-      color: 'bg-rose-500',
-      trend: null,
-    },
-  ];
-
+  // Get status color
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'processing': return 'bg-blue-100 text-blue-800';
-      case 'shipped': return 'bg-purple-100 text-purple-800';
-      case 'delivered': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'healthy':
+        return 'text-green-600 bg-green-100';
+      case 'degraded':
+        return 'text-yellow-600 bg-yellow-100';
+      case 'warning':
+        return 'text-orange-600 bg-orange-100';
+      case 'critical':
+        return 'text-red-600 bg-red-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
     }
   };
 
-  if (loading) {
-    return <div className="p-8">Loading dashboard data...</div>;
+  // Get connection status indicator
+  const ConnectionStatusIndicator = () => {
+    const colors = {
+      disconnected: 'bg-gray-400',
+      connecting: 'bg-yellow-400 animate-pulse',
+      connected: 'bg-green-500',
+      error: 'bg-red-500'
+    };
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className={`w-3 h-3 rounded-full ${colors[connectionState]}`}></div>
+        <span className="text-sm text-gray-600 capitalize">{connectionState}</span>
+      </div>
+    );
+  };
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show nothing if not authenticated (will redirect)
+  if (!isAuthenticated || user?.role !== 'admin') {
+    return null;
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header */}
+      <div className="mb-6 bg-white rounded-lg shadow p-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-600 mt-1">Real-time system monitoring and analytics</p>
+          </div>
+          <div className="text-right">
+            <ConnectionStatusIndicator />
+            {lastUpdate && (
+              <p className="text-sm text-gray-500 mt-1">
+                Last update: {lastUpdate.toLocaleTimeString()}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div key={card.label} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`${card.color} p-3 rounded-lg`}>
-                  <Icon className="h-6 w-6 text-white" />
+      {/* Health Overview */}
+      {health && (
+        <div className="mb-6 bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">System Health</h2>
+          
+          {/* Overall Health Score */}
+          <div className="mb-6 text-center">
+            <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+              <div>
+                <div className="text-4xl font-bold">{health.overall.score}</div>
+                <div className="text-sm">Overall</div>
+              </div>
+            </div>
+            <div className={`mt-2 inline-block px-4 py-1 rounded-full text-sm font-medium ${getStatusColor(health.overall.status)}`}>
+              {health.overall.status.toUpperCase()}
+            </div>
+          </div>
+
+          {/* Dimension Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {Object.entries(health.dimensions).map(([key, dimension]) => (
+              <div key={key} className="p-4 border rounded-lg">
+                <h3 className="text-sm font-medium text-gray-600 mb-2 capitalize">{key}</h3>
+                <div className="text-3xl font-bold text-gray-900">{dimension.score}</div>
+                <div className={`mt-2 inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(dimension.status)}`}>
+                  {dimension.status}
                 </div>
               </div>
-              <h3 className="text-gray-600 text-sm mb-1">{card.label}</h3>
-              <p className="text-2xl font-bold">{card.value}</p>
-              {card.trend && (
-                <p className="text-xs text-gray-500 mt-1">Completion: {card.trend}</p>
-              )}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Grid */}
+      {analytics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {/* Sales Card */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Sales</h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-600">Today's Revenue</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(analytics.sales.revenueToday)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Orders Today</p>
+                <p className="text-xl font-semibold">{analytics.sales.ordersToday}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Avg Order Value</p>
+                <p className="text-xl font-semibold">{formatCurrency(analytics.sales.averageOrderValue)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Conversion Rate</p>
+                <p className="text-xl font-semibold">{analytics.sales.conversionRate}%</p>
+              </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Revenue Chart */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center">
-            <BarChart3 className="mr-2" />
-            Revenue (Last 30 Days)
-          </h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={revenueData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="date" 
-                  tickFormatter={(value) => {
-                    const date = new Date(value);
-                    return `${date.getDate()}/${date.getMonth() + 1}`;
-                  }}
-                />
-                <YAxis 
-                  tickFormatter={(value) => `₹${value.toLocaleString()}`}
-                />
-                <Tooltip 
-                  formatter={(value) => [`₹${Number(value).toLocaleString()}`, 'Revenue']}
-                  labelFormatter={(value) => `Date: ${value}`}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="amount" 
-                  stroke="#8884d8" 
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          {/* Orders Card */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Orders Status</h3>
+            <div className="space-y-2">
+              {Object.entries(analytics.orders.statusBreakdown).map(([status, count]) => (
+                <div key={status} className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600 capitalize">{status}</span>
+                  <span className="font-semibold">{count}</span>
+                </div>
+              ))}
+            </div>
+            {analytics.orders.pendingOldOrders > 0 && (
+              <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded">
+                <p className="text-sm text-orange-800">
+                  <span className="font-semibold">{analytics.orders.pendingOldOrders}</span> orders pending for over 1 hour
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Customers Card */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Customers</h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-600">New Today</p>
+                <p className="text-2xl font-bold text-blue-600">{analytics.customers.newToday}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Active (24h)</p>
+                <p className="text-xl font-semibold">{analytics.customers.activeLast24h}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Total Customers</p>
+                <p className="text-xl font-semibold">{analytics.customers.total.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Inventory Card */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Inventory</h3>
+            <div className="space-y-3">
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                <p className="text-sm text-gray-600">Low Stock Items</p>
+                <p className="text-2xl font-bold text-yellow-700">{analytics.system.inventory.lowStock}</p>
+              </div>
+              <div className="p-3 bg-red-50 border border-red-200 rounded">
+                <p className="text-sm text-gray-600">Out of Stock</p>
+                <p className="text-2xl font-bold text-red-700">{analytics.system.inventory.outOfStock}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Orders */}
+          <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Recent Orders</h3>
+            <div className="space-y-2">
+              {analytics.orders.recentOrders.map((order) => (
+                <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                  <div>
+                    <p className="font-medium">{order.orderNumber}</p>
+                    <p className="text-sm text-gray-600">{order.customerName}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{formatCurrency(order.amount)}</p>
+                    <span className={`text-xs px-2 py-1 rounded ${getStatusColor(order.status)}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Order Status Distribution */}
+      {/* Alerts */}
+      {alerts.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4">Order Status Distribution</h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={orderStatusData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent ? percent * 100 : 0).toFixed(0)}%`}
-                >
-                  {orderStatusData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={
-                        entry.name === 'delivered' ? '#10B981' :
-                        entry.name === 'pending' ? '#F59E0B' :
-                        entry.name === 'processing' ? '#3B82F6' :
-                        entry.name === 'shipped' ? '#8B5CF6' :
-                        entry.name === 'cancelled' ? '#EF4444' : '#6B7280'
-                      } 
-                    />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [value, 'Orders']} />
-              </PieChart>
-            </ResponsiveContainer>
+          <h2 className="text-xl font-semibold mb-4">Active Alerts</h2>
+          <div className="space-y-3">
+            {alerts.map((alert, index) => {
+              const severityColors = {
+                info: 'bg-blue-50 border-blue-200 text-blue-800',
+                warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+                critical: 'bg-red-50 border-red-200 text-red-800'
+              };
+
+              return (
+                <div key={index} className={`p-4 border rounded ${severityColors[alert.severity]}`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold">{alert.type.replace(/_/g, ' ')}</p>
+                      <p className="text-sm mt-1">{alert.message}</p>
+                    </div>
+                    <span className="text-xs">
+                      {new Date(alert.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Recent Orders and Low Stock Products */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Recent Orders */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4">Recent Orders</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {orders.map((order) => (
-                  <tr key={order._id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {order.orderNumber}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {order.user.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ₹{order.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Loading State */}
+      {!health && !analytics && connectionState === 'connected' && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard data...</p>
         </div>
+      )}
 
-        {/* Low Stock Products */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4">Low Stock Products</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {products.filter(p => p.stock < 10).map((product) => (
-                  <tr key={product._id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {product.category?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        product.stock === 0 ? 'bg-red-100 text-red-800' : 
-                        product.stock < 5 ? 'bg-orange-100 text-orange-800' : 
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {product.stock}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ₹{product.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-                {products.filter(p => p.stock < 10).length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
-                      No low stock products
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      {/* Error State */}
+      {connectionState === 'error' && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <p className="text-red-800 font-semibold">Connection Error</p>
+          <p className="text-red-600 mt-2">Attempting to reconnect...</p>
         </div>
-      </div>
+      )}
     </div>
   );
 }
