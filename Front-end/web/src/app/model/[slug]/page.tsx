@@ -15,6 +15,12 @@ import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterS
 import apiClient from '@/lib/api';
 import { vehicleService } from '@/services/vehicleService';
 
+const RELATED_VEHICLE_FALLBACK_IMAGES: Record<string, string> = {
+  'toyota-fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpeg',
+  'toyota-hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg',
+  'hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg'
+};
+
 // Extended product type to handle both local and WordPress products
 interface LocalProductImage {
   id?: number;
@@ -697,22 +703,55 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                   >
                     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
-                        {relatedVehicle.image?.url ? (
-                          <img 
-                            src={relatedVehicle.image.url} 
-                            alt={relatedVehicle.name || relatedVehicle.make + ' ' + relatedVehicle.model}
-                            className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = '/images/fallback-product.png';
-                            }}
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <span className="text-sm">No image</span>
-                          </div>
-                        )}
+                        {(() => {
+                          const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
+                          const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`
+                            .toLowerCase()
+                            .replace(/\s+/g, '-')
+                            .replace(/[^a-z0-9-]/g, '');
+
+                          let imageUrl: string | undefined;
+
+                          if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
+                            imageUrl = RELATED_VEHICLE_FALLBACK_IMAGES['toyota-fortuner'];
+                          } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
+                            imageUrl = RELATED_VEHICLE_FALLBACK_IMAGES['toyota-hilux'];
+                          }
+
+                          if (!imageUrl) {
+                            imageUrl =
+                              (relatedVehicle.image && relatedVehicle.image.url) ||
+                              RELATED_VEHICLE_FALLBACK_IMAGES[slugKey] ||
+                              RELATED_VEHICLE_FALLBACK_IMAGES[nameKey];
+                          }
+                          
+                          if (!imageUrl) {
+                            return (
+                              <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                <span className="text-sm">No image</span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <img 
+                              src={imageUrl} 
+                              alt={relatedVehicle.name || relatedVehicle.make + ' ' + relatedVehicle.model}
+                              className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
+                                  target.src = '/images/vehicles/toyota-fortuner.jpg';
+                                } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
+                                  target.src = '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg';
+                                } else {
+                                  target.src = '/images/fallback-product.png';
+                                }
+                              }}
+                              loading="lazy"
+                            />
+                          );
+                        })()}
                       </div>
                       <div className="p-3 text-center bg-gray-50">
                         <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">

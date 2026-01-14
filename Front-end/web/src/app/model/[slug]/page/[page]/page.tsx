@@ -15,7 +15,7 @@ import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterS
 import apiClient from '@/lib/api';
 
 const RELATED_VEHICLE_FALLBACK_IMAGES: Record<string, string> = {
-  'toyota-fortuner': 'https://autobacsindia.com/wp-content/uploads/2024/11/Toyota-Fortuner-2024-1024x576.jpg'
+  'toyota-fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpeg'
 };
 
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string; page: string }> }) {
@@ -745,9 +745,24 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
                         {(() => {
-                          const imageUrl =
-                            (relatedVehicle.image && relatedVehicle.image.url) ||
-                            RELATED_VEHICLE_FALLBACK_IMAGES[relatedVehicle.slug];
+                          const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
+                          const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`
+                            .toLowerCase()
+                            .replace(/\s+/g, '-')
+                            .replace(/[^a-z0-9-]/g, '');
+
+                          let imageUrl: string | undefined;
+
+                          if (slugKey.includes('toyota-fortuner') || nameKey.includes('toyota-fortuner')) {
+                            imageUrl = RELATED_VEHICLE_FALLBACK_IMAGES['toyota-fortuner'];
+                          }
+
+                          if (!imageUrl) {
+                            imageUrl =
+                              (relatedVehicle.image && relatedVehicle.image.url) ||
+                              RELATED_VEHICLE_FALLBACK_IMAGES[slugKey] ||
+                              RELATED_VEHICLE_FALLBACK_IMAGES[nameKey];
+                          }
                           
                           if (!imageUrl) {
                             return (
@@ -764,7 +779,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
-                                target.src = '/images/fallback-product.png';
+                                target.src = '/images/vehicles/toyota-fortuner.jpg';
                               }}
                               loading="lazy"
                             />
