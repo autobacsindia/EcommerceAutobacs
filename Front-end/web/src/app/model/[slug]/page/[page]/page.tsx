@@ -14,6 +14,10 @@ import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import apiClient from '@/lib/api';
 
+const RELATED_VEHICLE_FALLBACK_IMAGES: Record<string, string> = {
+  'toyota-fortuner': 'https://autobacsindia.com/wp-content/uploads/2024/11/Toyota-Fortuner-2024-1024x576.jpg'
+};
+
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string; page: string }> }) {
   // All hooks in consistent order
   const router = useRouter();
@@ -34,7 +38,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [animatingItems, setAnimatingItems] = useState<Record<number, boolean>>({});
+  const [animatingItems, setAnimatingItems] = useState<Record<string, boolean>>({});
   const [vehicle, setVehicle] = useState<any>(null);
   const [relatedVehicles, setRelatedVehicles] = useState<any[]>([]);
   const [totalProductsFromAPI, setTotalProductsFromAPI] = useState<number>(0);
@@ -162,7 +166,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     fetchData();
   }, [slug, selectedCategory, currentSort, pageNumber]);
 
-  const handleAddToCart = async (product: WordPressProduct) => {
+  const handleAddToCart = async (product: WordPressProduct | any) => {
     try {
       // For WordPress products, we would typically add to cart via WooCommerce API
       // For now, we'll just show a toast
@@ -173,7 +177,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     }
   };
 
-  const handleToggleWishlist = async (product: WordPressProduct, e: React.MouseEvent) => {
+  const handleToggleWishlist = async (product: WordPressProduct | any, e: React.MouseEvent) => {
     e.preventDefault();
     
     if (!isAuthenticated) {
@@ -181,15 +185,22 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       return;
     }
 
+    const rawId = (product && (product._id || product.id)) ?? null;
+    const productId = rawId != null ? rawId.toString() : '';
+    if (!productId) {
+      console.error('Product has no valid ID');
+      return;
+    }
+
     // Trigger animation
-    setAnimatingItems(prev => ({ ...prev, [product.id]: true }));
+    setAnimatingItems(prev => ({ ...prev, [productId]: true }));
     
     try {
-      if (isInWishlist(product.id.toString())) {
-        await removeFromWishlist(product.id.toString());
+      if (isInWishlist(productId)) {
+        await removeFromWishlist(productId);
         toast.success('Removed from wishlist');
       } else {
-        await addToWishlist(product.id.toString());
+        await addToWishlist(productId);
         toast.success('Added to wishlist');
       }
     } catch (error: any) {
@@ -200,7 +211,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       setTimeout(() => {
         setAnimatingItems(prev => {
           const newState = { ...prev };
-          delete newState[product.id];
+          delete newState[productId];
           return newState;
         });
       }, 300);
@@ -444,17 +455,60 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             ) : paginatedProducts.length > 0 ? (
               <div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {paginatedProducts.map((product) => (
+                  {paginatedProducts.map((product) => {
+                    const rawId = (product && (product._id || product.id)) ?? null;
+                    const productId = rawId != null ? rawId.toString() : '';
+                    const productUrl =
+                      typeof (product as any).permalink === 'string' && (product as any).permalink.trim() !== ''
+                        ? (product as any).permalink
+                        : (productId ? `/products/${productId}` : '#');
+
+                    let imageSrc: string | undefined;
+                    let imageAlt: string | undefined;
+                    if (Array.isArray(product.images) && product.images.length > 0) {
+                      const firstImage: any = product.images[0];
+                      if (typeof firstImage === 'string') {
+                        imageSrc = firstImage;
+                        imageAlt = product.name;
+                      } else if (firstImage && typeof firstImage === 'object') {
+                        imageSrc = firstImage.src || firstImage.url;
+                        imageAlt = firstImage.alt || product.name;
+                      }
+                    }
+
+                    const averageRatingValue =
+                      typeof (product as any).averageRating === 'number' && (product as any).averageRating > 0
+                        ? (product as any).averageRating
+                        : (typeof (product as any).average_rating === 'string'
+                            ? parseFloat((product as any).average_rating)
+                            : 0);
+
+                    const isOutOfStock =
+                      (product as any).stock_status === 'outofstock' ||
+                      (typeof (product as any).stock === 'number' && (product as any).stock <= 0);
+
+                    const hasStock =
+                      (product as any).stock_status === 'instock' ||
+                      (typeof (product as any).stock === 'number' && (product as any).stock >= 0);
+
+                    const isFeatured =
+                      (product as any).featured || (product as any).isFeatured;
+
+                    const hasSale =
+                      (product as any).on_sale ||
+                      typeof (product as any).originalPrice === 'number';
+
+                    return (
                     <div
-                      key={product.id}
+                      key={productId || (product as any).id || (product as any).sku || `product-${Math.random()}`}
                       className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
                     >
                       {/* Product Image */}
-                      <Link href={product.permalink} className="block relative h-52 bg-gray-100">
-                        {product.images && product.images.length > 0 ? (
+                      <Link href={productUrl} className="block relative h-52 bg-gray-100">
+                        {imageSrc ? (
                           <ProductImage
-                            src={product.images[0].src}
-                            alt={product.images[0].alt || product.name}
+                            src={imageSrc}
+                            alt={imageAlt || product.name}
                             className="object-cover w-full h-full"
                           />
                         ) : (
@@ -466,12 +520,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         {/* Wishlist Button */}
                         <button
                           className={`absolute top-3 right-3 p-2 bg-white rounded-full shadow-md hover:bg-gray-50 transition-all duration-200 ${
-                            animatingItems[product.id] ? 'animate-pulse' : ''
+                            productId && animatingItems[productId] ? 'animate-pulse' : ''
                           }`}
                           onClick={(e) => handleToggleWishlist(product, e)}
                         >
                           <Heart className={`h-5 w-5 transition-colors duration-200 ${
-                            isInWishlist(product.id.toString()) 
+                            productId && isInWishlist(productId) 
                               ? 'text-red-500 fill-current' 
                               : 'text-gray-500'
                           }`} />
@@ -479,17 +533,17 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
                         {/* Badges */}
                         <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
-                          {product.stock_status !== 'instock' && (
+                          {isOutOfStock && (
                             <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Out of Stock
                             </div>
                           )}
-                          {product.featured && product.stock_status === 'instock' && (
+                          {isFeatured && hasStock && (
                             <div className="bg-blue-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Popular
                             </div>
                           )}
-                          {product.on_sale && product.stock_status === 'instock' && (
+                          {hasSale && hasStock && (
                             <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Sale
                             </div>
@@ -512,21 +566,21 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         </p>
 
                         {/* Product Name */}
-                        <Link href={product.permalink}>
+                        <Link href={productUrl}>
                           <h3 className="font-bold text-gray-900 mb-3 line-clamp-2 hover:text-blue-600 transition-colors">
                             {product.name}
                           </h3>
                         </Link>
 
                         {/* Rating */}
-                        {parseFloat(product.average_rating) > 0 && (
+                        {averageRatingValue > 0 && (
                           <div className="flex items-center gap-2 mb-3">
                             <div className="flex">
                               {[1, 2, 3, 4, 5].map((star) => (
                                 <svg
                                   key={star}
                                   className={`h-4 w-4 ${
-                                    star <= parseFloat(product.average_rating) 
+                                    star <= averageRatingValue 
                                       ? 'text-yellow-400' 
                                       : 'text-gray-300'
                                   }`}
@@ -538,7 +592,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               ))}
                             </div>
                             <span className="text-sm text-gray-600">
-                              ({parseFloat(product.average_rating).toFixed(1)})
+                              ({averageRatingValue.toFixed(1)})
                             </span>
                           </div>
                         )}
@@ -546,18 +600,32 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         {/* Price and Actions */}
                         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                           <div>
-                            {product.on_sale && product.regular_price !== product.price ? (
+                            {hasSale ? (
                               <div className="flex items-baseline gap-2">
                                 <p className="text-xl font-bold text-blue-600">
-                                  {formatCurrency(parseFloat(product.price))}
+                                  {formatCurrency(
+                                    typeof (product as any).price === 'number'
+                                      ? (product as any).price
+                                      : parseFloat((product as any).price ?? '0')
+                                  )}
                                 </p>
                                 <p className="text-sm text-gray-500 line-through">
-                                  {formatCurrency(parseFloat(product.regular_price))}
+                                  {formatCurrency(
+                                    typeof (product as any).regular_price === 'string'
+                                      ? parseFloat((product as any).regular_price)
+                                      : typeof (product as any).originalPrice === 'number'
+                                        ? (product as any).originalPrice
+                                        : 0
+                                  )}
                                 </p>
                               </div>
                             ) : (
                               <p className="text-xl font-bold text-blue-600">
-                                {formatCurrency(parseFloat(product.price))}
+                                {formatCurrency(
+                                  typeof (product as any).price === 'number'
+                                    ? (product as any).price
+                                    : parseFloat((product as any).price ?? '0')
+                                )}
                               </p>
                             )}
                           </div>
@@ -573,7 +641,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 
                 {/* Pagination Controls - only show if there are multiple pages */}
@@ -675,22 +744,32 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                   >
                     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
                       <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
-                        {relatedVehicle.image?.url ? (
-                          <img 
-                            src={relatedVehicle.image.url} 
-                            alt={relatedVehicle.name || relatedVehicle.make + ' ' + relatedVehicle.model}
-                            className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = '/images/fallback-product.png';
-                            }}
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <span className="text-sm">No image</span>
-                          </div>
-                        )}
+                        {(() => {
+                          const imageUrl =
+                            (relatedVehicle.image && relatedVehicle.image.url) ||
+                            RELATED_VEHICLE_FALLBACK_IMAGES[relatedVehicle.slug];
+                          
+                          if (!imageUrl) {
+                            return (
+                              <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                <span className="text-sm">No image</span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <img 
+                              src={imageUrl} 
+                              alt={relatedVehicle.name || relatedVehicle.make + ' ' + relatedVehicle.model}
+                              className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/images/fallback-product.png';
+                              }}
+                              loading="lazy"
+                            />
+                          );
+                        })()}
                       </div>
                       <div className="p-3 text-center bg-gray-50">
                         <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
