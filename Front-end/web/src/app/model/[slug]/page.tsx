@@ -13,13 +13,7 @@ import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import apiClient from '@/lib/api';
-import { vehicleService } from '@/services/vehicleService';
-
-const RELATED_VEHICLE_FALLBACK_IMAGES: Record<string, string> = {
-  'toyota-fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpeg',
-  'toyota-hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg',
-  'hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg'
-};
+import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
 
 // Extended product type to handle both local and WordPress products
 interface LocalProductImage {
@@ -139,12 +133,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         if (vehicleResponse.success && vehicleResponse.vehicle) {
           setVehicle(vehicleResponse.vehicle);
           
-          // Fetch related vehicles (same make, different models)
           if (vehicleResponse.vehicle.make) {
             try {
               const relatedResponse: any = await apiClient.get(`/vehicles/models/${vehicleResponse.vehicle.make}`);
               if (relatedResponse.success && relatedResponse.models) {
-                // Get full vehicle data for related models in parallel
                 const relatedVehiclePromises = relatedResponse.models
                   .filter((model: string) => model.toLowerCase() !== vehicleResponse.vehicle.model.toLowerCase())
                   .map((model: string) => 
@@ -152,8 +144,33 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       .then((res: any) => res.success && res.vehicle ? res.vehicle : null)
                       .catch(() => null)
                   );
-                
-                const relatedVehiclesData = (await Promise.all(relatedVehiclePromises)).filter(v => v !== null);
+
+                let relatedVehiclesData: any[] = (await Promise.all(relatedVehiclePromises)).filter(v => v !== null);
+
+                const currentSlug = (vehicleResponse.vehicle.slug || '').toString().toLowerCase();
+                const crossTargets = CROSS_RELATED_SLUG_MAP[currentSlug] || [];
+
+                if (crossTargets.length > 0) {
+                  try {
+                    const allVehicles = await vehicleService.getAllVehicles();
+                    for (const targetSlug of crossTargets) {
+                      const alreadyHasTarget = relatedVehiclesData.some(
+                        v => (v.slug || '').toString().toLowerCase() === targetSlug
+                      );
+                      if (!alreadyHasTarget) {
+                        const targetVehicle = allVehicles.find(
+                          v => (v.slug || '').toString().toLowerCase() === targetSlug
+                        );
+                        if (targetVehicle) {
+                          relatedVehiclesData.unshift(targetVehicle);
+                        }
+                      }
+                    }
+                  } catch (crossErr) {
+                    console.warn('Could not enrich cross-related vehicles:', crossErr);
+                  }
+                }
+
                 setRelatedVehicles(relatedVehiclesData);
               }
             } catch (err) {
@@ -713,16 +730,20 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           let imageUrl: string | undefined;
 
                           if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
-                            imageUrl = RELATED_VEHICLE_FALLBACK_IMAGES['toyota-fortuner'];
+                            imageUrl = VEHICLE_IMAGE_MAP['fortuner'];
                           } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
-                            imageUrl = RELATED_VEHICLE_FALLBACK_IMAGES['toyota-hilux'];
+                            imageUrl = VEHICLE_IMAGE_MAP['hilux'];
+                          } else if (slugKey.includes('thar') || nameKey.includes('thar')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['thar'];
+                          } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['jimny'];
                           }
 
                           if (!imageUrl) {
                             imageUrl =
                               (relatedVehicle.image && relatedVehicle.image.url) ||
-                              RELATED_VEHICLE_FALLBACK_IMAGES[slugKey] ||
-                              RELATED_VEHICLE_FALLBACK_IMAGES[nameKey];
+                              VEHICLE_IMAGE_MAP[slugKey] ||
+                              VEHICLE_IMAGE_MAP[nameKey];
                           }
                           
                           if (!imageUrl) {
@@ -741,9 +762,13 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
                                 if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
-                                  target.src = '/images/vehicles/toyota-fortuner.jpg';
+                                  target.src = VEHICLE_IMAGE_MAP['fortuner'];
                                 } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
-                                  target.src = '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg';
+                                  target.src = VEHICLE_IMAGE_MAP['hilux'];
+                                } else if (slugKey.includes('thar') || nameKey.includes('thar')) {
+                                  target.src = VEHICLE_IMAGE_MAP['thar'];
+                                } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
+                                  target.src = VEHICLE_IMAGE_MAP['jimny'];
                                 } else {
                                   target.src = '/images/fallback-product.png';
                                 }

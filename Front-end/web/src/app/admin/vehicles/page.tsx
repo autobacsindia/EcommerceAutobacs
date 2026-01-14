@@ -5,7 +5,6 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, Package, ToggleLeft, ToggleRight } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 
 interface Vehicle {
   _id: string;
@@ -146,9 +145,6 @@ export default function AdminVehiclesPage() {
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Image
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Make
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -174,22 +170,6 @@ export default function AdminVehiclesPage() {
           <tbody className="bg-white divide-y divide-gray-200">
             {vehicles.map((vehicle) => (
               <tr key={vehicle._id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {vehicle.image?.url ? (
-                    <div className="relative h-10 w-10 rounded overflow-hidden bg-gray-100">
-                      <Image
-                        src={vehicle.image.url}
-                        alt={vehicle.image.alt || `${vehicle.make} ${vehicle.model}`}
-                        fill
-                        className="object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center">
-                      <span className="text-gray-400 text-xs">No img</span>
-                    </div>
-                  )}
-                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{vehicle.make}</div>
                 </td>

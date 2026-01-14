@@ -31,27 +31,71 @@ import { wordpressService } from './wordpressService';
 // Use the main API client instead of creating a separate axios instance
 const vehicleApi = apiClient;
 
-// Map vehicle slugs to local image filenames
-function getVehicleImageUrl(slug: string): string {
-  const vehicleImageMap: Record<string, string> = {
-    'toyota-hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg',
-    'mahindra-thar': '/images/vehicles/mahindra_thar_roxx_2024_5k-3840x2160-1-scaled.jpg',
-    'isuzu-dmax-v-cross': '/images/vehicles/1778470-1920x1300-desktop-hd-isuzu-wallpaper-photo.jpg',
-    'maruti-jimny': '/images/vehicles/suzuki_jimny_2018_08.jpg',
-    'jeep-wrangler': '/images/vehicles/181709-3000x1688-desktop-hd-jeep-background-photo-scaled.jpg',
-    'toyota-fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpg',
-    'volkswagen-polo': '/images/vehicles/VW-Polo-7.jpg',
-    'hyundai': '/images/vehicles/Hyundai-i20-2-jpeg.jpg',
-    'kia': '/images/vehicles/Carens_1920x1080_3.jpg',
-    'ford-endeavour': '/images/vehicles/Untitled-design-2024-01-04T133626.142.jpg',
-    'audi': '/images/vehicles/A240553_web_2880-scaled.jpg',
-    'bmw': '/images/vehicles/bmw-3-series.jpg',
-    'ford-ranger': '/images/vehicles/Ford-Ranger.jpg', // This might not exist locally
-    'land-rover-defender': '/images/vehicles/land-rover-defender-1333693509.jpg',
-    'mercedes-benz': '/images/vehicles/Mercedes-Benz-E-Class.jpg',
-  };
+export const VEHICLE_IMAGE_MAP: Record<string, string> = {
+  'toyota-hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg',
+  'mahindra-thar': '/images/vehicles/mahindra_thar_roxx_2024_5k-3840x2160-1-scaled.jpg',
+  'isuzu-dmax-v-cross': '/images/vehicles/1778470-1920x1300-desktop-hd-isuzu-wallpaper-photo.jpg',
+  'maruti-jimny': '/images/vehicles/suzuki_jimny_2018_08.jpg',
+  'jeep-wrangler': '/images/vehicles/181709-3000x1688-desktop-hd-jeep-background-photo-scaled.jpg',
+  'toyota-fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpeg',
+  'volkswagen-polo': '/images/vehicles/VW-Polo-7.jpg',
+  'hyundai': '/images/vehicles/Hyundai-i20-2-jpeg.jpg',
+  'kia': '/images/vehicles/Carens_1920x1080_3.jpg',
+  'ford-endeavour': '/images/vehicles/Untitled-design-2024-01-04T133626.142.png',
+  'audi': '/images/vehicles/A240553_web_2880-scaled.jpg',
+  'bmw': '/images/vehicles/bmw-3-series.jpg',
+  'ford-ranger': '/images/vehicles/Ford-Ranger.jpg', 
+  'land-rover-defender': '/images/vehicles/land-rover-defender-1333693509.jpg',
+  'mercedes-benz': '/images/vehicles/Mercedes-Benz-E-Class.jpg',
+
+  'hilux': '/images/vehicles/Nova-Hilux-2021_1-scaled-1.jpg',
+  'fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpeg',
+  'thar': '/images/vehicles/mahindra_thar_roxx_2024_5k-3840x2160-1-scaled.jpg',
+  'jimny': '/images/vehicles/suzuki_jimny_2018_08.jpg',
   
-  return vehicleImageMap[slug] || `/images/vehicles/${slug}.jpg`;
+  // Aliases for robustness
+  'isuzu-dmax': '/images/vehicles/1778470-1920x1300-desktop-hd-isuzu-wallpaper-photo.jpg',
+  'ranger': '/images/vehicles/Ford-Ranger.jpg',
+  'endeavour': '/images/vehicles/Untitled-design-2024-01-04T133626.142.png',
+  'wrangler': '/images/vehicles/181709-3000x1688-desktop-hd-jeep-background-photo-scaled.jpg',
+  'defender': '/images/vehicles/land-rover-defender-1333693509.jpg',
+  'mercedes': '/images/vehicles/Mercedes-Benz-E-Class.jpg',
+};
+
+export const CROSS_RELATED_SLUG_MAP: Record<string, string[]> = {
+  // Thar <-> Jimny/Wrangler
+  'mahindra-thar': ['maruti-jimny', 'jimny', 'jeep-wrangler', 'wrangler'],
+  'thar': ['maruti-jimny', 'jimny', 'jeep-wrangler', 'wrangler'],
+  'maruti-jimny': ['mahindra-thar', 'thar', 'jeep-wrangler', 'wrangler'],
+  'jimny': ['mahindra-thar', 'thar', 'jeep-wrangler', 'wrangler'],
+  
+  // Isuzu <-> Ranger/Hilux
+  'isuzu-dmax-v-cross': ['ford-ranger', 'ranger', 'toyota-hilux', 'hilux'],
+  'isuzu-dmax': ['ford-ranger', 'ranger', 'toyota-hilux', 'hilux'],
+  'ford-ranger': ['isuzu-dmax-v-cross', 'isuzu-dmax'],
+  'ranger': ['isuzu-dmax-v-cross', 'isuzu-dmax'],
+  
+  // Fortuner <-> Endeavour/Hilux
+  'toyota-fortuner': ['ford-endeavour', 'endeavour', 'toyota-hilux', 'hilux'],
+  'fortuner': ['ford-endeavour', 'endeavour', 'toyota-hilux', 'hilux'],
+  'ford-endeavour': ['toyota-fortuner', 'fortuner'],
+  'endeavour': ['toyota-fortuner', 'fortuner'],
+  'toyota-hilux': ['toyota-fortuner', 'fortuner', 'isuzu-dmax-v-cross', 'isuzu-dmax'],
+  'hilux': ['toyota-fortuner', 'fortuner', 'isuzu-dmax-v-cross', 'isuzu-dmax'],
+  
+  // Defender <-> Mercedes
+  'land-rover-defender': ['mercedes-benz', 'mercedes'],
+  'defender': ['mercedes-benz', 'mercedes'],
+  'mercedes-benz': ['land-rover-defender', 'defender'],
+  'mercedes': ['land-rover-defender', 'defender'],
+  
+  // Hyundai <-> Kia
+  'hyundai': ['kia'],
+  'kia': ['hyundai'],
+};
+
+function getVehicleImageUrl(slug: string): string {
+  return VEHICLE_IMAGE_MAP[slug] || `/images/vehicles/${slug}.jpg`;
 }
 
 export const vehicleService = {
@@ -208,4 +252,3 @@ export const vehicleService = {
 };
 
 export type { Vehicle, VehicleApiResponse };
-

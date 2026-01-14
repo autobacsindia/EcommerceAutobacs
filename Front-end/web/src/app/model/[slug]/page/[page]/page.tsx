@@ -13,10 +13,7 @@ import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import apiClient from '@/lib/api';
-
-const RELATED_VEHICLE_FALLBACK_IMAGES: Record<string, string> = {
-  'toyota-fortuner': '/images/vehicles/toyota-fortuner-right-front-three-quarter0.jpeg'
-};
+import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
 
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string; page: string }> }) {
   // All hooks in consistent order
@@ -61,27 +58,24 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       setError(null);
         
       try {
-        // Fetch product categories
         const categoriesData = await wordpressService.getProductCategories();
         setCategories(categoriesData);
         
-        // Fetch specific vehicle data
         try {
           const vehicleResponse: any = await apiClient.get(`/vehicles/slug/${slug}`);
           if (vehicleResponse.success && vehicleResponse.vehicle) {
             setVehicle(vehicleResponse.vehicle);
             
-            // Fetch related vehicles (same make, different models)
             if (vehicleResponse.vehicle.make) {
               const relatedResponse: any = await apiClient.get(`/vehicles/models/${vehicleResponse.vehicle.make}`);
               if (relatedResponse.success && relatedResponse.models) {
-                // Get full vehicle data for related models
-                const relatedVehiclesData = [];
+                const relatedVehiclesData: any[] = [];
                 for (const model of relatedResponse.models) {
                   if (model.toLowerCase() !== vehicleResponse.vehicle.model.toLowerCase()) {
-                    // Try to find a vehicle with this model
                     try {
-                      const relatedVehicleResponse: any = await apiClient.get(`/vehicles/make-model/${vehicleResponse.vehicle.make}/${model}`);
+                      const relatedVehicleResponse: any = await apiClient.get(
+                        `/vehicles/make-model/${vehicleResponse.vehicle.make}/${model}`
+                      );
                       if (relatedVehicleResponse.success && relatedVehicleResponse.vehicle) {
                         relatedVehiclesData.push(relatedVehicleResponse.vehicle);
                       }
@@ -90,13 +84,37 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     }
                   }
                 }
+
+                const currentSlug = (vehicleResponse.vehicle.slug || '').toString().toLowerCase();
+                const crossTargets = CROSS_RELATED_SLUG_MAP[currentSlug] || [];
+
+                if (crossTargets.length > 0) {
+                  try {
+                    const allVehicles = await vehicleService.getAllVehicles();
+                    for (const targetSlug of crossTargets) {
+                      const alreadyHasTarget = relatedVehiclesData.some(
+                        v => (v.slug || '').toString().toLowerCase() === targetSlug
+                      );
+                      if (!alreadyHasTarget) {
+                        const targetVehicle = allVehicles.find(
+                          v => (v.slug || '').toString().toLowerCase() === targetSlug
+                        );
+                        if (targetVehicle) {
+                          relatedVehiclesData.unshift(targetVehicle);
+                        }
+                      }
+                    }
+                  } catch (crossErr) {
+                    console.warn('Could not enrich cross-related vehicles:', crossErr);
+                  }
+                }
+
                 setRelatedVehicles(relatedVehiclesData);
               }
             }
           }
         } catch (vehicleErr) {
           console.warn('Could not fetch vehicle data:', vehicleErr);
-          // Continue without vehicle data
         }
           
         // Fetch products for the vehicle using LOCAL API instead of WordPress
@@ -753,15 +771,21 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
                           let imageUrl: string | undefined;
 
-                          if (slugKey.includes('toyota-fortuner') || nameKey.includes('toyota-fortuner')) {
-                            imageUrl = RELATED_VEHICLE_FALLBACK_IMAGES['toyota-fortuner'];
+                          if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['fortuner'];
+                          } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['hilux'];
+                          } else if (slugKey.includes('thar') || nameKey.includes('thar')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['thar'];
+                          } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['jimny'];
                           }
 
                           if (!imageUrl) {
                             imageUrl =
                               (relatedVehicle.image && relatedVehicle.image.url) ||
-                              RELATED_VEHICLE_FALLBACK_IMAGES[slugKey] ||
-                              RELATED_VEHICLE_FALLBACK_IMAGES[nameKey];
+                              VEHICLE_IMAGE_MAP[slugKey] ||
+                              VEHICLE_IMAGE_MAP[nameKey];
                           }
                           
                           if (!imageUrl) {
@@ -779,7 +803,17 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
-                                target.src = '/images/vehicles/toyota-fortuner.jpg';
+                                if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
+                                  target.src = VEHICLE_IMAGE_MAP['fortuner'];
+                                } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
+                                  target.src = VEHICLE_IMAGE_MAP['hilux'];
+                                } else if (slugKey.includes('thar') || nameKey.includes('thar')) {
+                                  target.src = VEHICLE_IMAGE_MAP['thar'];
+                                } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
+                                  target.src = VEHICLE_IMAGE_MAP['jimny'];
+                                } else {
+                                  target.src = '/images/fallback-product.png';
+                                }
                               }}
                               loading="lazy"
                             />
