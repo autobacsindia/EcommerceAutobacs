@@ -320,6 +320,23 @@ class LocationService {
   }
 
   /**
+   * Check if location permission is denied
+   */
+  async isLocationDenied(): Promise<boolean> {
+    if (!navigator.geolocation) {
+      return true;
+    }
+
+    try {
+      const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+      return permission.state === 'denied';
+    } catch (error) {
+      console.error('Check location permission error:', error);
+      return false;
+    }
+  }
+
+  /**
    * Check if location permission is granted
    */
   async checkLocationPermission(): Promise<boolean> {
@@ -359,7 +376,6 @@ class LocationService {
           }
         },
         (error) => {
-          console.error('Get current coordinates error:', error);
           let message = 'Unable to retrieve your location';
           
           switch (error.code) {
@@ -372,6 +388,10 @@ class LocationService {
             case error.TIMEOUT:
               message = 'Location request timed out. Please try again.';
               break;
+          }
+          
+          if (error.code !== error.PERMISSION_DENIED) {
+            console.error('Get current coordinates error:', error);
           }
           
           reject(new Error(message));

@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, ChevronDown, CheckCircle, Clock } from 'lucide-react';
+import { MapPin, ChevronDown, CheckCircle, Clock, X } from 'lucide-react';
 import { useLocation } from '@/contexts/LocationContext';
-import { getLocationHistory, markCurrentLocation } from '@/utils/locationHistory';
+import { getLocationHistory, markCurrentLocation, removeFromHistory } from '@/utils/locationHistory';
 import { LocationHistoryItem } from '@/utils/locationHistory';
 import locationService from '@/services/locationService';
 
@@ -25,7 +25,8 @@ export default function LocationHistory({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load history when dropdown opens
+  const ownerId = currentLocation?.user || currentLocation?.sessionId || null;
+
   useEffect(() => {
     if (isOpen) {
       loadHistory();
@@ -33,7 +34,6 @@ export default function LocationHistory({
     }
   }, [isOpen, currentLocation]);
 
-  // Handle click outside to close
   useEffect(() => {
     if (!isOpen) return;
 
@@ -47,7 +47,6 @@ export default function LocationHistory({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
 
@@ -82,10 +81,10 @@ export default function LocationHistory({
   }, [isOpen, history, selectedIndex, onSelectLocation, onClose]);
 
   const loadHistory = () => {
-    const historyItems = getLocationHistory();
+    const historyItems = getLocationHistory(ownerId);
     const currentPostalCode = currentLocation?.selectedAddress.postalCode;
     const markedHistory = currentPostalCode
-      ? markCurrentLocation(currentPostalCode)
+      ? markCurrentLocation(currentPostalCode, ownerId)
       : historyItems;
     setHistory(markedHistory);
   };
@@ -93,6 +92,12 @@ export default function LocationHistory({
   const handleSelectItem = (item: LocationHistoryItem) => {
     if (item.isCurrent) return;
     onSelectLocation(item);
+  };
+
+  const handleRemoveItem = (event: React.MouseEvent<HTMLSpanElement>, itemId: string) => {
+    event.stopPropagation();
+    removeFromHistory(itemId, ownerId);
+    loadHistory();
   };
 
   const formatTimeAgo = (timestamp: string): string => {
@@ -123,7 +128,6 @@ export default function LocationHistory({
       role="menu"
       aria-label="Recent locations"
     >
-      {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
           <Clock className="h-4 w-4" />
@@ -131,7 +135,6 @@ export default function LocationHistory({
         </h3>
       </div>
 
-      {/* History List */}
       <div className="max-h-80 overflow-y-auto">
         {history.length === 0 ? (
           <div className="px-4 py-8 text-center">
@@ -175,32 +178,46 @@ export default function LocationHistory({
                   aria-current={isCurrent ? 'location' : undefined}
                 >
                   <div className="flex items-start gap-3">
-                    <MapPin className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
-                      isCurrent ? 'text-blue-600' : 'text-gray-400'
-                    }`} />
-                    
+                    <MapPin
+                      className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
+                        isCurrent ? 'text-blue-600' : 'text-gray-400'
+                      }`}
+                    />
+
                     <div className="flex-1 min-w-0">
-                      {/* Location Name */}
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className={`text-sm font-medium truncate ${
-                          isCurrent ? 'text-blue-900' : 'text-gray-900'
-                        }`}>
+                        <p
+                          className={`text-sm font-medium truncate ${
+                            isCurrent ? 'text-blue-900' : 'text-gray-900'
+                          }`}
+                        >
                           {item.address.city}, {item.address.state}
                         </p>
-                        {isCurrent && (
-                          <CheckCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                        )}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isCurrent && (
+                            <CheckCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                          )}
+                          {!isCurrent && (
+                            <span
+                              onClick={(event) => handleRemoveItem(event, item.id)}
+                              className="text-gray-400 hover:text-red-600 cursor-pointer p-1"
+                              aria-label="Remove saved location"
+                            >
+                              <X className="h-4 w-4" />
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* PIN Code */}
                       <p className="text-xs text-gray-500 mb-2">
                         PIN: {item.address.postalCode}
                       </p>
 
-                      {/* Zone Badge and Time */}
                       <div className="flex items-center gap-2">
                         {item.deliveryZone && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${zoneColor}`}>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${zoneColor}`}
+                          >
                             {locationService.getZoneTypeDisplay(item.deliveryZone.type)}
                           </span>
                         )}
@@ -223,7 +240,6 @@ export default function LocationHistory({
         )}
       </div>
 
-      {/* Footer with Change Location button */}
       {history.length > 0 && onOpenSelector && (
         <div className="px-4 py-3 border-t border-gray-200">
           <button

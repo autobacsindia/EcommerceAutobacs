@@ -43,17 +43,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [currentLocation, setCurrentLocation] = useState<UserLocation | null>(null);
   const [deliveryZone, setDeliveryZone] = useState<DeliveryZone | null>(null);
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rateLimitContext = useRateLimit(); // Use rate limit context
   const showRateLimitNotification = rateLimitContext?.showRateLimitNotification || ((retryAfter: number) => {});
-
-  /**
-   * Load location on mount
-   */
-  useEffect(() => {
-    loadLocation();
-  }, []);
 
   /**
    * Load current location from cache or API

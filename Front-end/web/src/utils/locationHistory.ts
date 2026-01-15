@@ -5,7 +5,7 @@
 
 import { UserLocation } from '@/types/location';
 
-const STORAGE_KEY = 'autobacs_location_history';
+const BASE_STORAGE_KEY = 'autobacs_location_history';
 const MAX_HISTORY_ITEMS = 5;
 
 export interface LocationHistoryItem {
@@ -22,6 +22,11 @@ export interface LocationHistoryItem {
   };
   timestamp: string;
   isCurrent?: boolean;
+}
+
+function getStorageKey(ownerId?: string | null): string {
+  if (!ownerId) return `${BASE_STORAGE_KEY}_guest`;
+  return `${BASE_STORAGE_KEY}_${ownerId}`;
 }
 
 /**
@@ -54,13 +59,13 @@ export function createHistoryItem(location: UserLocation): LocationHistoryItem {
  * Get location history from localStorage
  * Returns empty array if no history or on error
  */
-export function getLocationHistory(): LocationHistoryItem[] {
+export function getLocationHistory(ownerId?: string | null): LocationHistoryItem[] {
   try {
     if (typeof window === 'undefined') {
       return [];
     }
 
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(getStorageKey(ownerId));
     if (!stored) {
       return [];
     }
@@ -97,7 +102,8 @@ export function addToLocationHistory(location: UserLocation): void {
     }
 
     const historyItem = createHistoryItem(location);
-    let history = getLocationHistory();
+    const ownerId = (location.user as string) || location.sessionId || null;
+    let history = getLocationHistory(ownerId);
 
     // Remove existing entry with same postal code
     history = history.filter(
@@ -111,7 +117,7 @@ export function addToLocationHistory(location: UserLocation): void {
     history = history.slice(0, MAX_HISTORY_ITEMS);
 
     // Save to localStorage
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    localStorage.setItem(getStorageKey(ownerId), JSON.stringify(history));
   } catch (error) {
     console.error('Error saving to location history:', error);
   }
@@ -120,13 +126,13 @@ export function addToLocationHistory(location: UserLocation): void {
 /**
  * Clear all location history
  */
-export function clearLocationHistory(): void {
+export function clearLocationHistory(ownerId?: string | null): void {
   try {
     if (typeof window === 'undefined') {
       return;
     }
 
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(getStorageKey(ownerId));
   } catch (error) {
     console.error('Error clearing location history:', error);
   }
@@ -135,15 +141,15 @@ export function clearLocationHistory(): void {
 /**
  * Remove specific item from history
  */
-export function removeFromHistory(itemId: string): void {
+export function removeFromHistory(itemId: string, ownerId?: string | null): void {
   try {
     if (typeof window === 'undefined') {
       return;
     }
 
-    let history = getLocationHistory();
+    let history = getLocationHistory(ownerId);
     history = history.filter((item) => item.id !== itemId);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    localStorage.setItem(getStorageKey(ownerId), JSON.stringify(history));
   } catch (error) {
     console.error('Error removing from location history:', error);
   }
@@ -152,8 +158,8 @@ export function removeFromHistory(itemId: string): void {
 /**
  * Mark current location in history
  */
-export function markCurrentLocation(postalCode: string): LocationHistoryItem[] {
-  const history = getLocationHistory();
+export function markCurrentLocation(postalCode: string, ownerId?: string | null): LocationHistoryItem[] {
+  const history = getLocationHistory(ownerId);
   return history.map((item) => ({
     ...item,
     isCurrent: item.address.postalCode === postalCode,

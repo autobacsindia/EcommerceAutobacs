@@ -6,6 +6,7 @@ import { useLocation } from '@/contexts/LocationContext';
 import { LocationSelectRequest } from '@/types/location';
 import toast from 'react-hot-toast';
 import ManualLocationForm from './ManualLocationForm';
+import locationService from '@/services/locationService';
 
 interface LocationSelectorProps {
   isOpen: boolean;
@@ -45,6 +46,34 @@ export default function LocationSelector({
 
   const handleUseCurrentLocation = async (retryAttempt = 0) => {
     try {
+      // Check if permission is explicitly denied
+      const isDenied = await locationService.isLocationDenied();
+      if (isDenied) {
+        toast((t) => (
+          <div className="flex flex-col space-y-2">
+            <span>Location access is blocked. Please enable it in your browser settings or enter manually.</span>
+            <div className="flex space-x-2 pt-1">
+              <button 
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  setShowManualForm(true);
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs font-medium transition-colors"
+              >
+                Enter Manually
+              </button>
+              <button 
+                onClick={() => toast.dismiss(t.id)} 
+                className="text-gray-500 hover:text-gray-700 text-xs px-2 py-1"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ), { duration: 6000, position: 'top-center' });
+        return;
+      }
+
       setUseCurrentLocation(true);
       
       // Get current coordinates
@@ -97,14 +126,16 @@ export default function LocationSelector({
       onLocationSelected?.();
       handleClose();
     } catch (error: any) {
-      console.error('Current location error:', error);
+      const message = error?.message || '';
+      const isPermissionDeniedError = message.includes('Location permission denied');
+      if (!isPermissionDeniedError) {
+        console.error('Current location error:', error);
+      }
       
-      // Check if this is a reverse geocode error and we can retry
-      const isReverseGeocodeError = error.message && error.message.includes('Failed to reverse geocode coordinates');
+      const isReverseGeocodeError = message.includes('Failed to reverse geocode coordinates');
       
       if (isReverseGeocodeError && retryAttempt < maxRetries) {
-        // Exponential backoff retry
-        const retryDelay = Math.pow(2, retryAttempt) * 1000; // 1s, 2s, 4s
+        const retryDelay = Math.pow(2, retryAttempt) * 1000;
         toast.loading(`Retrying... (${retryAttempt + 1}/${maxRetries})`);
         
         setTimeout(() => {
@@ -116,13 +147,10 @@ export default function LocationSelector({
         return;
       }
       
-      // Show user-friendly error message
-      let errorMessage = error.message || 'Failed to detect location';
+      let errorMessage = message || 'Failed to detect location';
       
-      // Provide more specific guidance for reverse geocode errors
       if (isReverseGeocodeError) {
         errorMessage = 'Unable to determine your address from location.';
-        // Offer manual entry option
         toast((t) => (
           <div className="flex flex-col space-y-2">
             <span>{errorMessage}</span>
@@ -145,12 +173,39 @@ export default function LocationSelector({
             </div>
           </div>
         ), { duration: 10000 });
-        return; // Don't show the regular error toast
+        return;
+      }
+
+      if (isPermissionDeniedError) {
+        toast((t) => (
+          <div className="flex flex-col space-y-2">
+            <span>
+              We could not access your location because permission is blocked. You can enable it in your browser settings or enter your location manually.
+            </span>
+            <div className="flex space-x-2 pt-1">
+              <button
+                className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  setShowManualForm(true);
+                }}
+              >
+                Enter Manually
+              </button>
+              <button
+                className="px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded"
+                onClick={() => toast.dismiss(t.id)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ), { duration: 10000 });
+        setRetryCount(0);
+        return;
       }
       
       toast.error(errorMessage);
-      
-      // Reset retry count after final attempt
       setRetryCount(0);
     } finally {
       if (retryCount === 0 || retryCount >= maxRetries) {
