@@ -358,6 +358,110 @@ class ProductImportService {
       };
     }
   }
+
+  async findMissingWordPressProducts() {
+    const totalProducts = await this.getTotalProductCount();
+    const totalPages = Math.ceil(totalProducts / this.importBatchSize);
+    const localProducts = await Product.find({}).select('externalId sku');
+    const localExternalIds = new Set();
+    const localSkus = new Set();
+    for (const product of localProducts) {
+      if (product.externalId) {
+        localExternalIds.add(product.externalId.toString());
+      }
+      if (product.sku) {
+        localSkus.add(product.sku);
+      }
+    }
+    const missingProducts = [];
+    for (let page = 1; page <= totalPages; page++) {
+      const wpProducts = await this.fetchProductsFromWordPress(page, this.importBatchSize);
+      for (const wpProduct of wpProducts) {
+        const externalId = wpProduct.id ? wpProduct.id.toString() : null;
+        const sku = wpProduct.sku || null;
+        let exists = false;
+        if (externalId && localExternalIds.has(externalId)) {
+          exists = true;
+        } else if (sku && localSkus.has(sku)) {
+          exists = true;
+        }
+        if (!exists) {
+          missingProducts.push({
+            id: wpProduct.id,
+            sku: wpProduct.sku,
+            name: wpProduct.name,
+            status: wpProduct.status,
+            regular_price: wpProduct.regular_price,
+            sale_price: wpProduct.sale_price
+          });
+        }
+      }
+    }
+    return {
+      totalWordPressProducts: totalProducts,
+      totalLocalProducts: localProducts.length,
+      missingCount: missingProducts.length,
+      missingProducts
+    };
+  }
+
+  async previewImport() {
+    const totalProducts = await this.getTotalProductCount();
+    const totalPages = Math.ceil(totalProducts / this.importBatchSize);
+    const toCreate = [];
+    const toUpdate = [];
+    const failed = [];
+    for (let page = 1; page <= totalPages; page++) {
+      const wpProducts = await this.fetchProductsFromWordPress(page, this.importBatchSize);
+      for (const wpProduct of wpProducts) {
+        try {
+          const productData = this.transformProductData(wpProduct);
+          let existingProduct = null;
+          if (productData.externalId) {
+            existingProduct = await Product.findOne({ externalId: productData.externalId }).select('_id name sku');
+          }
+          if (!existingProduct && productData.sku) {
+            existingProduct = await Product.findOne({ sku: productData.sku }).select('_id name sku');
+          }
+          if (existingProduct) {
+            toUpdate.push({
+              wpId: wpProduct.id,
+              wpSku: wpProduct.sku,
+              wpName: wpProduct.name,
+              localProductId: existingProduct._id,
+              localName: existingProduct.name,
+              localSku: existingProduct.sku
+            });
+          } else {
+            toCreate.push({
+              wpId: wpProduct.id,
+              sku: wpProduct.sku,
+              name: wpProduct.name,
+              status: wpProduct.status,
+              regular_price: wpProduct.regular_price,
+              sale_price: wpProduct.sale_price
+            });
+          }
+        } catch (error) {
+          failed.push({
+            wpId: wpProduct.id,
+            sku: wpProduct.sku,
+            name: wpProduct.name,
+            error: error.message
+          });
+        }
+      }
+    }
+    return {
+      totalWordPressProducts: totalProducts,
+      toCreateCount: toCreate.length,
+      toUpdateCount: toUpdate.length,
+      failedCount: failed.length,
+      toCreate,
+      toUpdate,
+      failed
+    };
+  }
 }
 
 export default ProductImportService;

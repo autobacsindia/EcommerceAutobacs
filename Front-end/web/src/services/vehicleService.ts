@@ -224,7 +224,7 @@ export const vehicleService = {
     sortBy?: string;
     order?: 'asc' | 'desc';
     inStock?: boolean;
-  } = {}): Promise<any> {
+  } = {}, requestOptions?: { timeout?: number }): Promise<any> {
     try {
       const params = new URLSearchParams();
       
@@ -241,7 +241,7 @@ export const vehicleService = {
       const queryString = params.toString();
       const url = `/products/by-vehicle/${vehicleId}${queryString ? '?' + queryString : ''}`;
       
-      const response = await vehicleApi.get(url);
+      const response = await vehicleApi.get(url, requestOptions);
       return response;
     } catch (error) {
       // Don't log error here - let the calling code decide how to handle it

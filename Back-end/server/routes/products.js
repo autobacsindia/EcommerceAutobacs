@@ -563,6 +563,53 @@ router.post("/import/wordpress", protect, admin, asyncHandler(async (req, res) =
   }
 }));
 
+router.get("/import/wordpress/missing", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const importService = new ProductImportService();
+    const result = await importService.findMissingWordPressProducts();
+    res.json({
+      success: true,
+      summary: {
+        totalWordPressProducts: result.totalWordPressProducts,
+        totalLocalProducts: result.totalLocalProducts,
+        missingCount: result.missingCount
+      },
+      missingProducts: result.missingProducts
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get missing WordPress products',
+      error: error.message
+    });
+  }
+}));
+
+router.get("/import/wordpress/preview", protect, admin, asyncHandler(async (req, res) => {
+  try {
+    const importService = new ProductImportService();
+    const result = await importService.previewImport();
+    res.json({
+      success: true,
+      summary: {
+        totalWordPressProducts: result.totalWordPressProducts,
+        toCreateCount: result.toCreateCount,
+        toUpdateCount: result.toUpdateCount,
+        failedCount: result.failedCount
+      },
+      toCreate: result.toCreate,
+      toUpdate: result.toUpdate,
+      failed: result.failed
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get WordPress import preview',
+      error: error.message
+    });
+  }
+}));
+
 // @route   POST /products/import/brand/:brandName
 // @desc    Import products for a specific brand from WordPress
 // @access  Private/Admin

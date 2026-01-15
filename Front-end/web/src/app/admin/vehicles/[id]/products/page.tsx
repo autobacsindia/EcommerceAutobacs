@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
-import { ArrowLeft, Search, Plus, X, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Search, Plus, X, Loader2, Check, Edit } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -48,6 +48,8 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
+  const [debouncedTableSearchTerm, setDebouncedTableSearchTerm] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,7 +57,15 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
 
   useEffect(() => {
     fetchVehicleProducts();
-  }, [id, currentPage]);
+  }, [id, currentPage, debouncedTableSearchTerm]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedTableSearchTerm(tableSearchTerm);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [tableSearchTerm]);
 
   useEffect(() => {
     if (showAddModal && searchTerm) {
@@ -69,8 +79,15 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
   const fetchVehicleProducts = async () => {
     try {
       setLoading(true);
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', '20');
+      if (debouncedTableSearchTerm) {
+        params.append('search', debouncedTableSearchTerm);
+      }
+
       const response = await apiClient.get<VehicleProductsResponse>(
-        `${API_ENDPOINTS.VEHICLE_PRODUCTS(id)}?page=${currentPage}&limit=20`
+        `${API_ENDPOINTS.VEHICLE_PRODUCTS(id)}?${params.toString()}`
       );
       
       setVehicle(response.vehicle);
@@ -181,6 +198,20 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search mapped products..."
+            value={tableSearchTerm}
+            onChange={(e) => setTableSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg"
+          />
+        </div>
+      </div>
+
       {/* Mapped Products Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
@@ -227,13 +258,22 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
                   <div className="text-sm text-gray-500">{product.brand || '-'}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => handleUnmapProduct(product._id, product.name)}
-                    className="text-red-600 hover:text-red-900 flex items-center gap-1"
-                  >
-                    <X className="h-4 w-4" />
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <Link
+                      href={`/admin/products/edit/${product._id}`}
+                      className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit
+                    </Link>
+                    <button
+                      onClick={() => handleUnmapProduct(product._id, product.name)}
+                      className="text-red-600 hover:text-red-900 flex items-center gap-1"
+                    >
+                      <X className="h-4 w-4" />
+                      Remove
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

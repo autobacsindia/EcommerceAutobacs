@@ -100,19 +100,19 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         // Fetch categories, products, and vehicle data in parallel for better performance
         // Using local API instead of WordPress for better performance and control
         const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
-          wordpressService.getProductCategories(),
+          wordpressService.getProductCategories({ timeout: 5000 }),
           vehicleService.getVehicleProducts(slug, {
             page: currentPage,
             limit: itemsPerPage,
             ...(selectedCategory && { category: selectedCategory }),
             sortBy: mapSortBy(currentSort),
             order: getSortOrder(currentSort)
-          }).catch((err: any) => {
+          }, { timeout: 5000 }).catch((err: any) => {
             console.warn('Local API failed, falling back to WordPress:', err);
             // Fallback to WordPress if local API fails
-            return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage);
+            return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage, { timeout: 5000 });
           }),
-          apiClient.get(`/vehicles/slug/${slug}`).catch(err => {
+          apiClient.get(`/vehicles/slug/${slug}`, { timeout: 5000 }).catch(err => {
             console.warn('Could not fetch vehicle data:', err);
             return { success: false };
           })
@@ -487,7 +487,22 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             ) : paginatedProducts.length > 0 ? (
               <div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {paginatedProducts.filter(p => p && (p._id || p.id)).map((product) => (
+                  {paginatedProducts.filter(p => p && (p._id || p.id)).map((product) => {
+                    // Safe value calculation to prevent "0" rendering issues
+                    const averageRatingValue = product.averageRating || (product.average_rating ? parseFloat(product.average_rating) : 0);
+                    
+                    const priceValue = typeof product.price === 'number' 
+                      ? product.price 
+                      : parseFloat(product.price ?? '0');
+                    
+                    const hasValidPrice = !Number.isNaN(priceValue) && priceValue > 0;
+
+                    const originalPriceSource = product.regular_price || (product.originalPrice !== undefined ? product.originalPrice.toString() : '');
+                    const originalPriceNumber = originalPriceSource ? parseFloat(originalPriceSource) : NaN;
+                    
+                    const hasOriginalPrice = hasValidPrice && !Number.isNaN(originalPriceNumber) && originalPriceNumber > priceValue;
+
+                    return (
                     <div
                       key={product._id || product.id || `product-${product.sku}`}
                       className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
@@ -532,7 +547,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               Popular
                             </div>
                           )}
-                          {(product.on_sale || product.originalPrice) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
+                          {(product.on_sale || (product.originalPrice && product.originalPrice > 0)) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
                             <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
                               Sale
                             </div>
@@ -563,14 +578,14 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         </Link>
 
                         {/* Rating */}
-                        {((product.average_rating && parseFloat(product.average_rating) > 0) || (product.averageRating && product.averageRating > 0)) && (
+                        {averageRatingValue > 0 && (
                           <div className="flex items-center gap-2 mb-3">
                             <div className="flex">
                               {[1, 2, 3, 4, 5].map((star) => (
                                 <svg
                                   key={star}
                                   className={`h-4 w-4 ${
-                                    star <= (product.averageRating || parseFloat(product.average_rating || '0'))
+                                    star <= averageRatingValue
                                       ? 'text-yellow-400' 
                                       : 'text-gray-300'
                                   }`}
@@ -582,42 +597,44 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               ))}
                             </div>
                             <span className="text-sm text-gray-600">
-                              ({(product.averageRating || parseFloat(product.average_rating || '0')).toFixed(1)})
+                              ({averageRatingValue.toFixed(1)})
                             </span>
                           </div>
                         )}
 
-                        {/* Price and Actions */}
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                          <div>
-                            {((product.on_sale && product.regular_price !== product.price) || product.originalPrice) ? (
-                              <div className="flex items-baseline gap-2">
+                        {hasValidPrice && (
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                            <div>
+                              {hasOriginalPrice ? (
+                                <div className="flex items-baseline gap-2">
+                                  <p className="text-xl font-bold text-blue-600">
+                                    {formatCurrency(priceValue)}
+                                  </p>
+                                  <p className="text-sm text-gray-500 line-through">
+                                    {formatCurrency(originalPriceNumber)}
+                                  </p>
+                                </div>
+                              ) : (
                                 <p className="text-xl font-bold text-blue-600">
-                                  {formatCurrency(parseFloat(product.price))}
+                                  {formatCurrency(priceValue)}
                                 </p>
-                                <p className="text-sm text-gray-500 line-through">
-                                  {formatCurrency(parseFloat(product.regular_price || product.originalPrice?.toString() || '0'))}
-                                </p>
-                              </div>
-                            ) : (
-                              <p className="text-xl font-bold text-blue-600">
-                                {formatCurrency(parseFloat(product.price))}
-                              </p>
-                            )}
-                          </div>
+                              )}
+                            </div>
 
-                          <button
-                            onClick={() => handleAddToCart(product)}
-                            disabled={product.stock_status === 'outofstock' || product.stock === 0}
-                            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                          >
-                            <ShoppingCart className="h-4 w-4" />
-                            <span className="text-sm font-medium">Add</span>
-                          </button>
-                        </div>
+                            <button
+                              onClick={() => handleAddToCart(product)}
+                              disabled={product.stock_status === 'outofstock' || product.stock === 0}
+                              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            >
+                              <ShoppingCart className="h-4 w-4" />
+                              <span className="text-sm font-medium">Add</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 
                 {/* Pagination Controls - only show if there are multiple pages */}

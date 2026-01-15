@@ -58,11 +58,11 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       setError(null);
         
       try {
-        const categoriesData = await wordpressService.getProductCategories();
+        const categoriesData = await wordpressService.getProductCategories({ timeout: 5000 });
         setCategories(categoriesData);
         
         try {
-          const vehicleResponse: any = await apiClient.get(`/vehicles/slug/${slug}`);
+          const vehicleResponse: any = await apiClient.get(`/vehicles/slug/${slug}`, { timeout: 5000 });
           if (vehicleResponse.success && vehicleResponse.vehicle) {
             setVehicle(vehicleResponse.vehicle);
             
@@ -126,7 +126,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               category: selectedCategory || undefined,
               sortBy: currentSort === 'date' ? 'createdAt' : currentSort === 'price_asc' ? 'price' : currentSort === 'price_desc' ? 'price' : currentSort === 'name_asc' ? 'name' : 'averageRating',
               order: currentSort === 'price_asc' || currentSort === 'name_asc' ? 'asc' : 'desc'
-            }
+            },
+            timeout: 5000
           });
           
           if (productsResponse.success && productsResponse.products) {
@@ -139,7 +140,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             const wpResponse = await wordpressService.getProductsByVehicle(
               slug,
               pageNumber,
-              itemsPerPage
+              itemsPerPage,
+              { timeout: 5000 }
             );
             setProducts(wpResponse.products || []);
             setTotalProductsFromAPI(wpResponse.total || 0);
@@ -151,7 +153,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             const wpResponse = await wordpressService.getProductsByVehicle(
               slug,
               pageNumber,
-              itemsPerPage
+              itemsPerPage,
+              { timeout: 5000 }
             );
             setProducts(wpResponse.products || []);
             setTotalProductsFromAPI(wpResponse.total || 0);
@@ -516,6 +519,22 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       (product as any).on_sale ||
                       typeof (product as any).originalPrice === 'number';
 
+                    const priceValue =
+                      typeof (product as any).price === 'number'
+                        ? (product as any).price
+                        : parseFloat((product as any).price ?? '0');
+                    const hasValidPrice = !Number.isNaN(priceValue) && priceValue > 0;
+
+                    const originalPriceSource =
+                      typeof (product as any).regular_price === 'string'
+                        ? (product as any).regular_price
+                        : typeof (product as any).originalPrice === 'number'
+                          ? (product as any).originalPrice.toString()
+                          : '';
+                    const originalPriceNumber = originalPriceSource ? parseFloat(originalPriceSource) : NaN;
+                    const hasOriginalPrice =
+                      hasValidPrice && !Number.isNaN(originalPriceNumber) && originalPriceNumber > priceValue;
+
                     return (
                     <div
                       key={productId || (product as any).id || (product as any).sku || `product-${Math.random()}`}
@@ -615,48 +634,35 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           </div>
                         )}
 
-                        {/* Price and Actions */}
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                          <div>
-                            {hasSale ? (
-                              <div className="flex items-baseline gap-2">
+                        {hasValidPrice && (
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                            <div>
+                              {hasOriginalPrice ? (
+                                <div className="flex items-baseline gap-2">
+                                  <p className="text-xl font-bold text-blue-600">
+                                    {formatCurrency(priceValue)}
+                                  </p>
+                                  <p className="text-sm text-gray-500 line-through">
+                                    {formatCurrency(originalPriceNumber)}
+                                  </p>
+                                </div>
+                              ) : (
                                 <p className="text-xl font-bold text-blue-600">
-                                  {formatCurrency(
-                                    typeof (product as any).price === 'number'
-                                      ? (product as any).price
-                                      : parseFloat((product as any).price ?? '0')
-                                  )}
+                                  {formatCurrency(priceValue)}
                                 </p>
-                                <p className="text-sm text-gray-500 line-through">
-                                  {formatCurrency(
-                                    typeof (product as any).regular_price === 'string'
-                                      ? parseFloat((product as any).regular_price)
-                                      : typeof (product as any).originalPrice === 'number'
-                                        ? (product as any).originalPrice
-                                        : 0
-                                  )}
-                                </p>
-                              </div>
-                            ) : (
-                              <p className="text-xl font-bold text-blue-600">
-                                {formatCurrency(
-                                  typeof (product as any).price === 'number'
-                                    ? (product as any).price
-                                    : parseFloat((product as any).price ?? '0')
-                                )}
-                              </p>
-                            )}
-                          </div>
+                              )}
+                            </div>
 
-                          <button
-                            onClick={() => handleAddToCart(product)}
-                            disabled={product.stock_status !== 'instock'}
-                            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                          >
-                            <ShoppingCart className="h-4 w-4" />
-                            <span className="text-sm font-medium">Add</span>
-                          </button>
-                        </div>
+                            <button
+                              onClick={() => handleAddToCart(product)}
+                              disabled={product.stock_status !== 'instock'}
+                              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            >
+                              <ShoppingCart className="h-4 w-4" />
+                              <span className="text-sm font-medium">Add</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                     );

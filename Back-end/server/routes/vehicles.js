@@ -275,16 +275,20 @@ router.get("/:id/products", protect, admin, asyncHandler(async (req, res) => {
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
+  const search = req.query.search;
 
-  const total = await Product.countDocuments({
+  const query = {
     compatibleVehicles: vehicle._id,
     isActive: true
-  });
+  };
 
-  const products = await Product.find({
-    compatibleVehicles: vehicle._id,
-    isActive: true
-  })
+  if (search) {
+    query.name = { $regex: search, $options: 'i' };
+  }
+
+  const total = await Product.countDocuments(query);
+
+  const products = await Product.find(query)
     .select('name price images brand')
     .skip((page - 1) * limit)
     .limit(limit);

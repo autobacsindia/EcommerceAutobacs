@@ -188,14 +188,14 @@ export const wordpressService = {
   },
   
   // Fetch products by vehicle using more comprehensive search (now via proxy)
-  async getProductsByVehicle(vehicleSlug: string, page: number = 1, perPage: number = 20): Promise<{ products: WordPressProduct[], total: number }> {
+  async getProductsByVehicle(vehicleSlug: string, page: number = 1, perPage: number = 20, requestOptions?: { timeout?: number }): Promise<{ products: WordPressProduct[], total: number }> {
     try {
       // Decode the vehicle slug to get the actual vehicle name
       const vehicleName = decodeURIComponent(vehicleSlug).toLowerCase();
         
       // Approach: Get all products that match the vehicle across all pages, then paginate
       // First, get all products matching the vehicle
-      const allVehicleProducts = await this.getAllVehicleProducts(vehicleName);
+      const allVehicleProducts = await this.getAllVehicleProducts(vehicleName, requestOptions);
         
       // Calculate total number of products for this vehicle
       const totalVehicleProducts = allVehicleProducts.length;
@@ -214,7 +214,7 @@ export const wordpressService = {
   },
     
   // Helper method to fetch all products matching a vehicle across all pages (now via proxy)
-  async getAllVehicleProducts(vehicleName: string): Promise<WordPressProduct[]> {
+  async getAllVehicleProducts(vehicleName: string, requestOptions?: { timeout?: number }): Promise<WordPressProduct[]> {
     const perPage = 50; // Fetch more per page to reduce API calls
     let allProducts: WordPressProduct[] = [];
     let currentPage = 1;
@@ -226,7 +226,8 @@ export const wordpressService = {
         params: {
           per_page: 1,
           page: 1
-        }
+        },
+        ...requestOptions
       });
         
       if (firstPageResponse.success && firstPageResponse.total) {
@@ -248,7 +249,8 @@ export const wordpressService = {
           params: {
             per_page: perPage,
             page: currentPage
-          }
+          },
+          ...requestOptions
         });
         
         if (!response.success || !response.products) {
@@ -304,10 +306,11 @@ export const wordpressService = {
   },
   
   // Fetch product categories via backend proxy
-  async getProductCategories(): Promise<WordPressProductCategory[]> {
+  async getProductCategories(requestOptions?: { timeout?: number }): Promise<WordPressProductCategory[]> {
     try {
       const response: any = await apiClient.get(API_ENDPOINTS.WORDPRESS_CATEGORIES, {
-        params: { per_page: 100 }
+        params: { per_page: 100 },
+        ...requestOptions
       });
       
       if (response.success) {
