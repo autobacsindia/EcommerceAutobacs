@@ -7,6 +7,7 @@
     "test-ssl": "node test-ssl-connection.js",
     "test-preflight": "node test-preflight-check.js",
     "test-razorpay": "node test-razorpay.js",
+    "test-profile-api": "node test-profile-api.js",
     "diagnose-ip": "node utils/mongodb-ip-diagnostic.js",
     "add-ip-to-whitelist": "node utils/mongodb-ip-diagnostic.js --add-to-whitelist",
     "manage-whitelist": "node utils/mongodb-whitelist-cli.js",
