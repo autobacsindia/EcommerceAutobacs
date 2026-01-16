@@ -77,6 +77,7 @@ export default function ProductFilters() {
   
   // State for categories
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [showCategories, setShowCategories] = useState(true);
   
   // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
@@ -232,23 +233,36 @@ export default function ProductFilters() {
     <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
       <h2 className="text-lg font-bold mb-4">Filters</h2>
 
-      {/* Categories */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Categories</h3>
-        {loadingCategories ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, index) => (
-              <div key={index} className="flex items-center animate-pulse">
-                <div className="h-4 w-4 bg-gray-200 rounded"></div>
-                <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">Categories</h3>
+          <button
+            type="button"
+            onClick={() => setShowCategories(!showCategories)}
+            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded text-gray-700 text-sm leading-none"
+            aria-label={showCategories ? 'Collapse categories' : 'Expand categories'}
+          >
+            {showCategories ? '-' : '+'}
+          </button>
+        </div>
+        {showCategories && (
+          <>
+            {loadingCategories ? (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, index) => (
+                  <div key={index} className="flex items-center animate-pulse">
+                    <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                    <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <WoofCategoryList 
-            selectedCategories={selectedCategories}
-            onCategoryChange={setSelectedCategories}
-          />
+            ) : (
+              <WoofCategoryList 
+                selectedCategories={selectedCategories}
+                onCategoryChange={setSelectedCategories}
+              />
+            )}
+          </>
         )}
       </div>
 
