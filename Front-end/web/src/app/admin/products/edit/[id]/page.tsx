@@ -22,6 +22,7 @@ interface Product {
   stock: number;
   sku: string;
   isFeatured: boolean;
+  isOfferFeatured?: boolean;
   isActive: boolean;
   images: { url: string; alt: string; isPrimary: boolean }[];
   variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number }> }>;
@@ -48,6 +49,7 @@ export default function EditProductPage() {
     stock: '',
     sku: '',
     isFeatured: false,
+    isOfferFeatured: false,
     isActive: true,
   });
   
@@ -93,6 +95,7 @@ export default function EditProductPage() {
         stock: productData.stock?.toString() || '',
         sku: productData.sku || '',
         isFeatured: productData.isFeatured || false,
+        isOfferFeatured: productData.isOfferFeatured || false,
         isActive: productData.isActive !== undefined ? productData.isActive : true,
       });
     } catch (err) {
@@ -387,6 +390,25 @@ export default function EditProductPage() {
                 />
                 <span className="ml-2 text-sm text-gray-700">Mark as featured</span>
               </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Show on Offers Page
+              </label>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="isOfferFeatured"
+                  checked={formData.isOfferFeatured}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Feature on offers page</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                If original price is higher than current price, discount will be shown automatically.
+              </p>
             </div>
           </div>
           

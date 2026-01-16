@@ -256,7 +256,7 @@ export default function ProductGrid({ products }: ProductGridProps) {
                 )}
                 {product.originalPrice && product.originalPrice > product.price && (
                   <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-                    Sale
+                    {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
                   </div>
                 )}
                 {product.isFeatured && product.stock > 0 && product.originalPrice && product.originalPrice <= product.price && (

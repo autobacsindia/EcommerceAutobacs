@@ -120,6 +120,29 @@ router.get("/featured", asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   GET /products/offers
+// @desc    Get products to showcase on Offers page
+// @access  Public
+router.get("/offers", asyncHandler(async (req, res) => {
+  const { limit = 24 } = req.query;
+  const products = await Product.find({
+    isActive: true,
+    $or: [
+      { isOfferFeatured: true },
+      { $expr: { $gt: ["$originalPrice", "$price"] } }
+    ]
+  })
+    .populate('categories', 'name slug')
+    .limit(Number(limit))
+    .sort({ createdAt: -1 });
+
+  res.json({
+    success: true,
+    count: products.length,
+    products
+  });
+}));
+
 // @route   GET /products/by-vehicle/:vehicleId
 // @desc    Get products compatible with a specific vehicle
 // @access  Public
