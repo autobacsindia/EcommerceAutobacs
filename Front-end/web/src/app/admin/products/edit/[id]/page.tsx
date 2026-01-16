@@ -24,6 +24,7 @@ interface Product {
   isFeatured: boolean;
   isActive: boolean;
   images: { url: string; alt: string; isPrimary: boolean }[];
+  variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number }> }>;
 }
 
 export default function EditProductPage() {
@@ -53,6 +54,7 @@ export default function EditProductPage() {
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<{ url: string; alt: string; isPrimary: boolean }[]>([]);
+  const [variableSpecs, setVariableSpecs] = useState<Array<{ key: string; options: Array<{ label: string; price: number }> }>>([]);
 
   useEffect(() => {
     fetchCategories();
@@ -77,6 +79,7 @@ export default function EditProductPage() {
       
       setProduct(productData);
       setExistingImages(productData.images || []);
+      setVariableSpecs(productData.variableSpecs || []);
       
       // Populate form with product data
       setFormData({
@@ -140,6 +143,7 @@ export default function EditProductPage() {
         // In a real implementation, we would handle image uploads
         // For now, we'll just send existing images
         images: existingImages,
+        variableSpecs: variableSpecs.length > 0 ? variableSpecs : undefined,
       };
       
       // Remove empty fields
@@ -383,6 +387,108 @@ export default function EditProductPage() {
                 />
                 <span className="ml-2 text-sm text-gray-700">Mark as featured</span>
               </div>
+            </div>
+          </div>
+          
+          {/* Variable Specifications */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Variable Specifications</h2>
+            <div className="space-y-4">
+              {variableSpecs.map((spec, si) => (
+                <div key={si} className="border rounded-lg p-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Specification Name</label>
+                    <input
+                      type="text"
+                      value={spec.key}
+                      onChange={(e) => {
+                        const v = [...variableSpecs];
+                        v[si] = { ...v[si], key: e.target.value };
+                        setVariableSpecs(v);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+                    <div className="space-y-2">
+                      {spec.options.map((opt, oi) => (
+                        <div key={oi} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input
+                            type="text"
+                            placeholder="Label"
+                            value={opt.label}
+                            onChange={(e) => {
+                              const v = [...variableSpecs];
+                              const opts = [...v[si].options];
+                              opts[oi] = { ...opts[oi], label: e.target.value };
+                              v[si] = { ...v[si], options: opts };
+                              setVariableSpecs(v);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Price"
+                            min="0"
+                            step="0.01"
+                            value={opt.price}
+                            onChange={(e) => {
+                              const v = [...variableSpecs];
+                              const opts = [...v[si].options];
+                              opts[oi] = { ...opts[oi], price: parseFloat(e.target.value || '0') };
+                              v[si] = { ...v[si], options: opts };
+                              setVariableSpecs(v);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                          <div className="md:col-span-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const v = [...variableSpecs];
+                                const opts = [...v[si].options];
+                                v[si] = { ...v[si], options: opts.filter((_, idx) => idx !== oi) };
+                                setVariableSpecs(v);
+                              }}
+                              className="px-3 py-2 border rounded-md"
+                            >
+                              Remove Option
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const v = [...variableSpecs];
+                          v[si] = { ...v[si], options: [...v[si].options, { label: '', price: 0 }] };
+                          setVariableSpecs(v);
+                        }}
+                        className="px-3 py-2 border rounded-md"
+                      >
+                        Add Option
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setVariableSpecs(variableSpecs.filter((_, idx) => idx !== si))}
+                      className="px-3 py-2 border rounded-md"
+                    >
+                      Remove Specification
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setVariableSpecs([...variableSpecs, { key: '', options: [{ label: '', price: 0 }] }])}
+                className="px-4 py-2 border rounded-md"
+              >
+                Add Specification
+              </button>
             </div>
           </div>
           

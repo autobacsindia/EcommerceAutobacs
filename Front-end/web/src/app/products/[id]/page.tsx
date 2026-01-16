@@ -31,17 +31,33 @@ function ProductDetailPageClient({ product }: { product: any }) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
-  const [isCompared, setIsCompared] = useState(false);
+  const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number } | null>(null);
 
   // Get currently compared products from URL
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
+  const isCompared = product ? comparedProductIds.includes(product._id) : false;
 
   useEffect(() => {
     if (product) {
       setIsWishlisted(isInWishlist(product._id));
-      setIsCompared(comparedProductIds.includes(product._id));
     }
-  }, [product, isInWishlist, comparedProductIds]);
+  }, [product, isInWishlist]);
+
+  // Separate effect for initializing specs to avoid conflicts with other dependencies
+  useEffect(() => {
+    if (product) {
+      const vs = Array.isArray(product.variableSpecs) ? product.variableSpecs : [];
+      if (vs.length > 0 && Array.isArray(vs[0].options) && vs[0].options.length > 0) {
+        setSelectedSpecOption({
+          key: vs[0].key,
+          label: vs[0].options[0].label,
+          price: vs[0].options[0].price
+        });
+      } else {
+        setSelectedSpecOption(null);
+      }
+    }
+  }, [product?._id]); // Only re-run when product ID changes
 
   const handleWishlistToggle = async () => {
     if (!isAuthenticated) {
@@ -112,8 +128,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
     
     // Update URL without reloading the page
     const newUrl = `${window.location.pathname}?${currentParams.toString()}`;
-    window.history.replaceState({}, '', newUrl);
-    setIsCompared(!isCompared);
+    router.replace(newUrl, { scroll: false });
   };
 
   const viewComparison = () => {
@@ -160,8 +175,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
                     const currentParams = new URLSearchParams(searchParams.toString());
                     currentParams.delete('compare');
                     const newUrl = `${window.location.pathname}?${currentParams.toString()}`;
-                    window.history.replaceState({}, '', newUrl);
-                    setIsCompared(false);
+                    router.replace(newUrl, { scroll: false });
                   }}
                   className="text-blue-600 hover:text-blue-800 font-medium"
                 >
@@ -246,7 +260,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
               {/* Price */}
               <div className="mb-6">
                 <p className="text-4xl font-bold text-blue-600">
-                  ₹{product.price?.toLocaleString() || 0}
+                  ₹{(selectedSpecOption?.price ?? product.price ?? 0).toLocaleString()}
                 </p>
                 {product.originalPrice && product.originalPrice > product.price && (
                   <p className="text-lg text-gray-500 line-through">
@@ -295,18 +309,44 @@ function ProductDetailPageClient({ product }: { product: any }) {
               )}
 
               {/* Specifications */}
-              {product.specifications && product.specifications.length > 0 && (
+              {Array.isArray(product.variableSpecs) && product.variableSpecs.length > 0 ? (
                 <div className="mb-6">
                   <h2 className="font-semibold text-gray-900 mb-2">Specifications</h2>
-                  <div className="grid grid-cols-2 gap-2">
-                    {product.specifications.map((spec: any, index: number) => (
-                      <div key={index} className="flex justify-between border-b border-gray-100 py-1">
-                        <span className="text-gray-600">{spec.key}:</span>
-                        <span className="text-gray-900 font-medium">{spec.value}</span>
+                  {product.variableSpecs.map((specGroup: any, gi: number) => (
+                    <div key={gi} className="mb-4">
+                      <div className="text-gray-700 mb-2">{specGroup.key}:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {specGroup.options.map((opt: any, oi: number) => {
+                          const selected = selectedSpecOption && selectedSpecOption.key === specGroup.key && selectedSpecOption.label === opt.label;
+                          return (
+                            <button
+                              key={oi}
+                              type="button"
+                              onClick={() => setSelectedSpecOption({ key: specGroup.key, label: opt.label, price: opt.price })}
+                              className={`px-3 py-2 rounded-md border text-sm ${selected ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
+              ) : (
+                product.specifications && product.specifications.length > 0 && (
+                  <div className="mb-6">
+                    <h2 className="font-semibold text-gray-900 mb-2">Specifications</h2>
+                    <div className="grid grid-cols-2 gap-2">
+                      {product.specifications.map((spec: any, index: number) => (
+                        <div key={index} className="flex justify-between border-b border-gray-100 py-1">
+                          <span className="text-gray-600">{spec.key}:</span>
+                          <span className="text-gray-900 font-medium">{spec.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
               )}
 
               {/* Add to Cart and Compare */}

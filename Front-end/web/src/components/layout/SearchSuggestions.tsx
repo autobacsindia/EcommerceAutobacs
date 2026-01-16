@@ -7,6 +7,8 @@ import apiClient from '@/lib/api';
 import { generateDeterministicId } from '@/lib/utils/idGenerator';
 import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 import { Search, Clock, X } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { useLocation } from '@/contexts/LocationContext';
 
 // Define a suggestion type with more information
 interface Suggestion {
@@ -32,16 +34,25 @@ export default function SearchSuggestions() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const isMounted = useIsMounted();
   const router = useRouter();
+  const { user } = useAuth();
+  const { currentLocation } = useLocation();
   const timeoutRef = useRef<NodeJS.Timeout | number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionRefs = useRef<(HTMLButtonElement | HTMLDivElement)[]>([]);
   
+  // Create a storage key that depends on user ID and location
+  const storageKey = (() => {
+    const userId = user ? user._id : 'guest';
+    const locationCode = currentLocation ? currentLocation.selectedAddress.postalCode : 'global';
+    return `searchHistory_${userId}_${locationCode}`;
+  })();
+  
   // Load search history from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedHistory = localStorage.getItem('searchHistory');
+      const savedHistory = localStorage.getItem(storageKey);
       if (savedHistory) {
         try {
           const parsedHistory = JSON.parse(savedHistory);
@@ -53,14 +64,14 @@ export default function SearchSuggestions() {
         }
       }
     }
-  }, []);
+  }, [storageKey]);
 
   // Save search history to localStorage whenever it changes
   useEffect(() => {
     if (history.length > 0 && typeof window !== 'undefined') {
-      localStorage.setItem('searchHistory', JSON.stringify(history));
+      localStorage.setItem(storageKey, JSON.stringify(history));
     }
-  }, [history]);
+  }, [history, storageKey]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -87,7 +98,10 @@ export default function SearchSuggestions() {
       // Show history when query is empty or too short
       if (query.length === 0 && history.length > 0) {
         setSuggestions([]);
-        setIsOpen(true);
+        // Only open if the input is currently focused
+        if (document.activeElement === inputRef.current) {
+          setIsOpen(true);
+        }
       } else {
         setSuggestions([]);
         setIsOpen(false);
@@ -181,7 +195,7 @@ export default function SearchSuggestions() {
   const clearHistory = () => {
     setHistory([]);
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('searchHistory');
+      localStorage.removeItem(storageKey);
     }
   };
 
@@ -275,6 +289,7 @@ export default function SearchSuggestions() {
           />
           <button 
             onClick={() => handleSearch()}
+            aria-label="Search"
             className="bg-white text-green-800 px-4 py-2 hover:bg-gray-50 transition-colors border-l border-gray-200"
           >
             <Search className="h-5 w-5" />

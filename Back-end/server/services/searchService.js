@@ -13,7 +13,11 @@ class SearchService {
     // Check if Elasticsearch is available
     if (await elasticsearchService.isConnected()) {
       try {
-        return await elasticsearchService.searchProducts(params);
+        const esParams = { ...params };
+        if (!esParams.q && esParams.search) {
+          esParams.q = esParams.search;
+        }
+        return await elasticsearchService.searchProducts(esParams);
       } catch (error) {
         console.error('Elasticsearch search failed, falling back to MongoDB:', error);
       }
@@ -109,36 +113,26 @@ class SearchService {
       }
     }
     
-    // Text search
     if (search) {
-      query.$text = { $search: search };
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapeRegex(search), 'i');
+      query.$or = [
+        { name: regex },
+        { description: regex },
+        { brand: regex },
+        { tags: { $elemMatch: { $regex: regex } } }
+      ];
     }
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorting
     const sortOptions = {};
-    
-    // When searching, default sort by relevance (text score)
-    if (search && sortBy === 'createdAt') {
-      // If searching and no specific sort requested, sort by relevance
-      sortOptions.score = { $meta: 'textScore' };
-    } else {
-      // Otherwise use requested sort
-      sortOptions[sortBy] = order === 'asc' ? 1 : -1;
-    }
+    sortOptions[sortBy] = order === 'asc' ? 1 : -1;
 
-    // Execute query
     let productQuery = Product.find(query)
       .populate('categories', 'name slug')
       .populate('compatibleVehicles', 'make model year');
-      
-    // When searching, include text score for sorting
-    if (search) {
-      productQuery = productQuery.select({ score: { $meta: 'textScore' } });
-    }
-    
     productQuery = productQuery.sort(sortOptions);
     
     const products = await productQuery

@@ -75,6 +75,13 @@ const ProductSchema = new mongoose.Schema({
     default: 0
   },
   tags: [String],
+  variableSpecs: [{
+    key: { type: String, required: true },
+    options: [{
+      label: { type: String, required: true },
+      price: { type: Number, required: true, min: 0 }
+    }]
+  }],
   externalId: {
     type: String,
     unique: true,

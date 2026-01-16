@@ -1,49 +1,36 @@
 {
   "metrics": {
     "totalImports": 1,
-    "totalProductsProcessed": 3,
-    "totalProductsCreated": 1,
-    "totalProductsUpdated": 0,
-    "totalFailures": 2,
-    "averageProcessingTime": 3227,
+    "totalProductsProcessed": 142,
+    "totalProductsCreated": 13,
+    "totalProductsUpdated": 129,
+    "totalFailures": 0,
+    "averageProcessingTime": 15548,
     "errorRates": []
   },
   "importHistory": [
     {
-      "id": "import-1765793925405",
-      "startTime": "2025-12-15T10:18:45.408Z",
+      "id": "import-1768540409601",
+      "startTime": "2026-01-16T05:13:29.605Z",
       "config": {
         "batchSize": 50,
         "delayBetweenBatches": 1000
       },
-      "productsProcessed": 3,
-      "productsCreated": 1,
-      "productsUpdated": 0,
-      "failures": 2,
+      "productsProcessed": 142,
+      "productsCreated": 13,
+      "productsUpdated": 129,
+      "failures": 0,
       "status": "completed",
-      "endTime": "2025-12-15T10:18:48.635Z",
-      "duration": 3227,
+      "endTime": "2026-01-16T05:13:45.153Z",
+      "duration": 15548,
       "results": {
         "success": true,
-        "created": 1,
-        "updated": 0,
-        "failed": 2,
-        "duration": 3225
+        "created": 13,
+        "updated": 129,
+        "failed": 0,
+        "duration": 15543
       }
     }
   ],
-  "alerts": [
-    {
-      "id": "1765793928628",
-      "timestamp": "2025-12-15T10:18:48.628Z",
-      "type": "HIGH_ERROR_RATE",
-      "data": {
-        "errorRate": "66.67",
-        "threshold": 5,
-        "productsProcessed": 3,
-        "failures": 2
-      },
-      "importId": "import-1765793925405"
-    }
-  ]
+  "alerts": []
 }

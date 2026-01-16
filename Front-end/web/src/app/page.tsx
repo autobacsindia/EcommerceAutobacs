@@ -9,7 +9,6 @@ import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
 
 import FastMovingProducts from '@/components/products/FastMovingProducts';
-import CuratedCollections from '@/components/products/CuratedCollections';
 import KeepShoppingWidget from '@/components/products/KeepShoppingWidget';
 import SuperCarsBanner from '@/components/layout/SuperCarsBanner';
 import HeroBanner from '@/components/layout/HeroBanner';
@@ -256,26 +255,21 @@ export default function Home() {
       {/* Curated Collections - Three "Keep Shopping For" Widgets */}
       <div className="bg-gray-50 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Widget 1: Keep shopping for */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
             <KeepShoppingWidget
               title="Keep shopping for"
               searchKeyword="suspension performance"
               viewAllLink="/products?search=suspension performance"
             />
-
-            {/* Widget 2: Revamp your ride in style */}
             <KeepShoppingWidget
               title="Revamp your ride in style"
-              searchKeyword="body kit styling"
-              viewAllLink="/products?search=body kit styling"
+              searchKeyword="exterior"
+              viewAllLink="/products?search=exterior"
             />
-
-            {/* Widget 3: Transform your vehicle */}
             <KeepShoppingWidget
               title="Transform your vehicle"
-              searchKeyword="exhaust speaker accessories"
-              viewAllLink="/products?search=exhaust accessories"
+              searchKeyword="accessories"
+              viewAllLink="/products?search=accessories"
             />
           </div>
         </div>
