@@ -1,6 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import SearchPage from './page';
 import { useSearchParams, useRouter } from 'next/navigation';
+import apiClient from '@/lib/api';
+
+// Mock apiClient
+jest.mock('@/lib/api', () => ({
+  get: jest.fn(),
+}));
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -8,8 +14,31 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
 
+// Mock CartContext
+jest.mock('@/context/CartContext', () => ({
+  useCart: jest.fn(() => ({
+    addToCart: jest.fn(),
+  })),
+}));
+
+// Mock AuthContext
+jest.mock('@/context/AuthContext', () => ({
+  useAuth: jest.fn(() => ({
+    isAuthenticated: false,
+  })),
+}));
+
+// Mock WishlistContext
+jest.mock('@/context/WishlistContext', () => ({
+  useWishlist: jest.fn(() => ({
+    isInWishlist: jest.fn(() => false),
+    addToWishlist: jest.fn(),
+    removeFromWishlist: jest.fn(),
+  })),
+}));
+
 // Mock fetch
-global.fetch = jest.fn();
+// global.fetch = jest.fn();
 
 describe('SearchPage', () => {
   const mockPush = jest.fn();
@@ -22,54 +51,53 @@ describe('SearchPage', () => {
     
     (useSearchParams as jest.Mock).mockReturnValue(mockSearchParams);
     
-    (global.fetch as jest.Mock).mockClear();
+    (apiClient.get as jest.Mock).mockClear();
     mockPush.mockClear();
   });
 
-  it('renders search results page correctly', () => {
+  it('renders search results page correctly', async () => {
     mockSearchParams.set('search', 'test');
     
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
+    (apiClient.get as jest.Mock).mockImplementation((url) => {
+      if (url.includes('/products/suggestions')) {
+        return Promise.resolve({ success: true, corrections: [] });
+      }
+      return Promise.resolve({
         products: [],
         pagination: { total: 0 }
-      }),
-    });
-    
-    render(<SearchPage />);
-    
-    expect(screen.getByText('Search Results')).toBeInTheDocument();
-    expect(screen.getByText('Found 0 results for "test"')).toBeInTheDocument();
-  });
-
-  it('displays "Did you mean?" suggestions when there are no results', async () => {
-    mockSearchParams.set('search', 'tesst');
-    
-    // Mock product search response with no results
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
-        products: [],
-        pagination: { total: 0 }
-      }),
-    });
-    
-    // Mock suggestions response with corrections
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
-        success: true,
-        corrections: [
-          { original: 'tesst', suggested: 'test', confidence: 0.8 }
-        ]
-      }),
+      });
     });
     
     render(<SearchPage />);
     
     await waitFor(() => {
-      expect(screen.getByText('Did you mean:')).toBeInTheDocument();
+      expect(screen.getByText('Search Results')).toBeInTheDocument();
+      expect(screen.getByText('Found 0 results for "test"')).toBeInTheDocument();
+    });
+  });
+
+  it('displays "Did you mean?" suggestions when there are no results', async () => {
+    mockSearchParams.set('search', 'tesst');
+    
+    (apiClient.get as jest.Mock).mockImplementation((url) => {
+      if (url.includes('/products/suggestions')) {
+        return Promise.resolve({
+          success: true,
+          corrections: [
+            { original: 'tesst', suggested: 'test', confidence: 0.8 }
+          ]
+        });
+      }
+      return Promise.resolve({
+        products: [],
+        pagination: { total: 0 }
+      });
+    });
+    
+    render(<SearchPage />);
+    
+    await waitFor(() => {
+      expect(screen.getByText(/Did you mean:/)).toBeInTheDocument();
       expect(screen.getByText('test')).toBeInTheDocument();
     });
   });
@@ -77,13 +105,15 @@ describe('SearchPage', () => {
   it('does not display "Did you mean?" when there are results', async () => {
     mockSearchParams.set('search', 'test');
     
-    // Mock product search response with results
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
-        products: [{ _id: '1', name: 'Test Product' }],
+    // Mock apiClient.get implementation to handle multiple calls
+    (apiClient.get as jest.Mock).mockImplementation((url) => {
+      if (url.includes('/products/suggestions')) {
+        return Promise.resolve({ success: true, corrections: [] });
+      }
+      return Promise.resolve({
+        products: [{ _id: '1', name: 'Test Product', price: 100, originalPrice: 100, images: [] }],
         pagination: { total: 1 }
-      }),
+      });
     });
     
     render(<SearchPage />);

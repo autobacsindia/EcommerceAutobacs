@@ -68,6 +68,12 @@ const ProductSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  offerStartDate: {
+    type: Date
+  },
+  offerEndDate: {
+    type: Date
+  },
   averageRating: {
     type: Number,
     default: 0,

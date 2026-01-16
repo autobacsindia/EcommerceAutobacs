@@ -125,11 +125,31 @@ router.get("/featured", asyncHandler(async (req, res) => {
 // @access  Public
 router.get("/offers", asyncHandler(async (req, res) => {
   const { limit = 24 } = req.query;
+  const now = new Date();
+
   const products = await Product.find({
     isActive: true,
-    $or: [
-      { isOfferFeatured: true },
-      { $expr: { $gt: ["$originalPrice", "$price"] } }
+    $and: [
+      {
+        $or: [
+          { isOfferFeatured: true },
+          { $expr: { $gt: ["$originalPrice", "$price"] } }
+        ]
+      },
+      {
+        $or: [
+          { offerStartDate: { $exists: false } },
+          { offerStartDate: null },
+          { offerStartDate: { $lte: now } }
+        ]
+      },
+      {
+        $or: [
+          { offerEndDate: { $exists: false } },
+          { offerEndDate: null },
+          { offerEndDate: { $gte: now } }
+        ]
+      }
     ]
   })
     .populate('categories', 'name slug')

@@ -23,6 +23,8 @@ interface Product {
   sku: string;
   isFeatured: boolean;
   isOfferFeatured?: boolean;
+  offerStartDate?: string;
+  offerEndDate?: string;
   isActive: boolean;
   images: { url: string; alt: string; isPrimary: boolean }[];
   variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number }> }>;
@@ -50,6 +52,8 @@ export default function EditProductPage() {
     sku: '',
     isFeatured: false,
     isOfferFeatured: false,
+    offerStartDate: '',
+    offerEndDate: '',
     isActive: true,
   });
   
@@ -96,6 +100,8 @@ export default function EditProductPage() {
         sku: productData.sku || '',
         isFeatured: productData.isFeatured || false,
         isOfferFeatured: productData.isOfferFeatured || false,
+        offerStartDate: productData.offerStartDate ? new Date(productData.offerStartDate).toISOString().slice(0, 16) : '',
+        offerEndDate: productData.offerEndDate ? new Date(productData.offerEndDate).toISOString().slice(0, 16) : '',
         isActive: productData.isActive !== undefined ? productData.isActive : true,
       });
     } catch (err) {
@@ -136,6 +142,18 @@ export default function EditProductPage() {
     e.preventDefault();
     setSubmitting(true);
     
+    // Validation
+    if (formData.isOfferFeatured && formData.offerStartDate && formData.offerEndDate) {
+      const startDate = new Date(formData.offerStartDate);
+      const endDate = new Date(formData.offerEndDate);
+      
+      if (endDate <= startDate) {
+        alert('Offer End Date must be after Offer Start Date');
+        setSubmitting(false);
+        return;
+      }
+    }
+    
     try {
       const productData = {
         ...formData,
@@ -143,6 +161,8 @@ export default function EditProductPage() {
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
         stock: parseInt(formData.stock),
         category: formData.category || undefined,
+        offerStartDate: formData.offerStartDate || null,
+        offerEndDate: formData.offerEndDate || null,
         // In a real implementation, we would handle image uploads
         // For now, we'll just send existing images
         images: existingImages,
@@ -409,6 +429,35 @@ export default function EditProductPage() {
               <p className="text-xs text-gray-500 mt-1">
                 If original price is higher than current price, discount will be shown automatically.
               </p>
+
+              {formData.isOfferFeatured && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Offer Start Date
+                    </label>
+                    <input
+                      type="datetime-local"
+                      name="offerStartDate"
+                      value={formData.offerStartDate || ''}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Offer End Date
+                    </label>
+                    <input
+                      type="datetime-local"
+                      name="offerEndDate"
+                      value={formData.offerEndDate || ''}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           
