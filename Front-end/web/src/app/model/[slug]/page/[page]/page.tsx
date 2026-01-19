@@ -12,6 +12,7 @@ import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
 
@@ -21,6 +22,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+  const { handleError } = useErrorHandler();
   
   // Unwrap the params Promise - must be consistent across all renders
   const unwrappedParams = use(params);
@@ -56,13 +58,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     const fetchData = async () => {
       setLoading(true);
       setError(null);
+      
+      const timeoutDuration = 15000; // Increased timeout to 15s to prevent premature timeouts in dev
         
       try {
-        const categoriesData = await wordpressService.getProductCategories({ timeout: 5000 });
+        const categoriesData = await wordpressService.getProductCategories({ timeout: timeoutDuration });
         setCategories(categoriesData);
         
         try {
-          const vehicleResponse: any = await apiClient.get(`/vehicles/slug/${slug}`, { timeout: 5000 });
+          const vehicleResponse: any = await apiClient.get(`/vehicles/slug/${slug}`, { timeout: timeoutDuration });
           if (vehicleResponse.success && vehicleResponse.vehicle) {
             setVehicle(vehicleResponse.vehicle);
             
@@ -127,7 +131,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               sortBy: currentSort === 'date' ? 'createdAt' : currentSort === 'price_asc' ? 'price' : currentSort === 'price_desc' ? 'price' : currentSort === 'name_asc' ? 'name' : 'averageRating',
               order: currentSort === 'price_asc' || currentSort === 'name_asc' ? 'asc' : 'desc'
             },
-            timeout: 5000
+            timeout: timeoutDuration
           });
           
           if (productsResponse.success && productsResponse.products) {
@@ -141,7 +145,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               slug,
               pageNumber,
               itemsPerPage,
-              { timeout: 5000 }
+              { timeout: timeoutDuration }
             );
             setProducts(wpResponse.products || []);
             setTotalProductsFromAPI(wpResponse.total || 0);
@@ -154,7 +158,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               slug,
               pageNumber,
               itemsPerPage,
-              { timeout: 5000 }
+              { timeout: timeoutDuration }
             );
             setProducts(wpResponse.products || []);
             setTotalProductsFromAPI(wpResponse.total || 0);
@@ -176,9 +180,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           }
         }
       } catch (err: any) {
-        console.error('Error fetching vehicle products:', err);
-        setError(err.message || 'Failed to load products');
-        toast.error('Failed to load products');
+        // Use global error handler for toast and logging
+        const message = handleError(err, 'Failed to load products for this vehicle');
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -193,8 +197,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       // For now, we'll just show a toast
       toast.success(`${product.name} added to cart`);
     } catch (error) {
-      console.error('Failed to add to cart:', error);
-      toast.error('Failed to add to cart');
+      handleError(error, 'Failed to add to cart');
     }
   };
 
@@ -225,8 +228,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         toast.success('Added to wishlist');
       }
     } catch (error: any) {
-      console.error('Failed to toggle wishlist:', error);
-      toast.error('Failed to update wishlist');
+      handleError(error, 'Failed to update wishlist');
     } finally {
       // Remove animation after delay
       setTimeout(() => {

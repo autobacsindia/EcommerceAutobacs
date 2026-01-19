@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { LogIn, Loader2 } from 'lucide-react';
+import { FcGoogle } from 'react-icons/fc';
+import { FaFacebook } from 'react-icons/fa';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,18 +70,21 @@ export default function LoginPage() {
       setIsLoading(true);
       await login(formData.email, formData.password);
       
-      // Redirect to home or intended page
       router.push('/');
     } catch (err: any) {
-      // Capture rate limit reset time from error
       if (err.status === 429 && err.rateLimitInfo?.resetTime) {
         setRateLimitResetTime(err.rateLimitInfo.resetTime);
       }
-      // Error is handled by AuthContext
       console.error('Login failed:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSocialLogin = (provider: 'google' | 'facebook') => {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const url = `${apiBaseUrl}/auth/${provider}`;
+    window.location.href = url;
   };
 
   return (
@@ -202,6 +207,39 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
+
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-50 text-gray-500">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3">
+            <button
+              type="button"
+              onClick={() => handleSocialLogin('google')}
+              className="w-full inline-flex justify-center items-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FcGoogle className="mr-2 h-5 w-5" />
+              Continue with Google
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSocialLogin('facebook')}
+              className="w-full inline-flex justify-center items-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FaFacebook className="mr-2 h-5 w-5 text-blue-600" />
+              Continue with Facebook
+            </button>
+          </div>
+        </div>
 
         {/* Demo Credentials (for testing) */}
         <div className="mt-6 p-4 bg-blue-50 rounded-md">

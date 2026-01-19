@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { UserPlus, Loader2 } from 'lucide-react';
+import { FcGoogle } from 'react-icons/fc';
+import { FaFacebook } from 'react-icons/fa';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -115,6 +117,12 @@ export default function RegisterPage() {
   };
 
   const passwordStrength = getPasswordStrength(formData.password);
+
+  const handleSocialRegister = (provider: 'google' | 'facebook') => {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const url = `${apiBaseUrl}/auth/${provider}`;
+    window.location.href = url;
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -335,6 +343,39 @@ export default function RegisterPage() {
             </button>
           </div>
         </form>
+
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-50 text-gray-500">
+                Or sign up with
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3">
+            <button
+              type="button"
+              onClick={() => handleSocialRegister('google')}
+              className="w-full inline-flex justify-center items-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FcGoogle className="mr-2 h-5 w-5" />
+              Continue with Google
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSocialRegister('facebook')}
+              className="w-full inline-flex justify-center items-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <FaFacebook className="mr-2 h-5 w-5 text-blue-600" />
+              Continue with Facebook
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

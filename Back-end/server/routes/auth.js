@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import fetch from "node-fetch";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateRegister, validateLogin } from "../middleware/validationMiddleware.js";
@@ -719,5 +720,295 @@ router.get("/verification-status", protect, asyncHandler(async (req, res) => {
     verifiedAt: user.verifiedAt
   });
 }));
+
+const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
+  if (!email) {
+    throw new Error('Email is required for social login');
+  }
+
+  const normalizedEmail = email.toLowerCase();
+  let user = await User.findOne({ email: normalizedEmail });
+
+  if (!user) {
+    const randomPassword = Math.random().toString(36).slice(-12) + Date.now().toString(36);
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(randomPassword, salt);
+
+    user = new User({
+      name: name?.trim() || normalizedEmail,
+      email: normalizedEmail,
+      passwordHash,
+      isVerified: !!isVerified
+    });
+    await user.save();
+  } else if (isVerified && !user.isVerified) {
+    user.isVerified = true;
+    await user.save();
+  }
+
+  return user;
+};
+
+const completeSocialLogin = async (req, res, user, provider) => {
+  const ipAddress = req.ip || req.connection?.remoteAddress;
+  const userAgent = req.headers["user-agent"];
+
+  const tokens = generateSessionTokenPair(user, ipAddress, userAgent);
+
+  await storeRefreshToken(
+    user,
+    tokens.refreshToken,
+    tokens.refreshTokenExpiry,
+    ipAddress,
+    userAgent
+  );
+
+  await logLoginAttempt(user, true, ipAddress, userAgent);
+
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const hashParams = new URLSearchParams({
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresIn: String(tokens.accessTokenExpiry),
+    provider
+  }).toString();
+
+  const redirectUrl = `${frontendUrl}/auth/social-callback#${hashParams}`;
+  res.redirect(redirectUrl);
+};
+
+router.get("/google", (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    return res.status(500).json({
+      success: false,
+      message: "Google client ID is not configured"
+    });
+  }
+
+  const redirectUri =
+    process.env.GOOGLE_REDIRECT_URI ||
+    `${req.protocol}://${req.get("host")}/auth/google/callback`;
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: ["openid", "email", "profile"].join(" "),
+    access_type: "offline",
+    prompt: "consent"
+  });
+
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+router.get(
+  "/google/callback",
+  asyncHandler(async (req, res) => {
+    const code = req.query.code;
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: "Authorization code not provided"
+      });
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({
+        success: false,
+        message: "Google OAuth credentials are not configured"
+      });
+    }
+
+    const redirectUri =
+      process.env.GOOGLE_REDIRECT_URI ||
+      `${req.protocol}://${req.get("host")}/auth/google/callback`;
+
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code"
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok) {
+      console.error("[Auth] Google token exchange failed:", tokenData);
+      return res.status(400).json({
+        success: false,
+        message: "Failed to complete Google login"
+      });
+    }
+
+    const idToken = tokenData.id_token;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Google token response"
+      });
+    }
+
+    const tokenInfoResponse = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+    );
+    const tokenInfo = await tokenInfoResponse.json();
+
+    if (!tokenInfoResponse.ok) {
+      console.error("[Auth] Google token verification failed:", tokenInfo);
+      return res.status(400).json({
+        success: false,
+        message: "Failed to verify Google token"
+      });
+    }
+
+    const email = tokenInfo.email;
+    const name = tokenInfo.name || email;
+    const emailVerified =
+      tokenInfo.email_verified === "true" || tokenInfo.email_verified === true;
+
+    try {
+      const user = await findOrCreateSocialUser({
+        name,
+        email,
+        isVerified: emailVerified
+      });
+
+      await completeSocialLogin(req, res, user, "google");
+    } catch (error) {
+      console.error("[Auth] Google social login error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to complete Google social login"
+      });
+    }
+  })
+);
+
+router.get("/facebook", (req, res) => {
+  const clientId = process.env.FACEBOOK_CLIENT_ID;
+  if (!clientId) {
+    return res.status(500).json({
+      success: false,
+      message: "Facebook client ID is not configured"
+    });
+  }
+
+  const redirectUri =
+    process.env.FACEBOOK_REDIRECT_URI ||
+    `${req.protocol}://${req.get("host")}/auth/facebook/callback`;
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: ["email", "public_profile"].join(",")
+  });
+
+  res.redirect(`https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`);
+});
+
+router.get(
+  "/facebook/callback",
+  asyncHandler(async (req, res) => {
+    const code = req.query.code;
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: "Authorization code not provided"
+      });
+    }
+
+    const clientId = process.env.FACEBOOK_CLIENT_ID;
+    const clientSecret = process.env.FACEBOOK_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({
+        success: false,
+        message: "Facebook OAuth credentials are not configured"
+      });
+    }
+
+    const redirectUri =
+      process.env.FACEBOOK_REDIRECT_URI ||
+      `${req.protocol}://${req.get("host")}/auth/facebook/callback`;
+
+    const tokenResponse = await fetch(
+      "https://graph.facebook.com/v19.0/oauth/access_token?" +
+        new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          code
+        }).toString(),
+      {
+        method: "GET"
+      }
+    );
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      console.error("[Auth] Facebook token exchange failed:", tokenData);
+      return res.status(400).json({
+        success: false,
+        message: "Failed to complete Facebook login"
+      });
+    }
+
+    const userResponse = await fetch(
+      "https://graph.facebook.com/me?" +
+        new URLSearchParams({
+          fields: "id,name,email",
+          access_token: tokenData.access_token
+        }).toString(),
+      {
+        method: "GET"
+      }
+    );
+
+    const userData = await userResponse.json();
+
+    if (!userResponse.ok) {
+      console.error("[Auth] Facebook user fetch failed:", userData);
+      return res.status(400).json({
+        success: false,
+        message: "Failed to fetch Facebook user profile"
+      });
+    }
+
+    const email = userData.email;
+    const name = userData.name;
+
+    try {
+      const user = await findOrCreateSocialUser({
+        name,
+        email,
+        isVerified: true
+      });
+
+      await completeSocialLogin(req, res, user, "facebook");
+    } catch (error) {
+      console.error("[Auth] Facebook social login error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to complete Facebook social login"
+      });
+    }
+  })
+);
 
 export default router;

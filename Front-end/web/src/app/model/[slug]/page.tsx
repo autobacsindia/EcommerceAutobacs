@@ -12,6 +12,7 @@ import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
 
@@ -42,6 +43,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+  const { handleError } = useErrorHandler();
   
   // State hooks - MUST be called before any conditional returns
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
@@ -99,20 +101,21 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       try {
         // Fetch categories, products, and vehicle data in parallel for better performance
         // Using local API instead of WordPress for better performance and control
+        const timeoutDuration = 15000; // Increased timeout to 15s to prevent premature timeouts in dev
         const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
-          wordpressService.getProductCategories({ timeout: 5000 }),
+          wordpressService.getProductCategories({ timeout: timeoutDuration }),
           vehicleService.getVehicleProducts(slug, {
             page: currentPage,
             limit: itemsPerPage,
             ...(selectedCategory && { category: selectedCategory }),
             sortBy: mapSortBy(currentSort),
             order: getSortOrder(currentSort)
-          }, { timeout: 5000 }).catch((err: any) => {
+          }, { timeout: timeoutDuration }).catch((err: any) => {
             console.warn('Local API failed, falling back to WordPress:', err);
             // Fallback to WordPress if local API fails
-            return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage, { timeout: 5000 });
+            return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage, { timeout: timeoutDuration });
           }),
-          apiClient.get(`/vehicles/slug/${slug}`, { timeout: 5000 }).catch(err => {
+          apiClient.get(`/vehicles/slug/${slug}`, { timeout: timeoutDuration }).catch(err => {
             console.warn('Could not fetch vehicle data:', err);
             return { success: false };
           })
@@ -191,9 +194,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           }
         }
       } catch (err: any) {
-        console.error('Error fetching vehicle products:', err);
-        setError(err.message || 'Failed to load products');
-        toast.error('Failed to load products');
+        // Use global error handler for toast and logging
+        const message = handleError(err, 'Failed to load products for this vehicle');
+        // Still set local error state for UI fallback
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -208,8 +212,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       // For now, we'll just show a toast
       toast.success(`${product.name} added to cart`);
     } catch (error) {
-      console.error('Failed to add to cart:', error);
-      toast.error('Failed to add to cart');
+      handleError(error, 'Failed to add to cart');
     }
   };
 
@@ -243,8 +246,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         toast.success('Added to wishlist');
       }
     } catch (error: any) {
-      console.error('Failed to toggle wishlist:', error);
-      toast.error('Failed to update wishlist');
+      handleError(error, 'Failed to update wishlist');
     } finally {
       // Remove animation after delay
       setTimeout(() => {
@@ -497,7 +499,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     
                     const hasValidPrice = !Number.isNaN(priceValue) && priceValue > 0;
 
-                    const originalPriceSource = product.regular_price || (product.originalPrice !== undefined ? product.originalPrice.toString() : '');
+                    const originalPriceSource = product.regular_price || (product.originalPrice != null ? product.originalPrice.toString() : '');
                     const originalPriceNumber = originalPriceSource ? parseFloat(originalPriceSource) : NaN;
                     
                     const hasOriginalPrice = hasValidPrice && !Number.isNaN(originalPriceNumber) && originalPriceNumber > priceValue;

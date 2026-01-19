@@ -1,63 +1,56 @@
 // Global error handling middleware for Express
+import AppError from '../utils/AppError.js';
 
 export const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  // Only log detailed errors in development or if it's a 500
+  if (process.env.NODE_ENV === 'development' || !err.statusCode || err.statusCode === 500) {
+    console.error('Error:', err);
+  }
+
+  let error = { ...err };
+  error.message = err.message;
+  error.statusCode = err.statusCode || 500;
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(e => e.message);
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Error',
-      errors
-    });
+    error = new AppError('Validation Error', 400);
+    error.errors = errors;
   }
 
   // Mongoose duplicate key error
   if (err.code === 11000) {
     const field = Object.keys(err.keyPattern)[0];
-    return res.status(400).json({
-      success: false,
-      message: `${field} already exists`
-    });
+    error = new AppError(`${field} already exists`, 400);
   }
 
   // Mongoose cast error (invalid ObjectId)
   if (err.name === 'CastError') {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid ID format'
-    });
+    error = new AppError('Invalid ID format', 400);
   }
 
   // JWT errors
   if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid token'
-    });
+    error = new AppError('Invalid token', 401);
   }
 
   if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Token expired'
-    });
+    error = new AppError('Token expired', 401);
   }
 
-  // Default error
-  const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
+  // Send response
+  res.status(error.statusCode).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    status: error.status || 'error',
+    message: error.message || 'Internal Server Error',
+    errors: error.errors,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 };
 
 // Not found middleware
 export const notFound = (req, res, next) => {
-  const error = new Error(`Route not found - ${req.originalUrl}`);
-  error.statusCode = 404;
+  const error = new AppError(`Route not found - ${req.originalUrl}`, 404);
   next(error);
 };
 
