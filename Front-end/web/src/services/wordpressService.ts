@@ -18,6 +18,7 @@ interface WordPressProductCategory {
   id: number;
   name: string;
   slug: string;
+  count: number;
 }
 
 interface WordPressProductAttribute {

@@ -7,7 +7,7 @@ interface AsyncState<T> {
   error: any | null;
 }
 
-export const useAsync = <T, = any>(asyncFunction?: () => Promise<T>, immediate = true) => {
+export const useAsync = <T = any>(asyncFunction?: () => Promise<T>, immediate = true) => {
   const [state, setState] = useState<AsyncState<T>>({
     status: 'idle',
     value: null,

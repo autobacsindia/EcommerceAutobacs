@@ -572,7 +572,7 @@ async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: n
 /**
  * PUT request with retry logic for rate limiting
  */
-async put<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
+async put<T = any>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
   const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
   

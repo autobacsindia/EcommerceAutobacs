@@ -2,6 +2,8 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
 import authRoutes from "./routes/auth.js";
 import orderRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
@@ -57,6 +59,8 @@ const app = express();
 const cronService = new CronService();
 
 // Apply middleware before routes
+app.use(helmet());
+app.use(compression());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true

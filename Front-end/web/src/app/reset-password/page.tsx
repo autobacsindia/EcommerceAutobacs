@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import apiClient from '@/lib/api';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 
 function ResetPasswordContent() {

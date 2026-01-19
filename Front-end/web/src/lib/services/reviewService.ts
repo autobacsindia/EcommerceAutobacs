@@ -90,7 +90,7 @@ export const markReviewAsHelpful = async (
   reviewId: string
 ): Promise<{ success: boolean; helpfulCount: number }> => {
   try {
-    const response = await apiClient.post(`/reviews/${reviewId}/helpful`, {});
+    const response = await apiClient.post<any>(`/reviews/${reviewId}/helpful`, {});
     return {
       success: response.success,
       helpfulCount: response.helpfulCount

@@ -29,6 +29,13 @@ if (!wpConfigured) {
   if (!process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY) missing.push('NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY');
   if (!process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET) missing.push('NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET');
   
+  // Razorpay
+  if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+    missing.push('NEXT_PUBLIC_RAZORPAY_KEY_ID');
+  } else if (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID === 'your_razorpay_key_id_here') {
+    missing.push('NEXT_PUBLIC_RAZORPAY_KEY_ID (Found placeholder value)');
+  }
+  
   console.log('Missing configuration:', missing.join(', '));
 }
 
