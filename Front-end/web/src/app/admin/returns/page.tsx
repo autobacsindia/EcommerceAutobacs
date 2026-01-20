@@ -45,8 +45,13 @@ export default function AdminReturnsPage() {
       
       const response = await apiClient.get(`${API_ENDPOINTS.RETURNS_LIST}?${params.toString()}`);
       setReturns(response.returns || []);
-    } catch (err) {
-      console.error('Failed to fetch returns:', err);
+    } catch (err: any) {
+      console.error('Failed to fetch returns:', {
+        message: err.message || 'Unknown error',
+        name: err.name,
+        stack: err.stack,
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setLoading(false);
     }

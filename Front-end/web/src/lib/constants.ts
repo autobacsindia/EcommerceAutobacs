@@ -59,7 +59,7 @@ export const API_ENDPOINTS = {
   ORDER_STATUS_HISTORY: (id: string) => `/orders/${id}/status-history`,
   
   // Returns
-  RETURNS_LIST: '/orders/returns',
+  RETURNS_LIST: '/orders/admin/returns',
   RETURN_APPROVE: (orderId: string) => `/orders/${orderId}/return/approve`,
   RETURN_REJECT: (orderId: string) => `/orders/${orderId}/return/reject`,
   RETURN_ITEM_RECEIVED: (orderId: string) => `/orders/${orderId}/return/item-received`,
