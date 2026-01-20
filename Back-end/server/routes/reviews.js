@@ -164,6 +164,63 @@ router.get("/products/:productId/summary", asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   GET /reviews/user
+// @desc    Get all reviews submitted by the current user
+// @access  Private
+router.get("/user", protect, asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = req.query;
+  const userId = req.user._id;
+
+  // Build filter
+  const filter = { user: userId };
+
+  // Build sort
+  const sort = {};
+  sort[sortBy] = order === "asc" ? 1 : -1;
+
+  // Execute query with pagination
+  const reviews = await Review.find(filter)
+    .populate("product", "name images")
+    .sort(sort)
+    .limit(limit * 1)
+    .skip((page - 1) * limit)
+    .lean();
+
+  // Get total count for pagination
+  const totalReviews = await Review.countDocuments(filter);
+
+  // Format response
+  const formattedReviews = reviews.map(review => ({
+    id: review._id,
+    product: review.product ? {
+      id: review.product._id,
+      name: review.product.name,
+      image: review.product.images && review.product.images.length > 0 ? review.product.images[0] : null
+    } : null,
+    rating: review.rating,
+    title: review.title,
+    comment: review.comment,
+    images: review.images,
+    isVerifiedPurchase: review.isVerifiedPurchase,
+    isApproved: review.isApproved,
+    helpfulCount: review.helpfulCount,
+    createdAt: review.createdAt
+  }));
+
+  res.json({
+    success: true,
+    count: formattedReviews.length,
+    pagination: {
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalReviews / limit),
+      totalReviews,
+      hasNext: page * limit < totalReviews,
+      hasPrev: page > 1
+    },
+    reviews: formattedReviews
+  });
+}));
+
 // @route   POST /reviews/products/:productId
 // @desc    Submit a new review for a product
 // @access  Private (authenticated users)

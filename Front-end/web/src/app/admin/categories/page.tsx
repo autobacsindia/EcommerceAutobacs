@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, Eye, FolderOpen } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderOpen } from 'lucide-react';
 import apiClient from '@/lib/api';
 
 // Define the Category interface inline to avoid import issues
@@ -181,13 +181,6 @@ export default function AdminCategoriesPage() {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <Link 
-                      href={`/categories/${category._id}`}
-                      className="p-2 text-gray-500 hover:text-gray-700"
-                      title="View"
-                    >
-                      <Eye className="h-5 w-5" />
-                    </Link>
                     <Link 
                       href={`/admin/categories/edit/${category._id}`}
                       className="p-2 text-gray-500 hover:text-gray-700"

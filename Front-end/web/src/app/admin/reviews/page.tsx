@@ -293,11 +293,11 @@ export default function AdminReviewsPage() {
                   {reviews.map((review) => (
                     <tr key={review._id}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{review.product.name}</div>
+                        <div className="text-sm font-medium text-gray-900">{review.product?.name || 'Unknown Product'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{review.user.name}</div>
-                        <div className="text-sm text-gray-500">{review.user.email}</div>
+                        <div className="text-sm text-gray-900">{review.user?.name || 'Unknown User'}</div>
+                        <div className="text-sm text-gray-500">{review.user?.email || 'No Email'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">

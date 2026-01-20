@@ -60,7 +60,14 @@ const cronService = new CronService();
 
 // Apply middleware before routes
 app.use(helmet());
-app.use(compression());
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers.accept === 'text/event-stream' || req.path.includes('/stream')) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 
@@ -39,15 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsMounted(true);
   }, []);
   
-  // Check authentication status after mount
-  useEffect(() => {
-    if (isMounted) {
-      checkAuth();
-    }
-  }, [isMounted]);
+
   
   // Enhanced checkAuth with better error handling and consistency
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       setIsLoading(true);
       const savedToken = apiClient.getAuthToken();
@@ -92,9 +87,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Check authentication status after mount
+  useEffect(() => {
+    if (isMounted) {
+      checkAuth();
+    }
+  }, [isMounted, checkAuth]);
   
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -136,9 +138,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
   
-  const register = async (name: string, email: string, password: string) => {
+  const register = useCallback(async (name: string, email: string, password: string) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -181,18 +183,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
   
-  const logout = () => {
+  const logout = useCallback(() => {
     apiClient.clearAuthToken();
     setUser(null);
     setToken(null);
     setError(null);
-  };
+  }, []);
   
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setError(null);
-  };
+  }, []);
   
   // Ensure consistent value object structure
   const value: AuthContextType = {

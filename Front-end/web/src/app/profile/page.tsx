@@ -3,16 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X } from 'lucide-react';
+import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star } from 'lucide-react';
 import Link from 'next/link';
 import profileService from '@/lib/profileService';
-import { UserProfile, Address, PaginatedOrders, PaymentMethod } from '@/lib/types';
+import { UserProfile, Address, PaginatedOrders, PaymentMethod, PaginatedUserReviews } from '@/lib/types';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [orders, setOrders] = useState<PaginatedOrders | null>(null);
+  const [reviews, setReviews] = useState<PaginatedUserReviews | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -29,6 +30,7 @@ export default function ProfilePage() {
     addresses: [] as Address[]
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [currentReviewsPage, setCurrentReviewsPage] = useState(1);
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [newAddress, setNewAddress] = useState<Omit<Address, 'isDefault'>>({
     fullName: '',
@@ -56,9 +58,10 @@ export default function ProfilePage() {
   const loadProfileData = async () => {
     try {
       setLoading(true);
-      const [profileData, ordersData, paymentMethodsData, verificationData] = await Promise.all([
+      const [profileData, ordersData, reviewsData, paymentMethodsData, verificationData] = await Promise.all([
         profileService.getProfile(),
         profileService.getOrders(currentPage),
+        profileService.getMyReviews(currentReviewsPage),
         profileService.getPaymentMethods(),
         fetch('/api/auth/verification-status', {
           headers: {
@@ -69,6 +72,7 @@ export default function ProfilePage() {
 
       setProfile(profileData);
       setOrders(ordersData);
+      setReviews(reviewsData);
       setPaymentMethods(paymentMethodsData.paymentMethods);
       
       if (verificationData.success) {
@@ -187,6 +191,16 @@ export default function ProfilePage() {
       setCurrentPage(page);
     } catch (error) {
       console.error('Error loading orders:', error);
+    }
+  };
+
+  const loadReviews = async (page: number) => {
+    try {
+      const reviewsData = await profileService.getMyReviews(page);
+      setReviews(reviewsData);
+      setCurrentReviewsPage(page);
+    } catch (error) {
+      console.error('Error loading reviews:', error);
     }
   };
 
@@ -688,6 +702,106 @@ export default function ProfilePage() {
             </>
           ) : (
             <p className="text-gray-500">No orders found.</p>
+          )}
+        </div>
+
+        {/* My Reviews Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <Star className="h-5 w-5 text-gray-500 mr-2" />
+            <h3 className="text-xl font-semibold text-gray-900">My Reviews</h3>
+          </div>
+
+          {reviews && reviews.reviews.length > 0 ? (
+            <>
+              <div className="space-y-4">
+                {reviews.reviews.map((review) => (
+                  <div key={review.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex gap-4">
+                        {review.product?.image && (
+                          <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+                            <img
+                              src={review.product.image.url}
+                              alt={review.product.image.alt || review.product.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <Link href={`/products/${review.product?.id}`} className="font-medium text-blue-600 hover:underline">
+                            {review.product?.name || 'Unknown Product'}
+                          </Link>
+                          <div className="flex items-center mt-1">
+                            <div className="flex text-yellow-400">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`h-4 w-4 ${i < review.rating ? 'fill-current' : 'text-gray-300'}`}
+                                />
+                              ))}
+                            </div>
+                            <span className="ml-2 text-sm text-gray-500">
+                              {new Date(review.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <h4 className="font-medium mt-2">{review.title}</h4>
+                          <p className="text-gray-600 text-sm mt-1">{review.comment}</p>
+                          
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              review.isApproved 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {review.isApproved ? 'Approved' : 'Pending Approval'}
+                            </span>
+                            {review.isVerifiedPurchase && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 flex items-center">
+                                <Shield className="h-3 w-3 mr-1" />
+                                Verified Purchase
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {review.helpfulCount} found helpful
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {reviews.pagination.totalPages && reviews.pagination.totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing page {reviews.pagination.currentPage} of {reviews.pagination.totalPages}
+                  </div>
+                  <div className="flex space-x-2">
+                    {reviews.pagination.hasPrev && (
+                      <button
+                        onClick={() => loadReviews(currentReviewsPage - 1)}
+                        className="px-3 py-1 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      >
+                        Previous
+                      </button>
+                    )}
+                    {reviews.pagination.hasNext && (
+                      <button
+                        onClick={() => loadReviews(currentReviewsPage + 1)}
+                        className="px-3 py-1 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      >
+                        Next
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-500">No reviews submitted yet.</p>
           )}
         </div>
 

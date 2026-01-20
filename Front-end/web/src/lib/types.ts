@@ -112,6 +112,31 @@ export interface PaginatedReviews {
   pagination: Pagination;
 }
 
+export interface ReviewProduct {
+  id: string;
+  name: string;
+  image: ProductImage | null;
+}
+
+export interface UserReview {
+  id: string;
+  product: ReviewProduct | null;
+  rating: number;
+  title?: string;
+  comment: string;
+  images?: ReviewImage[];
+  isVerifiedPurchase: boolean;
+  isApproved: boolean;
+  helpfulCount: number;
+  createdAt: string;
+}
+
+export interface PaginatedUserReviews {
+  reviews: UserReview[];
+  pagination: Pagination;
+  count: number;
+}
+
 // User profile interfaces
 export interface Address {
   fullName: string;
