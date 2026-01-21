@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star } from 'lucide-react';
 import Link from 'next/link';
+import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address, PaginatedOrders, PaymentMethod, PaginatedUserReviews } from '@/lib/types';
 

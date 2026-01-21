@@ -94,7 +94,7 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
     });
   }
   
-  await user.remove();
+  await user.deleteOne();
   
   res.json({
     success: true,

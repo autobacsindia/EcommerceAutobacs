@@ -80,13 +80,13 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
     );
   }
 
-  const renderCategory = (category: Category, level = 0) => {
+  const renderCategory = (category: Category, level = 0, index?: number) => {
     const hasChildren = category.children && category.children.length > 0;
     const isExpanded = expandedCategories.has(category._id);
     const isChecked = selectedCategories.includes(category._id);
     
     return (
-      <li key={category._id} className={`${level === 0 ? 'woof_list_item' : 'woof_childs_list_item'} woof_list_item_${category._id}`}>
+      <li key={category._id || index} className={`${level === 0 ? 'woof_list_item' : 'woof_childs_list_item'} woof_list_item_${category._id}`}>
         <div className="woof_list_item_container">
           <input 
             type="checkbox" 
@@ -113,7 +113,7 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
         
         {hasChildren && isExpanded && (
           <ul className={`woof_childs_list woof_childs_list_${category._id}`}>
-            {category.children!.map(child => renderCategory(child, level + 1))}
+            {category.children!.map((child, idx) => renderCategory(child, level + 1, idx))}
           </ul>
         )}
       </li>
@@ -123,7 +123,7 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
   return (
     <div className="woof_container_overlay">
       <ul className="woof_list woof_list_checkbox">
-        {categories.map(category => renderCategory(category))}
+        {categories.map((category, idx) => renderCategory(category, 0, idx))}
       </ul>
     </div>
   );

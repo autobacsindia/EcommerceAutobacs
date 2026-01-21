@@ -280,7 +280,7 @@ export default function SearchSuggestions() {
         </div>
       }
     >
-      <div ref={containerRef} className="relative w-full max-w-md">
+      <div ref={containerRef} className="relative w-full">
         <div className="flex rounded-md overflow-hidden shadow-sm">
           <input
             ref={inputRef}

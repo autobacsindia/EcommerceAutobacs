@@ -2,8 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
-import { Plus, Edit, Trash2, Search, Eye } from 'lucide-react';
+import { Plus, Trash2, Search, Eye, X } from 'lucide-react';
 import Link from 'next/link';
+
+interface Address {
+  fullName: string;
+  phone: string;
+  isDefault: boolean;
+}
 
 interface User {
   _id: string;
@@ -12,6 +18,7 @@ interface User {
   role: 'customer' | 'admin';
   isActive: boolean;
   createdAt: string;
+  addresses?: Address[];
 }
 
 export default function AdminUsersPage() {
@@ -19,6 +26,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -166,15 +174,17 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex gap-2">
-                    <button className="text-blue-600 hover:text-blue-900">
+                    <button 
+                      onClick={() => setSelectedUser(user)}
+                      className="text-blue-600 hover:text-blue-900"
+                      title="View Details"
+                    >
                       <Eye className="h-4 w-4" />
-                    </button>
-                    <button className="text-blue-600 hover:text-blue-900">
-                      <Edit className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(user._id)}
                       className="text-red-600 hover:text-red-900"
+                      title="Delete User"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -189,6 +199,88 @@ export default function AdminUsersPage() {
       {filteredUsers.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           No users found
+        </div>
+      )}
+
+      {/* User Details Modal */}
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative shadow-xl">
+            <button 
+              onClick={() => setSelectedUser(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">User Details</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Name</label>
+                <p className="text-lg text-gray-900 font-medium">{selectedUser.name}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Email ID</label>
+                <p className="text-lg text-gray-900">{selectedUser.email}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Phone Number</label>
+                <div className="text-lg text-gray-900">
+                  {selectedUser.addresses && selectedUser.addresses.length > 0
+                    ? selectedUser.addresses.map((addr, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span>{addr.phone}</span>
+                          {addr.isDefault && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Default</span>
+                          )}
+                        </div>
+                      ))
+                    : <span className="text-gray-400 italic">No phone number available</span>}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Role</label>
+                  <span className={`px-3 py-1 text-sm rounded-full inline-block ${
+                    selectedUser.role === 'admin' 
+                      ? 'bg-purple-100 text-purple-800' 
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {selectedUser.role}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Status</label>
+                  <span className={`px-3 py-1 text-sm rounded-full inline-block ${
+                    selectedUser.isActive 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {selectedUser.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Joined On</label>
+                <p className="text-gray-900">{new Date(selectedUser.createdAt).toLocaleDateString()}</p>
+              </div>
+            </div>
+            
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

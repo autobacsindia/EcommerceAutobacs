@@ -31,27 +31,27 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-black sticky top-0 z-50 shadow-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="bg-black sticky top-0 z-50 shadow-md w-full">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* Top Row - Primary Actions Bar */}
-        <div className="flex items-center justify-between h-16 border-b border-gray-800">
+        <div className="flex items-center h-16 border-b border-gray-800 gap-4">
           {/* Logo */}
-          <div className="flex-shrink-0 mr-6">
+          <div className="flex-shrink-0">
             <BrandLogo variant="full" />
           </div>
 
           {/* Location Display - Shows user's delivery location */}
-          <div className="hidden lg:block mr-4">
+          <div className="hidden lg:block flex-shrink-0">
             <LocationDisplay compact={true} />
           </div>
 
           {/* Search Bar - Desktop */}
-          <div className="hidden md:block flex-1 mr-2">
+          <div className="hidden md:block flex-1 max-w-4xl">
             <ClientSearchSuggestions />
           </div>
 
           {/* Right Section */}
-          <div className="flex items-center space-x-3 text-white">
+          <div className="flex items-center space-x-4 text-white flex-shrink-0 ml-auto">
             {/* Currency Switcher */}
             <div className="hidden sm:block">
               <CurrencySwitcherDropdown />
@@ -144,7 +144,7 @@ export default function Header() {
         </div>
 
         {/* Bottom Row - Navigation Menu */}
-        <nav className="hidden md:flex items-center justify-between h-12">
+        <nav className="hidden md:flex items-center gap-6 h-10 overflow-x-auto no-scrollbar">
           {NAV_LINKS.map((link, index) => {
             const isActive = pathname === link.href || 
               (link.href !== '/' && pathname.startsWith(link.href));
@@ -153,7 +153,7 @@ export default function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`text-sm font-medium transition-colors relative py-1 flex-1 text-center ${
+                className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
                   isActive
                     ? 'text-white'
                     : 'text-white hover:text-green-200'

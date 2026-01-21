@@ -78,10 +78,10 @@ export default function ProductFilters() {
   
   // State for categories and brands
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [showCategories, setShowCategories] = useState(true);
+  const [showCategories, setShowCategories] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loadingBrands, setLoadingBrands] = useState(true);
-  const [showBrands, setShowBrands] = useState(true);
+  const [showBrands, setShowBrands] = useState(false);
   
   // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
@@ -339,8 +339,8 @@ export default function ProductFilters() {
                 ))}
               </div>
             ) : brands.length > 0 ? (
-              brands.map((brand) => (
-                <div key={brand._id} className="flex items-center">
+              brands.map((brand, index) => (
+                <div key={brand._id || index} className="flex items-center">
                   <input
                     type="checkbox"
                     id={`brand-${brand._id}`}
