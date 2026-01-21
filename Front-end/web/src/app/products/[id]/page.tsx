@@ -16,8 +16,49 @@ async function getProduct(id: string): Promise<any> {
     // Use the API client which has proper timeout handling
     const response: any = await apiClient.get(`/products/${id}`);
     return response?.product || null; // Changed from data.data to data.product to match backend response
-  } catch (error) {
-    console.error('Error fetching product:', error);
+  } catch (error: any) {
+    // Handle invalid ID format gracefully (e.g. when a slug or invalid ID is passed that the backend rejects)
+    const isInvalidId = error?.message?.includes('Invalid ID format') || error?.message?.includes('Cast to ObjectId failed');
+    
+    // If ID is invalid or not found (404), try to find by search (fallback mechanism)
+    // This handles cases where search suggestions might pass a slug or name instead of an ObjectId
+    if (isInvalidId || error?.status === 404) {
+      try {
+        console.log(`Product not found by ID (${id}), attempting fallback search...`);
+        // Search for the product using the ID as a keyword
+        let searchResponse: any = await apiClient.get(`/products?search=${encodeURIComponent(id)}&limit=1`);
+        
+        // If first attempt fails and the ID looks like a slug (has dashes), try replacing dashes with spaces
+        if ((!searchResponse?.products || searchResponse.products.length === 0) && id.includes('-')) {
+          const cleanName = id.replace(/-/g, ' ');
+          console.log(`Fallback search attempt 2 with cleaned name: ${cleanName}`);
+          searchResponse = await apiClient.get(`/products?search=${encodeURIComponent(cleanName)}&limit=1`);
+        }
+
+        if (searchResponse?.products && searchResponse.products.length > 0) {
+          const foundProduct = searchResponse.products[0];
+          console.log(`Fallback search found product: ${foundProduct.name} (${foundProduct._id})`);
+          
+          // If we found a product, fetch full details using the real ID
+          if (foundProduct._id) {
+             try {
+               const fullProductResponse: any = await apiClient.get(`/products/${foundProduct._id}`);
+               return fullProductResponse?.product || foundProduct;
+             } catch (detailError) {
+               // If fetching details fails, return the search result (better than nothing)
+               return foundProduct;
+             }
+          }
+          return foundProduct;
+        }
+      } catch (fallbackError) {
+        // Fallback failed, proceed to return null
+      }
+    }
+
+    if (!isInvalidId) {
+      console.error('Error fetching product:', error);
+    }
     return null;
   }
 }
@@ -193,7 +234,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
         </div>
       )}
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
         <nav className="mb-6 text-sm text-gray-600">
           <Link href="/" className="hover:text-blue-600">Home</Link>
@@ -220,8 +261,8 @@ function ProductDetailPageClient({ product }: { product: any }) {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-8">
+        <div className="py-4">
+          <div className="lg:grid lg:grid-cols-2 lg:gap-12">
             {/* Product Images */}
             <div>
               <ImageGallery
