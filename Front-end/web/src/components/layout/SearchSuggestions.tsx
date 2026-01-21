@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import useIsMounted from '@/lib/hooks/useIsMounted';
 import apiClient from '@/lib/api';
 import { generateDeterministicId } from '@/lib/utils/idGenerator';
-import EnvironmentAwareComponent from './EnvironmentAwareComponent';
 import { Search, Clock, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation } from '@/contexts/LocationContext';
@@ -40,7 +39,10 @@ export default function SearchSuggestions() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const suggestionRefs = useRef<(HTMLButtonElement | HTMLDivElement)[]>([]);
+  const suggestionRefs = useRef<(HTMLButtonElement | HTMLDivElement | null)[]>([]);
+  
+  // Reset refs on each render to prevent stale references
+  suggestionRefs.current = [];
   
   // Create a storage key that depends on user ID and location
   const storageKey = (() => {
@@ -254,176 +256,150 @@ export default function SearchSuggestions() {
     }
   };
 
-  // Use EnvironmentAwareComponent for consistent rendering
   return (
-    <EnvironmentAwareComponent 
-      skeletonType="search"
-      fallback={
-        <div className="relative w-full max-w-md">
-          <div className="flex">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search products..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              readOnly
-            />
-            <button 
-              className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      }
-    >
-      <div ref={containerRef} className="relative w-full">
-        <div className="flex rounded-md overflow-hidden shadow-sm">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => {
-              if (query.length >= 2 || (query.length === 0 && history.length > 0)) {
-                setIsOpen(true);
-              }
-            }}
-            placeholder="Search products, brands, categories..."
-            className="w-full px-4 py-2 bg-white text-gray-900 placeholder-gray-500 border-0 focus:outline-none focus:ring-2 focus:ring-white"
-          />
-          <button 
-            onClick={() => handleSearch()}
-            aria-label="Search"
-            className="bg-white text-green-800 px-4 py-2 hover:bg-gray-50 transition-colors border-l border-gray-200"
-          >
-            <Search className="h-5 w-5" />
-          </button>
-        </div>
+    <div className="relative w-full">
+      <div className="flex rounded-md overflow-hidden shadow-sm">
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => {
+            if (query.length >= 2 || (query.length === 0 && history.length > 0)) {
+              setIsOpen(true);
+            }
+          }}
+          placeholder="Search products, brands, categories..."
+          className="w-full px-4 py-2 bg-white text-gray-900 placeholder-gray-500 border-0 focus:outline-none focus:ring-2 focus:ring-white"
+        />
+        <button 
+          onClick={() => handleSearch()}
+          aria-label="Search"
+          className="bg-white text-green-800 px-4 py-2 hover:bg-gray-50 transition-colors border-l border-gray-200"
+        >
+          <Search className="h-5 w-5" />
+        </button>
+      </div>
 
-        {/* Suggestions dropdown */}
-        {isOpen && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-            {isLoading ? (
-              <div className="px-4 py-2 text-gray-500">
-                <div className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Searching...
-                </div>
+      {/* Suggestions dropdown */}
+      {isOpen && (
+        <div ref={containerRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
+          {isLoading ? (
+            <div className="px-4 py-2 text-gray-500">
+              <div className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Searching...
               </div>
-            ) : (
-              <div className="py-1 max-h-96 overflow-y-auto">
-                {/* Search History Section */}
-                {query.length === 0 && history.length > 0 && (
-                  <div>
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 flex justify-between items-center">
-                      <span>Recent Searches</span>
-                      <button 
-                        onClick={clearHistory}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Clear all
-                      </button>
-                    </div>
-                    <ul>
-                      {history.map((item, index) => (
-                        <li key={`history-${index}`}>
-                          {/* Changed from button to div to avoid nesting buttons */}
-                          <div
-                            ref={(el) => { if (el) suggestionRefs.current[index] = el; }}
-                            className={`w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center justify-between cursor-pointer ${
-                              activeIndex === index ? 'bg-gray-100' : ''
+            </div>
+          ) : (
+            <div className="py-1 max-h-96 overflow-y-auto">
+              {/* Search History Section */}
+              {query.length === 0 && history.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 text-xs font-semibold text-gray-500 flex justify-between items-center">
+                    <span>Recent Searches</span>
+                    <button 
+                      onClick={clearHistory}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <ul>
+                    {history.map((item, index) => (
+                      <li key={`history-${index}`}>
+                        {/* Changed from button to div to avoid nesting buttons */}
+                        <div
+                          ref={(el) => { if (el) suggestionRefs.current[index] = el; }}
+                          className={`w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center justify-between cursor-pointer ${
+                            activeIndex === index ? 'bg-gray-100' : ''
+                          }`}
+                        >
+                          <div 
+                            className="flex items-center gap-2 flex-grow"
+                            onClick={() => handleHistoryItemClick(item.term)}
+                          >
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span className="text-gray-700">{item.term}</span>
+                          </div>
+                          <button 
+                            onClick={(e) => removeFromHistory(item.term, e)}
+                            className="text-gray-400 hover:text-gray-600 ml-2"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Suggestions Section */}
+              {suggestions.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 text-xs font-semibold text-gray-500">
+                    Suggestions
+                  </div>
+                  <ul>
+                    {suggestions.map((suggestion, index) => {
+                      const actualIndex = index + (query.length === 0 && history.length > 0 ? history.length : 0);
+                      return (
+                        <li key={suggestion.id}>
+                          <button
+                            ref={(el) => { if (el) suggestionRefs.current[actualIndex] = el; }}
+                            onClick={() => handleSuggestionClick(suggestion)}
+                            className={`w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center gap-3 ${
+                              activeIndex === actualIndex ? 'bg-gray-100' : ''
                             }`}
                           >
-                            <div 
-                              className="flex items-center gap-2 flex-grow"
-                              onClick={() => handleHistoryItemClick(item.term)}
-                            >
-                              <Clock className="h-4 w-4 text-gray-400" />
-                              <span className="text-gray-700">{item.term}</span>
-                            </div>
-                            <button 
-                              onClick={(e) => removeFromHistory(item.term, e)}
-                              className="text-gray-400 hover:text-gray-600 ml-2"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Suggestions Section */}
-                {suggestions.length > 0 && (
-                  <div>
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500">
-                      Suggestions
-                    </div>
-                    <ul>
-                      {suggestions.map((suggestion, index) => {
-                        const actualIndex = index + (query.length === 0 && history.length > 0 ? history.length : 0);
-                        return (
-                          <li key={suggestion.id}>
-                            <button
-                              ref={(el) => { if (el) suggestionRefs.current[actualIndex] = el; }}
-                              onClick={() => handleSuggestionClick(suggestion)}
-                              className={`w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center gap-3 ${
-                                activeIndex === actualIndex ? 'bg-gray-100' : ''
-                              }`}
-                            >
-                              {suggestion.imageUrl && (
-                                <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-md overflow-hidden">
-                                  <img 
-                                    src={suggestion.imageUrl} 
-                                    alt={suggestion.text}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      target.style.display = 'none';
-                                    }}
-                                  />
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-gray-900 truncate">{suggestion.text}</div>
-                                <div className="flex items-center text-xs text-gray-500">
-                                  <span className="capitalize">{suggestion.type}</span>
-                                  {suggestion.category && (
-                                    <>
-                                      <span className="mx-1">•</span>
-                                      <span>{suggestion.category}</span>
-                                    </>
-                                  )}
-                                </div>
+                            {suggestion.imageUrl && (
+                              <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-md overflow-hidden">
+                                <img 
+                                  src={suggestion.imageUrl} 
+                                  alt={suggestion.text}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                  }}
+                                />
                               </div>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                )}
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{suggestion.text}</div>
+                              <div className="flex items-center text-xs text-gray-500">
+                                <span className="capitalize">{suggestion.type}</span>
+                                {suggestion.category && (
+                                  <>
+                                    <span className="mx-1">•</span>
+                                    <span>{suggestion.category}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
 
-                {/* No results message */}
-                {query.length >= 2 && suggestions.length === 0 && (
-                  <div className="px-4 py-3 text-gray-500">
-                    No suggestions found for "{query}"
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </EnvironmentAwareComponent>
+              {/* No results message */}
+              {query.length >= 2 && suggestions.length === 0 && (
+                <div className="px-4 py-3 text-gray-500">
+                  No suggestions found for "{query}"
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
