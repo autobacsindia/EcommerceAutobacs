@@ -56,6 +56,11 @@ const ProductSchema = new mongoose.Schema({
     value: { type: String }
   }],
   features: [String],
+  packageContents: [String],
+  qna: [{
+    question: { type: String, required: true },
+    answer: { type: String, required: true }
+  }],
   isActive: {
     type: Boolean,
     default: true

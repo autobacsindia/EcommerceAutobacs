@@ -198,37 +198,35 @@ function ProductDetailPageClient({ product }: { product: any }) {
     product.images[0].url && product.images[0].url.includes('example.com');
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-white py-8">
       {/* Compare Bar */}
       {comparedProductIds.length > 0 && (
-        <div className="bg-blue-50 border-b border-blue-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center">
-                <GitCompare className="h-5 w-5 text-blue-600 mr-2" />
-                <span className="text-blue-800 font-medium">
-                  {comparedProductIds.length} product{comparedProductIds.length !== 1 ? 's' : ''} selected for comparison
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const currentParams = new URLSearchParams(searchParams.toString());
-                    currentParams.delete('compare');
-                    const newUrl = `${window.location.pathname}?${currentParams.toString()}`;
-                    router.replace(newUrl, { scroll: false });
-                  }}
-                  className="text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={viewComparison}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Compare Now
-                </button>
-              </div>
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-lg p-4">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center">
+              <GitCompare className="h-5 w-5 text-blue-600 mr-2" />
+              <span className="text-gray-900 font-medium">
+                {comparedProductIds.length} product{comparedProductIds.length !== 1 ? 's' : ''} selected for comparison
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const currentParams = new URLSearchParams(searchParams.toString());
+                  currentParams.delete('compare');
+                  const newUrl = `${window.location.pathname}?${currentParams.toString()}`;
+                  router.replace(newUrl, { scroll: false });
+                }}
+                className="text-gray-600 hover:text-gray-900 font-medium px-4 py-2"
+              >
+                Clear
+              </button>
+              <button
+                onClick={viewComparison}
+                className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors font-medium"
+              >
+                Compare Now
+              </button>
             </div>
           </div>
         </div>
@@ -236,204 +234,312 @@ function ProductDetailPageClient({ product }: { product: any }) {
       
       <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
-        <nav className="mb-6 text-sm text-gray-600">
-          <Link href="/" className="hover:text-blue-600">Home</Link>
+        <nav className="mb-8 text-sm text-gray-500">
+          <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
           <span className="mx-2">/</span>
-          <Link href="/products" className="hover:text-blue-600">Products</Link>
+          <Link href="/products" className="hover:text-blue-600 transition-colors">Products</Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-900">{product.name}</span>
+          <span className="text-gray-900 font-medium">{product.name}</span>
         </nav>
 
-        {/* Info Banner for Sample Data */}
-        {hasPlaceholderImage && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg mb-6">
-            <div className="p-4">
-              <div className="flex items-center">
-                <svg className="h-5 w-5 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <p className="text-yellow-800 text-sm">
-                  <span className="font-medium">Sample Product:</span> This is a sample product with a placeholder image. 
-                  Real product data will be imported from WordPress.
-                </p>
-              </div>
-            </div>
+        {/* Top Section: Title, Price, Images, Purchase Options */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-16">
+          {/* Left: Images */}
+          <div>
+            <ImageGallery
+              images={product.images && product.images.length > 0 
+                ? product.images.map((img: any, index: number) => ({
+                    id: img._id || index,
+                    src: img.url,
+                    alt: img.alt || `${product.name} image ${index + 1}`,
+                    name: img.alt
+                  }))
+                : []
+              }
+              className="sticky top-8"
+            />
           </div>
-        )}
 
-        <div className="py-4">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-12">
-            {/* Product Images */}
-            <div>
-              <ImageGallery
-                images={product.images && product.images.length > 0 
-                  ? product.images.map((img: any, index: number) => ({
-                      id: img._id || index,
-                      src: img.url,
-                      alt: img.alt || `${product.name} image ${index + 1}`,
-                      name: img.alt
-                    }))
-                  : []
-                }
-                className="mb-4"
-              />
-            </div>
-
-            {/* Product Info */}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-4">{product.name}</h1>
-              
-              {/* Rating */}
-              <div className="flex items-center gap-2 mb-4">
-                <div className="flex">
+          {/* Right: Product Details & Purchase */}
+          <div className="flex flex-col">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">{product.name}</h1>
+            
+            {/* Rating & Reviews Link */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center gap-1">
+                <div className="flex text-yellow-400">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <Star
                       key={star}
-                      className={`h-5 w-5 ${
-                        star <= (product.averageRating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
-                      }`}
+                      className={`h-5 w-5 ${star <= (product.averageRating || 0) ? 'fill-current' : 'text-gray-200'}`}
                     />
                   ))}
                 </div>
-                <span className="text-gray-600">({product.averageRating || 0} rating)</span>
+                <span className="text-sm font-medium text-gray-900 ml-2">{product.averageRating || 0}</span>
               </div>
+              <span className="text-gray-300">|</span>
+              <a href="#reviews" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                {product.totalReviews || 0} Reviews
+              </a>
+              <span className="text-gray-300">|</span>
+              <a href="#qa" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                Ask a Question
+              </a>
+            </div>
 
-              {/* Price */}
-              <div className="mb-6">
-                <p className="text-4xl font-bold text-blue-600">
+            {/* Price */}
+            <div className="mb-8">
+              <div className="flex items-baseline gap-3">
+                <span className="text-4xl font-bold text-gray-900">
                   ₹{(selectedSpecOption?.price ?? product.price ?? 0).toLocaleString()}
-                </p>
+                </span>
                 {product.originalPrice && product.originalPrice > product.price && (
-                  <p className="text-lg text-gray-500 line-through">
+                  <span className="text-xl text-gray-400 line-through">
                     ₹{product.originalPrice?.toLocaleString()}
-                  </p>
+                  </span>
+                )}
+                {product.originalPrice && product.originalPrice > product.price && (
+                  <span className="text-sm font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
+                    {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                  </span>
                 )}
               </div>
+              <p className="text-sm text-gray-500 mt-2">Inclusive of all taxes</p>
+            </div>
 
-              {/* Stock Status */}
-              <div className="mb-6">
-                {product.stock > 0 ? (
-                  <p className="text-green-600 font-semibold">In Stock ({product.stock} available)</p>
-                ) : (
-                  <p className="text-red-600 font-semibold">Out of Stock</p>
-                )}
+            {/* Short Description */}
+            {product.shortDescription && (
+              <p className="text-gray-600 mb-8 leading-relaxed">
+                {product.shortDescription}
+              </p>
+            )}
+
+            {/* Variable Specifications */}
+            {Array.isArray(product.variableSpecs) && product.variableSpecs.length > 0 && (
+              <div className="mb-8 border-t border-b border-gray-100 py-6">
+                {product.variableSpecs.map((specGroup: any, gi: number) => (
+                  <div key={gi}>
+                    <label className="block text-sm font-medium text-gray-900 mb-3">
+                      {specGroup.key}
+                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      {specGroup.options.map((opt: any, oi: number) => {
+                        const selected = selectedSpecOption && selectedSpecOption.key === specGroup.key && selectedSpecOption.label === opt.label;
+                        return (
+                          <button
+                            key={oi}
+                            type="button"
+                            onClick={() => setSelectedSpecOption({ key: specGroup.key, label: opt.label, price: opt.price })}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                              selected 
+                                ? 'bg-blue-600 text-white shadow-md' 
+                                : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
 
-              {/* Description */}
-              <div className="mb-6">
-                <h2 className="font-semibold text-gray-900 mb-2">Description</h2>
-                <p className="text-gray-700">{product.description || 'No description available.'}</p>
-              </div>
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              <button 
+                onClick={handleAddToCart}
+                disabled={cartLoading || product.stock === 0}
+                className="flex-1 bg-blue-600 text-white px-8 py-4 rounded-xl hover:bg-blue-700 transition-all font-semibold text-lg shadow-blue-200 shadow-lg disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {cartLoading ? 'Adding...' : 'Add to Cart'}
+              </button>
+              
+              <button 
+                onClick={handleWishlistToggle}
+                disabled={wishlistLoading}
+                className={`px-4 py-4 border rounded-xl transition-all flex items-center justify-center ${
+                  isWishlisted 
+                    ? 'border-red-200 bg-red-50 text-red-500' 
+                    : 'border-gray-200 hover:bg-gray-50 text-gray-400 hover:text-red-500'
+                }`}
+              >
+                <Heart className={`h-6 w-6 ${isWishlisted ? 'fill-current' : ''}`} />
+              </button>
 
-              {/* Category */}
-              {product.category && (
-                <div className="mb-6">
-                  <h2 className="font-semibold text-gray-900 mb-2">Category</h2>
-                  <p className="text-gray-700">{product.category.name === 'Suspension' ? 'SUSPENSION' : product.category.name}</p>
-                </div>
-              )}
+              <button 
+                onClick={toggleCompare}
+                className={`px-4 py-4 border rounded-xl transition-all flex items-center justify-center ${
+                  isCompared 
+                    ? 'border-blue-200 bg-blue-50 text-blue-600' 
+                    : 'border-gray-200 hover:bg-gray-50 text-gray-400 hover:text-blue-600'
+                }`}
+              >
+                <GitCompare className="h-6 w-6" />
+              </button>
+            </div>
 
-              {/* Brand */}
-              {product.brand && (
-                <div className="mb-6">
-                  <h2 className="font-semibold text-gray-900 mb-2">Brand</h2>
-                  <p className="text-gray-700">{product.brand}</p>
-                </div>
-              )}
-
-              {/* SKU */}
+            {/* Meta Info */}
+            <div className="space-y-3 text-sm text-gray-500">
               {product.sku && (
-                <div className="mb-6">
-                  <h2 className="font-semibold text-gray-900 mb-2">SKU</h2>
-                  <p className="text-gray-700">{product.sku}</p>
+                <div className="flex gap-2">
+                  <span className="font-medium text-gray-900 w-24">SKU:</span>
+                  <span>{product.sku}</span>
                 </div>
               )}
+              {product.category && (
+                <div className="flex gap-2">
+                  <span className="font-medium text-gray-900 w-24">Category:</span>
+                  <span className="uppercase">{product.category.name}</span>
+                </div>
+              )}
+              {product.brand && (
+                <div className="flex gap-2">
+                  <span className="font-medium text-gray-900 w-24">Brand:</span>
+                  <span>{product.brand}</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <span className="font-medium text-gray-900 w-24">Availability:</span>
+                <span className={product.stock > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                  {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-              {/* Specifications */}
-              {Array.isArray(product.variableSpecs) && product.variableSpecs.length > 0 ? (
-                <div className="mb-6">
-                  <h2 className="font-semibold text-gray-900 mb-2">Specifications</h2>
-                  {product.variableSpecs.map((specGroup: any, gi: number) => (
-                    <div key={gi} className="mb-4">
-                      <div className="text-gray-700 mb-2">{specGroup.key}:</div>
-                      <div className="flex flex-wrap gap-2">
-                        {specGroup.options.map((opt: any, oi: number) => {
-                          const selected = selectedSpecOption && selectedSpecOption.key === specGroup.key && selectedSpecOption.label === opt.label;
-                          return (
-                            <button
-                              key={oi}
-                              type="button"
-                              onClick={() => setSelectedSpecOption({ key: specGroup.key, label: opt.label, price: opt.price })}
-                              className={`px-3 py-2 rounded-md border text-sm ${selected ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
-                            >
-                              {opt.label}
-                            </button>
-                          );
-                        })}
+        {/* Middle Section: Details, Features, Compatibility */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-16 border-t border-gray-100 pt-16">
+          {/* Description & Features */}
+          <div className="lg:col-span-2 space-y-12">
+            <section>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Product Description</h2>
+              <div className="prose prose-blue max-w-none text-gray-600 leading-relaxed">
+                {product.description}
+              </div>
+            </section>
+
+            {product.features && product.features.length > 0 && (
+              <section>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Key Features</h2>
+                <ul className="list-disc space-y-2 pl-5 text-gray-700 marker:text-blue-600">
+                  {product.features.map((feature: string, index: number) => (
+                    <li key={index} className="leading-relaxed pl-1">
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            
+            {/* Technical Specifications (Existing Schema) */}
+            {product.specifications && product.specifications.length > 0 && (
+              <section>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Technical Specifications</h2>
+                <div className="bg-gray-50 rounded-2xl p-6 sm:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
+                    {product.specifications.map((spec: any, index: number) => (
+                      <div key={index} className="flex justify-between border-b border-gray-200 py-3 last:border-0">
+                        <span className="text-gray-500">{spec.key}</span>
+                        <span className="font-medium text-gray-900">{spec.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* Compatibility Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 sticky top-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Vehicle Compatibility</h3>
+              {product.compatibleVehicles && product.compatibleVehicles.length > 0 ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-500 mb-4">
+                    This part is compatible with the following vehicles:
+                  </p>
+                  {product.compatibleVehicles.map((vehicle: any, index: number) => (
+                    <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+                        {vehicle.make?.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{vehicle.make} {vehicle.model}</p>
+                        <p className="text-xs text-gray-500">{vehicle.year} • {vehicle.variant}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                product.specifications && product.specifications.length > 0 && (
-                  <div className="mb-6">
-                    <h2 className="font-semibold text-gray-900 mb-2">Specifications</h2>
-                    <div className="grid grid-cols-2 gap-2">
-                      {product.specifications.map((spec: any, index: number) => (
-                        <div key={index} className="flex justify-between border-b border-gray-100 py-1">
-                          <span className="text-gray-600">{spec.key}:</span>
-                          <span className="text-gray-900 font-medium">{spec.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Universal fitment or specific compatibility data not available.</p>
+                </div>
               )}
-
-              {/* Add to Cart and Compare */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button 
-                  onClick={handleAddToCart}
-                  disabled={cartLoading || product.stock === 0}
-                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                >
-                  <ShoppingCart className="h-5 w-5" />
-                  {cartLoading ? 'Adding...' : 'Add to Cart'}
-                </button>
-                
-                <button 
-                  onClick={toggleCompare}
-                  className={`px-6 py-3 border rounded-md transition-colors flex items-center justify-center gap-2 ${
-                    isCompared 
-                      ? 'border-blue-500 bg-blue-50 text-blue-500' 
-                      : 'border-gray-300 hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <GitCompare className="h-5 w-5" />
-                  {isCompared ? 'Added to Compare' : 'Compare'}
-                </button>
-                
-                <button 
-                  onClick={handleWishlistToggle}
-                  disabled={wishlistLoading}
-                  className={`p-3 border rounded-md transition-colors flex items-center justify-center ${
-                    isWishlisted 
-                      ? 'border-red-500 bg-red-50 text-red-500' 
-                      : 'border-gray-300 hover:bg-gray-50 text-gray-600 hover:text-red-500'
-                  }`}
-                >
-                  <Heart className={`h-6 w-6 ${isWishlisted ? 'fill-current' : ''}`} />
-                </button>
-              </div>
             </div>
           </div>
-          
-          {/* Reviews Section */}
-          <div className="mt-12">
-            <Reviews 
-              productId={product._id} 
-              isAuthenticated={isAuthenticated} 
-            />
+        </div>
+
+        {/* Bottom Section: Package Details, Reviews, Q&A */}
+        <div className="border-t border-gray-100 pt-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+            {/* Left Column: Package Details & Q&A */}
+            <div className="lg:col-span-4 space-y-12">
+              {product.packageContents && product.packageContents.length > 0 && (
+                <section>
+                  <h2 className="text-xl font-bold text-gray-900 mb-6">What's in the Box</h2>
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <ul className="space-y-3">
+                      {product.packageContents.map((item: string, index: number) => (
+                        <li key={index} className="flex items-center gap-3 text-gray-700">
+                          <span className="h-5 w-5 rounded-full border border-green-500 flex items-center justify-center text-green-500 text-xs">✓</span>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              )}
+
+              <section id="qa">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">Questions & Answers</h2>
+                {product.qna && product.qna.length > 0 ? (
+                  <div className="space-y-4">
+                    {product.qna.map((item: any, index: number) => (
+                      <div key={index} className="bg-white border border-gray-200 rounded-xl p-6">
+                        <div className="flex items-start gap-3 mb-3">
+                          <span className="flex-shrink-0 h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">Q</span>
+                          <h3 className="font-semibold text-gray-900">{item.question}</h3>
+                        </div>
+                        <div className="flex items-start gap-3 pl-9">
+                          <span className="flex-shrink-0 h-6 w-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-xs">A</span>
+                          <p className="text-gray-600">{item.answer}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+                    <p className="text-gray-500 mb-4">Have a question about this product?</p>
+                    <button className="text-blue-600 font-medium hover:underline">
+                      Ask a Question
+                    </button>
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Right Column: Reviews */}
+            <div className="lg:col-span-8" id="reviews">
+              <h2 className="text-2xl font-bold text-gray-900 mb-8">Customer Reviews</h2>
+              <Reviews 
+                productId={product._id} 
+                isAuthenticated={isAuthenticated} 
+              />
+            </div>
           </div>
         </div>
       </div>

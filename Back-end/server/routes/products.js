@@ -440,7 +440,22 @@ router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
 // @desc    Get product by ID
 // @access  Public
 router.get("/:id", asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id)
+  let id = req.params.id;
+
+  // Handle prefixed IDs (e.g. product-123...)
+  if (id.startsWith('product-')) {
+    id = id.replace(/^product-/, '');
+  }
+
+  // Validate ID format
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid ID format'
+    });
+  }
+
+  const product = await Product.findById(id)
     .populate('categories', 'name slug description')
     .populate('compatibleVehicles', 'make model year variant');
 
@@ -534,6 +549,16 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @access  Private/Admin
 router.post("/:id/stock", protect, admin, asyncHandler(async (req, res) => {
   const { stock } = req.body;
+  let id = req.params.id;
+  
+  // Handle prefixed IDs
+  if (id.startsWith('product-')) {
+    id = id.replace(/^product-/, '');
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: 'Invalid ID format' });
+  }
 
   if (stock === undefined || stock < 0) {
     return res.status(400).json({
@@ -543,7 +568,7 @@ router.post("/:id/stock", protect, admin, asyncHandler(async (req, res) => {
   }
 
   const product = await Product.findByIdAndUpdate(
-    req.params.id,
+    id,
     { stock },
     { new: true }
   );

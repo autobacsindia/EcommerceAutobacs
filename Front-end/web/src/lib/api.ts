@@ -371,13 +371,17 @@ class APIClient {
         errorDetails.errorMessage.includes('Cast to ObjectId failed')
       );
     
+      // Check for auth errors (401)
+      const isAuthError = (error as any)?.status === 401 || (response as any).status === 401;
+
       // Only log non-rate limit errors to reduce console spam
       const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
     
-      // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint OR it's an invalid ID error
+      // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint OR it's an invalid ID error OR it's an auth error
       // This suppresses expected 404s from location, category, and vehicle endpoints
       // Also suppress all errors from vehicle products endpoint as it has WordPress fallback
-      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint || isInvalidIdError;
+      // Also suppress auth errors as they are handled by the auth context/interceptors
+      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint || isInvalidIdError || isAuthError;
     
       if (!shouldSuppressLog) {
         // Only log non-rate limit errors to reduce console spam

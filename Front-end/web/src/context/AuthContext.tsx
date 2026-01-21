@@ -77,7 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (err: any) {
       // Only log actual errors, not on expected auth failures
-      if (err.message !== 'Unauthorized') {
+      const isAuthError = err.message === 'Unauthorized' || 
+                          err.message === 'Not authorized, token failed' || 
+                          err.status === 401 ||
+                          (err.message && err.message.includes('token failed'));
+                          
+      if (!isAuthError) {
         console.error('Auth check failed:', err);
       }
       // Ensure consistent state on error

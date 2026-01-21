@@ -10,9 +10,18 @@ interface Category {
   name: string;
 }
 
+interface Vehicle {
+  _id: string;
+  make: string;
+  model: string;
+  year: number;
+  variant?: string;
+}
+
 export default function CreateProductPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
@@ -32,9 +41,15 @@ export default function CreateProductPage() {
   
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [variableSpecs, setVariableSpecs] = useState<any[]>([]);
+  const [features, setFeatures] = useState<string[]>(['']);
+  const [packageContents, setPackageContents] = useState<string[]>(['']);
+  const [qna, setQna] = useState<{question: string, answer: string}[]>([{ question: '', answer: '' }]);
+  const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
 
   useEffect(() => {
     fetchCategories();
+    fetchVehicles();
   }, []);
 
   const fetchCategories = async () => {
@@ -43,6 +58,15 @@ export default function CreateProductPage() {
       setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
+    }
+  };
+
+  const fetchVehicles = async () => {
+    try {
+      const response = await apiClient.get<{ vehicles: Vehicle[] }>('/vehicles');
+      setVehicles(response.vehicles || []);
+    } catch (err) {
+      console.error('Failed to fetch vehicles:', err);
     } finally {
       setLoading(false);
     }
@@ -77,12 +101,19 @@ export default function CreateProductPage() {
       // In a real implementation, we would upload images first and get URLs
       // For now, we'll submit without images
       
+      const validQna = qna.filter(item => item.question.trim() !== '' && item.answer.trim() !== '');
+
       const productData = {
         ...formData,
         price: parseFloat(formData.price),
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
         stock: parseInt(formData.stock),
         category: formData.category || undefined,
+        variableSpecs: variableSpecs.length > 0 ? variableSpecs : undefined,
+        compatibleVehicles: selectedVehicles.length > 0 ? selectedVehicles : undefined,
+        features: features.length > 0 ? features : undefined,
+        packageContents: packageContents.length > 0 ? packageContents : undefined,
+        qna: validQna.length > 0 ? validQna : undefined,
       };
       
       // Remove empty fields
@@ -329,6 +360,268 @@ export default function CreateProductPage() {
             </div>
           </div>
           
+          {/* Compatible Vehicles */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Compatible Vehicles</h2>
+            <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
+              {vehicles.length === 0 ? (
+                <p className="text-gray-500">No vehicles available. Create vehicles first.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {vehicles.map(vehicle => (
+                    <div key={vehicle._id} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id={`vehicle-${vehicle._id}`}
+                        checked={selectedVehicles.includes(vehicle._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedVehicles([...selectedVehicles, vehicle._id]);
+                          } else {
+                            setSelectedVehicles(selectedVehicles.filter(id => id !== vehicle._id));
+                          }
+                        }}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor={`vehicle-${vehicle._id}`} className="ml-2 text-sm text-gray-700">
+                        {vehicle.make} {vehicle.model} ({vehicle.year}) {vehicle.variant ? `- ${vehicle.variant}` : ''}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Variable Specifications */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Variable Specifications</h2>
+            <div className="space-y-4">
+              {variableSpecs.map((spec, si) => (
+                <div key={si} className="border rounded-lg p-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Specification Name</label>
+                    <input
+                      type="text"
+                      value={spec.key}
+                      onChange={(e) => {
+                        const v = [...variableSpecs];
+                        v[si] = { ...v[si], key: e.target.value };
+                        setVariableSpecs(v);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+                    <div className="space-y-2">
+                      {spec.options.map((opt, oi) => (
+                        <div key={oi} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input
+                            type="text"
+                            placeholder="Label"
+                            value={opt.label}
+                            onChange={(e) => {
+                              const v = [...variableSpecs];
+                              const opts = [...v[si].options];
+                              opts[oi] = { ...opts[oi], label: e.target.value };
+                              v[si] = { ...v[si], options: opts };
+                              setVariableSpecs(v);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                          <input
+                            type="number"
+                            placeholder="Price"
+                            min="0"
+                            step="0.01"
+                            value={opt.price}
+                            onChange={(e) => {
+                              const v = [...variableSpecs];
+                              const opts = [...v[si].options];
+                              opts[oi] = { ...opts[oi], price: parseFloat(e.target.value || '0') };
+                              v[si] = { ...v[si], options: opts };
+                              setVariableSpecs(v);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                          <div className="md:col-span-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const v = [...variableSpecs];
+                                const opts = [...v[si].options];
+                                v[si] = { ...v[si], options: opts.filter((_, idx) => idx !== oi) };
+                                setVariableSpecs(v);
+                              }}
+                              className="px-3 py-2 border rounded-md"
+                            >
+                              Remove Option
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const v = [...variableSpecs];
+                          v[si] = { ...v[si], options: [...v[si].options, { label: '', price: 0 }] };
+                          setVariableSpecs(v);
+                        }}
+                        className="px-3 py-2 border rounded-md"
+                      >
+                        Add Option
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setVariableSpecs(variableSpecs.filter((_, idx) => idx !== si))}
+                      className="px-3 py-2 border rounded-md"
+                    >
+                      Remove Specification
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setVariableSpecs([...variableSpecs, { key: '', options: [{ label: '', price: 0 }] }])}
+                className="px-4 py-2 border rounded-md"
+              >
+                Add Specification
+              </button>
+            </div>
+          </div>
+
+          {/* Features */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Features</h2>
+            <div className="space-y-4">
+              {features.map((feature, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={feature}
+                    onChange={(e) => {
+                      const newFeatures = [...features];
+                      newFeatures[index] = e.target.value;
+                      setFeatures(newFeatures);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Feature description"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFeatures(features.filter((_, i) => i !== index))}
+                    className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setFeatures([...features, ''])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Add Feature
+              </button>
+            </div>
+          </div>
+
+          {/* Package Contents */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Package Contents</h2>
+            <div className="space-y-4">
+              {packageContents.map((item, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={item}
+                    onChange={(e) => {
+                      const newContents = [...packageContents];
+                      newContents[index] = e.target.value;
+                      setPackageContents(newContents);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Package item"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPackageContents(packageContents.filter((_, i) => i !== index))}
+                    className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPackageContents([...packageContents, ''])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Add Package Item
+              </button>
+            </div>
+          </div>
+
+          {/* Q&A */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Questions & Answers</h2>
+            <div className="space-y-6">
+              {qna.map((item, index) => (
+                <div key={index} className="border p-4 rounded-lg space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Question</label>
+                    <input
+                      type="text"
+                      value={item.question}
+                      onChange={(e) => {
+                        const newQna = [...qna];
+                        newQna[index] = { ...newQna[index], question: e.target.value };
+                        setQna(newQna);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder="Question"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Answer</label>
+                    <textarea
+                      value={item.answer}
+                      onChange={(e) => {
+                        const newQna = [...qna];
+                        newQna[index] = { ...newQna[index], answer: e.target.value };
+                        setQna(newQna);
+                      }}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder="Answer"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setQna(qna.filter((_, i) => i !== index))}
+                      className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                    >
+                      Remove Q&A
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setQna([...qna, { question: '', answer: '' }])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Add Q&A
+              </button>
+            </div>
+          </div>
+
           {/* Images */}
           <div className="md:col-span-2">
             <h2 className="text-xl font-semibold mb-4">Product Images</h2>
