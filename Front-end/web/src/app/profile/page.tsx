@@ -63,11 +63,12 @@ export default function ProfilePage() {
         profileService.getOrders(currentPage),
         profileService.getMyReviews(currentReviewsPage),
         profileService.getPaymentMethods(),
-        fetch('/api/auth/verification-status', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }).then(res => res.json()).catch(() => ({ success: false }))
+        apiClient.get<{
+          success: boolean;
+          isVerified: boolean;
+          email: string;
+          verifiedAt?: string;
+        }>('/auth/verification-status').catch(() => ({ success: false, isVerified: false, email: '' }))
       ]);
 
       setProfile(profileData);
@@ -209,20 +210,12 @@ export default function ProfilePage() {
       setIsResendingVerification(true);
       setResendMessage(null);
 
-      const response = await fetch('/api/auth/resend-verification', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response: any = await apiClient.post('/auth/resend-verification', {});
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.success) {
         setResendMessage('Verification email sent! Please check your inbox.');
       } else {
-        setResendMessage(data.message || 'Failed to send verification email');
+        setResendMessage(response.message || 'Failed to send verification email');
       }
     } catch (error) {
       console.error('Error resending verification:', error);

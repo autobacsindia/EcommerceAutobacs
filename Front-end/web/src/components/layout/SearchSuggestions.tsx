@@ -175,7 +175,7 @@ export default function SearchSuggestions() {
         return [newHistoryItem, ...filteredHistory].slice(0, 10);
       });
       
-      router.push(`/search?search=${encodeURIComponent(searchQuery.trim())}`);
+      router.push(`/products/search?search=${encodeURIComponent(searchQuery.trim())}`);
       setIsOpen(false);
       setQuery('');
       setActiveIndex(-1);
@@ -183,8 +183,17 @@ export default function SearchSuggestions() {
   };
 
   const handleSuggestionClick = (suggestion: Suggestion) => {
-    setQuery(suggestion.text);
-    handleSearch(suggestion.text);
+    if (suggestion.type === 'brand') {
+      router.push(`/products/search?brand=${encodeURIComponent(suggestion.text)}`);
+    } else if (suggestion.type === 'category') {
+      router.push(`/products/search?category=${encodeURIComponent(suggestion.text)}`);
+    } else if (suggestion.type === 'product') {
+      router.push(`/products/${suggestion.id}`);
+    } else {
+      setQuery(suggestion.text);
+      handleSearch(suggestion.text);
+    }
+    setIsOpen(false);
   };
 
   const handleHistoryItemClick = (term: string) => {

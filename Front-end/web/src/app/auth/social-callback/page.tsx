@@ -55,12 +55,20 @@ export default function SocialCallbackPage() {
           </p>
         ) : (
           <div>
-            <p className="text-sm text-red-600 mb-2">
-              We could not complete your social login.
-            </p>
-            <p className="text-sm text-gray-600">
-              Please try again or use email and password to sign in.
-            </p>
+            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+              <p className="text-sm text-red-800 font-medium">
+                Authentication Failed
+              </p>
+              <p className="text-sm text-red-700 mt-1">
+                We could not complete your social login. Please try again or use email and password to sign in.
+              </p>
+            </div>
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Back to Login
+            </button>
           </div>
         )}
       </div>

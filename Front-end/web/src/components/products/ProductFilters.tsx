@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import productService from '@/lib/services/productService';
 import WoofCategoryList from './WoofCategoryList';
 
 // Define the Category interface inline to avoid import issues
@@ -75,9 +76,12 @@ export default function ProductFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // State for categories
+  // State for categories and brands
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [showCategories, setShowCategories] = useState(true);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [loadingBrands, setLoadingBrands] = useState(true);
+  const [showBrands, setShowBrands] = useState(true);
   
   // Initialize state from URL parameters deterministically
   const [priceRange, setPriceRange] = useState<[number, number]>(() => {
@@ -91,6 +95,15 @@ export default function ProductFilters() {
     const categoryParam = searchParams.get('category');
     if (categoryParam) {
       return categoryParam.split(',').filter(Boolean);
+    }
+    return [];
+  });
+  
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(() => {
+    // Parse multiple brands from URL
+    const brandParam = searchParams.get('brand');
+    if (brandParam) {
+      return brandParam.split(',').filter(Boolean);
     }
     return [];
   });
@@ -166,6 +179,33 @@ export default function ProductFilters() {
     fetchCategories();
   }, []);
 
+  // Fetch brands
+  useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        setLoadingBrands(true);
+        const brandsData = await productService.getBrands();
+        setBrands(brandsData);
+      } catch (err) {
+        console.error('Failed to fetch brands:', err);
+      } finally {
+        setLoadingBrands(false);
+      }
+    };
+
+    fetchBrands();
+  }, []);
+
+  const handleBrandToggle = (brandName: string) => {
+    setSelectedBrands(prev => {
+      if (prev.includes(brandName)) {
+        return prev.filter(b => b !== brandName);
+      } else {
+        return [...prev, brandName];
+      }
+    });
+  };
+
   // Update URL when filters change
   const applyFilters = () => {
     const currentParams = new URLSearchParams(searchParams.toString());
@@ -191,6 +231,13 @@ export default function ProductFilters() {
       currentParams.set('category', selectedCategories.join(','));
     } else {
       currentParams.delete('category');
+    }
+    
+    // Brands - support multiple
+    if (selectedBrands.length > 0) {
+      currentParams.set('brand', selectedBrands.join(','));
+    } else {
+      currentParams.delete('brand');
     }
     
     // In stock only
@@ -263,6 +310,53 @@ export default function ProductFilters() {
               />
             )}
           </>
+        )}
+      </div>
+
+      {/* Brand Filter */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">Brands</h3>
+          <button
+            type="button"
+            onClick={() => setShowBrands(!showBrands)}
+            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded text-gray-700 text-sm leading-none"
+            aria-label={showBrands ? 'Collapse brands' : 'Expand brands'}
+          >
+            {showBrands ? '-' : '+'}
+          </button>
+        </div>
+        
+        {showBrands && (
+          <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+            {loadingBrands ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, index) => (
+                  <div key={index} className="flex items-center animate-pulse">
+                    <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                    <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+                  </div>
+                ))}
+              </div>
+            ) : brands.length > 0 ? (
+              brands.map((brand) => (
+                <div key={brand._id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={`brand-${brand._id}`}
+                    checked={selectedBrands.includes(brand.name)}
+                    onChange={() => handleBrandToggle(brand.name)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor={`brand-${brand._id}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {brand.name}
+                  </label>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No brands available</p>
+            )}
+          </div>
         )}
       </div>
 

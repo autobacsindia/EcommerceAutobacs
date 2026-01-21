@@ -182,6 +182,41 @@ class ProductService {
     }
   }
 
+  // Get all brands
+  async getBrands(limit: number = 50, useStaticData: boolean = false): Promise<{ name: string; _id: string; productCount?: number }[]> {
+    if (useStaticData) {
+      // Extract brands from static products
+      const staticProducts = await this.loadStaticProducts();
+      const brandCounts: Record<string, number> = {};
+      
+      staticProducts.forEach(product => {
+        if (product.brand) {
+          brandCounts[product.brand] = (brandCounts[product.brand] || 0) + 1;
+        }
+      });
+      
+      return Object.keys(brandCounts)
+        .sort()
+        .map(name => ({ 
+          name, 
+          _id: name.toLowerCase().replace(/\s+/g, '-'),
+          productCount: brandCounts[name] 
+        }));
+    } else {
+      try {
+        const response: any = await apiClient.get(`/brands?limit=${limit}`);
+        return response.brands.map((brand: any) => ({
+          name: brand.name,
+          _id: brand._id,
+          productCount: brand.productCount
+        }));
+      } catch (error) {
+        console.error('Error fetching brands from API:', error);
+        return [];
+      }
+    }
+  }
+
   // Get products by category
   async getProductsByCategory(
     categoryId: string, 

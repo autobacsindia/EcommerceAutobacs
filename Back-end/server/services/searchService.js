@@ -221,7 +221,8 @@ class SearchService {
           text: product.name,
           type: 'product',
           category: product.categories && product.categories.length > 0 ? product.categories[0].name : null,
-          imageUrl: imageUrl
+          imageUrl: imageUrl,
+          value: product._id
         });
       }
 
@@ -231,7 +232,8 @@ class SearchService {
         suggestions.push({
           id: `brand-${product.brand.toLowerCase().replace(/\s+/g, '-')}`,
           text: product.brand,
-          type: 'brand'
+          type: 'brand',
+          value: product.brand
         });
       }
     });
@@ -243,7 +245,8 @@ class SearchService {
         suggestions.push({
           id: `category-${category.name.toLowerCase().replace(/\s+/g, '-')}`,
           text: category.name,
-          type: 'category'
+          type: 'category',
+          value: category.name
         });
       }
     });

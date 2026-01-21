@@ -1,6 +1,6 @@
 // API Client for Autobacs India Backend
 // Handles all API communication with the Express backend
-// Updated to fix rate limit issues
+// Updated to fix rate limit issues and add JWT refresh support
 
 // API utility functions with retry logic and error handling
 
@@ -58,6 +58,7 @@ enum ErrorCategory {
 
 // Storage key for JWT token
 const TOKEN_KEY = 'autobacs_auth_token';
+const REFRESH_TOKEN_KEY = 'autobacs_refresh_token';
 
 // Define location-related endpoints that need special rate limit handling
 const locationEndpoints = ['/location/current', '/location/select', '/location/estimate'];
@@ -67,11 +68,15 @@ const locationEndpoints = ['/location/current', '/location/select', '/location/e
  */
 class APIClient {
   private token: string | null = null;
+  private refreshToken: string | null = null;
+  private isRefreshing = false;
+  private refreshSubscribers: ((token: string) => void)[] = [];
 
   constructor() {
     // Initialize token from localStorage if available (client-side only)
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem(TOKEN_KEY);
+      this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     }
   }
 
@@ -86,12 +91,24 @@ class APIClient {
   }
 
   /**
+   * Set refresh token
+   */
+  setRefreshToken(token: string): void {
+    this.refreshToken = token;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    }
+  }
+
+  /**
    * Clear authentication token
    */
   clearAuthToken(): void {
     this.token = null;
+    this.refreshToken = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
     }
   }
 
@@ -100,6 +117,53 @@ class APIClient {
    */
   getAuthToken(): string | null {
     return this.token;
+  }
+
+  /**
+   * Get current refresh token
+   */
+  getRefreshToken(): string | null {
+    return this.refreshToken;
+  }
+
+  /**
+   * Refresh the access token
+   */
+  private async refreshSession(): Promise<string | null> {
+    try {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ refreshToken: this.refreshToken })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success && data.accessToken) {
+        this.setAuthToken(data.accessToken);
+        if (data.refreshToken) {
+          this.setRefreshToken(data.refreshToken);
+        }
+        return data.accessToken;
+      } else {
+        throw new Error('Refresh failed');
+      }
+    } catch (error) {
+      this.clearAuthToken();
+      throw error;
+    }
+  }
+
+  private onRefreshed(token: string) {
+    this.refreshSubscribers.forEach(cb => cb(token));
+    this.refreshSubscribers = [];
+  }
+
+  private addSubscriber(callback: (token: string) => void) {
+    this.refreshSubscribers.push(callback);
   }
 
   /**
@@ -184,605 +248,345 @@ class APIClient {
           throw new ApiError(response.status, errorMessage, response.url, ErrorCategory.CLIENT, rateLimitInfo);
         }
     
-      // Handle authentication errors
-      if (response.status === 401) {
-        this.clearAuthToken();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+        // Handle authentication errors - Removed automatic redirect to allow refresh logic
+        if (response.status === 401) {
+          // Just throw error, let the caller handle refresh/redirect
         }
-      }
     
-      // Extract error message
-      let errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
+        // Extract error message
+        let errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
     
-      // Categorize reverse geocode errors specifically
-      let category: ErrorCategory;
-      if (response.url && response.url.includes('/location/select') && 
-          errorMessage && errorMessage.toLowerCase().includes('reverse geocode')) {
-        errorMessage = 'Failed to reverse geocode coordinates';
+        // Categorize reverse geocode errors specifically
+        let category: ErrorCategory;
+        if (response.url && response.url.includes('/location/select') && 
+            errorMessage && errorMessage.toLowerCase().includes('reverse geocode')) {
+          errorMessage = 'Failed to reverse geocode coordinates';
               
-        if (errorMessage.toLowerCase().includes('zero results')) {
-          category = ErrorCategory.CLIENT; // Invalid coordinates with no address match
-        } else if (errorMessage.toLowerCase().includes('timeout') || response.status === 408) {
-          category = ErrorCategory.TIMEOUT; // Service timeout
-        } else if (response.status >= 500) {
-          category = ErrorCategory.SERVER; // Service unavailable
-        } else {
-          category = ErrorCategory.CLIENT; // General geocoding failure
-        }
-      } else {
-        // For non-reverse geocode errors, use default categorization
-        category = this.categorizeError(response.status, new Error(errorMessage));
-      }
-            
-      // Include validation errors in the message if they exist
-      if (typeof data === 'object' && data.errors && Array.isArray(data.errors)) {
-        const validationErrors = data.errors.map((err: any) => {
-          // Handle different error formats
-          if (err.msg) return err.msg;
-          if (err.message) return err.message;
-          if (err.param && err.msg) return `${err.param}: ${err.msg}`;
-          return 'Validation error';
-        }).join(', ');
-            
-        // Only add validation errors if they provide additional information
-        if (validationErrors && validationErrors !== 'Validation error' && validationErrors !== 'validation error') {
-          errorMessage = `${errorMessage}: ${validationErrors}`;
-        } else if (validationErrors) {
-          // If we only have generic validation errors, use a more descriptive message
-          if (validationErrors === 'Validation error' || validationErrors === 'validation error') {
-            // If we have a general error message, use it with more context
-            if (data.message && data.message !== 'Validation failed') {
-              errorMessage = data.message;
-            } else {
-              errorMessage = 'Validation failed. Please check your input and try again.';
-            }
+          if (errorMessage.toLowerCase().includes('zero results')) {
+            category = ErrorCategory.CLIENT; // Invalid coordinates with no address match
+          } else if (errorMessage.toLowerCase().includes('timeout') || response.status === 408) {
+            category = ErrorCategory.TIMEOUT; // Service timeout
+          } else if (response.status >= 500) {
+            category = ErrorCategory.SERVER; // Service unavailable
           } else {
-            errorMessage = validationErrors;
+            category = ErrorCategory.CLIENT; // General geocoding failure
+          }
+        } else {
+          // For non-reverse geocode errors, use default categorization
+          category = this.categorizeError(response.status, new Error(errorMessage));
+        }
+            
+        // Include validation errors in the message if they exist
+        if (typeof data === 'object' && data.errors && Array.isArray(data.errors)) {
+          const validationErrors = data.errors.map((err: any) => {
+            // Handle different error formats
+            if (err.msg) return err.msg;
+            if (err.message) return err.message;
+            if (err.param && err.msg) return `${err.param}: ${err.msg}`;
+            return 'Validation error';
+          }).join(', ');
+              
+          // Only add validation errors if they provide additional information
+          if (validationErrors && validationErrors !== 'Validation error' && validationErrors !== 'validation error') {
+            errorMessage = `${errorMessage}: ${validationErrors}`;
+          } else if (validationErrors) {
+            // If we only have generic validation errors, use a more descriptive message
+            if (validationErrors === 'Validation error' || validationErrors === 'validation error') {
+              // If we have a general error message, use it with more context
+              if (data.message && data.message !== 'Validation failed') {
+                errorMessage = data.message;
+              } else {
+                errorMessage = 'Validation failed. Please check your input and try again.';
+              }
+            } else {
+              errorMessage = validationErrors;
+            }
           }
         }
+          
+        const apiError = new ApiError(response.status, errorMessage, response.url, category);
+          
+        // Add raw response data to error for debugging
+        apiError.rawData = data;
+        apiError.responseStatus = response.status;
+          
+        throw apiError;
       }
-          
-      const apiError = new ApiError(response.status, errorMessage, response.url, category);
-          
-      // Add raw response data to error for debugging
-      apiError.rawData = data;
-      apiError.responseStatus = response.status;
-          
+    
+      return data;
+    } catch (error) {
+      // Handle abort errors specifically - don't wrap them in ApiError
+      if ((error as any).name === 'AbortError') {
+        // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
+        // Instead, we re-throw the original error which will be caught by the calling function
+        // Only log if there's a meaningful reason
+        if ((error as any).message && (error as any).message !== 'signal is aborted without reason') {
+          console.debug(`Request intentionally aborted for ${(response as any).url}: ${(error as any).message}`);
+        }
+        throw error;
+      }
+    
+      // Better error serialization to avoid empty objects
+      const errorDetails: Record<string, any> = {
+        errorType: typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : undefined,
+        isApiError: error instanceof ApiError
+      };
+    
+      // Add stack trace only if available
+      if (error instanceof Error && error.stack) {
+        errorDetails.errorStack = error.stack;
+      }
+    
+      // Add API-specific error details
+      if ((error as any)?.status !== undefined) {
+        errorDetails.status = (error as any).status;
+      }
+      if ((response as any)?.url) {
+        errorDetails.url = (response as any).url;
+      }
+      if ((error as any)?.category) {
+        errorDetails.category = (error as any).category;
+      }
+      if ((error as any)?.responseStatus !== undefined) {
+        errorDetails.responseStatus = (error as any).responseStatus;
+      }
+    
+      // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
+      // or category endpoints (category might not exist)
+      // or vehicle product endpoints (will fallback to WordPress)
+      const isLocationEndpoint = (response as any).url?.includes('/location/current');
+      const isCategoryEndpoint = (response as any).url?.includes('/categories/slug/');
+      const isVehiclesEndpoint = (response as any).url?.includes('/vehicles/slug/');
+      const isVehicleProductsEndpoint = (response as any).url?.includes('/products/by-vehicle/');
+      const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
+    
+      // Also check if the error is an ApiError with 404 status
+      const isApiError404 = error instanceof ApiError && error.status === 404;
+    
+      // Only log non-rate limit errors to reduce console spam
+      const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
+    
+      // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint
+      // This suppresses expected 404s from location, category, and vehicle endpoints
+      // Also suppress all errors from vehicle products endpoint as it has WordPress fallback
+      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint;
+    
+      if (!shouldSuppressLog) {
+        // Only log non-rate limit errors to reduce console spam
+        if (!isRateLimitError) {
+          console.error('API Response Error:', errorDetails);
+        } else {
+          console.warn('Rate limit hit:', errorDetails);
+        }
+      }
+    
+      // Handle parsing errors
+      if (error instanceof SyntaxError) {
+        throw new ApiError(0, 'Invalid response format', (response as any).url, ErrorCategory.PARSING);
+      }
+
+      // Re-throw ApiError instances
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      // Handle other errors with more context
+      const category = this.categorizeError((response as any).status, error);
+      let errorMessage = 'An unknown error occurred';
+
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+
+      // Add more context for network errors
+      if (category === ErrorCategory.NETWORK) {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+        errorMessage = `Network error: Unable to connect to the server at ${API_BASE_URL}. Please make sure the backend server is running. Details: ${errorMessage}`;
+      }
+
+      const apiError = new ApiError((response as any).status || 0, errorMessage, (response as any).url || '', category);
+
+      // Add error details for debugging
+      apiError.originalError = error;
+
       throw apiError;
     }
-    
-    return data;
-  } catch (error) {
-    // Handle abort errors specifically - don't wrap them in ApiError
-    if ((error as any).name === 'AbortError') {
-      // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
-      // Instead, we re-throw the original error which will be caught by the calling function
-      // Only log if there's a meaningful reason
-      if ((error as any).message && (error as any).message !== 'signal is aborted without reason') {
-        console.debug(`Request intentionally aborted for ${(response as any).url}: ${(error as any).message}`);
-      }
-      throw error;
-    }
-    
-    // Better error serialization to avoid empty objects
-    const errorDetails: Record<string, any> = {
-      errorType: typeof error,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorName: error instanceof Error ? error.name : undefined,
-      isApiError: error instanceof ApiError
-    };
-    
-    // Add stack trace only if available
-    if (error instanceof Error && error.stack) {
-      errorDetails.errorStack = error.stack;
-    }
-    
-    // Add API-specific error details
-    if ((error as any)?.status !== undefined) {
-      errorDetails.status = (error as any).status;
-    }
-    if ((response as any)?.url) {
-      errorDetails.url = (response as any).url;
-    }
-    if ((error as any)?.category) {
-      errorDetails.category = (error as any).category;
-    }
-    if ((error as any)?.responseStatus !== undefined) {
-      errorDetails.responseStatus = (error as any).responseStatus;
-    }
-    
-    // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
-    // or category endpoints (category might not exist)
-    // or vehicle product endpoints (will fallback to WordPress)
-    const isLocationEndpoint = (response as any).url?.includes('/location/current');
-    const isCategoryEndpoint = (response as any).url?.includes('/categories/slug/');
-    const isVehiclesEndpoint = (response as any).url?.includes('/vehicles/slug/');
-    const isVehicleProductsEndpoint = (response as any).url?.includes('/products/by-vehicle/');
-    const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
-    
-    // Also check if the error is an ApiError with 404 status
-    const isApiError404 = error instanceof ApiError && error.status === 404;
-    
-    // Only log non-rate limit errors to reduce console spam
-    const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
-    
-    // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint
-    // This suppresses expected 404s from location, category, and vehicle endpoints
-    // Also suppress all errors from vehicle products endpoint as it has WordPress fallback
-    const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint;
-    
-    if (!shouldSuppressLog) {
-      // Only log non-rate limit errors to reduce console spam
-      if (!isRateLimitError) {
-        console.error('API Response Error:', errorDetails);
-      } else {
-        console.warn('Rate limit hit:', errorDetails);
-      }
-    }
-    
-    // Handle parsing errors
-    if (error instanceof SyntaxError) {
-      throw new ApiError(0, 'Invalid response format', (response as any).url, ErrorCategory.PARSING);
-    }
-
-    // Re-throw ApiError instances
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    // Handle other errors with more context
-    const category = this.categorizeError((response as any).status, error);
-    let errorMessage = 'An unknown error occurred';
-
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === 'string') {
-      errorMessage = error;
-    }
-
-    // Add more context for network errors
-    if (category === ErrorCategory.NETWORK) {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-      errorMessage = `Network error: Unable to connect to the server at ${API_BASE_URL}. Please make sure the backend server is running. Details: ${errorMessage}`;
-    }
-
-    const apiError = new ApiError((response as any).status || 0, errorMessage, (response as any).url || '', category);
-
-    // Add error details for debugging
-    apiError.originalError = error;
-
-    throw apiError;
   }
-}
 
-/**
- * GET request with retry logic for rate limiting
- */
-async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-  const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  
-  // Handle query parameters
-  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-  if (options?.params) {
-    const params = new URLSearchParams(options.params);
-    const separator = finalUrl.includes('?') ? '&' : '?';
-    finalUrl = `${finalUrl}${separator}${params.toString()}`;
-  }
-  
-  // Default settings
-  let retries = options?.retries ?? 3;
-  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
-  const timeout = options?.timeout ?? 30000; // 30 seconds default
-  
-  // Increase retries and delay for location endpoints
-  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
-    retries = 5; // More retries for location endpoints
-    retryDelay = 2000; // Longer initial delay
-  }
-  
-  let lastError: any;
-  
-  for (let i = 0; i <= retries; i++) {
-    // Create abort controller for timeout handling
-    let controller: AbortController | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
+  /**
+   * Internal method to execute requests with retry and refresh logic
+   */
+  private async executeRequest<T>(
+    method: string,
+    endpoint: string,
+    data: any | undefined,
+    options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }
+  ): Promise<T> {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     
-    try {
-      // Use provided signal if available, otherwise create our own timeout controller
-      let signal;
+    // Handle query parameters
+    let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
+    if (options?.params) {
+      const params = new URLSearchParams(options.params);
+      const separator = finalUrl.includes('?') ? '&' : '?';
+      finalUrl = `${finalUrl}${separator}${params.toString()}`;
+    }
+    
+    // Default settings
+    let retries = options?.retries ?? 3;
+    let retryDelay = options?.retryDelay ?? 1000; // 1 second default
+    const timeout = options?.timeout ?? 30000; // 30 seconds default
+    
+    // Increase retries and delay for location endpoints
+    if (locationEndpoints.some(ep => endpoint.includes(ep))) {
+      retries = 5; // More retries for location endpoints
+      retryDelay = 2000; // Longer initial delay
+    }
+    
+    let lastError: any;
+    
+    for (let i = 0; i <= retries; i++) {
+      // Create abort controller for timeout handling
+      let controller: AbortController | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
       
-      if (options?.signal) {
-        // Use the provided signal directly
-        signal = options.signal;
-      } else {
-        // Create our own timeout controller
-        controller = new AbortController();
-        timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
-        signal = controller.signal;
-      }
-      
-      // Remove params from options to avoid passing it to fetch
-      const { params, ...fetchOptionsWithoutParams } = options || {};
-      
-      const fetchOptions = {
-        method: 'GET',
-        headers: this.getHeaders(fetchOptionsWithoutParams?.headers),
-        signal,
-        ...fetchOptionsWithoutParams
-      };
-      
-      const response = await fetch(finalUrl, fetchOptions);
-      
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      return await this.handleResponse(response);
-    } catch (error: any) {
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      // Handle abort errors specifically
-      if (error.name === 'AbortError') {
-        // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
-        // Instead, we re-throw the original error which will be caught by the calling function
-        // Only log if there's a meaningful reason
-        if (error.message && error.message !== 'signal is aborted without reason') {
-          console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+      try {
+        // Use provided signal if available, otherwise create our own timeout controller
+        let signal;
+        
+        if (options?.signal) {
+          // Use the provided signal directly
+          signal = options.signal;
+        } else {
+          // Create our own timeout controller
+          controller = new AbortController();
+          timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
+          signal = controller.signal;
         }
         
-        // Don't retry aborted requests, just re-throw the original AbortError
-        throw error;
-      }
-      
-      lastError = error;
-      
-      // If it's a rate limit error and we have retries left, wait and retry
-      if (error.status === 429 && i < retries) {
-        // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
-        const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
-        // Add jitter to prevent thundering herd problem
-        const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
-        console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+        // Remove params from options to avoid passing it to fetch
+        const { params, ...fetchOptionsWithoutParams } = options || {};
         
-        // Log rate limiting event for monitoring
-        rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+        // Separate headers from other options to prevent conflicts
+        const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
         
-        await new Promise(resolve => setTimeout(resolve, retryAfter));
-        continue;
-      }
-      
-      // For all other errors or if we're out of retries, throw the error
-      throw error;
-    }
-  }
-  
-  // If we get here, we've exhausted all retries
-  throw lastError;
-}
+        const fetchOptions: RequestInit = {
+          ...restOptions,
+          method,
+          headers: this.getHeaders(optionHeaders),
+          signal
+        };
 
-/**
- * POST request with retry logic for rate limiting
- */
-async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-  const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  
-  // Handle query parameters
-  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-  if (options?.params) {
-    const params = new URLSearchParams(options.params);
-    const separator = finalUrl.includes('?') ? '&' : '?';
-    finalUrl = `${finalUrl}${separator}${params.toString()}`;
-  }
-  
-  // Default settings
-  let retries = options?.retries ?? 3;
-  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
-  const timeout = options?.timeout ?? 30000; // 30 seconds default
-  
-  // Increase retries and delay for location endpoints
-  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
-    retries = 5; // More retries for location endpoints
-    retryDelay = 2000; // Longer initial delay
-  }
-  
-  let lastError: any;
-  
-  for (let i = 0; i <= retries; i++) {
-    // Create abort controller for timeout handling
-    let controller: AbortController | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    try {
-      // Use provided signal if available, otherwise create our own timeout controller
-      let signal;
-      
-      if (options?.signal) {
-        // Use the provided signal directly
-        signal = options.signal;
-      } else {
-        // Create our own timeout controller
-        controller = new AbortController();
-        timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
-        signal = controller.signal;
-      }
-      
-      // Remove params from options to avoid passing it to fetch
-      const { params, ...fetchOptionsWithoutParams } = options || {};
-      
-      // Separate headers from other options to prevent conflicts
-      const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
-      
-      const fetchOptions = {
-        ...restOptions,
-        method: 'POST',
-        headers: this.getHeaders(optionHeaders),
-        body: JSON.stringify(data),
-        signal
-      };
-      
-      const response = await fetch(finalUrl, fetchOptions);
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      return await this.handleResponse(response);
-    } catch (error: any) {
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      // Handle abort errors specifically
-      if (error.name === 'AbortError') {
-        // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
-        // Instead, we re-throw the original error which will be caught by the calling function
-        // Only log if there's a meaningful reason
-        if (error.message && error.message !== 'signal is aborted without reason') {
-          console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+        if (data !== undefined) {
+          fetchOptions.body = JSON.stringify(data);
         }
         
-        // Don't retry aborted requests, just re-throw the original AbortError
-        throw error;
-      }
-      
-      lastError = error;
-      
-      // If it's a rate limit error and we have retries left, wait and retry
-      if (error.status === 429 && i < retries) {
-        // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
-        const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
-        // Add jitter to prevent thundering herd problem
-        const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
-        console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+        const response = await fetch(finalUrl, fetchOptions);
         
-        // Log rate limiting event for monitoring
-        rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+        if (timeoutId) clearTimeout(timeoutId);
         
-        await new Promise(resolve => setTimeout(resolve, retryAfter));
-        continue;
-      }
-      
-      // For all other errors or if we're out of retries, throw the error
-      throw error;
-    }
-  }
-  
-  // If we get here, we've exhausted all retries
-  throw lastError;
-}
+        return await this.handleResponse(response);
+      } catch (error: any) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Handle abort errors specifically
+        if (error.name === 'AbortError') {
+          if (error.message && error.message !== 'signal is aborted without reason') {
+            console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+          }
+          throw error;
+        }
 
-/**
- * PUT request with retry logic for rate limiting
- */
-async put<T = any>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-  const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  
-  // Handle query parameters
-  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-  if (options?.params) {
-    const params = new URLSearchParams(options.params);
-    const separator = finalUrl.includes('?') ? '&' : '?';
-    finalUrl = `${finalUrl}${separator}${params.toString()}`;
-  }
-  
-  // Default settings
-  let retries = options?.retries ?? 3;
-  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
-  const timeout = options?.timeout ?? 30000; // 30 seconds default
-  
-  // Increase retries and delay for location endpoints
-  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
-    retries = 5; // More retries for location endpoints
-    retryDelay = 2000; // Longer initial delay
-  }
-  
-  let lastError: any;
-  
-  for (let i = 0; i <= retries; i++) {
-    // Create abort controller for timeout handling
-    let controller: AbortController | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    try {
-      // Use provided signal if available, otherwise create our own timeout controller
-      let signal;
-      
-      if (options?.signal) {
-        // Use the provided signal directly
-        signal = options.signal;
-      } else {
-        // Create our own timeout controller
-        controller = new AbortController();
-        timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
-        signal = controller.signal;
-      }
-      
-      // Remove params from options to avoid passing it to fetch
-      const { params, ...fetchOptionsWithoutParams } = options || {};
-      
-      // Separate headers from other options to prevent conflicts
-      const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
-      
-      const fetchOptions = {
-        ...restOptions,
-        method: 'PUT',
-        headers: this.getHeaders(optionHeaders),
-        body: JSON.stringify(data),
-        signal
-      };
-      
-      const response = await fetch(finalUrl, fetchOptions);
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      return await this.handleResponse(response);
-    } catch (error: any) {
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      // Handle abort errors specifically
-      if (error.name === 'AbortError') {
-        // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
-        // Instead, we re-throw the original error which will be caught by the calling function
-        // Only log if there's a meaningful reason
-        if (error.message && error.message !== 'signal is aborted without reason') {
-          console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+        // Handle Token Refresh on 401
+        // Skip for auth endpoints to avoid infinite loops
+        const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/refresh');
+        
+        if (error.status === 401 && !isAuthEndpoint && this.refreshToken) {
+           if (!this.isRefreshing) {
+             this.isRefreshing = true;
+             try {
+               const newToken = await this.refreshSession();
+               if (newToken) {
+                 this.onRefreshed(newToken);
+               }
+               this.isRefreshing = false;
+               // Retry the request immediately
+               continue;
+             } catch (refreshError) {
+               this.isRefreshing = false;
+               this.clearAuthToken();
+               if (typeof window !== 'undefined') {
+                 window.location.href = '/login';
+               }
+               throw refreshError;
+             }
+           } else {
+             // Wait for refresh to complete
+             return new Promise<T>((resolve, reject) => {
+               this.addSubscriber(() => {
+                 // Retry request after token refresh
+                 resolve(this.executeRequest<T>(method, endpoint, data, options));
+               });
+             });
+           }
         }
         
-        // Don't retry aborted requests, just re-throw the original AbortError
-        throw error;
-      }
-      
-      lastError = error;
-      
-      // If it's a rate limit error and we have retries left, wait and retry
-      if (error.status === 429 && i < retries) {
-        // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
-        const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
-        // Add jitter to prevent thundering herd problem
-        const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
-        console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+        lastError = error;
         
-        // Log rate limiting event for monitoring
-        rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
-        
-        await new Promise(resolve => setTimeout(resolve, retryAfter));
-        continue;
-      }
-      
-      // For all other errors or if we're out of retries, throw the error
-      throw error;
-    }
-  }
-  
-  // If we get here, we've exhausted all retries
-  throw lastError;
-}
-
-/**
- * DELETE request with retry logic for rate limiting
- */
-async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-  const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-  
-  // Handle query parameters
-  let finalUrl = isCompleteUrl ? endpoint : `${API_BASE_URL}${endpoint}`;
-  if (options?.params) {
-    const params = new URLSearchParams(options.params);
-    const separator = finalUrl.includes('?') ? '&' : '?';
-    finalUrl = `${finalUrl}${separator}${params.toString()}`;
-  }
-  
-  // Default settings
-  let retries = options?.retries ?? 3;
-  let retryDelay = options?.retryDelay ?? 1000; // 1 second default
-  const timeout = options?.timeout ?? 30000; // 30 seconds default
-  
-  // Increase retries and delay for location endpoints
-  if (locationEndpoints.some(ep => endpoint.includes(ep))) {
-    retries = 5; // More retries for location endpoints
-    retryDelay = 2000; // Longer initial delay
-  }
-  
-  let lastError: any;
-  
-  for (let i = 0; i <= retries; i++) {
-    // Create abort controller for timeout handling
-    let controller: AbortController | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    try {
-      // Use provided signal if available, otherwise create our own timeout controller
-      let signal;
-      
-      if (options?.signal) {
-        // Use the provided signal directly
-        signal = options.signal;
-      } else {
-        // Create our own timeout controller
-        controller = new AbortController();
-        timeoutId = setTimeout(() => controller!.abort(new DOMException(`Request timeout exceeded after ${timeout}ms. The server may be busy or unavailable.`, 'TimeoutError')), timeout);
-        signal = controller.signal;
-      }
-      
-      // Remove params from options to avoid passing it to fetch
-      const { params, ...fetchOptionsWithoutParams } = options || {};
-      
-      // Separate headers from other options to prevent conflicts
-      const { headers: optionHeaders, ...restOptions } = fetchOptionsWithoutParams || {};
-      
-      const fetchOptions = {
-        ...restOptions,
-        method: 'DELETE',
-        headers: this.getHeaders(optionHeaders),
-        signal
-      };
-      
-      const response = await fetch(finalUrl, fetchOptions);
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      return await this.handleResponse(response);
-    } catch (error: any) {
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      // Handle abort errors specifically
-      if (error.name === 'AbortError') {
-        // For abort errors, we don't want to throw an ApiError as this creates noise in error tracking
-        // Instead, we re-throw the original error which will be caught by the calling function
-        // Only log if there's a meaningful reason
-        if (error.message && error.message !== 'signal is aborted without reason') {
-          console.debug(`Request intentionally aborted for ${finalUrl}: ${error.message}`);
+        // If it's a rate limit error and we have retries left, wait and retry
+        if (error.status === 429 && i < retries) {
+          const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
+          const jitter = Math.random() * 0.25 * baseDelay;
+          const retryAfter = Math.min(baseDelay + jitter, 60000); 
+          console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          
+          rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
+          
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
         }
         
-        // Don't retry aborted requests, just re-throw the original AbortError
+        // For all other errors or if we're out of retries, throw the error
         throw error;
       }
-      
-      lastError = error;
-      
-      // If it's a rate limit error and we have retries left, wait and retry
-      if (error.status === 429 && i < retries) {
-        // Use retry-after header if available, otherwise use default delay with exponential backoff and jitter
-        const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
-        // Add jitter to prevent thundering herd problem
-        const jitter = Math.random() * 0.25 * baseDelay;
-        const retryAfter = Math.min(baseDelay + jitter, 60000); // Cap at 60 seconds for location endpoints
-        console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
-        
-        // Log rate limiting event for monitoring
-        rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
-        
-        await new Promise(resolve => setTimeout(resolve, retryAfter));
-        continue;
-      }
-      
-      // For all other errors or if we're out of retries, throw the error
-      throw error;
     }
+    
+    // If we get here, we've exhausted all retries
+    throw lastError;
   }
-  
-  // If we get here, we've exhausted all retries
-  throw lastError;
-}
+
+  /**
+   * GET request with retry logic for rate limiting
+   */
+  async get<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
+    return this.executeRequest<T>('GET', endpoint, undefined, options);
+  }
+
+  /**
+   * POST request with retry logic for rate limiting
+   */
+  async post<T>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
+    return this.executeRequest<T>('POST', endpoint, data, options);
+  }
+
+  /**
+   * PUT request with retry logic for rate limiting
+   */
+  async put<T = any>(endpoint: string, data: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
+    return this.executeRequest<T>('PUT', endpoint, data, options);
+  }
+
+  /**
+   * DELETE request with retry logic for rate limiting
+   */
+  async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
+    return this.executeRequest<T>('DELETE', endpoint, undefined, options);
+  }
 }
 
 // Create and export singleton instance
