@@ -73,6 +73,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
   const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number } | null>(null);
+  const [showQuestionForm, setShowQuestionForm] = useState(false);
 
   // Get currently compared products from URL
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
@@ -282,9 +283,16 @@ function ProductDetailPageClient({ product }: { product: any }) {
                 {product.totalReviews || 0} Reviews
               </a>
               <span className="text-gray-300">|</span>
-              <a href="#qa" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowQuestionForm(true);
+                  document.getElementById('qa')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
                 Ask a Question
-              </a>
+              </button>
             </div>
 
             {/* Price */}
@@ -535,7 +543,29 @@ function ProductDetailPageClient({ product }: { product: any }) {
               )}
 
               <section id="qa">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">Questions & Answers</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">Questions & Answers</h2>
+                  {!showQuestionForm && (
+                    <button 
+                      onClick={() => setShowQuestionForm(true)}
+                      className="text-blue-600 font-medium hover:underline"
+                    >
+                      Ask a Question
+                    </button>
+                  )}
+                </div>
+
+                {showQuestionForm && (
+                  <div className="mb-8">
+                    <QuestionForm 
+                      productId={product._id} 
+                      onSuccess={() => {
+                        // Keep the success message visible
+                      }} 
+                    />
+                  </div>
+                )}
+
                 {product.qna && product.qna.length > 0 ? (
                   <div className="space-y-4">
                     {product.qna.map((item: any, index: number) => (
@@ -552,12 +582,17 @@ function ProductDetailPageClient({ product }: { product: any }) {
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-                    <p className="text-gray-500 mb-4">Have a question about this product?</p>
-                    <button className="text-blue-600 font-medium hover:underline">
-                      Ask a Question
-                    </button>
-                  </div>
+                  !showQuestionForm && (
+                    <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+                      <p className="text-gray-500 mb-4">Have a question about this product?</p>
+                      <button 
+                        onClick={() => setShowQuestionForm(true)}
+                        className="text-blue-600 font-medium hover:underline"
+                      >
+                        Ask a Question
+                      </button>
+                    </div>
+                  )
                 )}
               </section>
             </div>

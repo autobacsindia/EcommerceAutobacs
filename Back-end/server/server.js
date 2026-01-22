@@ -119,6 +119,7 @@ app.use("/products", publicBrowsingRateLimit, productRoutes);
 app.use("/categories", publicBrowsingRateLimit, categoryRoutes);
 app.use("/vehicles", publicBrowsingRateLimit, vehicleRoutes);
 app.use("/brands", publicBrowsingRateLimit, brandRoutes);
+app.use("/product-questions", publicBrowsingRateLimit, productQuestionRoutes);
 
 // Authenticated user endpoints (600 req/min, burst 200) - cart, profile, wishlist
 app.use("/cart", authenticatedUserRateLimit, cartRoutes);
