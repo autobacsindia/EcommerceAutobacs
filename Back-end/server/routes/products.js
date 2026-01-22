@@ -249,20 +249,19 @@ router.get('/by-vehicle/:vehicleId', asyncHandler(async (req, res) => {
 // @access  Public
 router.get('/brands', asyncHandler(async (req, res) => {
   try {
-    // Get all unique brands from products
-    const brandNames = await Product.distinct('brand', { 
-      brand: { $exists: true, $ne: null, $ne: '' },
-      isActive: true
-    });
-    
-    // Create or get brand documents to ensure consistent ObjectIds
     const Brand = (await import('../models/Brand.js')).default;
     
-    // Use aggregation to get product counts efficiently
+    // Get all active brands from the Brand collection first
+    // This ensures we only show brands that are explicitly managed and active
+    const brands = await Brand.find({ isActive: true }).sort({ name: 1 });
+    
+    // Get product counts for these brands
+    const brandNames = brands.map(b => b.name);
+    
     const productCounts = await Product.aggregate([
       {
         $match: {
-          brand: { $exists: true, $ne: null, $ne: '' },
+          brand: { $in: brandNames },
           isActive: true
         }
       },
@@ -280,41 +279,20 @@ router.get('/brands', asyncHandler(async (req, res) => {
       countMap[item._id] = item.count;
     });
     
-    // Process each brand to ensure it exists in the Brand collection
-    const brandInfo = [];
-    for (const brandName of brandNames) {
-      const slug = brandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      
-      // Find or create brand document to get consistent ObjectId
-      let brandDoc = await Brand.findOne({ slug });
-      if (!brandDoc) {
-        // Create new brand document if it doesn't exist
-        brandDoc = new Brand({
-          name: brandName,
-          slug: slug,
-          isActive: true
-        });
-        await brandDoc.save();
-      }
-      
-      // Get product count from the map
-      const productCount = countMap[brandName] || 0;
-      
-      // Only include brands with products
-      if (productCount > 0) {
-        brandInfo.push({
-          id: brandDoc._id.toString(), // Proper ObjectId string
-          name: brandName,
-          slug: slug,
+    // Construct the response
+    const brandInfo = brands
+      .map(brand => {
+        const productCount = countMap[brand.name] || 0;
+        return {
+          id: brand._id.toString(),
+          name: brand.name,
+          slug: brand.slug,
           productCount: productCount,
-          logo: brandDoc.logo || null,
-          description: brandDoc.description || null
-        });
-      }
-    }
-    
-    // Sort brands alphabetically by name
-    brandInfo.sort((a, b) => a.name.localeCompare(b.name));
+          logo: brand.logo || null,
+          description: brand.description || null
+        };
+      })
+      .filter(b => b.productCount > 0); // Only show brands with products
     
     res.json({
       success: true,

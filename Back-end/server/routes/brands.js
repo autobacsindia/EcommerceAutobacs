@@ -188,7 +188,7 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // @route   DELETE /brands/:id
-// @desc    Delete brand (soft delete)
+// @desc    Delete brand
 // @access  Private/Admin
 router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
   const brand = await Brand.findById(req.params.id);
@@ -205,9 +205,8 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
     brand: { $regex: new RegExp(`^${brand.name}$`, 'i') } 
   });
 
-  // Soft delete
-  brand.isActive = false;
-  await brand.save();
+  // Hard delete
+  await Brand.findByIdAndDelete(req.params.id);
 
   res.json({
     success: true,

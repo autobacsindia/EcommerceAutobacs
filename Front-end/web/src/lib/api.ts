@@ -592,6 +592,13 @@ class APIClient {
   }
 
   /**
+   * PATCH request with retry logic for rate limiting
+   */
+  async patch<T = any>(endpoint: string, data?: any, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {
+    return this.executeRequest<T>('PATCH', endpoint, data, options);
+  }
+
+  /**
    * DELETE request with retry logic for rate limiting
    */
   async delete<T>(endpoint: string, options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }): Promise<T> {

@@ -88,6 +88,8 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
       if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
       if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
+      if (searchParams.isFeatured) queryParams.append('isFeatured', searchParams.isFeatured);
+      if (searchParams.isFastMoving) queryParams.append('isFastMoving', searchParams.isFastMoving);
       
       // Handle multiple ratings
       if (searchParams.rating) {
@@ -341,9 +343,17 @@ export default function ProductsPageClient() {
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold mb-2">Our Products</h1>
+          <h1 className="text-4xl font-bold mb-2">
+            {searchParams.get('isFeatured') === 'true' 
+              ? 'Featured Products' 
+              : searchParams.get('isFastMoving') === 'true'
+                ? 'Fast-Moving Products'
+                : 'Our Products'}
+          </h1>
           <p className="text-blue-100">
-            Explore our premium collection of automotive accessories and performance parts
+            {searchParams.get('isFeatured') === 'true' 
+              ? 'Explore our fast-moving and most popular automotive accessories'
+              : 'Explore our premium collection of automotive accessories and performance parts'}
           </p>
         </div>
       </div>

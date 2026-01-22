@@ -83,6 +83,14 @@ export default function FastMovingProducts({
 
   const handleAddToCart = async (productId: string, e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent navigation to product page
+
+    if (!isAuthenticated) {
+      toast.error('Please login to add items to cart');
+      router.push('/login?redirect=/');
+      return;
+    }
+
     try {
       await addToCart(productId, 1);
       toast.success('Added to cart!');
@@ -128,7 +136,7 @@ export default function FastMovingProducts({
       <section className={`py-16 bg-white ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Fast-Moving Products</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Products</h2>
             <p className="text-gray-600">Popular products customers love to buy</p>
           </div>
           
@@ -158,7 +166,7 @@ export default function FastMovingProducts({
       <section className={`py-16 bg-white ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Fast-Moving Products</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Products</h2>
             <p className="text-gray-600">Popular products customers love to buy</p>
           </div>
           
@@ -210,7 +218,7 @@ export default function FastMovingProducts({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Fast-Moving Products</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Products</h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
             Popular products customers love to buy
           </p>
@@ -337,7 +345,7 @@ export default function FastMovingProducts({
           <ViewAllCard
             href="/products?isFeatured=true"
             title="View All"
-            subtitle="Fast-Moving Products"
+            subtitle="Featured Products"
             gradient="from-orange-500 to-red-600"
           />
         </div>

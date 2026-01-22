@@ -417,10 +417,40 @@ function ProductDetailPageClient({ product }: { product: any }) {
           <div className="lg:col-span-2 space-y-12">
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Product Description</h2>
-              <div className="prose prose-blue max-w-none text-gray-600 leading-relaxed">
+              <div className="prose prose-blue max-w-none text-gray-600 leading-relaxed whitespace-pre-line">
                 {product.description}
               </div>
             </section>
+
+            {/* Why Choose Section */}
+            {product.whyChoose && product.whyChoose.length > 0 && (
+              <section>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Why Choose {product.name}?</h2>
+                <div className="space-y-4">
+                  {product.whyChoose.map((item: string, index: number) => {
+                    // Check for separator
+                    const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
+                    
+                    if (separator) {
+                      const [title, ...rest] = item.split(separator);
+                      const description = rest.join(separator);
+                      return (
+                        <div key={index} className="leading-relaxed text-gray-700">
+                          <span className="font-bold text-gray-900">{title}</span>
+                          <span>{separator}{description}</span>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <p key={index} className="text-gray-700 leading-relaxed">
+                        {item}
+                      </p>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {product.features && product.features.length > 0 && (
               <section>

@@ -34,6 +34,7 @@ class SearchService {
       search,
       vehicle,
       isFeatured,
+      isFastMoving,
       inStock,
       rating,
       sortBy = 'createdAt',
@@ -96,6 +97,7 @@ class SearchService {
     
     if (vehicle) query.compatibleVehicles = vehicle;
     if (isFeatured) query.isFeatured = isFeatured === 'true';
+    if (isFastMoving) query.isFastMoving = isFastMoving === 'true';
     
     // In stock filtering
     if (inStock === 'true') {

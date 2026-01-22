@@ -56,6 +56,7 @@ const ProductSchema = new mongoose.Schema({
     value: { type: String }
   }],
   features: [String],
+  whyChoose: [String],
   packageContents: [String],
   qna: [{
     question: { type: String, required: true },
@@ -66,6 +67,10 @@ const ProductSchema = new mongoose.Schema({
     default: true
   },
   isFeatured: {
+    type: Boolean,
+    default: false
+  },
+  isFastMoving: {
     type: Boolean,
     default: false
   },

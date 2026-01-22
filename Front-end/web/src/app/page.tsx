@@ -9,6 +9,7 @@ import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
 
 import FastMovingProducts from '@/components/products/FastMovingProducts';
+import ModernFastMovingSection from '@/components/products/ModernFastMovingSection';
 import KeepShoppingWidget from '@/components/products/KeepShoppingWidget';
 import SuperCarsBanner from '@/components/layout/SuperCarsBanner';
 import HeroBanner from '@/components/layout/HeroBanner';
@@ -246,7 +247,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Fast-Moving Products Section */}
+      {/* Fast Moving Products Section */}
+      <ModernFastMovingSection limit={4} />
+
+      {/* Featured Products Section */}
       <FastMovingProducts limit={4} />
 
       {/* Super Cars Premium Banner */}

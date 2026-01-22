@@ -80,7 +80,7 @@ export default function AdminBrandsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete the brand "${name}"? This will deactivate the brand but keep products associated with it.`)) return;
+    if (!confirm(`Are you sure you want to permanently delete the brand "${name}"? This action cannot be undone.`)) return;
     
     try {
       await apiClient.delete(API_ENDPOINTS.BRAND_DELETE(id));
