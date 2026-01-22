@@ -2,7 +2,7 @@ import express from "express";
 import ProductQuestion from "../models/ProductQuestion.js";
 import Product from "../models/Product.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import asyncHandler from "express-async-handler";
+import { asyncHandler } from "../middleware/errorMiddleware.js";
 
 const router = express.Router();
 
