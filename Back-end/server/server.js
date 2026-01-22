@@ -23,6 +23,7 @@ import deliveryZoneRoutes from "./routes/deliveryZones.js";
 import razorpayRoutes from "./routes/razorpay.js";
 import brandRoutes from "./routes/brands.js";
 import wordpressRoutes from "./routes/wordpress.js";
+import productQuestionRoutes from "./routes/productQuestions.js";
 import tokenIntrospectionRoutes from "./routes/tokenIntrospection.js";
 import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
 import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
