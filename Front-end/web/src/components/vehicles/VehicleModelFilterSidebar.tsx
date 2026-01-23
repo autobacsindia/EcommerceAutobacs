@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowRight } from 'lucide-react';
 
 interface VehicleMake {
   _id: string;
@@ -134,6 +135,16 @@ export default function VehicleModelFilterSidebar({ currentVehicleSlug }: Vehicl
     router.push(`/model/${currentVehicleSlug}?${currentParams.toString()}`);
   };
 
+  const handleBrowseParts = () => {
+    if (selectedMake && selectedModel) {
+      // Generate slug consistent with other parts of the application
+      const makeSlug = selectedMake.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const modelSlug = selectedModel.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const fullSlug = `${makeSlug}-${modelSlug}`;
+      router.push(`/model/${fullSlug}`);
+    }
+  };
+
   const clearVehicleFilters = () => {
     setSelectedMake('');
     setSelectedModel('');
@@ -224,6 +235,18 @@ export default function VehicleModelFilterSidebar({ currentVehicleSlug }: Vehicl
           </select>
         </div>
       </div>
+
+      {selectedMake && selectedModel && (
+        <div className="mt-4">
+          <button
+            onClick={handleBrowseParts}
+            className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
+          >
+            <span>Browse {selectedModel} Parts</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {(currentVehicleMake || currentVehicleModel) && (
         <div className="mt-4 pt-4 border-t border-gray-200">
