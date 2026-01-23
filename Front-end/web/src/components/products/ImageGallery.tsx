@@ -355,6 +355,7 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
             height={600}
             className="object-cover w-full h-full"
             context="product"
+            priority={true}
             onLoad={handleMainImageLoad}
           />
         </div>

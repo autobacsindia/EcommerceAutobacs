@@ -8,15 +8,34 @@ import PageLoader from '@/components/layout/PageLoader';
 import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
 
-import FastMovingProducts from '@/components/products/FastMovingProducts';
-import ModernFastMovingSection from '@/components/products/ModernFastMovingSection';
-import KeepShoppingWidget from '@/components/products/KeepShoppingWidget';
-import SuperCarsBanner from '@/components/layout/SuperCarsBanner';
 import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 
-// Dynamically import VehicleSelector to avoid SSR issues
-const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { ssr: false });
+// Dynamically import components to improve initial load time
+const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { 
+  ssr: false,
+  loading: () => <div className="h-96 bg-gray-50 animate-pulse rounded-lg" />
+});
+
+const FastMovingProducts = dynamic(() => import('@/components/products/FastMovingProducts'), {
+  loading: () => <div className="h-96 bg-gray-50 animate-pulse" />
+});
+
+const ModernFastMovingSection = dynamic(() => import('@/components/products/ModernFastMovingSection'), {
+  loading: () => <div className="h-96 bg-gray-50 animate-pulse" />
+});
+
+const KeepShoppingWidget = dynamic(() => import('@/components/products/KeepShoppingWidget'), {
+  loading: () => <div className="h-64 bg-gray-50 animate-pulse rounded-lg" />
+});
+
+const RecentlyViewedProducts = dynamic(() => import('@/components/products/RecentlyViewedProducts'), {
+  ssr: false 
+});
+
+const SuperCarsBanner = dynamic(() => import('@/components/layout/SuperCarsBanner'), {
+  loading: () => <div className="h-80 bg-gray-900 animate-pulse" />
+});
 
 export default function Home() {
   const isMounted = useIsMounted();
@@ -247,8 +266,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Fast Moving Products Section */}
-      <ModernFastMovingSection limit={4} />
+      {/* Fast Moving Products Section - Modern Design */}
+      <ModernFastMovingSection />
 
       {/* Featured Products Section */}
       <FastMovingProducts limit={4} />
@@ -361,6 +380,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Recently Viewed Section */}
+      <RecentlyViewedProducts />
 
       {/* CTA Section */}
       <section className="bg-blue-600 text-white py-16">

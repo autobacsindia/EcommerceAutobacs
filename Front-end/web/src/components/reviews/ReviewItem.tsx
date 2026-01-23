@@ -74,10 +74,13 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
           <div className={styles.reviewImages}>
             {images.map((image, index) => (
               <div key={index} className={styles.imageContainer}>
-                <img 
+                <EnhancedImage 
                   src={image.url} 
                   alt={image.alt || `Review image ${index + 1}`} 
+                  width={100}
+                  height={100}
                   className={styles.reviewImage}
+                  context="product"
                 />
               </div>
             ))}

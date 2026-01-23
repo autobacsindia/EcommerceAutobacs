@@ -3,13 +3,9 @@
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 
-interface EnhancedImageProps {
+interface EnhancedImageProps extends Omit<React.ComponentProps<typeof Image>, 'src' | 'alt'> {
   src: string | null | undefined;
   alt: string;
-  width?: number;
-  height?: number;
-  priority?: boolean;
-  className?: string;
   fallbackSrc?: string;
   context?: 'product' | 'category' | 'profile' | 'generic';
 }
@@ -22,7 +18,8 @@ export default function EnhancedImage({
   priority = false,
   className = '',
   fallbackSrc,
-  context = 'generic'
+  context = 'generic',
+  ...props
 }: EnhancedImageProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -111,9 +108,17 @@ export default function EnhancedImage({
     );
   }
 
-  // Ensure we always have width and height for Next.js Image component
-  const imageWidth = width || 200;
-  const imageHeight = height || 200;
+  // Ensure we always have width and height for Next.js Image component unless fill is used
+  const isFill = props.fill === true;
+  const imageWidth = !isFill ? (width || 200) : undefined;
+  const imageHeight = !isFill ? (height || 200) : undefined;
+
+  const handleLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    setImageLoaded(true);
+    if (props.onLoad) {
+      props.onLoad(e);
+    }
+  };
 
   return (
     <Image
@@ -124,8 +129,8 @@ export default function EnhancedImage({
       priority={priority}
       className={`${className} ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
       onError={() => setImageError(true)}
-      onLoad={() => setImageLoaded(true)}
-      unoptimized={true} // Allow external images without optimization
+      {...props}
+      onLoad={handleLoad}
     />
   );
 }

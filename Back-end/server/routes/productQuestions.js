@@ -108,4 +108,23 @@ router.put("/:id/answer", protect, admin, asyncHandler(async (req, res) => {
   });
 }));
 
+// @desc    Delete a question
+// @route   DELETE /api/product-questions/:id
+// @access  Private/Admin
+router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+  const question = await ProductQuestion.findById(req.params.id);
+
+  if (!question) {
+    res.status(404);
+    throw new Error("Question not found");
+  }
+
+  await ProductQuestion.deleteOne({ _id: question._id });
+
+  res.json({
+    success: true,
+    message: "Question deleted successfully"
+  });
+}));
+
 export default router;

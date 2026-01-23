@@ -55,11 +55,14 @@ class LocationService {
     const debugInfo = {
       sessionId: this.sessionId,
       hasAuthToken: !!apiClient.getAuthToken(),
-      willSendSessionId: !!(this.sessionId && !apiClient.getAuthToken())
+      willSendSessionId: !!this.sessionId
     };
     console.log('LocationService.getHeaders() debug:', JSON.stringify(debugInfo, null, 2));
     
-    if (this.sessionId && !apiClient.getAuthToken()) {
+    // Always send session ID if available
+    // This ensures that if the auth token is invalid (expired/malformed),
+    // the backend can still identify the user as a guest via session ID
+    if (this.sessionId) {
       headers['x-session-id'] = this.sessionId;
     }
     

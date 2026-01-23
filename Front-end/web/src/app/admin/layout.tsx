@@ -4,7 +4,20 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { LayoutDashboard, Package, ShoppingCart, Users, FolderOpen, MessageCircle, RotateCcw, DollarSign, GitBranch, Tag, Car } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  Package, 
+  FolderOpen, 
+  Tag, 
+  Car,
+  ShoppingCart, 
+  Users, 
+  RotateCcw,
+  DollarSign,
+  GitBranch,
+  MessageCircle,
+  HelpCircle
+} from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -36,6 +49,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { icon: DollarSign, label: 'Refunds', href: '/admin/refunds' },
     { icon: GitBranch, label: 'Workflows', href: '/admin/workflows' },
     { icon: MessageCircle, label: 'Reviews', href: '/admin/reviews' },
+    { icon: HelpCircle, label: 'Questions', href: '/admin/questions' },
     { icon: Users, label: 'Users', href: '/admin/users' },
   ];
 

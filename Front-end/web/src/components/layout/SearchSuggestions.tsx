@@ -358,15 +358,14 @@ export default function SearchSuggestions() {
                             }`}
                           >
                             {suggestion.imageUrl && (
-                              <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-md overflow-hidden">
-                                <img 
+                              <div className="flex-shrink-0 w-10 h-10 bg-gray-200 rounded-md overflow-hidden relative">
+                                <EnhancedImage 
                                   src={suggestion.imageUrl} 
                                   alt={suggestion.text}
+                                  width={40}
+                                  height={40}
                                   className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                  }}
+                                  context="product"
                                 />
                               </div>
                             )}

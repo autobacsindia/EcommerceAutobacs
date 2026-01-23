@@ -8,6 +8,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import ImageGallery from '@/components/products/ImageGallery';
+import QuestionForm from '@/components/products/QuestionForm';
+import QuestionList from '@/components/products/QuestionList';
+import TrustBadges from '@/components/products/TrustBadges';
+import RecentlyViewed from '@/components/products/RecentlyViewed';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 
@@ -66,7 +70,7 @@ async function getProduct(id: string): Promise<any> {
 function ProductDetailPageClient({ product }: { product: any }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCart } = useCart();
   const [isWishlisted, setIsWishlisted] = useState(false);
@@ -84,6 +88,31 @@ function ProductDetailPageClient({ product }: { product: any }) {
       setIsWishlisted(isInWishlist(product._id));
     }
   }, [product, isInWishlist]);
+
+  // Save to recently viewed
+  useEffect(() => {
+    if (product) {
+      try {
+        const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
+        const recent = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        // Remove duplicate if exists
+        const filtered = recent.filter((p: any) => p._id !== product._id);
+        // Add to front
+        const newRecent = [{
+          _id: product._id,
+          name: product.name,
+          price: product.price,
+          originalPrice: product.originalPrice,
+          image: product.images?.[0]?.url,
+          slug: product.slug
+        }, ...filtered].slice(0, 10); // Keep last 10
+        
+        localStorage.setItem(storageKey, JSON.stringify(newRecent));
+      } catch (e) {
+        console.error('Failed to save recently viewed', e);
+      }
+    }
+  }, [product, user]);
 
   // Separate effect for initializing specs to avoid conflicts with other dependencies
   useEffect(() => {
@@ -389,6 +418,9 @@ function ProductDetailPageClient({ product }: { product: any }) {
               </button>
             </div>
 
+            {/* Trust Badges */}
+            <TrustBadges />
+
             {/* Meta Info */}
             <div className="space-y-3 text-sm text-gray-500">
               {product.sku && (
@@ -566,34 +598,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
                   </div>
                 )}
 
-                {product.qna && product.qna.length > 0 ? (
-                  <div className="space-y-4">
-                    {product.qna.map((item: any, index: number) => (
-                      <div key={index} className="bg-white border border-gray-200 rounded-xl p-6">
-                        <div className="flex items-start gap-3 mb-3">
-                          <span className="flex-shrink-0 h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">Q</span>
-                          <h3 className="font-semibold text-gray-900">{item.question}</h3>
-                        </div>
-                        <div className="flex items-start gap-3 pl-9">
-                          <span className="flex-shrink-0 h-6 w-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-xs">A</span>
-                          <p className="text-gray-600">{item.answer}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  !showQuestionForm && (
-                    <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-                      <p className="text-gray-500 mb-4">Have a question about this product?</p>
-                      <button 
-                        onClick={() => setShowQuestionForm(true)}
-                        className="text-blue-600 font-medium hover:underline"
-                      >
-                        Ask a Question
-                      </button>
-                    </div>
-                  )
-                )}
+                <QuestionList productId={product._id} legacyQna={product.qna} />
               </section>
             </div>
 

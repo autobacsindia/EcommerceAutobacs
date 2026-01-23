@@ -36,6 +36,7 @@ export default function CreateProductPage() {
     stock: '',
     sku: '',
     isFeatured: false,
+    isFastMoving: false,
     isActive: true,
   });
   
@@ -356,6 +357,22 @@ export default function CreateProductPage() {
                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Mark as featured</span>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fast Moving Product
+              </label>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="isFastMoving"
+                  checked={formData.isFastMoving}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Mark as fast moving</span>
               </div>
             </div>
           </div>

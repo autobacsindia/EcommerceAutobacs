@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import EnhancedImage from '@/components/layout/EnhancedImage';
 import productService from '@/lib/services/productService';
 import { Product } from '@/lib/types';
 
@@ -26,15 +27,14 @@ const ProductCard = ({ product }: ProductCardProps) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
-      <div className="aspect-square overflow-hidden">
-        <img 
+      <div className="aspect-square overflow-hidden relative">
+        <EnhancedImage 
           src={primaryImage} 
           alt={product.name} 
+          width={300}
+          height={300}
           className="w-full h-full object-cover"
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.src = productService.getProductPlaceholderImage();
-          }}
+          context="product"
         />
       </div>
       <div className="p-4">

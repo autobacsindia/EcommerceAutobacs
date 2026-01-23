@@ -8,6 +8,7 @@ import ScheduledImportService from "../services/scheduledImportService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateProduct } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { cacheResponse } from "../middleware/cacheMiddleware.js";
 import { cleanupWordPressProducts } from "../utils/wordpressProductCleanup.js";
 import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
 
@@ -16,7 +17,7 @@ const router = express.Router();
 // @route   GET /products
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", cacheResponse(300), asyncHandler(async (req, res) => {
   const searchResults = await SearchService.searchProducts(req.query);
   
   res.json({
@@ -31,7 +32,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
 // @access  Public
-router.get("/suggestions", asyncHandler(async (req, res) => {
+router.get("/suggestions", cacheResponse(300), asyncHandler(async (req, res) => {
   const { q, limit = 10 } = req.query;
   const result = await SearchService.getSearchSuggestions(q, parseInt(limit));
   

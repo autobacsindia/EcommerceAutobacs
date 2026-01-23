@@ -216,18 +216,24 @@ export default function ProductComparison() {
                   </button>
                   
                   {/* Product Image */}
-                  <div className="w-32 h-32 mb-4">
+                  <div className="w-32 h-32 mb-4 relative">
                     {Array.isArray(product.images) && product.images.length > 0 ? (
-                      <img 
+                      <EnhancedImage 
                         src={product.images[0].url} 
                         alt={product.images[0].alt || product.name}
+                        width={128}
+                        height={128}
                         className="w-full h-full object-contain"
+                        context="product"
                       />
                     ) : typeof product.images === 'string' ? (
-                      <img 
+                      <EnhancedImage 
                         src={product.images} 
                         alt={product.name}
+                        width={128}
+                        height={128}
                         className="w-full h-full object-contain"
+                        context="product"
                       />
                     ) : (
                       <div className="bg-gray-200 border-2 border-dashed rounded-xl w-full h-full" />
