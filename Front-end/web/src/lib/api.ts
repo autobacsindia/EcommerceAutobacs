@@ -516,8 +516,18 @@ class APIClient {
         // Skip for auth endpoints to avoid infinite loops
         const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/refresh');
         
-        if (error.status === 401 && !isAuthEndpoint && this.refreshToken) {
-           if (!this.isRefreshing) {
+        if (error.status === 401 && !isAuthEndpoint) {
+          if (!this.refreshToken) {
+            console.warn('Authentication failed: No refresh token available. Redirecting to login.');
+            this.clearAuthToken();
+            if (typeof window !== 'undefined') {
+              // Use window.location to force a full page refresh and clear any stale state
+              window.location.href = '/login?reason=session_expired';
+            }
+            throw error;
+          }
+
+          if (!this.isRefreshing) {
              this.isRefreshing = true;
              try {
                const newToken = await this.refreshSession();
@@ -528,14 +538,15 @@ class APIClient {
                // Retry the request immediately
                continue;
              } catch (refreshError) {
-               this.isRefreshing = false;
-               this.clearAuthToken();
-               if (typeof window !== 'undefined') {
-                 window.location.href = '/login';
-               }
-               throw refreshError;
-             }
-           } else {
+              this.isRefreshing = false;
+              this.clearAuthToken();
+              console.error('Token refresh failed:', refreshError);
+              if (typeof window !== 'undefined') {
+                window.location.href = '/login?reason=refresh_failed';
+              }
+              throw refreshError;
+            }
+          } else {
              // Wait for refresh to complete
              return new Promise<T>((resolve, reject) => {
                this.addSubscriber(() => {
