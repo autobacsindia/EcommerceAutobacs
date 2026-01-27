@@ -70,7 +70,7 @@ const OrderSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"], 
+    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded", "failed"], 
     default: "pending" 
   },
   statusHistory: [{
@@ -230,13 +230,14 @@ OrderSchema.pre('save', function(next) {
 // Method to get valid next statuses
 OrderSchema.methods.getValidNextStatuses = function() {
   const transitions = {
-    'pending': ['confirmed', 'cancelled'],
+    'pending': ['confirmed', 'cancelled', 'failed'],
     'confirmed': ['processing', 'cancelled'],
     'processing': ['shipped', 'cancelled'],
     'shipped': ['delivered'],
     'delivered': ['refunded'],
     'cancelled': [],
-    'refunded': []
+    'refunded': [],
+    'failed': []
   };
   return transitions[this.status] || [];
 };

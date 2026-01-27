@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star } from 'lucide-react';
+import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address, PaginatedOrders, PaymentMethod, PaginatedUserReviews } from '@/lib/types';
+import { TimelineProgress } from '@/components/tracking/TimelineProgress';
+import { OrderStatus } from '@/types/tracking';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -615,56 +617,71 @@ export default function ProfilePage() {
 
           {orders && orders.orders.length > 0 ? (
             <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Order ID
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Items
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {orders.orders.map((order) => (
-                      <tr key={order._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                          {order._id.substring(0, 8)}...
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(order.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} items
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ₹{order.totalAmount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+              <div className="space-y-6">
+                {orders.orders.map((order) => (
+                  <div key={order._id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow bg-white">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Link href={`/orders/${order._id}`} className="font-semibold text-lg text-gray-900 hover:text-blue-600 transition">
+                            Order #{order._id.substring(0, 8).toUpperCase()}
+                          </Link>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                            order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            order.status === 'cancelled' || order.status === 'failed' ? 'bg-red-100 text-red-800' :
                             order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
                             {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg text-blue-600">₹{(order.totalAmount || 0).toFixed(2)}</p>
+                        <p className="text-sm text-gray-500">
+                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} items
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <TimelineProgress currentStatus={order.status as OrderStatus} />
+                    </div>
+
+                    <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {order.items.slice(0, 4).map((item, idx) => (
+                          <div key={idx} className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center overflow-hidden">
+                            {item.image ? (
+                              <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <Package className="h-4 w-4 text-gray-400" />
+                            )}
+                          </div>
+                        ))}
+                        {order.items.length > 4 && (
+                          <div className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-500">
+                            +{order.items.length - 4}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <Link 
+                        href={`/orders/${order._id}`}
+                        className="flex items-center text-blue-600 font-medium hover:text-blue-800"
+                      >
+                        View Details <ChevronRight className="h-4 w-4 ml-1" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {/* Pagination */}

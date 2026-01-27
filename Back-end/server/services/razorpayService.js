@@ -268,15 +268,39 @@ class RazorpayService {
    */
   async handlePaymentFailure(paymentEntity) {
     try {
-      // Find payment record
+      // 1. Try to find and update payment record if it exists
       const paymentRecord = await Payment.findOne({ gatewayPaymentId: paymentEntity.id });
       if (paymentRecord) {
         paymentRecord.status = 'failed';
         paymentRecord.failureReason = paymentEntity.error_description || paymentEntity.error_reason;
         await paymentRecord.save();
-        
-        console.log(`Payment failure recorded for payment ${paymentEntity.id}:`, paymentEntity.error_description);
       }
+
+      // 2. Update Order status to 'failed'
+      // Extract orderId from notes if available
+      const orderId = paymentEntity.notes ? paymentEntity.notes.orderId : null;
+      
+      if (orderId) {
+        const order = await Order.findById(orderId);
+        if (order) {
+          // Only update if status is pending (don't overwrite other terminal states)
+          if (order.status === 'pending') {
+            await orderStatusService.updateOrderStatus(orderId, 'failed', {
+              userId: null, // System update
+              isAdmin: true,
+              reason: 'payment_failed',
+              notes: `Payment failed via Razorpay. Reason: ${paymentEntity.error_description || paymentEntity.error_reason || 'Unknown'}`,
+              metadata: {
+                gatewayId: paymentEntity.id,
+                failureReason: paymentEntity.error_description
+              }
+            });
+            console.log(`Order ${orderId} marked as failed due to payment failure`);
+          }
+        }
+      }
+      
+      console.log(`Payment failure processed for payment ${paymentEntity.id}`);
     } catch (error) {
       console.error('Error handling payment failure:', error);
     }

@@ -418,6 +418,7 @@ export default function AdminOrdersPage() {
                       <option value="shipped">Shipped</option>
                       <option value="delivered">Delivered</option>
                       <option value="cancelled">Cancelled</option>
+                      <option value="failed">Failed</option>
                     </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

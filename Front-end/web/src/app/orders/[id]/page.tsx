@@ -8,10 +8,12 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { 
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle, 
-  XCircle, Clock, AlertCircle, Download, RotateCcw, X 
+  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2 
 } from 'lucide-react';
 import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
+import { TimelineProgress } from '@/components/tracking/TimelineProgress';
+import { OrderStatus } from '@/types/tracking';
 
 interface OrderDetail {
   _id: string;
@@ -120,6 +122,21 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleDeleteOrder = async () => {
+    if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await apiClient.delete(`${API_ENDPOINTS.ORDERS}/${orderId}`);
+      router.push('/orders');
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete order');
+      setLoading(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -156,6 +173,10 @@ export default function OrderDetailPage() {
     
     const daysSinceDelivery = (new Date().getTime() - new Date(deliveredAt).getTime()) / (1000 * 60 * 60 * 24);
     return daysSinceDelivery <= 30;
+  };
+
+  const canDeleteOrder = (status: string) => {
+    return ['cancelled', 'failed'].includes(status.toLowerCase());
   };
 
   const getProgressPercentage = (status: string) => {
@@ -240,26 +261,10 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Progress Bar */}
-        {!['cancelled', 'refunded'].includes(order.status.toLowerCase()) && (
-          <div className="mt-6">
-            <div className="relative">
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-600 transition-all duration-500"
-                  style={{ width: `${getProgressPercentage(order.status)}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between mt-2 text-xs text-gray-600">
-                <span>Placed</span>
-                <span>Confirmed</span>
-                <span>Processing</span>
-                <span>Shipped</span>
-                <span>Delivered</span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Progress Bar (Roadmap) */}
+        <div className="mt-8 mb-4">
+          <TimelineProgress currentStatus={order.status as OrderStatus} />
+        </div>
       </div>
 
       {/* Action Buttons */}
@@ -292,6 +297,15 @@ export default function OrderDetailPage() {
             >
               <RotateCcw className="h-5 w-5" />
               Request Return
+            </button>
+          )}
+          {canDeleteOrder(order.status) && (
+            <button
+              onClick={handleDeleteOrder}
+              className="flex items-center gap-2 px-4 py-2 border-2 border-red-500 text-red-600 rounded-lg hover:bg-red-50 transition font-medium"
+            >
+              <Trash2 className="h-5 w-5" />
+              Delete Order
             </button>
           )}
           <button
@@ -377,7 +391,7 @@ export default function OrderDetailPage() {
           <div className="grid md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-blue-600 mb-1">Refund Amount</p>
-              <p className="font-bold text-xl">₹{order.refundDetails.amount.toFixed(2)}</p>
+              <p className="font-bold text-xl">₹{(order.refundDetails.amount || 0).toFixed(2)}</p>
             </div>
             <div>
               <p className="text-sm text-blue-600 mb-1">Status</p>
@@ -386,7 +400,7 @@ export default function OrderDetailPage() {
             <div>
               <p className="text-sm text-blue-600 mb-1">Method</p>
               <p className="font-medium">
-                {order.refundDetails.refundMethod.replace(/_/g, ' ').toUpperCase()}
+                {(order.refundDetails.refundMethod || '').replace(/_/g, ' ').toUpperCase()}
               </p>
             </div>
           </div>
@@ -449,25 +463,25 @@ export default function OrderDetailPage() {
           <div className="space-y-2 text-gray-700">
             <div className="flex justify-between">
               <span>Subtotal:</span>
-              <span>₹{order.subtotal.toFixed(2)}</span>
+              <span>₹{(order.subtotal || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Shipping:</span>
-              <span>₹{order.shippingCost.toFixed(2)}</span>
+              <span>₹{(order.shippingCost || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Tax:</span>
-              <span>₹{order.tax.toFixed(2)}</span>
+              <span>₹{(order.tax || 0).toFixed(2)}</span>
             </div>
-            {order.discount > 0 && (
+            {(order.discount || 0) > 0 && (
               <div className="flex justify-between text-green-600">
                 <span>Discount:</span>
-                <span>-₹{order.discount.toFixed(2)}</span>
+                <span>-₹{(order.discount || 0).toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-lg pt-2 border-t">
               <span>Total:</span>
-              <span className="text-blue-600">₹{order.totalAmount.toFixed(2)}</span>
+              <span className="text-blue-600">₹{(order.totalAmount || 0).toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -509,10 +523,10 @@ export default function OrderDetailPage() {
                     <p className="font-semibold">{productName}</p>
                   )}
                   <p className="text-gray-600 text-sm mt-1">Quantity: {item.quantity}</p>
-                  <p className="text-gray-600 text-sm">Price: ₹{item.price.toFixed(2)} each</p>
+                  <p className="text-gray-600 text-sm">Price: ₹{(item.price || 0).toFixed(2)} each</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-lg">₹{(item.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-bold text-lg">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>
                 </div>
               </div>
             );

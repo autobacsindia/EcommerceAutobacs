@@ -125,6 +125,7 @@ export default function OrdersPage() {
       delivered: 'bg-green-100 text-green-800 border-green-200',
       cancelled: 'bg-red-100 text-red-800 border-red-200',
       refunded: 'bg-gray-100 text-gray-800 border-gray-200',
+      failed: 'bg-red-100 text-red-800 border-red-200',
     };
     return colors[status.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
@@ -138,6 +139,7 @@ export default function OrdersPage() {
       delivered: '✅',
       cancelled: '❌',
       refunded: '💰',
+      failed: '❌',
     };
     return icons[status.toLowerCase()] || '📋';
   };
@@ -231,6 +233,7 @@ export default function OrdersPage() {
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
               <option value="refunded">Refunded</option>
+              <option value="failed">Failed</option>
             </select>
 
             {/* Sort */}

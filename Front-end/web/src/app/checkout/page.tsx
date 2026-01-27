@@ -70,6 +70,11 @@ export default function CheckoutPage() {
   const handlePlaceOrder = async () => {
     try {
       setLoading(true);
+      
+      const subtotal = cart?.total || 0;
+      const tax = subtotal * 0.18;
+      const totalAmount = subtotal + tax;
+      
       const orderData = {
         shippingAddress: {
           fullName: address.fullName,
@@ -86,7 +91,11 @@ export default function CheckoutPage() {
           quantity: item.quantity,
           price: item.product.price,
         })),
-        totalAmount: cart?.total || 0,
+        subtotal,
+        tax,
+        shippingCost: 0,
+        discount: 0,
+        totalAmount,
       };
 
       const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData);
@@ -120,6 +129,10 @@ export default function CheckoutPage() {
         throw new Error('Failed to create Razorpay order');
       }
 
+      // Track if payment outcome has been determined (success or failure)
+      // This prevents ondismiss from triggering redundant cancellations
+      let isPaymentProcessed = false;
+
       const razorpayOptions = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
         amount: razorpayResponse.data.amount,
@@ -128,6 +141,7 @@ export default function CheckoutPage() {
         description: `Order #${orderId}`,
         order_id: razorpayResponse.data.orderId,
         handler: async function (response: any) {
+          isPaymentProcessed = true;
           try {
             // Verify payment
             const verifyResponse = await apiClient.post('/razorpay/verify-payment', {
@@ -150,8 +164,28 @@ export default function CheckoutPage() {
           }
         },
         modal: {
-          ondismiss: function () {
-            alert('Payment was cancelled. You can try again or choose another method.');
+          ondismiss: async function () {
+            // If payment was already processed (success or failure), do nothing
+            if (isPaymentProcessed) return;
+
+            try {
+              await apiClient.put(`/orders/${orderId}/cancel`, {
+                reason: 'customer_request',
+                notes: 'Payment cancelled by user'
+              });
+              alert('Order cancelled as payment was not completed.');
+              router.push(`/orders/${orderId}`);
+            } catch (error: any) {
+              // Ignore if order is already failed or cancelled
+              const errorMessage = error.message || '';
+              if (errorMessage.includes('failed') || errorMessage.includes('cannot be cancelled')) {
+                 console.log('Order already in terminal state, ignoring cancel request');
+                 router.push(`/orders/${orderId}`);
+                 return;
+              }
+              console.error('Failed to cancel order:', error);
+              alert('Payment cancelled.');
+            }
           }
         },
         prefill: {
@@ -169,10 +203,27 @@ export default function CheckoutPage() {
       }
 
       const rzp = new window.Razorpay(razorpayOptions);
-      rzp.on('payment.failed', function (response: any) {
+      rzp.on('payment.failed', async function (response: any) {
+        isPaymentProcessed = true;
         const reason =
           (response && (response.error?.description || response.error?.reason)) ||
           'Payment declined. Please try another card or method.';
+        
+        try {
+          // Mark order as failed in backend
+          await apiClient.put(`/orders/${orderId}/payment-failed`, {
+            reason: 'payment_failed',
+            paymentId: response.error?.metadata?.payment_id,
+            errorDescription: reason
+          });
+        } catch (error: any) {
+          // Ignore if order is already failed
+          const errorMessage = error.message || '';
+          if (!errorMessage.includes('failed')) {
+             console.error('Failed to update order status:', error);
+          }
+        }
+
         alert(reason);
       });
       rzp.open();
@@ -270,9 +321,23 @@ export default function CheckoutPage() {
             ))}
           </div>
           <div className="bg-gray-50 p-6 rounded-lg mb-6">
+            <div className="space-y-3 mb-4 border-b pb-4">
+              <div className="flex justify-between text-gray-600">
+                <span>Subtotal:</span>
+                <span>₹{cart?.total?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Shipping:</span>
+                <span className="text-green-600">FREE</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Tax (18% GST):</span>
+                <span>₹{((cart?.total || 0) * 0.18).toFixed(2)}</span>
+              </div>
+            </div>
             <div className="flex justify-between text-xl font-bold">
               <span>Total:</span>
-              <span>₹{cart?.total?.toFixed(2)}</span>
+              <span>₹{((cart?.total || 0) * 1.18).toFixed(2)}</span>
             </div>
           </div>
           <button
@@ -395,8 +460,19 @@ export default function CheckoutPage() {
               <p>{PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod}</p>
             </div>
             <div>
-              <h3 className="font-bold mb-2">Order Total</h3>
-              <p className="text-2xl font-bold text-blue-600">₹{cart?.total?.toFixed(2)}</p>
+              <h3 className="font-bold mb-2">Order Summary</h3>
+              <div className="flex justify-between text-sm mb-1">
+                <span>Subtotal:</span>
+                <span>₹{cart?.total?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm mb-1">
+                <span>Tax (18% GST):</span>
+                <span>₹{((cart?.total || 0) * 0.18).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold text-blue-600 border-t pt-2 mt-2">
+                <span>Total:</span>
+                <span>₹{((cart?.total || 0) * 1.18).toFixed(2)}</span>
+              </div>
             </div>
           </div>
           <button

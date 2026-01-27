@@ -10,13 +10,14 @@ import Order from '../models/Order.js';
  * Each status maps to an array of allowed next statuses
  */
 const STATUS_TRANSITIONS = {
-  'pending': ['confirmed', 'cancelled'],
+  'pending': ['confirmed', 'cancelled', 'failed'],
   'confirmed': ['processing', 'cancelled'],
   'processing': ['shipped', 'cancelled'],
   'shipped': ['delivered'],
   'delivered': ['refunded'],
   'cancelled': [], // Terminal state
-  'refunded': []   // Terminal state
+  'refunded': [],   // Terminal state
+  'failed': []      // Terminal state
 };
 
 /**
@@ -37,7 +38,8 @@ const TRANSITION_REASONS = {
   'shipped': ['handed_to_carrier', 'label_created', 'in_transit'],
   'delivered': ['customer_received', 'left_at_door', 'signed_for'],
   'cancelled': ['customer_request', 'out_of_stock', 'payment_failed', 'fraud_suspected', 'duplicate_order'],
-  'refunded': ['return_completed', 'damaged_item', 'quality_issue', 'order_cancelled']
+  'refunded': ['return_completed', 'damaged_item', 'quality_issue', 'order_cancelled'],
+  'failed': ['payment_failed', 'gateway_error', 'timeout']
 };
 
 class OrderStatusService {

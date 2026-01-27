@@ -37,7 +37,6 @@ router.get('/stream', protect, admin, async (req, res) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': process.env.FRONTEND_URL || '*',
     'X-Accel-Buffering': 'no' // Disable nginx buffering
   });
 

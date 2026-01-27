@@ -222,6 +222,101 @@ router.put("/:id/cancel", protect, validateCancellation, asyncHandler(async (req
   });
 }));
 
+// @route   PUT /orders/:id/payment-failed
+// @desc    Mark order as failed due to payment failure
+// @access  Private
+router.put("/:id/payment-failed", protect, asyncHandler(async (req, res) => {
+  const { reason, paymentId, errorDescription } = req.body;
+  const order = await Order.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      message: 'Order not found'
+    });
+  }
+
+  // Ensure user owns the order
+  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized'
+    });
+  }
+
+  // Only allow if pending
+  if (order.status !== 'pending') {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot mark order as failed. Current status: ${order.status}`
+    });
+  }
+
+  // Use status service to update
+  const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'failed', {
+    userId: req.user.id,
+    isAdmin: req.user.role === 'admin',
+    reason: reason || 'payment_failed',
+    notes: `Payment failed reported by client. ${errorDescription ? 'Error: ' + errorDescription : ''}`,
+    metadata: {
+      paymentId,
+      errorDescription
+    }
+  });
+
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Order marked as failed',
+    order: result.order
+  });
+}));
+
+// @route   DELETE /orders/:id
+// @desc    Delete an order (Only cancelled or failed orders)
+// @access  Private
+router.delete("/:id", protect, asyncHandler(async (req, res) => {
+  const order = await Order.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      message: 'Order not found'
+    });
+  }
+
+  // Ensure user owns the order (or is admin)
+  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized to delete this order'
+    });
+  }
+
+  // Only allow deleting cancelled or failed orders
+  const deletableStatuses = ['cancelled', 'failed'];
+  if (!deletableStatuses.includes(order.status)) {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot delete order with status '${order.status}'. Only cancelled or failed orders can be deleted.`
+    });
+  }
+
+  await order.deleteOne();
+
+  res.json({
+    success: true,
+    message: 'Order deleted successfully',
+    id: req.params.id
+  });
+}));
+
 // @route   PUT /orders/:id/status
 // @desc    Update order status with validation (Admin only)
 // @access  Private/Admin
@@ -693,29 +788,22 @@ router.post("/:id/return", protect, asyncHandler(async (req, res) => {
     });
   }
   
-  // Validate images (max 5, each < 5MB)
-  if (images && images.length > 5) {
-    return res.status(400).json({
-      success: false,
-      message: 'Maximum 5 images allowed per return request'
-    });
-  }
-  
   // Create return request
-  order.returnRequest = {
-    requestedAt: new Date(),
-    requestedBy: req.user.id,
-    reason,
-    status: 'pending',
+  const returnRequest = {
     items: items.map(item => ({
-      product: item.product,
+      product: item.productId,
       quantity: item.quantity,
-      reason: item.reason || reason
+      reason: item.reason || reason,
+      condition: item.condition || 'opened'
     })),
+    status: 'pending',
+    reason,
+    description,
     images: images || [],
-    description
+    requestedAt: new Date()
   };
   
+  order.returnRequest = returnRequest;
   await order.save();
   
   res.status(201).json({
@@ -729,10 +817,7 @@ router.post("/:id/return", protect, asyncHandler(async (req, res) => {
 // @desc    Get return request details
 // @access  Private
 router.get("/:id/return", protect, asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id)
-    .populate('returnRequest.requestedBy', 'name email')
-    .populate('returnRequest.approvedBy', 'name email')
-    .populate('returnRequest.items.product', 'name images price');
+  const order = await Order.findById(req.params.id);
   
   if (!order) {
     return res.status(404).json({
@@ -741,11 +826,11 @@ router.get("/:id/return", protect, asyncHandler(async (req, res) => {
     });
   }
   
-  // Verify access (order owner or admin)
+  // Verify user owns the order
   if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
-      message: 'Not authorized to access this return request'
+      message: 'Not authorized to access this order'
     });
   }
   
@@ -762,11 +847,11 @@ router.get("/:id/return", protect, asyncHandler(async (req, res) => {
   });
 }));
 
-// @route   PUT /orders/:id/return/approve
-// @desc    Approve return request (Admin only)
+// @route   PUT /orders/:id/return/status
+// @desc    Update return request status (Admin only)
 // @access  Private/Admin
-router.put("/:id/return/approve", protect, admin, asyncHandler(async (req, res) => {
-  const { notes, returnShippingLabel } = req.body;
+router.put("/:id/return/status", protect, admin, asyncHandler(async (req, res) => {
+  const { status, adminNotes, refundAmount } = req.body;
   
   const order = await Order.findById(req.params.id);
   
@@ -780,232 +865,50 @@ router.put("/:id/return/approve", protect, admin, asyncHandler(async (req, res) 
   if (!order.returnRequest) {
     return res.status(404).json({
       success: false,
-      message: 'No return request found'
+      message: 'No return request found for this order'
     });
   }
   
-  if (order.returnRequest.status !== 'pending') {
-    return res.status(400).json({
-      success: false,
-      message: `Cannot approve return request with status: ${order.returnRequest.status}`
-    });
+  // Update status
+  order.returnRequest.status = status;
+  if (adminNotes) {
+    order.returnRequest.adminNotes = adminNotes;
   }
   
-  order.returnRequest.status = 'approved';
-  order.returnRequest.approvedBy = req.user.id;
-  order.returnRequest.approvedAt = new Date();
-  order.returnRequest.adminNotes = notes;
-  order.returnRequest.returnShippingLabel = returnShippingLabel;
+  // If approved and refund amount provided, process refund logic here
+  // (Simplified for now - just recording it)
+  if (status === 'approved' && refundAmount) {
+    order.refundDetails = {
+      amount: refundAmount,
+      status: 'pending',
+      refundMethod: 'original_payment',
+      requestedAt: new Date()
+    };
+    
+    // Also update order status to refunded if full refund
+    if (refundAmount >= order.totalAmount) {
+      await orderStatusService.updateOrderStatus(order._id, 'refunded', {
+        userId: req.user.id,
+        isAdmin: true,
+        reason: 'return_approved',
+        notes: 'Return request approved and refunded'
+      });
+      // Re-fetch to get updated status
+      const updatedOrder = await Order.findById(req.params.id);
+      return res.json({
+        success: true,
+        message: 'Return request updated and order refunded',
+        order: updatedOrder
+      });
+    }
+  }
   
   await order.save();
   
   res.json({
     success: true,
-    message: 'Return request approved successfully',
+    message: 'Return request status updated',
     returnRequest: order.returnRequest
-  });
-}));
-
-// @route   PUT /orders/:id/return/reject
-// @desc    Reject return request (Admin only)
-// @access  Private/Admin
-router.put("/:id/return/reject", protect, admin, asyncHandler(async (req, res) => {
-  const { reason } = req.body;
-  
-  const order = await Order.findById(req.params.id);
-  
-  if (!order) {
-    return res.status(404).json({
-      success: false,
-      message: 'Order not found'
-    });
-  }
-  
-  if (!order.returnRequest) {
-    return res.status(404).json({
-      success: false,
-      message: 'No return request found'
-    });
-  }
-  
-  if (order.returnRequest.status !== 'pending') {
-    return res.status(400).json({
-      success: false,
-      message: `Cannot reject return request with status: ${order.returnRequest.status}`
-    });
-  }
-  
-  if (!reason) {
-    return res.status(400).json({
-      success: false,
-      message: 'Rejection reason is required'
-    });
-  }
-  
-  order.returnRequest.status = 'rejected';
-  order.returnRequest.approvedBy = req.user.id;
-  order.returnRequest.approvedAt = new Date();
-  order.returnRequest.rejectedReason = reason;
-  
-  await order.save();
-  
-  res.json({
-    success: true,
-    message: 'Return request rejected',
-    returnRequest: order.returnRequest
-  });
-}));
-
-// @route   PUT /orders/:id/return/received
-// @desc    Mark return item as received (Admin only)
-// @access  Private/Admin
-router.put("/:id/return/received", protect, admin, asyncHandler(async (req, res) => {
-  const { inspectionNotes } = req.body;
-  
-  const order = await Order.findById(req.params.id);
-  
-  if (!order) {
-    return res.status(404).json({
-      success: false,
-      message: 'Order not found'
-    });
-  }
-  
-  if (!order.returnRequest || order.returnRequest.status !== 'approved') {
-    return res.status(400).json({
-      success: false,
-      message: 'Return request must be approved before marking as received'
-    });
-  }
-  
-  order.returnRequest.status = 'item_received';
-  order.returnRequest.itemReceivedAt = new Date();
-  order.returnRequest.inspectionNotes = inspectionNotes;
-  
-  await order.save();
-  
-  res.json({
-    success: true,
-    message: 'Return item marked as received',
-    returnRequest: order.returnRequest
-  });
-}));
-
-// @route   POST /orders/:id/return/refund
-// @desc    Process refund for returned items (Admin only)
-// @access  Private/Admin
-router.post("/:id/return/refund", protect, admin, asyncHandler(async (req, res) => {
-  const { amount, refundType, refundMethod, notes, itemsRefunded } = req.body;
-  
-  const order = await Order.findById(req.params.id);
-  
-  if (!order) {
-    return res.status(404).json({
-      success: false,
-      message: 'Order not found'
-    });
-  }
-  
-  if (!order.returnRequest || order.returnRequest.status !== 'item_received') {
-    return res.status(400).json({
-      success: false,
-      message: 'Return items must be received before processing refund'
-    });
-  }
-  
-  // Validate refund amount
-  if (!amount || amount <= 0 || amount > order.totalAmount) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid refund amount'
-    });
-  }
-  
-  // Validate refund type
-  const validRefundTypes = ['full', 'partial'];
-  if (!refundType || !validRefundTypes.includes(refundType)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid refund type. Must be full or partial'
-    });
-  }
-  
-  // Validate refund method
-  const validRefundMethods = ['original_payment', 'store_credit', 'bank_transfer'];
-  if (!refundMethod || !validRefundMethods.includes(refundMethod)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid refund method'
-    });
-  }
-  
-  // Create refund record
-  order.refundDetails = {
-    requestedAt: new Date(),
-    amount,
-    refundType,
-    refundMethod,
-    itemsRefunded: itemsRefunded || order.returnRequest.items,
-    status: 'pending',
-    processedBy: req.user.id,
-    notes
-  };
-  
-  // Update return request status
-  order.returnRequest.status = 'refund_processed';
-  
-  await order.save();
-  
-  res.status(201).json({
-    success: true,
-    message: 'Refund initiated successfully',
-    refundDetails: order.refundDetails
-  });
-}));
-
-// @route   GET /orders/admin/returns
-// @desc    Get all return requests (Admin only)
-// @access  Private/Admin
-router.get("/admin/returns", protect, admin, asyncHandler(async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
-  
-  const query = {};
-  if (status) {
-    query['returnRequest.status'] = status;
-  } else {
-    // Only get orders with return requests
-    query['returnRequest'] = { $exists: true, $ne: null };
-  }
-  
-  const skip = (Number(page) - 1) * Number(limit);
-  
-  const orders = await Order.find(query)
-    .populate('user', 'name email')
-    .populate('returnRequest.requestedBy', 'name email')
-    .populate('returnRequest.approvedBy', 'name email')
-    .populate('returnRequest.items.product', 'name images price')
-    .sort({ 'returnRequest.requestedAt': -1 })
-    .skip(skip)
-    .limit(Number(limit));
-  
-  const total = await Order.countDocuments(query);
-  
-  const returns = orders.map(order => ({
-    orderId: order._id,
-    orderNumber: order._id,
-    user: order.user,
-    totalAmount: order.totalAmount,
-    returnRequest: order.returnRequest,
-    refundDetails: order.refundDetails
-  }));
-  
-  res.json({
-    success: true,
-    count: returns.length,
-    total,
-    pages: Math.ceil(total / Number(limit)),
-    currentPage: Number(page),
-    returns
   });
 }));
 

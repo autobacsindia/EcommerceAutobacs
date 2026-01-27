@@ -20,7 +20,7 @@ export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
   const progress = currentStep?.value || 0;
   
   // Handle cancelled/refunded status
-  const isCancelled = currentStatus === 'cancelled' || currentStatus === 'refunded';
+  const isCancelled = currentStatus === 'cancelled' || currentStatus === 'refunded' || currentStatus === 'failed';
 
   return (
     <div className="w-full">

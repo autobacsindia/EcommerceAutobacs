@@ -92,6 +92,7 @@ export const ORDER_STATUS = {
   SHIPPED: 'shipped',
   DELIVERED: 'delivered',
   CANCELLED: 'cancelled',
+  FAILED: 'failed',
 } as const;
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
@@ -100,6 +101,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   [ORDER_STATUS.SHIPPED]: 'Shipped',
   [ORDER_STATUS.DELIVERED]: 'Delivered',
   [ORDER_STATUS.CANCELLED]: 'Cancelled',
+  [ORDER_STATUS.FAILED]: 'Failed',
 };
 
 export const ORDER_STATUS_COLORS: Record<string, string> = {
@@ -108,6 +110,7 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   [ORDER_STATUS.SHIPPED]: 'bg-purple-100 text-purple-800',
   [ORDER_STATUS.DELIVERED]: 'bg-green-100 text-green-800',
   [ORDER_STATUS.CANCELLED]: 'bg-red-100 text-red-800',
+  [ORDER_STATUS.FAILED]: 'bg-red-100 text-red-800',
 };
 
 // User Roles

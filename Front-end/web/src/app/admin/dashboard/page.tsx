@@ -100,7 +100,10 @@ export default function AdminDashboardPage() {
     }
   }, [isAuthenticated, user, authLoading, router]);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+  const apiUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:5000';
   const sseUrl = `${apiUrl}/dashboard/stream`;
 
   // Handle SSE messages

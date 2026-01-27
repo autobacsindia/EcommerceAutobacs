@@ -61,6 +61,7 @@ export function useSSE({
     abortControllerRef.current = abortController;
 
     try {
+      console.log(`SSE: Connecting to ${url}`);
       const response = await fetch(url, {
         method: 'GET',
         headers: {

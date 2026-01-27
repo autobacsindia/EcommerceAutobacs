@@ -25,7 +25,8 @@ export type OrderStatus =
   | 'shipped'
   | 'delivered'
   | 'cancelled'
-  | 'refunded';
+  | 'refunded'
+  | 'failed';
 
 export interface Carrier {
   name: string;
