@@ -49,7 +49,10 @@ class RazorpayService {
         amount: amount, // Amount in paise
         currency: currency,
         receipt: receipt || `receipt_${orderId}`,
-        payment_capture: 1 // Auto-capture payment
+        payment_capture: 1, // Auto-capture payment
+        notes: {
+          orderId: orderId
+        }
       };
       
       const razorpayOrder = await instance.orders.create(options);
@@ -210,21 +213,22 @@ class RazorpayService {
 
   /**
    * Handle Razorpay webhook events
-   * @param {Object} webhookData - Webhook payload
+   * @param {string|Buffer} rawBody - Raw webhook body for signature verification
    * @param {string} signature - Webhook signature
    * @returns {Promise<Object>} Processing result
    */
-  async handleWebhook(webhookData, signature) {
+  async handleWebhook(rawBody, signature) {
     try {
       // Verify webhook signature
       const shasum = crypto.createHmac('sha256', this.key_secret);
-      shasum.update(JSON.stringify(webhookData));
+      shasum.update(rawBody);
       const digest = shasum.digest('hex');
       
       if (digest !== signature) {
         throw new Error('Webhook signature verification failed');
       }
       
+      const webhookData = JSON.parse(rawBody.toString());
       const event = webhookData.event;
       const payload = webhookData.payload;
       

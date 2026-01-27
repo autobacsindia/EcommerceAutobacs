@@ -88,7 +88,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.total
+          total: response.cart.totalPrice || response.cart.total || 0
         };
         
         setCart(cartData);
@@ -136,7 +136,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.total
+          total: response.cart.totalPrice || response.cart.total || 0
         };
         
         setCart(cartData);
@@ -171,7 +171,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.total
+          total: response.cart.totalPrice || response.cart.total || 0
         };
         
         setCart(cartData);
@@ -208,7 +208,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.total
+          total: response.cart.totalPrice || response.cart.total || 0
         };
         
         setCart(cartData);

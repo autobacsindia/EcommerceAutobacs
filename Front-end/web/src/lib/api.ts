@@ -279,27 +279,27 @@ class APIClient {
         // Include validation errors in the message if they exist
         if (typeof data === 'object' && data.errors && Array.isArray(data.errors)) {
           const validationErrors = data.errors.map((err: any) => {
-            // Handle different error formats
+            if (typeof err === 'string') return err;
             if (err.msg) return err.msg;
             if (err.message) return err.message;
             if (err.param && err.msg) return `${err.param}: ${err.msg}`;
             return 'Validation error';
           }).join(', ');
-              
-          // Only add validation errors if they provide additional information
-          if (validationErrors && validationErrors !== 'Validation error' && validationErrors !== 'validation error') {
-            errorMessage = `${errorMessage}: ${validationErrors}`;
-          } else if (validationErrors) {
-            // If we only have generic validation errors, use a more descriptive message
-            if (validationErrors === 'Validation error' || validationErrors === 'validation error') {
-              // If we have a general error message, use it with more context
+
+          if (validationErrors) {
+            const allGenericValidationErrors = validationErrors
+              .split(',')
+              .map(msg => msg.trim().toLowerCase())
+              .every(msg => msg === 'validation error');
+
+            if (!allGenericValidationErrors) {
+              errorMessage = `${errorMessage}: ${validationErrors}`;
+            } else {
               if (data.message && data.message !== 'Validation failed') {
                 errorMessage = data.message;
               } else {
                 errorMessage = 'Validation failed. Please check your input and try again.';
               }
-            } else {
-              errorMessage = validationErrors;
             }
           }
         }

@@ -68,7 +68,8 @@ router.post("/create-order", protect, [
 router.post("/verify-payment", protect, [
   body('razorpay_order_id').notEmpty().withMessage('Razorpay order ID is required'),
   body('razorpay_payment_id').notEmpty().withMessage('Razorpay payment ID is required'),
-  body('razorpay_signature').notEmpty().withMessage('Razorpay signature is required')
+  body('razorpay_signature').notEmpty().withMessage('Razorpay signature is required'),
+  body('orderId').optional().isString().withMessage('Order ID must be a string')
 ], asyncHandler(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -80,7 +81,7 @@ router.post("/verify-payment", protect, [
   }
 
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
     
     // Verify payment signature
     const verificationResult = await razorpayService.verifyPayment({
@@ -96,12 +97,19 @@ router.post("/verify-payment", protect, [
       });
     }
     
-    // Find order by Razorpay order ID
-    const order = await Order.findOne({ 'payment.gatewayOrderId': razorpay_order_id });
+    // Find order
+    let order;
+    if (orderId) {
+      order = await Order.findById(orderId);
+    } else {
+      // Fallback: try to find by gatewayOrderId (will likely fail if Payment record doesn't exist yet)
+      order = await Order.findOne({ 'payment.gatewayOrderId': razorpay_order_id });
+    }
+
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found for this payment'
+        message: 'Order not found'
       });
     }
     
@@ -139,11 +147,8 @@ router.post("/webhook", express.raw({ type: 'application/json' }), asyncHandler(
       });
     }
     
-    // Parse webhook data
-    const webhookData = JSON.parse(req.body);
-    
     // Handle webhook
-    const result = await razorpayService.handleWebhook(webhookData, signature);
+    const result = await razorpayService.handleWebhook(req.body, signature);
     
     res.json({
       success: true,

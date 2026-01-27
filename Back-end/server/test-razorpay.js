@@ -48,6 +48,59 @@ async function testRazorpayService() {
     });
     console.log('✅ Payment method mapping works correctly\n');
     
+    // Test 3: Webhook Signature Verification
+    console.log('Test 3: Webhook Signature Verification');
+    const crypto = await import('crypto');
+    
+    // Create a mock webhook payload
+    const mockPayload = {
+      entity: 'event',
+      account_id: 'acc_test_123',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_test_123',
+            amount: 1000,
+            currency: 'INR',
+            status: 'captured'
+          }
+        }
+      }
+    };
+    
+    const rawBody = JSON.stringify(mockPayload);
+    
+    // Sign it with the configured secret
+    const shasum = crypto.default.createHmac('sha256', razorpayService.key_secret);
+    shasum.update(rawBody);
+    const validSignature = shasum.digest('hex');
+    
+    // Verify valid signature
+    try {
+      const result = await razorpayService.handleWebhook(rawBody, validSignature);
+      if (result.success) {
+        console.log('✅ Valid signature verification passed');
+      } else {
+        console.error('❌ Valid signature verification failed');
+      }
+    } catch (error) {
+      console.error('❌ Valid signature verification threw error:', error.message);
+    }
+    
+    // Verify invalid signature
+    try {
+      await razorpayService.handleWebhook(rawBody, 'invalid_signature_hex');
+      console.error('❌ Invalid signature verification failed (should have thrown error)');
+    } catch (error) {
+      if (error.message === 'Webhook signature verification failed') {
+        console.log('✅ Invalid signature verification correctly rejected');
+      } else {
+        console.error('❌ Invalid signature verification threw unexpected error:', error.message);
+      }
+    }
+    console.log('');
+    
     console.log('🎉 All tests passed! Razorpay service is ready for integration.');
     console.log('\n📝 Next steps:');
     console.log('1. Make sure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are set in .env');

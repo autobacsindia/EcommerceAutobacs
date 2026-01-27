@@ -11,6 +11,7 @@ import { Check, CreditCard, MapPin, Package } from 'lucide-react';
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
 interface Address {
+  fullName: string;
   street: string;
   city: string;
   state: string;
@@ -28,6 +29,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
 
   const [address, setAddress] = useState<Address>({
+    fullName: '',
     street: '',
     city: '',
     state: '',
@@ -37,6 +39,12 @@ export default function CheckoutPage() {
   });
 
   const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.COD);
+
+  useEffect(() => {
+    if (user?.name) {
+      setAddress(prev => ({ ...prev, fullName: user.name }));
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -52,7 +60,7 @@ export default function CheckoutPage() {
 
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address.street || !address.city || !address.state || !address.postalCode || !address.phone) {
+    if (!address.fullName || !address.street || !address.city || !address.state || !address.postalCode || !address.phone) {
       alert('Please fill all address fields');
       return;
     }
@@ -63,12 +71,20 @@ export default function CheckoutPage() {
     try {
       setLoading(true);
       const orderData = {
-        shippingAddress: address,
+        shippingAddress: {
+          fullName: address.fullName,
+          addressLine1: address.street,
+          city: address.city,
+          state: address.state,
+          postalCode: address.postalCode,
+          country: address.country,
+          phone: address.phone
+        },
         paymentMethod,
         items: cart?.items.map((item: any) => ({
-          productId: item.productId._id,
+          product: item.product._id, // Backend expects 'product' not 'productId' in items array
           quantity: item.quantity,
-          price: item.productId.price,
+          price: item.product.price,
         })),
         totalAmount: cart?.total || 0,
       };
@@ -105,7 +121,7 @@ export default function CheckoutPage() {
       }
 
       const razorpayOptions = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
         amount: razorpayResponse.data.amount,
         currency: razorpayResponse.data.currency,
         name: 'Autobacs India',
@@ -117,7 +133,8 @@ export default function CheckoutPage() {
             const verifyResponse = await apiClient.post('/razorpay/verify-payment', {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
+              razorpay_signature: response.razorpay_signature,
+              orderId: orderId // Send internal order ID to link payment
             });
 
             if (verifyResponse.success) {
@@ -132,6 +149,11 @@ export default function CheckoutPage() {
             alert(err.message || 'Payment verification failed');
           }
         },
+        modal: {
+          ondismiss: function () {
+            alert('Payment was cancelled. You can try again or choose another method.');
+          }
+        },
         prefill: {
           name: user?.name || '',
           email: user?.email || '',
@@ -141,21 +163,20 @@ export default function CheckoutPage() {
         }
       };
 
-      // Load Razorpay SDK dynamically
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      document.body.appendChild(script);
+      if (!window.Razorpay) {
+        alert('Payment gateway failed to load. Please refresh the page.');
+        return;
+      }
 
-      script.onload = () => {
-        // @ts-ignore
-        const rzp = new window.Razorpay(razorpayOptions);
-        rzp.open();
-      };
+      const rzp = new window.Razorpay(razorpayOptions);
+      rzp.on('payment.failed', function (response: any) {
+        const reason =
+          (response && (response.error?.description || response.error?.reason)) ||
+          'Payment declined. Please try another card or method.';
+        alert(reason);
+      });
+      rzp.open();
 
-      script.onerror = () => {
-        alert('Failed to load Razorpay SDK. Please try again.');
-      };
     } catch (err: any) {
       alert(err.message || 'Failed to initiate Razorpay payment');
     }
@@ -238,13 +259,13 @@ export default function CheckoutPage() {
           <h2 className="text-2xl font-bold mb-4">Review Your Cart</h2>
           <div className="space-y-4 mb-8">
             {cart?.items.map((item: any) => (
-              <div key={item._id} className="flex items-center gap-4 border rounded-lg p-4">
+              <div key={item.product._id} className="flex items-center gap-4 border rounded-lg p-4">
                 <div className="w-20 h-20 bg-gray-100 rounded"></div>
                 <div className="flex-1">
-                  <h3 className="font-semibold">{item.productId.name}</h3>
+                  <h3 className="font-semibold">{item.product.name}</h3>
                   <p className="text-gray-600">Quantity: {item.quantity}</p>
                 </div>
-                <p className="font-bold">₹{(item.productId.price * item.quantity).toFixed(2)}</p>
+                <p className="font-bold">₹{(item.product.price * item.quantity).toFixed(2)}</p>
               </div>
             ))}
           </div>
@@ -268,6 +289,14 @@ export default function CheckoutPage() {
         <div className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">Shipping Address</h2>
           <form onSubmit={handleAddressSubmit} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={address.fullName}
+              onChange={(e) => setAddress({ ...address, fullName: e.target.value })}
+              className="w-full border rounded-lg px-4 py-2"
+              required
+            />
             <input
               type="text"
               placeholder="Street Address"
