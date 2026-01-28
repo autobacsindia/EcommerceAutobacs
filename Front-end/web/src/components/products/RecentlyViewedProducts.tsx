@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface RecentProduct {
   _id: string;

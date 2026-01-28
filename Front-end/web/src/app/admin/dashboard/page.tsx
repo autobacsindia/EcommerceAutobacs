@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSSE } from '@/hooks/useSSE';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 // Types
 interface HealthMetrics {
@@ -149,15 +150,6 @@ export default function AdminDashboardPage() {
     onConnect: handleConnect
   });
 
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
   // Get status color
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -270,7 +262,7 @@ export default function AdminDashboardPage() {
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-600">Today's Revenue</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(analytics.sales.revenueToday)}</p>
+                <p className="text-2xl font-bold text-green-600">{formatPrice(analytics.sales.revenueToday)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Orders Today</p>
@@ -278,7 +270,7 @@ export default function AdminDashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Avg Order Value</p>
-                <p className="text-xl font-semibold">{formatCurrency(analytics.sales.averageOrderValue)}</p>
+                <p className="text-xl font-semibold">{formatPrice(analytics.sales.averageOrderValue)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Conversion Rate</p>
@@ -352,7 +344,7 @@ export default function AdminDashboardPage() {
                     <p className="text-sm text-gray-600">{order.customerName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold">{formatCurrency(order.amount)}</p>
+                    <p className="font-semibold">{formatPrice(order.amount)}</p>
                     <span className={`text-xs px-2 py-1 rounded ${getStatusColor(order.status)}`}>
                       {order.status}
                     </span>

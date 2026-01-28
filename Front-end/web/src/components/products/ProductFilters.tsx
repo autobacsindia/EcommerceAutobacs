@@ -65,6 +65,7 @@ const loadFilterPreferences = () => {
 export default function ProductFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { formatPrice } = useCurrency();
   
   // State for categories and brands
   const [loadingCategories, setLoadingCategories] = useState(true);

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import productService from '@/lib/services/productService';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { Product } from '@/lib/types';
 
 interface ProductCardProps {

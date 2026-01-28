@@ -141,7 +141,7 @@ export default function CartPage() {
                               {item.product.name}
                             </Link>
                             <p className="text-sm text-gray-500 mt-1">
-                              {formatCurrency(item.product.price)} each
+                              {formatPrice(item.product.price)} each
                             </p>
                           </div>
                           <button
@@ -180,7 +180,7 @@ export default function CartPage() {
 
                           {/* Item Total */}
                           <p className="text-lg font-bold text-gray-900">
-                            {formatCurrency(item.product.price * item.quantity)}
+                            {formatPrice(item.product.price * item.quantity)}
                           </p>
                         </div>
 

@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { ShoppingCart, Trash2, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { toast } from 'react-hot-toast';
 
 export default function WishlistPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { wishlistItems, loading, removeFromWishlist, fetchWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 

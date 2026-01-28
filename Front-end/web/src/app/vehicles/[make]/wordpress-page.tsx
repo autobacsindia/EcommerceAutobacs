@@ -7,7 +7,7 @@ import { ShoppingCart, Heart, Filter } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
@@ -18,6 +18,7 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
   
   // Unwrap the params Promise
   const paramsValue = use(params);
@@ -413,15 +414,15 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
                           {product.on_sale && product.regular_price !== product.price ? (
                             <div className="flex items-baseline gap-2">
                               <p className="text-xl font-bold text-blue-600">
-                                {formatCurrency(parseFloat(product.price))}
+                                {formatPrice(parseFloat(product.price))}
                               </p>
                               <p className="text-sm text-gray-500 line-through">
-                                {formatCurrency(parseFloat(product.regular_price))}
+                                {formatPrice(parseFloat(product.regular_price))}
                               </p>
                             </div>
                           ) : (
                             <p className="text-xl font-bold text-blue-600">
-                              {formatCurrency(parseFloat(product.price))}
+                              {formatPrice(parseFloat(product.price))}
                             </p>
                           )}
                         </div>

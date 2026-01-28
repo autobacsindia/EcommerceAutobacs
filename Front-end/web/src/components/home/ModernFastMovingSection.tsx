@@ -6,6 +6,7 @@ import { ArrowRight, ShoppingCart, Star, Zap } from 'lucide-react';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface Product {
   _id: string;
@@ -25,6 +26,7 @@ const ModernFastMovingSection = () => {
   const [loading, setLoading] = useState(true);
   const { addToCart } = useCart();
   const [addingToCart, setAddingToCart] = useState<string | null>(null);
+  const { formatPrice } = useCurrency();
 
   useEffect(() => {
     const fetchFastMoving = async () => {

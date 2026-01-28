@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 
 interface ProductImageType {

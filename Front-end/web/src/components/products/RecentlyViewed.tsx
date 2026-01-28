@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { useAuth } from '@/context/AuthContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface RecentProduct {
   _id: string;
@@ -16,6 +17,7 @@ interface RecentProduct {
 
 const RecentlyViewed = () => {
   const { user } = useAuth();
+  const { formatPrice } = useCurrency();
   const [products, setProducts] = useState<RecentProduct[]>([]);
   const [mounted, setMounted] = useState(false);
 

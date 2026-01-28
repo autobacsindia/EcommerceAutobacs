@@ -7,7 +7,7 @@ import { ShoppingCart, Heart, Filter } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
@@ -610,15 +610,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                               {hasOriginalPrice ? (
                                 <div className="flex items-baseline gap-2">
                                   <p className="text-xl font-bold text-blue-600">
-                                    {formatCurrency(priceValue)}
+                                    {formatPrice(priceValue)}
                                   </p>
                                   <p className="text-sm text-gray-500 line-through">
-                                    {formatCurrency(originalPriceNumber)}
+                                    {formatPrice(originalPriceNumber)}
                                   </p>
                                 </div>
                               ) : (
                                 <p className="text-xl font-bold text-blue-600">
-                                  {formatCurrency(priceValue)}
+                                  {formatPrice(priceValue)}
                                 </p>
                               )}
                             </div>
