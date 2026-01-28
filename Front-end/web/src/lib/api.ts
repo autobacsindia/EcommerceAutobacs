@@ -371,17 +371,25 @@ class APIClient {
         errorDetails.errorMessage.includes('Cast to ObjectId failed')
       );
     
+      // Check for order status errors (redundant updates)
+      const isOrderStatusError = typeof errorDetails.errorMessage === 'string' && (
+        errorDetails.errorMessage.includes('Cannot mark order as failed') || 
+        errorDetails.errorMessage.includes('cannot be cancelled') ||
+        errorDetails.errorMessage.includes('Order already in terminal state')
+      );
+
       // Check for auth errors (401)
       const isAuthError = (error as any)?.status === 401 || (response as any).status === 401;
 
       // Only log non-rate limit errors to reduce console spam
       const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
     
-      // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint OR it's an invalid ID error OR it's an auth error
+      // Log the error UNLESS it's a special endpoint AND it's a 404 error OR it's a vehicle products endpoint OR it's an invalid ID error OR it's an auth error OR it's an order status error
       // This suppresses expected 404s from location, category, and vehicle endpoints
       // Also suppress all errors from vehicle products endpoint as it has WordPress fallback
       // Also suppress auth errors as they are handled by the auth context/interceptors
-      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint || isInvalidIdError || isAuthError;
+      // Also suppress order status errors as they are handled by the checkout flow
+      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint || isInvalidIdError || isAuthError || isOrderStatusError;
     
       if (!shouldSuppressLog) {
         // Only log non-rate limit errors to reduce console spam

@@ -247,6 +247,21 @@ export default function CheckoutPage() {
           <h1 className="text-3xl font-bold mb-4">Order Placed Successfully!</h1>
           <p className="text-gray-600 mb-2">Thank you for your order</p>
           <p className="text-lg font-semibold mb-8">Order ID: #{orderId}</p>
+          
+          <div className="bg-gray-50 rounded-lg p-6 mb-8 max-w-md mx-auto text-left">
+            <h3 className="font-semibold text-lg mb-4 text-center">Payment Details</h3>
+            <div className="flex justify-between mb-2">
+              <span className="text-gray-600">Method</span>
+              <span className="font-medium">{PAYMENT_METHOD_LABELS[paymentMethod]}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Status</span>
+              <span className="font-medium text-green-600">
+                {paymentMethod === PAYMENT_METHODS.COD ? 'Pending' : 'Success'}
+              </span>
+            </div>
+          </div>
+
           <div className="flex gap-4 justify-center">
             <button
               onClick={() => router.push(`/orders/${orderId}`)}

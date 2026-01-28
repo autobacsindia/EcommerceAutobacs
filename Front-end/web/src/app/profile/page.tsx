@@ -608,11 +608,16 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Order History Section */}
+        {/* My Orders Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center mb-4">
-            <Package className="h-5 w-5 text-gray-500 mr-2" />
-            <h3 className="text-xl font-semibold text-gray-900">Order History</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <Package className="h-5 w-5 text-gray-500 mr-2" />
+              <h3 className="text-xl font-semibold text-gray-900">My Orders</h3>
+            </div>
+            <Link href="/orders" className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+              View All Orders
+            </Link>
           </div>
 
           {orders && orders.orders.length > 0 ? (

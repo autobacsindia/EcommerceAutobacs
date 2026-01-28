@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { 
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle, 
   XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2 
@@ -435,11 +435,20 @@ export default function OrderDetailPage() {
               <>
                 <div>
                   <p className="text-sm text-gray-600">Method</p>
-                  <p className="font-medium">{order.payment.paymentMethod}</p>
+                  <p className="font-medium">{PAYMENT_METHOD_LABELS[order.payment.paymentMethod] || order.payment.paymentMethod || 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Status</p>
-                  <p className="font-medium">{order.payment.status}</p>
+                  <p className={`font-medium ${
+                    !order.payment.status ? 'text-gray-500' :
+                    order.payment.status === 'completed' || order.payment.status === 'success' || order.payment.status === 'paid' 
+                      ? 'text-green-600' 
+                      : order.payment.status === 'pending' 
+                        ? 'text-yellow-600' 
+                        : 'text-red-600'
+                  }`}>
+                    {(order.payment.status || 'Unknown').charAt(0).toUpperCase() + (order.payment.status || 'Unknown').slice(1)}
+                  </p>
                 </div>
                 {order.payment.transactionId && (
                   <div>
