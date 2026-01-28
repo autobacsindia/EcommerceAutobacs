@@ -7,7 +7,7 @@ import { ShoppingCart, Heart, GitCompare } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 
@@ -46,6 +46,7 @@ interface ProductGridProps {
 export default function ProductGrid({ products }: ProductGridProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { formatPrice } = useCurrency();
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist, wishlistItems } = useWishlist();
@@ -314,15 +315,15 @@ export default function ProductGrid({ products }: ProductGridProps) {
                   {product.originalPrice && product.originalPrice > product.price ? (
                     <div className="flex items-baseline gap-2">
                       <p className="text-2xl font-bold text-blue-600">
-                        {formatCurrency(product.price)}
+                        {formatPrice(product.price)}
                       </p>
                       <p className="text-sm text-gray-500 line-through">
-                        {formatCurrency(product.originalPrice)}
+                        {formatPrice(product.originalPrice)}
                       </p>
                     </div>
                   ) : (
                     <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(product.price)}
+                      {formatPrice(product.price)}
                     </p>
                   )}
                 </div>

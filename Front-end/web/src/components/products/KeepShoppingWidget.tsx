@@ -42,6 +42,7 @@ export default function KeepShoppingWidget({
 }: KeepShoppingWidgetProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const { formatPrice } = useCurrency();
 
   useEffect(() => {
     const fetchProducts = async () => {

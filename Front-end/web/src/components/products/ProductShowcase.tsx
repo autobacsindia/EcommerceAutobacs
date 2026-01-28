@@ -11,6 +11,7 @@ interface ProductCardProps {
 }
 
 const ProductCard = ({ product }: ProductCardProps) => {
+  const { formatPrice } = useCurrency();
   // Get primary image or fallback
   const primaryImage = product.images && Array.isArray(product.images) 
     ? product.images.find(img => img.isPrimary)?.url || product.images[0]?.url
@@ -47,7 +48,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
         </p>
         <div className="flex items-center justify-between">
           <span className="text-lg font-bold text-blue-600">
-            ₹{product.price.toLocaleString('en-IN')}
+            {formatPrice(product.price)}
           </span>
           {product.stock > 0 ? (
             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">

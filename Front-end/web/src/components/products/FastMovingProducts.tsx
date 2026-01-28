@@ -48,6 +48,7 @@ export default function FastMovingProducts({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { isAuthenticated } = useAuth();
   const router = useRouter();

@@ -7,6 +7,7 @@ import { ShoppingCart, Heart, Star, GitCompare } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ImageGallery from '@/components/products/ImageGallery';
 import QuestionForm from '@/components/products/QuestionForm';
 import QuestionList from '@/components/products/QuestionList';
@@ -73,6 +74,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
   const { isAuthenticated, user } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);

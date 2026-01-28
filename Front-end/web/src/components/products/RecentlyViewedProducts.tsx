@@ -17,6 +17,7 @@ interface RecentProduct {
 }
 
 export default function RecentlyViewedProducts() {
+  const { formatPrice } = useCurrency();
   const [products, setProducts] = useState<RecentProduct[]>([]);
   const { addToCart } = useCart();
   const { user } = useAuth();
@@ -76,9 +77,9 @@ export default function RecentlyViewedProducts() {
                 <div className="mt-3 flex items-end justify-between">
                   <div>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-lg font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
+                      <span className="text-lg font-bold text-gray-900">{formatPrice(product.price)}</span>
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="text-xs text-gray-400 line-through">₹{product.originalPrice.toLocaleString()}</span>
+                        <span className="text-xs text-gray-400 line-through">{formatPrice(product.originalPrice)}</span>
                       )}
                     </div>
                   </div>

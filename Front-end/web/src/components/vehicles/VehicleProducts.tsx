@@ -23,6 +23,7 @@ export default function VehicleProducts({ vehicleSlug, vehicleName }: VehiclePro
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
   
   const [products, setProducts] = useState<WordPressProduct[]>([]);
   const [categories, setCategories] = useState<WordPressProductCategory[]>([]);

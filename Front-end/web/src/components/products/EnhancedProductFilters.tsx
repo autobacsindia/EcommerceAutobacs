@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -395,8 +396,8 @@ export default function EnhancedProductFilters() {
             className="w-full"
           />
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">{formatPriceValue(priceRange[0])}</span>
-            <span className="text-sm text-gray-600">{formatPriceValue(priceRange[1])}</span>
+            <span className="text-sm text-gray-600">{formatPrice(priceRange[0])}</span>
+            <span className="text-sm text-gray-600">{formatPrice(priceRange[1])}</span>
           </div>
           <div className="flex gap-2">
             <button 

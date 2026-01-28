@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import productService from '@/lib/services/productService';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import WoofCategoryList from './WoofCategoryList';
 
 // Define the Category interface inline to avoid import issues
@@ -34,17 +35,6 @@ const parsePriceValue = (value: string | null, defaultValue: number): number => 
   if (!value) return defaultValue;
   const parsed = Number(value);
   return isNaN(parsed) ? defaultValue : parsed;
-};
-
-// Helper function to format price values consistently
-const formatPriceValue = (value: number): string => {
-  // Use fixed locale to ensure consistent formatting between server and client
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-    minimumFractionDigits: 0
-  }).format(value).replace('₹', '₹');
 };
 
 // Helper function to save filter preferences to localStorage
@@ -374,8 +364,8 @@ export default function ProductFilters() {
             className="w-full"
           />
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">{formatPriceValue(priceRange[0])}</span>
-            <span className="text-sm text-gray-600">{formatPriceValue(priceRange[1])}</span>
+            <span className="text-sm text-gray-600">{formatPrice(priceRange[0])}</span>
+            <span className="text-sm text-gray-600">{formatPrice(priceRange[1])}</span>
           </div>
           <div className="flex gap-2">
             <button 

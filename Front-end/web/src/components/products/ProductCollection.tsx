@@ -51,15 +51,17 @@ export default function ProductCollection({
   category,
   brand,
   searchKeyword,
-  limit = 3,
+  limit = 8,
   className = ''
 }: ProductCollectionProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
   const { addToCart } = useCart();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { isAuthenticated } = useAuth();
+  const { formatPrice } = useCurrency();
   const router = useRouter();
 
   useEffect(() => {

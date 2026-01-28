@@ -62,6 +62,7 @@ export default function CuratedCollectionCarousel({
   const { addToCart } = useCart();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { isAuthenticated } = useAuth();
+  const { formatPrice } = useCurrency();
   const router = useRouter();
 
   useEffect(() => {

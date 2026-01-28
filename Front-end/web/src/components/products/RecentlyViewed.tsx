@@ -65,11 +65,11 @@ const RecentlyViewed = () => {
                 </h3>
                 <div className="flex items-baseline gap-2">
                   <span className="text-lg font-bold text-gray-900">
-                    ₹{product.price?.toLocaleString('en-IN')}
+                    {formatPrice(product.price)}
                   </span>
                   {product.originalPrice && product.originalPrice > product.price && (
                     <span className="text-xs text-gray-500 line-through">
-                      ₹{product.originalPrice.toLocaleString('en-IN')}
+                      {formatPrice(product.originalPrice)}
                     </span>
                   )}
                 </div>
