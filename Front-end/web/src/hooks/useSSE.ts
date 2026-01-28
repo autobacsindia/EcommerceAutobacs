@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import apiClient from '@/lib/api';
 
 interface SSEMessage {
   type: string;
@@ -35,11 +36,21 @@ export function useSSE({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isConnectedRef = useRef(false);
+  const tokenRef = useRef(token);
+  const isRefreshingRef = useRef(false);
+
+  // Update tokenRef when token prop changes
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   const connect = useCallback(async () => {
+    // Use tokenRef.current to get the latest token
+    const currentToken = tokenRef.current;
+
     // Don't connect if disabled or no token
-    if (!enabled || !token) {
-      if (!token) {
+    if (!enabled || !currentToken) {
+      if (!currentToken) {
         console.log('SSE: No token available, skipping connection');
       }
       return;
@@ -65,13 +76,36 @@ export function useSSE({
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${currentToken}`,
           'Accept': 'text/event-stream'
         },
         signal: abortController.signal
       });
 
       if (!response.ok) {
+        // Handle 401 Unauthorized with token refresh
+        if (response.status === 401 && !isRefreshingRef.current) {
+          console.log('SSE: 401 Unauthorized, attempting to refresh token...');
+          isRefreshingRef.current = true;
+          try {
+            const newToken = await apiClient.refreshSession();
+            isRefreshingRef.current = false;
+            
+            if (newToken) {
+              console.log('SSE: Token refreshed successfully, reconnecting...');
+              tokenRef.current = newToken;
+              // Retry connection immediately with new token
+              return connect();
+            } else {
+              throw new Error('SSE: Token refresh returned null');
+            }
+          } catch (refreshError) {
+            isRefreshingRef.current = false;
+            console.error('SSE: Token refresh failed:', refreshError);
+            throw new Error('SSE connection failed: 401 Unauthorized and refresh failed');
+          }
+        }
+
         throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
       }
 

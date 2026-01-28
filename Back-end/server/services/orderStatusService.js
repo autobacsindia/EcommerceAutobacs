@@ -152,7 +152,12 @@ class OrderStatusService {
       // Validate reason if provided
       if (reason) {
         const validReasons = this.getValidReasons(newStatus);
-        if (validReasons.length > 0 && !validReasons.includes(reason)) {
+        
+        // Allow 'admin_update' reason for admins, even if not in the strict validation list
+        // This supports manual overrides from the admin panel
+        const isAllowedAdminUpdate = isAdmin && reason === 'admin_update';
+        
+        if (!isAllowedAdminUpdate && validReasons.length > 0 && !validReasons.includes(reason)) {
           throw new Error(`Invalid reason '${reason}' for status '${newStatus}'. Valid reasons: ${validReasons.join(', ')}`);
         }
       }

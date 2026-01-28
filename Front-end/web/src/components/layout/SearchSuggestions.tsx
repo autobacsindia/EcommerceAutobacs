@@ -8,6 +8,7 @@ import { generateDeterministicId } from '@/lib/utils/idGenerator';
 import { Search, Clock, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation } from '@/contexts/LocationContext';
+import EnhancedImage from '@/components/layout/EnhancedImage';
 
 // Define a suggestion type with more information
 interface Suggestion {
