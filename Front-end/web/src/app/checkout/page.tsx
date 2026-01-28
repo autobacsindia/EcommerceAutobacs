@@ -99,7 +99,7 @@ export default function CheckoutPage() {
         totalAmount,
       };
 
-      const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData);
+      const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData) as any;
       
       // If Razorpay is selected, initiate Razorpay checkout
       if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
@@ -125,7 +125,7 @@ export default function CheckoutPage() {
           orderId,
           amount: Math.round(amount * 100), // Convert to paise
           currency: 'INR'
-        });
+        }) as any;
 
         if (!razorpayResponse.success) {
           throw new Error('Failed to create Razorpay order');
@@ -150,7 +150,7 @@ export default function CheckoutPage() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 orderId: orderId
-              });
+              }) as any;
 
               if (verifyResponse.success) {
                 setOrderId(orderId);

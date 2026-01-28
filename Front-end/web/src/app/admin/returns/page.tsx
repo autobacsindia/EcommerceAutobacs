@@ -43,7 +43,7 @@ export default function AdminReturnsPage() {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.append('status', statusFilter);
       
-      const response = await apiClient.get(`${API_ENDPOINTS.RETURNS_LIST}?${params.toString()}`);
+      const response = await apiClient.get(`${API_ENDPOINTS.RETURNS_LIST}?${params.toString()}`) as any;
       setReturns(response.returns || []);
     } catch (err: any) {
       console.error('Failed to fetch returns:', {

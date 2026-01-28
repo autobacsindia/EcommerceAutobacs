@@ -89,6 +89,7 @@ type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { user, token, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { formatPrice } = useCurrency();
   const [health, setHealth] = useState<HealthMetrics | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);

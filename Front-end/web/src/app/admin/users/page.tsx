@@ -35,7 +35,7 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/users');
+      const response = await apiClient.get('/users') as any;
       setUsers(response.users || []);
     } catch (err) {
       console.error('Failed to fetch users:', err);

@@ -89,8 +89,8 @@ export default function AdminReviewsPage() {
       }
       
       const endpoint = `/reviews/admin?${params.toString()}`;
-      const data = await apiClient.get(endpoint);
-      
+      const data = await apiClient.get(endpoint) as any;
+
       setReviews(data.reviews);
       setPagination({
         currentPage: data.pagination.currentPage,

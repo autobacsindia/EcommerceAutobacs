@@ -38,7 +38,7 @@ export default function AdminRefundsPage() {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.append('status', statusFilter);
       
-      const response = await apiClient.get(`${API_ENDPOINTS.REFUNDS_LIST}?${params.toString()}`);
+      const response = await apiClient.get(`${API_ENDPOINTS.REFUNDS_LIST}?${params.toString()}`) as any;
       setRefunds(response.refunds || []);
     } catch (err) {
       console.error('Failed to fetch refunds:', err);

@@ -432,7 +432,7 @@ export default function CreateProductPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
                     <div className="space-y-2">
-                      {spec.options.map((opt, oi) => (
+                      {spec.options.map((opt: any, oi: number) => (
                         <div key={oi} className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <input
                             type="text"
