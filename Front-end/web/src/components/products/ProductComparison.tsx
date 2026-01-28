@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import EnhancedImage from '@/components/EnhancedImage';
 
 interface ProductImage {
   url: string;
@@ -249,15 +250,15 @@ export default function ProductComparison() {
                     {product.originalPrice && product.originalPrice > product.price ? (
                       <div className="flex flex-col items-center">
                         <span className="text-2xl font-bold text-blue-600">
-                          {formatCurrency(product.price)}
+                          {formatPrice(product.price)}
                         </span>
                         <span className="text-sm text-gray-500 line-through">
-                          {formatCurrency(product.originalPrice)}
+                          {formatPrice(product.originalPrice)}
                         </span>
                       </div>
                     ) : (
                       <span className="text-2xl font-bold text-blue-600">
-                        {formatCurrency(product.price)}
+                        {formatPrice(product.price)}
                       </span>
                     )}
                   </div>

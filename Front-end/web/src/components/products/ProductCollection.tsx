@@ -298,20 +298,20 @@ export default function ProductCollection({
                     {product.originalPrice && product.originalPrice > product.price ? (
                       <div className="mb-4">
                         <p className="text-2xl font-bold text-blue-600">
-                          {formatCurrency(product.price)}
+                          {formatPrice(product.price)}
                         </p>
                         <p className="text-sm text-gray-500 line-through">
-                          Original price was: {formatCurrency(product.originalPrice)}
+                          Original price was: {formatPrice(product.originalPrice)}
                         </p>
                         <p className="text-sm text-gray-600">
-                          Current price is: {formatCurrency(product.price)}
+                          Current price is: {formatPrice(product.price)}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">(incl. taxes)</p>
                       </div>
                     ) : (
                       <div className="mb-4">
                         <p className="text-2xl font-bold text-gray-900">
-                          {formatCurrency(product.price)}
+                          {formatPrice(product.price)}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">(incl. taxes)</p>
                       </div>

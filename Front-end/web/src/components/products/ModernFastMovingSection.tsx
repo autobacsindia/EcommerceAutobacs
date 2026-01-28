@@ -8,7 +8,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 
@@ -232,11 +232,11 @@ export default function ModernFastMovingSection({
                 <div className="mt-auto pt-4 flex items-center justify-between border-t border-gray-100">
                   <div className="flex flex-col">
                     <span className="text-xl font-bold text-gray-900">
-                      {formatCurrency(product.price)}
+                      {formatPrice(product.price)}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
                       <span className="text-sm text-gray-400 line-through">
-                        {formatCurrency(product.originalPrice)}
+                        {formatPrice(product.originalPrice)}
                       </span>
                     )}
                   </div>

@@ -167,11 +167,11 @@ const ModernFastMovingSection = () => {
                   <div className="flex flex-col">
                     {product.originalPrice && product.originalPrice > product.price && (
                       <span className="text-xs text-gray-500 line-through">
-                        ₹{product.originalPrice.toLocaleString('en-IN')}
+                        {formatPrice(product.originalPrice)}
                       </span>
                     )}
                     <span className="text-xl font-bold text-white">
-                      ₹{product.price.toLocaleString('en-IN')}
+                      {formatPrice(product.price)}
                     </span>
                   </div>
                   

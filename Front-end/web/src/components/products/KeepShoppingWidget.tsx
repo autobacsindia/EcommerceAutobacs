@@ -142,7 +142,7 @@ export default function KeepShoppingWidget({
 
               {/* Price */}
               <p className="text-sm font-semibold text-gray-900">
-                {formatCurrency(product.price)}
+                {formatPrice(product.price)}
               </p>
             </Link>
           ))}

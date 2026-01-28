@@ -399,15 +399,15 @@ export default function VehicleProducts({ vehicleSlug, vehicleName }: VehiclePro
                           {product.on_sale && product.regular_price !== product.price ? (
                             <div className="flex items-baseline gap-2">
                               <p className="text-2xl font-bold text-blue-600">
-                                {formatCurrency(parseFloat(product.price))}
+                                {formatPrice(parseFloat(product.price))}
                               </p>
                               <p className="text-sm text-gray-500 line-through">
-                                {formatCurrency(parseFloat(product.regular_price))}
+                                {formatPrice(parseFloat(product.regular_price))}
                               </p>
                             </div>
                           ) : (
                             <p className="text-2xl font-bold text-blue-600">
-                              {formatCurrency(parseFloat(product.price))}
+                              {formatPrice(parseFloat(product.price))}
                             </p>
                           )}
                         </div>

@@ -175,7 +175,7 @@ export default function WishlistPage() {
                 )}
                 
                 <p className="text-xl font-bold text-blue-600 mb-4">
-                  {formatCurrency(item.product?.price || 0)}
+                  {formatPrice(item.product?.price || 0)}
                 </p>
               </div>
 

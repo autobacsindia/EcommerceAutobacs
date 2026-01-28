@@ -8,7 +8,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 
@@ -304,16 +304,16 @@ export default function CuratedCollectionCarousel({
                         <div>
                           <div className="flex items-baseline gap-2">
                             <span className="text-lg font-bold text-gray-900">
-                              {formatCurrency(product.price)}
+                              {formatPrice(product.price)}
                             </span>
                             <span className="text-xs text-gray-500 line-through">
-                              {formatCurrency(product.originalPrice)}
+                              {formatPrice(product.originalPrice)}
                             </span>
                           </div>
                         </div>
                       ) : (
                         <p className="text-lg font-bold text-gray-900">
-                          {formatCurrency(product.price)}
+                          {formatPrice(product.price)}
                         </p>
                       )}
                     </div>

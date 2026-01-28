@@ -4,12 +4,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
-import { formatCurrency } from '@/lib/utils';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { ProductImage } from '@/lib/types';
 
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, isLoading } = useCart();
+  const { formatPrice } = useCurrency();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
 
   const handleQuantityChange = async (productId: string, newQuantity: number) => {
@@ -215,7 +216,7 @@ export default function CartPage() {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span>{formatCurrency(cart.total || 0)}</span>
+                  <span>{formatPrice(cart.total || 0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
@@ -223,11 +224,11 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Tax (18% GST)</span>
-                  <span>{formatCurrency((cart.total || 0) * 0.18)}</span>
+                  <span>{formatPrice((cart.total || 0) * 0.18)}</span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-lg font-bold text-gray-900">
                   <span>Total</span>
-                  <span>{formatCurrency((cart.total || 0) * 1.18)}</span>
+                  <span>{formatPrice((cart.total || 0) * 1.18)}</span>
                 </div>
               </div>
 

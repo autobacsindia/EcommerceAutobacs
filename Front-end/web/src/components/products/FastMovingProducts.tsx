@@ -315,15 +315,15 @@ export default function FastMovingProducts({
                     {product.originalPrice && product.originalPrice > product.price ? (
                       <div className="flex flex-col">
                         <p className="text-lg font-bold text-blue-600">
-                          {formatCurrency(product.price)}
+                          {formatPrice(product.price)}
                         </p>
                         <p className="text-xs text-gray-500 line-through">
-                          {formatCurrency(product.originalPrice)}
+                          {formatPrice(product.originalPrice)}
                         </p>
                       </div>
                     ) : (
                       <p className="text-lg font-bold text-blue-600">
-                        {formatCurrency(product.price)}
+                        {formatPrice(product.price)}
                       </p>
                     )}
                   </div>
