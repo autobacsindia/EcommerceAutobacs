@@ -15,6 +15,7 @@ import TrustBadges from '@/components/products/TrustBadges';
 import RecentlyViewed from '@/components/products/RecentlyViewed';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
+import { toast } from 'react-hot-toast';
 
 async function getProduct(id: string): Promise<any> {
   try {
@@ -144,12 +145,14 @@ function ProductDetailPageClient({ product }: { product: any }) {
     try {
       if (isWishlisted) {
         await removeFromWishlist(product._id);
+        toast.success('Removed from wishlist');
       } else {
         await addToWishlist(product._id);
+        toast.success('Added to wishlist');
       }
       setIsWishlisted(!isWishlisted);
     } catch (error: any) {
-      alert(error.message || 'Failed to update wishlist');
+      toast.error(error.message || 'Failed to update wishlist');
     } finally {
       setWishlistLoading(false);
     }
@@ -166,9 +169,9 @@ function ProductDetailPageClient({ product }: { product: any }) {
     setCartLoading(true);
     try {
       await addToCart(product._id, 1);
-      alert('Added to cart!');
+      toast.success('Added to cart!');
     } catch (error: any) {
-      alert(error.message || 'Failed to add to cart');
+      toast.error(error.message || 'Failed to add to cart');
     } finally {
       setCartLoading(false);
     }
@@ -187,7 +190,7 @@ function ProductDetailPageClient({ product }: { product: any }) {
     } else {
       // Add to comparison (limit to 4 products)
       if (compareList.length >= 4) {
-        alert('You can only compare up to 4 products at a time.');
+        toast.error('You can only compare up to 4 products at a time.');
         return;
       }
       compareList.push(product._id);

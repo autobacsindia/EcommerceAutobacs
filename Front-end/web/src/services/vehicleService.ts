@@ -1,3 +1,6 @@
+import apiClient from '@/lib/api';
+import { wordpressService } from './wordpressService';
+
 interface Vehicle {
   _id: string;
   make: string;
@@ -24,9 +27,6 @@ interface VehicleApiResponse {
   vehicle?: Vehicle;
   message?: string;
 }
-
-import apiClient from '@/lib/api';
-import { wordpressService } from './wordpressService';
 
 // Use the main API client instead of creating a separate axios instance
 const vehicleApi = apiClient;

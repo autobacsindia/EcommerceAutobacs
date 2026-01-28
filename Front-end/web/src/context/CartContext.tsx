@@ -113,6 +113,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   
   const addToCart = async (productId: string, quantity: number = 1) => {
+    // Prevent API calls if not authenticated
+    if (!isAuthenticated) {
+      const errorMessage = 'Please log in to add items to cart';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -151,6 +158,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   
   const removeFromCart = async (productId: string) => {
+    // Prevent API calls if not authenticated
+    if (!isAuthenticated) {
+      const errorMessage = 'Please log in to manage your cart';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -186,6 +200,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   
   const updateQuantity = async (productId: string, quantity: number) => {
+    // Prevent API calls if not authenticated
+    if (!isAuthenticated) {
+      const errorMessage = 'Please log in to update cart';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -223,6 +244,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   
   const clearCart = async () => {
+    // Prevent API calls if not authenticated
+    if (!isAuthenticated) {
+      // If locally not authenticated, just clear local state
+      setCart(null);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);

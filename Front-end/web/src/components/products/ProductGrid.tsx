@@ -56,10 +56,18 @@ export default function ProductGrid({ products }: ProductGridProps) {
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
 
   const handleAddToCart = async (productId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to add items to cart');
+      router.push('/login');
+      return;
+    }
+
     try {
       await addToCart(productId, 1);
-    } catch (error) {
+      toast.success('Added to cart');
+    } catch (error: any) {
       console.error('Failed to add to cart:', error);
+      toast.error(error.message || 'Failed to add to cart');
     }
   };
 
@@ -123,7 +131,7 @@ export default function ProductGrid({ products }: ProductGridProps) {
     } else {
       // Add to comparison (limit to 4 products)
       if (compareList.length >= 4) {
-        alert('You can only compare up to 4 products at a time.');
+        toast.error('You can only compare up to 4 products at a time.');
         return;
       }
       compareList.push(productId);
@@ -142,7 +150,7 @@ export default function ProductGrid({ products }: ProductGridProps) {
 
   const viewComparison = () => {
     if (comparedProductIds.length < 2) {
-      alert('Please select at least 2 products to compare.');
+      toast.error('Please select at least 2 products to compare.');
       return;
     }
     router.push(`/compare?ids=${comparedProductIds.join(',')}`);

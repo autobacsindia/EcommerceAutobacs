@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { toast } from 'react-hot-toast';
 
 interface RecentProduct {
   _id: string;
@@ -18,10 +20,11 @@ interface RecentProduct {
 }
 
 export default function RecentlyViewedProducts() {
+  const router = useRouter();
   const { formatPrice } = useCurrency();
   const [products, setProducts] = useState<RecentProduct[]>([]);
   const { addToCart } = useCart();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -86,9 +89,19 @@ export default function RecentlyViewedProducts() {
                   </div>
                   
                   <button 
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.preventDefault();
-                      addToCart(product._id, 1);
+                      if (!isAuthenticated) {
+                        toast.error('Please log in to add items to cart');
+                        router.push('/login');
+                        return;
+                      }
+                      try {
+                        await addToCart(product._id, 1);
+                        toast.success('Added to cart');
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to add to cart');
+                      }
                     }}
                     className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-colors"
                     title="Add to Cart"
