@@ -8,6 +8,8 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useRazorpay } from '@/hooks/useRazorpay';
+import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -40,6 +42,17 @@ export default function CheckoutPage() {
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  const { processPayment, isProcessing: isRazorpayProcessing } = useRazorpay({
+    onSuccess: async (orderId) => {
+      setOrderId(orderId);
+      await clearCart();
+      setCurrentStep('confirmation');
+    },
+    onFailure: (error) => {
+      console.error('Payment failed:', error);
+    }
+  });
 
   const [address, setAddress] = useState<Address>({
     fullName: '',
@@ -191,13 +204,18 @@ export default function CheckoutPage() {
       };
 
       const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData) as any;
+      const newOrderId = response.order._id;
       
       // If Razorpay is selected, initiate Razorpay checkout
       if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
-        await handleRazorpayCheckout(response.order._id, response.order.totalAmount);
+        await processPayment(newOrderId, response.order.totalAmount, {
+           name: user?.name || address.fullName,
+           email: user?.email || '',
+           phone: address.phone
+        });
       } else {
         // For other payment methods (COD), proceed normally
-        setOrderId(response.order._id);
+        setOrderId(newOrderId);
         await clearCart();
         setCurrentStep('confirmation');
       }
@@ -206,126 +224,6 @@ export default function CheckoutPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRazorpayCheckout = (orderId: string, amount: number) => {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        // Create Razorpay order
-        const razorpayResponse = await apiClient.post('/razorpay/create-order', {
-          orderId,
-          amount: Math.round(amount * 100), // Convert to paise
-          currency: 'INR'
-        }) as any;
-
-        if (!razorpayResponse.success) {
-          throw new Error('Failed to create Razorpay order');
-        }
-
-        // Track if payment outcome has been determined (success or failure)
-        let isPaymentProcessed = false;
-
-        const razorpayOptions = {
-          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
-          amount: razorpayResponse.data.amount,
-          currency: razorpayResponse.data.currency,
-          name: 'Autobacs India',
-          description: `Order #${orderId}`,
-          order_id: razorpayResponse.data.orderId,
-          handler: async function (response: any) {
-            isPaymentProcessed = true;
-            try {
-              // Verify payment
-              const verifyResponse = await apiClient.post('/razorpay/verify-payment', {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderId: orderId
-              }) as any;
-
-              if (verifyResponse.success) {
-                setOrderId(orderId);
-                await clearCart();
-                setCurrentStep('confirmation');
-                toast.success('Payment successful!');
-                resolve();
-              } else {
-                toast.error('Payment verification failed');
-                resolve();
-              }
-            } catch (err: any) {
-              toast.error(err.message || 'Payment verification failed');
-              resolve();
-            }
-          },
-          modal: {
-            ondismiss: async function () {
-              if (isPaymentProcessed) return;
-
-              toast('Payment cancelled', { icon: 'ℹ️' });
-
-              try {
-                await apiClient.put(`/orders/${orderId}/cancel`, {
-                  reason: 'customer_request',
-                  notes: 'Payment cancelled by user'
-                });
-                router.push(`/orders/${orderId}`);
-              } catch (error: any) {
-                const errorMessage = error.message || '';
-                if (errorMessage.includes('failed') || errorMessage.includes('cannot be cancelled')) {
-                   console.log('Order already in terminal state, ignoring cancel request');
-                   router.push(`/orders/${orderId}`);
-                } else {
-                   console.error('Failed to cancel order:', error);
-                }
-              }
-              resolve();
-            }
-          },
-          prefill: {
-            name: user?.name || '',
-            email: user?.email || '',
-            contact: address.phone || '',
-          },
-          theme: {
-            color: '#2563eb'
-          }
-        };
-
-        if (!window.Razorpay) {
-          toast.error('Payment gateway failed to load. Please refresh the page.');
-          reject(new Error('Razorpay SDK not loaded'));
-          return;
-        }
-
-        const rzp = new window.Razorpay(razorpayOptions);
-        rzp.on('payment.failed', async function (response: any) {
-          // Do not set isPaymentProcessed = true here, as the user might retry in the same modal.
-          // Do not resolve() here, as we want to keep the loading state until the modal is closed or payment succeeds.
-          
-          const reason =
-            (response && (response.error?.description || response.error?.reason)) ||
-            'Payment declined. Please try another card or method.';
-          
-          try {
-            await apiClient.put(`/orders/${orderId}/payment-failed`, {
-              reason: 'payment_failed',
-              paymentId: response.error?.metadata?.payment_id,
-              errorDescription: reason
-            });
-          } catch (error) {
-            console.error('Failed to update order status:', error);
-          }
-
-          toast.error(reason);
-        });
-        rzp.open();
-
-      } catch (err: any) {
-        toast.error(err.message || 'Failed to initiate Razorpay payment');
-        reject(err);
-      }
-    });
   };
 
   if (authLoading || !isAuthenticated) {
@@ -655,23 +553,8 @@ export default function CheckoutPage() {
       {currentStep === 'payment' && (
         <div className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">Payment Method</h2>
-          <div className="space-y-4 mb-8">
-            {[
-              { value: PAYMENT_METHODS.COD, label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.COD] },
-              { value: PAYMENT_METHODS.RAZORPAY, label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.RAZORPAY] }
-            ].map((method) => (
-              <label key={method.value} className="flex items-center gap-4 border rounded-lg p-4 cursor-pointer hover:bg-gray-50">
-                <input
-                  type="radio"
-                  name="payment"
-                  value={method.value}
-                  checked={paymentMethod === method.value}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-4 h-4"
-                />
-                <span className="font-medium">{method.label}</span>
-              </label>
-            ))}
+          <div className="mb-8">
+            <PaymentMethodSelector selectedMethod={paymentMethod} onSelect={setPaymentMethod} />
           </div>
           <button
             onClick={() => setCurrentStep('review')}
@@ -715,10 +598,10 @@ export default function CheckoutPage() {
           </div>
           <button
             onClick={handlePlaceOrder}
-            disabled={loading}
+            disabled={loading || isRazorpayProcessing}
             className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? (
+            {loading || isRazorpayProcessing ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span>Processing...</span>
