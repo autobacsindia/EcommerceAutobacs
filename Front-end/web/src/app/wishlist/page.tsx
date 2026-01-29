@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, Trash2, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
@@ -36,10 +37,11 @@ export default function WishlistPage() {
     }
   };
 
+  const { addToCart } = useCart();
+
   const handleAddToCart = async (productId: string) => {
     try {
-      // We'll need to implement add to cart functionality here
-      // For now, we'll just show a toast
+      await addToCart(productId, 1);
       toast.success('Item added to cart');
     } catch (err: any) {
       console.error('Failed to add to cart:', err);
