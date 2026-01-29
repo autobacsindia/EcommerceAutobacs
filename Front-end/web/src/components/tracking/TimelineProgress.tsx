@@ -7,11 +7,11 @@ interface TimelineProgressProps {
 }
 
 const statusSteps = [
-  { status: 'pending', label: 'Order Placed', value: 0 },
-  { status: 'confirmed', label: 'Confirmed', value: 20 },
-  { status: 'processing', label: 'Processing', value: 40 },
-  { status: 'shipped', label: 'Shipped', value: 60 },
-  { status: 'delivered', label: 'Delivered', value: 100 }
+  { status: 'pending', label: 'Order Placed', value: 0, color: 'bg-red-500', ringColor: 'ring-red-200' },
+  { status: 'confirmed', label: 'Confirmed', value: 20, color: 'bg-orange-500', ringColor: 'ring-orange-200' },
+  { status: 'processing', label: 'Processing', value: 40, color: 'bg-yellow-500', ringColor: 'ring-yellow-200' },
+  { status: 'shipped', label: 'Shipped', value: 60, color: 'bg-green-400', ringColor: 'ring-green-200' },
+  { status: 'delivered', label: 'Delivered', value: 100, color: 'bg-green-600', ringColor: 'ring-green-300' }
 ];
 
 export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
@@ -28,9 +28,12 @@ export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
       <div className="relative">
         <div className="overflow-hidden h-2 flex rounded-full bg-gray-200">
           <div
-            style={{ width: `${progress}%` }}
+            style={{ 
+              width: `${progress}%`,
+              background: isCancelled ? undefined : 'linear-gradient(to right, #ef4444, #f97316, #eab308, #4ade80, #16a34a)'
+            }}
             className={`transition-all duration-500 ease-out flex flex-col text-center whitespace-nowrap text-white justify-center ${
-              isCancelled ? 'bg-red-500' : 'bg-blue-600'
+              isCancelled ? 'bg-red-500' : ''
             }`}
           />
         </div>
@@ -49,9 +52,9 @@ export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
                   isActive
                     ? isCancelled
                       ? 'bg-red-500 scale-110'
-                      : 'bg-blue-600 scale-110'
+                      : `${step.color} scale-110`
                     : 'bg-gray-300'
-                } ${isCurrent ? 'ring-4 ring-blue-200' : ''}`}
+                } ${isCurrent ? `ring-4 ${isCancelled ? 'ring-red-200' : step.ringColor}` : ''}`}
               />
               <span
                 className={`mt-2 text-xs font-medium text-center ${

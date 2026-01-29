@@ -100,21 +100,20 @@ export default function LoginPage() {
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-red-700">
                 {timeUntilRetry !== null && timeUntilRetry > 0 
-                  ? `Too many attempts. Please try again in ${Math.ceil(timeUntilRetry)}s` 
+                  ? `Too many attempts. Please try again in ${Math.ceil(timeUntilRetry / 1000)} seconds.`
                   : error}
               </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-bold text-gray-900 mb-1">
-                Email
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Email or mobile phone number
               </label>
               <input
-                id="email"
+                type="text"
                 name="email"
-                type="email"
                 value={formData.email}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-600 transition-colors
@@ -127,22 +126,21 @@ export default function LoginPage() {
               )}
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="password" className="block text-sm font-bold text-gray-900">
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-bold text-gray-700">
                   Password
                 </label>
-                <Link 
-                  href="/forgot-password" 
-                  className="text-sm text-blue-700 hover:text-red-700 hover:underline"
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-blue-700 hover:text-red-700 hover:underline"
                 >
-                  Forgot your password?
+                  Forgot Password
                 </Link>
               </div>
               <input
-                id="password"
-                name="password"
                 type="password"
+                name="password"
                 value={formData.password}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-600 transition-colors
@@ -163,6 +161,18 @@ export default function LoginPage() {
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continue'}
             </button>
           </form>
+
+          <div className="mt-6 text-xs text-gray-600">
+            By continuing, you agree to AutoBacs India's{' '}
+            <Link href="/terms" className="text-blue-700 hover:text-red-700 hover:underline">
+              Conditions of Use
+            </Link>{' '}
+            and{' '}
+            <Link href="/privacy" className="text-blue-700 hover:text-red-700 hover:underline">
+              Privacy Notice
+            </Link>
+            .
+          </div>
 
           <div className="mt-6">
             <div className="relative">
@@ -192,18 +202,6 @@ export default function LoginPage() {
                 <span>Facebook</span>
               </button>
             </div>
-          </div>
-
-          <div className="mt-6 text-xs text-gray-600">
-            By continuing, you agree to AutoBacs India's{' '}
-            <Link href="/terms" className="text-blue-700 hover:text-red-700 hover:underline">
-              Conditions of Use
-            </Link>{' '}
-            and{' '}
-            <Link href="/privacy" className="text-blue-700 hover:text-red-700 hover:underline">
-              Privacy Notice
-            </Link>
-            .
           </div>
         </div>
 

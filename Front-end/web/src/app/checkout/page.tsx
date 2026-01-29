@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
-import { Check, CreditCard, MapPin, Package, Loader2 } from 'lucide-react';
+import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
@@ -19,6 +19,18 @@ interface Address {
   postalCode: string;
   country: string;
   phone: string;
+  isDefault?: boolean;
+}
+
+interface SavedAddress {
+  fullName: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  phone: string;
+  isDefault?: boolean;
 }
 
 export default function CheckoutPage() {
@@ -40,12 +52,55 @@ export default function CheckoutPage() {
   });
 
   const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.COD);
+  
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    if (user?.name) {
-      setAddress(prev => ({ ...prev, fullName: user.name }));
-    }
-  }, [user]);
+    const fetchProfile = async () => {
+      if (isAuthenticated) {
+        try {
+          const response = await apiClient.get('/profile') as any;
+          if (response.success && response.user && response.user.addresses) {
+            setSavedAddresses(response.user.addresses);
+            if (response.user.addresses.length === 0) {
+              setShowAddressForm(true);
+              if (user?.name) {
+                setAddress(prev => ({ ...prev, fullName: user.name }));
+              }
+            } else {
+              // Pre-select default address if exists
+              const defaultIndex = response.user.addresses.findIndex((a: any) => a.isDefault);
+              if (defaultIndex !== -1) {
+                setSelectedAddressIndex(defaultIndex);
+                const addr = response.user.addresses[defaultIndex];
+                setAddress({
+                  fullName: addr.fullName,
+                  street: addr.addressLine1,
+                  city: addr.city,
+                  state: addr.state,
+                  postalCode: addr.postalCode,
+                  country: addr.country,
+                  phone: addr.phone
+                });
+              }
+            }
+          } else {
+             setShowAddressForm(true);
+             if (user?.name) {
+               setAddress(prev => ({ ...prev, fullName: user.name }));
+             }
+          }
+        } catch (error) {
+          console.error('Failed to fetch profile', error);
+          setShowAddressForm(true);
+        }
+      }
+    };
+    fetchProfile();
+  }, [isAuthenticated]); // removed user dependency to avoid infinite loop if user object changes
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -59,12 +114,48 @@ export default function CheckoutPage() {
     }
   }, [cart, router]);
 
-  const handleAddressSubmit = (e: React.FormEvent) => {
+  const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!showAddressForm && selectedAddressIndex !== null) {
+       setCurrentStep('payment');
+       return;
+    }
+
     if (!address.fullName || !address.street || !address.city || !address.state || !address.postalCode || !address.phone) {
       toast.error('Please fill all address fields');
       return;
     }
+
+    if (shouldSaveAddress) {
+      try {
+        const newAddress: SavedAddress = {
+          fullName: address.fullName,
+          addressLine1: address.street,
+          city: address.city,
+          state: address.state,
+          postalCode: address.postalCode,
+          country: address.country,
+          phone: address.phone,
+          isDefault: savedAddresses.length === 0
+        };
+
+        const updatedAddresses = [...savedAddresses, newAddress];
+
+        await apiClient.put('/profile', {
+          name: user?.name,
+          email: user?.email,
+          addresses: updatedAddresses
+        });
+
+        setSavedAddresses(updatedAddresses);
+        toast.success('Address saved to profile');
+      } catch (error) {
+        console.error('Failed to save address', error);
+        // Continue anyway
+      }
+    }
+
     setCurrentStep('payment');
   };
 
@@ -372,7 +463,122 @@ export default function CheckoutPage() {
       {currentStep === 'address' && (
         <div className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">Shipping Address</h2>
-          <form onSubmit={handleAddressSubmit} className="space-y-4">
+          
+          {/* Saved Addresses List */}
+          {!showAddressForm && savedAddresses.length > 0 && (
+            <div className="space-y-4 mb-6">
+              {savedAddresses.map((addr, index) => (
+                <div 
+                  key={index} 
+                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                    selectedAddressIndex === index 
+                      ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' 
+                      : 'border-gray-200 hover:border-blue-300'
+                  }`}
+                  onClick={() => {
+                    setSelectedAddressIndex(index);
+                    setAddress({
+                      fullName: addr.fullName,
+                      street: addr.addressLine1,
+                      city: addr.city,
+                      state: addr.state,
+                      postalCode: addr.postalCode,
+                      country: addr.country,
+                      phone: addr.phone
+                    });
+                  }}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-semibold">{addr.fullName}</p>
+                      <p className="text-gray-600">{addr.addressLine1}</p>
+                      <p className="text-gray-600">{addr.city}, {addr.state} {addr.postalCode}</p>
+                      <p className="text-gray-600">{addr.phone}</p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm('Are you sure you want to delete this address?')) return;
+                          
+                          const newAddresses = savedAddresses.filter((_, i) => i !== index);
+                          try {
+                            await apiClient.put('/profile', {
+                              name: user?.name,
+                              email: user?.email,
+                              addresses: newAddresses
+                            });
+                            setSavedAddresses(newAddresses);
+                            if (selectedAddressIndex === index) {
+                              setSelectedAddressIndex(null);
+                            } else if (selectedAddressIndex !== null && selectedAddressIndex > index) {
+                              setSelectedAddressIndex(selectedAddressIndex - 1);
+                            }
+                            toast.success('Address deleted');
+                          } catch (error) {
+                            console.error('Failed to delete address', error);
+                            toast.error('Failed to delete address');
+                          }
+                        }}
+                        className="text-gray-400 hover:text-red-500 p-1"
+                        title="Delete address"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      {selectedAddressIndex === index && (
+                        <div className="bg-blue-600 text-white p-1 rounded-full">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              <button
+                onClick={() => {
+                  setShowAddressForm(true);
+                  setSelectedAddressIndex(null);
+                  setAddress({
+                    fullName: user?.name || '',
+                    street: '',
+                    city: '',
+                    state: '',
+                    postalCode: '',
+                    country: 'India',
+                    phone: ''
+                  });
+                }}
+                className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2 transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                Add New Address
+              </button>
+
+              <button 
+                onClick={handleAddressSubmit}
+                disabled={selectedAddressIndex === null}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed mt-4"
+              >
+                Deliver to this address
+              </button>
+            </div>
+          )}
+
+          {/* New Address Form */}
+          {showAddressForm && (
+            <form onSubmit={handleAddressSubmit} className="space-y-4">
+               {/* Header if canceling */}
+               {savedAddresses.length > 0 && (
+                 <button 
+                    type="button"
+                    onClick={() => setShowAddressForm(false)}
+                    className="text-sm text-blue-600 hover:underline mb-4"
+                 >
+                    &larr; Back to saved addresses
+                 </button>
+               )}
+
             <input
               type="text"
               placeholder="Full Name"
@@ -425,10 +631,23 @@ export default function CheckoutPage() {
                 required
               />
             </div>
-            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700">
+
+            <div className="flex items-center gap-2 mt-2">
+                <input
+                    type="checkbox"
+                    id="saveAddress"
+                    checked={shouldSaveAddress}
+                    onChange={(e) => setShouldSaveAddress(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <label htmlFor="saveAddress" className="text-sm text-gray-700">Save this address for future orders</label>
+            </div>
+
+            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 mt-4">
               Continue to Payment
             </button>
           </form>
+          )}
         </div>
       )}
 
