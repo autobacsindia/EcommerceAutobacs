@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ShoppingCart, Trash2, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
@@ -132,19 +133,21 @@ export default function WishlistPage() {
         {wishlistItems.map((item: any) => (
           <div key={item.product._id} className="border rounded-lg p-4 hover:shadow-lg transition-shadow duration-300">
             <div className="relative aspect-square bg-gray-100 rounded-lg mb-4 overflow-hidden">
-              <EnhancedImage
-                src={getFirstImageUrl(item.product?.images)}
-                alt={item.product?.name || 'Product'}
-                width={300}
-                height={300}
-                className="w-full h-full object-cover"
-                context="product"
-              />
+              <Link href={`/products/${item.product._id}`} className="block w-full h-full">
+                <EnhancedImage
+                  src={getFirstImageUrl(item.product?.images)}
+                  alt={item.product?.name || 'Product'}
+                  width={300}
+                  height={300}
+                  className="w-full h-full object-cover"
+                  context="product"
+                />
+              </Link>
               
               {/* Remove from wishlist button */}
               <button
                 onClick={() => handleRemoveFromWishlist(item.product._id)}
-                className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-red-50 transition-colors"
+                className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-red-50 transition-colors z-10"
                 aria-label="Remove from wishlist"
               >
                 <Trash2 className="h-4 w-4 text-gray-600 hover:text-red-500" />
@@ -152,7 +155,9 @@ export default function WishlistPage() {
             </div>
 
             <div className="flex flex-col h-full">
-              <h3 className="font-semibold text-lg mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
+              <Link href={`/products/${item.product._id}`} className="hover:text-blue-600 transition-colors">
+                <h3 className="font-semibold text-lg mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
+              </Link>
               
               <div className="mt-2">
                 {item.product?.averageRating > 0 && (
