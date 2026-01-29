@@ -7,6 +7,8 @@ import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { ProductImage } from '@/lib/types';
+import { toast } from 'react-hot-toast';
+import SkeletonLoader from '@/components/layout/SkeletonLoader';
 
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, isLoading } = useCart();
@@ -21,6 +23,7 @@ export default function CartPage() {
       await updateQuantity(productId, newQuantity);
     } catch (error) {
       console.error('Failed to update quantity:', error);
+      toast.error('Failed to update quantity');
     } finally {
       setUpdatingItem(null);
     }
@@ -30,8 +33,10 @@ export default function CartPage() {
     if (confirm('Remove this item from cart?')) {
       try {
         await removeFromCart(productId);
+        toast.success('Item removed from cart');
       } catch (error) {
         console.error('Failed to remove item:', error);
+        toast.error('Failed to remove item');
       }
     }
   };
@@ -40,11 +45,18 @@ export default function CartPage() {
     if (confirm('Clear all items from cart?')) {
       try {
         await clearCart();
+        toast.success('Cart cleared');
       } catch (error) {
         console.error('Failed to clear cart:', error);
+        toast.error('Failed to clear cart');
       }
     }
   };
+
+  // Loading state
+  if (isLoading && !cart) {
+    return <SkeletonLoader type="cart-page" />;
+  }
 
   // Empty cart state
   if (!cart || cart.items?.length === 0) {
@@ -230,6 +242,7 @@ export default function CartPage() {
                   <span>Total</span>
                   <span>{formatPrice((cart.total || 0) * 1.18)}</span>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">* Final tax calculated at checkout</p>
               </div>
 
               {/* Checkout Button */}

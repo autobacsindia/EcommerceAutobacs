@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface SkeletonLoaderProps {
-  type?: 'header' | 'search' | 'cart' | 'user' | 'mobile-menu';
+  type?: 'header' | 'search' | 'cart' | 'user' | 'mobile-menu' | 'cart-page';
   className?: string;
 }
 
@@ -10,6 +10,62 @@ export default function SkeletonLoader({
   className = '' 
 }: SkeletonLoaderProps) {
   switch (type) {
+    case 'cart-page':
+      return (
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
+          <div className="mb-8">
+            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-2" />
+            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+          </div>
+          <div className="lg:grid lg:grid-cols-12 lg:gap-8">
+            <div className="lg:col-span-8">
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="p-4 border-b flex justify-between items-center">
+                  <div className="h-6 w-24 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+                </div>
+                <div className="divide-y">
+                  {[1, 2, 3].map((item) => (
+                    <div key={item} className="p-6">
+                      <div className="flex gap-4">
+                        <div className="flex-shrink-0 w-24 h-24 bg-gray-200 rounded-md animate-pulse" />
+                        <div className="flex-1 space-y-3">
+                          <div className="flex justify-between">
+                            <div className="space-y-2">
+                              <div className="h-5 w-48 bg-gray-200 rounded animate-pulse" />
+                              <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+                            </div>
+                            <div className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+                            <div className="h-6 w-20 bg-gray-200 rounded animate-pulse" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="lg:col-span-4 mt-8 lg:mt-0">
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="h-6 w-32 bg-gray-200 rounded animate-pulse mb-4" />
+                <div className="space-y-3 mb-6">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex justify-between">
+                      <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+                <div className="h-12 w-full bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
     case 'header':
       return (
         <header className={`bg-white border-b border-gray-200 sticky top-0 z-50 ${className}`}>
