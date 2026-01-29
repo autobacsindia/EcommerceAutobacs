@@ -39,8 +39,8 @@ export default function DiagnosticsPage() {
         const isPlaceholderKey = consumerKey.includes('your_consumer_key');
         const isPlaceholderSecret = consumerSecret.includes('your_consumer_secret');
         
-        const siteUrlValid = siteUrl && siteUrl.startsWith('http') && !isPlaceholderUrl;
-        const credentialsPresent = !isPlaceholderKey && !isPlaceholderSecret && consumerKey && consumerSecret;
+        const siteUrlValid = !!(siteUrl && siteUrl.startsWith('http') && !isPlaceholderUrl);
+        const credentialsPresent = !!(!isPlaceholderKey && !isPlaceholderSecret && consumerKey && consumerSecret);
         
         // Check backend API
         const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
@@ -49,13 +49,17 @@ export default function DiagnosticsPage() {
         
         try {
           // Simple fetch to check if backend is reachable
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
           const response = await fetch(`${apiUrl}/health`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json'
             },
-            timeout: 5000 // 5 second timeout
+            signal: controller.signal
           });
+          clearTimeout(timeoutId);
           isReachable = response.ok;
         } catch (error: any) {
           backendError = error.message || 'Unable to reach backend API';

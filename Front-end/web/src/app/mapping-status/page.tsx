@@ -29,8 +29,13 @@ export default function MappingStatusPage() {
         let testProducts = 0;
         if (vehicles.length > 0) {
           testVehicle = vehicles[0].name;
-          const products = await wordpressService.getProductsByVehicle(vehicles[0].slug);
-          testProducts = products.length;
+          try {
+            const products = await wordpressService.getProductsByVehicle(vehicles[0].slug);
+            testProducts = products.products.length;
+            console.log(`Test vehicle ${vehicles[0].slug}: Found ${testProducts} products`);
+          } catch (error) {
+            console.error('Error fetching test products:', error);
+          }
         }
         
         setStatus({

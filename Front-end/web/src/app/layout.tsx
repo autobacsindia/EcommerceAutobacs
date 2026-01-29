@@ -8,8 +8,7 @@ import { WishlistProvider } from "@/context/WishlistContext";
 import { LocationProvider } from "@/contexts/LocationContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { RateLimitProvider } from "@/contexts/RateLimitContext";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+import LayoutWrapper from "@/components/layout/LayoutWrapper";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
 
@@ -45,11 +44,7 @@ export default function RootLayout({
                 <RateLimitProvider>
                   <LocationProvider>
                     <CurrencyProvider>
-                      <div className="flex flex-col min-h-screen">
-                        <Header />
-                        <main className="flex-1">{children}</main>
-                        <Footer />
-                      </div>
+                      <LayoutWrapper>{children}</LayoutWrapper>
                       <Toaster position="top-right" />
                       <Script
                         id="razorpay-checkout"
