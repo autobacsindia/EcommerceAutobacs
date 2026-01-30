@@ -106,9 +106,13 @@ export const useRazorpay = ({ onSuccess, onFailure }: UseRazorpayProps) => {
             } catch (error: any) {
               const errorMessage = error.message || '';
               // Ignore if order is already in a terminal state
-              if (!errorMessage.includes('failed') && !errorMessage.includes('cannot be cancelled')) {
+              // Fix: Added check for 'failed' status message
+              if (!errorMessage.includes('Current status: failed') && 
+                  !errorMessage.includes('failed') && 
+                  !errorMessage.includes('cannot be cancelled')) {
                  console.error('Failed to cancel order:', error);
               }
+              // Even if error, redirect to order details
               router.push(`/orders/${orderId}`);
             }
             
@@ -146,8 +150,12 @@ export const useRazorpay = ({ onSuccess, onFailure }: UseRazorpayProps) => {
             paymentId: response.error?.metadata?.payment_id,
             errorDescription: reason
           });
-        } catch (error) {
-          console.error('Failed to update order status:', error);
+        } catch (error: any) {
+          // Suppress error if already failed
+          const errMsg = error.message || '';
+          if (!errMsg.includes('Current status: failed')) {
+            console.error('Failed to update order status:', error);
+          }
         }
 
         toast.error(reason);

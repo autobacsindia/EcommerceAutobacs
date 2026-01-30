@@ -62,7 +62,7 @@ export default function ContactPage() {
       icon: <Clock className="h-6 w-6 text-blue-600" />,
       title: "Working Hours",
       details: [
-        "Monday - Saturday: 9:00 AM - 6:00 PM",
+        "Monday - Saturday: 10:00 AM - 6:00 PM",
         "Sunday: Closed"
       ]
     }

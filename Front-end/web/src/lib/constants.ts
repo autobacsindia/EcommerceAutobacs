@@ -68,6 +68,11 @@ export const API_ENDPOINTS = {
   REFUNDS_LIST: '/orders/refunds',
   REFUND_PROCESS: (orderId: string) => `/orders/${orderId}/refund`,
   
+  // Reviews
+  REVIEWS: '/reviews',
+  PRODUCT_REVIEWS: (productId: string) => `/products/${productId}/reviews`,
+  CREATE_REVIEW: '/reviews',
+  
   // Brands
   BRANDS: '/brands',
   BRAND_DETAIL: (id: string) => `/brands/${id}`,

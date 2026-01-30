@@ -50,7 +50,9 @@ export default function CheckoutPage() {
       setCurrentStep('confirmation');
     },
     onFailure: (error) => {
-      console.error('Payment failed:', error);
+      if (error.message !== 'Payment cancelled') {
+        console.error('Payment failed:', error);
+      }
     }
   });
 

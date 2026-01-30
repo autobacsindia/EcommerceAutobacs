@@ -43,6 +43,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+  const { formatPrice } = useCurrency();
   const { handleError } = useErrorHandler();
   
   // State hooks - MUST be called before any conditional returns

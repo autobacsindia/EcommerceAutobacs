@@ -3,16 +3,20 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { 
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle, 
-  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2 
+  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star 
 } from 'lucide-react';
 import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
+import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
+import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
 
 interface OrderDetail {
@@ -91,12 +95,28 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { addToCart } = useCart();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addingToCart, setAddingToCart] = useState<string | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showReturnDialog, setShowReturnDialog] = useState(false);
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [selectedItemForReview, setSelectedItemForReview] = useState<any>(null);
+
+  const { processPayment, isProcessing: isPaymentProcessing } = useRazorpay({
+    onSuccess: (orderId) => {
+      fetchOrderDetail();
+    },
+    onFailure: (error) => {
+      // Error is handled by the hook (toast), but we can add extra logic if needed
+      if (error.message !== 'Payment cancelled') {
+        console.error('Retry payment failed:', error);
+      }
+    }
+  });
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -135,6 +155,52 @@ export default function OrderDetailPage() {
       setError(err.message || 'Failed to delete order');
       setLoading(false);
     }
+  };
+
+  const handleRetryPayment = async () => {
+    if (!order || !user) return;
+    
+    const userDetails = {
+      name: order.shippingAddress.fullName,
+      email: user.email,
+      phone: order.shippingAddress.phone
+    };
+
+    processPayment(order._id, order.totalAmount, userDetails);
+  };
+
+  const handleBuyAgain = async (item: any) => {
+    if (!item.product?._id) {
+      toast.error('Product no longer available');
+      return;
+    }
+
+    try {
+      setAddingToCart(item._id);
+      await addToCart(item.product._id, 1);
+      toast.success('Added to cart');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add to cart');
+    } finally {
+      setAddingToCart(null);
+    }
+  };
+
+  const handleWriteReview = (item: any) => {
+    setSelectedItemForReview(item);
+    setShowReviewDialog(true);
+  };
+
+  const canRetryPayment = (order: OrderDetail) => {
+    if (!order.payment) return true; // If no payment record, assume we can try
+    const paymentStatus = order.payment.status ? order.payment.status.toLowerCase() : 'pending';
+    const orderStatus = order.status.toLowerCase();
+    
+    // Can retry if payment failed or pending, AND order is not cancelled/refunded
+    const isPaymentIncomplete = ['failed', 'pending'].includes(paymentStatus);
+    const isOrderActive = !['cancelled', 'refunded'].includes(orderStatus);
+    
+    return isPaymentIncomplete && isOrderActive;
   };
 
   const getStatusColor = (status: string) => {
@@ -271,6 +337,20 @@ export default function OrderDetailPage() {
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
         <h2 className="font-bold text-lg mb-4">Available Actions</h2>
         <div className="flex flex-wrap gap-3">
+          {canRetryPayment(order) && (
+            <button
+              onClick={handleRetryPayment}
+              disabled={isPaymentProcessing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isPaymentProcessing ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <RefreshCcw className="h-5 w-5" />
+              )}
+              Retry Payment
+            </button>
+          )}
           {canCancelOrder(order.status) && (
             <button
               onClick={() => setShowCancelDialog(true)}
@@ -450,6 +530,23 @@ export default function OrderDetailPage() {
                     {(order.payment.status || 'Unknown').charAt(0).toUpperCase() + (order.payment.status || 'Unknown').slice(1)}
                   </p>
                 </div>
+                {order.payment.status === 'failed' && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-sm text-red-700 flex flex-col gap-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>Payment failed. Please verify your transaction or try placing the order again.</span>
+                    </div>
+                    {canRetryPayment(order) && (
+                      <button
+                        onClick={handleRetryPayment}
+                        disabled={isPaymentProcessing}
+                        className="self-start text-sm font-medium text-red-700 underline hover:text-red-800 disabled:opacity-50 ml-6"
+                      >
+                        {isPaymentProcessing ? 'Processing...' : 'Retry Payment Now'}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {order.payment.transactionId && (
                   <div>
                     <p className="text-sm text-gray-600">Transaction ID</p>
@@ -534,8 +631,22 @@ export default function OrderDetailPage() {
                   <p className="text-gray-600 text-sm mt-1">Quantity: {item.quantity}</p>
                   <p className="text-gray-600 text-sm">Price: ₹{(item.price || 0).toFixed(2)} each</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end gap-2">
                   <p className="font-bold text-lg">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>
+                  {product?._id && (
+                    <button
+                      onClick={() => handleBuyAgain(item)}
+                      disabled={addingToCart === item._id}
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-full transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {addingToCart === item._id ? (
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <ShoppingCart className="h-4 w-4" />
+                      )}
+                      Buy Again
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -608,6 +719,21 @@ export default function OrderDetailPage() {
           onClose={() => setShowReturnDialog(false)}
           onSuccess={() => {
             fetchOrderDetail();
+          }}
+        />
+      )}
+
+      {/* Write Review Modal */}
+      {showReviewDialog && selectedItemForReview && order && (
+        <WriteReviewModal
+          productId={selectedItemForReview.product?._id || ''}
+          productName={selectedItemForReview.product?.name || selectedItemForReview.name || ''}
+          productImage={selectedItemForReview.product?.images?.[0]?.url || selectedItemForReview.image}
+          orderId={order._id}
+          onClose={() => setShowReviewDialog(false)}
+          onSuccess={() => {
+            // Optional: refresh order if we want to show "Reviewed" state later
+            // fetchOrderDetail(); 
           }}
         />
       )}

@@ -223,13 +223,24 @@ class APIClient {
   /**
    * Handle API response with enhanced error categorization
    */
-  private async handleResponse(response: Response): Promise<any> {
+  private async handleResponse<T>(response: Response): Promise<T> {
+    let data;
     const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
     
     try {
-      const data = isJson ? await response.json() : await response.text();
-      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Handle non-JSON responses
+        const text = await response.text();
+        data = { message: text };
+      }
+    } catch (parseError) {
+      // Failed to parse response body
+      data = { message: 'Failed to parse server response' };
+    }
+
+    try {
       if (!response.ok) {
         // Handle rate limit errors
         if (response.status === 429) {
