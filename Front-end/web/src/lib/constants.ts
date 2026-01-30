@@ -88,6 +88,9 @@ export const API_ENDPOINTS = {
   WORDPRESS_CATEGORIES: '/wordpress/categories',
   WORDPRESS_PRODUCTS: '/wordpress/products',
   WORDPRESS_PRODUCT_DETAIL: (id: string) => `/wordpress/products/${id}`,
+
+  // Contact
+  CONTACT: '/contact',
 };
 
 // Order Status

@@ -61,7 +61,8 @@ class OrderStatusService {
 
     // Check if new status is in allowed transitions
     const allowedStatuses = STATUS_TRANSITIONS[currentStatus];
-    if (!allowedStatuses.includes(newStatus)) {
+    // Admins can bypass transition rules
+    if (!allowedStatuses.includes(newStatus) && !isAdmin) {
       return {
         valid: false,
         message: `Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed transitions: ${allowedStatuses.join(', ') || 'none'}`

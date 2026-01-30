@@ -84,10 +84,14 @@ export default function AdminOrderDetailPage() {
     
     try {
       setUpdating(true);
-      await apiClient.put(`/orders/${orderId}/status`, { status: newStatus });
+      await apiClient.put(`/orders/${orderId}/status`, { 
+        status: newStatus,
+        reason: 'admin_update'
+      });
       setOrder({ ...order, status: newStatus });
       alert('Order status updated successfully');
     } catch (err: any) {
+      console.error('Status update failed:', err);
       alert(err.message || 'Failed to update order status');
     } finally {
       setUpdating(false);

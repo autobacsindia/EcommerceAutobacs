@@ -28,6 +28,7 @@ import tokenIntrospectionRoutes from "./routes/tokenIntrospection.js";
 import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
 import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import contactRoutes from "./routes/contact.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -154,6 +155,7 @@ app.use("/dashboard", adminRateLimit, dashboardRoutes);
 
 // Location service (general rate limiting)
 app.use("/location", apiRateLimit, locationRoutes);
+app.use("/contact", apiRateLimit, contactRoutes);
 
 
 

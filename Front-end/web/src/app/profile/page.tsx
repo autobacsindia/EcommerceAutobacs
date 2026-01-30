@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star, ChevronRight } from 'lucide-react';
+import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star, ChevronRight, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
@@ -11,12 +11,23 @@ import { UserProfile, Address, PaginatedOrders, PaymentMethod, PaginatedUserRevi
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { OrderStatus } from '@/types/tracking';
 
+interface Message {
+  _id: string;
+  subject: string;
+  message: string;
+  status: 'new' | 'read' | 'replied' | 'closed';
+  reply?: string;
+  repliedAt?: string;
+  createdAt: string;
+}
+
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [orders, setOrders] = useState<PaginatedOrders | null>(null);
   const [reviews, setReviews] = useState<PaginatedUserReviews | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -61,7 +72,7 @@ export default function ProfilePage() {
   const loadProfileData = async () => {
     try {
       setLoading(true);
-      const [profileData, ordersData, reviewsData, paymentMethodsData, verificationData] = await Promise.all([
+      const [profileData, ordersData, reviewsData, paymentMethodsData, verificationData, messagesData] = await Promise.all([
         profileService.getProfile(),
         profileService.getOrders(currentPage),
         profileService.getMyReviews(currentReviewsPage),
@@ -71,13 +82,15 @@ export default function ProfilePage() {
           isVerified: boolean;
           email: string;
           verifiedAt?: string;
-        }>('/auth/verification-status').catch(() => ({ success: false, isVerified: false, email: '' }))
+        }>('/auth/verification-status').catch(() => ({ success: false, isVerified: false, email: '' })),
+        apiClient.get<{ success: boolean; data: Message[] }>('/contact/me').catch(() => ({ success: false, data: [] }))
       ]);
 
       setProfile(profileData);
       setOrders(ordersData);
       setReviews(reviewsData);
       setPaymentMethods(paymentMethodsData.paymentMethods);
+      setMessages(messagesData.data || []);
       
       if (verificationData.success) {
         setVerificationStatus({
@@ -818,6 +831,54 @@ export default function ProfilePage() {
             </>
           ) : (
             <p className="text-gray-500">No reviews submitted yet.</p>
+          )}
+        </div>
+
+        {/* Messages Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <MessageCircle className="h-5 w-5 text-gray-500 mr-2" />
+            <h3 className="text-xl font-semibold text-gray-900">My Inquiries</h3>
+          </div>
+
+          {messages.length > 0 ? (
+            <div className="space-y-4">
+              {messages.map((message) => (
+                <div key={message._id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <h4 className="font-medium text-gray-900">{message.subject}</h4>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      message.status === 'replied' ? 'bg-green-100 text-green-800' :
+                      message.status === 'read' ? 'bg-blue-100 text-blue-800' :
+                      message.status === 'closed' ? 'bg-gray-100 text-gray-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {message.status.charAt(0).toUpperCase() + message.status.slice(1)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">{message.message}</p>
+                  <p className="text-xs text-gray-400 mb-4">
+                    Sent on {new Date(message.createdAt).toLocaleDateString()}
+                  </p>
+
+                  {message.reply && (
+                    <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-semibold text-blue-800">Admin Reply</span>
+                        {message.repliedAt && (
+                          <span className="text-xs text-blue-600">
+                            {new Date(message.repliedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-800">{message.reply}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500">No inquiries found.</p>
           )}
         </div>
 

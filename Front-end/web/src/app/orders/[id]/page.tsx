@@ -10,7 +10,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { 
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle, 
-  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star 
+  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle 
 } from 'lucide-react';
 import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
@@ -192,15 +192,19 @@ export default function OrderDetailPage() {
   };
 
   const canRetryPayment = (order: OrderDetail) => {
-    if (!order.payment) return true; // If no payment record, assume we can try
-    const paymentStatus = order.payment.status ? order.payment.status.toLowerCase() : 'pending';
     const orderStatus = order.status.toLowerCase();
     
-    // Can retry if payment failed or pending, AND order is not cancelled/refunded
-    const isPaymentIncomplete = ['failed', 'pending'].includes(paymentStatus);
-    const isOrderActive = !['cancelled', 'refunded'].includes(orderStatus);
+    // If order is delivered, cancelled, or refunded, no need to retry
+    if (['delivered', 'cancelled', 'refunded'].includes(orderStatus)) return false;
+
+    // If payment is COD, no need to retry online payment
+    if (order.payment?.paymentMethod === 'cod') return false;
+
+    if (!order.payment) return true; // If no payment record, assume we can try
+    const paymentStatus = order.payment.status ? order.payment.status.toLowerCase() : 'pending';
     
-    return isPaymentIncomplete && isOrderActive;
+    // Can retry if payment failed or pending
+    return ['failed', 'pending'].includes(paymentStatus);
   };
 
   const getStatusColor = (status: string) => {
@@ -388,6 +392,13 @@ export default function OrderDetailPage() {
               Delete Order
             </button>
           )}
+          <Link
+            href={`/contact?orderId=${order.orderNumber || order._id}`}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+          >
+            <HelpCircle className="h-5 w-5" />
+            Need Help?
+          </Link>
           <button
             onClick={() => window.print()}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
@@ -645,6 +656,15 @@ export default function OrderDetailPage() {
                         <ShoppingCart className="h-4 w-4" />
                       )}
                       Buy Again
+                    </button>
+                  )}
+                  {order.status === 'delivered' && product?._id && (
+                    <button
+                      onClick={() => handleWriteReview(item)}
+                      className="flex items-center gap-1 text-sm text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 px-3 py-1.5 rounded-full transition"
+                    >
+                      <Star className="h-4 w-4" />
+                      Write a Review
                     </button>
                   )}
                 </div>
