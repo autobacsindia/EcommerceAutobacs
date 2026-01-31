@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -48,6 +48,7 @@ export default function AdminMessagesPage() {
   const [replyMode, setReplyMode] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const messageContentRef = useRef<HTMLDivElement>(null);
 
   // Check authentication
   useEffect(() => {
@@ -55,6 +56,13 @@ export default function AdminMessagesPage() {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Scroll to bottom when message content changes or reply is added
+  useEffect(() => {
+    if (messageContentRef.current) {
+      messageContentRef.current.scrollTop = messageContentRef.current.scrollHeight;
+    }
+  }, [selectedMessage?._id, selectedMessage?.reply]);
 
   // Fetch messages
   useEffect(() => {
@@ -212,7 +220,7 @@ export default function AdminMessagesPage() {
   }
 
   return (
-    <div className="p-6 h-[calc(100vh-4rem)] flex flex-col">
+    <div className="p-6 h-full flex flex-col">
       <div className="mb-6 flex-none">
         <h1 className="text-2xl font-bold text-gray-900">Messages & Inquiries</h1>
         <p className="text-gray-600">Manage contact form submissions</p>
@@ -358,7 +366,7 @@ export default function AdminMessagesPage() {
               </div>
             </div>
             
-            <div className="p-6 flex-1 overflow-y-auto bg-gray-50">
+            <div ref={messageContentRef} className="p-6 flex-1 overflow-y-auto bg-gray-50 min-h-0">
               <div className="bg-white p-6 rounded-lg border border-gray-200 whitespace-pre-wrap mb-6">
                 <h3 className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wider">Inquiry</h3>
                 {selectedMessage.message}
@@ -377,16 +385,25 @@ export default function AdminMessagesPage() {
               )}
             </div>
             
-            <div className="p-6 border-t border-gray-200 bg-white">
+            <div className={`p-6 border-t border-gray-200 bg-white ${replyMode ? 'shadow-inner' : ''}`}>
               {replyMode ? (
                 <form onSubmit={handleReply}>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Reply to {selectedMessage.name}</label>
+                  <div className="mb-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-sm font-medium text-gray-700">Reply to {selectedMessage.name}</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setReplyMode(false)}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <XCircle className="h-5 w-5" />
+                      </button>
+                    </div>
                     <textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
-                      rows={6}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows={5}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       placeholder="Type your reply here..."
                       required
                     ></textarea>
@@ -395,14 +412,14 @@ export default function AdminMessagesPage() {
                     <button
                       type="button"
                       onClick={() => setReplyMode(false)}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={sendingReply}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center text-sm"
                     >
                       {sendingReply ? 'Sending...' : 'Send Reply'}
                     </button>
