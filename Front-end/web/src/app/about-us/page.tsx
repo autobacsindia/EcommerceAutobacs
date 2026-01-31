@@ -260,7 +260,7 @@ export default function AboutUsPage() {
               </a>
             </div>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Our customer service team is available Monday to Saturday, 9:00 AM to 6:00 PM IST.
+              Our customer service team is available Monday to Saturday, 10:00 AM to 6:00 PM IST.
             </p>
           </div>
         </div>
