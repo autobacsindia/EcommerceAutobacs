@@ -128,11 +128,11 @@ const OrderSchema = new mongoose.Schema({
     },
     reason: {
       type: String,
-      enum: ["defective", "wrong_item", "not_as_described", "changed_mind", "other"]
+      enum: ["defective", "wrong_item", "other"]
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected", "item_received", "refund_processed"],
+      enum: ["pending", "approved", "rejected", "item_received", "completed", "cancelled", "refund_processed"],
       default: "pending"
     },
     items: [{

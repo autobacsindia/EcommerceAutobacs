@@ -44,7 +44,7 @@ interface OrderDetail {
     paymentMethod: string;
     status: string;
     transactionId?: string;
-  };
+  } | string;
   items: Array<{
     _id: string;
     product?: {
@@ -194,17 +194,22 @@ export default function OrderDetailPage() {
   const canRetryPayment = (order: OrderDetail) => {
     const orderStatus = order.status.toLowerCase();
     
-    // If order is delivered, cancelled, or refunded, no need to retry
-    if (['delivered', 'cancelled', 'refunded'].includes(orderStatus)) return false;
+    // Terminal statuses where retry is invalid
+    if (['delivered', 'cancelled', 'refunded', 'shipped'].includes(orderStatus)) return false;
 
-    // If payment is COD, no need to retry online payment
-    if (order.payment?.paymentMethod === 'cod') return false;
+    // If payment is object (populated)
+    if (order.payment && typeof order.payment === 'object') {
+       if (order.payment.paymentMethod === 'cod') return false;
+       
+       const paymentStatus = order.payment.status ? order.payment.status.toLowerCase() : 'pending';
+       return ['failed', 'pending'].includes(paymentStatus);
+    }
 
-    if (!order.payment) return true; // If no payment record, assume we can try
-    const paymentStatus = order.payment.status ? order.payment.status.toLowerCase() : 'pending';
-    
-    // Can retry if payment failed or pending
-    return ['failed', 'pending'].includes(paymentStatus);
+    // If payment is string (ID) or missing (fallback logic)
+    // If order is confirmed or processing, assume payment successful
+    if (['confirmed', 'processing'].includes(orderStatus)) return false;
+
+    return true;
   };
 
   const getStatusColor = (status: string) => {
@@ -237,12 +242,14 @@ export default function OrderDetailPage() {
     return ['pending', 'confirmed'].includes(status.toLowerCase());
   };
 
-  const canReturnOrder = (status: string, deliveredAt?: string) => {
-    if (status.toLowerCase() !== 'delivered') return false;
-    if (!deliveredAt) return false;
+  const canReturnOrder = (order: OrderDetail) => {
+    if (order.status.toLowerCase() !== 'delivered') return false;
     
-    const daysSinceDelivery = (new Date().getTime() - new Date(deliveredAt).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceDelivery <= 30;
+    const deliveredDate = order.deliveredAt || order.fulfillmentMetrics?.deliveredAt;
+    if (!deliveredDate) return false;
+    
+    const daysSinceDelivery = (new Date().getTime() - new Date(deliveredDate).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceDelivery <= 7;
   };
 
   const canDeleteOrder = (status: string) => {
@@ -374,13 +381,13 @@ export default function OrderDetailPage() {
               Track Package
             </Link>
           )}
-          {canReturnOrder(order.status, order.deliveredAt) && !order.returnRequest && (
+          {canReturnOrder(order) && (!order.returnRequest || !order.returnRequest.status) && (
             <button
               onClick={() => setShowReturnDialog(true)}
               className="flex items-center gap-2 px-4 py-2 border-2 border-orange-500 text-orange-600 rounded-lg hover:bg-orange-50 transition font-medium"
             >
               <RotateCcw className="h-5 w-5" />
-              Request Return
+              Return / Exchange Items
             </button>
           )}
           {canDeleteOrder(order.status) && (

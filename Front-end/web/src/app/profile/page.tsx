@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star, ChevronRight, MessageCircle } from 'lucide-react';
+import { User, Mail, Shield, MapPin, CreditCard, ShoppingCart, Heart, Package, Plus, Edit, X, Star, ChevronRight, MessageCircle, Wallet, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
-import { UserProfile, Address, PaginatedOrders, PaymentMethod, PaginatedUserReviews } from '@/lib/types';
+import { UserProfile, Address, PaginatedOrders, PaymentMethod, PaginatedUserReviews, PaginatedReturnRequests } from '@/lib/types';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { OrderStatus } from '@/types/tracking';
 
@@ -27,6 +27,9 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [orders, setOrders] = useState<PaginatedOrders | null>(null);
   const [reviews, setReviews] = useState<PaginatedUserReviews | null>(null);
+  const [returnRequests, setReturnRequests] = useState<PaginatedReturnRequests | null>(null);
+  const [currentReturnsPage, setCurrentReturnsPage] = useState(1);
+  const [wallet, setWallet] = useState<{ balance: number; currency: string; history: any[] } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,10 +75,12 @@ export default function ProfilePage() {
   const loadProfileData = async () => {
     try {
       setLoading(true);
-      const [profileData, ordersData, reviewsData, paymentMethodsData, verificationData, messagesData] = await Promise.all([
+      const [profileData, ordersData, reviewsData, returnRequestsData, walletData, paymentMethodsData, verificationData, messagesData] = await Promise.all([
         profileService.getProfile(),
         profileService.getOrders(currentPage),
         profileService.getMyReviews(currentReviewsPage),
+        profileService.getMyReturnRequests(currentReturnsPage),
+        profileService.getWalletBalance(),
         profileService.getPaymentMethods(),
         apiClient.get<{
           success: boolean;
@@ -89,6 +94,8 @@ export default function ProfilePage() {
       setProfile(profileData);
       setOrders(ordersData);
       setReviews(reviewsData);
+      setReturnRequests(returnRequestsData);
+      setWallet(walletData);
       setPaymentMethods(paymentMethodsData.paymentMethods);
       setMessages(messagesData.data || []);
       
@@ -203,21 +210,31 @@ export default function ProfilePage() {
 
   const loadOrders = async (page: number) => {
     try {
-      const ordersData = await profileService.getOrders(page);
-      setOrders(ordersData);
+      const data = await profileService.getOrders(page);
+      setOrders(data);
       setCurrentPage(page);
     } catch (error) {
-      console.error('Error loading orders:', error);
+      console.error('Failed to load orders:', error);
+    }
+  };
+
+  const loadReturns = async (page: number) => {
+    try {
+      const data = await profileService.getMyReturnRequests(page);
+      setReturnRequests(data);
+      setCurrentReturnsPage(page);
+    } catch (error) {
+      console.error('Failed to load return requests:', error);
     }
   };
 
   const loadReviews = async (page: number) => {
     try {
-      const reviewsData = await profileService.getMyReviews(page);
-      setReviews(reviewsData);
+      const data = await profileService.getMyReviews(page);
+      setReviews(data);
       setCurrentReviewsPage(page);
     } catch (error) {
-      console.error('Error loading reviews:', error);
+      console.error('Failed to load reviews:', error);
     }
   };
 
@@ -621,6 +638,51 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* Wallet Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <Wallet className="h-5 w-5 text-gray-500 mr-2" />
+              <h3 className="text-xl font-semibold text-gray-900">My Wallet</h3>
+            </div>
+            <div className="text-2xl font-bold text-green-600">
+              {wallet?.currency || '₹'} {(wallet?.balance || 0).toFixed(2)}
+            </div>
+          </div>
+          {wallet?.history && wallet.history.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {wallet.history.map((entry: any, index: number) => (
+                    <tr key={index}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {entry.description}
+                      </td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
+                        entry.type === 'credit' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {entry.type === 'credit' ? '+' : '-'}{wallet.currency || '₹'}{Math.abs(entry.amount).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-500">No wallet history available.</p>
+          )}
+        </div>
+
         {/* My Orders Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -731,6 +793,105 @@ export default function ProfilePage() {
             </>
           ) : (
             <p className="text-gray-500">No orders found.</p>
+          )}
+        </div>
+
+        {/* My Returns Section */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <RotateCcw className="h-5 w-5 text-gray-500 mr-2" />
+              <h3 className="text-xl font-semibold text-gray-900">My Returns</h3>
+            </div>
+          </div>
+
+          {returnRequests && returnRequests.requests.length > 0 ? (
+            <>
+              <div className="space-y-4">
+                {returnRequests.requests.map((request) => (
+                  <div key={request._id} className="border border-gray-200 rounded-lg p-6 bg-white">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-lg text-gray-900">
+                            Return #{request._id.substring(0, 8).toUpperCase()}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            request.status === 'approved' || request.status === 'refunded' ? 'bg-green-100 text-green-800' :
+                            request.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          Requested on {new Date(request.createdAt).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Order #{typeof request.order === 'string' ? request.order : request.order?.orderNumber}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            request.type === 'exchange' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {request.type === 'exchange' ? 'Exchange' : 'Return'}
+                          </span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-4 mt-4">
+                      <h4 className="text-sm font-medium text-gray-900 mb-2">Items</h4>
+                      <div className="space-y-2">
+                        {request.items.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center">
+                              {item.product?.image ? (
+                                <img src={item.product.image.url} alt={item.product.name} className="w-8 h-8 object-cover rounded mr-2" />
+                              ) : (
+                                <div className="w-8 h-8 bg-gray-200 rounded mr-2" />
+                              )}
+                              <span className="text-gray-700">{item.product?.name || 'Unknown Item'}</span>
+                              <span className="text-gray-500 ml-2">x{item.quantity}</span>
+                            </div>
+                            <span className="text-gray-500">{item.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {returnRequests.pagination.totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing page {returnRequests.pagination.currentPage} of {returnRequests.pagination.totalPages}
+                  </div>
+                  <div className="flex space-x-2">
+                    {returnRequests.pagination.hasPrev && (
+                      <button
+                        onClick={() => loadReturns(currentReturnsPage - 1)}
+                        className="px-3 py-1 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      >
+                        Previous
+                      </button>
+                    )}
+                    {returnRequests.pagination.hasNext && (
+                      <button
+                        onClick={() => loadReturns(currentReturnsPage + 1)}
+                        className="px-3 py-1 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      >
+                        Next
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-gray-500">No return requests found.</p>
           )}
         </div>
 

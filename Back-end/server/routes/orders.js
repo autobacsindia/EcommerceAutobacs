@@ -27,7 +27,8 @@ router.get("/", protect, asyncHandler(async (req, res) => {
     .populate('items.product', 'name images')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(Number(limit));
+    .limit(Number(limit))
+    .lean();
 
   const total = await Order.countDocuments({ user: req.user.id });
   
@@ -45,13 +46,56 @@ router.get("/", protect, asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   GET /orders/refunds
+// @desc    Get all refunds (orders with refundDetails)
+// @access  Private/Admin
+router.get("/refunds", protect, admin, asyncHandler(async (req, res) => {
+  const { status } = req.query;
+  
+  const query = { 
+    'refundDetails': { $exists: true, $ne: null } 
+  };
+  
+  if (status && status !== 'all') {
+    query['refundDetails.status'] = status;
+  }
+  
+  const orders = await Order.find(query)
+    .populate('user', 'name email')
+    .sort({ 'refundDetails.requestedAt': -1 });
+    
+  const refunds = orders.map(order => ({
+    _id: order._id,
+    order: {
+      _id: order._id,
+      orderNumber: order.orderNumber || order._id
+    },
+    user: {
+       name: order.user ? order.user.name : 'Unknown'
+     },
+     amount: order.refundDetails.amount || 0,
+     refundType: order.refundDetails.refundType || '',
+     refundMethod: order.refundDetails.refundMethod || '',
+      status: order.refundDetails.status || 'pending',
+      requestedAt: order.refundDetails.requestedAt || order.updatedAt
+    }));
+  
+  res.json({
+    success: true,
+    count: refunds.length,
+    refunds
+  });
+}));
+
 // @route   GET /orders/:id
 // @desc    Get order by ID
 // @access  Private
 router.get("/:id", protect, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id)
     .populate('items.product', 'name images price')
-    .populate('user', 'name email');
+    .populate('user', 'name email')
+    .populate('payment')
+    .lean();
 
   if (!order) {
     return res.status(404).json({

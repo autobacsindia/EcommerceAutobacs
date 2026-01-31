@@ -146,17 +146,17 @@ export default function AdminRefundsPage() {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center text-sm font-medium text-gray-900">
                     <DollarSign className="h-4 w-4 mr-1" />
-                    ₹{refund.amount.toLocaleString()}
+                    ₹{(refund.amount || 0).toLocaleString()}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900 capitalize">
-                    {refund.refundType.replace('_', ' ')}
+                    {refund.refundType ? refund.refundType.replace(/_/g, ' ') : 'N/A'}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900 capitalize">
-                    {refund.refundMethod.replace('_', ' ')}
+                    {refund.refundMethod ? refund.refundMethod.replace(/_/g, ' ') : 'N/A'}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">

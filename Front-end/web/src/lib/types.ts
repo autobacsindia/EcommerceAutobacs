@@ -156,8 +156,67 @@ export interface UserProfile {
   email: string;
   role: string;
   addresses: Address[];
+  walletBalance?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// Return Request interfaces
+export interface ReturnRequestItem {
+  product: {
+    _id: string;
+    name: string;
+    images: ProductImage[];
+    price: number;
+  };
+  quantity: number;
+  reason: string;
+  condition: string;
+}
+
+export interface ReturnRequestImage {
+  url: string;
+  description?: string;
+}
+
+export interface ReturnRequestVideo {
+  url: string;
+  description?: string;
+}
+
+export interface ReturnRequestTimeline {
+  status: string;
+  note?: string;
+  timestamp: string;
+  updatedBy?: string;
+}
+
+export interface ReturnRequest {
+  _id: string;
+  order: {
+    _id: string;
+    createdAt: string;
+  };
+  user: string;
+  items: ReturnRequestItem[];
+  type: 'return' | 'exchange';
+  status: 'pending' | 'approved' | 'rejected' | 'item_received' | 'completed' | 'cancelled';
+  images?: ReturnRequestImage[];
+  video?: ReturnRequestVideo;
+  refundMethod: 'store_credit' | 'original_payment';
+  refundAmount?: number;
+  replacementOrder?: string;
+  adminNotes?: string;
+  rejectionReason?: string;
+  timeline: ReturnRequestTimeline[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedReturnRequests {
+  requests: ReturnRequest[];
+  pagination: Pagination;
+  count: number;
 }
 
 export interface OrderItem {

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { X, CheckCircle, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS, RETURN_REASONS, RETURN_POLICY_POINTS } from '@/lib/constants';
+import { API_ENDPOINTS, RETURN_REASONS } from '@/lib/constants';
 import OrderItemCard from './shared/OrderItemCard';
 import ImageUploader from './shared/ImageUploader';
 
@@ -51,9 +51,11 @@ export default function ReturnRequestModal({
 }: ReturnRequestModalProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedItems, setSelectedItems] = useState<Map<string, SelectedItem>>(new Map());
+  const [requestType, setRequestType] = useState<'return' | 'exchange'>('return');
   const [returnReason, setReturnReason] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<UploadedImage[]>([]);
+  const [videoUrl, setVideoUrl] = useState('');
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export default function ReturnRequestModal({
   );
 
   // Check eligibility
-  if (daysSinceDelivery > 30) {
+  if (daysSinceDelivery > 7) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-lg max-w-md w-full p-6">
@@ -78,7 +80,7 @@ export default function ReturnRequestModal({
           </div>
           <h3 className="text-xl font-bold text-center mb-2">Return Window Expired</h3>
           <p className="text-gray-600 text-center mb-6">
-            Returns must be requested within 30 days of delivery. Your order was delivered {daysSinceDelivery} days ago.
+            Returns must be requested within 7 days of delivery. Your order was delivered {daysSinceDelivery} days ago.
           </p>
           <button
             onClick={onClose}
@@ -135,7 +137,7 @@ export default function ReturnRequestModal({
         if (!returnReason) {
           return 'Please select a reason for return';
         }
-        if (['defective', 'wrong_item', 'not_as_described', 'other'].includes(returnReason) && !description.trim()) {
+        if (['defective', 'wrong_item', 'other'].includes(returnReason) && !description.trim()) {
           return 'Please describe the issue';
         }
         if (description.length > 1000) {
@@ -143,7 +145,7 @@ export default function ReturnRequestModal({
         }
         break;
       case 3:
-        // Images are optional
+        // Images/Video are optional but encouraged
         break;
       case 4:
         if (!policyAccepted) {
@@ -185,22 +187,26 @@ export default function ReturnRequestModal({
       setError(null);
 
       const itemsToReturn = Array.from(selectedItems.entries()).map(([itemId, selectedItem]) => ({
-        product: selectedItem.productId,
+        productId: selectedItem.productId,
         quantity: selectedItem.quantity,
-        reason: selectedItem.reason || returnReason,
+        reason: returnReason, // Apply main reason to all items for now
       }));
 
       const payload = {
+        orderId,
         items: itemsToReturn,
+        type: requestType,
         reason: returnReason,
         description: description.trim() || undefined,
         images: images.length > 0 ? images : undefined,
+        video: videoUrl ? { url: videoUrl, description: 'Unboxing Video' } : undefined,
+        refundMethod: requestType === 'exchange' ? 'original_payment' : 'store_credit' // Default to store credit for returns
       };
 
-      const response: Record<string, any> = await apiClient.post(API_ENDPOINTS.ORDER_RETURN(orderId), payload);
+      const response = await apiClient.post(API_ENDPOINTS.RETURN_CREATE, payload);
       
       setSuccess({
-        returnRequestId: response.returnRequest?._id || 'N/A',
+        returnRequestId: response._id || 'N/A',
       });
     } catch (err: any) {
       setError(err.message || 'Failed to submit return request. Please try again.');
@@ -221,13 +227,13 @@ export default function ReturnRequestModal({
               </div>
             </div>
 
-            <h3 className="text-2xl font-bold text-center mb-2">Return Request Submitted</h3>
+            <h3 className="text-2xl font-bold text-center mb-2">Request Submitted</h3>
             <p className="text-gray-600 text-center mb-4">
-              Your return request for order #{orderNumber} has been submitted successfully.
+              Your {requestType} request for order #{orderNumber} has been submitted successfully.
             </p>
 
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-              <p className="text-sm font-medium text-gray-700 mb-1">Return Request ID</p>
+              <p className="text-sm font-medium text-gray-700 mb-1">Request ID</p>
               <p className="text-lg font-mono font-bold">{success.returnRequestId}</p>
             </div>
 
@@ -240,16 +246,19 @@ export default function ReturnRequestModal({
                 </li>
                 <li className="flex gap-2">
                   <span className="text-blue-600 font-bold">2.</span>
-                  <span>You'll receive an email if your return is approved</span>
+                  <span>You'll receive an email if your request is approved</span>
                 </li>
-                <li className="flex gap-2">
-                  <span className="text-blue-600 font-bold">3.</span>
-                  <span>A prepaid return shipping label will be provided</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-blue-600 font-bold">4.</span>
-                  <span>Refund will be processed after we receive and inspect the items</span>
-                </li>
+                {requestType === 'return' ? (
+                  <li className="flex gap-2">
+                    <span className="text-blue-600 font-bold">3.</span>
+                    <span>Refund will be credited to your wallet after inspection</span>
+                  </li>
+                ) : (
+                  <li className="flex gap-2">
+                    <span className="text-blue-600 font-bold">3.</span>
+                    <span>Replacement item will be shipped after we receive the return</span>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -261,13 +270,7 @@ export default function ReturnRequestModal({
                 }}
                 className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition"
               >
-                View Return Status
-              </button>
-              <button
-                onClick={onClose}
-                className="w-full border border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-50 font-medium transition"
-              >
-                Close
+                Done
               </button>
             </div>
           </div>
@@ -283,7 +286,7 @@ export default function ReturnRequestModal({
         <div className="sticky top-0 bg-white border-b z-10">
           <div className="flex items-center justify-between p-6">
             <div>
-              <h3 className="text-2xl font-bold">Request Return</h3>
+              <h3 className="text-2xl font-bold">Request Return / Exchange</h3>
               <p className="text-sm text-gray-600 mt-1">Order #{orderNumber}</p>
             </div>
             <button
@@ -320,9 +323,9 @@ export default function ReturnRequestModal({
               ))}
             </div>
             <div className="flex justify-between text-xs text-gray-600">
-              <span>Select Items</span>
+              <span>Items & Type</span>
               <span>Reason</span>
-              <span>Images</span>
+              <span>Evidence</span>
               <span>Review</span>
             </div>
           </div>
@@ -337,14 +340,40 @@ export default function ReturnRequestModal({
             </div>
           )}
 
-          {/* Step 1: Select Items */}
+          {/* Step 1: Select Items & Type */}
           {currentStep === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <h4 className="font-bold text-lg mb-2">Select Items to Return</h4>
+                <h4 className="font-bold text-lg mb-2">Select Items</h4>
                 <p className="text-sm text-gray-600 mb-4">
-                  Choose which items you'd like to return and specify the quantity
+                  Choose which items you'd like to return or exchange
                 </p>
+              </div>
+
+              {/* Request Type Selection */}
+              <div className="flex gap-4 mb-6">
+                <button
+                  type="button"
+                  onClick={() => setRequestType('return')}
+                  className={`flex-1 p-4 border rounded-lg text-center transition ${
+                    requestType === 'return'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Return for Refund
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequestType('exchange')}
+                  className={`flex-1 p-4 border rounded-lg text-center transition ${
+                    requestType === 'exchange'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  Exchange Item
+                </button>
               </div>
 
               <div className="space-y-3">
@@ -362,7 +391,7 @@ export default function ReturnRequestModal({
                       />
                       {isSelected && selectedItem && (
                         <div className="ml-14 mt-2 flex items-center gap-4">
-                          <label className="text-sm font-medium text-gray-700">Quantity to return:</label>
+                          <label className="text-sm font-medium text-gray-700">Quantity:</label>
                           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
                             <button
                               type="button"
@@ -388,21 +417,18 @@ export default function ReturnRequestModal({
                 })}
               </div>
 
-              {selectedItems.size > 0 && (
+              {selectedItems.size > 0 && requestType === 'return' && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-sm font-medium text-blue-900">
-                        {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected for return
+                        {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
                       </p>
                       <p className="text-xs text-blue-700 mt-1">
-                        Estimated refund: ₹{calculateRefundAmount().toFixed(2)}
+                        Estimated refund: ₹{calculateRefundAmount().toFixed(2)} (Store Credit)
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-blue-600 mt-2">
-                    * Shipping costs are typically not refunded
-                  </p>
                 </div>
               )}
             </div>
@@ -412,9 +438,9 @@ export default function ReturnRequestModal({
           {currentStep === 2 && (
             <div className="space-y-6">
               <div>
-                <h4 className="font-bold text-lg mb-2">Reason for Return</h4>
+                <h4 className="font-bold text-lg mb-2">Reason for {requestType === 'return' ? 'Return' : 'Exchange'}</h4>
                 <p className="text-sm text-gray-600 mb-4">
-                  Please tell us why you're returning these items
+                  Please tell us why you're requesting a {requestType}
                 </p>
               </div>
 
@@ -446,7 +472,7 @@ export default function ReturnRequestModal({
                 ))}
               </div>
 
-              {/* Description (required for some reasons) */}
+              {/* Description */}
               {returnReason && (
                 <div>
                   <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
@@ -458,16 +484,8 @@ export default function ReturnRequestModal({
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder={
-                      returnReason === 'defective'
-                        ? 'Please describe the defect or damage...'
-                        : returnReason === 'wrong_item'
-                        ? 'What did you receive vs. what you ordered?'
-                        : returnReason === 'not_as_described'
-                        ? 'How does the item differ from the description?'
-                        : 'Please provide additional details...'
-                    }
-                    rows={5}
+                    placeholder="Please provide additional details..."
+                    rows={4}
                     maxLength={1000}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
@@ -484,17 +502,37 @@ export default function ReturnRequestModal({
             </div>
           )}
 
-          {/* Step 3: Upload Images */}
+          {/* Step 3: Upload Images/Video */}
           {currentStep === 3 && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <h4 className="font-bold text-lg mb-2">Upload Images (Optional)</h4>
+                <h4 className="font-bold text-lg mb-2">Evidence (Optional but Recommended)</h4>
                 <p className="text-sm text-gray-600 mb-4">
-                  Clear photos help us process your return faster
+                  Photos and videos help us expedite your request, especially for damaged or defective items.
                 </p>
               </div>
 
-              <ImageUploader images={images} onImagesChange={setImages} />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Photos</label>
+                <ImageUploader images={images} onImagesChange={setImages} />
+              </div>
+
+              <div>
+                <label htmlFor="videoUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                  Unboxing/Issue Video URL
+                </label>
+                <input
+                  type="url"
+                  id="videoUrl"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Please upload your video to a cloud storage (Google Drive, Dropbox, etc.) and paste the shareable link here.
+                </p>
+              </div>
             </div>
           )}
 
@@ -502,15 +540,18 @@ export default function ReturnRequestModal({
           {currentStep === 4 && (
             <div className="space-y-6">
               <div>
-                <h4 className="font-bold text-lg mb-2">Review Your Return Request</h4>
+                <h4 className="font-bold text-lg mb-2">Review Request</h4>
                 <p className="text-sm text-gray-600 mb-4">
-                  Please review all details before submitting
+                  Please review details before submitting
                 </p>
               </div>
 
-              {/* Items Summary */}
               <div className="border border-gray-300 rounded-lg p-4">
-                <p className="font-medium text-gray-900 mb-3">Items to Return</p>
+                <div className="flex justify-between mb-2">
+                  <span className="font-medium text-gray-900">Type</span>
+                  <span className="capitalize">{requestType}</span>
+                </div>
+                <p className="font-medium text-gray-900 mb-3">Items</p>
                 <div className="space-y-2">
                   {Array.from(selectedItems.entries()).map(([itemId, selectedItem]) => {
                     const item = items.find(i => i._id === itemId);
@@ -519,108 +560,64 @@ export default function ReturnRequestModal({
                     return (
                       <div key={itemId} className="flex justify-between text-sm">
                         <span className="text-gray-700">{productName} × {selectedItem.quantity}</span>
-                        <span className="font-medium">₹{(item.price * selectedItem.quantity).toFixed(2)}</span>
                       </div>
                     );
                   })}
-                  <div className="flex justify-between pt-2 border-t font-bold">
-                    <span>Estimated Refund</span>
-                    <span className="text-blue-600">₹{calculateRefundAmount().toFixed(2)}</span>
-                  </div>
+                  {requestType === 'return' && (
+                    <div className="flex justify-between pt-2 border-t font-bold mt-2">
+                      <span>Refund (Store Credit)</span>
+                      <span className="text-blue-600">₹{calculateRefundAmount().toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Reason and Description */}
-              <div className="border border-gray-300 rounded-lg p-4">
-                <p className="font-medium text-gray-900 mb-2">Return Reason</p>
-                <p className="text-sm text-gray-700">
-                  {RETURN_REASONS.find(r => r.value === returnReason)?.label}
-                </p>
-                {description && (
-                  <>
-                    <p className="font-medium text-gray-900 mt-3 mb-2">Description</p>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{description}</p>
-                  </>
-                )}
-              </div>
-
-              {/* Images Count */}
-              {images.length > 0 && (
-                <div className="border border-gray-300 rounded-lg p-4">
-                  <p className="font-medium text-gray-900 mb-2">Supporting Images</p>
-                  <p className="text-sm text-gray-700">{images.length} image{images.length > 1 ? 's' : ''} uploaded</p>
-                </div>
-              )}
-
-              {/* Return Policy */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="font-medium text-yellow-900 mb-3">Return Policy</p>
-                <ul className="space-y-2 text-sm text-yellow-800">
-                  {RETURN_POLICY_POINTS.map((point, index) => (
-                    <li key={index} className="flex gap-2">
-                      <span>•</span>
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Policy Agreement */}
-              <label className="flex items-start gap-3 cursor-pointer p-4 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition">
+              <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                 <input
                   type="checkbox"
+                  id="policy"
                   checked={policyAccepted}
                   onChange={(e) => setPolicyAccepted(e.target.checked)}
-                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 rounded mt-0.5"
+                  className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500 mt-0.5"
                 />
-                <span className="text-sm text-gray-700">
-                  I have read and agree to the return policy. I understand that items must be in original condition for return.
-                </span>
-              </label>
+                <label htmlFor="policy" className="text-sm text-gray-700 cursor-pointer">
+                  I confirm that the items are in their original condition (unless defective) and I have read the return policy.
+                </label>
+              </div>
             </div>
           )}
+        </div>
 
-          {/* Navigation Buttons */}
-          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-8">
-            {currentStep > 1 && (
-              <button
-                type="button"
-                onClick={handleBack}
-                disabled={isSubmitting}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="h-5 w-5" />
-                Back
-              </button>
-            )}
-
-            {currentStep < totalSteps ? (
-              <button
-                type="button"
-                onClick={handleNext}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition"
-              >
-                Continue
-                <ChevronRight className="h-5 w-5" />
-              </button>
+        {/* Footer Actions */}
+        <div className="sticky bottom-0 bg-white border-t p-6 flex justify-between z-10">
+          <button
+            onClick={currentStep === 1 ? onClose : handleBack}
+            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition"
+            disabled={isSubmitting}
+          >
+            {currentStep === 1 ? 'Cancel' : 'Back'}
+          </button>
+          
+          <button
+            onClick={currentStep === totalSteps ? handleSubmit : handleNext}
+            disabled={isSubmitting}
+            className={`px-6 py-2 rounded-lg text-white font-medium transition flex items-center gap-2 ${
+              isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isSubmitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Submitting...
+              </>
+            ) : currentStep === totalSteps ? (
+              'Submit Request'
             ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isSubmitting || !policyAccepted}
-                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Submitting...</span>
-                  </>
-                ) : (
-                  'Submit Return Request'
-                )}
-              </button>
+              <>
+                Next <ChevronRight className="h-4 w-4" />
+              </>
             )}
-          </div>
+          </button>
         </div>
       </div>
     </div>

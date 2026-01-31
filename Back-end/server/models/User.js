@@ -72,7 +72,21 @@ const UserSchema = new mongoose.Schema({
     ipAddress: String,
     success: Boolean,
     userAgent: String
-  }]
+  }],
+
+  // Store Credits / Wallet
+  wallet: {
+    balance: { type: Number, default: 0 },
+    transactions: [{
+      type: { type: String, enum: ['credit', 'debit'], required: true },
+      amount: { type: Number, required: true },
+      description: String,
+      referenceId: { type: mongoose.Schema.Types.ObjectId }, // ReturnRequest ID or Order ID
+      referenceModel: { type: String, enum: ['ReturnRequest', 'Order'] },
+      expiryDate: Date,
+      createdAt: { type: Date, default: Date.now }
+    }]
+  }
 }, { timestamps: true });
 
 export default mongoose.model("User", UserSchema);

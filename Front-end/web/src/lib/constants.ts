@@ -60,6 +60,11 @@ export const API_ENDPOINTS = {
   
   // Returns
   RETURNS_LIST: '/orders/admin/returns',
+  RETURN_CREATE: '/returns',
+  MY_RETURNS: '/returns/my-returns',
+  WALLET: '/returns/wallet',
+  ADMIN_RETURNS: '/returns/admin/all',
+  RETURN_STATUS: (id: string) => `/returns/${id}/status`,
   RETURN_APPROVE: (orderId: string) => `/orders/${orderId}/return/approve`,
   RETURN_REJECT: (orderId: string) => `/orders/${orderId}/return/reject`,
   RETURN_ITEM_RECEIVED: (orderId: string) => `/orders/${orderId}/return/item-received`,
@@ -185,7 +190,7 @@ export const FOOTER_LINKS = {
   legal: [
     { href: '/privacy', label: 'Privacy Policy' },
     { href: '/terms', label: 'Terms of Service' },
-    { href: '/refund', label: 'Refund Policy' },
+    { href: '/returns', label: 'Refund Policy' },
   ],
 };
 
@@ -219,8 +224,6 @@ export const CANCELLATION_REASONS = [
 export const RETURN_REASONS = [
   { value: 'defective', label: 'Defective or damaged', description: 'Item has defects or arrived damaged' },
   { value: 'wrong_item', label: 'Wrong item received', description: 'Received incorrect product' },
-  { value: 'not_as_described', label: 'Not as described', description: 'Item doesn\'t match description' },
-  { value: 'changed_mind', label: 'Changed my mind', description: 'No longer need this item' },
   { value: 'other', label: 'Other reason', description: 'Please specify your reason' },
 ] as const;
 

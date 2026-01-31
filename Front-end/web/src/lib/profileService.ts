@@ -1,5 +1,5 @@
 import apiClient from './api';
-import { UserProfile, PaginatedOrders, PaymentMethodsData, PaginatedUserReviews } from './types';
+import { UserProfile, PaginatedOrders, PaymentMethodsData, PaginatedUserReviews, PaginatedReturnRequests } from './types';
 
 class ProfileService {
   /**
@@ -84,6 +84,33 @@ class ProfileService {
   async removePaymentMethod(id: string): Promise<any> {
     const response = await apiClient.delete(`/payment-methods/${id}`);
     return response;
+  }
+
+  async getMyReturnRequests(page: number = 1, limit: number = 10): Promise<PaginatedReturnRequests> {
+    const response = await apiClient.get<{
+      success: boolean;
+      requests: PaginatedReturnRequests['requests'];
+      pagination: PaginatedReturnRequests['pagination'];
+      count: number;
+    }>(`/returns/my-returns?page=${page}&limit=${limit}`);
+
+    return {
+      requests: response.requests,
+      pagination: response.pagination,
+      count: response.count
+    };
+  }
+
+  async getWalletBalance(): Promise<{ balance: number; currency: string; history: any[] }> {
+    const response = await apiClient.get<{
+      success: boolean;
+      wallet: {
+        balance: number;
+        currency: string;
+        history: any[];
+      };
+    }>('/returns/wallet');
+    return response.wallet;
   }
 }
 

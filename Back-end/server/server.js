@@ -29,6 +29,7 @@ import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
 import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import contactRoutes from "./routes/contact.js";
+import returnRoutes from "./routes/returnRoutes.js";
 
 // Import database configuration
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
@@ -132,6 +133,7 @@ app.use("/reviews", authenticatedUserRateLimit, reviewRoutes);
 
 // Checkout/Payment endpoints (60 req/min, burst 20) - prevent duplicate orders
 app.use("/orders", checkoutRateLimit, orderRoutes);
+app.use("/returns", returnRoutes);
 app.use("/razorpay", checkoutRateLimit, razorpayRoutes);
 app.use("/payment-methods", checkoutRateLimit, paymentMethodRoutes);
 
