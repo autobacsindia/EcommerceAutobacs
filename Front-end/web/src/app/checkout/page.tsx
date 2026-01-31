@@ -66,7 +66,7 @@ export default function CheckoutPage() {
     phone: '',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.COD);
+  const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.RAZORPAY);
   
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
@@ -216,7 +216,7 @@ export default function CheckoutPage() {
            phone: address.phone
         });
       } else {
-        // For other payment methods (COD), proceed normally
+        // Fallback for other payment methods
         setOrderId(newOrderId);
         await clearCart();
         setCurrentStep('confirmation');
