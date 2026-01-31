@@ -65,6 +65,22 @@ interface Analytics {
     apiRequests: number;
     errorRate: number;
   };
+  messages: {
+    total: number;
+    breakdown: {
+      new: number;
+      read: number;
+      replied: number;
+      closed: number;
+    };
+    recentMessages: {
+      _id: string;
+      name: string;
+      subject: string;
+      status: string;
+      createdAt: string;
+    }[];
+  };
 }
 
 interface RecentOrder {
@@ -153,7 +169,8 @@ export default function AdminDashboardPage() {
 
   // Get status color
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
+      // Health Statuses
       case 'healthy':
         return 'text-green-600 bg-green-100';
       case 'degraded':
@@ -162,6 +179,31 @@ export default function AdminDashboardPage() {
         return 'text-orange-600 bg-orange-100';
       case 'critical':
         return 'text-red-600 bg-red-100';
+      
+      // Order Statuses
+      case 'pending':
+        return 'text-yellow-600 bg-yellow-100';
+      case 'confirmed':
+      case 'processing':
+        return 'text-blue-600 bg-blue-100';
+      case 'shipped':
+        return 'text-purple-600 bg-purple-100';
+      case 'delivered':
+        return 'text-green-600 bg-green-100';
+      case 'cancelled':
+      case 'refunded':
+        return 'text-red-600 bg-red-100';
+
+      // Message Statuses
+      case 'new':
+        return 'text-blue-600 bg-blue-100';
+      case 'replied':
+        return 'text-green-600 bg-green-100';
+      case 'read':
+        return 'text-gray-600 bg-gray-100';
+      case 'closed':
+        return 'text-gray-600 bg-gray-200';
+
       default:
         return 'text-gray-600 bg-gray-100';
     }
@@ -319,6 +361,33 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
+          {/* Messages Card */}
+          {analytics.messages && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">Messages</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-gray-600">New Inquiries</p>
+                  <p className="text-2xl font-bold text-purple-600">{analytics.messages.breakdown.new}</p>
+                </div>
+                <div className="space-y-2">
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="text-gray-600">Replied</span>
+                     <span className="font-semibold">{analytics.messages.breakdown.replied}</span>
+                   </div>
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="text-gray-600">Closed</span>
+                     <span className="font-semibold">{analytics.messages.breakdown.closed}</span>
+                   </div>
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="text-gray-600">Total</span>
+                     <span className="font-semibold">{analytics.messages.total}</span>
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Inventory Card */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold mb-4 text-gray-900">Inventory</h3>
@@ -354,6 +423,32 @@ export default function AdminDashboardPage() {
               ))}
             </div>
           </div>
+
+          {/* Recent Messages */}
+          {analytics.messages && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">Recent Messages</h3>
+              <div className="space-y-2">
+                {analytics.messages.recentMessages.map((msg) => (
+                  <div key={msg._id} className="p-3 bg-gray-50 rounded">
+                    <div className="flex justify-between items-start mb-1">
+                      <p className="font-medium text-sm truncate pr-2">{msg.subject}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(msg.status)} whitespace-nowrap`}>
+                        {msg.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-gray-500">
+                      <span>{msg.name}</span>
+                      <span>{new Date(msg.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+                {analytics.messages.recentMessages.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">No recent messages</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

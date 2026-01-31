@@ -212,13 +212,13 @@ export default function AdminMessagesPage() {
   }
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="mb-6">
+    <div className="p-6 h-[calc(100vh-4rem)] flex flex-col">
+      <div className="mb-6 flex-none">
         <h1 className="text-2xl font-bold text-gray-900">Messages & Inquiries</h1>
         <p className="text-gray-600">Manage contact form submissions</p>
       </div>
 
-      <div className="flex flex-1 gap-6 overflow-hidden">
+      <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
         {/* Message List */}
         <div className={`w-full ${selectedMessage ? 'md:w-1/3 hidden md:flex' : 'flex'} flex-col bg-white rounded-lg shadow-md overflow-hidden`}>
           <div className="p-4 border-b border-gray-200">

@@ -1,5 +1,6 @@
 import express from "express";
 import Contact from "../models/Contact.js";
+import emailHandler from "../services/emailHandler.js";
 import { protect, admin, optionalAuth } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { check, validationResult } from "express-validator";
@@ -53,6 +54,20 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
     success: true,
     count: contacts.length,
     data: contacts
+  });
+}));
+
+// @route   GET /contact/stats
+// @desc    Get contact message statistics (e.g. unread count)
+// @access  Private/Admin
+router.get("/stats", protect, admin, asyncHandler(async (req, res) => {
+  const newCount = await Contact.countDocuments({ status: 'new' });
+  
+  res.json({
+    success: true,
+    data: {
+      newCount
+    }
   });
 }));
 
@@ -112,6 +127,31 @@ router.post("/:id/reply", protect, admin, asyncHandler(async (req, res) => {
   contact.status = 'replied';
 
   await contact.save();
+
+  // Send email notification
+  try {
+    await emailHandler.sendEmail({
+      to: contact.email,
+      subject: `Re: ${contact.subject} - Response from Autobacs`,
+      text: `Dear ${contact.name},\n\n${message}\n\nBest regards,\nAutobacs Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <p>Dear ${contact.name},</p>
+          <p>Thank you for contacting Autobacs. Here is our response to your inquiry:</p>
+          <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #d01f2f; margin: 20px 0;">
+            <p style="white-space: pre-wrap; margin: 0;">${message}</p>
+          </div>
+          <p>Original Message:<br/>
+          <em style="color: #666;">"${contact.message}"</em></p>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p>Best regards,<br/><strong>Autobacs Team</strong></p>
+        </div>
+      `
+    });
+  } catch (emailError) {
+    console.error('Failed to send reply email:', emailError);
+    // Continue execution, don't fail the request
+  }
 
   res.json({
     success: true,

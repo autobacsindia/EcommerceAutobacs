@@ -1,6 +1,7 @@
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
+import Contact from '../models/Contact.js';
 
 /**
  * Dashboard Analytics Service
@@ -25,11 +26,12 @@ class DashboardAnalyticsService {
     }
 
     try {
-      const [sales, orders, customers, system] = await Promise.all([
+      const [sales, orders, customers, system, messages] = await Promise.all([
         this.getSalesAnalytics(),
         this.getOrdersAnalytics(),
         this.getCustomerAnalytics(),
-        this.getSystemPerformance()
+        this.getSystemPerformance(),
+        this.getMessagesAnalytics()
       ]);
 
       const analyticsData = {
@@ -37,7 +39,8 @@ class DashboardAnalyticsService {
         sales,
         orders,
         customers,
-        system
+        system,
+        messages
       };
 
       // Cache the result
@@ -295,6 +298,58 @@ class DashboardAnalyticsService {
   }
 
   /**
+   * Get messages analytics
+   * @returns {Promise<Object>} Messages metrics
+   */
+  async getMessagesAnalytics() {
+    try {
+      const statusBreakdown = await Contact.aggregate([
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const breakdown = {
+        new: 0,
+        read: 0,
+        replied: 0,
+        closed: 0
+      };
+
+      statusBreakdown.forEach(item => {
+        if (breakdown.hasOwnProperty(item._id)) {
+          breakdown[item._id] = item.count;
+        }
+      });
+
+      const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
+
+      // Get recent messages
+      const recentMessages = await Contact.find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('_id name subject status createdAt')
+        .lean();
+
+      return {
+        total,
+        breakdown,
+        recentMessages
+      };
+    } catch (error) {
+      console.error('Error getting messages analytics:', error);
+      return {
+        total: 0,
+        breakdown: { new: 0, read: 0, replied: 0, closed: 0 },
+        recentMessages: []
+      };
+    }
+  }
+
+  /**
    * Get top performing products
    * @param {number} limit - Number of products to return
    * @returns {Promise<Array>} Top products
@@ -374,6 +429,16 @@ class DashboardAnalyticsService {
         },
         apiRequests: 0,
         errorRate: 0
+      },
+      messages: {
+        total: 0,
+        breakdown: {
+          new: 0,
+          read: 0,
+          replied: 0,
+          closed: 0
+        },
+        recentMessages: []
       }
     };
   }

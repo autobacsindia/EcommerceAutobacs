@@ -1,9 +1,10 @@
 'use client';
 
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import apiClient from '@/lib/api';
 import { 
   LayoutDashboard, 
   Package, 
@@ -26,6 +27,7 @@ import {
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const [messageCount, setMessageCount] = useState(0);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -33,6 +35,27 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
     // In production, check if user.role === 'admin'
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      const fetchStats = async () => {
+        try {
+          const res = await apiClient.get<{ success: boolean; data: { newCount: number } }>('/contact/stats');
+          if (res.success) {
+            setMessageCount(res.data.newCount);
+          }
+        } catch (error) {
+          console.error('Failed to fetch stats:', error);
+        }
+      };
+
+      fetchStats();
+      
+      // Optional: Poll every 30 seconds
+      const interval = setInterval(fetchStats, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return <div className="text-center py-8">Loading...</div>;
@@ -62,7 +85,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Sidebar */}
       <aside className="w-64 bg-gray-900 text-white flex flex-col">
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-y-auto">
           <h2 className="text-2xl font-bold mb-8">Admin Panel</h2>
           <nav className="space-y-2">
             {menuItems.map((item) => {
@@ -71,10 +94,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition"
+                  className="flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-800 transition"
                 >
-                  <Icon className="h-5 w-5" />
-                  {item.label}
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-5 w-5" />
+                    {item.label}
+                  </div>
+                  {item.href === '/admin/messages' && messageCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      {messageCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
