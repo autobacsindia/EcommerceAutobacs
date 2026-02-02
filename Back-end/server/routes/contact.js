@@ -163,7 +163,11 @@ router.post("/:id/reply", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /contact/:id
 // @desc    Update contact message status
 // @access  Private/Admin
-router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, [
+  param('id', 'Invalid contact ID').isMongoId(),
+  check('status', 'Invalid status').optional().isIn(['new', 'read', 'replied', 'closed']),
+  validate
+], asyncHandler(async (req, res) => {
   const { status, adminNotes } = req.body;
 
   const contact = await Contact.findById(req.params.id);

@@ -399,12 +399,22 @@ export default function AdminMessagesPage() {
                         <XCircle className="h-5 w-5" />
                       </button>
                     </div>
+                    {/* Rich Text Toolbar */}
+                    <div className="flex space-x-2 mb-2 p-1 bg-gray-50 border border-gray-200 rounded-md">
+                      <button type="button" onClick={() => insertFormat('<b>', '</b>')} className="p-1 hover:bg-gray-200 rounded text-sm font-bold w-8" title="Bold">B</button>
+                      <button type="button" onClick={() => insertFormat('<i>', '</i>')} className="p-1 hover:bg-gray-200 rounded text-sm italic w-8" title="Italic">I</button>
+                      <button type="button" onClick={() => insertFormat('<u>', '</u>')} className="p-1 hover:bg-gray-200 rounded text-sm underline w-8" title="Underline">U</button>
+                      <div className="w-px bg-gray-300 mx-2"></div>
+                      <button type="button" onClick={() => insertFormat('<p>', '</p>')} className="p-1 hover:bg-gray-200 rounded text-xs w-auto px-2" title="Paragraph">Para</button>
+                      <button type="button" onClick={() => insertFormat('<ul>\n  <li>', '</li>\n</ul>')} className="p-1 hover:bg-gray-200 rounded text-xs w-auto px-2" title="List">List</button>
+                    </div>
                     <textarea
+                      ref={textareaRef}
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       rows={5}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      placeholder="Type your reply here..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                      placeholder="Type your reply here... (HTML tags supported)"
                       required
                     ></textarea>
                   </div>
