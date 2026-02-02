@@ -3,9 +3,17 @@ import Contact from "../models/Contact.js";
 import emailHandler from "../services/emailHandler.js";
 import { protect, admin, optionalAuth } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { check, validationResult } from "express-validator";
+import { check, param, validationResult } from "express-validator";
 
 const router = express.Router();
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
 
 // @route   POST /contact
 // @desc    Submit a contact form message

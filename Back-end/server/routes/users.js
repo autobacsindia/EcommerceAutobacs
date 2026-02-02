@@ -2,8 +2,18 @@ import express from "express";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { check, param, validationResult } from "express-validator";
+import auditLogger from "../services/auditLogger.js";
 
 const router = express.Router();
+
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
 
 // @route   GET /users
 // @desc    Get all users
@@ -21,7 +31,10 @@ router.get("/", protect, admin, asyncHandler(async (req, res) => {
 // @route   GET /users/:id
 // @desc    Get user by ID
 // @access  Private/Admin
-router.get("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.get("/:id", protect, admin, [
+  param('id', 'Invalid user ID').isMongoId(),
+  validate
+], asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select('-passwordHash');
   
   if (!user) {
@@ -40,7 +53,14 @@ router.get("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /users/:id
 // @desc    Update user role/status
 // @access  Private/Admin
-router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, [
+  param('id', 'Invalid user ID').isMongoId(),
+  check('name', 'Name is required').optional().notEmpty(),
+  check('email', 'Valid email is required').optional().isEmail(),
+  check('role', 'Invalid role').optional().isIn(['user', 'admin']),
+  check('isActive', 'isActive must be a boolean').optional().isBoolean(),
+  validate
+], asyncHandler(async (req, res) => {
   const { name, email, role, isActive } = req.body;
   
   const user = await User.findById(req.params.id);
@@ -51,6 +71,14 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
       message: 'User not found'
     });
   }
+
+  // Capture previous state for audit log
+  const previousState = {
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive
+  };
   
   // Update user fields
   if (name) user.name = name;
@@ -59,6 +87,18 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
   if (isActive !== undefined) user.isActive = isActive;
   
   const updatedUser = await user.save();
+
+  // Log audit event
+  auditLogger.logAction(
+    req,
+    'UPDATE',
+    'User',
+    user._id,
+    {
+      previous: previousState,
+      updated: { name, email, role, isActive }
+    }
+  );
   
   res.json({
     success: true,
@@ -76,7 +116,10 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @route   DELETE /users/:id
 // @desc    Delete user
 // @access  Private/Admin
-router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, admin, [
+  param('id', 'Invalid user ID').isMongoId(),
+  validate
+], asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   
   if (!user) {
@@ -93,8 +136,20 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
       message: 'Cannot delete your own account'
     });
   }
+
+  const userEmail = user.email;
+  const userId = user._id;
   
   await user.deleteOne();
+
+  // Log audit event
+  auditLogger.logAction(
+    req,
+    'DELETE',
+    'User',
+    userId,
+    { email: userEmail }
+  );
   
   res.json({
     success: true,

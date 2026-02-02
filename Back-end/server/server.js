@@ -62,7 +62,20 @@ const app = express();
 const cronService = new CronService();
 
 // Apply middleware before routes
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "http:"],
+      connectSrc: ["'self'", "https://api.razorpay.com", "https://lumberjack.razorpay.com"],
+      frameSrc: ["'self'", "https://api.razorpay.com"],
+    },
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
 app.use(compression({
   filter: (req, res) => {
     if (req.headers.accept === 'text/event-stream' || req.path.includes('/stream')) {
@@ -71,9 +84,31 @@ app.use(compression({
     return compression.filter(req, res);
   }
 }));
+
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173', // Vite default
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1 && !process.env.Review_App) {
+      // In development, we might want to be more lenient or log it
+      if (process.env.NODE_ENV === 'development') {
+        return callback(null, true);
+      }
+      var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
