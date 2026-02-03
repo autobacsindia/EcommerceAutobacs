@@ -59,9 +59,10 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
         // In a real app, we would refetch the reviews and summary
         alert(result.message);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error submitting review:', err);
-      alert('Failed to submit review. Please try again.');
+      // Show specific error message from backend if available
+      alert(err.message || 'Failed to submit review. Please try again.');
     }
   };
 

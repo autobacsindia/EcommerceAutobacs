@@ -408,7 +408,10 @@ class APIClient {
       if (!shouldSuppressLog) {
         // Only log non-rate limit errors to reduce console spam
         if (!isRateLimitError) {
-          console.error('API Response Error:', errorDetails);
+          // Enhanced logging to ensure error details are visible even if object serialization fails
+          const status = errorDetails.status || (error as any)?.status || 'unknown';
+          const url = errorDetails.url || (response as any)?.url || '';
+          console.error(`API Response Error [${status}] ${url}:`, errorDetails);
         } else {
           console.warn('Rate limit hit:', errorDetails);
         }
