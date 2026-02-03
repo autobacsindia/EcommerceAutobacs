@@ -404,6 +404,120 @@ router.put("/:id/status", protect, admin, asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   POST /orders/bulk/status
+// @desc    Bulk update order status (Admin only)
+// @access  Private/Admin
+router.post("/bulk/status", protect, admin, asyncHandler(async (req, res) => {
+  const { orderIds, status, reason, notes } = req.body;
+
+  if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'No order IDs provided'
+    });
+  }
+
+  if (!status) {
+    return res.status(400).json({
+      success: false,
+      message: 'Status is required'
+    });
+  }
+
+  const results = {
+    successful: [],
+    failed: []
+  };
+
+  // Process updates in parallel
+  await Promise.all(orderIds.map(async (orderId) => {
+    try {
+      const result = await orderStatusService.updateOrderStatus(orderId, status, {
+        userId: req.user.id,
+        isAdmin: true,
+        reason: reason || 'bulk_admin_update',
+        notes: notes || 'Bulk status update from admin panel'
+      });
+
+      if (result.success) {
+        results.successful.push({ orderId, status });
+      } else {
+        results.failed.push({ orderId, error: result.message });
+      }
+    } catch (error) {
+      results.failed.push({ orderId, error: error.message });
+    }
+  }));
+
+  res.json({
+    success: true,
+    message: `Processed ${orderIds.length} orders`,
+    results
+  });
+}));
+
+// @route   POST /orders/bulk/delete
+// @desc    Bulk delete orders (Admin only, restricted to cancelled/failed)
+// @access  Private/Admin
+router.post("/bulk/delete", protect, admin, asyncHandler(async (req, res) => {
+  const { orderIds } = req.body;
+
+  if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'No order IDs provided'
+    });
+  }
+
+  const results = {
+    successful: [],
+    failed: []
+  };
+
+  // Only allow deleting cancelled or failed orders
+  const deletableStatuses = ['cancelled', 'failed'];
+
+  // Process deletes in parallel
+  await Promise.all(orderIds.map(async (orderId) => {
+    try {
+      const order = await Order.findById(orderId);
+      
+      if (!order) {
+        results.failed.push({ orderId, error: 'Order not found' });
+        return;
+      }
+
+      if (!deletableStatuses.includes(order.status)) {
+        results.failed.push({ 
+          orderId, 
+          error: `Cannot delete order with status '${order.status}'. Only cancelled or failed orders can be deleted.` 
+        });
+        return;
+      }
+
+      await order.deleteOne();
+      results.successful.push(orderId);
+      
+      // Log audit event
+      if (req.user) {
+        // We need to import auditLogger if we want to use it, but it's not imported in this file yet.
+        // Assuming we might want to add it later or if it's available globally (it's not).
+        // For now, skipping explicit audit log call inside this route as it wasn't requested, 
+        // but it's good practice. I'll stick to the core requirement.
+      }
+
+    } catch (error) {
+      results.failed.push({ orderId, error: error.message });
+    }
+  }));
+
+  res.json({
+    success: true,
+    message: `Processed ${orderIds.length} deletions`,
+    results
+  });
+}));
+
 // @route   GET /orders/:id/status-history
 // @desc    Get status history for an order
 // @access  Private

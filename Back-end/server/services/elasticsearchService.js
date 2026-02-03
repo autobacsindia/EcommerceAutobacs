@@ -230,11 +230,14 @@ class ElasticsearchService {
                 sku: { type: 'keyword' },
                 isActive: { type: 'boolean' },
                 isFeatured: { type: 'boolean' },
+                isFastMoving: { type: 'boolean' },
                 averageRating: { type: 'float' },
                 totalReviews: { type: 'integer' },
                 tags: { type: 'keyword' },
                 createdAt: { type: 'date' },
-                updatedAt: { type: 'date' }
+                updatedAt: { type: 'date' },
+                vehicle_makes: { type: 'keyword' },
+                vehicle_models: { type: 'keyword' }
               }
             }
           }
@@ -252,12 +255,27 @@ class ElasticsearchService {
    */
   async indexProduct(product) {
     try {
+      // Extract vehicle info if available
+      let vehicleMakes = [];
+      let vehicleModels = [];
+      
+      if (product.compatibleVehicles && Array.isArray(product.compatibleVehicles)) {
+        product.compatibleVehicles.forEach(v => {
+          if (v && v.make) vehicleMakes.push(v.make);
+          if (v && v.model) vehicleModels.push(v.model);
+        });
+        
+        // Remove duplicates
+        vehicleMakes = [...new Set(vehicleMakes)];
+        vehicleModels = [...new Set(vehicleModels)];
+      }
+
       const body = {
         productId: product._id.toString(),
         name: product.name,
         description: product.description,
         shortDescription: product.shortDescription,
-        category: product.category,
+        categories: product.categories, // Index full categories array
         brand: product.brand,
         price: product.price,
         originalPrice: product.originalPrice,
@@ -265,11 +283,17 @@ class ElasticsearchService {
         sku: product.sku,
         isActive: product.isActive,
         isFeatured: product.isFeatured,
+        isFastMoving: product.isFastMoving || false,
         averageRating: product.averageRating,
-        totalReviews: product.totalReviews,
+        totalReviews: product.totalReviews || 0,
         tags: product.tags,
         createdAt: product.createdAt,
-        updatedAt: product.updatedAt
+        updatedAt: product.updatedAt,
+        vehicle_makes: vehicleMakes,
+        vehicle_models: vehicleModels,
+        primaryImage: Array.isArray(product.images) && product.images.length > 0 
+          ? (product.images.find(img => img.isPrimary) || product.images[0]).url 
+          : (typeof product.images === 'string' ? product.images : null)
       };
 
       await this.client.index({
@@ -288,9 +312,10 @@ class ElasticsearchService {
    */
   async indexAllProducts() {
     try {
-      // Fetch all active products from MongoDB
+      // Fetch all active products from MongoDB with necessary populations
       const products = await Product.find({ isActive: true })
         .populate('categories', 'name slug')
+        .populate('compatibleVehicles', 'make model')
         .lean();
 
       // Index each product
@@ -337,6 +362,7 @@ class ElasticsearchService {
       limit = 12,
       category,
       brand,
+      vehicleType, // Mapping "Vehicle Type" request to vehicle make
       minPrice,
       maxPrice,
       inStock,
@@ -349,9 +375,39 @@ class ElasticsearchService {
       // Build the search query
       const searchBody = {
         query: {
-          bool: {
-            must: [],
-            filter: []
+          function_score: {
+            query: {
+              bool: {
+                must: [],
+                filter: []
+              }
+            },
+            functions: [
+              // Boost fast moving products
+              {
+                filter: { term: { isFastMoving: true } },
+                weight: 2
+              },
+              // Boost by popularity (total reviews)
+              {
+                field_value_factor: {
+                  field: "totalReviews",
+                  factor: 0.1,
+                  modifier: "log1p",
+                  missing: 0
+                }
+              },
+              // Boost by rating
+              {
+                field_value_factor: {
+                  field: "averageRating",
+                  factor: 0.5,
+                  missing: 0
+                }
+              }
+            ],
+            score_mode: "sum",
+            boost_mode: "multiply"
           }
         },
         aggs: {
@@ -360,6 +416,9 @@ class ElasticsearchService {
           },
           brands: {
             terms: { field: 'brand.keyword' }
+          },
+          vehicle_types: {
+            terms: { field: 'vehicle_makes.keyword' }
           },
           price_ranges: {
             range: {
@@ -395,30 +454,37 @@ class ElasticsearchService {
 
       // Add text search if query provided
       if (q) {
-        searchBody.query.bool.must.push({
+        searchBody.query.function_score.query.bool.must.push({
           multi_match: {
             query: q,
-            fields: ['name^3', 'description', 'brand', 'tags'],
+            fields: ['name^3', 'description', 'brand', 'tags', 'vehicle_makes', 'vehicle_models'],
             fuzziness: 'AUTO'
           }
         });
       } else {
         // Match all if no query
-        searchBody.query.bool.must.push({ match_all: {} });
+        searchBody.query.function_score.query.bool.must.push({ match_all: {} });
       }
 
       // Add filters
       if (category) {
         const categories = Array.isArray(category) ? category : category.split(',');
-        searchBody.query.bool.filter.push({
+        searchBody.query.function_score.query.bool.filter.push({
           terms: { 'category.name.keyword': categories }
         });
       }
 
       if (brand) {
         const brands = Array.isArray(brand) ? brand : brand.split(',');
-        searchBody.query.bool.filter.push({
+        searchBody.query.function_score.query.bool.filter.push({
           terms: { 'brand.keyword': brands }
+        });
+      }
+
+      if (vehicleType) {
+        const types = Array.isArray(vehicleType) ? vehicleType : vehicleType.split(',');
+        searchBody.query.function_score.query.bool.filter.push({
+          terms: { 'vehicle_makes.keyword': types }
         });
       }
 
@@ -426,13 +492,13 @@ class ElasticsearchService {
         const range = {};
         if (minPrice) range.gte = Number(minPrice);
         if (maxPrice) range.lte = Number(maxPrice);
-        searchBody.query.bool.filter.push({
+        searchBody.query.function_score.query.bool.filter.push({
           range: { price: range }
         });
       }
 
       if (inStock === 'true') {
-        searchBody.query.bool.filter.push({
+        searchBody.query.function_score.query.bool.filter.push({
           range: { stock: { gt: 0 } }
         });
       }
@@ -442,7 +508,7 @@ class ElasticsearchService {
         const validRatings = ratings.filter(r => !isNaN(r));
         if (validRatings.length > 0) {
           const maxRating = Math.max(...validRatings);
-          searchBody.query.bool.filter.push({
+          searchBody.query.function_score.query.bool.filter.push({
             range: { averageRating: { gte: maxRating } }
           });
         }
@@ -451,7 +517,7 @@ class ElasticsearchService {
       // Add sorting
       const sortOptions = {};
       if (q && sortBy === 'createdAt') {
-        // If searching and no specific sort requested, sort by relevance
+        // If searching and no specific sort requested, sort by relevance (score)
         sortOptions._score = { order: 'desc' };
       } else {
         // Otherwise use requested sort
@@ -480,6 +546,10 @@ class ElasticsearchService {
           count: bucket.doc_count
         })),
         brands: result.aggregations.brands.buckets.map(bucket => ({
+          name: bucket.key,
+          count: bucket.doc_count
+        })),
+        vehicleTypes: result.aggregations.vehicle_types.buckets.map(bucket => ({
           name: bucket.key,
           count: bucket.doc_count
         })),
@@ -533,7 +603,7 @@ class ElasticsearchService {
               operator: 'and'
             }
           },
-          _source: ['name', 'brand', 'category.name'],
+          _source: ['name', 'brand', 'categories.name', 'primaryImage'],
           size: limit * 2
         }
       });
@@ -545,12 +615,12 @@ class ElasticsearchService {
           query: {
             multi_match: {
               query: query,
-              fields: ['category.name^3'], // Higher boost for categories
+              fields: ['categories.name^3'], // Higher boost for categories
               fuzziness: 'AUTO',
               operator: 'and'
             }
           },
-          _source: ['category.name'],
+          _source: ['categories.name'],
           size: limit
         }
       });
@@ -562,7 +632,7 @@ class ElasticsearchService {
           query: {
             multi_match: {
               query: query,
-              fields: ['name', 'brand', 'category.name'],
+              fields: ['name', 'brand', 'categories.name'],
               fuzziness: 'AUTO:4,7', // More aggressive fuzziness for corrections
               operator: 'or'
             }
@@ -618,11 +688,18 @@ class ElasticsearchService {
         // Add product name suggestion
         if (source.name && !seenNames.has(source.name.toLowerCase())) {
           seenNames.add(source.name.toLowerCase());
+          
+          const categoryName = source.categories && source.categories.length > 0 
+            ? source.categories[0].name 
+            : null;
+
           suggestions.push({
             id: `product-${hit._id}`,
             text: source.name,
             type: 'product',
-            category: source.category ? source.category.name : null
+            category: categoryName,
+            imageUrl: source.primaryImage || null,
+            value: hit._id
           });
         }
 
@@ -632,7 +709,8 @@ class ElasticsearchService {
           suggestions.push({
             id: `brand-${source.brand.toLowerCase().replace(/\s+/g, '-')}`,
             text: source.brand,
-            type: 'brand'
+            type: 'brand',
+            value: source.brand
           });
         }
       });
@@ -641,12 +719,17 @@ class ElasticsearchService {
       categoryResult.hits.hits.forEach(hit => {
         const source = hit._source;
         
-        if (source.category && source.category.name && !seenCategories.has(source.category.name.toLowerCase())) {
-          seenCategories.add(source.category.name.toLowerCase());
-          suggestions.push({
-            id: `category-${source.category.name.toLowerCase().replace(/\s+/g, '-')}`,
-            text: source.category.name,
-            type: 'category'
+        if (source.categories && Array.isArray(source.categories)) {
+          source.categories.forEach(cat => {
+            if (cat.name && !seenCategories.has(cat.name.toLowerCase()) && cat.name.toLowerCase().includes(query.toLowerCase())) {
+              seenCategories.add(cat.name.toLowerCase());
+              suggestions.push({
+                id: `category-${cat.name.toLowerCase().replace(/\s+/g, '-')}`,
+                text: cat.name,
+                type: 'category',
+                value: cat.name
+              });
+            }
           });
         }
       });

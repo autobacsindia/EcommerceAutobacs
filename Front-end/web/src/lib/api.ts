@@ -131,7 +131,10 @@ class APIClient {
    */
   public async refreshSession(): Promise<string | null> {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+      const API_BASE_URL =
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        'http://localhost:5000';
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: {
@@ -433,7 +436,10 @@ class APIClient {
 
       // Add more context for network errors
       if (category === ErrorCategory.NETWORK) {
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+        const API_BASE_URL =
+          process.env.NEXT_PUBLIC_API_BASE_URL ||
+          process.env.NEXT_PUBLIC_API_URL ||
+          'http://localhost:5000';
         errorMessage = `Network error: Unable to connect to the server at ${API_BASE_URL}. Please make sure the backend server is running. Details: ${errorMessage}`;
       }
 
@@ -455,7 +461,10 @@ class APIClient {
     data: any | undefined,
     options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }
   ): Promise<T> {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+    const API_BASE_URL =
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:5000';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     
     // Handle query parameters

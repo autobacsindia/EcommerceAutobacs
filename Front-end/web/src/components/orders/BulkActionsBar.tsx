@@ -10,6 +10,7 @@ interface BulkActionsBarProps {
   onClearSelection: () => void;
   onBulkStatusUpdate: (status: string, reason: string, notes: string) => Promise<void>;
   onExportSelected: () => void;
+  onBulkDelete: () => void;
 }
 
 export default function BulkActionsBar({
@@ -18,7 +19,8 @@ export default function BulkActionsBar({
   onSelectAll,
   onClearSelection,
   onBulkStatusUpdate,
-  onExportSelected
+  onExportSelected,
+  onBulkDelete
 }: BulkActionsBarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [status, setStatus] = useState('');
@@ -73,6 +75,13 @@ export default function BulkActionsBar({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={onBulkDelete}
+              className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
             <button
               onClick={onExportSelected}
               className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"

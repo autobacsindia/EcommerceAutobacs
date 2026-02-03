@@ -117,6 +117,11 @@ class LocationService {
     } catch (error: any) {
       console.error('Select location error:', error);
       
+      // Handle Network Error / Failed to fetch
+      if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
+         throw new Error('Unable to connect to location service. Please check your internet connection or try again later.');
+      }
+      
       // Enhanced error handling for reverse geocode failures
       if (error.message && error.message.includes('reverse geocode')) {
         // Categorize the specific type of reverse geocode error

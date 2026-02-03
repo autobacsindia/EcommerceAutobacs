@@ -226,6 +226,40 @@ export default function AdminOrdersPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedOrders.length === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedOrders.length} orders? Only cancelled or failed orders can be deleted. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.post(API_ENDPOINTS.ORDER_BULK_DELETE, {
+        orderIds: selectedOrders,
+      }) as any;
+      
+      const { successful, failed } = response.results || { successful: [], failed: [] };
+      
+      // Show results
+      if (failed.length === 0) {
+        alert(`Successfully deleted ${successful.length} order(s)`);
+      } else {
+        alert(
+          `Deleted ${successful.length} order(s).\n` +
+          `Failed to delete ${failed.length} order(s) (likely not cancelled/failed):\n` +
+          failed.map((f: any) => `- ${f.orderId}: ${f.error}`).join('\n')
+        );
+      }
+      
+      // Refresh and clear selection
+      await fetchOrders();
+      setSelectedOrders([]);
+    } catch (error: any) {
+      console.error('Bulk delete failed:', error);
+      alert(error.message || 'Bulk delete failed');
+    }
+  };
+
   const handleExportSelected = () => {
     const selectedOrdersData = orders.filter(o => selectedOrders.includes(o._id));
     
@@ -483,6 +517,7 @@ export default function AdminOrdersPage() {
         onClearSelection={handleClearSelection}
         onBulkStatusUpdate={handleBulkStatusUpdate}
         onExportSelected={handleExportSelected}
+        onBulkDelete={handleBulkDelete}
       />
     </div>
   );

@@ -55,6 +55,7 @@ export const API_ENDPOINTS = {
   ADMIN_ORDERS: '/orders/admin/all',
   ORDER_UPDATE_STATUS: (id: string) => `/orders/${id}/status`,
   ORDER_BULK_STATUS: '/orders/bulk/status',
+  ORDER_BULK_DELETE: '/orders/bulk/delete',
   ORDER_ANALYTICS: '/orders/analytics/summary',
   ORDER_STATUS_HISTORY: (id: string) => `/orders/${id}/status-history`,
   
