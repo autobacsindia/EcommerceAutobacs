@@ -102,7 +102,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       try {
         // Fetch categories, products, and vehicle data in parallel for better performance
         // Using local API instead of WordPress for better performance and control
-        const timeoutDuration = 15000; // Increased timeout to 15s to prevent premature timeouts in dev
+        const timeoutDuration = 45000; // Increased timeout to 45s to allow for backend retries
         const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
           wordpressService.getProductCategories({ timeout: timeoutDuration }),
           vehicleService.getVehicleProducts(slug, {
