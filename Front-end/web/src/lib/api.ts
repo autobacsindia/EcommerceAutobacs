@@ -198,35 +198,37 @@ class APIClient {
     if (status === 401 || status === 403) {
       return ErrorCategory.AUTH;
     }
-    
-    // Client errors (4xx)
+
+    // Client errors
     if (status >= 400 && status < 500) {
       return ErrorCategory.CLIENT;
     }
-    
-    // Server errors (5xx)
+
+    // Server errors
     if (status >= 500 && status < 600) {
       return ErrorCategory.SERVER;
     }
-    
+
     // Timeout errors
     if (error instanceof DOMException && error.name === 'TimeoutError') {
       return ErrorCategory.TIMEOUT;
     }
-    
+
     // Parsing errors
     if (error instanceof SyntaxError) {
       return ErrorCategory.PARSING;
     }
-    
-    // Default to network for unknown errors
+
     return ErrorCategory.NETWORK;
   }
 
   /**
-   * Handle API response with enhanced error categorization
+   * Handle API responses
    */
-  private async handleResponse<T>(response: Response): Promise<T> {
+  private async handleResponse(response: Response): Promise<any> {
+    // Clone response to allow multiple reads if needed
+    const responseClone = response.clone();
+    
     let data;
     const contentType = response.headers.get('content-type');
     
@@ -234,18 +236,22 @@ class APIClient {
       if (contentType && contentType.includes('application/json')) {
         data = await response.json();
       } else {
-        // Handle non-JSON responses
-        const text = await response.text();
-        data = { message: text };
+        data = await response.text();
+        try {
+          // Try to parse text as JSON just in case
+          data = JSON.parse(data);
+        } catch (e) {
+          // Keep as text if not valid JSON
+        }
       }
-    } catch (parseError) {
-      // Failed to parse response body
-      data = { message: 'Failed to parse server response' };
+    } catch (error) {
+      // If parsing fails, use status text or empty object
+      data = { message: response.statusText || 'Unknown error occurred' };
     }
 
     try {
       if (!response.ok) {
-        // Handle rate limit errors
+        // Handle rate limiting (429)
         if (response.status === 429) {
           const retryAfter = response.headers.get('retry-after');
           const resetTime = retryAfter ? Date.now() + (parseInt(retryAfter) * 1000) : Date.now() + 900000; // Default to 15 minutes
@@ -268,7 +274,9 @@ class APIClient {
         }
     
         // Extract error message
-        let errorMessage = typeof data === 'object' && data.message ? data.message : 'An error occurred';
+        let errorMessage = typeof data === 'object' && data.message ? data.message : 
+                           typeof data === 'string' ? data : 
+                           response.statusText || 'An error occurred';
     
         // Categorize reverse geocode errors specifically
         let category: ErrorCategory;

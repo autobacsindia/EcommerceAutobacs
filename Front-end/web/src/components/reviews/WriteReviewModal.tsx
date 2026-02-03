@@ -60,7 +60,16 @@ export default function WriteReviewModal({
       onClose();
     } catch (err: any) {
       console.error('Failed to submit review:', err);
-      setError(err.message || 'Failed to submit review. Please try again.');
+      
+      const errorMessage = err.message || 'Failed to submit review. Please try again.';
+      
+      // Handle duplicate review error gracefully
+      if (errorMessage.toLowerCase().includes('already submitted a review')) {
+        toast.error('You have already submitted a review for this product');
+        onClose();
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
