@@ -11,7 +11,12 @@ import {
   validateProductIdParam,
   validateProductUpdate,
   validateStockUpdate,
-  validateBrandParam
+  validateBrandParam,
+  validateSearchSuggestions,
+  validateSearchHistory,
+  validateSearchTermParam,
+  validateSearchAnalytics,
+  validateProductSearch
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { cacheResponse } from "../middleware/cacheMiddleware.js";
@@ -23,7 +28,7 @@ const router = express.Router();
 // @route   GET /products
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
-router.get("/", cacheResponse(300), asyncHandler(async (req, res) => {
+router.get("/", cacheResponse(300), validateProductSearch, asyncHandler(async (req, res) => {
   const searchResults = await SearchService.searchProducts(req.query);
   
   res.json({
@@ -347,7 +352,7 @@ router.get('/brands/:brandName', asyncHandler(async (req, res) => {
 // @route   GET /products/brands/:brandName/details
 // @desc    Get details for a specific brand
 // @access  Public
-router.get('/brands/:brandName/details', validateBrandParam, asyncHandler(async (req, res) => {
+router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
   const { brandName } = req.params;
   
   try {
