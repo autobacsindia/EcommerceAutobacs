@@ -10,7 +10,8 @@ import {
   validateForgotPassword,
   validateResetPassword,
   validateTokenQuery,
-  validateRefreshTokenInput
+  validateRefreshTokenInput,
+  validateResendVerification
 } from "../middleware/validationMiddleware.js";
 import { 
   registerRateLimit, 
@@ -586,7 +587,7 @@ router.get("/verify-email", verifyEmailRateLimit, validateTokenQuery, asyncHandl
 // @route   POST /auth/resend-verification
 // @desc    Resend verification email
 // @access  Public or Private (optional auth)
-router.post("/resend-verification", resendVerificationRateLimit, optionalAuth, asyncHandler(async (req, res) => {
+router.post("/resend-verification", resendVerificationRateLimit, optionalAuth, validateResendVerification, asyncHandler(async (req, res) => {
   let email;
 
   // If authenticated, use user's email
@@ -600,14 +601,8 @@ router.post("/resend-verification", resendVerificationRateLimit, optionalAuth, a
     }
     email = user.email;
   } else {
-    // If not authenticated, require email in body
-    email = req.body?.email;
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email address is required'
-      });
-    }
+    // If not authenticated, use email from body (validated)
+    email = req.body.email;
   }
 
   // Find user

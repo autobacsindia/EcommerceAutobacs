@@ -843,7 +843,7 @@ router.post("/:id/tracking/simulate", protect, admin, asyncHandler(async (req, r
 // @route   GET /orders/analytics/tracking-stats
 // @desc    Get tracking statistics by carrier (Admin only)
 // @access  Private/Admin
-router.get("/analytics/tracking-stats", protect, admin, asyncHandler(async (req, res) => {
+router.get("/analytics/tracking-stats", protect, admin, validateAnalyticsQuery, asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
 
   const filter = {};

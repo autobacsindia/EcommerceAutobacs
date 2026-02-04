@@ -6,7 +6,9 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
   validateContactSubmission, 
   validateContactReply, 
-  validateContactStatusUpdate 
+  validateContactStatusUpdate,
+  validateContactQuery,
+  validateIdParam
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
@@ -150,7 +152,7 @@ router.post("/:id/reply", protect, admin, validateContactReply, asyncHandler(asy
 // @route   PUT /contact/:id
 // @desc    Update contact message status
 // @access  Private/Admin
-router.put("/:id", protect, admin, validateContactStatusUpdate, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateIdParam, validateContactStatusUpdate, asyncHandler(async (req, res) => {
   const { status, adminNotes } = req.body;
 
   const contact = await Contact.findById(req.params.id);

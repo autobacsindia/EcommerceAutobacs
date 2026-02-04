@@ -24,6 +24,6 @@ router.route("/admin/all")
   .get(protect, admin, validateRefundsQuery, getAllReturns);
 
 router.route("/:id/status")
-  .put(protect, admin, validateReturnStatusUpdate, updateReturnStatus);
+  .put(protect, admin, validateIdParam, validateReturnStatusUpdate, updateReturnStatus);
 
 export default router;

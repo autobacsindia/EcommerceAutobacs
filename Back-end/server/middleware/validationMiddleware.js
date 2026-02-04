@@ -1095,6 +1095,21 @@ export const validateContactQuery = [
   validateRequest
 ];
 
+export const validateResendVerification = [
+  body('email')
+    .custom((value, { req }) => {
+      if (!req.user && !value) {
+        throw new Error('Email address is required');
+      }
+      return true;
+    })
+    .optional()
+    .isEmail()
+    .withMessage('Please include a valid email')
+    .normalizeEmail(),
+  validateRequest
+];
+
 export const validateWishlistImport = [
   body('wishlistData')
     .notEmpty()
