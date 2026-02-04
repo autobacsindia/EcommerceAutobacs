@@ -1278,3 +1278,50 @@ export const validateSearchTermParam = [
   param('term').notEmpty().withMessage('Search term is required').trim(),
   validateRequest
 ];
+
+// Product Question Validation
+export const validateProductQuestion = [
+  body('productId')
+    .notEmpty()
+    .withMessage('Product ID is required')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Product ID'),
+  body('question')
+    .notEmpty()
+    .withMessage('Question is required')
+    .trim()
+    .isLength({ min: 10 })
+    .withMessage('Question must be at least 10 characters long'),
+  body('userName')
+    .optional()
+    .trim(),
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Invalid email address'),
+  validateRequest
+];
+
+export const validateProductQuestionAnswer = [
+  body('answer')
+    .notEmpty()
+    .withMessage('Answer is required')
+    .trim(),
+  body('isPublic')
+    .optional()
+    .isBoolean()
+    .withMessage('isPublic must be a boolean'),
+  validateRequest
+];
+
+export const validateProductQuestionQuery = [
+  query('pageNumber')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page number must be a positive integer'),
+  query('status')
+    .optional()
+    .isIn(['pending', 'answered', 'rejected'])
+    .withMessage('Invalid status'),
+  validateRequest
+];

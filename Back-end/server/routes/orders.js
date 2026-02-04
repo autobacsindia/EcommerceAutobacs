@@ -16,6 +16,7 @@ import {
   validatePagination,
   validateAnalyticsQuery,
   validateReturnRequest,
+  validateOrderReturn,
   validateReturnStatusUpdate,
   validateTrackingNumberParam,
   validateRefundsQuery,
@@ -870,7 +871,7 @@ router.get("/analytics/tracking-stats", protect, admin, asyncHandler(async (req,
 // @route   GET /orders/admin/all
 // @desc    Get all orders (Admin only)
 // @access  Private/Admin
-router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/all", protect, admin, validateAdminOrderQuery, asyncHandler(async (req, res) => {
   const { status, page = 1, limit = 20 } = req.query;
 
   const query = status ? { status } : {};

@@ -33,7 +33,7 @@ router.get("/:id", function(req, res, next) {
   }
   // Otherwise, require authentication
   protect(req, res, next);
-}, asyncHandler(async (req, res) => {
+}, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { token } = req.query;
 
@@ -193,7 +193,7 @@ router.delete("/:id", protect, validateIdParam, asyncHandler(async (req, res) =>
 // @route   POST /wishlist/:id/items
 // @desc    Add item to wishlist
 // @access  Private
-router.post("/:id/items", protect, validateWishlistItem, asyncHandler(async (req, res) => {
+router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncHandler(async (req, res) => {
   // Log incoming request for debugging
   console.log('Add to wishlist request:', {
     params: req.params,

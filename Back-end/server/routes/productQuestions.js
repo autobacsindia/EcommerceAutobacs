@@ -3,13 +3,20 @@ import ProductQuestion from "../models/ProductQuestion.js";
 import Product from "../models/Product.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
+import { 
+  validateProductQuestion, 
+  validateProductQuestionAnswer, 
+  validateProductQuestionQuery,
+  validateIdParam,
+  validateProductIdParam
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
 // @desc    Submit a question
 // @route   POST /api/product-questions
 // @access  Public
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", validateProductQuestion, asyncHandler(async (req, res) => {
   const { productId, question, userName, email } = req.body;
 
   const product = await Product.findById(productId);
@@ -36,7 +43,7 @@ router.post("/", asyncHandler(async (req, res) => {
 // @desc    Get questions for a product (Public - only answered/public ones)
 // @route   GET /api/product-questions/product/:productId
 // @access  Public
-router.get("/product/:productId", asyncHandler(async (req, res) => {
+router.get("/product/:productId", validateProductIdParam, asyncHandler(async (req, res) => {
   const questions = await ProductQuestion.find({
     product: req.params.productId,
     isPublic: true,
@@ -53,7 +60,7 @@ router.get("/product/:productId", asyncHandler(async (req, res) => {
 // @desc    Get all questions (Admin)
 // @route   GET /api/product-questions/admin
 // @access  Private/Admin
-router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin", protect, admin, validateProductQuestionQuery, asyncHandler(async (req, res) => {
   const pageSize = 20;
   const page = Number(req.query.pageNumber) || 1;
   const status = req.query.status;
@@ -79,7 +86,7 @@ router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
 // @desc    Answer a question
 // @route   PUT /api/product-questions/:id/answer
 // @access  Private/Admin
-router.put("/:id/answer", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id/answer", protect, admin, validateIdParam, validateProductQuestionAnswer, asyncHandler(async (req, res) => {
   const { answer, isPublic } = req.body;
   
   const question = await ProductQuestion.findById(req.params.id);

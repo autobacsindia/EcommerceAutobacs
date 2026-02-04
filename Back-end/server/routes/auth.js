@@ -448,16 +448,8 @@ router.post("/forgot-password", forgotPasswordRateLimit, asyncHandler(async (req
 // @route   GET /auth/verify-reset-token
 // @desc    Verify password reset token validity
 // @access  Public
-router.get("/verify-reset-token", asyncHandler(async (req, res) => {
+router.get("/verify-reset-token", validateTokenQuery, asyncHandler(async (req, res) => {
   const { token } = req.query;
-
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      valid: false,
-      message: 'Reset token is required'
-    });
-  }
 
   // Hash the provided token
   const hashedToken = hashToken(token);
