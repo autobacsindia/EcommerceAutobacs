@@ -373,24 +373,8 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
 // @route   POST /auth/forgot-password
 // @desc    Request password reset
 // @access  Public
-router.post("/forgot-password", forgotPasswordRateLimit, asyncHandler(async (req, res) => {
+router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword, asyncHandler(async (req, res) => {
   const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email address is required'
-    });
-  }
-
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid email address required'
-    });
-  }
 
   // Find user by email
   const user = await User.findOne({ email: email.toLowerCase() });

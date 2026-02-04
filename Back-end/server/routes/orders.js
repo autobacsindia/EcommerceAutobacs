@@ -1010,7 +1010,7 @@ router.get("/:id/return", protect, validateIdParam, asyncHandler(async (req, res
 // @route   PUT /orders/:id/return/status
 // @desc    Update return request status (Admin only)
 // @access  Private/Admin
-router.put("/:id/return/status", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id/return/status", protect, admin, validateReturnStatusUpdate, asyncHandler(async (req, res) => {
   const { status, adminNotes, refundAmount } = req.body;
   
   const order = await Order.findById(req.params.id);

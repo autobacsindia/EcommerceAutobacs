@@ -57,7 +57,7 @@ router.get("/suggestions", cacheResponse(300), validateSearchSuggestions, asyncH
 // @route   GET /products/analytics
 // @desc    Get search analytics
 // @access  Private/Admin
-router.get("/analytics", protect, admin, asyncHandler(async (req, res) => {
+router.get("/analytics", protect, admin, validateSearchAnalytics, asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
   
   // Default to last 30 days if no dates provided
@@ -75,7 +75,7 @@ router.get("/analytics", protect, admin, asyncHandler(async (req, res) => {
 // @route   GET /products/history
 // @desc    Get search history
 // @access  Public
-router.get("/history", asyncHandler(async (req, res) => {
+router.get("/history", validateSearchHistory, asyncHandler(async (req, res) => {
   const { limit = 10 } = req.query;
   const history = await SearchService.getSearchHistory(null, parseInt(limit));
   
@@ -347,7 +347,7 @@ router.get('/brands/:brandName', asyncHandler(async (req, res) => {
 // @route   GET /products/brands/:brandName/details
 // @desc    Get details for a specific brand
 // @access  Public
-router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
+router.get('/brands/:brandName/details', validateBrandParam, asyncHandler(async (req, res) => {
   const { brandName } = req.params;
   
   try {

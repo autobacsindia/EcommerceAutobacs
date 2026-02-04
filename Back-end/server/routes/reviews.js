@@ -391,7 +391,7 @@ router.post("/:reviewId/helpful", protect, validateReviewIdParam, asyncHandler(a
 // @route   GET /reviews/admin
 // @desc    Get all reviews (admin) with filtering
 // @access  Private/Admin
-router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin", protect, admin, validateAdminReviewQuery, asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, status, productId, userId, sortBy = "createdAt", order = "desc" } = req.query;
   
   // Build filter

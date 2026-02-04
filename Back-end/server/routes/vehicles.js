@@ -323,7 +323,7 @@ router.get("/:id/products", protect, admin, validateIdParam, validateVehicleQuer
 // @route   POST /vehicles/:id/products/map
 // @desc    Map products to a vehicle
 // @access  Private/Admin
-router.post("/:id/products/map", protect, admin, asyncHandler(async (req, res) => {
+router.post("/:id/products/map", protect, admin, validateVehicleProductMap, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
 
   if (!vehicle) {
