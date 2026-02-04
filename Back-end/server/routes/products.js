@@ -38,7 +38,7 @@ router.get("/", cacheResponse(300), asyncHandler(async (req, res) => {
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
 // @access  Public
-router.get("/suggestions", cacheResponse(300), asyncHandler(async (req, res) => {
+router.get("/suggestions", cacheResponse(300), validateSearchSuggestions, asyncHandler(async (req, res) => {
   const { q, limit = 10 } = req.query;
   const result = await SearchService.getSearchSuggestions(q, parseInt(limit));
   
@@ -98,9 +98,9 @@ router.delete("/history", asyncHandler(async (req, res) => {
 }));
 
 // @route   DELETE /products/history/:term
-// @desc    Remove specific term from search history
+// @desc    Remove term from search history
 // @access  Public
-router.delete("/history/:term", asyncHandler(async (req, res) => {
+router.delete("/history/:term", validateSearchTermParam, asyncHandler(async (req, res) => {
   // In a more advanced implementation, we would remove the specific term
   // For now, we'll just return success
   res.json({

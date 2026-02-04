@@ -9,7 +9,8 @@ import {
   validateWarehouseStockUpdate,
   validateProductIdParam,
   validateWarehouseSelection,
-  validateLocationCoordinates
+  validateLocationCoordinates,
+  validateWarehouseQuery
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
@@ -23,7 +24,7 @@ const router = express.Router();
  * @desc    Get all warehouses
  * @access  Private/Admin
  */
-router.get("/", protect, admin, async (req, res) => {
+router.get("/", protect, admin, validateWarehouseQuery, async (req, res) => {
   try {
     const { status, type, city } = req.query;
     const filters = { status, type, city };

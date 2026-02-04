@@ -4,7 +4,8 @@ import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { 
   validateLocationSelect, 
   validatePostalCode, 
-  validatePostalCodeQuery 
+  validatePostalCodeQuery,
+  validateRecentLocations
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
@@ -122,7 +123,7 @@ router.post("/validate", validatePostalCode, async (req, res) => {
  * @desc    Get recent locations for authenticated user
  * @access  Private
  */
-router.get("/recent", protect, async (req, res) => {
+router.get("/recent", protect, validateRecentLocations, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
     const locations = await locationService.getRecentLocations(req.user._id, limit);

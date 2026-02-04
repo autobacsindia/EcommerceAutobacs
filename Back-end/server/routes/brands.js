@@ -3,6 +3,14 @@ import Brand from "../models/Brand.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { 
+  validateBrand, 
+  validateBrandUpdate, 
+  validateBrandProductMap, 
+  validateIdParam,
+  validateRouteProductId,
+  validateBrandQuery
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 

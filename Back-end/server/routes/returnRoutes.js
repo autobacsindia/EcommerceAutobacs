@@ -7,7 +7,7 @@ import {
   getWallet
 } from "../controllers/returnController.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { validateReturnRequest, validateReturnStatus } from "../middleware/validationMiddleware.js";
+import { validateReturnRequest, validateReturnStatusUpdate, validateRefundsQuery } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -21,9 +21,9 @@ router.route("/wallet")
   .get(protect, getWallet);
 
 router.route("/admin/all")
-  .get(protect, admin, getAllReturns);
+  .get(protect, admin, validateRefundsQuery, getAllReturns);
 
 router.route("/:id/status")
-  .put(protect, admin, validateReturnStatus, updateReturnStatus);
+  .put(protect, admin, validateReturnStatusUpdate, updateReturnStatus);
 
 export default router;

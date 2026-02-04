@@ -61,7 +61,7 @@ router.get("/models/:make", asyncHandler(async (req, res) => {
 // @route   GET /vehicles/:id
 // @desc    Get vehicle by ID
 // @access  Public
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', validateIdParam, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
 
   if (!vehicle) {
@@ -151,7 +151,7 @@ router.post("/", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /vehicles/:id
 // @desc    Update vehicle
 // @access  Private/Admin
-router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateVehicleUpdate, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -272,7 +272,7 @@ router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler
 // @route   GET /vehicles/:id/products
 // @desc    Get products mapped to a vehicle
 // @access  Private/Admin
-router.get("/:id/products", protect, admin, asyncHandler(async (req, res) => {
+router.get("/:id/products", protect, admin, validateIdParam, validateVehicleQuery, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
 
   if (!vehicle) {
@@ -334,13 +334,6 @@ router.post("/:id/products/map", protect, admin, asyncHandler(async (req, res) =
   }
 
   const { productIds } = req.body;
-
-  if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Product IDs array is required'
-    });
-  }
 
   // Add vehicle to products' compatibleVehicles array
   const result = await Product.updateMany(

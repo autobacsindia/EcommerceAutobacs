@@ -68,7 +68,7 @@ router.get("/stats", protect, admin, asyncHandler(async (req, res) => {
 // @route   GET /contact
 // @desc    Get all contact messages
 // @access  Private/Admin
-router.get("/", protect, admin, asyncHandler(async (req, res) => {
+router.get("/", protect, admin, validateContactQuery, asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, status } = req.query;
   const skip = (page - 1) * limit;
 

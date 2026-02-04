@@ -3,7 +3,7 @@ import Wishlist from "../models/Wishlist.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { validateWishlist, validateWishlistItem, validateSharing, validateIdParam, validateWishlistImport } from "../middleware/validationMiddleware.js";
+import { validateWishlist, validateWishlistItem, validateSharing, validateIdParam, validateWishlistImport, validateRouteProductId, validateUserIdParam } from "../middleware/validationMiddleware.js";
 import crypto from "crypto";
 
 const router = express.Router();
@@ -172,7 +172,7 @@ router.put("/:id", protect, validateIdParam, validateWishlist, asyncHandler(asyn
 // @route   DELETE /wishlist/:id
 // @desc    Delete wishlist
 // @access  Private
-router.delete("/:id", protect, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const wishlist = await Wishlist.findOneAndDelete({ _id: id, user: req.user.id });
@@ -288,7 +288,7 @@ router.post("/:id/items", protect, validateWishlistItem, asyncHandler(async (req
 // @route   DELETE /wishlist/:id/items/:productId
 // @desc    Remove item from wishlist
 // @access  Private
-router.delete("/:id/items/:productId", protect, asyncHandler(async (req, res) => {
+router.delete("/:id/items/:productId", protect, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
   const { id, productId } = req.params;
 
   const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
@@ -462,7 +462,7 @@ router.get("/:id/export", protect, validateIdParam, asyncHandler(async (req, res
 // @route   POST /wishlist/import
 // @desc    Import wishlist from JSON
 // @access  Private
-router.post("/import", protect, asyncHandler(async (req, res) => {
+router.post("/import", protect, validateWishlistImport, asyncHandler(async (req, res) => {
   const { wishlistData } = req.body;
 
   if (!wishlistData || !wishlistData.name) {

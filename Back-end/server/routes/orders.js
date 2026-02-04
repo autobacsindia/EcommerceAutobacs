@@ -14,7 +14,13 @@ import {
   validateTrackingEvent,
   validatePaymentFailed,
   validatePagination,
-  validateAnalyticsQuery
+  validateAnalyticsQuery,
+  validateReturnRequest,
+  validateReturnStatusUpdate,
+  validateTrackingNumberParam,
+  validateRefundsQuery,
+  validateAdminOrderQuery,
+  validateTrackingSimulate
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import orderStatusService from "../services/orderStatusService.js";
@@ -61,7 +67,7 @@ router.get("/", protect, validatePagination, asyncHandler(async (req, res) => {
 // @route   GET /orders/refunds
 // @desc    Get all refunds (orders with refundDetails)
 // @access  Private/Admin
-router.get("/refunds", protect, admin, asyncHandler(async (req, res) => {
+router.get("/refunds", protect, admin, validateRefundsQuery, asyncHandler(async (req, res) => {
   const { status } = req.query;
   
   const query = { 
@@ -896,7 +902,7 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
 // @route   POST /orders/:id/return
 // @desc    Submit return request for delivered order
 // @access  Private
-router.post("/:id/return", protect, asyncHandler(async (req, res) => {
+router.post("/:id/return", protect, validateIdParam, validateOrderReturn, asyncHandler(async (req, res) => {
   const { items, reason, description, images } = req.body;
   
   const order = await Order.findById(req.params.id);
@@ -941,23 +947,6 @@ router.post("/:id/return", protect, asyncHandler(async (req, res) => {
     });
   }
   
-  // Validate items
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'At least one item must be selected for return'
-    });
-  }
-  
-  // Validate reason
-  const validReasons = ['defective', 'wrong_item', 'not_as_described', 'changed_mind', 'other'];
-  if (!reason || !validReasons.includes(reason)) {
-    return res.status(400).json({
-      success: false,
-      message: `Invalid return reason. Must be one of: ${validReasons.join(', ')}`
-    });
-  }
-  
   // Create return request
   const returnRequest = {
     items: items.map(item => ({
@@ -986,7 +975,7 @@ router.post("/:id/return", protect, asyncHandler(async (req, res) => {
 // @route   GET /orders/:id/return
 // @desc    Get return request details
 // @access  Private
-router.get("/:id/return", protect, asyncHandler(async (req, res) => {
+router.get("/:id/return", protect, validateIdParam, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
   
   if (!order) {

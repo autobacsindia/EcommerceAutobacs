@@ -449,6 +449,73 @@ export const validatePagination = [
   validateRequest
 ];
 
+export const validateTrackingNumberParam = [
+  param('trackingNumber')
+    .notEmpty()
+    .withMessage('Tracking number is required')
+    .trim(),
+  validateRequest
+];
+
+export const validateRefundsQuery = [
+  query('status')
+    .optional()
+    .trim(),
+  validateRequest
+];
+
+export const validateAdminOrderQuery = [
+  query('status')
+    .optional()
+    .trim(),
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page must be a positive integer'),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('Limit must be between 1 and 100'),
+  validateRequest
+];
+
+export const validateTrackingSimulate = [
+  body('scenario')
+    .notEmpty()
+    .withMessage('Scenario is required')
+    .trim(),
+  validateRequest
+];
+
+export const validateWarehouseQuery = [
+  query('status')
+    .optional()
+    .trim(),
+  query('type')
+    .optional()
+    .trim(),
+  query('city')
+    .optional()
+    .trim(),
+  validateRequest
+];
+
+export const validateRecentLocations = [
+  query('limit')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Limit must be a positive integer'),
+  validateRequest
+];
+
+export const validateTokenQuery = [
+  query('token')
+    .notEmpty()
+    .withMessage('Token is required')
+    .trim(),
+  validateRequest
+];
+
 // Location Validation
 export const validateLocationSelect = [
   body('placeId')
@@ -893,6 +960,33 @@ export const validateReturnRequest = [
   validateRequest
 ];
 
+export const validateOrderReturn = [
+  body('items')
+    .isArray({ min: 1 })
+    .withMessage('At least one item must be selected for return'),
+  body('items.*.productId')
+    .notEmpty()
+    .withMessage('Product ID is required')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Product ID'),
+  body('items.*.quantity')
+    .isInt({ min: 1 })
+    .withMessage('Quantity must be at least 1'),
+  body('reason')
+    .notEmpty()
+    .withMessage('Return reason is required')
+    .isIn(['defective', 'wrong_item', 'not_as_described', 'changed_mind', 'other'])
+    .withMessage('Invalid return reason'),
+  body('description')
+    .optional()
+    .trim(),
+  body('images')
+    .optional()
+    .isArray()
+    .withMessage('Images must be an array'),
+  validateRequest
+];
+
 export const validateReturnStatusUpdate = [
   param('id')
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
@@ -974,15 +1068,6 @@ export const validateReviewSubmission = [
     .optional({ nullable: true })
     .isURL()
     .withMessage('Invalid image URL format'),
-  validateRequest
-];
-
-export const validateRefundsQuery = [
-  query('status')
-    .optional()
-    .trim()
-    .isAlphanumeric()
-    .withMessage('Status must be alphanumeric'),
   validateRequest
 ];
 
@@ -1136,5 +1221,60 @@ export const validateDeliveryZone = [
   body('priority')
     .optional()
     .isInt(),
+  validateRequest
+];
+
+export const validateBrandQuery = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('search').optional().trim(),
+  validateRequest
+];
+
+export const validateVehicleQuery = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('search').optional().trim(),
+  query('make').optional().trim(),
+  query('model').optional().trim(),
+  query('year').optional().trim(),
+  validateRequest
+];
+
+// Product Search Validation
+export const validateProductSearch = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('q').optional().trim(),
+  query('sort').optional().trim(),
+  query('minPrice').optional().isFloat({ min: 0 }).withMessage('Min price must be a positive number'),
+  query('maxPrice').optional().isFloat({ min: 0 }).withMessage('Max price must be a positive number'),
+  query('brand').optional().trim(),
+  query('category').optional().trim(),
+  query('year').optional().trim(),
+  query('make').optional().trim(),
+  query('model').optional().trim(),
+  validateRequest
+];
+
+export const validateSearchSuggestions = [
+  query('q').notEmpty().withMessage('Search query is required').trim(),
+  query('limit').optional().isInt({ min: 1, max: 20 }).withMessage('Limit must be between 1 and 20'),
+  validateRequest
+];
+
+export const validateSearchAnalytics = [
+  query('startDate').optional().isISO8601().withMessage('Start date must be a valid date'),
+  query('endDate').optional().isISO8601().withMessage('End date must be a valid date'),
+  validateRequest
+];
+
+export const validateSearchHistory = [
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
+  validateRequest
+];
+
+export const validateSearchTermParam = [
+  param('term').notEmpty().withMessage('Search term is required').trim(),
   validateRequest
 ];

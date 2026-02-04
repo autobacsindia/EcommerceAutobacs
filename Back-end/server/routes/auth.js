@@ -4,7 +4,14 @@ import jwt from "jsonwebtoken";
 import fetch from "node-fetch";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { validateRegister, validateLogin } from "../middleware/validationMiddleware.js";
+import { 
+  validateRegister, 
+  validateLogin, 
+  validateForgotPassword,
+  validateResetPassword,
+  validateTokenQuery,
+  validateRefreshTokenInput
+} from "../middleware/validationMiddleware.js";
 import { 
   registerRateLimit, 
   loginRateLimit, 
@@ -536,15 +543,8 @@ router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, as
 // @route   GET /auth/verify-email
 // @desc    Verify email address with token
 // @access  Public
-router.get("/verify-email", verifyEmailRateLimit, asyncHandler(async (req, res) => {
+router.get("/verify-email", verifyEmailRateLimit, validateTokenQuery, asyncHandler(async (req, res) => {
   const { token } = req.query;
-
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      message: 'Verification token is required'
-    });
-  }
 
   // Hash the provided token
   const hashedToken = hashToken(token);
