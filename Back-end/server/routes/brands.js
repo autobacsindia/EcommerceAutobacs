@@ -94,15 +94,8 @@ router.get("/:id", asyncHandler(async (req, res) => {
 // @route   POST /brands
 // @desc    Create new brand
 // @access  Private/Admin
-router.post("/", protect, admin, asyncHandler(async (req, res) => {
+router.post("/", protect, admin, validateBrand, asyncHandler(async (req, res) => {
   const { name, logo, description } = req.body;
-
-  if (!name) {
-    return res.status(400).json({
-      success: false,
-      message: 'Brand name is required'
-    });
-  }
 
   // Generate slug from name
   const slug = generateSlug(name);
@@ -137,7 +130,7 @@ router.post("/", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /brands/:id
 // @desc    Update brand
 // @access  Private/Admin
-router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateBrandUpdate, asyncHandler(async (req, res) => {
   const { name, logo, description, isActive } = req.body;
 
   const brand = await Brand.findById(req.params.id);
@@ -190,7 +183,7 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @route   DELETE /brands/:id
 // @desc    Delete brand
 // @access  Private/Admin
-router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const brand = await Brand.findById(req.params.id);
 
   if (!brand) {
@@ -260,15 +253,8 @@ router.get("/:id/products", asyncHandler(async (req, res) => {
 // @route   POST /brands/:id/products
 // @desc    Map products to a brand
 // @access  Private/Admin
-router.post("/:id/products", protect, admin, asyncHandler(async (req, res) => {
+router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandler(async (req, res) => {
   const { productIds } = req.body;
-
-  if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Product IDs array is required'
-    });
-  }
 
   const brand = await Brand.findById(req.params.id);
 
@@ -295,7 +281,7 @@ router.post("/:id/products", protect, admin, asyncHandler(async (req, res) => {
 // @route   DELETE /brands/:id/products/:productId
 // @desc    Unmap a product from a brand
 // @access  Private/Admin
-router.delete("/:id/products/:productId", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id/products/:productId", protect, admin, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
   const brand = await Brand.findById(req.params.id);
 
   if (!brand) {
@@ -327,7 +313,7 @@ router.delete("/:id/products/:productId", protect, admin, asyncHandler(async (re
 // @route   PATCH /brands/:id/toggle-status
 // @desc    Toggle brand active status
 // @access  Private/Admin
-router.patch("/:id/toggle-status", protect, admin, asyncHandler(async (req, res) => {
+router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const brand = await Brand.findById(req.params.id);
 
   if (!brand) {

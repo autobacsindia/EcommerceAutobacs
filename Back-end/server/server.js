@@ -113,6 +113,12 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Data Sanitization against NoSQL query injection
+app.use(mongoSanitization);
+
+// Data Sanitization against XSS and trimming
+app.use(requestSanitization);
+
 // Test route
 app.get("/", (req, res) => {
   res.json({

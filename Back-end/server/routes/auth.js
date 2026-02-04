@@ -207,15 +207,8 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
 // @route   POST /auth/refresh
 // @desc    Refresh access token using refresh token
 // @access  Public
-router.post("/refresh", asyncHandler(async (req, res) => {
+router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(400).json({
-      success: false,
-      message: 'Refresh token is required'
-    });
-  }
 
   try {
     // Decode refresh token to get user ID (without verification for now)
@@ -486,23 +479,8 @@ router.get("/verify-reset-token", asyncHandler(async (req, res) => {
 // @route   POST /auth/reset-password
 // @desc    Reset password with token
 // @access  Public
-router.post("/reset-password", resetPasswordRateLimit, asyncHandler(async (req, res) => {
+router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, asyncHandler(async (req, res) => {
   const { token, password } = req.body;
-
-  if (!token || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Token and new password are required'
-    });
-  }
-
-  // Validate password strength
-  if (password.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: 'Password must be at least 6 characters'
-    });
-  }
 
   // Hash the provided token
   const hashedToken = hashToken(token);

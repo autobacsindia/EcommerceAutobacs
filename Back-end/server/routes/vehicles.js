@@ -3,6 +3,15 @@ import Vehicle from "../models/Vehicle.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import {
+  validateVehicle,
+  validateVehicleUpdate,
+  validateVehicleProductMap,
+  validateIdParam,
+  validateRouteProductId,
+  validateMakeModelParam,
+  validateSlugParam
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -90,7 +99,7 @@ router.get('/slug/:slug', asyncHandler(async (req, res) => {
 // @route   GET /vehicles/make-model/:make/:model
 // @desc    Get vehicle by make and model
 // @access  Public
-router.get('/make-model/:make/:model', asyncHandler(async (req, res) => {
+router.get('/make-model/:make/:model', validateMakeModelParam, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findOne({ 
     make: req.params.make, 
     model: req.params.model, 
@@ -240,7 +249,7 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
 // @route   PATCH /vehicles/:id/toggle-status
 // @desc    Toggle vehicle active status
 // @access  Private/Admin
-router.patch("/:id/toggle-status", protect, admin, asyncHandler(async (req, res) => {
+router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
 
   if (!vehicle) {
@@ -354,7 +363,7 @@ router.post("/:id/products/map", protect, admin, asyncHandler(async (req, res) =
 // @route   DELETE /vehicles/:id/products/:productId
 // @desc    Unmap a product from a vehicle
 // @access  Private/Admin
-router.delete("/:id/products/:productId", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id/products/:productId", protect, admin, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
   const vehicle = await Vehicle.findById(req.params.id);
 
   if (!vehicle) {

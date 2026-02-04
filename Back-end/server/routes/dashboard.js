@@ -1,6 +1,7 @@
 // Autobacs/Back-end/server/routes/dashboard.js
 import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
+import { validatePagination } from '../middleware/validationMiddleware.js';
 import healthCalculatorService from '../services/healthCalculatorService.js';
 import dashboardAnalyticsService from '../services/dashboardAnalyticsService.js';
 
@@ -166,7 +167,7 @@ router.get('/stats', protect, admin, async (req, res) => {
 /**
  * Get top performing products
  */
-router.get('/top-products', protect, admin, async (req, res) => {
+router.get('/top-products', protect, admin, validateTopProductsQuery, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     const topProducts = await dashboardAnalyticsService.getTopProducts(limit);

@@ -1,6 +1,16 @@
 import express from "express";
 import warehouseService from "../services/warehouseService.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import {
+  validateWarehouse,
+  validateWarehouseUpdate,
+  validateIdParam,
+  validateWarehouseInventoryQuery,
+  validateWarehouseStockUpdate,
+  validateProductIdParam,
+  validateWarehouseSelection,
+  validateLocationCoordinates
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -39,7 +49,7 @@ router.get("/", protect, admin, async (req, res) => {
  * @desc    Create new warehouse
  * @access  Private/Admin
  */
-router.post("/", protect, admin, async (req, res) => {
+router.post("/", protect, admin, validateWarehouse, async (req, res) => {
   try {
     const warehouse = await warehouseService.createWarehouse(req.body);
 
@@ -61,7 +71,7 @@ router.post("/", protect, admin, async (req, res) => {
  * @desc    Get warehouse by ID
  * @access  Private/Admin
  */
-router.get("/:id", protect, admin, async (req, res) => {
+router.get("/:id", protect, admin, validateIdParam, async (req, res) => {
   try {
     const warehouse = await warehouseService.getWarehouseById(req.params.id);
 
@@ -83,7 +93,7 @@ router.get("/:id", protect, admin, async (req, res) => {
  * @desc    Update warehouse
  * @access  Private/Admin
  */
-router.put("/:id", protect, admin, async (req, res) => {
+router.put("/:id", protect, admin, validateWarehouseUpdate, async (req, res) => {
   try {
     const warehouse = await warehouseService.updateWarehouse(req.params.id, req.body);
 
@@ -105,7 +115,7 @@ router.put("/:id", protect, admin, async (req, res) => {
  * @desc    Delete warehouse
  * @access  Private/Admin
  */
-router.delete("/:id", protect, admin, async (req, res) => {
+router.delete("/:id", protect, admin, validateIdParam, async (req, res) => {
   try {
     await warehouseService.deleteWarehouse(req.params.id);
 
@@ -127,7 +137,7 @@ router.delete("/:id", protect, admin, async (req, res) => {
  * @desc    Get warehouse inventory
  * @access  Private/Admin
  */
-router.get("/:id/inventory", protect, admin, async (req, res) => {
+router.get("/:id/inventory", protect, admin, validateWarehouseInventoryQuery, async (req, res) => {
   try {
     const { page, limit, productId, lowStock } = req.query;
     const options = { page, limit, productId, lowStock };
@@ -152,17 +162,10 @@ router.get("/:id/inventory", protect, admin, async (req, res) => {
  * @desc    Update warehouse stock for a product
  * @access  Private/Admin
  */
-router.put("/:id/inventory/:productId", protect, admin, async (req, res) => {
+router.put("/:id/inventory/:productId", protect, admin, validateWarehouseStockUpdate, async (req, res) => {
   try {
     const { quantity, operation } = req.body;
     
-    if (quantity === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "Quantity is required"
-      });
-    }
-
     const inventory = await warehouseService.updateWarehouseStock(
       req.params.id,
       req.params.productId,
@@ -187,7 +190,7 @@ router.put("/:id/inventory/:productId", protect, admin, async (req, res) => {
  * @desc    Get low stock alerts for warehouse
  * @access  Private/Admin
  */
-router.get("/:id/low-stock", protect, admin, async (req, res) => {
+router.get("/:id/low-stock", protect, admin, validateIdParam, async (req, res) => {
   try {
     const alerts = await warehouseService.getLowStockAlerts(req.params.id);
 
@@ -214,7 +217,7 @@ router.get("/:id/low-stock", protect, admin, async (req, res) => {
  * @desc    Check product availability across warehouses
  * @access  Public
  */
-router.get("/products/:productId/availability", async (req, res) => {
+router.get("/products/:productId/availability", validateProductIdParam, async (req, res) => {
   try {
     const availability = await warehouseService.getProductAvailability(req.params.productId);
 
@@ -236,16 +239,9 @@ router.get("/products/:productId/availability", async (req, res) => {
  * @desc    Select optimal warehouse for order
  * @access  Public
  */
-router.post("/select-for-order", async (req, res) => {
+router.post("/select-for-order", validateWarehouseSelection, async (req, res) => {
   try {
     const { orderItems, deliveryAddress } = req.body;
-
-    if (!orderItems || !deliveryAddress) {
-      return res.status(400).json({
-        success: false,
-        message: "Order items and delivery address are required"
-      });
-    }
 
     const result = await warehouseService.selectWarehouseForOrder(orderItems, deliveryAddress);
 
@@ -267,16 +263,9 @@ router.post("/select-for-order", async (req, res) => {
  * @desc    Find nearest warehouse to coordinates
  * @access  Public
  */
-router.get("/nearest", async (req, res) => {
+router.get("/nearest", validateLocationCoordinates, async (req, res) => {
   try {
     const { latitude, longitude, maxDistance } = req.query;
-
-    if (!latitude || !longitude) {
-      return res.status(400).json({
-        success: false,
-        message: "Latitude and longitude are required"
-      });
-    }
 
     const warehouse = await warehouseService.findNearestWarehouse(
       parseFloat(latitude),

@@ -3,32 +3,18 @@ import Contact from "../models/Contact.js";
 import emailHandler from "../services/emailHandler.js";
 import { protect, admin, optionalAuth } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { check, param, validationResult } from "express-validator";
+import { 
+  validateContactSubmission, 
+  validateContactReply, 
+  validateContactStatusUpdate 
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
-
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  next();
-};
 
 // @route   POST /contact
 // @desc    Submit a contact form message
 // @access  Public
-router.post("/", optionalAuth, [
-  check('name', 'Name is required').not().isEmpty(),
-  check('email', 'Please include a valid email').isEmail(),
-  check('subject', 'Subject is required').not().isEmpty(),
-  check('message', 'Message is required').not().isEmpty()
-], asyncHandler(async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
+router.post("/", optionalAuth, validateContactSubmission, asyncHandler(async (req, res) => {
   const { name, email, subject, message } = req.body;
 
   const contactData = {
@@ -111,15 +97,8 @@ router.get("/", protect, admin, asyncHandler(async (req, res) => {
 // @route   POST /contact/:id/reply
 // @desc    Reply to a contact message
 // @access  Private/Admin
-router.post("/:id/reply", protect, admin, asyncHandler(async (req, res) => {
+router.post("/:id/reply", protect, admin, validateContactReply, asyncHandler(async (req, res) => {
   const { message } = req.body;
-
-  if (!message) {
-    return res.status(400).json({
-      success: false,
-      message: "Reply message is required"
-    });
-  }
 
   const contact = await Contact.findById(req.params.id);
 
@@ -171,11 +150,7 @@ router.post("/:id/reply", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /contact/:id
 // @desc    Update contact message status
 // @access  Private/Admin
-router.put("/:id", protect, admin, [
-  param('id', 'Invalid contact ID').isMongoId(),
-  check('status', 'Invalid status').optional().isIn(['new', 'read', 'replied', 'closed']),
-  validate
-], asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateContactStatusUpdate, asyncHandler(async (req, res) => {
   const { status, adminNotes } = req.body;
 
   const contact = await Contact.findById(req.params.id);
@@ -201,7 +176,7 @@ router.put("/:id", protect, admin, [
 // @route   DELETE /contact/:id
 // @desc    Delete a contact message
 // @access  Private/Admin
-router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const contact = await Contact.findById(req.params.id);
 
   if (!contact) {

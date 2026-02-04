@@ -3,6 +3,7 @@ import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -30,15 +31,8 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 // @route   POST /cart/add
 // @desc    Add item to cart
 // @access  Private
-router.post("/add", protect, asyncHandler(async (req, res) => {
+router.post("/add", protect, validateCartItem, asyncHandler(async (req, res) => {
   const { productId, quantity = 1 } = req.body;
-
-  if (!productId) {
-    return res.status(400).json({
-      success: false,
-      message: 'Product ID is required'
-    });
-  }
 
   // Check if product exists and is active
   const product = await Product.findById(productId);
@@ -101,15 +95,8 @@ router.post("/add", protect, asyncHandler(async (req, res) => {
 // @route   PUT /cart/update/:productId
 // @desc    Update cart item quantity
 // @access  Private
-router.put("/update/:productId", protect, asyncHandler(async (req, res) => {
+router.put("/update/:productId", protect, validateCartUpdate, asyncHandler(async (req, res) => {
   const { quantity } = req.body;
-
-  if (!quantity || quantity < 1) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid quantity is required'
-    });
-  }
 
   const cart = await Cart.findOne({ user: req.user.id });
 
@@ -156,7 +143,7 @@ router.put("/update/:productId", protect, asyncHandler(async (req, res) => {
 // @route   DELETE /cart/remove/:productId
 // @desc    Remove item from cart
 // @access  Private
-router.delete("/remove/:productId", protect, asyncHandler(async (req, res) => {
+router.delete("/remove/:productId", protect, validateCartProductIdParam, asyncHandler(async (req, res) => {
   const cart = await Cart.findOne({ user: req.user.id });
 
   if (!cart) {

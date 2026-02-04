@@ -2,7 +2,7 @@ import express from "express";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { body, validationResult } from "express-validator";
+import { validateProfileUpdate } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -28,27 +28,7 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 // @route   PUT /profile
 // @desc    Update user profile
 // @access  Private
-router.put("/", protect, [
-  body('name').notEmpty().withMessage('Name is required'),
-  body('email').isEmail().withMessage('Valid email is required'),
-  // Conditional validation for addresses - only validate if addresses array exists and has items
-  body('addresses').optional().isArray().withMessage('Addresses must be an array'),
-  body('addresses.*.fullName').optional().notEmpty().withMessage('Full name is required for address'),
-  body('addresses.*.phone').optional().notEmpty().withMessage('Phone is required for address'),
-  body('addresses.*.addressLine1').optional().notEmpty().withMessage('Address line 1 is required'),
-  body('addresses.*.city').optional().notEmpty().withMessage('City is required'),
-  body('addresses.*.state').optional().notEmpty().withMessage('State is required'),
-  body('addresses.*.postalCode').optional().notEmpty().withMessage('Postal code is required')
-], asyncHandler(async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array()
-    });
-  }
-
+router.put("/", protect, validateProfileUpdate, asyncHandler(async (req, res) => {
   const { name, email, addresses } = req.body;
 
   try {

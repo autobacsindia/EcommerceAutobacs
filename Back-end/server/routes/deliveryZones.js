@@ -1,6 +1,16 @@
 import express from "express";
 import deliveryZoneService from "../services/deliveryZoneService.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { 
+  validateIdParam,
+  validatePinCodeParam,
+  validateServiceabilityCheck,
+  validateDeliveryEstimate,
+  validateShippingCost,
+  validateDeliveryZone,
+  validatePinCodesUpdate,
+  validateBulkImportPinCodes
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -13,7 +23,7 @@ const router = express.Router();
  * @desc    Get delivery zone by PIN code
  * @access  Public
  */
-router.get("/pincode/:pinCode", async (req, res) => {
+router.get("/pincode/:pinCode", validatePinCodeParam, async (req, res) => {
   try {
     const zone = await deliveryZoneService.getZoneByPinCode(req.params.pinCode);
 
@@ -73,16 +83,9 @@ router.post("/check-serviceability", async (req, res) => {
  * @desc    Get delivery estimate for PIN code
  * @access  Public
  */
-router.post("/estimate", async (req, res) => {
+router.post("/estimate", validateDeliveryEstimate, async (req, res) => {
   try {
     const { pinCode, orderDate } = req.body;
-
-    if (!pinCode) {
-      return res.status(400).json({
-        success: false,
-        message: "PIN code is required"
-      });
-    }
 
     const result = await deliveryZoneService.getDeliveryEstimate(
       pinCode,
@@ -107,16 +110,9 @@ router.post("/estimate", async (req, res) => {
  * @desc    Calculate shipping cost for PIN code and weight
  * @access  Public
  */
-router.post("/shipping-cost", async (req, res) => {
+router.post("/shipping-cost", validateShippingCost, async (req, res) => {
   try {
     const { pinCode, weightKg } = req.body;
-
-    if (!pinCode) {
-      return res.status(400).json({
-        success: false,
-        message: "PIN code is required"
-      });
-    }
 
     const result = await deliveryZoneService.calculateShippingCost(
       pinCode,

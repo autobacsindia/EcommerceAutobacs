@@ -3,7 +3,19 @@ import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { validateOrder } from "../middleware/validationMiddleware.js";
+import { 
+  validateOrder, 
+  validateIdParam, 
+  validateOrderStatusUpdate, 
+  validateOrderCancellation, 
+  validateBulkStatusUpdate, 
+  validateBulkDelete,
+  validateTrackingInfo,
+  validateTrackingEvent,
+  validatePaymentFailed,
+  validatePagination,
+  validateAnalyticsQuery
+} from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import orderStatusService from "../services/orderStatusService.js";
 import orderTrackingService from "../services/orderTrackingService.js";
@@ -19,7 +31,7 @@ router.use(attachTokenRefreshInfo);
 // @route   GET /orders
 // @desc    Get all orders for logged-in user with pagination
 // @access  Private
-router.get("/", protect, asyncHandler(async (req, res) => {
+router.get("/", protect, validatePagination, asyncHandler(async (req, res) => {
   const { page = 1, limit = 10 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -90,7 +102,7 @@ router.get("/refunds", protect, admin, asyncHandler(async (req, res) => {
 // @route   GET /orders/:id
 // @desc    Get order by ID
 // @access  Private
-router.get("/:id", protect, asyncHandler(async (req, res) => {
+router.get("/:id", protect, validateIdParam, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id)
     .populate('items.product', 'name images price')
     .populate('user', 'name email')
@@ -201,7 +213,7 @@ router.post("/", protect, validateOrder, asyncHandler(async (req, res) => {
 // @route   PUT /orders/:id/cancel
 // @desc    Cancel an order with validation and refund initiation
 // @access  Private
-router.put("/:id/cancel", protect, validateCancellation, asyncHandler(async (req, res) => {
+router.put("/:id/cancel", protect, validateOrderCancellation, validateCancellation, asyncHandler(async (req, res) => {
   const order = req.order; // Attached by validateCancellation middleware
   const { reason, notes } = req.body;
 
@@ -269,7 +281,7 @@ router.put("/:id/cancel", protect, validateCancellation, asyncHandler(async (req
 // @route   PUT /orders/:id/payment-failed
 // @desc    Mark order as failed due to payment failure
 // @access  Private
-router.put("/:id/payment-failed", protect, asyncHandler(async (req, res) => {
+router.put("/:id/payment-failed", protect, validatePaymentFailed, asyncHandler(async (req, res) => {
   const { reason, paymentId, errorDescription } = req.body;
   const order = await Order.findById(req.params.id);
 
@@ -325,7 +337,7 @@ router.put("/:id/payment-failed", protect, asyncHandler(async (req, res) => {
 // @route   DELETE /orders/:id
 // @desc    Delete an order (Only cancelled or failed orders)
 // @access  Private
-router.delete("/:id", protect, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, validateIdParam, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
 
   if (!order) {
@@ -364,7 +376,7 @@ router.delete("/:id", protect, asyncHandler(async (req, res) => {
 // @route   PUT /orders/:id/status
 // @desc    Update order status with validation (Admin only)
 // @access  Private/Admin
-router.put("/:id/status", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id/status", protect, admin, validateOrderStatusUpdate, asyncHandler(async (req, res) => {
   const { status, reason, notes, trackingNumber, estimatedDelivery, metadata } = req.body;
 
   if (!status) {
@@ -407,7 +419,7 @@ router.put("/:id/status", protect, admin, asyncHandler(async (req, res) => {
 // @route   POST /orders/bulk/status
 // @desc    Bulk update order status (Admin only)
 // @access  Private/Admin
-router.post("/bulk/status", protect, admin, asyncHandler(async (req, res) => {
+router.post("/bulk/status", protect, admin, validateBulkStatusUpdate, asyncHandler(async (req, res) => {
   const { orderIds, status, reason, notes } = req.body;
 
   if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
@@ -459,7 +471,7 @@ router.post("/bulk/status", protect, admin, asyncHandler(async (req, res) => {
 // @route   POST /orders/bulk/delete
 // @desc    Bulk delete orders (Admin only, restricted to cancelled/failed)
 // @access  Private/Admin
-router.post("/bulk/delete", protect, admin, asyncHandler(async (req, res) => {
+router.post("/bulk/delete", protect, admin, validateBulkDelete, asyncHandler(async (req, res) => {
   const { orderIds } = req.body;
 
   if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
@@ -521,7 +533,7 @@ router.post("/bulk/delete", protect, admin, asyncHandler(async (req, res) => {
 // @route   GET /orders/:id/status-history
 // @desc    Get status history for an order
 // @access  Private
-router.get("/:id/status-history", protect, asyncHandler(async (req, res) => {
+router.get("/:id/status-history", protect, validateIdParam, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
 
   if (!order) {
@@ -558,7 +570,7 @@ router.get("/:id/status-history", protect, asyncHandler(async (req, res) => {
 // @route   GET /orders/:id/valid-transitions
 // @desc    Get valid next statuses for an order
 // @access  Private
-router.get("/:id/valid-transitions", protect, asyncHandler(async (req, res) => {
+router.get("/:id/valid-transitions", protect, validateIdParam, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
 
   if (!order) {
@@ -596,7 +608,7 @@ router.get("/:id/valid-transitions", protect, asyncHandler(async (req, res) => {
 // @route   GET /orders/analytics/status-stats
 // @desc    Get order status statistics (Admin only)
 // @access  Private/Admin
-router.get("/analytics/status-stats", protect, admin, asyncHandler(async (req, res) => {
+router.get("/analytics/status-stats", protect, admin, validateAnalyticsQuery, asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
 
   const filter = {};
@@ -624,7 +636,7 @@ router.get("/analytics/status-stats", protect, admin, asyncHandler(async (req, r
 // @route   GET /orders/analytics/fulfillment-metrics
 // @desc    Get fulfillment performance metrics (Admin only)
 // @access  Private/Admin
-router.get("/analytics/fulfillment-metrics", protect, admin, asyncHandler(async (req, res) => {
+router.get("/analytics/fulfillment-metrics", protect, admin, validateAnalyticsQuery, asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
 
   const filter = {};
@@ -656,7 +668,7 @@ router.get("/analytics/fulfillment-metrics", protect, admin, asyncHandler(async 
 // @route   POST /orders/:id/tracking
 // @desc    Add tracking information to order (Admin only)
 // @access  Private/Admin
-router.post("/:id/tracking", protect, admin, asyncHandler(async (req, res) => {
+router.post("/:id/tracking", protect, admin, validateTrackingInfo, asyncHandler(async (req, res) => {
   const { trackingNumber, carrierCode, notes } = req.body;
 
   if (!carrierCode) {
@@ -696,7 +708,7 @@ router.post("/:id/tracking", protect, admin, asyncHandler(async (req, res) => {
 // @route   GET /orders/:id/tracking
 // @desc    Get tracking history for an order
 // @access  Private
-router.get("/:id/tracking", protect, asyncHandler(async (req, res) => {
+router.get("/:id/tracking", protect, validateIdParam, asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
 
   if (!order) {
@@ -732,7 +744,7 @@ router.get("/:id/tracking", protect, asyncHandler(async (req, res) => {
 // @route   POST /orders/:id/tracking/events
 // @desc    Add tracking event to order (Admin only)
 // @access  Private/Admin
-router.post("/:id/tracking/events", protect, admin, asyncHandler(async (req, res) => {
+router.post("/:id/tracking/events", protect, admin, validateTrackingEvent, asyncHandler(async (req, res) => {
   const { status, location, description, scannedBy, timestamp } = req.body;
 
   if (!status) {

@@ -2,6 +2,7 @@ import express from "express";
 import Category from "../models/Category.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // @route   GET /categories/:id
 // @desc    Get category by ID
 // @access  Public
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", validateIdParam, asyncHandler(async (req, res) => {
   const category = await Category.findById(req.params.id)
     .populate('parent', 'name slug');
 
@@ -43,7 +44,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 // @route   GET /categories/slug/:slug
 // @desc    Get category by slug (supports both hyphenated and non-hyphenated versions)
 // @access  Public
-router.get("/slug/:slug", asyncHandler(async (req, res) => {
+router.get("/slug/:slug", validateSlugParam, asyncHandler(async (req, res) => {
   let category = await Category.findOne({ slug: req.params.slug, isActive: true })
     .populate('parent', 'name slug');
 
@@ -90,15 +91,8 @@ router.get("/slug/:slug", asyncHandler(async (req, res) => {
 // @route   POST /categories
 // @desc    Create new category
 // @access  Private/Admin
-router.post("/", protect, admin, asyncHandler(async (req, res) => {
+router.post("/", protect, admin, validateCategory, asyncHandler(async (req, res) => {
   const { name, slug, description, parent, image, order } = req.body;
-
-  if (!name || !slug) {
-    return res.status(400).json({
-      success: false,
-      message: 'Name and slug are required'
-    });
-  }
 
   const category = await Category.create({
     name,
@@ -119,7 +113,7 @@ router.post("/", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /categories/:id
 // @desc    Update category
 // @access  Private/Admin
-router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateCategoryUpdate, asyncHandler(async (req, res) => {
   const category = await Category.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -143,7 +137,7 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @route   DELETE /categories/:id
 // @desc    Delete category (soft delete)
 // @access  Private/Admin
-router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const category = await Category.findById(req.params.id);
 
   if (!category) {

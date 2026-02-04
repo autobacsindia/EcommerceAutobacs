@@ -6,7 +6,13 @@ import ProductImportService from "../services/productImportService.js";
 import BrandProductImportService from "../services/brandProductImportService.js";
 import ScheduledImportService from "../services/scheduledImportService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { validateProduct } from "../middleware/validationMiddleware.js";
+import { 
+  validateProduct,
+  validateProductIdParam,
+  validateProductUpdate,
+  validateStockUpdate,
+  validateBrandParam
+} from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { cacheResponse } from "../middleware/cacheMiddleware.js";
 import { cleanupWordPressProducts } from "../utils/wordpressProductCleanup.js";
@@ -418,21 +424,8 @@ router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
 // @route   GET /products/:id
 // @desc    Get product by ID
 // @access  Public
-router.get("/:id", asyncHandler(async (req, res) => {
-  let id = req.params.id;
-
-  // Handle prefixed IDs (e.g. product-123...)
-  if (id.startsWith('product-')) {
-    id = id.replace(/^product-/, '');
-  }
-
-  // Validate ID format
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid ID format'
-    });
-  }
+router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
+  const id = req.params.id; // Sanitized by middleware
 
   const product = await Product.findById(id)
     .populate('categories', 'name slug description')
@@ -471,7 +464,7 @@ router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res) 
 // @route   PUT /products/:id
 // @desc    Update product
 // @access  Private/Admin
-router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate, asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
@@ -500,7 +493,7 @@ router.put("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @route   DELETE /products/:id
 // @desc    Delete product (soft delete by setting isActive to false)
 // @access  Private/Admin
-router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
@@ -526,26 +519,10 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
 // @route   POST /products/:id/stock
 // @desc    Update product stock
 // @access  Private/Admin
-router.post("/:id/stock", protect, admin, asyncHandler(async (req, res) => {
+router.post("/:id/stock", protect, admin, validateStockUpdate, asyncHandler(async (req, res) => {
   const { stock } = req.body;
-  let id = req.params.id;
+  const id = req.params.id; // Sanitized by middleware
   
-  // Handle prefixed IDs
-  if (id.startsWith('product-')) {
-    id = id.replace(/^product-/, '');
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ success: false, message: 'Invalid ID format' });
-  }
-
-  if (stock === undefined || stock < 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid stock quantity is required'
-    });
-  }
-
   const product = await Product.findByIdAndUpdate(
     id,
     { stock },
@@ -660,7 +637,7 @@ router.get("/import/wordpress/preview", protect, admin, asyncHandler(async (req,
 // @route   POST /products/import/brand/:brandName
 // @desc    Import products for a specific brand from WordPress
 // @access  Private/Admin
-router.post("/import/brand/:brandName", protect, admin, asyncHandler(async (req, res) => {
+router.post("/import/brand/:brandName", protect, admin, validateBrandParam, asyncHandler(async (req, res) => {
   try {
     const { brandName } = req.params;
     const importService = new BrandProductImportService();

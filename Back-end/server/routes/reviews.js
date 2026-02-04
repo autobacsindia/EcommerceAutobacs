@@ -3,7 +3,12 @@ import Review from "../models/Review.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { validateReview } from "../middleware/reviewValidationMiddleware.js";
+import { 
+  validateReviewSubmission, 
+  validateReviewUpdate, 
+  validateReviewIdParam,
+  validateRouteProductId 
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -31,17 +36,9 @@ const updateProductRatingStats = async (productId) => {
 // @route   GET /reviews/products/:productId
 // @desc    Get all approved reviews for a product with filtering and sorting
 // @access  Public
-router.get("/products/:productId", asyncHandler(async (req, res) => {
+router.get("/products/:productId", validateRouteProductId, asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, sortBy = "createdAt", order = "desc", minRating, maxRating, hasImages } = req.query;
   const productId = req.params.productId;
-  
-  // Validate product ID
-  if (!productId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid product ID"
-    });
-  }
 
   // Build filter
   const filter = { product: productId, isApproved: true };
@@ -106,16 +103,8 @@ router.get("/products/:productId", asyncHandler(async (req, res) => {
 // @route   GET /reviews/products/:productId/summary
 // @desc    Get review summary for a product
 // @access  Public
-router.get("/products/:productId/summary", asyncHandler(async (req, res) => {
+router.get("/products/:productId/summary", validateRouteProductId, asyncHandler(async (req, res) => {
   const productId = req.params.productId;
-  
-  // Validate product ID
-  if (!productId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid product ID"
-    });
-  }
 
   // Get all approved reviews for this product
   const reviews = await Review.find({ product: productId, isApproved: true });
@@ -224,18 +213,10 @@ router.get("/user", protect, asyncHandler(async (req, res) => {
 // @route   POST /reviews/products/:productId
 // @desc    Submit a new review for a product
 // @access  Private (authenticated users)
-router.post("/products/:productId", protect, validateReview, asyncHandler(async (req, res) => {
+router.post("/products/:productId", protect, validateReviewSubmission, asyncHandler(async (req, res) => {
   const { rating, title, comment, images } = req.body;
   const productId = req.params.productId;
   const userId = req.user._id;
-
-  // Validate product ID
-  if (!productId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid product ID"
-    });
-  }
 
   // Check if product exists
   const product = await Product.findById(productId);
@@ -293,18 +274,10 @@ router.post("/products/:productId", protect, validateReview, asyncHandler(async 
 // @route   PUT /reviews/:reviewId
 // @desc    Update own review
 // @access  Private (review owner)
-router.put("/:reviewId", protect, validateReview, asyncHandler(async (req, res) => {
+router.put("/:reviewId", protect, validateReviewUpdate, asyncHandler(async (req, res) => {
   const { rating, title, comment, images } = req.body;
   const reviewId = req.params.reviewId;
   const userId = req.user._id;
-
-  // Validate review ID
-  if (!reviewId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid review ID"
-    });
-  }
 
   // Find review
   const review = await Review.findById(reviewId);
@@ -353,17 +326,9 @@ router.put("/:reviewId", protect, validateReview, asyncHandler(async (req, res) 
 // @route   DELETE /reviews/:reviewId
 // @desc    Delete own review
 // @access  Private (review owner)
-router.delete("/:reviewId", protect, asyncHandler(async (req, res) => {
+router.delete("/:reviewId", protect, validateReviewIdParam, asyncHandler(async (req, res) => {
   const reviewId = req.params.reviewId;
   const userId = req.user._id;
-
-  // Validate review ID
-  if (!reviewId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid review ID"
-    });
-  }
 
   // Find review
   const review = await Review.findById(reviewId);
@@ -397,17 +362,9 @@ router.delete("/:reviewId", protect, asyncHandler(async (req, res) => {
 // @route   POST /reviews/:reviewId/helpful
 // @desc    Mark a review as helpful
 // @access  Private (authenticated users)
-router.post("/:reviewId/helpful", protect, asyncHandler(async (req, res) => {
+router.post("/:reviewId/helpful", protect, validateReviewIdParam, asyncHandler(async (req, res) => {
   const reviewId = req.params.reviewId;
   const userId = req.user._id;
-
-  // Validate review ID
-  if (!reviewId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid review ID"
-    });
-  }
 
   // Find review
   const review = await Review.findById(reviewId);
@@ -487,16 +444,8 @@ router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
 // @route   PUT /reviews/:reviewId/approve
 // @desc    Approve a review (admin)
 // @access  Private/Admin
-router.put("/:reviewId/approve", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:reviewId/approve", protect, admin, validateReviewIdParam, asyncHandler(async (req, res) => {
   const reviewId = req.params.reviewId;
-
-  // Validate review ID
-  if (!reviewId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid review ID"
-    });
-  }
 
   // Find and update review
   const review = await Review.findByIdAndUpdate(
@@ -529,16 +478,8 @@ router.put("/:reviewId/approve", protect, admin, asyncHandler(async (req, res) =
 // @route   PUT /reviews/:reviewId/reject
 // @desc    Reject a review (admin)
 // @access  Private/Admin
-router.put("/:reviewId/reject", protect, admin, asyncHandler(async (req, res) => {
+router.put("/:reviewId/reject", protect, admin, validateReviewIdParam, asyncHandler(async (req, res) => {
   const reviewId = req.params.reviewId;
-
-  // Validate review ID
-  if (!reviewId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid review ID"
-    });
-  }
 
   // Find and update review
   const review = await Review.findByIdAndUpdate(
@@ -571,16 +512,8 @@ router.put("/:reviewId/reject", protect, admin, asyncHandler(async (req, res) =>
 // @route   DELETE /reviews/:reviewId/admin
 // @desc    Delete any review (admin)
 // @access  Private/Admin
-router.delete("/:reviewId/admin", protect, admin, asyncHandler(async (req, res) => {
+router.delete("/:reviewId/admin", protect, admin, validateReviewIdParam, asyncHandler(async (req, res) => {
   const reviewId = req.params.reviewId;
-
-  // Validate review ID
-  if (!reviewId.match(/^[0-9a-fA-F]{24}$/)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid review ID"
-    });
-  }
 
   // Find review
   const review = await Review.findById(reviewId);

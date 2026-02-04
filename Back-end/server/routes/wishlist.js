@@ -3,7 +3,7 @@ import Wishlist from "../models/Wishlist.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { validateWishlist, validateWishlistItem, validateSharing } from "../middleware/wishlistValidationMiddleware.js";
+import { validateWishlist, validateWishlistItem, validateSharing, validateIdParam, validateWishlistImport } from "../middleware/validationMiddleware.js";
 import crypto from "crypto";
 
 const router = express.Router();
@@ -114,7 +114,7 @@ router.post("/", protect, validateWishlist, asyncHandler(async (req, res) => {
 // @route   PUT /wishlist/:id
 // @desc    Update wishlist details
 // @access  Private
-router.put("/:id", protect, validateWishlist, asyncHandler(async (req, res) => {
+router.put("/:id", protect, validateIdParam, validateWishlist, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, description, privacy } = req.body;
 
@@ -317,7 +317,7 @@ router.delete("/:id/items/:productId", protect, asyncHandler(async (req, res) =>
 // @route   DELETE /wishlist/:id/clear
 // @desc    Clear entire wishlist
 // @access  Private
-router.delete("/:id/clear", protect, asyncHandler(async (req, res) => {
+router.delete("/:id/clear", protect, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
@@ -342,7 +342,7 @@ router.delete("/:id/clear", protect, asyncHandler(async (req, res) => {
 // @route   POST /wishlist/:id/share
 // @desc    Share wishlist with users or generate share link
 // @access  Private
-router.post("/:id/share", protect, validateSharing, asyncHandler(async (req, res) => {
+router.post("/:id/share", protect, validateIdParam, validateSharing, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { userIds, role, isPublic } = req.body;
 
@@ -394,7 +394,7 @@ router.post("/:id/share", protect, validateSharing, asyncHandler(async (req, res
 // @route   DELETE /wishlist/:id/share/:userId
 // @desc    Revoke user access to shared wishlist
 // @access  Private
-router.delete("/:id/share/:userId", protect, asyncHandler(async (req, res) => {
+router.delete("/:id/share/:userId", protect, validateIdParam, validateUserIdParam, asyncHandler(async (req, res) => {
   const { id, userId } = req.params;
 
   const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
@@ -423,7 +423,7 @@ router.delete("/:id/share/:userId", protect, asyncHandler(async (req, res) => {
 // @route   GET /wishlist/:id/export
 // @desc    Export wishlist as JSON
 // @access  Private
-router.get("/:id/export", protect, asyncHandler(async (req, res) => {
+router.get("/:id/export", protect, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id })

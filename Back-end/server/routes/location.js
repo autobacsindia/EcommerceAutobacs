@@ -1,6 +1,11 @@
 import express from "express";
 import locationService from "../services/locationService.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
+import { 
+  validateLocationSelect, 
+  validatePostalCode, 
+  validatePostalCodeQuery 
+} from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -9,7 +14,7 @@ const router = express.Router();
  * @desc    Select and save user location
  * @access  Public
  */
-router.post("/select", optionalAuth, async (req, res) => {
+router.post("/select", optionalAuth, validateLocationSelect, async (req, res) => {
   try {
     // DEBUG: Log the incoming request
     console.log('\n=== Location Route Debug ===');
@@ -93,16 +98,9 @@ router.get("/current", optionalAuth, async (req, res) => {
  * @desc    Validate if address is serviceable
  * @access  Public
  */
-router.post("/validate", async (req, res) => {
+router.post("/validate", validatePostalCode, async (req, res) => {
   try {
     const { postalCode } = req.body;
-
-    if (!postalCode) {
-      return res.status(400).json({
-        success: false,
-        message: "Postal code is required"
-      });
-    }
 
     const result = await locationService.validateAddress(postalCode);
 
@@ -173,16 +171,9 @@ router.delete("/clear", optionalAuth, async (req, res) => {
  * @desc    Get delivery estimate for a postal code
  * @access  Public
  */
-router.get("/estimate", async (req, res) => {
+router.get("/estimate", validatePostalCodeQuery, async (req, res) => {
   try {
     const { postalCode } = req.query;
-
-    if (!postalCode) {
-      return res.status(400).json({
-        success: false,
-        message: "Postal code is required"
-      });
-    }
 
     const result = await locationService.getDeliveryEstimate(postalCode);
 
