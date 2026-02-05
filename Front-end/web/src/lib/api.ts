@@ -134,7 +134,7 @@ class APIClient {
       const API_BASE_URL =
         process.env.NEXT_PUBLIC_API_BASE_URL ||
         process.env.NEXT_PUBLIC_API_URL ||
-        'http://localhost:5000';
+        'http://localhost:5001';
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: {
@@ -450,7 +450,7 @@ class APIClient {
         const API_BASE_URL =
           process.env.NEXT_PUBLIC_API_BASE_URL ||
           process.env.NEXT_PUBLIC_API_URL ||
-          'http://localhost:5000';
+          'http://localhost:5001';
         errorMessage = `Network error: Unable to connect to the server at ${API_BASE_URL}. Please make sure the backend server is running. Details: ${errorMessage}`;
       }
 
@@ -475,7 +475,7 @@ class APIClient {
     const API_BASE_URL =
       process.env.NEXT_PUBLIC_API_BASE_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      'http://localhost:5000';
+      'http://localhost:5001';
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     
     // Handle query parameters
