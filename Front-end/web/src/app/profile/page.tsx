@@ -87,7 +87,7 @@ export default function ProfilePage() {
           isVerified: boolean;
           email: string;
           verifiedAt?: string;
-        }>('/auth/verification-status').catch(() => ({ success: false, isVerified: false, email: '' })),
+        }>('/auth/verification-status').catch(() => ({ success: false, isVerified: false, email: '', verifiedAt: undefined })),
         apiClient.get<{ success: boolean; data: Message[] }>('/contact/me').catch(() => ({ success: false, data: [] }))
       ]);
 
@@ -708,7 +708,7 @@ export default function ProfilePage() {
                           </Link>
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                            order.status === 'cancelled' || order.status === 'failed' ? 'bg-red-100 text-red-800' :
+                            order.status === 'cancelled' || (order.status as string) === 'failed' ? 'bg-red-100 text-red-800' :
                             order.status === 'shipped' ? 'bg-blue-100 text-blue-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
@@ -817,7 +817,7 @@ export default function ProfilePage() {
                             Return #{request._id.substring(0, 8).toUpperCase()}
                           </span>
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            request.status === 'approved' || request.status === 'refunded' ? 'bg-green-100 text-green-800' :
+                            request.status === 'approved' || (request.status as string) === 'refunded' ? 'bg-green-100 text-green-800' :
                             request.status === 'rejected' ? 'bg-red-100 text-red-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
@@ -828,7 +828,7 @@ export default function ProfilePage() {
                           Requested on {new Date(request.createdAt).toLocaleDateString()}
                         </p>
                         <p className="text-sm text-gray-500">
-                          Order #{typeof request.order === 'string' ? request.order : request.order?.orderNumber}
+                          Order #{typeof request.order === 'string' ? request.order : (request.order as any)?.orderNumber}
                         </p>
                       </div>
                       <div className="text-right">

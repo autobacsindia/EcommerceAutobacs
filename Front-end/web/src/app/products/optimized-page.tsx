@@ -10,7 +10,7 @@ import VehicleFilterSidebar from '@/components/vehicles/VehicleFilterSidebar';
 import Pagination from '@/components/layout/Pagination';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 import productService from '@/lib/services/productService';
-import { Product, ProductsData } from '@/lib/types';
+import { Product, ProductsData, Pagination as PaginationType } from '@/lib/types';
 
 // Enhanced function to fetch products with static data fallback
 async function getProducts(searchParams: any, useStaticData: boolean = false): Promise<ProductsData> {
@@ -210,15 +210,15 @@ export default function OptimizedProductsPageClient() {
   const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
 
   // Helper functions to safely access pagination properties
-  const getPaginationTotal = (pagination: Pagination | undefined) => {
+  const getPaginationTotal = (pagination: PaginationType | undefined) => {
     return pagination && 'total' in pagination ? pagination.total : undefined;
   };
 
-  const getPaginationPages = (pagination: Pagination | undefined) => {
+  const getPaginationPages = (pagination: PaginationType | undefined) => {
     return pagination && 'pages' in pagination ? pagination.pages : undefined;
   };
 
-  const getPaginationPage = (pagination: Pagination | undefined) => {
+  const getPaginationPage = (pagination: PaginationType | undefined) => {
     return pagination && 'currentPage' in pagination ? pagination.currentPage : undefined;
   };
 
@@ -437,7 +437,7 @@ export default function OptimizedProductsPageClient() {
             {/* Error State */}
             {error && (
               <ProductFetchError 
-                error={error.message} 
+                error={error} 
                 onRetry={handleRetry} 
               />
             )}
@@ -468,13 +468,10 @@ export default function OptimizedProductsPageClient() {
                 {!showAll && data.pagination && (
                   <div className="mt-8">
                     <Pagination 
+                      pagination={data.pagination}
                       currentPage={getPaginationPage(data.pagination) || 1}
-                      totalPages={getPaginationPages(data.pagination) || 1}
-                      onPageChange={(page) => {
-                        const currentParams = new URLSearchParams(searchParams.toString());
-                        currentParams.set('page', page.toString());
-                        router.push(`/products?${currentParams.toString()}`);
-                      }}
+                      basePath="/products"
+                      searchParams={new URLSearchParams(searchParams.toString())}
                     />
                   </div>
                 )}

@@ -134,7 +134,7 @@ export default function OrderDetailPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}/${orderId}`);
-      setOrder(response.order);
+      setOrder((response as any).order);
     } catch (err: any) {
       setError(err.message || 'Failed to load order details');
     } finally {
@@ -226,7 +226,7 @@ export default function OrderDetailPage() {
   };
 
   const getStatusIcon = (status: string) => {
-    const icons: Record<string, JSX.Element> = {
+    const icons: Record<string, any> = {
       pending: <Clock className="h-5 w-5" />,
       confirmed: <CheckCircle className="h-5 w-5" />,
       processing: <Package className="h-5 w-5" />,
@@ -533,22 +533,22 @@ export default function OrderDetailPage() {
               <>
                 <div>
                   <p className="text-sm text-gray-600">Method</p>
-                  <p className="font-medium">{PAYMENT_METHOD_LABELS[order.payment.paymentMethod] || order.payment.paymentMethod || 'N/A'}</p>
+                  <p className="font-medium">{PAYMENT_METHOD_LABELS[(order.payment as any)?.paymentMethod] || (order.payment as any)?.paymentMethod || 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Status</p>
                   <p className={`font-medium ${
-                    !order.payment.status ? 'text-gray-500' :
-                    order.payment.status === 'completed' || order.payment.status === 'success' || order.payment.status === 'paid' 
+                    !(order.payment as any)?.status ? 'text-gray-500' :
+                    (order.payment as any)?.status === 'completed' || (order.payment as any)?.status === 'success' || (order.payment as any)?.status === 'paid' 
                       ? 'text-green-600' 
-                      : order.payment.status === 'pending' 
+                      : (order.payment as any)?.status === 'pending' 
                         ? 'text-yellow-600' 
                         : 'text-red-600'
                   }`}>
-                    {(order.payment.status || 'Unknown').charAt(0).toUpperCase() + (order.payment.status || 'Unknown').slice(1)}
+                    {((order.payment as any)?.status || 'Unknown').charAt(0).toUpperCase() + ((order.payment as any)?.status || 'Unknown').slice(1)}
                   </p>
                 </div>
-                {order.payment.status === 'failed' && (
+                {(order.payment as any)?.status === 'failed' && (
                   <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-sm text-red-700 flex flex-col gap-2">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -565,10 +565,10 @@ export default function OrderDetailPage() {
                     )}
                   </div>
                 )}
-                {order.payment.transactionId && (
+                {(order.payment as any)?.transactionId && (
                   <div>
                     <p className="text-sm text-gray-600">Transaction ID</p>
-                    <p className="font-mono text-xs">{order.payment.transactionId}</p>
+                    <p className="font-mono text-xs">{(order.payment as any)?.transactionId}</p>
                   </div>
                 )}
               </>

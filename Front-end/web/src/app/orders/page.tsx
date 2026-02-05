@@ -68,8 +68,8 @@ export default function OrdersPage() {
     try {
       setLoading(true);
       const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}?page=${currentPage}&limit=${ordersPerPage}`);
-      setOrders(response.orders || []);
-      setTotalPages(response.pagination?.totalPages || 1);
+      setOrders((response as any).orders || []);
+      setTotalPages((response as any).pagination?.totalPages || 1);
     } catch (err: any) {
       setError(err.message || 'Failed to load orders');
     } finally {

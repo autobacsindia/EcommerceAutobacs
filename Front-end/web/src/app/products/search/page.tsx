@@ -112,7 +112,7 @@ async function getSearchCorrections(searchTerm: string) {
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState({ products: [], pagination: {} });
+  const [data, setData] = useState<any>({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
   const [corrections, setCorrections] = useState<any[]>([]);
   

@@ -480,7 +480,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               <div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                   {paginatedProducts.map((product) => {
-                    const rawId = (product && (product._id || product.id)) ?? null;
+                    const rawId = (product && ((product as any)._id || product.id)) ?? null;
                     const productId = rawId != null ? rawId.toString() : '';
                     const productUrl =
                       typeof (product as any).permalink === 'string' && (product as any).permalink.trim() !== ''

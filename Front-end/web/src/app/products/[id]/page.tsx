@@ -625,10 +625,9 @@ function ProductDetailPageClient({ product }: { product: any }) {
 export default function ProductDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  // Use React.use() to unwrap the Promise if it's a Promise
-  // @ts-ignore
+  // Use React.use() to unwrap the Promise
   const unwrappedParams = use(params);
   const productId = unwrappedParams.id;
   
