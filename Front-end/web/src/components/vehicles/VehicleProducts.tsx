@@ -47,10 +47,21 @@ export default function VehicleProducts({ vehicleSlug, vehicleName }: VehiclePro
         setCategories(categoriesData);
         
         // Fetch products for the vehicle
-        const productsData = await wordpressService.getProductsByVehicle(
+        const response = await wordpressService.getProductsByVehicle(
           vehicleSlug, 
-          selectedCategory || undefined
+          1, // page
+          50 // perPage
         );
+        
+        let productsData = response.products;
+        
+        // Filter by category if selected
+        if (selectedCategory) {
+          productsData = productsData.filter(product => 
+            product.categories && product.categories.some(cat => cat.slug === selectedCategory)
+          );
+        }
+        
         setProducts(productsData);
         
         // Show a warning if no data is found and WordPress API might not be configured
