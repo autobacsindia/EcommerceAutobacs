@@ -16,7 +16,7 @@ export default function CategoryMappingDemo() {
       try {
         setLoading(true);
         const response = await apiClient.get('/categories');
-        setCategories(response.data || response.categories || []);
+        setCategories((response as any).data || (response as any).categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);
         setError('Failed to load categories. Please try again later.');

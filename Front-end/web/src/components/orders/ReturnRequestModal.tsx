@@ -206,7 +206,7 @@ export default function ReturnRequestModal({
       const response = await apiClient.post(API_ENDPOINTS.RETURN_CREATE, payload);
       
       setSuccess({
-        returnRequestId: response._id || 'N/A',
+        returnRequestId: (response as any)._id || 'N/A',
       });
     } catch (err: any) {
       setError(err.message || 'Failed to submit return request. Please try again.');

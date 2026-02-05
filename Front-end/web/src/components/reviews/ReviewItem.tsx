@@ -1,5 +1,6 @@
 import React from 'react';
 import StarRating from './StarRating';
+import EnhancedImage from '@/components/layout/EnhancedImage';
 import styles from './ReviewItem.module.css';
 
 interface ReviewItemProps {

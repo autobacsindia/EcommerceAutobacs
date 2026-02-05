@@ -206,7 +206,7 @@ export default function EnhancedProductFilters() {
       try {
         setLoadingCategories(true);
         const response = await apiClient.get('/categories');
-        setCategories(response.data || response.categories || []);
+        setCategories((response as any).data || (response as any).categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);
         // Fallback to hardcoded categories if API fails

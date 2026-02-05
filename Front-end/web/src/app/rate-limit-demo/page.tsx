@@ -18,7 +18,7 @@ const RateLimitDemoPage = () => {
     try {
       // Make a request to a route that might be rate limited
       const data = await apiClient.get('/products');
-      setResult(`Success! Retrieved ${data.products?.length || 0} products`);
+      setResult(`Success! Retrieved ${(data as any).products?.length || 0} products`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 429 && err.rateLimitInfo?.retryAfter) {
         // Show rate limit notification

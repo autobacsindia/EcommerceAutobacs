@@ -6,11 +6,13 @@ import {
   getReviewSummary, 
   getReviews, 
   submitReview, 
-  markReviewAsHelpful,
+  markReviewAsHelpful
+} from '../../lib/services/reviewService';
+import { 
   ReviewSummary as ReviewSummaryType,
   Review,
-  PaginatedReviews
-} from '../../lib/services/reviewService';
+  PaginatedReviews 
+} from '../../lib/types';
 import styles from './Reviews.module.css';
 
 interface ReviewsProps {
@@ -38,7 +40,7 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
         
         setReviewSummary(summary);
         setReviews(reviewsData.reviews);
-        setTotalReviews(reviewsData.pagination.totalReviews);
+        setTotalReviews(reviewsData.pagination.totalReviews || 0);
       } catch (err) {
         setError('Failed to load reviews data');
         console.error('Error fetching reviews:', err);

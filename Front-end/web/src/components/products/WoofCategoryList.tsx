@@ -26,7 +26,7 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
       try {
         setLoading(true);
         const response = await apiClient.get('/categories');
-        const allCategories = response.data || response.categories || [];
+        const allCategories = (response as any).data || (response as any).categories || [];
         
         // Build hierarchical structure
         const topLevelCategories = allCategories.filter((cat: Category) => !cat.parent);

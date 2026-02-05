@@ -96,7 +96,7 @@ export default function ProductShowcase() {
           // Fallback to API if static data is not available
           console.warn('Static product data not available, falling back to API');
           const apiProducts = await productService.getFeaturedProducts(4, false);
-          setFeaturedProducts(apiProducts);
+          setFeaturedProducts(apiProducts as any);
         }
       } catch (err) {
         console.error('Error loading featured products:', err);

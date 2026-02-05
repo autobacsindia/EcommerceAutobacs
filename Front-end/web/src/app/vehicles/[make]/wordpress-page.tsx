@@ -47,9 +47,10 @@ export default function WordPressVehicleProductsPage({ params }: { params: Promi
         setCategories(categoriesData);
           
         // Fetch products for the vehicle
-        let productsData = await wordpressService.getProductsByVehicle(
+        const response = await wordpressService.getProductsByVehicle(
           make
         );
+        let productsData: WordPressProduct[] = (response as any).products || (Array.isArray(response) ? response : []);
         
         // If a category is selected, filter products by that category
         if (selectedCategory) {

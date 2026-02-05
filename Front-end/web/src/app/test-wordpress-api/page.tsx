@@ -32,8 +32,8 @@ export default function TestWordPressAPIPage() {
             sample: vehicles.slice(0, 3)
           },
           products: {
-            count: products.length,
-            sample: products.slice(0, 3)
+            count: (products as any).products?.length || (products as any).length || 0,
+            sample: ((products as any).products || (products as any) || []).slice(0, 3)
           },
           categories: {
             count: categories.length,

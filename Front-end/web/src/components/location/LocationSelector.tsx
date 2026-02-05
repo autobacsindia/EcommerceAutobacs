@@ -243,7 +243,7 @@ export default function LocationSelector({
             
             <div className="space-y-3">
               <button
-                onClick={handleUseCurrentLocation}
+                onClick={() => handleUseCurrentLocation()}
                 disabled={useCurrentLocation}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >

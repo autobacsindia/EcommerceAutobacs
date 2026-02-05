@@ -75,7 +75,7 @@ export default function ProductComparison() {
         
         const responses = await Promise.all(productPromises);
         const fetchedProducts = responses
-          .map(response => response.product)
+          .map(response => (response as any).product)
           .filter(Boolean);
           
         setProducts(fetchedProducts);

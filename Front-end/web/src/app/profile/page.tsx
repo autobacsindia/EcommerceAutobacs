@@ -846,8 +846,8 @@ export default function ProfilePage() {
                         {request.items.map((item, idx) => (
                           <div key={idx} className="flex items-center justify-between text-sm">
                             <div className="flex items-center">
-                              {item.product?.image ? (
-                                <img src={item.product.image.url} alt={item.product.name} className="w-8 h-8 object-cover rounded mr-2" />
+                              {item.product?.images?.[0] ? (
+                                <img src={item.product.images[0].url} alt={item.product.name} className="w-8 h-8 object-cover rounded mr-2" />
                               ) : (
                                 <div className="w-8 h-8 bg-gray-200 rounded mr-2" />
                               )}
@@ -864,13 +864,13 @@ export default function ProfilePage() {
               </div>
 
               {/* Pagination */}
-              {returnRequests.pagination.totalPages > 1 && (
+              {(returnRequests.pagination?.totalPages || 0) > 1 && (
                 <div className="mt-6 flex items-center justify-between">
                   <div className="text-sm text-gray-700">
-                    Showing page {returnRequests.pagination.currentPage} of {returnRequests.pagination.totalPages}
+                    Showing page {returnRequests.pagination?.currentPage || 1} of {returnRequests.pagination?.totalPages || 1}
                   </div>
                   <div className="flex space-x-2">
-                    {returnRequests.pagination.hasPrev && (
+                    {returnRequests.pagination?.hasPrev && (
                       <button
                         onClick={() => loadReturns(currentReturnsPage - 1)}
                         className="px-3 py-1 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
@@ -878,7 +878,7 @@ export default function ProfilePage() {
                         Previous
                       </button>
                     )}
-                    {returnRequests.pagination.hasNext && (
+                    {returnRequests.pagination?.hasNext && (
                       <button
                         onClick={() => loadReturns(currentReturnsPage + 1)}
                         className="px-3 py-1 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
