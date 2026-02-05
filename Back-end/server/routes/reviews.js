@@ -7,7 +7,8 @@ import {
   validateReviewSubmission, 
   validateReviewUpdate, 
   validateReviewIdParam,
-  validateRouteProductId 
+  validateRouteProductId,
+  validateAdminReviewQuery
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();

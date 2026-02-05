@@ -102,6 +102,9 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
     userAgent
   );
   
+  // Set refresh token cookie
+  setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+
   // Log successful registration
   await logLoginAttempt(newUser, true, ipAddress, userAgent);
 
@@ -194,6 +197,9 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     userAgent
   );
   
+  // Set refresh token cookie
+  setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+  
   // Log successful login
   await logLoginAttempt(user, true, ipAddress, userAgent);
 
@@ -201,7 +207,6 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     success: true,
     message: "Login successful",
     accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
     expiresIn: tokens.accessTokenExpiry,
     user: { 
       id: user._id, 
@@ -265,36 +270,21 @@ router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res)
 }));
 
 // @route   POST /auth/logout
-// @desc    Logout and revoke refresh token
-// @access  Private or Public (with refresh token)
+// @desc    Logout user (revoke refresh token)
+// @access  Public
 router.post("/logout", asyncHandler(async (req, res) => {
-  const { refreshToken } = req.body;
-  
-  if (!refreshToken) {
-    return res.json({
-      success: true,
-      message: 'Logged out successfully'
-    });
+  const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+  if (refreshToken) {
+    await revokeRefreshToken(refreshToken);
   }
   
-  try {
-    // Find user and revoke refresh token
-    const users = await User.find({ 'refreshTokens.0': { $exists: true } });
-    
-    for (const user of users) {
-      if (validateRefreshToken(user, refreshToken)) {
-        await revokeRefreshToken(user, refreshToken);
-        console.log(`[Auth] User logged out: ${user.email}`);
-        break;
-      }
-    }
-  } catch (error) {
-    console.error('[Auth] Logout error:', error);
-  }
-  
+  // Clear refresh token cookie
+  clearRefreshTokenCookie(res);
+
   res.json({
     success: true,
-    message: 'Logged out successfully'
+    message: "Logged out successfully"
   });
 }));
 
@@ -704,6 +694,7 @@ const completeSocialLogin = async (req, res, user, provider) => {
 
   const tokens = generateSessionTokenPair(user, ipAddress, userAgent);
 
+  // Store refresh token
   await storeRefreshToken(
     user,
     tokens.refreshToken,
@@ -711,7 +702,11 @@ const completeSocialLogin = async (req, res, user, provider) => {
     ipAddress,
     userAgent
   );
+  
+  // Set refresh token cookie
+  setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
 
+  // Log successful login
   await logLoginAttempt(user, true, ipAddress, userAgent);
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";

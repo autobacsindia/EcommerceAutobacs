@@ -196,3 +196,36 @@ export const cleanupExpiredTokens = async (UserModel) => {
     throw error;
   }
 };
+
+/**
+ * Set refresh token cookie on response
+ * @param {Object} res - Express response object
+ * @param {string} token - Refresh token
+ * @param {Date} expiresAt - Expiration date
+ */
+export const setRefreshTokenCookie = (res, token, expiresAt) => {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // Strict for production
+    path: '/', // Allow on all paths so logout can work
+    expires: expiresAt
+  };
+  
+  res.cookie('refreshToken', token, cookieOptions);
+};
+
+/**
+ * Clear refresh token cookie on response
+ * @param {Object} res - Express response object
+ */
+export const clearRefreshTokenCookie = (res) => {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    path: '/'
+  };
+  
+  res.clearCookie('refreshToken', cookieOptions);
+};

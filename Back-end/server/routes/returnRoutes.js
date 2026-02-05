@@ -7,7 +7,7 @@ import {
   getWallet
 } from "../controllers/returnController.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { validateReturnRequest, validateReturnStatusUpdate, validateRefundsQuery } from "../middleware/validationMiddleware.js";
+import { validateReturnRequest, validateReturnStatusUpdate, validateRefundsQuery, validateIdParam } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 

@@ -93,6 +93,16 @@ router.post("/run/:taskName", protect, admin, asyncHandler(async (req, res) => {
       const result = await cronServiceInstance.runFailedProductImport();
       
       if (result.success) {
+        // Log audit event
+        auditLogger.logAction(
+          req,
+          'UPDATE',
+          'ScheduledTask',
+          null,
+          { action: 'RUN_MANUAL', taskName },
+          'SUCCESS'
+        );
+
         res.json({
           success: true,
           message: 'Failed product import task executed successfully',

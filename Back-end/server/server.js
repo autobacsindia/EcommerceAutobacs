@@ -36,6 +36,10 @@ import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
+// Sanitization middleware
+import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
+import cookieParser from "cookie-parser";
+import csrfProtection from "./middleware/csrfMiddleware.js";
 import { 
   apiRateLimit, 
   wishlistRateLimit, 
@@ -71,9 +75,16 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:", "http:"],
       connectSrc: ["'self'", "https://api.razorpay.com", "https://lumberjack.razorpay.com"],
       frameSrc: ["'self'", "https://api.razorpay.com"],
+      upgradeInsecureRequests: [],
     },
   },
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" }
 }));
 
 app.use(compression({
@@ -84,6 +95,12 @@ app.use(compression({
     return compression.filter(req, res);
   }
 }));
+
+app.use(cookieParser());
+
+// Apply CSRF protection globally
+// This will set the XSRF-TOKEN cookie and validate headers for state-changing requests
+app.use(csrfProtection);
 
 const allowedOrigins = [
   'http://localhost:3000',
@@ -108,7 +125,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id', 'X-XSRF-TOKEN', 'X-CSRF-Token']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

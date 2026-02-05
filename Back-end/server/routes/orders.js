@@ -416,6 +416,16 @@ router.put("/:id/status", protect, admin, validateOrderStatusUpdate, asyncHandle
   if (estimatedDelivery) order.estimatedDelivery = estimatedDelivery;
   await order.save();
 
+  // Log audit event
+  auditLogger.logAction(
+    req,
+    'STATUS_CHANGE',
+    'Order',
+    req.params.id,
+    { oldStatus: result.oldStatus, newStatus: status, reason },
+    'SUCCESS'
+  );
+
   res.json({
     success: true,
     message: result.message,

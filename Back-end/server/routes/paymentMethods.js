@@ -2,7 +2,7 @@ import express from "express";
 import Payment from "../models/Payment.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { body, validationResult } from "express-validator";
+import { validatePaymentMethod } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -63,19 +63,7 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 // @route   POST /payment-methods
 // @desc    Add a new payment method (in a real implementation, this would integrate with a payment gateway)
 // @access  Private
-router.post("/", protect, [
-  body('paymentMethod').notEmpty().withMessage('Payment method is required'),
-  body('paymentGateway').notEmpty().withMessage('Payment gateway is required')
-], asyncHandler(async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array()
-    });
-  }
-
+router.post("/", protect, validatePaymentMethod, asyncHandler(async (req, res) => {
   const { paymentMethod, paymentGateway, cardDetails } = req.body;
 
   // In a real implementation, this would integrate with a payment gateway like Razorpay
@@ -111,51 +99,26 @@ router.post("/", protect, [
       createdAt: payment.createdAt
     };
 
-    if (payment.paymentDetails.card) {
+    if (cardDetails) {
       paymentMethodResponse.card = {
-        brand: payment.paymentDetails.card.brand,
-        last4: payment.paymentDetails.card.last4,
-        expiryMonth: payment.paymentDetails.card.expiryMonth,
-        expiryYear: payment.paymentDetails.card.expiryYear
+        brand: cardDetails.brand,
+        last4: cardDetails.last4,
+        expiryMonth: cardDetails.expiryMonth,
+        expiryYear: cardDetails.expiryYear
       };
     }
 
     res.status(201).json({
       success: true,
-      message: 'Payment method added successfully',
+      message: 'Payment method added',
       paymentMethod: paymentMethodResponse
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Server error while adding payment method'
+      message: 'Failed to add payment method'
     });
   }
-}));
-
-// @route   DELETE /payment-methods/:id
-// @desc    Remove a payment method
-// @access  Private
-router.delete("/:id", protect, asyncHandler(async (req, res) => {
-  // In a real implementation, this would integrate with a payment gateway to remove
-  // the payment method from their secure storage. For now, we'll just mark it as removed
-  // by deleting related payment records.
-  
-  const payment = await Payment.findOne({ _id: req.params.id, user: req.user.id });
-  
-  if (!payment) {
-    return res.status(404).json({
-      success: false,
-      message: 'Payment method not found'
-    });
-  }
-
-  // In a real implementation, we would call the payment gateway's API to remove the payment method
-  // For now, we'll just return a success response
-  res.json({
-    success: true,
-    message: 'Payment method removed successfully'
-  });
 }));
 
 export default router;

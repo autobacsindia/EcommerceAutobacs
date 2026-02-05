@@ -6,7 +6,7 @@
 
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { generateTokenPair, storeRefreshToken } from '../utils/sessionManager.js';
+import { generateTokenPair, storeRefreshToken, setRefreshTokenCookie } from '../utils/sessionManager.js';
 
 /**
  * Middleware to refresh access token if it's close to expiration during checkout
@@ -60,9 +60,13 @@ export const sessionKeepAlive = (minutesBeforeExpiry = 5) => {
           userAgent
         );
 
+        // Update cookie
+        setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+
         // Send new tokens in response headers
         res.set('X-Token-Refreshed', 'true');
         res.set('X-Access-Token', tokens.accessToken);
+        // Also send refresh token in header for backward compatibility
         res.set('X-Refresh-Token', tokens.refreshToken);
 
         console.log(`[Session Keep-Alive] Token refreshed for user ${user.email} during checkout`);

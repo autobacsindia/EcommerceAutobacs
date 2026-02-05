@@ -1,7 +1,7 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { body, validationResult } from "express-validator";
+import { validateRazorpayOrder, validateRazorpayVerification } from "../middleware/validationMiddleware.js";
 import razorpayService from "../services/razorpayService.js";
 import Order from "../models/Order.js";
 import { paymentSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
@@ -15,21 +15,7 @@ router.use(attachTokenRefreshInfo);
 // @route   POST /razorpay/create-order
 // @desc    Create a Razorpay order
 // @access  Private
-router.post("/create-order", protect, [
-  body('orderId').notEmpty().withMessage('Order ID is required'),
-  body('amount').isNumeric().withMessage('Amount must be a number'),
-  body('currency').optional().isString().withMessage('Currency must be a string'),
-  body('receipt').optional().isString().withMessage('Receipt must be a string')
-], asyncHandler(async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array()
-    });
-  }
-
+router.post("/create-order", protect, validateRazorpayOrder, asyncHandler(async (req, res) => {
   try {
     const { orderId, amount, currency, receipt } = req.body;
     
@@ -65,21 +51,7 @@ router.post("/create-order", protect, [
 // @route   POST /razorpay/verify-payment
 // @desc    Verify Razorpay payment and update order status
 // @access  Private
-router.post("/verify-payment", protect, [
-  body('razorpay_order_id').notEmpty().withMessage('Razorpay order ID is required'),
-  body('razorpay_payment_id').notEmpty().withMessage('Razorpay payment ID is required'),
-  body('razorpay_signature').notEmpty().withMessage('Razorpay signature is required'),
-  body('orderId').optional().isString().withMessage('Order ID must be a string')
-], asyncHandler(async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array()
-    });
-  }
-
+router.post("/verify-payment", protect, validateRazorpayVerification, asyncHandler(async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
     

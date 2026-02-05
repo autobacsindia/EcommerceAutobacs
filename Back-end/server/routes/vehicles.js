@@ -10,7 +10,8 @@ import {
   validateIdParam,
   validateRouteProductId,
   validateMakeModelParam,
-  validateSlugParam
+  validateSlugParam,
+  validateVehicleQuery,
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
