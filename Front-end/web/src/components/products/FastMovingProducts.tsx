@@ -12,6 +12,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import ViewAllCard from './ViewAllCard';
 import { toast } from 'react-hot-toast';
+import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 
 interface ProductImageType {
   url: string;
@@ -143,15 +144,7 @@ export default function FastMovingProducts({
           
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {[...Array(limit)].map((_, index) => (
-              <div key={index} className="bg-white rounded-lg border border-gray-200 overflow-hidden animate-pulse">
-                <div className="aspect-square bg-gray-200"></div>
-                <div className="p-4">
-                  <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-2/3 mb-3"></div>
-                  <div className="h-6 bg-gray-200 rounded w-1/2 mb-3"></div>
-                  <div className="h-10 bg-gray-200 rounded"></div>
-                </div>
-              </div>
+              <ProductCardSkeleton key={index} />
             ))}
             {/* View All Card Skeleton */}
             <div className="bg-gray-200 rounded-lg animate-pulse min-h-[400px]"></div>

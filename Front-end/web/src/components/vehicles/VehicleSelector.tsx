@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
+import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
 
 interface VehicleMake {
   _id: string;
@@ -93,12 +94,7 @@ export default function VehicleSelector({
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center space-x-2">
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-        <span>Loading vehicles...</span>
-      </div>
-    );
+    return <VehicleSelectorSkeleton />;
   }
 
   if (error) {

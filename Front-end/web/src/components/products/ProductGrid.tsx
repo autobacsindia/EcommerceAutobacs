@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
+import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 
 interface ProductImage {
   url: string;
@@ -41,9 +42,10 @@ interface Product {
 
 interface ProductGridProps {
   products: Product[];
+  loading?: boolean;
 }
 
-export default function ProductGrid({ products }: ProductGridProps) {
+export default function ProductGrid({ products, loading }: ProductGridProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatPrice } = useCurrency();
@@ -54,6 +56,10 @@ export default function ProductGrid({ products }: ProductGridProps) {
 
   // Get currently compared products from URL
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
+
+  if (loading) {
+    return <ProductGridSkeleton count={8} />;
+  }
 
   const handleAddToCart = async (productId: string) => {
     if (!isAuthenticated) {

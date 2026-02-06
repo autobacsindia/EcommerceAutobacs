@@ -26,6 +26,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Autobacs India | Premium Automotive Accessories",
   description: "Shop premium automotive accessories, body kits, and performance parts",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

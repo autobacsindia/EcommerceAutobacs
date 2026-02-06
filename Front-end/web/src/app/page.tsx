@@ -10,11 +10,12 @@ import dynamic from 'next/dynamic';
 
 import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
+import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
 
 // Dynamically import components to improve initial load time
 const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { 
   ssr: false,
-  loading: () => <div className="h-96 bg-gray-50 animate-pulse rounded-lg" />
+  loading: () => <VehicleSelectorSkeleton />
 });
 
 const FastMovingProducts = dynamic(() => import('@/components/products/FastMovingProducts'), {
