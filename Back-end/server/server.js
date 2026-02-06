@@ -105,6 +105,8 @@ app.use(csrfProtection);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173', // Vite default
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
@@ -113,6 +115,7 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    console.log('[CORS] Incoming origin:', origin);
     if (allowedOrigins.indexOf(origin) === -1 && !process.env.Review_App) {
       // In development, we might want to be more lenient or log it
       if (process.env.NODE_ENV === 'development') {

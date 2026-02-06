@@ -170,6 +170,17 @@ class APIClient {
   }
 
   /**
+   * Get cookie value by name
+   */
+  private getCookie(name: string): string | null {
+    if (typeof window === 'undefined') return null;
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+    return null;
+  }
+
+  /**
    * Build headers for requests
    */
   private getHeaders(customHeaders?: HeadersInit): HeadersInit {
@@ -180,6 +191,12 @@ class APIClient {
 
     if (this.token) {
       (headers as any)['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // Add CSRF token if available
+    const xsrfToken = this.getCookie('XSRF-TOKEN');
+    if (xsrfToken) {
+      (headers as any)['X-XSRF-TOKEN'] = xsrfToken;
     }
 
     return headers;
@@ -447,10 +464,17 @@ class APIClient {
 
       // Add more context for network errors
       if (category === ErrorCategory.NETWORK) {
-        const API_BASE_URL =
+        let API_BASE_URL =
           process.env.NEXT_PUBLIC_API_BASE_URL ||
           process.env.NEXT_PUBLIC_API_URL ||
-          'http://localhost:5000';
+          'http://127.0.0.1:5000';
+          
+        if (typeof window !== 'undefined') {
+          API_BASE_URL = '/api';
+        } else if (API_BASE_URL.includes('localhost')) {
+          API_BASE_URL = API_BASE_URL.replace('localhost', '127.0.0.1');
+        }
+        
         errorMessage = `Network error: Unable to connect to the server at ${API_BASE_URL}. Please make sure the backend server is running. Details: ${errorMessage}`;
       }
 
@@ -472,10 +496,19 @@ class APIClient {
     data: any | undefined,
     options?: RequestInit & { retries?: number, retryDelay?: number, timeout?: number, params?: Record<string, any> }
   ): Promise<T> {
-    const API_BASE_URL =
+    let API_BASE_URL =
       process.env.NEXT_PUBLIC_API_BASE_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      'http://localhost:5000';
+      'http://127.0.0.1:5000';
+
+    // Use relative path /api when running in browser to leverage Next.js rewrites
+    // This avoids CORS issues and ensures cookies work correctly across domains
+    if (typeof window !== 'undefined') {
+      API_BASE_URL = '/api';
+    } else if (API_BASE_URL.includes('localhost')) {
+      // Server-side: Replace localhost with 127.0.0.1 to prevent IPv6 errors
+      API_BASE_URL = API_BASE_URL.replace('localhost', '127.0.0.1');
+    }
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
     
     // Handle query parameters
@@ -485,6 +518,8 @@ class APIClient {
       const separator = finalUrl.includes('?') ? '&' : '?';
       finalUrl = `${finalUrl}${separator}${params.toString()}`;
     }
+
+    console.log(`[API] Executing request: ${method} ${finalUrl}`);
     
     // Default settings
     let retries = options?.retries ?? 3;
