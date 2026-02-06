@@ -41,11 +41,11 @@ router.post("/", validateProductQuestion, asyncHandler(async (req, res) => {
 }));
 
 // @desc    Get questions for a product (Public - only answered/public ones)
-// @route   GET /api/product-questions/product/:productId
+// @route   GET /api/product-questions/product/:id
 // @access  Public
-router.get("/product/:productId", validateProductIdParam, asyncHandler(async (req, res) => {
+router.get("/product/:id", validateProductIdParam, asyncHandler(async (req, res) => {
   const questions = await ProductQuestion.find({
-    product: req.params.productId,
+    product: req.params.id,
     isPublic: true,
     status: "answered"
   }).sort("-createdAt");

@@ -199,7 +199,7 @@ export const validatePaymentFailed = [
 export const validateProductIdParam = [
   param('id')
     .customSanitizer((value) => {
-      return value.startsWith('product-') ? value.replace(/^product-/, '') : value;
+      return value && value.startsWith('product-') ? value.replace(/^product-/, '') : value;
     })
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
     .withMessage('Invalid Product ID'),
