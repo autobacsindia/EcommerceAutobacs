@@ -176,33 +176,33 @@ app.get('/favicon.ico', (req, res) => {
 
 // Mount routes with specific e-commerce rate limiting strategy
 // Auth routes already have their own stricter rate limiting (5 req/min)
-app.use("/auth", authRoutes);
+app.use(["/auth", "/api/auth"], authRoutes);
 
 // Public browsing endpoints (300 req/min, burst 100) - catalog, products, categories
-app.use("/products", publicBrowsingRateLimit, productRoutes);
-app.use("/categories", publicBrowsingRateLimit, categoryRoutes);
-app.use("/vehicles", publicBrowsingRateLimit, vehicleRoutes);
-app.use("/brands", publicBrowsingRateLimit, brandRoutes);
-app.use("/product-questions", publicBrowsingRateLimit, productQuestionRoutes);
+app.use(["/products", "/api/products"], publicBrowsingRateLimit, productRoutes);
+app.use(["/categories", "/api/categories"], publicBrowsingRateLimit, categoryRoutes);
+app.use(["/vehicles", "/api/vehicles"], publicBrowsingRateLimit, vehicleRoutes);
+app.use(["/brands", "/api/brands"], publicBrowsingRateLimit, brandRoutes);
+app.use(["/product-questions", "/api/product-questions"], publicBrowsingRateLimit, productQuestionRoutes);
 
 // Authenticated user endpoints (600 req/min, burst 200) - cart, profile, wishlist
-app.use("/cart", authenticatedUserRateLimit, cartRoutes);
-app.use("/wishlist", authenticatedUserRateLimit, wishlistRoutes);
-app.use("/profile", authenticatedUserRateLimit, profileRoutes);
-app.use("/users", authenticatedUserRateLimit, userRoutes);
-app.use("/reviews", authenticatedUserRateLimit, reviewRoutes);
+app.use(["/cart", "/api/cart"], authenticatedUserRateLimit, cartRoutes);
+app.use(["/wishlist", "/api/wishlist"], authenticatedUserRateLimit, wishlistRoutes);
+app.use(["/profile", "/api/profile"], authenticatedUserRateLimit, profileRoutes);
+app.use(["/users", "/api/users"], authenticatedUserRateLimit, userRoutes);
+app.use(["/reviews", "/api/reviews"], authenticatedUserRateLimit, reviewRoutes);
 
 // Checkout/Payment endpoints (60 req/min, burst 20) - prevent duplicate orders
-app.use("/orders", checkoutRateLimit, orderRoutes);
-app.use("/returns", returnRoutes);
-app.use("/razorpay", checkoutRateLimit, razorpayRoutes);
-app.use("/payment-methods", checkoutRateLimit, paymentMethodRoutes);
+app.use(["/orders", "/api/orders"], checkoutRateLimit, orderRoutes);
+app.use(["/returns", "/api/returns"], returnRoutes);
+app.use(["/razorpay", "/api/razorpay"], checkoutRateLimit, razorpayRoutes);
+app.use(["/payment-methods", "/api/payment-methods"], checkoutRateLimit, paymentMethodRoutes);
 
 // Admin/Management endpoints (120 req/min) - warehouses, delivery zones, scheduled tasks
-app.use("/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
-app.use("/warehouses", adminRateLimit, warehouseRoutes);
-app.use("/delivery-zones", adminRateLimit, deliveryZoneRoutes);
-app.use("/wordpress", adminRateLimit, wordpressRoutes);
+app.use(["/scheduled-tasks", "/api/scheduled-tasks"], adminRateLimit, scheduledTasksRoutes);
+app.use(["/warehouses", "/api/warehouses"], adminRateLimit, warehouseRoutes);
+app.use(["/delivery-zones", "/api/delivery-zones"], adminRateLimit, deliveryZoneRoutes);
+app.use(["/wordpress", "/api/wordpress"], adminRateLimit, wordpressRoutes);
 
 // Admin-only token introspection endpoints (separate rate limiting inside routes)
 app.use("/admin/token", tokenIntrospectionRoutes);
@@ -217,8 +217,8 @@ app.use("/admin/adaptive-throttling", adaptiveThrottlingRoutes);
 app.use("/dashboard", adminRateLimit, dashboardRoutes);
 
 // Location service (general rate limiting)
-app.use("/location", apiRateLimit, locationRoutes);
-app.use("/contact", apiRateLimit, contactRoutes);
+app.use(["/location", "/api/location"], apiRateLimit, locationRoutes);
+app.use(["/contact", "/api/contact"], apiRateLimit, contactRoutes);
 
 
 

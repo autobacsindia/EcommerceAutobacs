@@ -97,9 +97,16 @@ class LocationService {
         }
       }
       
+      // Transform data for backend which expects [longitude, latitude] array for coordinates
+      const payload: any = { ...data };
+      if (data.coordinates) {
+        // Backend expects [longitude, latitude]
+        payload.coordinates = [data.coordinates.longitude, data.coordinates.latitude];
+      }
+      
       const response = await apiClient.post<LocationSelectResponse>(
         `${this.baseUrl}/select`,
-        data,
+        payload,
         { 
           headers: this.getHeaders(),
           timeout: 15000, // 15 second timeout

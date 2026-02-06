@@ -11,6 +11,7 @@ import { RateLimitProvider } from "@/contexts/RateLimitContext";
 import LayoutWrapper from "@/components/layout/LayoutWrapper";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
+import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,6 +45,7 @@ export default function RootLayout({
                 <RateLimitProvider>
                   <LocationProvider>
                     <CurrencyProvider>
+                      <GlobalLoadingBar />
                       <LayoutWrapper>{children}</LayoutWrapper>
                       <Toaster position="top-right" />
                       <Script

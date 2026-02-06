@@ -71,6 +71,8 @@ class APIClient {
   private refreshToken: string | null = null;
   private isRefreshing = false;
   private refreshSubscribers: ((token: string) => void)[] = [];
+  private loadingCount = 0;
+  private loadingListeners: Array<(isLoading: boolean, count: number) => void> = [];
 
   constructor() {
     // Initialize token from localStorage if available (client-side only)
@@ -167,6 +169,26 @@ class APIClient {
 
   private addSubscriber(callback: (token: string) => void) {
     this.refreshSubscribers.push(callback);
+  }
+
+  addLoadingListener(callback: (isLoading: boolean, count: number) => void) {
+    this.loadingListeners.push(callback);
+  }
+
+  removeLoadingListener(callback: (isLoading: boolean, count: number) => void) {
+    const index = this.loadingListeners.indexOf(callback);
+    if (index > -1) {
+      this.loadingListeners.splice(index, 1);
+    }
+  }
+
+  private notifyLoadingChange() {
+    const isLoading = this.loadingCount > 0;
+    for (const cb of this.loadingListeners) {
+      try {
+        cb(isLoading, this.loadingCount);
+      } catch {}
+    }
   }
 
   /**
@@ -570,12 +592,18 @@ class APIClient {
           fetchOptions.body = JSON.stringify(data);
         }
         
+        this.loadingCount++;
+        this.notifyLoadingChange();
         const response = await fetch(finalUrl, fetchOptions);
+        this.loadingCount = Math.max(0, this.loadingCount - 1);
+        this.notifyLoadingChange();
         
         if (timeoutId) clearTimeout(timeoutId);
         
         return await this.handleResponse(response);
       } catch (error: any) {
+        this.loadingCount = Math.max(0, this.loadingCount - 1);
+        this.notifyLoadingChange();
         if (timeoutId) clearTimeout(timeoutId);
         
         // Handle abort errors specifically
@@ -643,6 +671,8 @@ class APIClient {
           rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
           
           await new Promise(resolve => setTimeout(resolve, retryAfter));
+          this.loadingCount++;
+          this.notifyLoadingChange();
           continue;
         }
         

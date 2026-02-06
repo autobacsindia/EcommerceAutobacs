@@ -1,4 +1,6 @@
 // Global error handler for unhandled promise rejections and other errors
+import * as Sentry from '@sentry/react';
+
 class ErrorHandler {
   private static instance: ErrorHandler;
   private listeners: Array<(error: Error) => void> = [];
@@ -55,8 +57,10 @@ class ErrorHandler {
   }
 
   public logError(error: Error, context: string = 'Application Error') {
-    // In a real application, you would send this to a service like Sentry or a custom logging service
     console.error(`[${context}]`, error);
+    try {
+      Sentry.captureException(error, { tags: { context } });
+    } catch {}
     
     // Log to analytics service if available
     if (typeof window !== 'undefined' && (window as any).gtag) {

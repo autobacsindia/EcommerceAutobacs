@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { ApiError, ErrorCategory } from '@/lib/api';
 
 /**
  * Hook to handle API errors consistently across the application
@@ -12,20 +13,39 @@ export const useErrorHandler = () => {
     // Default message
     let message = customMessage || 'An unexpected error occurred. Please try again.';
 
-    // Extract message from different error types
-    if (error?.message) {
-      // If it's an API Error from our client, it might have a specific structure
-      // But usually error.message is populated by the ApiError class
+    if (error instanceof ApiError) {
+      switch (error.category) {
+        case ErrorCategory.NETWORK:
+          message = 'Unable to connect to the server. Please check your internet connection.';
+          break;
+        case ErrorCategory.TIMEOUT:
+          message = 'The request timed out. Please try again.';
+          break;
+        case ErrorCategory.AUTH:
+          message = 'Your session has expired. Please log in again.';
+          break;
+        case ErrorCategory.SERVER:
+          message = 'The server is temporarily unavailable. Please try again later.';
+          break;
+        case ErrorCategory.PARSING:
+          message = 'Received invalid data from the server. Please refresh and try again.';
+          break;
+        default:
+          message = error.message || message;
+      }
+    } else if (error?.message) {
       message = error.message;
     } else if (typeof error === 'string') {
       message = error;
     }
 
-    // Special handling for common error scenarios
-    if (message.toLowerCase().includes('network error')) {
-      message = 'Unable to connect to the server. Please check your internet connection.';
-    } else if (message.toLowerCase().includes('timeout')) {
-      message = 'The request timed out. Please try again.';
+    if (typeof message === 'string') {
+      const m = message.toLowerCase();
+      if (m.includes('network error')) {
+        message = 'Unable to connect to the server. Please check your internet connection.';
+      } else if (m.includes('timeout')) {
+        message = 'The request timed out. Please try again.';
+      }
     }
 
     // Show toast notification

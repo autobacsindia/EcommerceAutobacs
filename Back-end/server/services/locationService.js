@@ -43,7 +43,17 @@ class LocationService {
         addressComponents = placeDetails.addressComponents;
       } else if (locationData.coordinates) {
         // Reverse geocode coordinates
-        const { latitude, longitude } = locationData.coordinates;
+        let latitude, longitude;
+        
+        if (Array.isArray(locationData.coordinates)) {
+          // Handle [longitude, latitude] format
+          [longitude, latitude] = locationData.coordinates;
+        } else {
+          // Handle { latitude, longitude } format
+          latitude = locationData.coordinates.latitude;
+          longitude = locationData.coordinates.longitude;
+        }
+
         const geocoded = await googleMapsService.reverseGeocode(latitude, longitude);
         coordinates = geocoded.coordinates;
         formatted = geocoded.formatted;
