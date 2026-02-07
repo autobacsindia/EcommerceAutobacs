@@ -1,0 +1,24 @@
+export default {
+  testTimeout: 30000,
+  testEnvironment: 'node',
+  setupFiles: ['<rootDir>/tests/setupEnv.js'],
+  transform: {},
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  testMatch: ['**/tests/**/*.test.js', '**/?(*.)+(spec|test).js'],
+  verbose: true,
+  forceExit: true,
+  clearMocks: true,
+  resetMocks: true,
+  restoreMocks: true,
+  coverageDirectory: 'coverage',
+  collectCoverageFrom: [
+    'controllers/**/*.js',
+    'models/**/*.js',
+    'routes/**/*.js',
+    'services/**/*.js',
+    '!**/node_modules/**',
+    '!**/vendor/**',
+  ],
+};

@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { cleanupWordPressProducts } from '../utils/wordpressProductCleanup.js';
 
 // Mock Product model

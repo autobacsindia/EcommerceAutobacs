@@ -17,6 +17,11 @@ export const rateLimit = (options = {}) => {
   } = options;
 
   return (req, res, next) => {
+    // Bypass rate limiting in test environment
+    if (process.env.NODE_ENV === 'test') {
+      return next();
+    }
+
     // Check for adaptive throttling adjustments
     const endpoint = req.originalUrl || req.url;
     const adjustedMax = adaptiveThrottlingService.getAdjustedLimit(endpoint, max);

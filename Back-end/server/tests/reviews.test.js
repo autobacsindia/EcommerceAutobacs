@@ -1,9 +1,10 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import app from '../server.js'; // Adjust path as needed
+import { app } from '../app.js';
 import Review from '../models/Review.js';
 import Product from '../models/Product.js';
 import User from '../models/User.js';
+import * as dbHandler from './db-handler.js';
 
 describe('Reviews API', () => {
   let userToken;
@@ -14,20 +15,15 @@ describe('Reviews API', () => {
   let adminId;
 
   beforeAll(async () => {
-    // Connect to test database
-    // Note: This would require a separate test database setup
-    
-    // Create test user and admin
-    // This would normally be done with a test database
-    
-    // Create test product
-    // This would normally be done with a test database
+    await dbHandler.connect();
+  });
+
+  afterEach(async () => {
+    await dbHandler.clearDatabase();
   });
 
   afterAll(async () => {
-    // Clean up test data
-    // Disconnect from database
-    await mongoose.connection.close();
+    await dbHandler.closeDatabase();
   });
 
   describe('POST /reviews/products/:productId', () => {

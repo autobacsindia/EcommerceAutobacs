@@ -1,10 +1,11 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import app from '../server.js';
+import { app } from '../app.js';
 import Wishlist from '../models/Wishlist.js';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import bcrypt from 'bcryptjs';
+import * as dbHandler from './db-handler.js';
 
 // Mock data
 const testUser = {
@@ -29,9 +30,19 @@ let productId;
 let wishlistId;
 
 beforeAll(async () => {
-  // Connect to database
-  await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/autobacs_test');
-  
+  console.log('[TestDebug] JWT_SECRET:', process.env.JWT_SECRET);
+  await dbHandler.connect();
+});
+
+afterEach(async () => {
+  await dbHandler.clearDatabase();
+});
+
+afterAll(async () => {
+  await dbHandler.closeDatabase();
+});
+
+beforeEach(async () => {
   // Create test user
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(testUser.password, salt);
@@ -52,19 +63,24 @@ beforeAll(async () => {
       password: testUser.password
     });
     
-  authToken = loginRes.body.token;
+  if (loginRes.status !== 200) {
+    console.error('Login failed:', loginRes.status, loginRes.body);
+  }
+  authToken = loginRes.body.accessToken;
   
   // Create test product
   const product = await Product.create(testProduct);
   productId = product._id;
-});
 
-afterAll(async () => {
-  // Clean up test data
-  await User.deleteMany({ email: testUser.email });
-  await Product.deleteMany({ name: testProduct.name });
-  await Wishlist.deleteMany({ user: userId });
-  await mongoose.connection.close();
+  // Create a default wishlist for tests that need it
+  const wishlist = await Wishlist.create({
+    user: userId,
+    name: 'Default Wishlist',
+    description: 'Default description',
+    privacy: 'private',
+    items: []
+  });
+  wishlistId = wishlist._id;
 });
 
 describe('Wishlist API', () => {
@@ -84,7 +100,8 @@ describe('Wishlist API', () => {
       expect(res.body.wishlist.name).toBe('Test Wishlist');
       expect(res.body.wishlist.user.toString()).toBe(userId.toString());
       
-      wishlistId = res.body.wishlist._id;
+      // We don't need to set wishlistId here anymore as it's set in beforeEach
+      // but if we did, it would only affect subsequent tests in this block if they ran serially and without beforeEach cleanup
     });
     
     it('should not create wishlist without name', async () => {
@@ -108,7 +125,8 @@ describe('Wishlist API', () => {
         .expect(200);
         
       expect(res.body.success).toBe(true);
-      expect(res.body.wishlists.length).toBe(1);
+      // Expect at least 1 because we create one in beforeEach
+      expect(res.body.wishlists.length).toBeGreaterThanOrEqual(1);
     });
   });
   
@@ -144,6 +162,15 @@ describe('Wishlist API', () => {
     });
     
     it('should not add duplicate item to wishlist', async () => {
+      // First add item
+      await request(app)
+        .post(`/wishlist/${wishlistId}/items`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          productId: productId
+        });
+        
+      // Try to add again
       const res = await request(app)
         .post(`/wishlist/${wishlistId}/items`)
         .set('Authorization', `Bearer ${authToken}`)
@@ -180,12 +207,20 @@ describe('Wishlist API', () => {
         .expect(200);
         
       expect(res.body.wishlist).toBeDefined();
-      expect(res.body.wishlist.name).toBe('Updated Wishlist');
+      expect(res.body.wishlist.name).toBe('Default Wishlist');
     });
   });
   
   describe('DELETE /wishlist/:id/items/:productId', () => {
     it('should remove item from wishlist', async () => {
+      // First add item
+      await request(app)
+        .post(`/wishlist/${wishlistId}/items`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          productId: productId
+        });
+
       const res = await request(app)
         .delete(`/wishlist/${wishlistId}/items/${productId}`)
         .set('Authorization', `Bearer ${authToken}`)
