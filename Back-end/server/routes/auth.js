@@ -155,9 +155,6 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
 // @desc    Authenticate user and get token
 // @access  Public
 router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, res, next) => {
-  console.log('[AuthDebug] Login endpoint hit');
-  console.log('[AuthDebug] req.headers exists:', !!req.headers);
-  
   const { email, password } = req.body;
 
   // Find user

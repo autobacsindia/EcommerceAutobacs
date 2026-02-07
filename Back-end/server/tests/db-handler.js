@@ -12,7 +12,11 @@ export const connect = async () => {
     return;
   }
 
-  mongod = await MongoMemoryServer.create();
+  mongod = await MongoMemoryServer.create({
+    instance: {
+      launchTimeout: 30000
+    }
+  });
   const uri = mongod.getUri();
 
   await mongoose.connect(uri);

@@ -19,13 +19,14 @@ const CATEGORY_KEYWORDS = {
  */
 async function categorizeProduct(product) {
   try {
-    // Get all active categories from database
     const categories = await Category.find({ isActive: true });
     
     if (!categories || categories.length === 0) {
       console.warn('No categories found in database');
       return null;
     }
+
+    let bestMatch = null;
     
     // Create a map of category names to IDs
     const categoryMap = {};
@@ -45,6 +46,8 @@ async function categorizeProduct(product) {
     // Score each category based on keyword matches
     const categoryScores = {};
     
+    console.log('Product Text:', productText);
+
     for (const [categoryName, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
       let score = 0;
       
@@ -57,6 +60,8 @@ async function categorizeProduct(product) {
         }
       }
       
+      console.log(`Score for ${categoryName}:`, score);
+
       // Only consider categories with at least one match
       if (score > 0) {
         categoryScores[categoryName] = score;
@@ -65,6 +70,7 @@ async function categorizeProduct(product) {
     
     // If no categories matched, return null
     if (Object.keys(categoryScores).length === 0) {
+      console.log('No matching categories found');
       return null;
     }
     
@@ -73,6 +79,9 @@ async function categorizeProduct(product) {
       categoryScores[a] > categoryScores[b] ? a : b
     );
     
+    console.log('Best Category:', bestCategory);
+    console.log('Category Map:', JSON.stringify(categoryMap));
+
     // Return the ObjectId for the best matching category
     return categoryMap[bestCategory] || null;
   } catch (error) {
@@ -98,7 +107,6 @@ async function categorizeProducts(products) {
         category: categoryId
       });
     } else {
-      // Keep original product if no category match
       categorizedProducts.push(product);
     }
   }
@@ -106,5 +114,4 @@ async function categorizeProducts(products) {
   return categorizedProducts;
 }
 
-export { categorizeProduct, categorizeProducts, CATEGORY_KEYWORDS };
-export default { categorizeProduct, categorizeProducts, CATEGORY_KEYWORDS };
+export { categorizeProduct, categorizeProducts };

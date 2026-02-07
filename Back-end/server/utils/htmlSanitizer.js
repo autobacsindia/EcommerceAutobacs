@@ -13,20 +13,23 @@ function removeHtmlTags(html) {
   sanitized = sanitized.replace(/<br\s*\/?>/gi, '\n');
   
   // Replace p tags with newlines
-  sanitized = sanitized.replace(/<\/p>/gi, '\n');
+  sanitized = sanitized.replace(/<\/p>/gi, '\n\n');
   sanitized = sanitized.replace(/<p[^>]*>/gi, '');
   
   // Replace div tags with newlines
-  sanitized = sanitized.replace(/<\/div>/gi, '\n');
+  sanitized = sanitized.replace(/<\/div>/gi, '\n\n');
   sanitized = sanitized.replace(/<div[^>]*>/gi, '');
   
   // Remove all other HTML tags
   sanitized = sanitized.replace(/<[^>]*>/g, '');
   
-  // Trim extra whitespace
-  sanitized = sanitized.replace(/\s+/g, '\n').trim();
+  // Replace multiple horizontal spaces with single space
+  sanitized = sanitized.replace(/[ \t]+/g, ' ');
+
+  // Collapse multiple newlines to max 2
+  sanitized = sanitized.replace(/\n\s*\n/g, '\n\n');
   
-  return sanitized;
+  return sanitized.trim();
 }
 
 function sanitizeProductDescriptions(products) {

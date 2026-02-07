@@ -52,7 +52,10 @@ export const csrfProtection = (req, res, next) => {
     '/auth/google',
     '/auth/facebook',
     '/auth/google/callback',
-    '/auth/facebook/callback'
+    '/auth/facebook/callback',
+    '/api/delivery-zones/check-serviceability',
+    '/api/delivery-zones/estimate',
+    '/api/delivery-zones/shipping-cost'
   ];
 
   if (excludedPaths.some(path => req.path.includes(path))) {
