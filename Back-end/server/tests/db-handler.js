@@ -14,7 +14,10 @@ export const connect = async () => {
 
   mongod = await MongoMemoryServer.create({
     instance: {
-      launchTimeout: 30000
+      launchTimeout: 60000
+    },
+    binary: {
+      version: '7.0.14'
     }
   });
   const uri = mongod.getUri();

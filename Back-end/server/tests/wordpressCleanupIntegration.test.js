@@ -21,40 +21,59 @@ const mockBulkWriteResult = {
 };
 
 // Mock dependencies using unstable_mockModule for ESM
-jest.unstable_mockModule('../models/Product.js', () => ({
-  default: {
-    find: jest.fn().mockReturnValue({
+jest.unstable_mockModule('../models/Product.js', async () => {
+  const { jest } = await import('@jest/globals');
+  const mockModel = {
+    find: jest.fn(() => ({
       limit: jest.fn().mockResolvedValue(mockProducts)
-    }),
+    })),
+    countDocuments: jest.fn().mockResolvedValue(2),
     bulkWrite: jest.fn().mockResolvedValue(mockBulkWriteResult)
-  }
-}));
+  };
+  return {
+    __esModule: true,
+    default: mockModel,
+    ...mockModel
+  };
+});
 
-jest.unstable_mockModule('mongoose', () => ({
-  default: {
-    connect: jest.fn().mockResolvedValue(),
-    connection: {
-      close: jest.fn().mockResolvedValue(),
-      readyState: 1
+jest.unstable_mockModule('mongoose', async () => {
+  const { jest } = await import('@jest/globals');
+  return {
+    default: {
+      connect: jest.fn().mockResolvedValue(),
+      connection: {
+        close: jest.fn().mockResolvedValue(),
+        readyState: 1
+      }
     }
-  }
-}));
+  };
+});
 
-jest.unstable_mockModule('dotenv', () => ({
-  default: {
-    config: jest.fn()
-  }
-}));
+jest.unstable_mockModule('dotenv', async () => {
+  const { jest } = await import('@jest/globals');
+  return {
+    default: {
+      config: jest.fn()
+    }
+  };
+});
 
 // Also need to mock Category because it's used deeply
-jest.unstable_mockModule('../models/Category.js', () => ({
-  default: {
+jest.unstable_mockModule('../models/Category.js', async () => {
+  const { jest } = await import('@jest/globals');
+  const mockModel = {
     find: jest.fn().mockResolvedValue([
       { _id: 'cat4', name: 'PERFORMANCE', isActive: true },
       { _id: 'cat7', name: 'LIGHTS', isActive: true }
     ])
-  }
-}));
+  };
+  return {
+    __esModule: true,
+    default: mockModel,
+    ...mockModel
+  };
+});
 
 // Dynamic import after mocks
 const { cleanupWordPressProducts } = await import('../utils/wordpressProductCleanup.js');
@@ -95,9 +114,10 @@ describe('WordPress Product Cleanup Integration', () => {
   });
 
   test('should handle errors gracefully', async () => {
+    console.log('TEST 3 START');
     const Product = (await import('../models/Product.js')).default;
     Product.find.mockReturnValueOnce({
-      limit: jest.fn().mockRejectedValue(new Error('Database error'))
+      limit: jest.fn().mockRejectedValue(new Error('Database error 3'))
     });
     
     const result = await cleanupWordPressProducts(10);

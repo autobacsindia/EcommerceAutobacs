@@ -98,7 +98,7 @@ async function cleanupWordPressProducts(batchSize = 50) {
     console.log(summary.message);
     return summary;
   } catch (error) {
-    console.error('Error during WordPress product cleanup:', error.message);
+    console.error('Error during WordPress product cleanup:', error);
     if (mongoose.connection.readyState === 1) {
       await mongoose.connection.close();
     }

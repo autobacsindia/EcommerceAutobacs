@@ -1,7 +1,8 @@
 import { jest } from '@jest/globals';
 
 // Mock Category model directly with plain function to avoid Jest mock issues in ESM
-jest.unstable_mockModule('../models/Category.js', () => {
+jest.unstable_mockModule('../models/Category.js', async () => {
+  const { jest } = await import('@jest/globals');
   const mockCats = [
     { _id: 'cat1', name: 'ACCESSORIES', isActive: true },
     { _id: 'cat2', name: 'EXTERIOR', isActive: true },
