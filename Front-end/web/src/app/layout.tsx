@@ -24,6 +24,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: "Autobacs India | Premium Automotive Accessories",
   description: "Shop premium automotive accessories, body kits, and performance parts",
   manifest: "/manifest.json",
