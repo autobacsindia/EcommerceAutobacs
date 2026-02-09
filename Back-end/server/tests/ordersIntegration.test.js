@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
-import { app } from '../app.js';
+import { app, cronService, adaptiveThrottlingService } from '../app.js';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
@@ -53,6 +53,13 @@ describe('Orders Integration API', () => {
 
   afterAll(async () => {
     await dbHandler.closeDatabase();
+    // Shutdown services to prevent open handles
+    if (cronService && typeof cronService.shutdown === 'function') {
+      cronService.shutdown();
+    }
+    if (adaptiveThrottlingService && typeof adaptiveThrottlingService.shutdown === 'function') {
+      adaptiveThrottlingService.shutdown();
+    }
   });
 
   beforeEach(async () => {
@@ -220,7 +227,7 @@ describe('Orders Integration API', () => {
       const res = await request(app)
         .put(`/orders/${order._id}/cancel`)
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ reason: 'Changed mind' })
+        .send({ reason: 'customer_request' })
         .expect(200);
 
       expect(res.body.success).toBe(true);

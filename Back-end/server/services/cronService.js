@@ -138,6 +138,20 @@ class CronService {
   }
 
   /**
+   * Stop all scheduled tasks
+   */
+  shutdown() {
+    console.log('Stopping all cron jobs...');
+    this.scheduledTasks.forEach(item => {
+      if (item.task) {
+        item.task.stop();
+      }
+    });
+    this.scheduledTasks = [];
+    console.log('All cron jobs stopped');
+  }
+
+  /**
    * Get all scheduled tasks
    * @returns {Array} List of scheduled tasks
    */

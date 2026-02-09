@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">4.93% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>8/162</span>
+                <span class='fraction'>0/162</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">8.47% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>10/118</span>
+                <span class='fraction'>0/118</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">6.66% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/15</span>
+                <span class='fraction'>0/15</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">5.12% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>8/156</span>
+                <span class='fraction'>0/156</span>
             </div>
         
             
@@ -540,20 +540,20 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1006,21 +1006,21 @@ import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
 import WooCommerceApiClient from './woocommerceApiClient.js';
 &nbsp;
 class ProductImportService {
-  constructor() {
-    this.wordpressSiteUrl = process.env.WORDPRESS_SITE_URL;
-    this.wordpressApiKey = process.env.WORDPRESS_API_KEY;
-    this.wordpressApiSecret = process.env.WORDPRESS_API_SECRET;
-    this.wordpressApiVersion = process.env.WORDPRESS_API_VERSION || 'wc/v3';
-    this.importBatchSize = parseInt(process.env.IMPORT_BATCH_SIZE) || 50;
-    this.delayBetweenBatches = parseInt(process.env.IMPORT_DELAY_BETWEEN_BATCHES) || 1000;
+<span class="fstat-no" title="function not covered" >  co</span>nstructor() {
+<span class="cstat-no" title="statement not covered" >    this.wordpressSiteUrl = process.env.WORDPRESS_SITE_URL;</span>
+<span class="cstat-no" title="statement not covered" >    this.wordpressApiKey = process.env.WORDPRESS_API_KEY;</span>
+<span class="cstat-no" title="statement not covered" >    this.wordpressApiSecret = process.env.WORDPRESS_API_SECRET;</span>
+<span class="cstat-no" title="statement not covered" >    this.wordpressApiVersion = process.env.WORDPRESS_API_VERSION || 'wc/v3';</span>
+<span class="cstat-no" title="statement not covered" >    this.importBatchSize = parseInt(process.env.IMPORT_BATCH_SIZE) || 50;</span>
+<span class="cstat-no" title="statement not covered" >    this.delayBetweenBatches = parseInt(process.env.IMPORT_DELAY_BETWEEN_BATCHES) || 1000;</span>
     
     // Validate required configuration
-    <span class="missing-if-branch" title="if path not taken" >I</span>if (!this.wordpressSiteUrl || !this.wordpressApiKey || !this.wordpressApiSecret) {
+<span class="cstat-no" title="statement not covered" >    if (!this.wordpressSiteUrl || !this.wordpressApiKey || !this.wordpressApiSecret) {</span>
 <span class="cstat-no" title="statement not covered" >      throw new Error('Missing required WordPress API configuration');</span>
     }
     
     // Initialize WooCommerce API client
-    this.apiClient = new WooCommerceApiClient();
+<span class="cstat-no" title="statement not covered" >    this.apiClient = new WooCommerceApiClient();</span>
   }
 &nbsp;
   /**
@@ -1471,7 +1471,7 @@ export default ProductImportService;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-09T07:44:16.458Z
+                at 2026-02-09T08:27:47.208Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

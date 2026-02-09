@@ -79,8 +79,14 @@ jest.unstable_mockModule('../models/Category.js', async () => {
 const { cleanupWordPressProducts } = await import('../utils/wordpressProductCleanup.js');
 
 describe('WordPress Product Cleanup Integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    const Product = (await import('../models/Product.js')).default;
+    Product.find.mockImplementation(() => ({
+      limit: jest.fn().mockResolvedValue(mockProducts)
+    }));
+    Product.countDocuments.mockResolvedValue(2);
+    Product.bulkWrite.mockResolvedValue(mockBulkWriteResult);
   });
 
   test('should clean up products successfully', async () => {

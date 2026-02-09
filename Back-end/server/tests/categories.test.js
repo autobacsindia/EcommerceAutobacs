@@ -1,6 +1,6 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { app } from '../app.js';
+import { app, cronService, adaptiveThrottlingService } from '../app.js';
 import User from '../models/User.js';
 import Category from '../models/Category.js';
 import * as dbHandler from './db-handler.js';
@@ -36,6 +36,13 @@ describe('Categories API', () => {
 
   afterAll(async () => {
     await dbHandler.closeDatabase();
+    // Shutdown services to prevent open handles
+    if (cronService && typeof cronService.shutdown === 'function') {
+      cronService.shutdown();
+    }
+    if (adaptiveThrottlingService && typeof adaptiveThrottlingService.shutdown === 'function') {
+      adaptiveThrottlingService.shutdown();
+    }
   });
 
   beforeEach(async () => {

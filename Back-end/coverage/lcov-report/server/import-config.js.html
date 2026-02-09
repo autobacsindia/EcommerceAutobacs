@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>5/5</span>
+                <span class='fraction'>0/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">91.66% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>11/12</span>
+                <span class='fraction'>0/12</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>5/5</span>
+                <span class='fraction'>0/5</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -183,7 +183,7 @@
 <a name='L118'></a><a href='#L118'>118</a>
 <a name='L119'></a><a href='#L119'>119</a>
 <a name='L120'></a><a href='#L120'>120</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -213,7 +213,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -245,7 +245,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -262,7 +262,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -279,7 +279,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -302,7 +302,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// Import configuration settings
-export const IMPORT_CONFIG = {
+export const IMPORT_CONFIG = <span class="cstat-no" title="statement not covered" >{</span>
   // Batch processing settings
   BATCH_SIZE: parseInt(process.env.IMPORT_BATCH_SIZE) || 50,
   DELAY_BETWEEN_BATCHES: parseInt(process.env.IMPORT_DELAY_BETWEEN_BATCHES) || 1000,
@@ -312,7 +312,7 @@ export const IMPORT_CONFIG = {
   RETRY_DELAY: 1000,
   
   // WordPress API settings
-  WORDPRESS_SITE_URL: process.env.WORDPRESS_SITE_URL || <span class="branch-1 cbranch-no" title="branch not covered" >'https://autobacsindia.com',</span>
+  WORDPRESS_SITE_URL: process.env.WORDPRESS_SITE_URL || 'https://autobacsindia.com',
   WORDPRESS_API_VERSION: process.env.WORDPRESS_API_VERSION || 'wc/v3',
   
   // Database settings
@@ -332,7 +332,7 @@ export const IMPORT_CONFIG = {
 };
 &nbsp;
 // Category mapping rules
-export const CATEGORY_MAPPING_RULES = {
+export const CATEGORY_MAPPING_RULES = <span class="cstat-no" title="statement not covered" >{</span>
   // Direct mappings
   exact: {
     'Accessories': 'accessories',
@@ -364,7 +364,7 @@ export const CATEGORY_MAPPING_RULES = {
 };
 &nbsp;
 // Field mapping configuration
-export const FIELD_MAPPING = {
+export const FIELD_MAPPING = <span class="cstat-no" title="statement not covered" >{</span>
   // WordPress field -&gt; Our field
   'name': 'name',
   'description': 'description',
@@ -381,7 +381,7 @@ export const FIELD_MAPPING = {
 };
 &nbsp;
 // Error handling configuration
-export const ERROR_HANDLING = {
+export const ERROR_HANDLING = <span class="cstat-no" title="statement not covered" >{</span>
   // Retry strategies
   retryStrategies: {
     network: { maxRetries: 3, delay: 1000 },
@@ -398,7 +398,7 @@ export const ERROR_HANDLING = {
 };
 &nbsp;
 // Monitoring configuration
-export const MONITORING_CONFIG = {
+export const MONITORING_CONFIG = <span class="cstat-no" title="statement not covered" >{</span>
   // Metrics collection
   collectMetrics: true,
   metricsInterval: 60000, // 1 minute
@@ -427,7 +427,7 @@ export default {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-09T07:44:16.458Z
+                at 2026-02-09T08:27:47.208Z
             </div>
         <script src="../prettify.js"></script>
         <script>
