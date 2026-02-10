@@ -45,7 +45,7 @@ const mockInventoryInstance = {
 };
 
 // Setup mocks
-jest.unstable_mockModule('../../models/Warehouse.js', () => ({
+jest.unstable_mockModule('../../../models/Warehouse.js', () => ({
   default: class Warehouse {
     constructor(data) {
       Object.assign(this, data);
@@ -58,7 +58,7 @@ jest.unstable_mockModule('../../models/Warehouse.js', () => ({
   }
 }));
 
-jest.unstable_mockModule('../../models/WarehouseInventory.js', () => ({
+jest.unstable_mockModule('../../../models/WarehouseInventory.js', () => ({
   default: class WarehouseInventory {
     constructor(data) {
       Object.assign(this, data);
@@ -73,16 +73,16 @@ jest.unstable_mockModule('../../models/WarehouseInventory.js', () => ({
   }
 }));
 
-jest.unstable_mockModule('../../models/Product.js', () => ({
+jest.unstable_mockModule('../../../models/Product.js', () => ({
   default: {}
 }));
 
-jest.unstable_mockModule('../../services/googleMapsService.js', () => ({
+jest.unstable_mockModule('../../../services/googleMapsService.js', () => ({
   default: mockGoogleMapsService
 }));
 
 // Import service
-const { default: warehouseService } = await import('../../services/warehouseService.js');
+const { default: warehouseService } = await import('../../../services/warehouseService.js');
 
 describe('WarehouseService', () => {
   beforeEach(() => {

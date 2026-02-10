@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
+import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 
 interface ProductImageType {
   url: string;
@@ -121,14 +122,7 @@ export default function ModernFastMovingSection({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[...Array(limit)].map((_, index) => (
-              <div key={index} className="bg-white rounded-2xl shadow-sm overflow-hidden h-96 animate-pulse">
-                <div className="h-48 bg-gray-200" />
-                <div className="p-6 space-y-4">
-                  <div className="h-4 bg-gray-200 rounded w-3/4" />
-                  <div className="h-4 bg-gray-200 rounded w-1/2" />
-                  <div className="h-8 bg-gray-200 rounded w-1/3 mt-4" />
-                </div>
-              </div>
+              <ProductCardSkeleton key={index} />
             ))}
           </div>
         </div>

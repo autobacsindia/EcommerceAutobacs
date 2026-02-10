@@ -22,303 +22,70 @@ import { protect, admin } from "../middleware/authMiddleware.js";
 import { cacheResponse } from "../middleware/cacheMiddleware.js";
 import { cleanupWordPressProducts } from "../utils/wordpressProductCleanup.js";
 import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
+import {
+  getProducts,
+  getSearchSuggestions,
+  getSearchAnalytics,
+  getSearchHistory,
+  clearSearchHistory,
+  removeSearchHistoryTerm,
+  getFeaturedProducts,
+  getOfferProducts,
+  getProductsByVehicle,
+  getBrands
+} from "../controllers/productController.js";
 
 const router = express.Router();
 
 // @route   GET /products
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
-router.get("/", cacheResponse(300), validateProductSearch, asyncHandler(async (req, res) => {
-  const searchResults = await SearchService.searchProducts(req.query);
-  
-  res.json({
-    success: true,
-    count: searchResults.products.length,
-    ...searchResults.pagination,
-    products: searchResults.products,
-    facets: searchResults.facets // Include facets in response when using Elasticsearch
-  });
-}));
+router.get("/", cacheResponse(300), validateProductSearch, asyncHandler(getProducts));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
 // @access  Public
-router.get("/suggestions", cacheResponse(300), validateSearchSuggestions, asyncHandler(async (req, res) => {
-  const { q, limit = 10 } = req.query;
-  const result = await SearchService.getSearchSuggestions(q, parseInt(limit));
-  
-  // For now, we'll return empty arrays for history
-  // In a more advanced implementation, these would be populated
-  const history = [];
-  
-  res.json({
-    success: true,
-    suggestions: result.suggestions || [],
-    corrections: result.corrections || [],
-    history
-  });
-}));
+router.get("/suggestions", cacheResponse(300), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
 
 // @route   GET /products/analytics
 // @desc    Get search analytics
 // @access  Private/Admin
-router.get("/analytics", protect, admin, validateSearchAnalytics, asyncHandler(async (req, res) => {
-  const { startDate, endDate } = req.query;
-  
-  // Default to last 30 days if no dates provided
-  const end = endDate ? new Date(endDate) : new Date();
-  const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-  
-  const analytics = await SearchService.getSearchAnalytics(start, end);
-  
-  res.json({
-    success: true,
-    analytics
-  });
-}));
+router.get("/analytics", protect, admin, validateSearchAnalytics, asyncHandler(getSearchAnalytics));
 
 // @route   GET /products/history
 // @desc    Get search history
 // @access  Public
-router.get("/history", validateSearchHistory, asyncHandler(async (req, res) => {
-  const { limit = 10 } = req.query;
-  const history = await SearchService.getSearchHistory(null, parseInt(limit));
-  
-  res.json({
-    success: true,
-    history
-  });
-}));
+router.get("/history", validateSearchHistory, asyncHandler(getSearchHistory));
 
 // @route   DELETE /products/history
 // @desc    Clear search history
 // @access  Public
-router.delete("/history", asyncHandler(async (req, res) => {
-  const result = await SearchService.clearSearchHistory();
-  
-  res.json({
-    success: true,
-    message: 'Search history cleared successfully'
-  });
-}));
+router.delete("/history", asyncHandler(clearSearchHistory));
 
 // @route   DELETE /products/history/:term
 // @desc    Remove term from search history
 // @access  Public
-router.delete("/history/:term", validateSearchTermParam, asyncHandler(async (req, res) => {
-  // In a more advanced implementation, we would remove the specific term
-  // For now, we'll just return success
-  res.json({
-    success: true,
-    message: 'Term removed from search history'
-  });
-}));
+router.delete("/history/:term", validateSearchTermParam, asyncHandler(removeSearchHistoryTerm));
 
 // @route   GET /products/featured
 // @desc    Get featured products
 // @access  Public
-router.get("/featured", asyncHandler(async (req, res) => {
-  const { limit = 6 } = req.query;
-
-  const products = await Product.find({ isActive: true, isFeatured: true })
-    .populate('categories', 'name slug')
-    .limit(Number(limit))
-    .sort({ createdAt: -1 });
-
-  res.json({
-    success: true,
-    count: products.length,
-    products
-  });
-}));
+router.get("/featured", asyncHandler(getFeaturedProducts));
 
 // @route   GET /products/offers
 // @desc    Get products to showcase on Offers page
 // @access  Public
-router.get("/offers", asyncHandler(async (req, res) => {
-  const { limit = 24 } = req.query;
-  const now = new Date();
-
-  const products = await Product.find({
-    isActive: true,
-    $and: [
-      {
-        $or: [
-          { isOfferFeatured: true },
-          { $expr: { $gt: ["$originalPrice", "$price"] } }
-        ]
-      },
-      {
-        $or: [
-          { offerStartDate: { $exists: false } },
-          { offerStartDate: null },
-          { offerStartDate: { $lte: now } }
-        ]
-      },
-      {
-        $or: [
-          { offerEndDate: { $exists: false } },
-          { offerEndDate: null },
-          { offerEndDate: { $gte: now } }
-        ]
-      }
-    ]
-  })
-    .populate('categories', 'name slug')
-    .limit(Number(limit))
-    .sort({ createdAt: -1 });
-
-  res.json({
-    success: true,
-    count: products.length,
-    products
-  });
-}));
+router.get("/offers", asyncHandler(getOfferProducts));
 
 // @route   GET /products/by-vehicle/:vehicleId
 // @desc    Get products compatible with a specific vehicle
 // @access  Public
-router.get('/by-vehicle/:vehicleId', asyncHandler(async (req, res) => {
-  const { vehicleId } = req.params;
-  
-  try {
-    // Check if vehicleId is a valid MongoDB ObjectId or could be a slug
-    let vehicle;
-    
-    if (mongoose.Types.ObjectId.isValid(vehicleId)) {
-      // It's a valid ObjectId, query by ID
-      const Vehicle = (await import('../models/Vehicle.js')).default;
-      vehicle = await Vehicle.findById(vehicleId);
-    } else {
-      // It might be a slug, query by slug
-      const Vehicle = (await import('../models/Vehicle.js')).default;
-      vehicle = await Vehicle.findOne({ slug: vehicleId, isActive: true });
-    }
-    
-    if (!vehicle) {
-      return res.status(404).json({
-        success: false,
-        message: 'Vehicle not found'
-      });
-    }
-    
-    // Use SearchService to get products with vehicle filter
-    // Filter out undefined, null, or 'undefined' string values from query parameters
-    const queryParams = {
-      vehicle: vehicle._id.toString(),
-      page: req.query.page || 1,
-      limit: req.query.limit || 12,
-      sortBy: req.query.sortBy || 'createdAt',
-      order: req.query.order || 'desc'
-    };
-    
-    // Only add optional parameters if they have valid values
-    if (req.query.category && req.query.category !== 'undefined' && req.query.category !== 'null') {
-      queryParams.category = req.query.category;
-    }
-    if (req.query.brand && req.query.brand !== 'undefined' && req.query.brand !== 'null') {
-      queryParams.brand = req.query.brand;
-    }
-    if (req.query.minPrice && req.query.minPrice !== 'undefined' && req.query.minPrice !== 'null') {
-      queryParams.minPrice = req.query.minPrice;
-    }
-    if (req.query.maxPrice && req.query.maxPrice !== 'undefined' && req.query.maxPrice !== 'null') {
-      queryParams.maxPrice = req.query.maxPrice;
-    }
-    if (req.query.inStock && req.query.inStock !== 'undefined' && req.query.inStock !== 'null') {
-      queryParams.inStock = req.query.inStock;
-    }
-    
-    const searchResults = await SearchService.searchProducts(queryParams);
-    
-    res.json({
-      success: true,
-      vehicle: {
-        _id: vehicle._id,
-        make: vehicle.make,
-        model: vehicle.model,
-        year: vehicle.year,
-        slug: vehicle.slug,
-        name: `${vehicle.make} ${vehicle.model}`
-      },
-      count: searchResults.products.length,
-      ...searchResults.pagination,
-      products: searchResults.products,
-      facets: searchResults.facets
-    });
-  } catch (error) {
-    console.error('Error fetching products by vehicle:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch products for vehicle',
-      error: error.message
-    });
-  }
-}));
+router.get('/by-vehicle/:vehicleId', asyncHandler(getProductsByVehicle));
 
 // @route   GET /products/brands
 // @desc    Get all available brands
 // @access  Public
-router.get('/brands', asyncHandler(async (req, res) => {
-  try {
-    const Brand = (await import('../models/Brand.js')).default;
-    
-    // Get all active brands from the Brand collection first
-    // This ensures we only show brands that are explicitly managed and active
-    const brands = await Brand.find({ isActive: true }).sort({ name: 1 });
-    
-    // Get product counts for these brands
-    const brandNames = brands.map(b => b.name);
-    
-    const productCounts = await Product.aggregate([
-      {
-        $match: {
-          brand: { $in: brandNames },
-          isActive: true
-        }
-      },
-      {
-        $group: {
-          _id: '$brand',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-    
-    // Create a map for quick count lookups
-    const countMap = {};
-    productCounts.forEach(item => {
-      countMap[item._id] = item.count;
-    });
-    
-    // Construct the response
-    const brandInfo = brands
-      .map(brand => {
-        const productCount = countMap[brand.name] || 0;
-        return {
-          id: brand._id.toString(),
-          name: brand.name,
-          slug: brand.slug,
-          productCount: productCount,
-          logo: brand.logo || null,
-          description: brand.description || null
-        };
-      })
-      .filter(b => b.productCount > 0); // Only show brands with products
-    
-    res.json({
-      success: true,
-      brands: brandInfo
-    });
-  } catch (error) {
-    console.error('Error fetching brands:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch brands',
-      error: error.message
-    });
-  }
-}));
+router.get('/brands', asyncHandler(getBrands));
 
 // @route   GET /products/brands/:brandName
 // @desc    Get products for a specific brand

@@ -2,14 +2,14 @@
 import { jest } from '@jest/globals';
 
 // Mock dependencies
-jest.unstable_mockModule('../../services/elasticsearchService.js', () => ({
+jest.unstable_mockModule('../../../services/elasticsearchService.js', () => ({
   default: {
     isConnected: jest.fn(),
     searchProducts: jest.fn(),
   }
 }));
 
-jest.unstable_mockModule('../../services/categoryMappingService.js', () => ({
+jest.unstable_mockModule('../../../services/categoryMappingService.js', () => ({
   default: {
     initialized: true,
     initialize: jest.fn(),
@@ -18,7 +18,7 @@ jest.unstable_mockModule('../../services/categoryMappingService.js', () => ({
   }
 }));
 
-jest.unstable_mockModule('../../models/Product.js', () => ({
+jest.unstable_mockModule('../../../models/Product.js', () => ({
   default: {
     find: jest.fn(),
     countDocuments: jest.fn(),
@@ -26,10 +26,10 @@ jest.unstable_mockModule('../../models/Product.js', () => ({
 }));
 
 // Import the module under test using dynamic import to apply mocks
-const { default: SearchService } = await import('../../services/searchService.js');
-const { default: elasticsearchService } = await import('../../services/elasticsearchService.js');
-const { default: categoryMappingService } = await import('../../services/categoryMappingService.js');
-const { default: Product } = await import('../../models/Product.js');
+const { default: SearchService } = await import('../../../services/searchService.js');
+const { default: elasticsearchService } = await import('../../../services/elasticsearchService.js');
+const { default: categoryMappingService } = await import('../../../services/categoryMappingService.js');
+const { default: Product } = await import('../../../models/Product.js');
 
 describe('SearchService Unit Tests', () => {
   beforeEach(() => {

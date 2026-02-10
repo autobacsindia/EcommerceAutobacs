@@ -11,6 +11,7 @@ import dynamic from 'next/dynamic';
 import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
+import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 
 // Dynamically import components to improve initial load time
 const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { 
@@ -19,11 +20,31 @@ const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelec
 });
 
 const FastMovingProducts = dynamic(() => import('@/components/products/FastMovingProducts'), {
-  loading: () => <div className="h-96 bg-gray-50 animate-pulse" />
+  loading: () => (
+    <div className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <div className="h-8 w-64 bg-gray-200 rounded mx-auto mb-4 animate-pulse" />
+          <div className="h-4 w-48 bg-gray-200 rounded mx-auto animate-pulse" />
+        </div>
+        <ProductGridSkeleton count={5} />
+      </div>
+    </div>
+  )
 });
 
 const ModernFastMovingSection = dynamic(() => import('@/components/products/ModernFastMovingSection'), {
-  loading: () => <div className="h-96 bg-gray-50 animate-pulse" />
+  loading: () => (
+    <div className="py-16 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <div className="h-8 w-64 bg-gray-200 rounded mx-auto mb-2 animate-pulse" />
+          <div className="h-4 w-48 bg-gray-200 rounded mx-auto animate-pulse" />
+        </div>
+        <ProductGridSkeleton count={4} />
+      </div>
+    </div>
+  )
 });
 
 const KeepShoppingWidget = dynamic(() => import('@/components/products/KeepShoppingWidget'), {

@@ -3,12 +3,23 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import ProductGrid from '@/components/products/ProductGrid';
-import ProductFilters from '@/components/products/ProductFilters';
+import dynamic from 'next/dynamic';
 import ProductFetchError from '@/components/products/ProductFetchError';
-import VehicleFilterSidebar from '@/components/vehicles/VehicleFilterSidebar';
 import Pagination from '@/components/layout/Pagination';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
+import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
+
+const ProductGrid = dynamic(() => import('@/components/products/ProductGrid'), {
+  loading: () => <ProductGridSkeleton count={8} />
+});
+
+const ProductFilters = dynamic(() => import('@/components/products/ProductFilters'), {
+  loading: () => <div className="h-96 w-full bg-gray-50 animate-pulse rounded-lg" />
+});
+
+const VehicleFilterSidebar = dynamic(() => import('@/components/vehicles/VehicleFilterSidebar'), {
+  loading: () => <div className="h-64 w-full bg-gray-50 animate-pulse rounded-lg" />
+});
 
 // Define types for our data
 interface ProductImage {

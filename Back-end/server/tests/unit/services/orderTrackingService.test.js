@@ -18,12 +18,12 @@ const mockOrderInstance = {
 };
 
 // Setup mocks using unstable_mockModule
-jest.unstable_mockModule('../../models/Order.js', () => ({
+jest.unstable_mockModule('../../../models/Order.js', () => ({
   default: mockOrder
 }));
 
 // Import the service under test (dynamically after mocks)
-const { default: orderTrackingService, TRACKING_STATUS } = await import('../../services/orderTrackingService.js');
+const { default: orderTrackingService, TRACKING_STATUS } = await import('../../../services/orderTrackingService.js');
 
 describe('OrderTrackingService', () => {
   beforeEach(() => {

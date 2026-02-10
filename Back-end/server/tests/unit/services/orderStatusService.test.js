@@ -98,6 +98,23 @@ describe('OrderStatusService Unit Tests', () => {
     });
   });
 
+  describe('canCustomerCancel', () => {
+    it('should allow cancellation for pending order', () => {
+      const result = service.canCustomerCancel({ status: 'pending' });
+      expect(result.canCancel).toBe(true);
+    });
+    
+    it('should allow cancellation for confirmed order', () => {
+      const result = service.canCustomerCancel({ status: 'confirmed' });
+      expect(result.canCancel).toBe(true);
+    });
+    
+    it('should not allow cancellation for shipped order', () => {
+      const result = service.canCustomerCancel({ status: 'shipped' });
+      expect(result.canCancel).toBe(false);
+    });
+  });
+
   describe('updateOrderStatus', () => {
     it('should update status successfully for valid transition', async () => {
       mockOrderModel.findById.mockResolvedValue(mockOrderInstance);
