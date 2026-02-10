@@ -9,9 +9,13 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
+import dynamic from 'next/dynamic';
+
+const ProductImage = dynamic(() => import('@/components/products/ProductImage'), {
+  loading: () => <div className="w-full h-full bg-gray-100 animate-pulse" />
+});
 
 interface ProductImageType {
   url: string;
