@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Package, Eye, Filter, Search, ChevronDown } from 'lucide-react';
+import OrderHistorySkeleton from '@/components/skeletons/OrderHistorySkeleton';
 
 interface Order {
   _id: string;
@@ -145,14 +146,7 @@ export default function OrdersPage() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your orders...</p>
-        </div>
-      </div>
-    );
+    return <OrderHistorySkeleton />;
   }
 
   if (!isAuthenticated) {

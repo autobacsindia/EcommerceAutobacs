@@ -1,4 +1,5 @@
 import React from 'react';
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface SkeletonLoaderProps {
   type?: 'header' | 'search' | 'cart' | 'user' | 'mobile-menu' | 'cart-page';
@@ -14,32 +15,32 @@ export default function SkeletonLoader({
       return (
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
           <div className="mb-8">
-            <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-2" />
-            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-32" />
           </div>
           <div className="lg:grid lg:grid-cols-12 lg:gap-8">
             <div className="lg:col-span-8">
               <div className="bg-white rounded-lg shadow-md overflow-hidden">
                 <div className="p-4 border-b flex justify-between items-center">
-                  <div className="h-6 w-24 bg-gray-200 rounded animate-pulse" />
-                  <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-4 w-20" />
                 </div>
                 <div className="divide-y">
                   {[1, 2, 3].map((item) => (
                     <div key={item} className="p-6">
                       <div className="flex gap-4">
-                        <div className="flex-shrink-0 w-24 h-24 bg-gray-200 rounded-md animate-pulse" />
+                        <Skeleton className="flex-shrink-0 w-24 h-24 rounded-md" />
                         <div className="flex-1 space-y-3">
                           <div className="flex justify-between">
                             <div className="space-y-2">
-                              <div className="h-5 w-48 bg-gray-200 rounded animate-pulse" />
-                              <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+                              <Skeleton className="h-5 w-48" />
+                              <Skeleton className="h-4 w-24" />
                             </div>
-                            <div className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
+                            <Skeleton className="h-5 w-5" />
                           </div>
                           <div className="flex justify-between items-center">
-                            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
-                            <div className="h-6 w-20 bg-gray-200 rounded animate-pulse" />
+                            <Skeleton className="h-8 w-32" />
+                            <Skeleton className="h-6 w-20" />
                           </div>
                         </div>
                       </div>
@@ -50,16 +51,16 @@ export default function SkeletonLoader({
             </div>
             <div className="lg:col-span-4 mt-8 lg:mt-0">
               <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="h-6 w-32 bg-gray-200 rounded animate-pulse mb-4" />
+                <Skeleton className="h-6 w-32 mb-4" />
                 <div className="space-y-3 mb-6">
                   {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="flex justify-between">
-                      <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-                      <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-16" />
                     </div>
                   ))}
                 </div>
-                <div className="h-12 w-full bg-gray-200 rounded animate-pulse" />
+                <Skeleton className="h-12 w-full rounded" />
               </div>
             </div>
           </div>
@@ -73,13 +74,13 @@ export default function SkeletonLoader({
             <div className="flex items-center justify-between h-16">
               {/* Logo skeleton */}
               <div className="flex-shrink-0">
-                <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+                <Skeleton className="h-8 w-32" />
               </div>
 
               {/* Desktop Navigation skeleton */}
               <nav className="hidden md:flex space-x-8">
                 {[1, 2, 3, 4].map((item) => (
-                  <div key={item} className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                  <Skeleton key={item} className="h-4 w-16" />
                 ))}
               </nav>
 
@@ -88,25 +89,25 @@ export default function SkeletonLoader({
                 {/* Desktop Search skeleton */}
                 <div className="hidden md:block w-64">
                   <div className="flex">
-                    <div className="w-full px-4 py-2 border border-gray-300 rounded-l-md bg-gray-100 animate-pulse" />
-                    <div className="bg-blue-600 text-white px-4 py-2 rounded-r-md animate-pulse" />
+                    <Skeleton className="w-full h-10 rounded-l-md rounded-r-none" />
+                    <Skeleton className="w-12 h-10 rounded-l-none rounded-r-md" />
                   </div>
                 </div>
 
                 {/* Cart skeleton */}
                 <div className="relative p-2">
-                  <div className="h-5 w-5 bg-gray-200 rounded-full animate-pulse" />
+                  <Skeleton className="h-5 w-5 rounded-full" />
                 </div>
 
                 {/* User Menu skeleton */}
                 <div className="flex items-center space-x-2">
-                  <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
-                  <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-8 w-20" />
                 </div>
 
                 {/* Mobile Menu Button skeleton */}
                 <div className="md:hidden p-2">
-                  <div className="h-6 w-6 bg-gray-200 rounded animate-pulse" />
+                  <Skeleton className="h-6 w-6" />
                 </div>
               </div>
             </div>
@@ -118,8 +119,8 @@ export default function SkeletonLoader({
       return (
         <div className={`relative w-full max-w-md ${className}`}>
           <div className="flex">
-            <div className="w-full px-4 py-2 border border-gray-300 rounded-l-md bg-gray-100 animate-pulse" />
-            <div className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors animate-pulse" />
+            <Skeleton className="w-full h-10 rounded-l-md rounded-r-none" />
+            <Skeleton className="w-12 h-10 rounded-l-none rounded-r-md" />
           </div>
         </div>
       );
@@ -127,29 +128,29 @@ export default function SkeletonLoader({
     case 'cart':
       return (
         <div className={`relative p-2 ${className}`}>
-          <div className="h-5 w-5 bg-gray-200 rounded-full animate-pulse" />
+          <Skeleton className="h-5 w-5 rounded-full" />
         </div>
       );
       
     case 'user':
       return (
         <div className={`flex items-center space-x-2 ${className}`}>
-          <div className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
-          <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-8 w-20" />
         </div>
       );
       
     case 'mobile-menu':
       return (
         <div className={`md:hidden p-2 ${className}`}>
-          <div className="h-6 w-6 bg-gray-200 rounded animate-pulse" />
+          <Skeleton className="h-6 w-6" />
         </div>
       );
       
     default:
       return (
         <div className={className}>
-          <div className="bg-gray-200 rounded animate-pulse" />
+          <Skeleton className="w-full h-full" />
         </div>
       );
   }

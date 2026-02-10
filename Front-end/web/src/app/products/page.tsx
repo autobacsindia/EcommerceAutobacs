@@ -8,17 +8,19 @@ import ProductFetchError from '@/components/products/ProductFetchError';
 import Pagination from '@/components/layout/Pagination';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
+import SidebarSkeleton from '@/components/skeletons/SidebarSkeleton';
 
 const ProductGrid = dynamic(() => import('@/components/products/ProductGrid'), {
   loading: () => <ProductGridSkeleton count={8} />
 });
 
 const ProductFilters = dynamic(() => import('@/components/products/ProductFilters'), {
-  loading: () => <div className="h-96 w-full bg-gray-50 animate-pulse rounded-lg" />
+  loading: () => <SidebarSkeleton />,
+  ssr: false
 });
 
 const VehicleFilterSidebar = dynamic(() => import('@/components/vehicles/VehicleFilterSidebar'), {
-  loading: () => <div className="h-64 w-full bg-gray-50 animate-pulse rounded-lg" />
+  loading: () => <SidebarSkeleton />
 });
 
 // Define types for our data

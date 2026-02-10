@@ -12,6 +12,7 @@ import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 // Dynamically import components to improve initial load time
 const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { 
@@ -24,8 +25,8 @@ const FastMovingProducts = dynamic(() => import('@/components/products/FastMovin
     <div className="py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <div className="h-8 w-64 bg-gray-200 rounded mx-auto mb-4 animate-pulse" />
-          <div className="h-4 w-48 bg-gray-200 rounded mx-auto animate-pulse" />
+          <Skeleton className="h-8 w-64 mx-auto mb-4" />
+          <Skeleton className="h-4 w-48 mx-auto" />
         </div>
         <ProductGridSkeleton count={5} />
       </div>
@@ -38,8 +39,8 @@ const ModernFastMovingSection = dynamic(() => import('@/components/products/Mode
     <div className="py-16 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <div className="h-8 w-64 bg-gray-200 rounded mx-auto mb-2 animate-pulse" />
-          <div className="h-4 w-48 bg-gray-200 rounded mx-auto animate-pulse" />
+          <Skeleton className="h-8 w-64 mx-auto mb-2" />
+          <Skeleton className="h-4 w-48 mx-auto" />
         </div>
         <ProductGridSkeleton count={4} />
       </div>
@@ -48,7 +49,7 @@ const ModernFastMovingSection = dynamic(() => import('@/components/products/Mode
 });
 
 const KeepShoppingWidget = dynamic(() => import('@/components/products/KeepShoppingWidget'), {
-  loading: () => <div className="h-64 bg-gray-50 animate-pulse rounded-lg" />
+  loading: () => <Skeleton className="h-64 rounded-lg w-full" />
 });
 
 const RecentlyViewedProducts = dynamic(() => import('@/components/products/RecentlyViewedProducts'), {
@@ -56,7 +57,7 @@ const RecentlyViewedProducts = dynamic(() => import('@/components/products/Recen
 });
 
 const SuperCarsBanner = dynamic(() => import('@/components/layout/SuperCarsBanner'), {
-  loading: () => <div className="h-80 bg-gray-900 animate-pulse" />
+  loading: () => <Skeleton className="h-80 w-full" />
 });
 
 export default function Home() {

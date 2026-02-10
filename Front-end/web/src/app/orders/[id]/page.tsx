@@ -18,6 +18,7 @@ import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
+import OrderDetailSkeleton from '@/components/skeletons/OrderDetailSkeleton';
 
 interface OrderDetail {
   _id: string;
@@ -270,14 +271,7 @@ export default function OrderDetailPage() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading order details...</p>
-        </div>
-      </div>
-    );
+    return <OrderDetailSkeleton />;
   }
 
   if (!isAuthenticated) {
