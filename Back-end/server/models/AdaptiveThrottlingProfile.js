@@ -157,7 +157,7 @@ const adaptiveThrottlingProfileSchema = new mongoose.Schema({
 });
 
 // Index for finding active profiles
-adaptiveThrottlingProfileSchema.index({ status: 1 });
+// adaptiveThrottlingProfileSchema.index({ status: 1 }); // Already indexed in schema definition
 
 // Index for scheduled profiles
 adaptiveThrottlingProfileSchema.index({ 'activationSchedule.startTime': 1, status: 1 });

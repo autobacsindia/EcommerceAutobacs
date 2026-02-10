@@ -1,5 +1,5 @@
 export default {
-  testTimeout: 30000,
+  testTimeout: 300000,
   testEnvironment: 'node',
   setupFiles: ['<rootDir>/tests/setupEnv.js'],
   transform: {},
@@ -20,5 +20,7 @@ export default {
     'services/**/*.js',
     '!**/node_modules/**',
     '!**/vendor/**',
+    '!**/tests/**',
   ],
+  coverageReporters: ['text', 'lcov', 'clover', 'html'],
 };

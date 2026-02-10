@@ -106,7 +106,6 @@ const WarehouseSchema = new mongoose.Schema({
 
 // Indexes for performance optimization
 WarehouseSchema.index({ "location.coordinates": "2dsphere" }); // Geospatial queries
-WarehouseSchema.index({ code: 1 });
 WarehouseSchema.index({ operationalStatus: 1, isActive: 1 });
 WarehouseSchema.index({ "location.city": 1 });
 WarehouseSchema.index({ "location.postalCode": 1 });

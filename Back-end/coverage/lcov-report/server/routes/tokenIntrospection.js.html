@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">88.88% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>8/9</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">88.88% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>8/9</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -112,31 +112,31 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import express from 'express';
@@ -150,10 +150,10 @@ import {
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { rateLimit } from '../middleware/rateLimitMiddleware.js';
 &nbsp;
-const router = <span class="cstat-no" title="statement not covered" >express.Router();</span>
+const router = express.Router();
 &nbsp;
 // Rate limiter for token introspection endpoints (60 req/min per admin)
-const introspectionRateLimit = <span class="cstat-no" title="statement not covered" >rateLimit({</span>
+const introspectionRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 60,
   message: 'Too many token introspection requests. Please slow down.',
@@ -161,20 +161,20 @@ const introspectionRateLimit = <span class="cstat-no" title="statement not cover
 });
 &nbsp;
 // All routes require admin authentication
-<span class="cstat-no" title="statement not covered" >router.use(protect, admin);</span>
+router.use(protect, admin);
 &nbsp;
 // Token introspection endpoints
-<span class="cstat-no" title="statement not covered" >router.post('/introspect', introspectionRateLimit, introspect);</span>
-<span class="cstat-no" title="statement not covered" >router.post('/introspect/batch', introspectionRateLimit, batchIntrospect);</span>
+router.post('/introspect', introspectionRateLimit, introspect);
+router.post('/introspect/batch', introspectionRateLimit, batchIntrospect);
 &nbsp;
 // User session management
-<span class="cstat-no" title="statement not covered" >router.get('/sessions/:userId', introspectionRateLimit, getUserSessionsController);</span>
+router.get('/sessions/:userId', introspectionRateLimit, getUserSessionsController);
 &nbsp;
 // Token revocation
-<span class="cstat-no" title="statement not covered" >router.post('/revoke', introspectionRateLimit, revokeTokenController);</span>
+router.post('/revoke', introspectionRateLimit, revokeTokenController);
 &nbsp;
 // Token statistics
-<span class="cstat-no" title="statement not covered" >router.get('/stats', introspectionRateLimit, getTokenStats);</span>
+router.get('/stats', introspectionRateLimit, getTokenStats);
 &nbsp;
 export default router;
 &nbsp;</pre></td></tr></table></pre>
@@ -184,7 +184,7 @@ export default router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-09T08:27:47.208Z
+                at 2026-02-10T06:35:53.920Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

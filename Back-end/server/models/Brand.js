@@ -14,7 +14,8 @@ const BrandSchema = new mongoose.Schema({
   },
   externalId: {
     type: String,
-    sparse: true  // Allows multiple documents to have null/undefined values
+    sparse: true,
+    index: true
   },
   logo: {
     type: String
@@ -32,8 +33,7 @@ const BrandSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 BrandSchema.index({ name: 1 });
-BrandSchema.index({ slug: 1 });
-BrandSchema.index({ externalId: 1 });
+// BrandSchema.index({ externalId: 1 }); // Defined in schema
 
 // Transform the output to always use ObjectId as id
 BrandSchema.set('toJSON', {

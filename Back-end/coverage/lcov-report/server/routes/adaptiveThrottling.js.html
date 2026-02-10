@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/11</span>
+                <span class='fraction'>11/11</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/11</span>
+                <span class='fraction'>11/11</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -116,27 +116,27 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import express from 'express';
@@ -154,27 +154,27 @@ import {
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { adminRateLimit } from '../middleware/rateLimitMiddleware.js';
 &nbsp;
-const router = <span class="cstat-no" title="statement not covered" >express.Router();</span>
+const router = express.Router();
 &nbsp;
 // All routes require admin authentication
-<span class="cstat-no" title="statement not covered" >router.use(protect, admin, adminRateLimit);</span>
+router.use(protect, admin, adminRateLimit);
 &nbsp;
 // Profile management
-<span class="cstat-no" title="statement not covered" >router.get('/profiles', getAllProfiles);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/profiles/:id', getProfile);</span>
-<span class="cstat-no" title="statement not covered" >router.post('/profiles', createProfile);</span>
-<span class="cstat-no" title="statement not covered" >router.put('/profiles/:id', updateProfile);</span>
-<span class="cstat-no" title="statement not covered" >router.delete('/profiles/:id', deleteProfile);</span>
+router.get('/profiles', getAllProfiles);
+router.get('/profiles/:id', getProfile);
+router.post('/profiles', createProfile);
+router.put('/profiles/:id', updateProfile);
+router.delete('/profiles/:id', deleteProfile);
 &nbsp;
 // Activation/deactivation
-<span class="cstat-no" title="statement not covered" >router.post('/profiles/:id/activate', activateProfile);</span>
-<span class="cstat-no" title="statement not covered" >router.post('/deactivate', deactivateProfile);</span>
+router.post('/profiles/:id/activate', activateProfile);
+router.post('/deactivate', deactivateProfile);
 &nbsp;
 // Status
-<span class="cstat-no" title="statement not covered" >router.get('/status', getStatus);</span>
+router.get('/status', getStatus);
 &nbsp;
 // Preset creation
-<span class="cstat-no" title="statement not covered" >router.post('/profiles/presets/flash-sale', createFlashSalePreset);</span>
+router.post('/profiles/presets/flash-sale', createFlashSalePreset);
 &nbsp;
 export default router;
 &nbsp;</pre></td></tr></table></pre>
@@ -184,7 +184,7 @@ export default router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-09T08:27:47.208Z
+                at 2026-02-10T06:35:53.920Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

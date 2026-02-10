@@ -20,6 +20,11 @@ const mockBulkWriteResult = {
   modifiedCount: 2
 };
 
+const mockCats = [
+  { _id: 'cat4', name: 'PERFORMANCE', isActive: true },
+  { _id: 'cat7', name: 'LIGHTS', isActive: true }
+];
+
 // Mock dependencies using unstable_mockModule for ESM
 jest.unstable_mockModule('../models/Product.js', async () => {
   const { jest } = await import('@jest/globals');
@@ -34,6 +39,16 @@ jest.unstable_mockModule('../models/Product.js', async () => {
     __esModule: true,
     default: mockModel,
     ...mockModel
+  };
+});
+
+jest.unstable_mockModule('../models/Category.js', async () => {
+  const { jest } = await import('@jest/globals');
+  return {
+    __esModule: true,
+    default: {
+      find: jest.fn().mockResolvedValue(mockCats)
+    }
   };
 });
 
@@ -59,34 +74,24 @@ jest.unstable_mockModule('dotenv', async () => {
   };
 });
 
-// Also need to mock Category because it's used deeply
-jest.unstable_mockModule('../models/Category.js', async () => {
-  const { jest } = await import('@jest/globals');
-  const mockModel = {
-    find: jest.fn().mockResolvedValue([
-      { _id: 'cat4', name: 'PERFORMANCE', isActive: true },
-      { _id: 'cat7', name: 'LIGHTS', isActive: true }
-    ])
-  };
-  return {
-    __esModule: true,
-    default: mockModel,
-    ...mockModel
-  };
-});
-
 // Dynamic import after mocks
 const { cleanupWordPressProducts } = await import('../utils/wordpressProductCleanup.js');
 
 describe('WordPress Product Cleanup Integration', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    
+    // Setup Product mock
     const Product = (await import('../models/Product.js')).default;
     Product.find.mockImplementation(() => ({
       limit: jest.fn().mockResolvedValue(mockProducts)
     }));
     Product.countDocuments.mockResolvedValue(2);
     Product.bulkWrite.mockResolvedValue(mockBulkWriteResult);
+
+    // Setup Category mock explicitly to ensure it persists
+    const Category = (await import('../models/Category.js')).default;
+    Category.find.mockResolvedValue(mockCats);
   });
 
   test('should clean up products successfully', async () => {
@@ -95,18 +100,10 @@ describe('WordPress Product Cleanup Integration', () => {
     
     expect(result.success).toBe(true);
     expect(result.processed).toBe(2);
-    // Depending on logic, it might update 2 or 0 if categorization fails.
-    // Assuming categorization works (mocked Category), it should be 2.
-    // But wait, categorizeProduct might return null if logic fails.
-    // Given the mocks and logic, let's assume it works.
-    // If it fails, we will see.
   });
 
   test('should handle empty product list', async () => {
     // We need to override the mock for this test.
-    // But since we used unstable_mockModule which is global/hoisted, we can't easily change it per test via the module factory.
-    // However, we can import the mocked module and change the implementation of the spy.
-    
     const Product = (await import('../models/Product.js')).default;
     Product.find.mockReturnValueOnce({
       limit: jest.fn().mockResolvedValue([])

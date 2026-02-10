@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">3.72% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/215</span>
+                <span class='fraction'>8/215</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">0.63% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/157</span>
+                <span class='fraction'>1/157</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">3.44% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/29</span>
+                <span class='fraction'>1/29</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">3.82% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/209</span>
+                <span class='fraction'>8/209</span>
             </div>
         
             
@@ -939,8 +939,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -948,18 +948,18 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1807,10 +1807,10 @@
 import Product from '../models/Product.js';
 &nbsp;
 class ElasticsearchService {
-<span class="fstat-no" title="function not covered" >  co</span>nstructor() {
+  constructor() {
     // Check if Elasticsearch is enabled
-<span class="cstat-no" title="statement not covered" >    this.enabled = process.env.ELASTICSEARCH_ENABLED === 'true';</span>
-<span class="cstat-no" title="statement not covered" >    this.connectionStatus = {</span>
+    this.enabled = process.env.ELASTICSEARCH_ENABLED === 'true';
+    this.connectionStatus = {
       available: false,
       lastChecked: null,
       lastError: null,
@@ -1818,18 +1818,18 @@ class ElasticsearchService {
     };
     
     // Circuit breaker state
-<span class="cstat-no" title="statement not covered" >    this.circuitBreaker = {</span>
+    this.circuitBreaker = {
       failures: 0,
       threshold: 5,
       resetTimeout: 60000, // 1 minute
       state: 'closed' // closed, open, half-open
     };
     
-<span class="cstat-no" title="statement not covered" >    if (!this.enabled) {</span>
-<span class="cstat-no" title="statement not covered" >      console.log('ℹ Elasticsearch is disabled. Using MongoDB for search operations.');</span>
-<span class="cstat-no" title="statement not covered" >      console.log('  To enable: Set ELASTICSEARCH_ENABLED=true in .env file');</span>
-<span class="cstat-no" title="statement not covered" >      this.client = null;</span>
-<span class="cstat-no" title="statement not covered" >      return;</span>
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (!this.enabled) {
+      console.log('ℹ Elasticsearch is disabled. Using MongoDB for search operations.');
+      console.log('  To enable: Set ELASTICSEARCH_ENABLED=true in .env file');
+      this.client = null;
+      return;
     }
     
     // Validate configuration
@@ -2680,7 +2680,7 @@ export default new ElasticsearchService();</pre></td></tr></table></pre>
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-09T08:27:47.208Z
+                at 2026-02-10T06:35:53.920Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
