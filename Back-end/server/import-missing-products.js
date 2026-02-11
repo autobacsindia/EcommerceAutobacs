@@ -32,10 +32,9 @@ async function importMissingProfenderProducts() {
         password: wordpressApiSecret
       },
       params: {
-        per_page: 50, // Get all products to be sure
-        status: 'publish',
-        attribute: 'brand',
-        attribute_term: 'Profender'
+        per_page: 50,
+        search: 'Profender',
+        status: 'publish'
       },
       timeout: 30000
     });

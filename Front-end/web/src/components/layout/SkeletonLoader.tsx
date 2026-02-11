@@ -10,10 +10,15 @@ export default function SkeletonLoader({
   type = 'header', 
   className = '' 
 }: SkeletonLoaderProps) {
+  // Use suppressHydrationWarning for the root elements of loading skeletons
+  // to handle minor attribute mismatches that are unavoidable in SSR
   switch (type) {
     case 'cart-page':
       return (
-        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
+        <div 
+          className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ${className}`}
+          suppressHydrationWarning
+        >
           <div className="mb-8">
             <Skeleton className="h-8 w-48 mb-2" />
             <Skeleton className="h-4 w-32" />
@@ -69,23 +74,31 @@ export default function SkeletonLoader({
 
     case 'header':
       return (
-        <header className={`bg-white border-b border-gray-200 sticky top-0 z-50 ${className}`}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
+        <header 
+          className={`bg-black sticky top-0 z-50 shadow-md w-full ${className}`}
+          suppressHydrationWarning
+        >
+          <div className="w-full px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center h-16 border-b border-gray-800 gap-4">
               {/* Logo skeleton */}
               <div className="flex-shrink-0">
                 <Skeleton className="h-8 w-32" />
               </div>
 
+              {/* Location skeleton - hidden on mobile */}
+              <div className="hidden lg:block flex-shrink-0">
+                <Skeleton className="h-6 w-32" />
+              </div>
+
               {/* Desktop Navigation skeleton */}
-              <nav className="hidden md:flex space-x-8">
+              <nav className="hidden md:flex space-x-8 flex-1 max-w-4xl">
                 {[1, 2, 3, 4].map((item) => (
                   <Skeleton key={item} className="h-4 w-16" />
                 ))}
               </nav>
 
               {/* Right Section skeleton */}
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-4 text-white flex-shrink-0 ml-auto">
                 {/* Desktop Search skeleton */}
                 <div className="hidden md:block w-64">
                   <div className="flex">
@@ -117,7 +130,10 @@ export default function SkeletonLoader({
       
     case 'search':
       return (
-        <div className={`relative w-full max-w-md ${className}`}>
+        <div 
+          className={`relative w-full max-w-md ${className}`}
+          suppressHydrationWarning
+        >
           <div className="flex">
             <Skeleton className="w-full h-10 rounded-l-md rounded-r-none" />
             <Skeleton className="w-12 h-10 rounded-l-none rounded-r-md" />
@@ -127,14 +143,20 @@ export default function SkeletonLoader({
       
     case 'cart':
       return (
-        <div className={`relative p-2 ${className}`}>
+        <div 
+          className={`relative p-2 ${className}`}
+          suppressHydrationWarning
+        >
           <Skeleton className="h-5 w-5 rounded-full" />
         </div>
       );
       
     case 'user':
       return (
-        <div className={`flex items-center space-x-2 ${className}`}>
+        <div 
+          className={`flex items-center space-x-2 ${className}`}
+          suppressHydrationWarning
+        >
           <Skeleton className="h-5 w-16" />
           <Skeleton className="h-8 w-20" />
         </div>
@@ -142,14 +164,20 @@ export default function SkeletonLoader({
       
     case 'mobile-menu':
       return (
-        <div className={`md:hidden p-2 ${className}`}>
+        <div 
+          className={`md:hidden p-2 ${className}`}
+          suppressHydrationWarning
+        >
           <Skeleton className="h-6 w-6" />
         </div>
       );
       
     default:
       return (
-        <div className={className}>
+        <div 
+          className={className}
+          suppressHydrationWarning
+        >
           <Skeleton className="w-full h-full" />
         </div>
       );

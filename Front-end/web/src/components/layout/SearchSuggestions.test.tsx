@@ -113,8 +113,8 @@ describe('SearchSuggestions', () => {
     
     fireEvent.change(input, { target: { value: 'test product' } });
     fireEvent.click(searchButton);
-    
-    expect(mockPush).toHaveBeenCalledWith('/search?search=test%20product');
+
+    expect(mockPush).toHaveBeenCalledWith('/products/search?search=test%20product');
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
       'searchHistory_guest_global',
       expect.stringContaining('test product')
@@ -231,6 +231,6 @@ describe('SearchSuggestions', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     
     // Should navigate to search with the first history item
-    expect(mockPush).toHaveBeenCalledWith('/search?search=wheel');
+    expect(mockPush).toHaveBeenCalledWith('/products/search?search=wheel');
   });
 });

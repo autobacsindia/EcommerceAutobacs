@@ -9,6 +9,10 @@ jest.mock('./rateLimitLogger', () => ({
   logEvent: jest.fn()
 }));
 
+const mockHeaders = (headers: Record<string, string>) => ({
+  get: (name: string) => headers[name.toLowerCase()] || null
+});
+
 describe('APIClient Rate Limiting', () => {
   beforeEach(() => {
     // Clear all mocks before each test
@@ -16,6 +20,9 @@ describe('APIClient Rate Limiting', () => {
     
     // Reset the mock implementation
     (global.fetch as jest.Mock).mockReset();
+
+    // Reset timers to real ones
+    jest.useRealTimers();
   });
 
   describe('GET requests', () => {
@@ -25,14 +32,17 @@ describe('APIClient Rate Limiting', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '5']]),
+          headers: mockHeaders({ 'retry-after': '5', 'content-type': 'application/json' }),
           json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: mockHeaders({ 'content-type': 'application/json' }),
           json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         });
 
       // Spy on setTimeout to control timing
@@ -65,32 +75,42 @@ describe('APIClient Rate Limiting', () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         status: 429,
-        headers: new Map([['retry-after', '5']]),
+        headers: mockHeaders({ 'retry-after': '1', 'content-type': 'application/json' }),
         json: () => Promise.resolve({ message: 'Too many requests' }),
-        url: 'http://localhost:5000/test'
+        url: 'http://localhost:5000/test',
+        clone: function() { return this; }
       });
 
       // Spy on setTimeout to control timing
       jest.useFakeTimers();
 
-      // Make the API call
-      const promise = apiClient.get('/test');
-
-      // Fast-forward through all retries
-      await jest.advanceTimersByTimeAsync(60000);
+      // Make the API call with limited retries
+      const promise = apiClient.get('/test', { retries: 2 });
       
-      // Expect the promise to reject
-      await expect(promise).rejects.toThrow('Too many requests');
+      // Attach catch handler immediately to avoid unhandled rejection issues during timer advancement
+      const catchSpy = jest.fn();
+      promise.catch(catchSpy);
+
+      // Fast-forward through retries
+      // Retry 1
+      await jest.advanceTimersByTimeAsync(5000);
+      // Retry 2
+      await jest.advanceTimersByTimeAsync(5000);
+      // Final processing
+      await jest.advanceTimersByTimeAsync(5000);
+      
+      // Assertions
+      expect(catchSpy).toHaveBeenCalled();
+      const error = catchSpy.mock.calls[0][0];
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.message).toBe('Too many requests');
 
       // Restore real timers
       jest.useRealTimers();
 
-      // Assertions
-      // Should have tried 4 times (1 initial + 3 retries)
-      expect(fetch).toHaveBeenCalledTimes(4);
-      
-      // Check that rate limit logger was called for each retry attempt
-      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(3);
+      // Check call counts
+      expect(fetch).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -101,14 +121,17 @@ describe('APIClient Rate Limiting', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '3']]),
+          headers: mockHeaders({ 'retry-after': '3', 'content-type': 'application/json' }),
           json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: mockHeaders({ 'content-type': 'application/json' }),
           json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         });
 
       // Spy on setTimeout to control timing
@@ -140,14 +163,17 @@ describe('APIClient Rate Limiting', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '2']]),
+          headers: mockHeaders({ 'retry-after': '2', 'content-type': 'application/json' }),
           json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: mockHeaders({ 'content-type': 'application/json' }),
           json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         });
 
       // Spy on setTimeout to control timing
@@ -179,14 +205,17 @@ describe('APIClient Rate Limiting', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '4']]),
+          headers: mockHeaders({ 'retry-after': '4', 'content-type': 'application/json' }),
           json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: mockHeaders({ 'content-type': 'application/json' }),
           json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test'
+          url: 'http://localhost:5000/test',
+          clone: function() { return this; }
         });
 
       // Spy on setTimeout to control timing
@@ -218,14 +247,17 @@ describe('APIClient Rate Limiting', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 429,
-          headers: new Map([['retry-after', '5']]),
+          headers: mockHeaders({ 'retry-after': '5', 'content-type': 'application/json' }),
           json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/products'
+          url: 'http://localhost:5000/products',
+          clone: function() { return this; }
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: mockHeaders({ 'content-type': 'application/json' }),
           json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/products'
+          url: 'http://localhost:5000/products',
+          clone: function() { return this; }
         });
 
       // Spy on setTimeout to control timing

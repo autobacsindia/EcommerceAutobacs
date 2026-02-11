@@ -70,6 +70,23 @@ class GoogleMapsService {
       return geocoded;
     } catch (error) {
       console.error("Geocoding error:", error.message);
+
+      // Fallback for development if API fails
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('Google Maps API failed, using mock location for development');
+        return {
+          formatted: 'Mock Address, Mumbai, Maharashtra 400001, India',
+          coordinates: { latitude: 19.0760, longitude: 72.8777 },
+          placeId: 'mock_place_id',
+          addressComponents: {
+            street: 'Mock Street',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            postalCode: '400001',
+            country: 'India'
+          }
+        };
+      }
       
       // Provide specific error messages
       if (error.message === 'GOOGLE_MAPS_API_NOT_CONFIGURED') {
@@ -78,7 +95,7 @@ class GoogleMapsService {
         throw new Error('Location services unavailable');
       }
       
-      throw new Error("Failed to geocode address");
+      throw new Error(`Failed to geocode address: ${error.message}`);
     }
   }
 
@@ -139,6 +156,23 @@ class GoogleMapsService {
       return geocoded;
     } catch (error) {
       console.error("Reverse geocoding error:", error.message);
+
+      // Fallback for development if API fails (e.g. invalid key or quota)
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('Google Maps API failed, using mock location for development');
+        return {
+          formatted: 'Mock Address, Mumbai, Maharashtra 400001, India',
+          coordinates: { latitude, longitude },
+          placeId: 'mock_place_id',
+          addressComponents: {
+            street: 'Mock Street',
+            city: 'Mumbai',
+            state: 'Maharashtra',
+            postalCode: '400001',
+            country: 'India'
+          }
+        };
+      }
       
       // Provide specific error messages
       if (error.message === 'GOOGLE_MAPS_API_NOT_CONFIGURED') {
@@ -149,7 +183,7 @@ class GoogleMapsService {
         throw new Error('Location services unavailable. Please enter PIN code manually.');
       }
       
-      throw new Error("Failed to reverse geocode coordinates");
+      throw new Error(`Failed to reverse geocode coordinates: ${error.message}`);
     }
   }
 
