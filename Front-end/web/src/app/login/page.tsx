@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
+import { navigateTo } from '@/lib/utils/navigation';
 import BrandLogo from '@/components/layout/BrandLogo';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
@@ -80,7 +81,7 @@ export default function LoginPage() {
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const url = `${apiBaseUrl}/auth/${provider}`;
-    window.location.href = url;
+    navigateTo(url);
   };
 
   return (
@@ -108,10 +109,11 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label className="block text-sm font-bold text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-bold text-gray-700 mb-1">
                 Email or mobile phone number
               </label>
               <input
+                id="email"
                 type="text"
                 name="email"
                 value={formData.email}
@@ -128,7 +130,7 @@ export default function LoginPage() {
 
             <div className="mb-6">
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-bold text-gray-700">
+                <label htmlFor="password" className="block text-sm font-bold text-gray-700">
                   Password
                 </label>
                 <Link
@@ -139,6 +141,7 @@ export default function LoginPage() {
                 </Link>
               </div>
               <input
+                id="password"
                 type="password"
                 name="password"
                 value={formData.password}

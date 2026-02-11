@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
+import { navigateTo } from '@/lib/utils/navigation';
 import BrandLogo from '@/components/layout/BrandLogo';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
@@ -92,7 +93,7 @@ export default function RegisterPage() {
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
     const url = `${apiBaseUrl}/auth/${provider}`;
-    window.location.href = url;
+    navigateTo(url);
   };
 
   return (
