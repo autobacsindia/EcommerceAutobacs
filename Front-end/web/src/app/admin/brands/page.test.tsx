@@ -21,7 +21,7 @@ jest.mock('lucide-react', () => ({
 // Mock Image
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: (props: any) => <img {...props} alt={props.alt} />,
+  default: ({ fill, ...props }: any) => <img {...props} data-filled={fill ? "true" : undefined} />,
 }));
 
 describe('AdminBrandsPage', () => {
