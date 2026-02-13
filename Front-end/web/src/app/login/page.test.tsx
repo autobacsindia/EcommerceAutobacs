@@ -29,22 +29,22 @@ jest.mock('@/lib/utils/navigation', () => ({
 
 // Mock icons
 jest.mock('lucide-react', () => ({
-  Loader2: () => <div data-testid="loader">Loading...</div>,
-  AlertCircle: () => <div data-testid="alert-icon">!</div>,
+  Loader2: () => <span data-testid="loader">Loading...</span>,
+  AlertCircle: () => <span data-testid="alert-icon">!</span>,
 }));
 
 jest.mock('react-icons/fc', () => ({
-  FcGoogle: () => <div data-testid="google-icon">G</div>,
+  FcGoogle: () => <span data-testid="google-icon">G</span>,
 }));
 
 jest.mock('react-icons/fa', () => ({
-  FaFacebook: () => <div data-testid="facebook-icon">F</div>,
+  FaFacebook: () => <span data-testid="facebook-icon">F</span>,
 }));
 
 // Mock BrandLogo
 jest.mock('@/components/layout/BrandLogo', () => {
   return function MockBrandLogo() {
-    return <div data-testid="brand-logo">AutoBacs</div>;
+    return <span data-testid="brand-logo">AutoBacs</span>;
   };
 });
 

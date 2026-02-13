@@ -3,6 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import Header from './Header';
 import '@testing-library/jest-dom';
 
+import { APP_NAME, NAV_LINKS } from '@/lib/constants';
+
 // Mocks
 const mockLogout = jest.fn();
 let mockIsAuthenticated = false;
@@ -101,5 +103,18 @@ describe('Header Component', () => {
     // Since we can't easily assert the state change effect without deeper DOM inspection of conditional rendering (which might be mocked out or hidden),
     // we just ensure it doesn't crash.
     expect(toggleButton).toBeInTheDocument();
+  });
+
+  it('renders navigation links', () => {
+    render(<Header />);
+    NAV_LINKS.forEach(link => {
+      // We look for the link text. Note: Some links might be hidden on mobile/desktop, 
+      // but the test environment usually renders everything unless we apply styles that jsdom respects (which it mostly doesn't for display:none).
+      // However, Header.tsx has `hidden md:flex` for the nav. 
+      // JSDOM doesn't compute layout, so elements with `hidden` class are still in the DOM unless we use a matcher that checks visibility.
+      // `getByText` finds it even if it's visually hidden, unless `display: none` is inline style.
+      // Tailwind classes are just strings to JSDOM.
+      expect(screen.getByText(link.label)).toBeInTheDocument();
+    });
   });
 });

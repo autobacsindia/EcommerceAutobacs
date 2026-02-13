@@ -145,7 +145,7 @@ export default function Header() {
         </div>
 
         {/* Bottom Row - Navigation Menu */}
-        <nav className="hidden md:flex items-center gap-6 h-10 overflow-x-auto no-scrollbar">
+        <nav className="hidden md:flex items-center justify-between gap-2 w-full h-10" data-version="v4">
           {NAV_LINKS.map((link, index) => {
             const isActive = pathname === link.href || 
               (link.href !== '/' && pathname.startsWith(link.href));

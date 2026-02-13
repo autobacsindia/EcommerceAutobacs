@@ -90,21 +90,16 @@ export default function SkeletonLoader({
                 <Skeleton className="h-6 w-32" />
               </div>
 
-              {/* Desktop Navigation skeleton */}
-              <nav className="hidden md:flex space-x-8 flex-1 max-w-4xl">
-                {[1, 2, 3, 4].map((item) => (
-                  <Skeleton key={item} className="h-4 w-16" />
-                ))}
-              </nav>
+              {/* Search Bar skeleton - Desktop (Center) */}
+              <div className="hidden md:block flex-1 max-w-4xl">
+                 <Skeleton className="w-full h-10 rounded-md" />
+              </div>
 
               {/* Right Section skeleton */}
               <div className="flex items-center space-x-4 text-white flex-shrink-0 ml-auto">
-                {/* Desktop Search skeleton */}
-                <div className="hidden md:block w-64">
-                  <div className="flex">
-                    <Skeleton className="w-full h-10 rounded-l-md rounded-r-none" />
-                    <Skeleton className="w-12 h-10 rounded-l-none rounded-r-md" />
-                  </div>
+                {/* Currency Switcher skeleton */}
+                <div className="hidden sm:block">
+                  <Skeleton className="h-8 w-20" />
                 </div>
 
                 {/* Cart skeleton */}
@@ -124,7 +119,14 @@ export default function SkeletonLoader({
                 </div>
               </div>
             </div>
-          </div>
+
+            {/* Bottom Row - Navigation Menu skeleton */}
+            <nav className="hidden md:flex items-center justify-between gap-2 w-full h-10">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((item) => (
+                <Skeleton key={item} className="h-4 w-16" />
+              ))}
+            </nav>
+            </div>
         </header>
       );
       

@@ -37,6 +37,13 @@ jest.mock('@/context/WishlistContext', () => ({
   })),
 }));
 
+// Mock CurrencyContext
+jest.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: jest.fn(() => ({
+    formatPrice: (price: number) => `₹${price.toLocaleString()}`,
+  })),
+}));
+
 // Mock fetch
 // global.fetch = jest.fn();
 
@@ -79,6 +86,7 @@ describe('SearchPage', () => {
   it('displays "Did you mean?" suggestions when there are no results', async () => {
     mockSearchParams.set('search', 'tesst');
     
+    // Mock for suggestions endpoint (server component call)
     (apiClient.get as jest.Mock).mockImplementation((url) => {
       if (url.includes('/products/suggestions')) {
         return Promise.resolve({
@@ -96,9 +104,14 @@ describe('SearchPage', () => {
     
     render(<SearchPage />);
     
+    // Wait for text to appear (adjust expectation based on actual UI)
     await waitFor(() => {
-      expect(screen.getByText(/Did you mean:/)).toBeInTheDocument();
-      expect(screen.getByText('test')).toBeInTheDocument();
+      // Look for the container or the specific text node
+      const didYouMean = screen.getByText(/Did you mean:/i);
+      expect(didYouMean).toBeInTheDocument();
+      
+      const suggestedTerm = screen.getByText('test', { selector: 'button' });
+      expect(suggestedTerm).toBeInTheDocument();
     });
   });
 

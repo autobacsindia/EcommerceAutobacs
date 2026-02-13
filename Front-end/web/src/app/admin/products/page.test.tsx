@@ -65,7 +65,9 @@ describe('AdminProductsPage', () => {
     fireEvent.change(searchInput, { target: { value: 'test' } });
 
     // Fast-forward debounce timer
-    jest.advanceTimersByTime(500);
+    await React.act(async () => {
+        jest.advanceTimersByTime(500);
+    });
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenCalledWith(

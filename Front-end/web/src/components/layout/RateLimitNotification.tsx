@@ -58,6 +58,10 @@ const RateLimitNotification: React.FC<RateLimitNotificationProps> = ({
       </div>
       <div className="mt-2 w-full bg-orange-200 rounded-full h-2">
         <div 
+          role="progressbar"
+          aria-valuenow={((retryAfter - timeLeft) / retryAfter) * 100}
+          aria-valuemin={0}
+          aria-valuemax={100}
           className="bg-orange-500 h-2 rounded-full transition-all duration-1000 ease-linear" 
           style={{ width: `${((retryAfter - timeLeft) / retryAfter) * 100}%` }}
         ></div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import RateLimitNotification from './RateLimitNotification';
 
 describe('RateLimitNotification', () => {
@@ -24,16 +24,20 @@ describe('RateLimitNotification', () => {
     render(<RateLimitNotification retryAfter={10} onDismiss={onDismissMock} />);
     
     // Initially shows 10 seconds
-    expect(screen.getByText(/Please wait 0:10 before trying again/)).toBeDefined();
+    expect(screen.getByText(/Please wait.*0:10.*before trying again/)).toBeDefined();
     
     // Advance timer by 5 seconds
-    jest.advanceTimersByTime(5000);
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
     
     // Should now show 5 seconds remaining
-    expect(screen.getByText(/Please wait 0:05 before trying again/)).toBeDefined();
+    expect(screen.getByText(/Please wait.*0:05.*before trying again/)).toBeDefined();
     
     // Advance timer by 5 more seconds
-    jest.advanceTimersByTime(5000);
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
     
     // Should have called onDismiss
     expect(onDismissMock).toHaveBeenCalledTimes(1);

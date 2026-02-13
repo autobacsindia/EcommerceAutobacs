@@ -137,7 +137,7 @@ describe('BrandProductsPage', () => {
     fireEvent.change(searchInput, { target: { value: 'Available' } });
 
     // Advance timer for debounce
-    act(() => {
+    await act(async () => {
       jest.advanceTimersByTime(500);
     });
 
@@ -162,7 +162,7 @@ describe('BrandProductsPage', () => {
     const searchInput = screen.getByPlaceholderText(/Search products/i);
     fireEvent.change(searchInput, { target: { value: 'Available' } });
     
-    act(() => {
+    await act(async () => {
       jest.advanceTimersByTime(500);
     });
 

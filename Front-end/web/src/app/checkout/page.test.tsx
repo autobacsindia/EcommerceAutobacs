@@ -1,9 +1,9 @@
-
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import CheckoutPage from './page';
 import apiClient from '@/lib/api';
+import { toast } from 'react-hot-toast';
 
 // Mock dependencies
 jest.mock('@/lib/api', () => ({
@@ -21,8 +21,10 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('react-hot-toast', () => ({
-  success: jest.fn(),
-  error: jest.fn(),
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+  },
 }));
 
 // Mock hooks
@@ -55,21 +57,28 @@ jest.mock('@/context/CartContext', () => ({
   }),
 }));
 
+// Mock useRazorpay to capture callbacks
+let mockRazorpayCallbacks: any = {};
+const mockProcessPayment = jest.fn();
+
 jest.mock('@/hooks/useRazorpay', () => ({
-  useRazorpay: () => ({
-    processPayment: jest.fn(),
-    isProcessing: false,
-  }),
+  useRazorpay: (callbacks: any) => {
+    mockRazorpayCallbacks = callbacks;
+    return {
+      processPayment: mockProcessPayment,
+      isProcessing: false,
+    };
+  },
 }));
 
-// Mock child components that might be complex
+// Mock child components
 jest.mock('@/components/checkout/PaymentMethodSelector', () => {
   return function MockPaymentMethodSelector({ selectedMethod, onSelect }: any) {
     return (
       <div data-testid="payment-method-selector">
         <button onClick={() => onSelect('razorpay')}>Select Razorpay</button>
         <button onClick={() => onSelect('cod')}>Select COD</button>
-        <span>Current: {selectedMethod}</span>
+        <span data-testid="selected-method">{selectedMethod}</span>
       </div>
     );
   };
@@ -78,6 +87,8 @@ jest.mock('@/components/checkout/PaymentMethodSelector', () => {
 describe('CheckoutPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRazorpayCallbacks = {};
+    
     // Default mock for profile fetch (no saved addresses)
     (apiClient.get as jest.Mock).mockResolvedValue({
       success: true,
@@ -90,49 +101,74 @@ describe('CheckoutPage', () => {
   it('renders checkout page with cart summary', async () => {
     render(<CheckoutPage />);
 
-    // Check for Order Summary
     await waitFor(() => {
       expect(screen.getByText('Review Your Cart')).toBeInTheDocument();
       expect(screen.getByText('Test Item')).toBeInTheDocument();
-      // Price appears in item list and subtotal, so we expect at least one
-      expect(screen.getAllByText('₹100.00').length).toBeGreaterThan(0); 
+      expect(screen.getAllByText(/100.00/).length).toBeGreaterThan(0); 
     });
   });
 
   it('shows address form when no saved addresses exist', async () => {
     render(<CheckoutPage />);
 
-    // Click "Continue to Shipping" to go to address step
     const proceedBtn = screen.getByText(/continue to shipping/i);
     fireEvent.click(proceedBtn);
 
-    // Should show address form
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/street address/i)).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/city/i)).toBeInTheDocument();
     });
   });
 
-  it('renders payment method selector', async () => {
-    render(<CheckoutPage />);
-
-    // Proceed to payment step usually requires filling address
-    // But we can check if the component renders or if we can get to it.
-    // The CheckoutPage might have steps.
-    // Let's check if we can find the "Continue to Shipping" button.
-    
-    const proceedBtn = screen.getByText(/continue to shipping/i);
-    expect(proceedBtn).toBeInTheDocument();
-    
-    fireEvent.click(proceedBtn);
-
-    // Now we are in address step
-    await waitFor(() => {
-        expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
+  it('allows selecting a saved address', async () => {
+    (apiClient.get as jest.Mock).mockResolvedValue({
+      success: true,
+      user: {
+        addresses: [
+          {
+            fullName: 'Saved User',
+            addressLine1: 'Saved St',
+            city: 'Saved City',
+            state: 'Saved State',
+            postalCode: '123456',
+            country: 'India',
+            phone: '9876543210',
+            isDefault: true
+          }
+        ],
+      },
     });
 
-    // Fill address form
+    render(<CheckoutPage />);
+
+    // Go to shipping
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+
+    await waitFor(() => {
+      expect(screen.getByText('Saved User')).toBeInTheDocument();
+      expect(screen.getByText('Saved St')).toBeInTheDocument();
+    });
+
+    // Click on the address to select it
+    fireEvent.click(screen.getByText('Saved User'));
+
+    // Continue to payment (Deliver to this address)
+    fireEvent.click(screen.getByText(/deliver to this address/i));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument();
+    });
+  });
+
+  it('completes order with COD', async () => {
+    render(<CheckoutPage />);
+
+    // Cart -> Shipping
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+
+    // Fill Address
+    await waitFor(() => {
+       expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
+    });
     fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
     fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
     fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
@@ -140,13 +176,106 @@ describe('CheckoutPage', () => {
     fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
     fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
 
-    // Find "Continue to Payment" button
-    const toPaymentBtn = screen.getByText(/continue to payment/i);
-    fireEvent.click(toPaymentBtn);
-    
-    // Now should be in payment step
+    // Shipping -> Payment
+    fireEvent.click(screen.getByText(/continue to payment/i));
+
     await waitFor(() => {
       expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument();
+    });
+
+    // Select COD
+    fireEvent.click(screen.getByText('Select COD'));
+    expect(screen.getByTestId('selected-method')).toHaveTextContent('cod');
+
+    // Continue to Review
+    fireEvent.click(screen.getByText(/continue to review/i));
+
+    await waitFor(() => {
+      expect(screen.getByText('Review Your Order')).toBeInTheDocument();
+    });
+
+    // Mock order creation API
+    (apiClient.post as jest.Mock).mockResolvedValue({
+      success: true,
+      order: {
+        _id: 'order_123',
+        totalAmount: 118
+      }
+    });
+
+    // Place Order
+    const placeOrderBtn = screen.getByText(/place order/i);
+    fireEvent.click(placeOrderBtn);
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith('/orders', expect.objectContaining({
+        paymentMethod: 'cod',
+        shippingAddress: expect.objectContaining({
+          fullName: 'John Doe'
+        })
+      }));
+      expect(mockClearCart).toHaveBeenCalled();
+      expect(screen.getByText('Order Placed Successfully!')).toBeInTheDocument();
+    });
+  });
+
+  it('completes order with Razorpay', async () => {
+    render(<CheckoutPage />);
+
+    // Cart -> Shipping
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+
+    // Fill Address
+    await waitFor(() => {
+       expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
+    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+
+    // Shipping -> Payment
+    fireEvent.click(screen.getByText(/continue to payment/i));
+
+    // Select Razorpay
+    fireEvent.click(screen.getByText('Select Razorpay'));
+
+    // Continue to Review
+    fireEvent.click(screen.getByText(/continue to review/i));
+
+    await waitFor(() => {
+      expect(screen.getByText('Review Your Order')).toBeInTheDocument();
+    });
+
+    // Mock order creation API
+    (apiClient.post as jest.Mock).mockResolvedValue({
+      success: true,
+      order: {
+        _id: 'order_123',
+        totalAmount: 118
+      }
+    });
+
+    // Setup processPayment to trigger success callback
+    mockProcessPayment.mockImplementation(async () => {
+       if (mockRazorpayCallbacks.onSuccess) {
+           await mockRazorpayCallbacks.onSuccess('order_123');
+       }
+    });
+
+    // Place Order
+    const placeOrderBtn = screen.getByText(/place order/i);
+    await act(async () => {
+        fireEvent.click(placeOrderBtn);
+    });
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalled();
+      expect(mockProcessPayment).toHaveBeenCalled();
+      expect(mockClearCart).toHaveBeenCalled();
+      expect(screen.getByText('Order Placed Successfully!')).toBeInTheDocument();
     });
   });
 });

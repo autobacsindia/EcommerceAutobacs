@@ -151,7 +151,7 @@ describe('VehicleProductsPage', () => {
     
     fireEvent.change(searchInput, { target: { value: 'Filter' } });
 
-    act(() => {
+    await act(async () => {
       jest.advanceTimersByTime(500);
     });
 
@@ -178,7 +178,7 @@ describe('VehicleProductsPage', () => {
     const modalSearchInput = screen.getByPlaceholderText(/Search products to add/i);
     fireEvent.change(modalSearchInput, { target: { value: 'Available' } });
 
-    act(() => {
+    await act(async () => {
       jest.advanceTimersByTime(500);
     });
 

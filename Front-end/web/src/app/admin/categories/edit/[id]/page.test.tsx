@@ -64,6 +64,11 @@ describe('EditCategoryPage', () => {
   it('renders loading state initially', async () => {
     render(<EditCategoryPage />);
     expect(screen.queryByLabelText(/^Name/i)).not.toBeInTheDocument();
+    
+    // Wait for data load to complete to avoid act() warnings
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/^Name/i)).toBeInTheDocument();
+    });
   });
 
   it('fetches and populates category data', async () => {
