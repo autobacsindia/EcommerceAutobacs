@@ -100,6 +100,23 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+        <Link 
+          href="/admin/brands" 
+          className="mt-4 inline-flex items-center gap-2 text-blue-600 hover:text-blue-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Brands
+        </Link>
+      </div>
+    );
+  }
+
   if (!brand) {
     return (
       <div className="p-8">

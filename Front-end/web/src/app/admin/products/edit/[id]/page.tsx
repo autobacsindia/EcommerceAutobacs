@@ -281,10 +281,11 @@ export default function EditProductPage() {
             <h2 className="text-xl font-semibold mb-4">Product Information</h2>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
                 Product Name *
               </label>
               <input
+                id="name"
                 type="text"
                 name="name"
                 value={formData.name}
@@ -312,10 +313,11 @@ export default function EditProductPage() {
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
                 Description *
               </label>
               <textarea
+                id="description"
                 name="description"
                 value={formData.description}
                 onChange={handleInputChange}
@@ -331,10 +333,11 @@ export default function EditProductPage() {
             <h2 className="text-xl font-semibold mb-4">Pricing & Inventory</h2>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
                 Price (₹) *
               </label>
               <input
+                id="price"
                 type="number"
                 name="price"
                 value={formData.price}
@@ -362,10 +365,11 @@ export default function EditProductPage() {
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
                 Stock Quantity *
               </label>
               <input
+                id="stock"
                 type="number"
                 name="stock"
                 value={formData.stock}
@@ -395,10 +399,11 @@ export default function EditProductPage() {
             <h2 className="text-xl font-semibold mb-4">Organization</h2>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
                 Category
               </label>
               <select
+                id="category"
                 name="category"
                 value={formData.category}
                 onChange={handleInputChange}
@@ -432,13 +437,14 @@ export default function EditProductPage() {
               </label>
               <div className="flex items-center">
                 <input
+                  id="isActive"
                   type="checkbox"
                   name="isActive"
                   checked={formData.isActive}
                   onChange={handleInputChange}
                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <span className="ml-2 text-sm text-gray-700">Active</span>
+                <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Active</label>
               </div>
             </div>
             
@@ -448,13 +454,14 @@ export default function EditProductPage() {
               </label>
               <div className="flex items-center">
                 <input
+                  id="isFeatured"
                   type="checkbox"
                   name="isFeatured"
                   checked={formData.isFeatured}
                   onChange={handleInputChange}
                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <span className="ml-2 text-sm text-gray-700">Mark as featured</span>
+                <label htmlFor="isFeatured" className="ml-2 text-sm text-gray-700">Mark as featured</label>
               </div>
             </div>
             
@@ -464,13 +471,14 @@ export default function EditProductPage() {
               </label>
               <div className="flex items-center">
                 <input
+                  id="isFastMoving"
                   type="checkbox"
                   name="isFastMoving"
                   checked={formData.isFastMoving}
                   onChange={handleInputChange}
                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <span className="ml-2 text-sm text-gray-700">Mark as fast moving</span>
+                <label htmlFor="isFastMoving" className="ml-2 text-sm text-gray-700">Mark as fast moving</label>
               </div>
             </div>
 
@@ -480,13 +488,14 @@ export default function EditProductPage() {
               </label>
               <div className="flex items-center">
                 <input
+                  id="isOfferFeatured"
                   type="checkbox"
                   name="isOfferFeatured"
                   checked={formData.isOfferFeatured}
                   onChange={handleInputChange}
                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <span className="ml-2 text-sm text-gray-700">Feature on offers page</span>
+                <label htmlFor="isOfferFeatured" className="ml-2 text-sm text-gray-700">Feature on offers page</label>
               </div>
               <p className="text-xs text-gray-500 mt-1">
                 If original price is higher than current price, discount will be shown automatically.
@@ -495,10 +504,11 @@ export default function EditProductPage() {
               {formData.isOfferFeatured && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="offerStartDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Offer Start Date
                     </label>
                     <input
+                      id="offerStartDate"
                       type="datetime-local"
                       name="offerStartDate"
                       value={formData.offerStartDate || ''}
@@ -507,10 +517,11 @@ export default function EditProductPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="offerEndDate" className="block text-sm font-medium text-gray-700 mb-1">
                       Offer End Date
                     </label>
                     <input
+                      id="offerEndDate"
                       type="datetime-local"
                       name="offerEndDate"
                       value={formData.offerEndDate || ''}

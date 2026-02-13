@@ -337,7 +337,7 @@ export default function EditCategoryPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
                 Category Image
               </label>
               <div className="flex items-start space-x-4">
