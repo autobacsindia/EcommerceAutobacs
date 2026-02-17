@@ -85,43 +85,53 @@ export const getFeaturedProducts = async (req, res) => {
 };
 
 export const getOfferProducts = async (req, res) => {
-  const { limit = 24 } = req.query;
-  const now = new Date();
+  try {
+    const { limit = 24 } = req.query;
+    const now = new Date();
 
-  const products = await Product.find({
-    isActive: true,
-    $and: [
-      {
-        $or: [
-          { isOfferFeatured: true },
-          { $expr: { $gt: ["$originalPrice", "$price"] } }
-        ]
-      },
-      {
-        $or: [
-          { offerStartDate: { $exists: false } },
-          { offerStartDate: null },
-          { offerStartDate: { $lte: now } }
-        ]
-      },
-      {
-        $or: [
-          { offerEndDate: { $exists: false } },
-          { offerEndDate: null },
-          { offerEndDate: { $gte: now } }
-        ]
-      }
-    ]
-  })
-    .populate('categories', 'name slug')
-    .limit(Number(limit))
-    .sort({ createdAt: -1 });
+    const products = await Product.find({
+      isActive: true,
+      $and: [
+        {
+          $or: [
+            { isOfferFeatured: true },
+            { $expr: { $gt: ["$originalPrice", "$price"] } }
+          ]
+        },
+        {
+          $or: [
+            { offerStartDate: { $exists: false } },
+            { offerStartDate: null },
+            { offerStartDate: { $lte: now } }
+          ]
+        },
+        {
+          $or: [
+            { offerEndDate: { $exists: false } },
+            { offerEndDate: null },
+            { offerEndDate: { $gte: now } }
+          ]
+        }
+      ]
+    })
+      .populate('categories', 'name slug')
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
 
-  res.json({
-    success: true,
-    count: products.length,
-    products
-  });
+    res.json({
+      success: true,
+      count: products.length,
+      products
+    });
+  } catch (error) {
+    console.error('Error in getOfferProducts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch offer products',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 };
 
 export const getProductsByVehicle = async (req, res) => {

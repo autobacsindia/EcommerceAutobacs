@@ -52,12 +52,11 @@ class LocationService {
     const headers: Record<string, string> = {};
     
     // DEBUG: Log session ID generation
-    const debugInfo = {
+    /* const debugInfo = {
       sessionId: this.sessionId,
       hasAuthToken: !!apiClient.getAuthToken(),
       willSendSessionId: !!this.sessionId
-    };
-    console.log('LocationService.getHeaders() debug:', JSON.stringify(debugInfo, null, 2));
+    }; */
     
     // Always send session ID if available
     // This ensures that if the auth token is invalid (expired/malformed),
@@ -66,7 +65,7 @@ class LocationService {
       headers['x-session-id'] = this.sessionId;
     }
     
-    console.log('LocationService headers:', JSON.stringify(headers, null, 2));
+    // console.log('LocationService headers:', JSON.stringify(headers, null, 2));
     
     return headers;
   }

@@ -32,12 +32,14 @@ class RateLimitLogger {
     }
 
     // Log to console for development
-    console.log('[Rate Limit Event]', {
-      endpoint,
-      retryAfter,
-      timestamp: new Date(event.timestamp).toISOString(),
-      userAgent: event.userAgent
-    });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Rate Limit Event]', {
+        endpoint,
+        retryAfter,
+        timestamp: new Date(event.timestamp).toISOString(),
+        userAgent: event.userAgent
+      });
+    }
 
     // In a production environment, you might send this data to your analytics service
     // Example:

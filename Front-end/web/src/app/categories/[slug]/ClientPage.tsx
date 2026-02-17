@@ -470,7 +470,7 @@ export default function ClientPage({ slug }: { slug: string }) {
               <Pagination
                 pagination={data.pagination}
                 currentPage={currentPage}
-                basePath={`/categories/${params.slug as string}`}
+                basePath={`/categories/${slug}`}
                 searchParams={searchParams}
               />
             )}

@@ -30,20 +30,17 @@ async function getProduct(id: string): Promise<any> {
     // This handles cases where search suggestions might pass a slug or name instead of an ObjectId
     if (isInvalidId || error?.status === 404) {
       try {
-        console.log(`Product not found by ID (${id}), attempting fallback search...`);
         // Search for the product using the ID as a keyword
         let searchResponse: any = await apiClient.get(`/products?search=${encodeURIComponent(id)}&limit=1`);
         
         // If first attempt fails and the ID looks like a slug (has dashes), try replacing dashes with spaces
         if ((!searchResponse?.products || searchResponse.products.length === 0) && id.includes('-')) {
           const cleanName = id.replace(/-/g, ' ');
-          console.log(`Fallback search attempt 2 with cleaned name: ${cleanName}`);
           searchResponse = await apiClient.get(`/products?search=${encodeURIComponent(cleanName)}&limit=1`);
         }
 
         if (searchResponse?.products && searchResponse.products.length > 0) {
           const foundProduct = searchResponse.products[0];
-          console.log(`Fallback search found product: ${foundProduct.name} (${foundProduct._id})`);
           
           // If we found a product, fetch full details using the real ID
           if (foundProduct._id) {

@@ -541,7 +541,9 @@ class APIClient {
       finalUrl = `${finalUrl}${separator}${params.toString()}`;
     }
 
-    console.log(`[API] Executing request: ${method} ${finalUrl}`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[API] Executing request: ${method} ${finalUrl}`);
+    }
     
     // Default settings
     let retries = options?.retries ?? 3;
@@ -666,7 +668,9 @@ class APIClient {
           const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
           const jitter = Math.random() * 0.25 * baseDelay;
           const retryAfter = Math.min(baseDelay + jitter, 60000); 
-          console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
+          }
           
           rateLimitLogger.logEvent(endpoint, error.rateLimitInfo?.retryAfter || Math.ceil(retryAfter / 1000));
           
