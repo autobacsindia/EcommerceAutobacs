@@ -20,19 +20,29 @@ export default function FixDuplicatePage() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
+      
+      // Explicitly clear state first to avoid stale data
+      setProduct1(null);
+      setProduct2(null);
+
+      // Add timestamp to force fresh fetch
+      const timestamp = new Date().getTime();
+
       // We handle 404s gracefully in case one is already deleted
       try {
-        const p1: any = await apiClient.get(`/products/${targetId}`);
+        const p1: any = await apiClient.get(`/products/${targetId}?t=${timestamp}`);
         setProduct1(p1.product);
       } catch (e) {
         console.warn('Target product not found');
+        setProduct1(null);
       }
 
       try {
-        const p2: any = await apiClient.get(`/products/${sourceId}`);
+        const p2: any = await apiClient.get(`/products/${sourceId}?t=${timestamp}`);
         setProduct2(p2.product);
       } catch (e) {
         console.warn('Source product not found');
+        setProduct2(null);
       }
     } catch (error) {
       console.error(error);
@@ -68,6 +78,11 @@ export default function FixDuplicatePage() {
       
       // Refresh data
       await fetchProducts();
+
+      // Reset status after a delay
+      setTimeout(() => {
+        setStatus('');
+      }, 3000);
     } catch (error) {
       console.error(error);
       toast.error('Operation failed');
