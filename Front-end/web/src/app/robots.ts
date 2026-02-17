@@ -14,13 +14,6 @@ export default function robots(): MetadataRoute.Robots {
         '/checkout/', 
         '/auth/',
         '/api/',
-        '/api-test/',
-        '/test-api/',
-        '/test-data/',
-        '/test-images/',
-        '/test-wordpress-api/',
-        '/demo/',
-        '/diagnostics/'
       ],
     },
     sitemap: `${baseUrl}/sitemap.xml`,
