@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -36,6 +37,13 @@ const RecentlyViewed = () => {
     }
   }, [user]);
 
+  const clearHistory = () => {
+    const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
+    localStorage.removeItem(storageKey);
+    setProducts([]);
+    toast.success('Recently viewed history cleared');
+  };
+
   if (!mounted || products.length === 0) {
     return null;
   }
@@ -43,7 +51,15 @@ const RecentlyViewed = () => {
   return (
     <div className="bg-white py-8">
       <div className="container mx-auto px-4">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">Recently Viewed</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">Recently Viewed</h2>
+          <button 
+            onClick={clearHistory}
+            className="text-sm text-red-600 hover:text-red-700 font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+          >
+            Clear History
+          </button>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {products.map((product) => (
             <Link 

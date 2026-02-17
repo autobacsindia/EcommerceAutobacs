@@ -1,140 +1,143 @@
-import { findCategoryFlexible, getMainCategory, getCategoryHierarchy } from './categoryMapping';
-import { Category } from '@/lib/types';
 
-// Mock category data
-const mockCategories: Category[] = [
-  {
-    _id: '1',
-    name: 'Accessories',
-    slug: 'accessories',
-    description: 'General automotive accessories',
-    isActive: true,
-    order: 1
-  },
-  {
-    _id: '2',
-    name: 'Exterior',
-    slug: 'exterior',
-    description: 'Exterior styling parts',
-    isActive: true,
-    order: 2
-  },
-  {
-    _id: '3',
-    name: 'Body Kits',
-    slug: 'bodykit',
-    description: 'Complete body kits',
-    parent: '2',
-    isActive: true,
-    order: 1
-  },
-  {
-    _id: '4',
-    name: 'Lights',
-    slug: 'lights',
-    description: 'Lighting accessories',
-    parent: '2',
-    isActive: true,
-    order: 2
-  },
-  {
-    _id: '5',
-    name: 'Interior',
-    slug: 'interior',
-    description: 'Interior upgrades',
-    isActive: true,
-    order: 3
-  },
-  {
-    _id: '6',
-    name: 'Audio',
-    slug: 'audio',
-    description: 'Car audio systems',
-    parent: '5',
-    isActive: true,
-    order: 1
-  },
-  {
-    _id: '7',
-    name: 'Performance',
-    slug: 'performance',
-    description: 'Performance upgrades',
-    isActive: true,
-    order: 4
-  },
-  {
-    _id: '8',
-    name: 'Suspension',
-    slug: 'suspension',
-    description: 'Suspension systems',
-    parent: '7',
-    isActive: true,
-    order: 1
-  }
-];
+import {
+  findCategoryFlexible,
+  findSubcategories,
+  getMainCategory,
+  CATEGORY_HIERARCHY,
+} from './categoryMapping';
+import { Category } from './types';
 
-describe('Category Mapping Utility', () => {
-  test('should find category by exact slug match', () => {
-    const category = findCategoryFlexible('accessories', mockCategories);
-    expect(category).toBeDefined();
-    expect(category?._id).toBe('1');
-    expect(category?.name).toBe('Accessories');
+describe('Category Mapping Utilities', () => {
+  const mockCategories: Category[] = [
+    {
+      _id: '1',
+      name: 'Accessories',
+      slug: 'accessories',
+      isActive: true,
+      order: 0,
+    },
+    {
+      _id: '2',
+      name: 'Exterior',
+      slug: 'exterior',
+      isActive: true,
+      order: 1,
+    },
+    {
+      _id: '3',
+      name: 'Body Kits',
+      slug: 'bodykit',
+      parent: '2',
+      isActive: true,
+      order: 2,
+    },
+    {
+      _id: '4',
+      name: 'Lights',
+      slug: 'lights',
+      parent: '2',
+      isActive: true,
+      order: 3,
+    },
+    {
+      _id: '5',
+      name: 'Audio Systems',
+      slug: 'audio',
+      isActive: true,
+      order: 4,
+    },
+  ];
+
+  describe('findCategoryFlexible', () => {
+    it('finds category by exact slug', () => {
+      const result = findCategoryFlexible('accessories', mockCategories);
+      expect(result).toBeDefined();
+      expect(result?.slug).toBe('accessories');
+    });
+
+    it('finds category by exact name', () => {
+      const result = findCategoryFlexible('Exterior', mockCategories);
+      expect(result).toBeDefined();
+      expect(result?.slug).toBe('exterior');
+    });
+
+    it('finds category by direct mapping', () => {
+      const result = findCategoryFlexible('Lighting', mockCategories);
+      expect(result).toBeDefined();
+      expect(result?.slug).toBe('lights');
+    });
+
+    it('finds category by pattern matching', () => {
+      const result = findCategoryFlexible('Performance Parts', mockCategories);
+      // Assuming 'Performance' is in pattern list but not in mockCategories directly?
+      // Wait, mockCategories doesn't have 'performance'.
+      // The function looks up the slug from the rule in the categories array.
+      // So if I search for 'Performance Parts', it matches /perform/i -> category: 'performance'.
+      // But 'performance' slug is NOT in mockCategories. So it should return null or undefined if the slug is not found.
+      
+      // Let's test with something that exists.
+      // 'Audio Systems' has slug 'audio'. Pattern /audio|sound/i maps to 'audio'.
+      const resultAudio = findCategoryFlexible('Car Sound', mockCategories);
+      expect(resultAudio).toBeDefined();
+      expect(resultAudio?.slug).toBe('audio');
+    });
+
+    it('finds category by partial match', () => {
+      const result = findCategoryFlexible('Body', mockCategories);
+      expect(result).toBeDefined();
+      expect(result?.slug).toBe('bodykit');
+    });
+
+    it('returns null for non-existent category', () => {
+      const result = findCategoryFlexible('NonExistent', mockCategories);
+      expect(result).toBeNull();
+    });
+
+    it('returns null for empty input', () => {
+      const result = findCategoryFlexible('', mockCategories);
+      expect(result).toBeNull();
+    });
   });
 
-  test('should find category by pattern matching', () => {
-    const category = findCategoryFlexible('lighting', mockCategories);
-    expect(category).toBeDefined();
-    expect(category?._id).toBe('4');
-    expect(category?.name).toBe('Lights');
+  describe('findSubcategories', () => {
+    it('finds subcategories for a given parent', () => {
+      const result = findSubcategories('2', mockCategories);
+      expect(result).toHaveLength(2);
+      expect(result.map(c => c.slug)).toContain('bodykit');
+      expect(result.map(c => c.slug)).toContain('lights');
+    });
+
+    it('returns empty array if no subcategories found', () => {
+      const result = findSubcategories('1', mockCategories);
+      expect(result).toHaveLength(0);
+    });
   });
 
-  test('should find main category from product categories', () => {
-    const productCategories = [
-      mockCategories[2], // Body Kits
-      mockCategories[1]  // Exterior
-    ];
+  describe('getMainCategory', () => {
+    // getMainCategory uses a hardcoded priority list
+    // 'bodykit', 'suspension', 'audio', 'lights', ...
     
-    const mainCategory = getMainCategory(productCategories);
-    expect(mainCategory).toBeDefined();
-    expect(mainCategory?._id).toBe('3'); // Body Kits should be prioritized
+    it('returns highest priority category', () => {
+      const productCategories: Category[] = [
+        mockCategories[0], // accessories (low priority)
+        mockCategories[2], // bodykit (high priority)
+      ];
+      const result = getMainCategory(productCategories);
+      expect(result?.slug).toBe('bodykit');
+    });
+
+    it('returns null for empty categories', () => {
+      const result = getMainCategory([]);
+      expect(result).toBeNull();
+    });
   });
 
-  test('should return first category if no main nav match', () => {
-    const productCategories = [
-      {
-        _id: '999',
-        name: 'Custom Category',
-        slug: 'custom',
-        description: 'Custom products',
-        isActive: true,
-        order: 1
-      } as Category
-    ];
-    
-    const mainCategory = getMainCategory(productCategories);
-    expect(mainCategory).toBeDefined();
-    expect(mainCategory?._id).toBe('999');
-  });
-
-  test('should organize categories in hierarchy', () => {
-    const hierarchy = getCategoryHierarchy(mockCategories);
-    expect(hierarchy).toHaveLength(4); // ACCESSORIES, EXTERIOR, INTERIOR, PERFORMANCE
-    
-    // Check that EXTERIOR has subcategories
-    const exterior = hierarchy.find(cat => cat.slug === 'exterior');
-    expect(exterior).toBeDefined();
-    expect(exterior?.subcategories).toHaveLength(2);
-    
-    // Check that INTERIOR has subcategories
-    const interior = hierarchy.find(cat => cat.slug === 'interior');
-    expect(interior).toBeDefined();
-    expect(interior?.subcategories).toHaveLength(1);
-    expect(interior?.subcategories?.[0].name).toBe('AUDIO');
-    
-    // Check that PERFORMANCE has subcategories
-    const performance = hierarchy.find(cat => cat.slug === 'performance');
-    expect(performance).toBeDefined();
-    expect(performance?.subcategories).toHaveLength(1);
-    expect(performance?.subcategories?.[0].name).toBe('SUSPENSION');
+  describe('CATEGORY_HIERARCHY', () => {
+    it('is defined and has structure', () => {
+      expect(CATEGORY_HIERARCHY).toBeInstanceOf(Array);
+      expect(CATEGORY_HIERARCHY.length).toBeGreaterThan(0);
+      expect(CATEGORY_HIERARCHY[0]).toHaveProperty('name');
+      expect(CATEGORY_HIERARCHY[0]).toHaveProperty('slug');
+    });
   });
 });

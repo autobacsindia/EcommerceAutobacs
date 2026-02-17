@@ -45,12 +45,27 @@ export default function RecentlyViewedProducts() {
     setImageErrors(prev => ({ ...prev, [id]: true }));
   };
 
+  const clearHistory = () => {
+    const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
+    localStorage.removeItem(storageKey);
+    setProducts([]);
+    toast.success('Recently viewed history cleared');
+  };
+
   if (products.length === 0) return null;
 
   return (
     <section className="py-12 bg-white border-t border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-8">Recently Viewed</h2>
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl font-bold text-gray-900">Recently Viewed</h2>
+          <button 
+            onClick={clearHistory}
+            className="text-sm text-red-600 hover:text-red-700 font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+          >
+            Clear History
+          </button>
+        </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
           {products.slice(0, 5).map((product) => (
