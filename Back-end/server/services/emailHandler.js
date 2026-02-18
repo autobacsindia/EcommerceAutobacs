@@ -17,6 +17,24 @@ class EmailHandler {
   }
 
   /**
+   * Helper to log messages only in non-test environment
+   */
+  log(message) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(message);
+    }
+  }
+
+  /**
+   * Helper to log errors only in non-test environment
+   */
+  error(message, ...args) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(message, ...args);
+    }
+  }
+
+  /**
    * Initialize SendGrid client and validate configuration
    */
   initialize() {
@@ -37,27 +55,27 @@ class EmailHandler {
     }
     
     if (!enableEmail) {
-      console.log('[EmailHandler] Email notifications disabled via configuration');
+      this.log('[EmailHandler] Email notifications disabled via configuration');
       return;
     }
     
     // Validate required credentials
     if (!apiKey) {
-      console.error('[EmailHandler] SENDGRID_API_KEY not found in environment variables');
-      console.error('[EmailHandler] Email notifications DISABLED');
+      this.error('[EmailHandler] SENDGRID_API_KEY not found in environment variables');
+      this.error('[EmailHandler] Email notifications DISABLED');
       return;
     }
     
     if (!this.fromEmail) {
-      console.error('[EmailHandler] SENDGRID_FROM_EMAIL not found in environment variables');
-      console.error('[EmailHandler] Email notifications DISABLED');
+      this.error('[EmailHandler] SENDGRID_FROM_EMAIL not found in environment variables');
+      this.error('[EmailHandler] Email notifications DISABLED');
       return;
     }
     
     // Validate email format
     if (!this.isValidEmail(this.fromEmail)) {
-      console.error(`[EmailHandler] Invalid sender email format: ${this.fromEmail}`);
-      console.error('[EmailHandler] Email notifications DISABLED');
+      this.error(`[EmailHandler] Invalid sender email format: ${this.fromEmail}`);
+      this.error('[EmailHandler] Email notifications DISABLED');
       return;
     }
     
@@ -65,10 +83,10 @@ class EmailHandler {
       // Initialize SendGrid
       sgMail.setApiKey(apiKey);
       this.isEnabled = true;
-      console.log(`[EmailHandler] Initialized successfully with sender: ${this.fromEmail}`);
+      this.log(`[EmailHandler] Initialized successfully with sender: ${this.fromEmail}`);
     } catch (error) {
-      console.error('[EmailHandler] Failed to initialize SendGrid:', error.message);
-      console.error('[EmailHandler] Email notifications DISABLED');
+      this.error('[EmailHandler] Failed to initialize SendGrid:', error.message);
+      this.error('[EmailHandler] Email notifications DISABLED');
     }
   }
 
@@ -124,7 +142,7 @@ class EmailHandler {
         // SendGrid returns array of responses
         const messageId = response[0]?.headers['x-message-id'];
         
-        console.log(`[EmailHandler] ✓ Email sent to ${to} | Subject: ${subject} | MessageID: ${messageId}`);
+        this.log(`[EmailHandler] ✓ Email sent to ${to} | Subject: ${subject} | MessageID: ${messageId}`);
         
         return {
           success: true,
@@ -140,7 +158,7 @@ class EmailHandler {
         // Check if error is retryable
         const isRetryable = this.isRetryableError(error);
         
-        console.error(`[EmailHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${to}:`, error.message);
+        this.error(`[EmailHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${to}:`, error.message);
         
         if (!isRetryable || attempt >= this.retryAttempts) {
           // Don't retry if error is not retryable or max attempts reached
@@ -149,7 +167,7 @@ class EmailHandler {
         
         // Exponential backoff delay
         const delay = this.retryDelay * Math.pow(2, attempt - 1);
-        console.log(`[EmailHandler] Retrying in ${delay}ms...`);
+        this.log(`[EmailHandler] Retrying in ${delay}ms...`);
         await this.sleep(delay);
       }
     }

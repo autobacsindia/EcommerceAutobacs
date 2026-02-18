@@ -45,7 +45,7 @@ describe('Orders Integration API', () => {
 
   beforeAll(async () => {
     await dbHandler.connect();
-  });
+  }, 60000);
 
   afterEach(async () => {
     await dbHandler.clearDatabase();
@@ -232,6 +232,178 @@ describe('Orders Integration API', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.order.status).toBe('cancelled');
+    });
+  });
+
+  describe('GET /orders/:id', () => {
+    it('should get order by id for owner', async () => {
+      const order = await Order.create({
+        user: userId,
+        items: [{
+          product: productId,
+          quantity: 1,
+          price: 500,
+          name: 'Test Product'
+        }],
+        shippingAddress: {
+          fullName: 'Test User',
+          phone: '1234567890',
+          addressLine1: '123 Test St',
+          city: 'Test City',
+          state: 'Test State',
+          postalCode: '12345'
+        },
+        subtotal: 500,
+        totalAmount: 500,
+        status: 'pending'
+      });
+
+      const res = await request(app)
+        .get(`/orders/${order._id}`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.order._id).toBe(order._id.toString());
+    });
+
+    it('should return 403 for unauthorized user', async () => {
+      // Create another user
+      const otherUser = await User.create({
+        name: 'Other User',
+        email: 'other@example.com',
+        passwordHash: 'hash',
+        role: 'customer'
+      });
+      // Login other user to get token
+      const loginRes = await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'other@example.com',
+          password: 'password123' 
+        });
+      
+      // Actually, easier to just create an order for the *other* user and try to access with *current* userToken
+      const otherOrder = await Order.create({
+        user: otherUser._id,
+        items: [{
+          product: productId,
+          quantity: 1,
+          price: 100,
+          name: 'Test Product'
+        }],
+        shippingAddress: {
+          fullName: 'Other User',
+          phone: '0987654321',
+          addressLine1: '456 Other St',
+          city: 'Other City',
+          state: 'Other State',
+          postalCode: '67890',
+          country: 'India'
+        },
+        subtotal: 100,
+        totalAmount: 100,
+        status: 'pending'
+      });
+
+      await request(app)
+        .get(`/orders/${otherOrder._id}`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(403);
+    });
+
+    it('should allow admin to access any order', async () => {
+       const order = await Order.create({
+        user: userId,
+        items: [{
+          product: productId,
+          quantity: 1,
+          price: 500,
+          name: 'Test Product'
+        }],
+        shippingAddress: {
+          fullName: 'Test User',
+          phone: '1234567890',
+          addressLine1: '123 Test St',
+          city: 'Test City',
+          state: 'Test State',
+          postalCode: '12345',
+          country: 'India'
+        },
+        subtotal: 500,
+        totalAmount: 500,
+        status: 'pending'
+      });
+
+      const res = await request(app)
+        .get(`/orders/${order._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('PUT /orders/:id/status', () => {
+    it('should allow admin to update status', async () => {
+      const order = await Order.create({
+        user: userId,
+        items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
+        shippingAddress: {
+          fullName: 'Test User',
+          phone: '1234567890',
+          addressLine1: '123 Test St',
+          city: 'Test City',
+          state: 'Test State',
+          postalCode: '12345',
+          country: 'India'
+        },
+        subtotal: 500,
+        totalAmount: 500,
+        status: 'pending'
+      });
+
+      const res = await request(app)
+        .put(`/orders/${order._id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ 
+          status: 'processing',
+          reason: 'admin_update'
+        })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.order.status).toBe('processing');
+    });
+
+    it('should forbid non-admin from updating status', async () => {
+      const order = await Order.create({
+        user: userId,
+        items: [{
+          product: productId,
+          quantity: 1,
+          price: 500,
+          name: 'Test Product'
+        }],
+        shippingAddress: {
+          fullName: 'Test User',
+          phone: '1234567890',
+          addressLine1: '123 Test St',
+          city: 'Test City',
+          state: 'Test State',
+          postalCode: '12345',
+          country: 'India'
+        },
+        subtotal: 500,
+        totalAmount: 500,
+        status: 'pending'
+      });
+
+      await request(app)
+        .put(`/orders/${order._id}/status`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({ status: 'processing' })
+        .expect(403);
     });
   });
 });

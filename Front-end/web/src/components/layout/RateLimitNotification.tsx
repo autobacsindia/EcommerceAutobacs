@@ -22,8 +22,7 @@ const RateLimitNotification: React.FC<RateLimitNotificationProps> = ({
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         const newTime = prev - 1;
-        if (newTime <= 0 && onDismiss) {
-          onDismiss();
+        if (newTime <= 0) {
           return 0;
         }
         return newTime;

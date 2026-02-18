@@ -34,10 +34,14 @@ class CategoryMappingService {
         this.categoryCache.set(normalizedName, category);
       });
       
-      console.log(`📚 Category mapping service initialized with ${categories.length} categories`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`📚 Category mapping service initialized with ${categories.length} categories`);
+      }
       this.initialized = true;
     } catch (error) {
-      console.error('❌ Failed to initialize category mapping service:', error.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('❌ Failed to initialize category mapping service:', error.message);
+      }
       throw error;
     }
   }

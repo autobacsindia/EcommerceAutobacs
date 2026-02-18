@@ -103,6 +103,17 @@ export const validateRefreshToken = (user, refreshToken) => {
 };
 
 /**
+ * Find user by refresh token
+ * @param {Model} UserModel - User mongoose model
+ * @param {string} refreshToken - Refresh token to search for
+ * @returns {Promise<Object|null>} - User document or null
+ */
+export const findUserByRefreshToken = async (UserModel, refreshToken) => {
+  const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  return await UserModel.findOne({ 'refreshTokens.token': hashedToken });
+};
+
+/**
  * Revoke a specific refresh token
  * @param {Object} user - User mongoose document
  * @param {string} refreshToken - Refresh token to revoke

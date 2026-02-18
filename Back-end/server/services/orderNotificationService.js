@@ -8,11 +8,17 @@ import smsHandler from './smsHandler.js';
 import notificationLogger from './notificationLogger.js';
 
 class OrderNotificationService {
+  log(message) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(message);
+    }
+  }
+
   /**
    * Send order placed notification
    */
   async sendOrderPlacedNotification(order, user) {
-    console.log(`[Notification] Order Placed - Order #${order._id} for ${user.email}`);
+    this.log(`[Notification] Order Placed - Order #${order._id} for ${user.email}`);
     
     const emailSubject = `Order Confirmation - Order #${order._id}`;
     const emailBody = this._generateOrderPlacedEmail(order, user);
@@ -40,7 +46,7 @@ class OrderNotificationService {
    * Send order confirmed notification
    */
   async sendOrderConfirmedNotification(order, user) {
-    console.log(`[Notification] Order Confirmed - Order #${order._id}`);
+    this.log(`[Notification] Order Confirmed - Order #${order._id}`);
     
     const emailSubject = `Payment Confirmed - Order #${order._id}`;
     const emailBody = this._generateOrderConfirmedEmail(order, user);
@@ -68,7 +74,7 @@ class OrderNotificationService {
    * Send order shipped notification
    */
   async sendOrderShippedNotification(order, user) {
-    console.log(`[Notification] Order Shipped - Order #${order._id}, Tracking: ${order.trackingNumber}`);
+    this.log(`[Notification] Order Shipped - Order #${order._id}, Tracking: ${order.trackingNumber}`);
     
     const emailSubject = `Your Order Has Shipped - Order #${order._id}`;
     const emailBody = this._generateOrderShippedEmail(order, user);
@@ -197,7 +203,7 @@ class OrderNotificationService {
    * Send return request approved notification
    */
   async sendReturnApprovedNotification(order, user) {
-    console.log(`[Notification] Return Approved - Order #${order._id}`);
+    this.log(`[Notification] Return Approved - Order #${order._id}`);
     
     const emailSubject = `Return Request Approved - Order #${order._id}`;
     const emailBody = this._generateReturnApprovedEmail(order, user);
@@ -220,7 +226,7 @@ class OrderNotificationService {
    * Send return request rejected notification
    */
   async sendReturnRejectedNotification(order, user, reason) {
-    console.log(`[Notification] Return Rejected - Order #${order._id}`);
+    this.log(`[Notification] Return Rejected - Order #${order._id}`);
     
     const emailSubject = `Return Request Update - Order #${order._id}`;
     const emailBody = this._generateReturnRejectedEmail(order, user, reason);
@@ -238,7 +244,7 @@ class OrderNotificationService {
    * Send item received notification
    */
   async sendItemReceivedNotification(order, user) {
-    console.log(`[Notification] Return Item Received - Order #${order._id}`);
+    this.log(`[Notification] Return Item Received - Order #${order._id}`);
     
     const emailSubject = `Return Item Received - Order #${order._id}`;
     const emailBody = this._generateItemReceivedEmail(order, user);
@@ -256,7 +262,7 @@ class OrderNotificationService {
    * Send refund processed notification
    */
   async sendRefundProcessedNotification(order, user, refundDetails) {
-    console.log(`[Notification] Refund Processed - Order #${order._id}, Amount: ${refundDetails.amount}`);
+    this.log(`[Notification] Refund Processed - Order #${order._id}, Amount: ${refundDetails.amount}`);
     
     const emailSubject = `Refund Processed - Order #${order._id}`;
     const emailBody = this._generateRefundProcessedEmail(order, user, refundDetails);
@@ -274,7 +280,7 @@ class OrderNotificationService {
    * Send tracking update notification
    */
   async sendTrackingUpdateNotification(order, user, event) {
-    console.log(`[Notification] Tracking Update - Order #${order._id}, Status: ${event.status}`);
+    this.log(`[Notification] Tracking Update - Order #${order._id}, Status: ${event.status}`);
     
     // Only send email for major events
     const majorEvents = ['picked_up', 'out_for_delivery', 'delivered', 'failed_delivery'];

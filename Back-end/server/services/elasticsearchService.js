@@ -45,11 +45,15 @@ class ElasticsearchService {
         maxRetries: 3
       });
       
-      console.log('ℹ Elasticsearch client initialized');
-      console.log(`  Node: ${node}`);
-      console.log(`  Timeout: ${retryTimeout}ms`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('ℹ Elasticsearch client initialized');
+        console.log(`  Node: ${node}`);
+        console.log(`  Timeout: ${retryTimeout}ms`);
+      }
     } catch (error) {
-      console.error('✗ Failed to initialize Elasticsearch client:', error.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('✗ Failed to initialize Elasticsearch client:', error.message);
+      }
       this.client = null;
       this.enabled = false;
     }

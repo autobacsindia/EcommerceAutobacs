@@ -2,9 +2,11 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../app.js';
 import Product from '../models/Product.js';
+import Category from '../models/Category.js';
 import User from '../models/User.js';
 import * as dbHandler from './db-handler.js';
 import bcrypt from 'bcryptjs';
+import categoryMappingService from '../services/categoryMappingService.js';
 
 describe('Products API', () => {
   let adminId;
@@ -203,6 +205,120 @@ describe('Products API', () => {
         .expect(200);
       
       expect(getRes.body.product.isActive).toBe(false);
+    });
+  });
+
+  describe('Advanced Filtering & Sorting', () => {
+    beforeEach(async () => {
+      // Create categories
+      const electronics = await Category.create({
+        name: 'Electronics',
+        slug: 'electronics'
+      });
+      const books = await Category.create({
+        name: 'Books',
+        slug: 'books'
+      });
+
+      // Force refresh of category mapping service
+      categoryMappingService.initialized = false;
+      categoryMappingService.categoryCache.clear();
+      await categoryMappingService.initialize();
+
+      // Seed additional products
+      await Product.create([
+        {
+          name: 'Electronics A',
+          description: 'Desc A',
+          price: 50,
+          stock: 10,
+          categories: [electronics._id],
+          brand: 'Sony',
+          images: [{ url: 'http://example.com/a.jpg' }]
+        },
+        {
+          name: 'Electronics B',
+          description: 'Desc B',
+          price: 150,
+          stock: 10,
+          categories: [electronics._id],
+          brand: 'Samsung',
+          images: [{ url: 'http://example.com/b.jpg' }]
+        },
+        {
+          name: 'Book C',
+          description: 'Desc C',
+          price: 200,
+          stock: 10,
+          categories: [books._id],
+          brand: 'Penguin',
+          images: [{ url: 'http://example.com/c.jpg' }]
+        }
+      ]);
+    });
+
+    it('should filter by category', async () => {
+      const res = await request(app)
+        .get('/products')
+        .query({ category: 'Electronics' })
+        .expect(200);
+      
+      expect(res.body.success).toBe(true);
+      const names = res.body.products.map(p => p.name);
+      expect(names).toContain('Electronics A');
+      expect(names).toContain('Electronics B');
+      expect(names).not.toContain('Book C');
+    });
+
+    it('should filter by brand', async () => {
+      const res = await request(app)
+        .get('/products')
+        .query({ brand: 'Samsung' })
+        .expect(200);
+      
+      expect(res.body.success).toBe(true);
+      const names = res.body.products.map(p => p.name);
+      expect(names).toContain('Electronics B');
+      expect(names).not.toContain('Electronics A');
+    });
+
+    it('should filter by price range', async () => {
+      const res = await request(app)
+        .get('/products')
+        .query({ minPrice: 100, maxPrice: 180 })
+        .expect(200);
+      
+      expect(res.body.success).toBe(true);
+      const names = res.body.products.map(p => p.name);
+      expect(names).toContain('Electronics B');
+      expect(names).not.toContain('Electronics A');
+      expect(names).not.toContain('Book C');
+    });
+
+    it('should sort by price ascending', async () => {
+      const res = await request(app)
+        .get('/products')
+        .query({ sortBy: 'price', order: 'asc' })
+        .expect(200);
+      
+      expect(res.body.success).toBe(true);
+      const prices = res.body.products.map(p => p.price);
+      const sortedPrices = [...prices].sort((a, b) => a - b);
+      expect(prices).toEqual(sortedPrices);
+    });
+  });
+
+  describe('Product Validation', () => {
+    it('should return 400 when creating product without required fields', async () => {
+       const invalidProduct = {
+        description: 'No Name'
+      };
+
+      await request(app)
+        .post('/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(invalidProduct)
+        .expect(400);
     });
   });
 });

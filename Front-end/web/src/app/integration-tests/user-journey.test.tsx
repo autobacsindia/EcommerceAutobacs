@@ -9,6 +9,10 @@ import apiClient from '@/lib/api';
 import orderService from '@/lib/services/orderService';
 import { toast } from 'react-hot-toast';
 import { useRouter, usePathname, useSearchParams, useParams } from 'next/navigation';
+import { useCart } from '@/context/CartContext';
+import { useAuth } from '@/context/AuthContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 // --- Mocks ---
 
@@ -120,50 +124,22 @@ const mockRemoveFromCart = jest.fn();
 const mockClearCart = jest.fn();
 
 jest.mock('@/context/CartContext', () => ({
-  useCart: () => ({
-    cart: {
-      items: [
-        { product: { _id: 'p1', name: 'Test Product 1', price: 100, images: [{ url: 'img1.jpg' }] }, quantity: 1 }
-      ],
-      total: 100,
-    },
-    addToCart: mockAddToCart,
-    updateQuantity: mockUpdateQuantity,
-    removeFromCart: mockRemoveFromCart,
-    clearCart: mockClearCart,
-    isLoading: false,
-  }),
+  useCart: jest.fn(),
 }));
 
 // Mock Auth Context
 jest.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({
-    user: { name: 'Test User', email: 'test@example.com' },
-    isAuthenticated: true,
-    isLoading: false,
-    login: jest.fn(),
-    logout: jest.fn(),
-  }),
+  useAuth: jest.fn(),
 }));
 
 // Mock Wishlist Context
 jest.mock('@/context/WishlistContext', () => ({
-  useWishlist: () => ({
-    wishlist: [],
-    addToWishlist: jest.fn(),
-    removeFromWishlist: jest.fn(),
-    isInWishlist: jest.fn().mockReturnValue(false),
-  }),
+  useWishlist: jest.fn(),
 }));
 
 // Mock Currency Context
 jest.mock('@/contexts/CurrencyContext', () => ({
-  useCurrency: () => ({
-    currency: 'INR',
-    setCurrency: jest.fn(),
-    exchangeRate: 1,
-    formatPrice: (price: number) => `₹${price}`,
-  }),
+  useCurrency: jest.fn(),
 }));
 
 // --- Test Data ---
@@ -209,9 +185,45 @@ describe('User Journey Integration Flow', () => {
     currentPath = '/products';
     currentSearchParams = new URLSearchParams();
     
+    // Setup Context Mocks
+    (useCart as jest.Mock).mockReturnValue({
+      cart: {
+        items: [
+          { product: { _id: 'p1', name: 'Test Product 1', price: 100, images: [{ url: 'img1.jpg' }] }, quantity: 1 }
+        ],
+        total: 100,
+      },
+      addToCart: mockAddToCart,
+      updateQuantity: mockUpdateQuantity,
+      removeFromCart: mockRemoveFromCart,
+      clearCart: mockClearCart,
+      isLoading: false,
+    });
+
+    (useAuth as jest.Mock).mockReturnValue({
+      user: { name: 'Test User', email: 'test@example.com' },
+      isAuthenticated: true,
+      isLoading: false,
+      login: jest.fn(),
+      logout: jest.fn(),
+    });
+
+    (useWishlist as jest.Mock).mockReturnValue({
+      wishlist: [],
+      addToWishlist: jest.fn(),
+      removeFromWishlist: jest.fn(),
+      isInWishlist: jest.fn().mockReturnValue(false),
+    });
+
+    (useCurrency as jest.Mock).mockReturnValue({
+      currency: 'INR',
+      setCurrency: jest.fn(),
+      exchangeRate: 1,
+      formatPrice: (price: number) => `₹${price}`,
+    });
+    
     // Setup API mocks
     (apiClient.get as jest.Mock).mockImplementation((url) => {
-      console.log('Mock API GET:', url);
       if (url.startsWith('/products/p1')) return Promise.resolve({ product: mockProductDetail });
       if (url.startsWith('/products')) return Promise.resolve({ 
         products: mockProducts, 
@@ -219,6 +231,8 @@ describe('User Journey Integration Flow', () => {
       });
       if (url.startsWith('/cart')) return Promise.resolve({ items: [], total: 0 });
       if (url.startsWith('/profile')) return Promise.resolve({ success: true, user: { addresses: [] } });
+      if (url.startsWith('/reviews')) return Promise.resolve({ reviews: [], total: 0 });
+      if (url.startsWith('/product-questions')) return Promise.resolve({ questions: [] });
       return Promise.resolve({});
     });
 
@@ -249,17 +263,14 @@ describe('User Journey Integration Flow', () => {
       back: jest.fn(),
     });
 
-    console.log('Rendering App for path:', currentPath);
     // This is a simplified simulation of routing
     if (currentPath.startsWith('/products/p1')) {
-      console.log('Rendering Product Detail with ID: p1');
       // The default export of ClientPage expects 'id' prop and fetches data internally
       return { 
         ...render(<ProductDetailClientPage id="p1" />),
         mockPush: pushMock 
       };
     } else if (currentPath === '/cart') {
-      console.log('Rendering Cart Page');
       return { 
         ...render(<CartPage />),
         mockPush: pushMock 
@@ -313,7 +324,9 @@ describe('User Journey Integration Flow', () => {
     renderApp();
 
     await waitFor(() => {
-      expect(screen.getByText('Add to Cart')).toBeInTheDocument();
+      const btn = screen.getByText('Add to Cart');
+      expect(btn).toBeInTheDocument();
+      expect(btn).not.toBeDisabled();
     });
 
     // Action: Click Add to Cart
@@ -321,10 +334,7 @@ describe('User Journey Integration Flow', () => {
 
     // Assert: Check Cart Context called
     await waitFor(() => {
-      expect(mockAddToCart).toHaveBeenCalledWith(expect.objectContaining({
-        productId: 'p1',
-        quantity: 1
-      }));
+      expect(mockAddToCart).toHaveBeenCalledWith('p1', 1);
     });
   });
 

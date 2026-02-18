@@ -30,6 +30,7 @@ import {
   generateTokenPair as generateSessionTokenPair,
   storeRefreshToken,
   validateRefreshToken,
+  findUserByRefreshToken,
   revokeRefreshToken,
   revokeAllRefreshTokens,
   rotateRefreshToken,
@@ -129,9 +130,13 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
       html: emailTemplate.html
     });
 
-    console.log(`[Auth] Verification email sent to ${newUser.email}`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[Auth] Verification email sent to ${newUser.email}`);
+    }
   } catch (error) {
-    console.error('[Auth] Failed to send verification email:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[Auth] Failed to send verification email:', error);
+    }
     // Continue with registration even if email fails
   }
 
@@ -231,19 +236,18 @@ router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res)
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.headers['user-agent'];
     
-    // Find user by checking all users' refresh tokens
-    // In production, consider adding user ID to refresh token payload
-    const users = await User.find({ 'refreshTokens.0': { $exists: true } });
-    let user = null;
-    
-    for (const u of users) {
-      if (validateRefreshToken(u, refreshToken)) {
-        user = u;
-        break;
-      }
-    }
+    // Find user by refresh token (optimized lookup)
+    const user = await findUserByRefreshToken(User, refreshToken);
     
     if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token'
+      });
+    }
+
+    // Verify token is still valid (not expired)
+    if (!validateRefreshToken(user, refreshToken)) {
       return res.status(401).json({
         success: false,
         message: 'Invalid or expired refresh token'
@@ -253,7 +257,9 @@ router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res)
     // Rotate refresh token (revoke old, generate new)
     const tokens = await rotateRefreshToken(user, refreshToken, ipAddress, userAgent);
     
-    console.log(`[Auth] Token refreshed for user: ${user.email}`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[Auth] Token refreshed for user: ${user.email}`);
+    }
     
     res.json({
       success: true,
@@ -263,7 +269,9 @@ router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res)
       expiresIn: tokens.accessTokenExpiry
     });
   } catch (error) {
-    console.error('[Auth] Token refresh error:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[Auth] Token refresh error:', error);
+    }
     return res.status(401).json({
       success: false,
       message: 'Invalid or expired refresh token'
@@ -278,7 +286,15 @@ router.post("/logout", asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
   if (refreshToken) {
-    await revokeRefreshToken(refreshToken);
+    try {
+      const user = await findUserByRefreshToken(User, refreshToken);
+      if (user) {
+        await revokeRefreshToken(user, refreshToken);
+      }
+    } catch (error) {
+      console.error('[Auth] Error revoking token during logout:', error);
+      // Continue with logout (clear cookie) even if DB update fails
+    }
   }
   
   // Clear refresh token cookie

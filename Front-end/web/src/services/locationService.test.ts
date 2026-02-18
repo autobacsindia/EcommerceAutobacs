@@ -361,10 +361,28 @@ describe('LocationService', () => {
         Object.defineProperty(global.navigator, 'geolocation', { value: originalGeo, writable: true });
     });
 
+    it('returns false on permission query error', async () => {
+      mockPermissions.query.mockRejectedValue(new Error('Permission API Error'));
+      const result = await locationService.isLocationDenied();
+      expect(result).toBe(false);
+    });
+
     it('checks if permission is granted', async () => {
       mockPermissions.query.mockResolvedValue({ state: 'granted' });
       const result = await locationService.checkLocationPermission();
       expect(result).toBe(true);
+    });
+
+    it('returns false if permission is not granted', async () => {
+      mockPermissions.query.mockResolvedValue({ state: 'prompt' });
+      const result = await locationService.checkLocationPermission();
+      expect(result).toBe(false);
+    });
+
+    it('returns false on check permission error', async () => {
+      mockPermissions.query.mockRejectedValue(new Error('Permission API Error'));
+      const result = await locationService.checkLocationPermission();
+      expect(result).toBe(false);
     });
   });
 
@@ -394,6 +412,55 @@ describe('LocationService', () => {
       });
 
       await expect(locationService.getCurrentCoordinates()).rejects.toThrow('Location permission denied');
+    });
+
+    it('rejects with error when coordinates are invalid', async () => {
+      const mockPosition = {
+        coords: { latitude: 1000, longitude: 2000 }, // Invalid
+      };
+      
+      mockGeolocation.getCurrentPosition.mockImplementation((success) => {
+        success(mockPosition);
+      });
+
+      await expect(locationService.getCurrentCoordinates()).rejects.toThrow('Invalid coordinates received from device');
+    });
+  });
+
+  describe('findNearestWarehouse', () => {
+    it('finds nearest warehouse', async () => {
+      const coords = { latitude: 10, longitude: 20 };
+      const warehouse = { id: 'wh_1', name: 'Main Warehouse' };
+      mockedApiClient.get.mockResolvedValue({ warehouse });
+
+      const result = await locationService.findNearestWarehouse(coords.latitude, coords.longitude);
+
+      expect(mockedApiClient.get).toHaveBeenCalledWith(
+        '/warehouses/nearest',
+        expect.objectContaining({
+            params: expect.objectContaining({
+                latitude: coords.latitude,
+                longitude: coords.longitude
+            })
+        })
+      );
+      expect(result).toEqual(warehouse);
+    });
+
+    it('returns null when no warehouse found (404)', async () => {
+      const error = { status: 404 };
+      mockedApiClient.get.mockRejectedValue(error);
+
+      const result = await locationService.findNearestWarehouse(0, 0);
+
+      expect(result).toBeNull();
+    });
+
+    it('throws error for non-404 errors', async () => {
+      const error = { status: 500, message: 'Server Error' };
+      mockedApiClient.get.mockRejectedValue(error);
+
+      await expect(locationService.findNearestWarehouse(0, 0)).rejects.toEqual(error);
     });
   });
 

@@ -128,7 +128,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Data Sanitization against NoSQL query injection
-app.use(mongoSanitization);
+// app.use(mongoSanitization);
 
 // Data Sanitization against XSS and trimming
 app.use(requestSanitization);

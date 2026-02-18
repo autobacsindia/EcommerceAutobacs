@@ -38,6 +38,15 @@ jest.mock('@/context/WishlistContext', () => ({
   })),
 }));
 
+// Mock CurrencyContext
+jest.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: jest.fn(() => ({
+    formatPrice: (price: number) => `AED ${price}`,
+    currency: { code: 'AED', symbol: 'AED', rate: 1 }
+  })),
+  CurrencyProvider: ({ children }: { children: React.ReactNode }) => children
+}));
+
 describe('OffersPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();

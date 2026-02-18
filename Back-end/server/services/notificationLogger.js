@@ -54,15 +54,19 @@ class NotificationLogger {
         metadata: logMetadata
       });
       
-      if (result?.success) {
-        console.log(`[NotificationLogger] ✓ Logged successful ${type} notification: ${notificationId}`);
-      } else {
-        console.log(`[NotificationLogger] ✗ Logged failed ${type} notification: ${notificationId} - ${result?.error}`);
+      if (process.env.NODE_ENV !== 'test') {
+        if (result?.success) {
+          console.log(`[NotificationLogger] ✓ Logged successful ${type} notification: ${notificationId}`);
+        } else {
+          console.log(`[NotificationLogger] ✗ Logged failed ${type} notification: ${notificationId} - ${result?.error}`);
+        }
       }
       
       return log;
     } catch (error) {
-      console.error('[NotificationLogger] Failed to log notification:', error.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('[NotificationLogger] Failed to log notification:', error.message);
+      }
       // Don't throw - logging failures shouldn't break notification flow
       return null;
     }
