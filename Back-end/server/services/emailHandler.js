@@ -251,6 +251,9 @@ class EmailHandler {
    * @returns {Promise} - Promise that resolves after delay
    */
   sleep(ms) {
+    if (process.env.NODE_ENV === 'test') {
+      return Promise.resolve();
+    }
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 

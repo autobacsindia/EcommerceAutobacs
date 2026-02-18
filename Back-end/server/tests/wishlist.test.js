@@ -30,7 +30,6 @@ let productId;
 let wishlistId;
 
 beforeAll(async () => {
-  console.log('[TestDebug] JWT_SECRET:', process.env.JWT_SECRET);
   await dbHandler.connect();
 });
 

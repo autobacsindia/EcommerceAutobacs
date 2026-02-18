@@ -16,39 +16,6 @@ const WishlistItemSchema = new mongoose.Schema({
   }
 });
 
-// Add comprehensive validation debugging
-WishlistItemSchema.pre('validate', function(next) {
-  console.log('WishlistItemSchema pre-validate hook:', {
-    doc: this.toObject(),
-    product: this.product,
-    addedAt: this.addedAt,
-    notes: this.notes
-  });
-  
-  // Check if product is valid
-  if (!this.product) {
-    console.error('WishlistItem validation error: product is required');
-  }
-  
-  next();
-});
-
-WishlistItemSchema.post('validate', function(doc, next) {
-  console.log('WishlistItemSchema post-validate hook:', doc.toObject());
-  next();
-});
-
-WishlistItemSchema.post('save', function(error, doc, next) {
-  if (error.name === 'ValidationError') {
-    console.error('WishlistItem save validation error:', {
-      error: error,
-      message: error.message,
-      errors: error.errors
-    });
-  }
-  next(error);
-});
-
 const SharedUserSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -94,45 +61,6 @@ const WishlistSchema = new mongoose.Schema({
   }
 }, { 
   timestamps: true 
-});
-
-// Add comprehensive validation debugging
-WishlistSchema.pre('validate', function(next) {
-  console.log('WishlistSchema pre-validate hook:', {
-    doc: this.toObject(),
-    user: this.user,
-    name: this.name,
-    items: this.items,
-    privacy: this.privacy
-  });
-  
-  // Check if user is valid
-  if (!this.user) {
-    console.error('Wishlist validation error: user is required');
-  }
-  
-  // Check if name is valid
-  if (!this.name) {
-    console.error('Wishlist validation error: name is required');
-  }
-  
-  next();
-});
-
-WishlistSchema.post('validate', function(doc, next) {
-  console.log('WishlistSchema post-validate hook:', doc.toObject());
-  next();
-});
-
-WishlistSchema.post('save', function(error, doc, next) {
-  if (error.name === 'ValidationError') {
-    console.error('Wishlist save validation error:', {
-      error: error,
-      message: error.message,
-      errors: error.errors
-    });
-  }
-  next(error);
 });
 
 // Index for user lookup

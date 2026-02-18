@@ -194,29 +194,13 @@ router.delete("/:id", protect, validateIdParam, asyncHandler(async (req, res) =>
 // @desc    Add item to wishlist
 // @access  Private
 router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncHandler(async (req, res) => {
-  // Log incoming request for debugging
-  console.log('Add to wishlist request:', {
-    params: req.params,
-    body: req.body,
-    user: req.user ? req.user.id : 'no user'
-  });
-  
-  // Log validation result
-  console.log('Request validation result:', req.validationErrors ? req.validationErrors() : 'No validation errors function');
-  
   const { id } = req.params;
   const { productId, notes } = req.body;
   
-  // Log extracted data
-  console.log('Extracted data:', { id, productId, notes });
-
   // Check if product exists and is active
-  console.log('Checking if product exists:', productId);
   const product = await Product.findById(productId);
-  console.log('Product lookup result:', { product: product ? 'found' : 'not found', isActive: product ? product.isActive : 'N/A' });
   
   if (!product || !product.isActive) {
-    console.log('Product not found or not active:', { productId, productExists: !!product, isActive: product ? product.isActive : 'N/A' });
     return res.status(404).json({
       success: false,
       message: 'Product not found or not available'
@@ -224,12 +208,9 @@ router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncH
   }
 
   // Find wishlist
-  console.log('Finding wishlist:', { wishlistId: id, userId: req.user.id });
   const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
-  console.log('Wishlist lookup result:', { wishlist: wishlist ? 'found' : 'not found', wishlistData: wishlist ? wishlist.toObject() : 'N/A' });
   
   if (!wishlist) {
-    console.log('Wishlist not found for user:', { wishlistId: id, userId: req.user.id });
     return res.status(404).json({
       success: false,
       message: 'Wishlist not found'
@@ -237,13 +218,11 @@ router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncH
   }
 
   // Check if product already in wishlist
-  console.log('Checking if product already in wishlist');
   const existingItem = wishlist.items.find(
     item => item.product.toString() === productId
   );
   
   if (existingItem) {
-    console.log('Product already in wishlist:', { productId, wishlistId: id });
     return res.status(400).json({
       success: false,
       message: 'Product already in wishlist'
@@ -251,38 +230,19 @@ router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncH
   }
 
   // Add item to wishlist
-  console.log('Adding item to wishlist');
   wishlist.items.push({ 
     product: productId,
     notes: notes || undefined
   });
   
-  try {
-    console.log('Saving wishlist');
-    await wishlist.save();
-    console.log('Populating wishlist');
-    await wishlist.populate('items.product', 'name price images stock isActive averageRating');
+  await wishlist.save();
+  await wishlist.populate('items.product', 'name price images stock isActive averageRating');
     
-    console.log('Item added to wishlist successfully:', { wishlistId: id, productId });
-    
-    res.json({
-      success: true,
-      message: 'Item added to wishlist',
-      wishlist
-    });
-  } catch (error) {
-    console.error('Error saving wishlist:', error);
-    console.error('Error details:', {
-      name: error.name,
-      message: error.message,
-      errors: error.errors,
-      stack: error.stack
-    });
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to add item to wishlist'
-    });
-  }
+  res.json({
+    success: true,
+    message: 'Item added to wishlist',
+    wishlist
+  });
 }));
 
 // @route   DELETE /wishlist/:id/items/:productId
