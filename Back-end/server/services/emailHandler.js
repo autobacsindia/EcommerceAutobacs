@@ -27,6 +27,15 @@ class EmailHandler {
     // Check if email notifications are enabled
     const enableEmail = process.env.ENABLE_EMAIL_NOTIFICATIONS !== 'false';
     
+    // Check if running in test environment
+    if (process.env.NODE_ENV === 'test') {
+      // In test environment, suppress errors about missing keys
+      if (!apiKey || !this.fromEmail) {
+        // console.log('[EmailHandler] Test environment detected: Email notifications disabled (mock mode)');
+        return;
+      }
+    }
+    
     if (!enableEmail) {
       console.log('[EmailHandler] Email notifications disabled via configuration');
       return;

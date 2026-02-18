@@ -5,6 +5,7 @@ process.env.MONGODB_URI = 'mongodb://localhost:27017/test-db';
 process.env.RAZORPAY_KEY_ID = 'rzp_test_1234567890abcdef';
 process.env.RAZORPAY_KEY_SECRET = 'test_secret_key_1234567890abcdef';
 process.env.SENDGRID_API_KEY = 'SG.test_key_1234567890abcdef';
+process.env.SENDGRID_FROM_EMAIL = 'test@example.com';
 process.env.EMAIL_FROM = 'test@example.com';
 process.env.WORDPRESS_SITE_URL = 'http://example.com';
 process.env.WORDPRESS_API_KEY = 'ck_test_123';
