@@ -13,12 +13,16 @@ class CronService {
    * Initialize all cron jobs
    */
   initializeCronJobs() {
-    console.log('Initializing cron jobs...');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('Initializing cron jobs...');
+    }
     
     // Schedule failed product import job to run at 11:10 AM daily
     this.scheduleFailedProductImport();
     
-    console.log('Cron jobs initialized');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('Cron jobs initialized');
+    }
   }
 
   /**
@@ -141,14 +145,18 @@ class CronService {
    * Stop all scheduled tasks
    */
   shutdown() {
-    console.log('Stopping all cron jobs...');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('Stopping all cron jobs...');
+    }
     this.scheduledTasks.forEach(item => {
       if (item.task) {
         item.task.stop();
       }
     });
     this.scheduledTasks = [];
-    console.log('All cron jobs stopped');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('All cron jobs stopped');
+    }
   }
 
   /**

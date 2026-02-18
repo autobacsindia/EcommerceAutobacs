@@ -20,7 +20,9 @@ class AdaptiveThrottlingService {
       this.checkScheduledProfiles();
     }, 60000);
     
-    console.log('✓ Adaptive Throttling Service initialized');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('✓ Adaptive Throttling Service initialized');
+    }
   }
   
   /**
@@ -239,7 +241,9 @@ class AdaptiveThrottlingService {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
     }
-    console.log('✓ Adaptive Throttling Service shut down');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('✓ Adaptive Throttling Service shut down');
+    }
   }
 }
 

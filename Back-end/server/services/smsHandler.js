@@ -18,6 +18,24 @@ class SmsHandler {
   }
 
   /**
+   * Helper to log messages only in non-test environment
+   */
+  log(message) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(message);
+    }
+  }
+
+  /**
+   * Helper to log errors only in non-test environment
+   */
+  error(message, ...args) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(message, ...args);
+    }
+  }
+
+  /**
    * Initialize Twilio client and validate configuration
    */
   initialize() {
@@ -28,34 +46,42 @@ class SmsHandler {
     // Check if SMS notifications are enabled
     const enableSms = process.env.ENABLE_SMS_NOTIFICATIONS !== 'false';
     
+    // Check if running in test environment
+    if (process.env.NODE_ENV === 'test') {
+      // In test environment, suppress errors about missing keys
+      if (!accountSid || !authToken || !this.fromPhone) {
+        return;
+      }
+    }
+    
     if (!enableSms) {
-      console.log('[SmsHandler] SMS notifications disabled via configuration');
+      this.log('[SmsHandler] SMS notifications disabled via configuration');
       return;
     }
     
     // Validate required credentials
     if (!accountSid) {
-      console.error('[SmsHandler] TWILIO_ACCOUNT_SID not found in environment variables');
-      console.error('[SmsHandler] SMS notifications DISABLED');
+      this.error('[SmsHandler] TWILIO_ACCOUNT_SID not found in environment variables');
+      this.error('[SmsHandler] SMS notifications DISABLED');
       return;
     }
     
     if (!authToken) {
-      console.error('[SmsHandler] TWILIO_AUTH_TOKEN not found in environment variables');
-      console.error('[SmsHandler] SMS notifications DISABLED');
+      this.error('[SmsHandler] TWILIO_AUTH_TOKEN not found in environment variables');
+      this.error('[SmsHandler] SMS notifications DISABLED');
       return;
     }
     
     if (!this.fromPhone) {
-      console.error('[SmsHandler] TWILIO_PHONE_NUMBER not found in environment variables');
-      console.error('[SmsHandler] SMS notifications DISABLED');
+      this.error('[SmsHandler] TWILIO_PHONE_NUMBER not found in environment variables');
+      this.error('[SmsHandler] SMS notifications DISABLED');
       return;
     }
     
     // Validate phone number format
     if (!this.isValidPhoneFormat(this.fromPhone)) {
-      console.error(`[SmsHandler] Invalid phone format: ${this.fromPhone}. Expected E.164 format (e.g., +91XXXXXXXXXX)`);
-      console.error('[SmsHandler] SMS notifications DISABLED');
+      this.error(`[SmsHandler] Invalid phone format: ${this.fromPhone}. Expected E.164 format (e.g., +91XXXXXXXXXX)`);
+      this.error('[SmsHandler] SMS notifications DISABLED');
       return;
     }
     
@@ -63,10 +89,10 @@ class SmsHandler {
       // Initialize Twilio client
       this.client = twilio(accountSid, authToken);
       this.isEnabled = true;
-      console.log(`[SmsHandler] Initialized successfully with sender: ${this.fromPhone}`);
+      this.log(`[SmsHandler] Initialized successfully with sender: ${this.fromPhone}`);
     } catch (error) {
-      console.error('[SmsHandler] Failed to initialize Twilio:', error.message);
-      console.error('[SmsHandler] SMS notifications DISABLED');
+      this.error('[SmsHandler] Failed to initialize Twilio:', error.message);
+      this.error('[SmsHandler] SMS notifications DISABLED');
     }
   }
 
@@ -104,7 +130,7 @@ class SmsHandler {
     const truncatedMessage = this.truncateMessage(message);
     
     if (truncatedMessage !== message) {
-      console.log(`[SmsHandler] Message truncated from ${message.length} to ${truncatedMessage.length} characters`);
+      this.log(`[SmsHandler] Message truncated from ${message.length} to ${truncatedMessage.length} characters`);
     }
     
     // Attempt to send with retry logic
@@ -118,7 +144,7 @@ class SmsHandler {
           to: formattedPhone
         });
         
-        console.log(`[SmsHandler] ✓ SMS sent to ${formattedPhone} | SID: ${response.sid} | Status: ${response.status}`);
+        this.log(`[SmsHandler] ✓ SMS sent to ${formattedPhone} | SID: ${response.sid} | Status: ${response.status}`);
         
         return {
           success: true,
@@ -137,7 +163,7 @@ class SmsHandler {
         // Check if error is retryable
         const isRetryable = this.isRetryableError(error);
         
-        console.error(`[SmsHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${formattedPhone}:`, error.message);
+        this.error(`[SmsHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${formattedPhone}:`, error.message);
         
         if (!isRetryable || attempt >= this.retryAttempts) {
           // Don't retry if error is not retryable or max attempts reached
@@ -146,7 +172,7 @@ class SmsHandler {
         
         // Exponential backoff delay
         const delay = this.retryDelay * Math.pow(2, attempt - 1);
-        console.log(`[SmsHandler] Retrying in ${delay}ms...`);
+        this.log(`[SmsHandler] Retrying in ${delay}ms...`);
         await this.sleep(delay);
       }
     }

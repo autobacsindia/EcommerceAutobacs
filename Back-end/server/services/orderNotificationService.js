@@ -119,7 +119,7 @@ class OrderNotificationService {
    * Send order delivered notification
    */
   async sendOrderDeliveredNotification(order, user) {
-    console.log(`[Notification] Order Delivered - Order #${order._id}`);
+    this.log(`[Notification] Order Delivered - Order #${order._id}`);
     
     const emailSubject = `Order Delivered - Order #${order._id}`;
     const emailBody = this._generateOrderDeliveredEmail(order, user);
@@ -163,7 +163,7 @@ class OrderNotificationService {
    * Send order cancelled notification
    */
   async sendOrderCancelledNotification(order, user, refundDetails = null) {
-    console.log(`[Notification] Order Cancelled - Order #${order._id}`);
+    this.log(`[Notification] Order Cancelled - Order #${order._id}`);
     
     const emailSubject = `Order Cancelled - Order #${order._id}`;
     const emailBody = this._generateOrderCancelledEmail(order, user, refundDetails);
@@ -181,7 +181,7 @@ class OrderNotificationService {
    * Send return request submitted notification
    */
   async sendReturnRequestSubmittedNotification(order, user) {
-    console.log(`[Notification] Return Request Submitted - Order #${order._id}`);
+    this.log(`[Notification] Return Request Submitted - Order #${order._id}`);
     
     // Customer notification
     const customerSubject = `Return Request Received - Order #${order._id}`;
@@ -194,7 +194,7 @@ class OrderNotificationService {
     });
     
     // Admin notification (mock - in production, send to admin email list)
-    console.log(`[Admin Alert] New return request for Order #${order._id}`);
+    this.log(`[Admin Alert] New return request for Order #${order._id}`);
     
     return { success: true };
   }
@@ -571,7 +571,7 @@ Autobacs Team
       });
       
       // Fallback to console if service not enabled
-      if (result.fallbackToConsole) {
+      if (result.fallbackToConsole && process.env.NODE_ENV !== 'test') {
         console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📧 EMAIL NOTIFICATION (Mock - Service Disabled)
@@ -586,7 +586,9 @@ ${body}
       
       return result;
     } catch (error) {
-      console.error('[OrderNotificationService] Email send error:', error.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('[OrderNotificationService] Email send error:', error.message);
+      }
       return {
         success: false,
         error: error.message,
@@ -607,7 +609,7 @@ ${body}
       });
       
       // Fallback to console if service not enabled
-      if (result.fallbackToConsole) {
+      if (result.fallbackToConsole && process.env.NODE_ENV !== 'test') {
         console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📱 SMS NOTIFICATION (Mock - Service Disabled)
@@ -620,7 +622,9 @@ Message: ${message}
       
       return result;
     } catch (error) {
-      console.error('[OrderNotificationService] SMS send error:', error.message);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('[OrderNotificationService] SMS send error:', error.message);
+      }
       return {
         success: false,
         error: error.message,

@@ -121,7 +121,9 @@ class LocationService {
       
       return response;
     } catch (error: any) {
-      console.error('Select location error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Select location error:', error);
+      }
       
       // Handle Network Error / Failed to fetch
       if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
@@ -168,7 +170,9 @@ class LocationService {
         localStorage.removeItem('autobacs_current_location');
         return null;
       }
-      console.error('Get current location error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Get current location error:', error);
+      }
       throw error;
     }
   }
@@ -181,7 +185,9 @@ class LocationService {
       const cached = localStorage.getItem('autobacs_current_location');
       return cached ? JSON.parse(cached) : null;
     } catch (error) {
-      console.error('Get cached location error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Get cached location error:', error);
+      }
       return null;
     }
   }
@@ -196,7 +202,9 @@ class LocationService {
         { postalCode }
       );
     } catch (error) {
-      console.error('Validate address error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Validate address error:', error);
+      }
       throw error;
     }
   }
@@ -214,7 +222,9 @@ class LocationService {
       );
       return response.locations || [];
     } catch (error) {
-      console.error('Get recent locations error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Get recent locations error:', error);
+      }
       throw error;
     }
   }
@@ -230,7 +240,9 @@ class LocationService {
       );
       localStorage.removeItem('autobacs_current_location');
     } catch (error) {
-      console.error('Clear location error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Clear location error:', error);
+      }
       throw error;
     }
   }
@@ -247,7 +259,9 @@ class LocationService {
         }
       );
     } catch (error) {
-      console.error('Get delivery estimate error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Get delivery estimate error:', error);
+      }
       throw error;
     }
   }
@@ -262,7 +276,9 @@ class LocationService {
         data
       );
     } catch (error) {
-      console.error('Calculate shipping cost error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Calculate shipping cost error:', error);
+      }
       throw error;
     }
   }
@@ -276,7 +292,9 @@ class LocationService {
         `/warehouses/products/${productId}/availability`
       );
     } catch (error) {
-      console.error('Check product availability error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Check product availability error:', error);
+      }
       throw error;
     }
   }
@@ -291,7 +309,9 @@ class LocationService {
         data
       );
     } catch (error) {
-      console.error('Select warehouse for order error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Select warehouse for order error:', error);
+      }
       throw error;
     }
   }
@@ -316,7 +336,9 @@ class LocationService {
       if (error.status === 404) {
         return null;
       }
-      console.error('Find nearest warehouse error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Find nearest warehouse error:', error);
+      }
       throw error;
     }
   }
@@ -328,7 +350,9 @@ class LocationService {
     try {
       return await apiClient.get(`/delivery-zones/pincode/${pinCode}`);
     } catch (error) {
-      console.error('Get zone by PIN code error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Get zone by PIN code error:', error);
+      }
       throw error;
     }
   }
@@ -345,7 +369,9 @@ class LocationService {
       const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
       return permission.state === 'denied';
     } catch (error) {
-      console.error('Check location permission error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Check location permission error:', error);
+      }
       return false;
     }
   }
@@ -362,7 +388,9 @@ class LocationService {
       const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
       return permission.state === 'granted';
     } catch (error) {
-      console.error('Check location permission error:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Check location permission error:', error);
+      }
       return false;
     }
   }
@@ -404,7 +432,7 @@ class LocationService {
               break;
           }
           
-          if (error.code !== error.PERMISSION_DENIED) {
+          if (error.code !== error.PERMISSION_DENIED && process.env.NODE_ENV !== 'test') {
             console.error('Get current coordinates error:', error);
           }
           

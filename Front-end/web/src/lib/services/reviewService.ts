@@ -14,7 +14,9 @@ export const getReviewSummary = async (productId: string): Promise<ReviewSummary
     const response = await apiClient.get(`/reviews/products/${productId}/summary`);
     return response.summary;
   } catch (error) {
-    console.error('Error fetching review summary:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Error fetching review summary:', error);
+    }
     throw error;
   }
 };
@@ -64,7 +66,9 @@ export const getReviews = async (
       }
     };
   } catch (error) {
-    console.error('Error fetching reviews:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Error fetching reviews:', error);
+    }
     throw error;
   }
 };
@@ -81,7 +85,9 @@ export const submitReview = async (
       review: response.review
     };
   } catch (error) {
-    console.error('Error submitting review:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Error submitting review:', error);
+    }
     throw error;
   }
 };
@@ -96,7 +102,9 @@ export const markReviewAsHelpful = async (
       helpfulCount: response.helpfulCount
     };
   } catch (error) {
-    console.error('Error marking review as helpful:', error);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Error marking review as helpful:', error);
+    }
     throw error;
   }
 };

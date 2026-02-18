@@ -458,9 +458,13 @@ class APIClient {
           // Enhanced logging to ensure error details are visible even if object serialization fails
           const status = errorDetails.status || (error as any)?.status || 'unknown';
           const url = errorDetails.url || (response as any)?.url || '';
-          console.error(`API Response Error [${status}] ${url}:`, errorDetails);
+          if (process.env.NODE_ENV !== 'test') {
+            console.error(`API Response Error [${status}] ${url}:`, errorDetails);
+          }
         } else {
-          console.warn('Rate limit hit:', errorDetails);
+          if (process.env.NODE_ENV !== 'test') {
+            console.warn('Rate limit hit:', errorDetails);
+          }
         }
       }
     
@@ -541,7 +545,7 @@ class APIClient {
       finalUrl = `${finalUrl}${separator}${params.toString()}`;
     }
 
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
       console.log(`[API] Executing request: ${method} ${finalUrl}`);
     }
     
@@ -668,7 +672,7 @@ class APIClient {
           const baseDelay = error.rateLimitInfo?.retryAfter ? error.rateLimitInfo.retryAfter * 1000 : (retryDelay * Math.pow(2, i));
           const jitter = Math.random() * 0.25 * baseDelay;
           const retryAfter = Math.min(baseDelay + jitter, 60000); 
-          if (process.env.NODE_ENV !== 'production') {
+          if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
             console.log(`Rate limited. Waiting ${Math.round(retryAfter)}ms before retry ${i + 1}/${retries}`);
           }
           

@@ -21,8 +21,10 @@ class ElasticsearchService {
     };
     
     if (!this.enabled) {
-      console.log('ℹ Elasticsearch is disabled. Using MongoDB for search operations.');
-      console.log('  To enable: Set ELASTICSEARCH_ENABLED=true in .env file');
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('ℹ Elasticsearch is disabled. Using MongoDB for search operations.');
+        console.log('  To enable: Set ELASTICSEARCH_ENABLED=true in .env file');
+      }
       this.client = null;
       return;
     }

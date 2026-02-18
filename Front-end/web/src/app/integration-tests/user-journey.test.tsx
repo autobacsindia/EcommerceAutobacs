@@ -70,13 +70,13 @@ jest.mock('next/navigation', () => ({
 // Mock Image (Next.js)
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: (props: any) => <img {...props} />,
+  default: ({ priority, jsx, ...props }: any) => <img {...props} />,
 }));
 
 // Mock EnhancedImage
 jest.mock('@/components/layout/EnhancedImage', () => ({
   __esModule: true,
-  default: (props: any) => <img {...props} alt={props.alt || 'enhanced-image'} />
+  default: ({ priority, jsx, ...props }: any) => <img {...props} alt={props.alt || 'enhanced-image'} />
 }));
 
 // Mock SkeletonLoader
@@ -231,7 +231,13 @@ describe('User Journey Integration Flow', () => {
       });
       if (url.startsWith('/cart')) return Promise.resolve({ items: [], total: 0 });
       if (url.startsWith('/profile')) return Promise.resolve({ success: true, user: { addresses: [] } });
-      if (url.startsWith('/reviews')) return Promise.resolve({ reviews: [], total: 0 });
+      if (url.includes('/summary')) return Promise.resolve({ 
+        summary: { averageRating: 4.5, totalReviews: 10, ratingDistribution: { 5: 5, 4: 5, 3: 0, 2: 0, 1: 0 } } 
+      });
+      if (url.startsWith('/reviews')) return Promise.resolve({ 
+        reviews: [], 
+        pagination: { currentPage: 1, totalPages: 1, totalReviews: 0, hasNext: false, hasPrev: false } 
+      });
       if (url.startsWith('/product-questions')) return Promise.resolve({ questions: [] });
       return Promise.resolve({});
     });
