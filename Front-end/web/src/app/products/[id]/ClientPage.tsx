@@ -67,7 +67,6 @@ async function getProduct(id: string): Promise<any> {
 }
 
 function ProductDetailPageClient({ product }: { product: any }) {
-  console.log('ProductDetailPageClient received product:', product);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuth();

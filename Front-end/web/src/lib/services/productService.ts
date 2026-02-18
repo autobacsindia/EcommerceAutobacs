@@ -67,7 +67,9 @@ class ProductService {
         }
       };
     } catch (error) {
-      console.error('Error fetching products from API:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error fetching products from API:', error);
+      }
       throw error;
     }
   }
@@ -78,7 +80,9 @@ class ProductService {
       const response: any = await apiClient.get(`/products/${id}`);
       return response.product || null;
     } catch (error) {
-      console.error(`Error fetching product ${id} from API:`, error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error(`Error fetching product ${id} from API:`, error);
+      }
       return null;
     }
   }
@@ -94,7 +98,9 @@ class ProductService {
       const products: CleanProductData[] = await response.json();
       return products;
     } catch (error) {
-      console.error('Error loading static products:', error);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error('Error loading static products:', error);
+      }
       return [];
     }
   }
@@ -113,7 +119,9 @@ class ProductService {
         const response: any = await apiClient.get(`/products/featured?limit=${limit}`);
         return response.products || [];
       } catch (error) {
-        console.error('Error fetching featured products from API:', error);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error('Error fetching featured products from API:', error);
+        }
         return [];
       }
     }
@@ -176,7 +184,9 @@ class ProductService {
           total: response.pagination.total || response.products.length
         };
       } catch (error) {
-        console.error('Error searching products via API:', error);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error('Error searching products via API:', error);
+        }
         return { products: [], total: 0 };
       }
     }
@@ -211,7 +221,9 @@ class ProductService {
           productCount: brand.productCount
         }));
       } catch (error) {
-        console.error('Error fetching brands from API:', error);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error('Error fetching brands from API:', error);
+        }
         return [];
       }
     }
@@ -235,7 +247,9 @@ class ProductService {
         const response = await this.fetchProductsFromAPI({ category: categoryId, limit });
         return response.products as CleanProductData[];
       } catch (error) {
-        console.error(`Error fetching products for category ${categoryId}:`, error);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error(`Error fetching products for category ${categoryId}:`, error);
+        }
         return [];
       }
     }
@@ -257,7 +271,9 @@ class ProductService {
         const response = await this.fetchProductsFromAPI({ brand: brandName, limit });
         return response.products as CleanProductData[];
       } catch (error) {
-        console.error(`Error fetching products for brand ${brandName}:`, error);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error(`Error fetching products for brand ${brandName}:`, error);
+        }
         return [];
       }
     }
@@ -267,7 +283,9 @@ class ProductService {
   clearProductCache(): void {
     // In a real implementation, this would clear any cached product data
     // For now, we're just logging the action
-    console.log('Product cache cleared');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('Product cache cleared');
+    }
     
     // If using localStorage for caching, you might do something like:
     // localStorage.removeItem('cached_products');

@@ -88,7 +88,10 @@ describe('WishlistPage Component', () => {
   it('handles add to cart', async () => {
     render(<WishlistPage />);
     // Assuming there is an add to cart button
-    const addToCartButton = screen.getByText(/Add to Cart/i) || screen.getByTestId('icon-cart').closest('button');
+    // Try to find by text first, then by icon
+    const addToCartButton = screen.queryByText(/Add to Cart/i) || screen.getByTestId('icon-cart').closest('button');
+    expect(addToCartButton).toBeInTheDocument();
+    
     if (addToCartButton) {
         fireEvent.click(addToCartButton);
         await waitFor(() => {
@@ -99,7 +102,10 @@ describe('WishlistPage Component', () => {
 
   it('handles remove from wishlist', async () => {
     render(<WishlistPage />);
-    const removeButton = screen.getByTestId('icon-trash').closest('button');
+    const removeIcon = screen.getByTestId('icon-trash');
+    const removeButton = removeIcon.closest('button');
+    expect(removeButton).toBeInTheDocument();
+    
     if (removeButton) {
       fireEvent.click(removeButton);
       await waitFor(() => {

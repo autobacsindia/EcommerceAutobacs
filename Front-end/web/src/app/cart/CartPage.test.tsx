@@ -78,7 +78,10 @@ describe('CartPage Component', () => {
 
   it('handles remove item', async () => {
     render(<CartPage />);
-    const removeButton = screen.getByTestId('icon-trash').closest('button');
+    const removeIcon = screen.getByTestId('icon-trash');
+    const removeButton = removeIcon.closest('button');
+    expect(removeButton).toBeInTheDocument();
+    
     if (removeButton) {
       fireEvent.click(removeButton);
       expect(global.confirm).toHaveBeenCalled();
@@ -90,7 +93,10 @@ describe('CartPage Component', () => {
 
   it('handles update quantity', async () => {
     render(<CartPage />);
-    const plusButton = screen.getByTestId('icon-plus').closest('button');
+    const plusIcon = screen.getByTestId('icon-plus');
+    const plusButton = plusIcon.closest('button');
+    expect(plusButton).toBeInTheDocument();
+    
     if (plusButton) {
       fireEvent.click(plusButton);
       await waitFor(() => {
@@ -98,7 +104,10 @@ describe('CartPage Component', () => {
       });
     }
 
-    const minusButton = screen.getByTestId('icon-minus').closest('button');
+    const minusIcon = screen.getByTestId('icon-minus');
+    const minusButton = minusIcon.closest('button');
+    expect(minusButton).toBeInTheDocument();
+    
     if (minusButton) {
       fireEvent.click(minusButton);
       await waitFor(() => {

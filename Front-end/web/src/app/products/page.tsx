@@ -194,7 +194,9 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
         }
       };
       
-      console.error(`Error fetching products (attempt ${attempt + 1}/${retries + 1}):`, errorInfo);
+      if (process.env.NODE_ENV !== 'test') {
+        console.error(`Error fetching products (attempt ${attempt + 1}/${retries + 1}):`, errorInfo);
+      }
       
       // If this is the last attempt, re-throw the error
       if (attempt === retries) {

@@ -31,8 +31,8 @@ class RateLimitLogger {
       this.events = this.events.slice(0, this.MAX_EVENTS);
     }
 
-    // Log to console for development
-    if (process.env.NODE_ENV !== 'production') {
+    // Log to console for development (but not in test)
+    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
       console.log('[Rate Limit Event]', {
         endpoint,
         retryAfter,
