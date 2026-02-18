@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
+import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Package, Eye, Filter, Search, ChevronDown } from 'lucide-react';
 import OrderHistorySkeleton from '@/components/skeletons/OrderHistorySkeleton';
@@ -68,9 +69,9 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}?page=${currentPage}&limit=${ordersPerPage}`);
-      setOrders((response as any).orders || []);
-      setTotalPages((response as any).pagination?.totalPages || 1);
+      const response = await orderService.getUserOrders(currentPage, ordersPerPage);
+      setOrders((response.orders as unknown as Order[]) || []);
+      setTotalPages(response.pagination?.totalPages || 1);
     } catch (err: any) {
       setError(err.message || 'Failed to load orders');
     } finally {

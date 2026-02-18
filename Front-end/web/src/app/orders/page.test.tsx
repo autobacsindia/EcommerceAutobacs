@@ -2,11 +2,11 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import OrdersPage from './page';
 import { useAuth } from '@/context/AuthContext';
-import apiClient from '@/lib/api';
+import orderService from '@/lib/services/orderService';
 
 // Mock dependencies
 jest.mock('@/context/AuthContext');
-jest.mock('@/lib/api');
+jest.mock('@/lib/services/orderService');
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: jest.fn(),
@@ -85,10 +85,10 @@ describe('OrdersPage', () => {
       isLoading: false,
       user: mockUser,
     });
-    (apiClient.get as jest.Mock).mockResolvedValue(mockOrders);
+    (orderService.getUserOrders as jest.Mock).mockResolvedValue(mockOrders);
   });
 
-  it('renders loading skeleton initially', () => {
+  it('renders loading skeleton initially', async () => {
     (useAuth as jest.Mock).mockReturnValue({
       isAuthenticated: true,
       isLoading: false,
@@ -99,6 +99,11 @@ describe('OrdersPage', () => {
     // However, the component sets loading=true by default.
     render(<OrdersPage />);
     expect(screen.getByTestId('order-skeleton')).toBeInTheDocument();
+    
+    // Wait for the effect to complete to avoid act warnings
+    await waitFor(() => {
+        expect(screen.queryByTestId('order-skeleton')).not.toBeInTheDocument();
+    });
   });
 
   it('renders orders after fetch', async () => {

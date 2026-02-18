@@ -1,4 +1,5 @@
 import apiClient from './api';
+import orderService from './services/orderService';
 import { UserProfile, PaginatedOrders, PaymentMethodsData, PaginatedUserReviews, PaginatedReturnRequests } from './types';
 
 class ProfileService {
@@ -22,18 +23,7 @@ class ProfileService {
    * Get user orders with pagination
    */
   async getOrders(page: number = 1, limit: number = 10): Promise<PaginatedOrders> {
-    const response = await apiClient.get<{ 
-      success: boolean; 
-      orders: PaginatedOrders['orders']; 
-      pagination: PaginatedOrders['pagination'];
-      count: number;
-    }>(`/orders?page=${page}&limit=${limit}`);
-    
-    return {
-      orders: response.orders,
-      pagination: response.pagination,
-      count: response.count
-    };
+    return orderService.getUserOrders(page, limit);
   }
 
   /**

@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
+import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { 
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle, 
@@ -134,8 +135,8 @@ export default function OrderDetailPage() {
   const fetchOrderDetail = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`${API_ENDPOINTS.ORDERS}/${orderId}`);
-      setOrder((response as any).order);
+      const order = await orderService.getOrderById(orderId);
+      setOrder(order as unknown as OrderDetail);
     } catch (err: any) {
       setError(err.message || 'Failed to load order details');
     } finally {
@@ -150,7 +151,7 @@ export default function OrderDetailPage() {
     
     try {
       setLoading(true);
-      await apiClient.delete(`${API_ENDPOINTS.ORDERS}/${orderId}`);
+      await orderService.deleteOrder(orderId);
       router.push('/orders');
     } catch (err: any) {
       setError(err.message || 'Failed to delete order');

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
+import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -205,7 +206,7 @@ export default function CheckoutPage() {
         totalAmount,
       };
 
-      const response = await apiClient.post(API_ENDPOINTS.ORDERS, orderData) as any;
+      const response = await orderService.createOrder(orderData) as any;
       const newOrderId = response.order._id;
       
       // If Razorpay is selected, initiate Razorpay checkout
