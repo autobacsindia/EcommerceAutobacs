@@ -10,6 +10,11 @@ test.describe('User Flow', () => {
   };
 
   test('should register, login, and update profile', async ({ page }) => {
+    // Enable console logging
+    page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
+    page.on('pageerror', err => console.log(`BROWSER ERROR: ${err}`));
+    page.on('requestfailed', request => console.log(`REQUEST FAILED: ${request.url()} ${request.failure()?.errorText}`));
+
     // 1. Register
     await page.goto('/register');
     await page.fill('input[name="name"]', user.name);

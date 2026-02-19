@@ -11,6 +11,7 @@
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:e2e": "node node_modules/@playwright/test/cli.js test",
     "check-env": "node scripts/check-env.js",
     "test-wordpress": "node scripts/test-wordpress-api.js",
     "test-makes": "node scripts/test-vehicle-makes.js",
