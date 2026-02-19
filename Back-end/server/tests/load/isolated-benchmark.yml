@@ -1,0 +1,44 @@
+config:
+  target: 'http://localhost:5000'
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      rampTo: 20
+      name: 'Ramp up load'
+    - duration: 60
+      arrivalRate: 20
+      name: 'Sustained load'
+  processor: './functions.cjs'
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+
+scenarios:
+  - name: 'List and Detail'
+    weight: 40
+    flow:
+      - get:
+          url: '/api/products'
+          afterResponse: 'setProductId'
+      - think: 1
+      - get:
+          url: '/api/products/{{ productId }}'
+          ifTrue: 'productId'
+
+  - name: 'Search Products'
+    weight: 30
+    flow:
+      - get:
+          url: '/api/products?search=oil'
+
+  - name: 'Featured Products'
+    weight: 20
+    flow:
+      - get:
+          url: '/api/products/featured'
+
+  - name: 'List Categories'
+    weight: 10
+    flow:
+      - get:
+          url: '/api/categories'

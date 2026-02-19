@@ -118,5 +118,9 @@ ProductSchema.index({ price: 1 });
 ProductSchema.index({ brand: 1 });
 ProductSchema.index({ averageRating: -1 });
 ProductSchema.index({ stock: 1 });
+ProductSchema.index({ createdAt: -1 });
+ProductSchema.index({ compatibleVehicles: 1 });
+ProductSchema.index({ isFeatured: 1 });
+ProductSchema.index({ isFastMoving: 1 });
 
 export default mongoose.model("Product", ProductSchema);
