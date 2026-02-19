@@ -23,18 +23,20 @@ test.describe('Checkout Flow', () => {
   });
 
   test('should add product to cart and complete checkout with COD', async ({ page }) => {
-    // Enable console logging
-    page.on('console', msg => console.log(`BROWSER: ${msg.text()}`));
-
     // Mock Products API to ensure we have an in-stock product
     const mockProduct = {
       _id: 'mock-product-id',
       name: 'Test Product',
       price: 1000,
-      images: [{ url: '/test-image.jpg', isPrimary: true }],
+      description: 'Test Description',
+      images: [{ url: 'https://placehold.co/200x200.png', isPrimary: true }],
+      category: { _id: 'cat1', name: 'Test Category' },
+      brand: { _id: 'brand1', name: 'Test Brand' },
       stock: 10,
+      specifications: [],
+      compatibility: [],
       isActive: true,
-      description: 'Test Description'
+      createdAt: new Date().toISOString()
     };
 
     const mockCart = {
@@ -97,6 +99,52 @@ test.describe('Checkout Flow', () => {
       });
     });
 
+    // Mock Wishlist API to prevent 400 errors
+    await page.route('**/api/wishlist', async route => {
+      await route.fulfill({
+        json: {
+          success: true,
+          wishlist: []
+        }
+      });
+    });
+
+    // Mock Auth Me API
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({
+        json: {
+          success: true,
+          user: {
+            _id: 'mock-user-id',
+            name: user.name,
+            email: user.email,
+            role: 'user'
+          }
+        }
+      });
+    });
+
+    // Mock Profile API
+    await page.route('**/api/profile', async route => {
+      await route.fulfill({
+        json: {
+          success: true,
+          user: {
+            _id: 'mock-user-id',
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: 'user',
+            addresses: []
+          }
+        }
+      });
+    });
+
+    // Mock other common APIs to reduce noise
+    await page.route('**/api/categories*', async route => route.fulfill({ json: { success: true, categories: [] } }));
+    await page.route('**/api/brands*', async route => route.fulfill({ json: { success: true, brands: [] } }));
+
     await page.goto('/products');
     
     // Verify we are logged in
@@ -136,11 +184,15 @@ test.describe('Checkout Flow', () => {
       await page.goto('/cart');
       await expect(page.getByText('Proceed to Checkout')).toBeVisible();
       
-      // 4. Proceed to Checkout
+      // 4. Proceed to Checkout (Cart Page)
       await page.click('text=Proceed to Checkout');
-      await expect(page).toHaveURL('/checkout');
       
-      // 5. Fill Address Form
+      // 5. Checkout Page - Cart Review Step
+      // The checkout page starts with a cart review step
+      await expect(page.getByText('Review Your Cart')).toBeVisible();
+      await page.click('text=Continue to Shipping');
+      
+      // 6. Fill Address Form
       await expect(page.getByText('Shipping Address', { exact: false })).toBeVisible();
       
       // Fill address details
