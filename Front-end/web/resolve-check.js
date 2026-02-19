@@ -1,13 +1,6 @@
-console.log('Resolving @playwright/test:');
 try {
-  console.log(require.resolve('@playwright/test'));
+  const pwTest = require.resolve('@playwright/test');
+  console.log('Resolved @playwright/test to:', pwTest);
 } catch (e) {
-  console.log(e.message);
-}
-
-console.log('Resolving playwright:');
-try {
-  console.log(require.resolve('playwright'));
-} catch (e) {
-  console.log(e.message);
+  console.error('Failed to resolve @playwright/test', e);
 }

@@ -1,0 +1,133 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e5]:
+    - banner [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - link "Roavion - Powered by AutoBacs India" [ref=e10] [cursor=pointer]:
+            - /url: /
+            - img "Roavion - Powered by AutoBacs India" [ref=e11]
+          - button "Change delivery location" [ref=e15]:
+            - img [ref=e16]
+            - generic [ref=e19]:
+              - generic [ref=e20]: Deliver to
+              - generic [ref=e21]:
+                - generic [ref=e22]: Select your location
+                - img [ref=e23]
+          - generic [ref=e31]:
+            - button "Select currency" [ref=e34]:
+              - img [ref=e35]
+              - generic [ref=e38]: INR
+              - img [ref=e39]
+            - generic [ref=e42]:
+              - link "Test User 1771489422509" [ref=e43] [cursor=pointer]:
+                - /url: /profile
+                - img [ref=e44]
+                - generic [ref=e47]: Test User 1771489422509
+              - button "Logout" [ref=e48]
+            - link [ref=e49] [cursor=pointer]:
+              - /url: /wishlist
+              - img [ref=e50]
+            - link "Cart" [ref=e52] [cursor=pointer]:
+              - /url: /cart
+              - img [ref=e53]
+        - navigation [ref=e57]:
+          - link "Shop" [ref=e58] [cursor=pointer]:
+            - /url: /shop
+          - link "Brand" [ref=e59] [cursor=pointer]:
+            - /url: /brands
+          - link "Vehicle" [ref=e60] [cursor=pointer]:
+            - /url: /vehicles
+          - link "Accessories" [ref=e61] [cursor=pointer]:
+            - /url: /categories/accessories
+          - link "Exterior" [ref=e62] [cursor=pointer]:
+            - /url: /categories/exterior
+          - link "Interior" [ref=e63] [cursor=pointer]:
+            - /url: /categories/interior
+          - link "Body Kits" [ref=e64] [cursor=pointer]:
+            - /url: /categories/bodykit
+          - link "Performance" [ref=e65] [cursor=pointer]:
+            - /url: /categories/performance
+          - link "Suspension" [ref=e66] [cursor=pointer]:
+            - /url: /categories/suspension
+          - link "Audio" [ref=e67] [cursor=pointer]:
+            - /url: /categories/audio
+          - link "Lights" [ref=e68] [cursor=pointer]:
+            - /url: /categories/lights
+          - link "Offers" [ref=e69] [cursor=pointer]:
+            - /url: /offers
+    - main [ref=e70]:
+      - paragraph [ref=e74]: Loading...
+    - contentinfo [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - heading "Autobacs India" [level=3] [ref=e79]
+            - paragraph [ref=e80]: Premium automotive accessories and performance parts for your car.
+            - generic [ref=e81]:
+              - link [ref=e82] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e83]
+              - link [ref=e85] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e86]
+              - link [ref=e88] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e89]
+              - link [ref=e92] [cursor=pointer]:
+                - /url: "#"
+                - img [ref=e93]
+          - generic [ref=e96]:
+            - heading "Company" [level=4] [ref=e97]
+            - list [ref=e98]:
+              - listitem [ref=e99]:
+                - link "About Us" [ref=e100] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=e101]:
+                - link "Contact" [ref=e102] [cursor=pointer]:
+                  - /url: /contact
+              - listitem [ref=e103]:
+                - link "Careers" [ref=e104] [cursor=pointer]:
+                  - /url: /careers
+          - generic [ref=e105]:
+            - heading "Support" [level=4] [ref=e106]
+            - list [ref=e107]:
+              - listitem [ref=e108]:
+                - link "FAQ" [ref=e109] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=e110]:
+                - link "Shipping Info" [ref=e111] [cursor=pointer]:
+                  - /url: /shipping
+              - listitem [ref=e112]:
+                - link "Returns" [ref=e113] [cursor=pointer]:
+                  - /url: /returns
+              - listitem [ref=e114]:
+                - link "Warranty" [ref=e115] [cursor=pointer]:
+                  - /url: /warranty
+          - generic [ref=e116]:
+            - heading "Legal" [level=4] [ref=e117]
+            - list [ref=e118]:
+              - listitem [ref=e119]:
+                - link "Privacy Policy" [ref=e120] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=e121]:
+                - link "Terms of Service" [ref=e122] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=e123]:
+                - link "Refund Policy" [ref=e124] [cursor=pointer]:
+                  - /url: /returns
+        - generic [ref=e126]:
+          - paragraph [ref=e128]: © 2026 Autobacs India. All rights reserved.
+          - generic [ref=e129]:
+            - generic [ref=e130]:
+              - img [ref=e131]
+              - generic [ref=e134]: SSL Secured
+            - generic [ref=e135]:
+              - img [ref=e136]
+              - generic [ref=e138]:
+                - img [ref=e139]
+                - generic [ref=e142]: Verified
+  - alert [ref=e147]
+```
