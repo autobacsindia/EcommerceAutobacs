@@ -10,6 +10,15 @@ test.describe('User Flow', () => {
   };
 
   test('should register, login, and update profile', async ({ page }) => {
+    // Enable console logging
+    page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
+    page.on('pageerror', err => console.log(`BROWSER ERROR: ${err}`));
+    page.on('requestfailed', request => console.log(`REQUEST FAILED: ${request.url()} ${request.failure()?.errorText}`));
+
+    // Mock all image requests
+    await page.route('**/*.{png,jpg,jpeg,webp,svg}', route => route.fulfill({ status: 200, body: 'mock-image', contentType: 'image/png' }));
+    await page.route('**/_next/image*', route => route.fulfill({ status: 200, body: 'mock-image', contentType: 'image/png' }));
+
     // 1. Register
     await page.goto('/register');
     await page.fill('input[name="name"]', user.name);
@@ -40,7 +49,7 @@ test.describe('User Flow', () => {
     await expect(page.getByText('Logout')).toBeVisible();
 
     // 4. Update Profile
-    await page.goto('/profile');
+    await page.goto('/profile', { waitUntil: 'domcontentloaded' });
     
     // Assuming profile page has a form to update details
     // I need to verify Profile page structure. 

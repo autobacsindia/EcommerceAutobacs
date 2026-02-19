@@ -13,12 +13,6 @@ export default function PaymentMethodSelector({ selectedMethod, onSelect }: Paym
       label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.RAZORPAY],
       icon: CreditCard,
       description: 'Pay securely with Credit/Debit Card, UPI, or Netbanking'
-    },
-    { 
-      value: PAYMENT_METHODS.COD, 
-      label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.COD],
-      icon: CreditCard,
-      description: 'Pay with cash upon delivery'
     }
   ];
 

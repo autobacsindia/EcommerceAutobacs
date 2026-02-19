@@ -22,7 +22,11 @@ test.describe('Checkout Flow', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('should add product to cart and complete checkout with COD', async ({ page }) => {
+  test('should add product to cart and complete checkout with Razorpay', async ({ page }) => {
+    // Mock all image requests to prevent 400 errors and speed up tests
+    await page.route('**/*.{png,jpg,jpeg,webp,svg}', route => route.fulfill({ status: 200, body: 'mock-image', contentType: 'image/png' }));
+    await page.route('**/_next/image*', route => route.fulfill({ status: 200, body: 'mock-image', contentType: 'image/png' }));
+
     // Mock Products API to ensure we have an in-stock product
     const mockProduct = {
       _id: 'mock-product-id',
@@ -83,6 +87,58 @@ test.describe('Checkout Flow', () => {
           cart: mockCart
         }
       });
+    });
+
+    // Mock Razorpay Create Order
+    await page.route('**/api/razorpay/create-order', async route => {
+      console.log('Mocking Razorpay Create Order API hit');
+      await route.fulfill({
+        json: {
+          success: true,
+          data: {
+            id: 'rzp_order_mock_123',
+            amount: 100000,
+            currency: 'INR',
+            orderId: 'mock_rzp_order_id'
+          }
+        }
+      });
+    });
+
+    // Mock Razorpay Verify Payment
+    await page.route('**/api/razorpay/verify-payment', async route => {
+      console.log('Mocking Razorpay Verify Payment API hit');
+      await route.fulfill({
+        json: {
+          success: true,
+          orderId: 'mock-order-id'
+        }
+      });
+    });
+
+    // Inject Razorpay Mock
+    await page.addInitScript(() => {
+        console.log('Injecting Razorpay mock...');
+        (window as any).Razorpay = function(options: any) {
+            console.log('Razorpay constructor called with options:', options);
+            this.open = function() {
+                console.log('Razorpay open() called');
+                // Simulate successful payment immediately
+                if (options.handler) {
+                    console.log('Calling Razorpay success handler...');
+                    options.handler({
+                        razorpay_payment_id: 'pay_mock_123',
+                        razorpay_order_id: options.order_id,
+                        razorpay_signature: 'sig_mock_123'
+                    });
+                } else {
+                    console.error('Razorpay handler not found in options');
+                }
+            };
+            this.on = function(event: string, callback: any) {
+                console.log('Razorpay on() called for event:', event);
+            };
+        };
     });
 
     // Mock Create Order API
@@ -181,9 +237,9 @@ test.describe('Checkout Flow', () => {
     });
 
     await test.step('Proceed to Checkout', async () => {
-      await page.goto('/cart');
+      await page.goto('/cart', { waitUntil: 'domcontentloaded' });
       await expect(page.getByText('Proceed to Checkout')).toBeVisible();
-      
+
       // 4. Proceed to Checkout (Cart Page)
       await page.click('text=Proceed to Checkout');
       
@@ -209,8 +265,8 @@ test.describe('Checkout Flow', () => {
       // 6. Payment Step
       await expect(page.getByText('Payment Method')).toBeVisible();
       
-      // Select COD
-      await page.click('text=Cash on Delivery');
+      // Select Razorpay (should be default, but let's click it)
+      await page.click('text=Razorpay');
       
       // Click "Continue to Review"
       await page.click('button:has-text("Continue to Review")');

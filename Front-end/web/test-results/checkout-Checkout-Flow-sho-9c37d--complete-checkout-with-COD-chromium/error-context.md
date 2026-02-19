@@ -26,10 +26,10 @@
               - generic [ref=e41]: INR
               - img [ref=e42]
             - generic [ref=e45]:
-              - link "Checkout User 1771494355138" [ref=e46] [cursor=pointer]:
+              - link "Checkout User 1771502281812" [ref=e46] [cursor=pointer]:
                 - /url: /profile
                 - img [ref=e47]
-                - generic [ref=e50]: Checkout User 1771494355138
+                - generic [ref=e50]: Checkout User 1771502281812
               - button "Logout" [ref=e51]
             - link [ref=e52] [cursor=pointer]:
               - /url: /wishlist
@@ -193,7 +193,7 @@
                 - generic [ref=e205]: Verified
   - button "Open Next.js Dev Tools" [ref=e211] [cursor=pointer]:
     - generic [ref=e214]:
-      - text: Compiling
+      - text: Rendering
       - generic [ref=e215]:
         - generic [ref=e216]: .
         - generic [ref=e217]: .
