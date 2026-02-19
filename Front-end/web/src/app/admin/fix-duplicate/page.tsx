@@ -31,7 +31,13 @@ export default function FixDuplicatePage() {
       // We handle 404s gracefully in case one is already deleted
       try {
         const p1: any = await apiClient.get(`/products/${targetId}?t=${timestamp}`);
-        setProduct1(p1.product);
+        // Check if product is active
+        if (p1.product && p1.product.isActive === false) {
+          console.warn('Target product is inactive (soft deleted)');
+          setProduct1(null);
+        } else {
+          setProduct1(p1.product);
+        }
       } catch (e) {
         console.warn('Target product not found');
         setProduct1(null);
@@ -39,7 +45,13 @@ export default function FixDuplicatePage() {
 
       try {
         const p2: any = await apiClient.get(`/products/${sourceId}?t=${timestamp}`);
-        setProduct2(p2.product);
+        // Check if product is active
+        if (p2.product && p2.product.isActive === false) {
+          console.warn('Source product is inactive (soft deleted)');
+          setProduct2(null);
+        } else {
+          setProduct2(p2.product);
+        }
       } catch (e) {
         console.warn('Source product not found');
         setProduct2(null);

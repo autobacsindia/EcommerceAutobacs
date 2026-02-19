@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
 import { app, cronService, adaptiveThrottlingService } from '../app.js';
+import elasticsearchService from '../services/elasticsearchService.js';
 import User from '../models/User.js';
 import * as dbHandler from './db-handler.js';
 import bcrypt from 'bcryptjs';
@@ -42,6 +43,9 @@ describe('Profile Integration API', () => {
     }
     if (adaptiveThrottlingService && typeof adaptiveThrottlingService.shutdown === 'function') {
       adaptiveThrottlingService.shutdown();
+    }
+    if (elasticsearchService && typeof elasticsearchService.shutdown === 'function') {
+      await elasticsearchService.shutdown();
     }
   });
 

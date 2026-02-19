@@ -172,7 +172,7 @@ const mockProducts = [
   },
 ];
 
-const mockProductDetail = { ...mockProducts[0], specifications: [], features: [] };
+const mockProductDetail = { ...mockProducts[0], specifications: [], features: [], qna: [] };
 
 let currentPath = '/products';
 let currentSearchParams = new URLSearchParams();
@@ -230,6 +230,7 @@ describe('User Journey Integration Flow', () => {
         pagination: { total: 2, pages: 1, currentPage: 1, count: 2 } 
       });
       if (url.startsWith('/cart')) return Promise.resolve({ items: [], total: 0 });
+      // Return empty addresses to trigger address form
       if (url.startsWith('/profile')) return Promise.resolve({ success: true, user: { addresses: [] } });
       if (url.includes('/summary')) return Promise.resolve({ 
         summary: { averageRating: 4.5, totalReviews: 10, ratingDistribution: { 5: 5, 4: 5, 3: 0, 2: 0, 1: 0 } } 
@@ -239,6 +240,11 @@ describe('User Journey Integration Flow', () => {
         pagination: { currentPage: 1, totalPages: 1, totalReviews: 0, hasNext: false, hasPrev: false } 
       });
       if (url.startsWith('/product-questions')) return Promise.resolve({ questions: [] });
+      return Promise.resolve({});
+    });
+
+    (apiClient.put as jest.Mock).mockImplementation((url) => {
+      if (url.startsWith('/profile')) return Promise.resolve({ success: true });
       return Promise.resolve({});
     });
 
@@ -271,7 +277,6 @@ describe('User Journey Integration Flow', () => {
 
     // This is a simplified simulation of routing
     if (currentPath.startsWith('/products/p1')) {
-      // The default export of ClientPage expects 'id' prop and fetches data internally
       return { 
         ...render(<ProductDetailClientPage id="p1" />),
         mockPush: pushMock 
@@ -304,19 +309,17 @@ describe('User Journey Integration Flow', () => {
     });
 
     // 2. Click on a product to view details
-    // The router mock is already set in renderApp, so the click will trigger it
     fireEvent.click(screen.getByTestId('product-card-p1'));
 
     expect(initialMockPush).toHaveBeenCalledWith('/products/p1');
     
     // 3. Simulate navigation by re-rendering with new path
     unmount();
-    renderApp(); // Should now render ProductDetailClientPage
+    renderApp(); 
 
     await waitFor(() => {
-      // Check for detail page specific elements
-      expect(screen.getByRole('heading', { name: /Test Product 1/i })).toBeInTheDocument(); // Name
-      expect(screen.getByText(/Description 1/i)).toBeInTheDocument(); // Description
+      expect(screen.getByRole('heading', { name: /Test Product 1/i })).toBeInTheDocument();
+      expect(screen.getByText(/Description 1/i)).toBeInTheDocument();
     });
     
     await waitFor(() => {
@@ -350,16 +353,10 @@ describe('User Journey Integration Flow', () => {
     renderApp();
 
     // Verify rendering with findByText (auto-waits)
-    // 1. Check for Order Summary (Side panel)
     await screen.findByText(/Order Summary/i);
-    
-    // 2. Check for Page Title
     await screen.findByText(/Shopping Cart/i);
-    
-    // 3. Check for Product in Cart
     await screen.findByText(/Test Product 1/i);
     
-    // 4. Check for Price (using getAllByText because it might appear multiple times)
     const prices = await screen.findAllByText(/100/);
     expect(prices.length).toBeGreaterThan(0);
   });
@@ -374,8 +371,6 @@ describe('User Journey Integration Flow', () => {
 
     // Verify Step 1: Cart Review
     await screen.findByText(/Review Your Cart/i);
-
-    // 1. Review Cart Step (Confirm items)
     await screen.findByText(/Test Product 1/i);
     
     // Proceed to Address
@@ -385,14 +380,9 @@ describe('User Journey Integration Flow', () => {
     // 2. Address Step
     await screen.findByText(/Shipping Address/i);
 
-    // Fill address form
+    // Since mock profile returns no addresses, form should be visible
     const nameInput = screen.getByPlaceholderText(/Full Name/i);
     fireEvent.change(nameInput, { target: { value: 'Test User' } });
-    
-    // Note: Some inputs might be hidden if address is pre-filled or saved
-    // But in our mock, we don't have saved addresses or we do?
-    // Mock profile response returns { user: { addresses: [] } }
-    // So form should be visible
     
     fireEvent.change(screen.getByPlaceholderText(/Street Address/i), { target: { value: '123 Main St' } });
     fireEvent.change(screen.getByPlaceholderText(/City/i), { target: { value: 'Mumbai' } });
@@ -401,18 +391,17 @@ describe('User Journey Integration Flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/Phone/i), { target: { value: '9876543210' } });
 
     // Click "Continue to Payment"
-    // Using findByText to wait for button to be available
     const paymentBtn = await screen.findByText(/Continue to Payment/i);
     fireEvent.click(paymentBtn);
 
     // 3. Payment Step
+    await screen.findByText(/Payment Method/i);
     await screen.findByTestId('payment-method-selector');
 
     // Select COD
     fireEvent.click(screen.getByText(/Cash on Delivery/i));
     
     // Click "Continue to Review"
-    // The button is in the checkout page, outside the selector
     const reviewBtn = await screen.findByText(/Continue to Review/i);
     fireEvent.click(reviewBtn);
 

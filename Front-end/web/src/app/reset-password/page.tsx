@@ -41,11 +41,13 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     
     if (password !== confirmPassword) {
+      setStatus('error');
       setErrorMessage('Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
+      setStatus('error');
       setErrorMessage('Password must be at least 6 characters');
       return;
     }

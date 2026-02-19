@@ -66,7 +66,7 @@ async function getProduct(id: string): Promise<any> {
   }
 }
 
-function ProductDetailPageClient({ product }: { product: any }) {
+export function ProductDetailPageClient({ product }: { product: any }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuth();

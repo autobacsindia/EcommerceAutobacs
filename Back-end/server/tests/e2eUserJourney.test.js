@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
 import { app, cronService, adaptiveThrottlingService } from '../app.js';
+import elasticsearchService from '../services/elasticsearchService.js';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
@@ -54,6 +55,9 @@ describe('E2E User Journey Integration Test', () => {
     }
     if (adaptiveThrottlingService && typeof adaptiveThrottlingService.shutdown === 'function') {
       adaptiveThrottlingService.shutdown();
+    }
+    if (elasticsearchService && typeof elasticsearchService.shutdown === 'function') {
+      await elasticsearchService.shutdown();
     }
   });
 

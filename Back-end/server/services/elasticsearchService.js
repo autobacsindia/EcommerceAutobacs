@@ -137,6 +137,17 @@ class ElasticsearchService {
   }
 
   /**
+   * Close the Elasticsearch client
+   */
+  async shutdown() {
+    if (this.client) {
+      await this.client.close();
+      this.client = null;
+      this.connectionStatus.available = false;
+    }
+  }
+
+  /**
    * Test initial connection at startup
    */
   async testConnection() {
