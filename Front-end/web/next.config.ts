@@ -7,7 +7,6 @@ const pwaConfig = withPWA({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
-  swcMinify: true,
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
@@ -113,13 +112,17 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    // !! WARN !!
+    // Dangerously allow production builds to successfully complete even if
+    // your project has type errors.
+    // ignoreBuildErrors: true,
   },
   async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:5000/:path*', // Proxy to Backend
+        destination: `${apiUrl}/:path*`, // Proxy to Backend
       },
     ];
   },

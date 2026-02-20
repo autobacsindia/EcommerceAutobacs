@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@sentry/nextjs": "^10.39.0",
     "@sentry/node": "^8.55.0",
     "@sentry/react": "^8.55.0",
     "axios": "^1.13.2",
