@@ -256,7 +256,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
           await removeFromWishlist(productId);
           // Return a special indicator that we removed the item
           throw new Error('ITEM_REMOVED');
-        } catch (removeError) {
+        } catch (removeError: any) {
           if (removeError.message !== 'ITEM_REMOVED') {
             console.error('Failed to remove from wishlist:', removeError);
             throw removeError;
@@ -339,7 +339,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       if (typeof item.product === 'string') {
         return item.product === productId;
       } else if (typeof item.product === 'object' && item.product !== null) {
-        return item.product._id === productId;
+        return (item.product as any)._id === productId;
       }
       return false;
     });

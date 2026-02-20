@@ -194,7 +194,7 @@ export default function CheckoutPage() {
           phone: address.phone
         },
         paymentMethod,
-        items: cart?.items.map((item: any) => ({
+        items: (cart?.items || []).map((item: any) => ({
           product: item.product._id, // Backend expects 'product' not 'productId' in items array
           quantity: item.quantity,
           price: item.product.price,
