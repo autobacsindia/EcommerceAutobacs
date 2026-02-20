@@ -348,10 +348,10 @@ class APIClient {
           }).join(', ');
 
           if (validationErrors) {
-            const allGenericValidationErrors = validationErrors
+            const allGenericValidationErrors = (validationErrors as string)
               .split(',')
-              .map(msg => msg.trim().toLowerCase())
-              .every(msg => msg === 'validation error');
+              .map((msg: string) => msg.trim().toLowerCase())
+              .every((msg: string) => msg === 'validation error');
 
             if (!allGenericValidationErrors) {
               errorMessage = `${errorMessage}: ${validationErrors}`;
