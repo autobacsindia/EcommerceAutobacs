@@ -101,7 +101,9 @@ export default function EditProductPage() {
   const fetchCategories = async () => {
     try {
       const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
-      setCategories(response.data || response.categories || []);
+      const fetchedCategories = response.data || response.categories || [];
+      console.log('Fetched categories:', fetchedCategories.length);
+      setCategories(fetchedCategories);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
     }
@@ -427,7 +429,7 @@ export default function EditProductPage() {
           <div>
             <h2 className="text-xl font-semibold mb-4">Organization</h2>
             
-            <div className="mb-4 relative">
+            <div className="mb-4 relative" style={{ zIndex: isCategoryDropdownOpen ? 50 : 1 }}>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Categories
               </label>
@@ -462,47 +464,54 @@ export default function EditProductPage() {
               </div>
               
               {isCategoryDropdownOpen && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto p-2">
+                <div className="absolute z-[100] w-full mt-1 bg-white border border-gray-300 rounded-md shadow-2xl max-h-60 overflow-y-auto p-2">
                   <input
                     type="text"
                     placeholder="Search categories..."
-                    className="w-full px-2 py-1 mb-2 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-2 py-1 mb-2 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                     value={categorySearch}
                     onChange={(e) => setCategorySearch(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
+                    autoFocus
                   />
-                  {categories
-                    .filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                    .map(category => (
-                    <div 
-                      key={category._id} 
-                      className="flex items-center p-2 hover:bg-gray-100 cursor-pointer rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (selectedCategories.includes(category._id)) {
-                          setSelectedCategories(prev => prev.filter(id => id !== category._id));
-                        } else {
-                          setSelectedCategories(prev => [...prev, category._id]);
-                        }
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedCategories.includes(category._id)}
-                        readOnly
-                        className="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                      />
-                      <span>{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</span>
-                    </div>
-                  ))}
-                  {categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
-                    <div className="p-2 text-gray-500 text-center text-sm">No categories found</div>
+                  {categories.length === 0 ? (
+                    <div className="p-2 text-gray-500 text-center text-sm">Loading categories...</div>
+                  ) : (
+                    <>
+                      {categories
+                        .filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                        .map(category => (
+                        <div 
+                          key={category._id} 
+                          className="flex items-center p-2 hover:bg-gray-100 cursor-pointer rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (selectedCategories.includes(category._id)) {
+                              setSelectedCategories(prev => prev.filter(id => id !== category._id));
+                            } else {
+                              setSelectedCategories(prev => [...prev, category._id]);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.includes(category._id)}
+                            readOnly
+                            className="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <span className="text-gray-900">{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</span>
+                        </div>
+                      ))}
+                      {categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                        <div className="p-2 text-gray-500 text-center text-sm">No matching categories found</div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
             </div>
 
-            <div className="mb-4">
+            <div className="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
               <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
                 Tags
               </label>
@@ -510,7 +519,7 @@ export default function EditProductPage() {
                 id="tags"
                 rows={3}
                 placeholder="Paste tags here (comma separated), e.g., tag1, tag2, tag3"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
               />
