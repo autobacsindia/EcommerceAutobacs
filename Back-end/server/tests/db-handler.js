@@ -14,7 +14,7 @@ export const connect = async () => {
 
   mongod = await MongoMemoryServer.create({
     instance: {
-      launchTimeout: 60000
+      launchTimeout: 120000
     },
     binary: {
       version: '7.0.14'

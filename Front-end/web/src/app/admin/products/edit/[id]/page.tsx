@@ -120,7 +120,7 @@ export default function EditProductPage() {
 
   const fetchProduct = async () => {
     try {
-      const response: any = await apiClient.get(`/products/${productId}`);
+      const response: any = await apiClient.get(`/products/${productId}?t=${Date.now()}`);
       const productData = response.product;
       
       setProduct(productData);
@@ -232,7 +232,7 @@ export default function EditProductPage() {
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
         stock: parseInt(formData.stock),
         // category: formData.category || undefined, // Replaced by categories
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        categories: selectedCategories, // Send array directly, even if empty
         tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
         offerStartDate: formData.offerStartDate || null,
         offerEndDate: formData.offerEndDate || null,
@@ -253,6 +253,8 @@ export default function EditProductPage() {
         }
       });
       
+      console.log('Submitting product data:', productData);
+
       await apiClient.put(`/products/${productId}`, productData);
       alert('Product updated successfully');
       router.push('/admin/products');

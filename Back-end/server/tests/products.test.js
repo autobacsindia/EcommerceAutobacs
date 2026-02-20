@@ -188,6 +188,33 @@ describe('Products API', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.product.price).toBe(150);
     });
+
+    it('should update product with multiple categories and tags', async () => {
+      // Create categories
+      const cat1 = await Category.create({ name: 'Update Cat 1', slug: 'update-cat-1' });
+      const cat2 = await Category.create({ name: 'Update Cat 2', slug: 'update-cat-2' });
+
+      const updateData = {
+        categories: [cat1._id, cat2._id],
+        tags: ['tag1', 'tag2', 'tag3']
+      };
+
+      const res = await request(app)
+        .put(`/products/${productId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.product.categories).toHaveLength(2);
+      expect(res.body.product.tags).toHaveLength(3);
+      expect(res.body.product.tags).toContain('tag1');
+      
+      // Verify persistence
+      const product = await Product.findById(productId);
+      expect(product.categories).toHaveLength(2);
+      expect(product.tags).toHaveLength(3);
+    });
   });
 
   describe('DELETE /products/:id', () => {
