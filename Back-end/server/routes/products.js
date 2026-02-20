@@ -219,7 +219,7 @@ router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
 // @route   POST /products
 // @desc    Create a new product
 // @access  Private/Admin
-router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res) => {
+router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res, next) => {
   const product = new Product(req.body);
   const savedProduct = await product.save();
   
@@ -231,6 +231,9 @@ router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res) 
     message: 'Product created successfully',
     product: savedProduct
   });
+
+  // Proceed to sync middleware
+  next();
 }), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   PUT /products/:id
@@ -260,12 +263,15 @@ router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate
     message: 'Product updated successfully',
     product: updatedProduct
   });
+
+  // Proceed to sync middleware
+  next();
 }), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   DELETE /products/:id
 // @desc    Delete product (soft delete by setting isActive to false)
 // @access  Private/Admin
-router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async (req, res) => {
+router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async (req, res, next) => {
   const product = await Product.findById(req.params.id);
 
   if (!product) {
@@ -286,12 +292,15 @@ router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async
     success: true,
     message: 'Product deleted successfully'
   });
+
+  // Proceed to sync middleware
+  next();
 }), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   POST /products/:id/stock
 // @desc    Update product stock
 // @access  Private/Admin
-router.post("/:id/stock", protect, admin, validateStockUpdate, asyncHandler(async (req, res) => {
+router.post("/:id/stock", protect, admin, validateStockUpdate, asyncHandler(async (req, res, next) => {
   const { stock } = req.body;
   const id = req.params.id; // Sanitized by middleware
   
@@ -316,6 +325,9 @@ router.post("/:id/stock", protect, admin, validateStockUpdate, asyncHandler(asyn
     message: 'Stock updated successfully',
     product
   });
+
+  // Proceed to sync middleware
+  next();
 }), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   POST /products/import/wordpress

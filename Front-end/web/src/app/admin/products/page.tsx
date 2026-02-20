@@ -11,7 +11,7 @@ interface Product {
   name: string;
   price: number;
   stock: number;
-  category?: { name: string };
+  categories?: { name: string }[];
   featured: boolean;
 }
 
@@ -64,6 +64,9 @@ export default function AdminProductsPage() {
         params.append('search', debouncedSearchTerm);
       }
       
+      // Cache busting to prevent stale data
+      params.append('t', Date.now().toString());
+
       const response = await apiClient.get<ProductsResponse>(
         `${API_ENDPOINTS.PRODUCTS}?${params.toString()}`
       );
@@ -131,7 +134,7 @@ export default function AdminProductsPage() {
                 Product Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Category
+                Categories
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Price
@@ -154,7 +157,11 @@ export default function AdminProductsPage() {
                   <div className="text-sm font-medium text-gray-900">{product.name}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-500">{product.category?.name || 'N/A'}</div>
+                  <div className="text-sm text-gray-500">
+                    {product.categories && product.categories.length > 0 
+                      ? product.categories.map(c => c.name).join(', ') 
+                      : 'N/A'}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">₹{product.price.toFixed(2)}</div>

@@ -25,6 +25,14 @@ export default function CreateProductPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
+  // Category Multi-select state
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+
+  // Tags state
+  const [tagsInput, setTagsInput] = useState('');
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -109,7 +117,11 @@ export default function CreateProductPage() {
         price: parseFloat(formData.price),
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
         stock: parseInt(formData.stock),
-        category: formData.category || undefined,
+        // category: formData.category || undefined, // Removed single category
+        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        tags: tagsInput.split(',').map(t => t.trim()).filter(t => t).length > 0 
+          ? tagsInput.split(',').map(t => t.trim()).filter(t => t) 
+          : undefined,
         variableSpecs: variableSpecs.length > 0 ? variableSpecs : undefined,
         compatibleVehicles: selectedVehicles.length > 0 ? selectedVehicles : undefined,
         features: features.length > 0 ? features : undefined,
@@ -300,24 +312,96 @@ export default function CreateProductPage() {
           <div>
             <h2 className="text-xl font-semibold mb-4">Organization</h2>
             
-            <div className="mb-4">
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-                Category
+            <div className="mb-4 relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Categories
               </label>
-              <select
-                id="category"
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <div 
+                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-[42px]"
+                onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
               >
-                <option value="">Select a category</option>
-                {categories.map(category => (
-                  <option key={category._id} value={category._id}>
-                    {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
-                  </option>
-                ))}
-              </select>
+                {selectedCategories.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedCategories.map(catId => {
+                      const cat = categories.find(c => c._id === catId);
+                      return (
+                        <span key={catId} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
+                          {cat?.name || 'Unknown'}
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCategories(prev => prev.filter(id => id !== catId));
+                            }}
+                            className="ml-1 text-blue-600 hover:text-blue-800"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className="text-gray-400">Select categories...</span>
+                )}
+              </div>
+              
+              {isCategoryDropdownOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div className="p-2 border-b sticky top-0 bg-white">
+                    <input
+                      type="text"
+                      placeholder="Search categories..."
+                      className="w-full px-2 py-1 border rounded text-sm"
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  {categories
+                    .filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                    .map(category => (
+                    <div 
+                      key={category._id}
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center"
+                      onClick={() => {
+                        if (selectedCategories.includes(category._id)) {
+                          setSelectedCategories(prev => prev.filter(id => id !== category._id));
+                        } else {
+                          setSelectedCategories(prev => [...prev, category._id]);
+                        }
+                      }}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={selectedCategories.includes(category._id)}
+                        readOnly
+                        className="mr-2"
+                      />
+                      <span>{category.name}</span>
+                    </div>
+                  ))}
+                  {categories.filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                    <div className="px-3 py-2 text-gray-500 text-sm">No categories found</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tags (comma separated)
+              </label>
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="e.g. fast, luxury, sedan"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter tags separated by commas. These help in search and filtering.
+              </p>
             </div>
             
             <div className="mb-4">

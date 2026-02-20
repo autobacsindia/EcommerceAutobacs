@@ -253,8 +253,6 @@ export default function EditProductPage() {
         }
       });
       
-      console.log('Submitting product data:', productData);
-
       await apiClient.put(`/products/${productId}`, productData);
       alert('Product updated successfully');
       router.push('/admin/products');
