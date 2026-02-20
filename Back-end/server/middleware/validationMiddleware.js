@@ -225,6 +225,18 @@ export const validateProductUpdate = [
     .optional()
     .notEmpty()
     .withMessage('Category is required'),
+  body('categories')
+    .optional()
+    .isArray()
+    .withMessage('Categories must be an array'),
+  body('categories.*')
+    .optional()
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Category ID'),
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags must be an array'),
   body('stock')
     .optional()
     .isInt({ min: 0 })
