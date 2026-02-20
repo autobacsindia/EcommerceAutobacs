@@ -221,10 +221,6 @@ export const validateProductUpdate = [
     .optional()
     .isFloat({ min: 0 })
     .withMessage('Valid price is required'),
-  body('category')
-    .optional()
-    .notEmpty()
-    .withMessage('Category is required'),
   body('categories')
     .optional()
     .isArray()
@@ -331,9 +327,9 @@ export const validateProduct = [
   body('price')
     .isFloat({ min: 0 })
     .withMessage('Valid price is required'),
-  body('category')
-    .notEmpty()
-    .withMessage('Category is required'),
+  body('categories')
+    .isArray({ min: 1 })
+    .withMessage('At least one category is required'),
   body('stock')
     .isInt({ min: 0 })
     .withMessage('Valid stock quantity is required'),

@@ -8,12 +8,12 @@ class ElasticsearchSyncMiddleware {
    * Sync a product to Elasticsearch after it's saved
    */
   static async syncProduct(req, res, next) {
-    // Skip if Elasticsearch is not connected
-    if (!(await elasticsearchService.isConnected())) {
-      return next();
-    }
-
     try {
+      // Skip if Elasticsearch is not connected
+      if (!(await elasticsearchService.isConnected())) {
+        return next();
+      }
+
       // Get the product from the response locals or request body
       const product = res.locals.product || req.body;
       

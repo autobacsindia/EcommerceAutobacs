@@ -487,7 +487,7 @@ class ElasticsearchService {
       if (category) {
         const categories = Array.isArray(category) ? category : category.split(',');
         searchBody.query.function_score.query.bool.filter.push({
-          terms: { 'category.name.keyword': categories }
+          terms: { 'categories.name.keyword': categories }
         });
       }
 

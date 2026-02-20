@@ -241,32 +241,38 @@ router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res, 
 // @access  Private/Admin
 router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate, asyncHandler(async (req, res, next) => {
   console.log('PUT /products/:id body:', req.body);
-  const product = await Product.findById(req.params.id);
+  try {
+    const product = await Product.findById(req.params.id);
 
-  if (!product) {
-    return res.status(404).json({
-      success: false,
-      message: 'Product not found'
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    ).populate('categories', 'name slug');
+    
+    // Store product in response locals for middleware
+    res.locals.product = updatedProduct;
+
+    res.json({
+      success: true,
+      message: 'Product updated successfully',
+      product: updatedProduct
     });
+
+    // Proceed to sync middleware
+    next();
+  } catch (error) {
+    console.error('Error updating product:', error);
+    // Pass to global error handler
+    throw error;
   }
-
-  const updatedProduct = await Product.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true, runValidators: true }
-  );
-  
-  // Store product in response locals for middleware
-  res.locals.product = updatedProduct;
-
-  res.json({
-    success: true,
-    message: 'Product updated successfully',
-    product: updatedProduct
-  });
-
-  // Proceed to sync middleware
-  next();
 }), ElasticsearchSyncMiddleware.syncProduct);
 
 // @route   DELETE /products/:id

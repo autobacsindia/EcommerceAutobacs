@@ -5,6 +5,7 @@ export const errorHandler = (err, req, res, next) => {
   // Only log detailed errors in development or if it's a 500
   if (process.env.NODE_ENV === 'development' || !err.statusCode || err.statusCode === 500) {
     console.error('Error:', err);
+    console.error('Stack:', err.stack);
   }
 
   let error = { ...err };
@@ -26,7 +27,7 @@ export const errorHandler = (err, req, res, next) => {
 
   // Mongoose cast error (invalid ObjectId)
   if (err.name === 'CastError') {
-    error = new AppError('Invalid ID format', 400);
+    error = new AppError(`Invalid ${err.path}: ${err.value}`, 400);
   }
 
   // JWT errors
@@ -44,7 +45,7 @@ export const errorHandler = (err, req, res, next) => {
     status: error.status || 'error',
     message: error.message || 'Internal Server Error',
     errors: error.errors,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack, detailedError: err })
   });
 };
 

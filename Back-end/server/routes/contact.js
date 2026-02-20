@@ -57,14 +57,23 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
 // @desc    Get contact message statistics (e.g. unread count)
 // @access  Private/Admin
 router.get("/stats", protect, admin, asyncHandler(async (req, res) => {
-  const newCount = await Contact.countDocuments({ status: 'new' });
-  
-  res.json({
-    success: true,
-    data: {
-      newCount
-    }
-  });
+  try {
+    const newCount = await Contact.countDocuments({ status: 'new' });
+    
+    res.json({
+      success: true,
+      data: {
+        newCount
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching contact stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch contact statistics',
+      error: error.message
+    });
+  }
 }));
 
 // @route   GET /contact
