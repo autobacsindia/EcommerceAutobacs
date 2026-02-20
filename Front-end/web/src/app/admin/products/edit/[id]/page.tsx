@@ -25,7 +25,8 @@ interface Product {
   shortDescription: string;
   price: number;
   originalPrice: number;
-  category: string;
+  category?: string; // Keep for backward compatibility if needed, but we'll use categories
+  categories?: string[] | Category[];
   brand: string;
   stock: number;
   sku: string;
@@ -40,6 +41,7 @@ interface Product {
   variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number }> }>;
   compatibleVehicles?: Vehicle[];
   qna?: Array<{ question: string; answer: string }>;
+  tags?: string[];
 }
 
 export default function EditProductPage() {
@@ -53,13 +55,21 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
+  // Category Multi-select state
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+
+  // Tags state
+  const [tagsInput, setTagsInput] = useState('');
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     shortDescription: '',
     price: '',
     originalPrice: '',
-    category: '',
+    // category: '', // Removed in favor of selectedCategories
     brand: '',
     stock: '',
     sku: '',
@@ -133,7 +143,7 @@ export default function EditProductPage() {
         shortDescription: productData.shortDescription || '',
         price: productData.price?.toString() || '',
         originalPrice: productData.originalPrice?.toString() || '',
-        category: productData.category?._id || productData.category || '',
+        // category: productData.category?._id || productData.category || '', // Handled by selectedCategories
         brand: productData.brand || '',
         stock: productData.stock?.toString() || '',
         sku: productData.sku || '',
@@ -144,6 +154,23 @@ export default function EditProductPage() {
         offerEndDate: productData.offerEndDate ? new Date(productData.offerEndDate).toISOString().slice(0, 16) : '',
         isActive: productData.isActive !== undefined ? productData.isActive : true,
       });
+
+      // Handle categories
+      if (productData.categories && Array.isArray(productData.categories)) {
+        const categoryIds = productData.categories.map((c: any) => 
+          typeof c === 'object' ? c._id : c
+        );
+        setSelectedCategories(categoryIds);
+      } else if (productData.category) {
+        // Fallback for single category
+        const catId = typeof productData.category === 'object' ? productData.category._id : productData.category;
+        setSelectedCategories([catId]);
+      }
+
+      // Handle tags
+      if (productData.tags && Array.isArray(productData.tags)) {
+        setTagsInput(productData.tags.join(', '));
+      }
     } catch (err) {
       console.error('Failed to fetch product:', err);
       alert('Failed to load product');
@@ -196,13 +223,15 @@ export default function EditProductPage() {
     
     try {
       const validQna = qna.filter(item => item.question.trim() !== '' && item.answer.trim() !== '');
-
+      
       const productData = {
         ...formData,
         price: parseFloat(formData.price),
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
         stock: parseInt(formData.stock),
-        category: formData.category || undefined,
+        // category: formData.category || undefined, // Replaced by categories
+        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+        tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
         offerStartDate: formData.offerStartDate || null,
         offerEndDate: formData.offerEndDate || null,
         // In a real implementation, we would handle image uploads
@@ -398,24 +427,96 @@ export default function EditProductPage() {
           <div>
             <h2 className="text-xl font-semibold mb-4">Organization</h2>
             
-            <div className="mb-4">
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-                Category
+            <div className="mb-4 relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Categories
               </label>
-              <select
-                id="category"
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <div 
+                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1"
+                onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
               >
-                <option value="">Select a category</option>
-                {categories.map(category => (
-                  <option key={category._id} value={category._id}>
-                    {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
-                  </option>
-                ))}
-              </select>
+                {selectedCategories.length > 0 
+                  ? (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedCategories.map(catId => {
+                        const cat = categories.find(c => c._id === catId);
+                        return (
+                          <span key={catId} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
+                            {cat ? (cat.name === 'Suspension' ? 'SUSPENSION' : cat.name) : catId}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCategories(prev => prev.filter(id => id !== catId));
+                              }}
+                              className="ml-1 hover:text-blue-900"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )
+                  : <span className="text-gray-500">Select categories</span>}
+              </div>
+              
+              {isCategoryDropdownOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto p-2">
+                  <input
+                    type="text"
+                    placeholder="Search categories..."
+                    className="w-full px-2 py-1 mb-2 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  {categories
+                    .filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                    .map(category => (
+                    <div 
+                      key={category._id} 
+                      className="flex items-center p-2 hover:bg-gray-100 cursor-pointer rounded"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selectedCategories.includes(category._id)) {
+                          setSelectedCategories(prev => prev.filter(id => id !== category._id));
+                        } else {
+                          setSelectedCategories(prev => [...prev, category._id]);
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.includes(category._id)}
+                        readOnly
+                        className="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <span>{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</span>
+                    </div>
+                  ))}
+                  {categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                    <div className="p-2 text-gray-500 text-center text-sm">No categories found</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
+                Tags
+              </label>
+              <textarea
+                id="tags"
+                rows={3}
+                placeholder="Paste tags here (comma separated), e.g., tag1, tag2, tag3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Copy and paste tags from WordPress or enter manually separated by commas.
+              </p>
             </div>
             
             <div className="mb-4">
