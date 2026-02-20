@@ -302,7 +302,7 @@ export default function EditProductPage() {
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h1 className="text-3xl font-bold">Edit Product</h1>
+        <h1 className="text-3xl font-bold">Edit Product <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded ml-2">New</span></h1>
       </div>
       
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">

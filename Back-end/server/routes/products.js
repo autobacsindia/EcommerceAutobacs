@@ -239,7 +239,8 @@ router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res, 
 // @route   PUT /products/:id
 // @desc    Update product
 // @access  Private/Admin
-router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate, asyncHandler(async (req, res) => {
+router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate, asyncHandler(async (req, res, next) => {
+  console.log('PUT /products/:id body:', req.body);
   const product = await Product.findById(req.params.id);
 
   if (!product) {
