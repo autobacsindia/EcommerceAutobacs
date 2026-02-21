@@ -420,6 +420,21 @@ export function ProductDetailPageClient({ product }: { product: any }) {
               </button>
             </div>
 
+            <div className="mb-8 space-y-3 text-sm text-gray-600 border-t pt-4">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-600">🚚</span>
+                <span>Shipping Extra & Exchanges*</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-blue-600">💳</span>
+                <span>Flexible and secure payment</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-blue-600">😊</span>
+                <span>600,000 happy customers</span>
+              </div>
+            </div>
+
             {/* Trust Badges */}
             <TrustBadges />
 

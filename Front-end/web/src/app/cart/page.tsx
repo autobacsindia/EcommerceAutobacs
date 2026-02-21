@@ -231,7 +231,7 @@ export default function CartPage() {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span>{formatPrice(cart.total || 0)}</span>
+                  <span>{formatPrice((cart.total || 0) / 1.18)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
@@ -239,11 +239,11 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Tax (18% GST)</span>
-                  <span>{formatPrice((cart.total || 0) * 0.18)}</span>
+                  <span>{formatPrice((cart.total || 0) - ((cart.total || 0) / 1.18))}</span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-lg font-bold text-gray-900">
                   <span>Total</span>
-                  <span>{formatPrice((cart.total || 0) * 1.18)}</span>
+                  <span>{formatPrice(cart.total || 0)}</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">* Final tax calculated at checkout</p>
               </div>
