@@ -8,25 +8,32 @@ class ElasticsearchSyncMiddleware {
    * Sync a product to Elasticsearch after it's saved
    */
   static async syncProduct(req, res, next) {
-    try {
-      // Skip if Elasticsearch is not connected
-      if (!(await elasticsearchService.isConnected())) {
-        return next();
-      }
+    // Fire and forget - don't await the sync
+    (async () => {
+      try {
+        // Skip if Elasticsearch is not connected
+        if (!(await elasticsearchService.isConnected())) {
+          return;
+        }
 
-      // Get the product from the response locals or request body
-      const product = res.locals.product || req.body;
-      
-      if (product && product._id) {
-        // Index the product in Elasticsearch
-        await elasticsearchService.indexProduct(product);
+        // Get the product from the response locals or request body
+        const product = res.locals.product || req.body;
+        
+        if (product && product._id) {
+          // Index the product in Elasticsearch
+          await elasticsearchService.indexProduct(product);
+        }
+      } catch (error) {
+        console.error('Error syncing product to Elasticsearch:', error);
+        // Don't fail the request if Elasticsearch sync fails
       }
-    } catch (error) {
-      console.error('Error syncing product to Elasticsearch:', error);
-      // Don't fail the request if Elasticsearch sync fails
-    }
+    })();
     
-    next();
+    // Proceed immediately
+    // If headers are not sent yet, next() might be appropriate, but this is a post-response hook usually
+    if (!res.headersSent) {
+      next();
+    }
   }
 
   /**

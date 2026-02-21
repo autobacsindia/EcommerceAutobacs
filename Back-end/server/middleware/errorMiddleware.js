@@ -12,6 +12,19 @@ export const errorHandler = (err, req, res, next) => {
   error.message = err.message;
   error.statusCode = err.statusCode || 500;
 
+  // Handle non-Error objects
+  if (typeof err === 'string') {
+    error.message = err;
+  }
+  
+  // If message is missing, try to find it
+  if (!error.message) {
+    error.message = 'An unexpected error occurred';
+    if (process.env.NODE_ENV === 'development') {
+       error.message += `: ${JSON.stringify(err)}`;
+    }
+  }
+
   // Mongoose validation error
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(e => e.message);

@@ -251,6 +251,12 @@ router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate
       });
     }
 
+    // Handle categories specifically if needed, but Mongoose usually handles array of IDs fine
+    // Ensure unique elements if it's an array
+    if (Array.isArray(req.body.categories)) {
+      req.body.categories = [...new Set(req.body.categories)];
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,

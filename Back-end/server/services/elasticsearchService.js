@@ -271,6 +271,10 @@ class ElasticsearchService {
    * Index a single product
    */
   async indexProduct(product) {
+    if (!this.enabled || !this.client) {
+      return;
+    }
+
     try {
       // Extract vehicle info if available
       let vehicleMakes = [];
@@ -287,12 +291,23 @@ class ElasticsearchService {
         vehicleModels = [...new Set(vehicleModels)];
       }
 
+      // Handle image extraction safely
+      let primaryImage = null;
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        const primary = product.images.find(img => img.isPrimary) || product.images[0];
+        primaryImage = primary ? primary.url : null;
+      } else if (typeof product.images === 'string') {
+        primaryImage = product.images;
+      }
+
+      // Prepare body for Elasticsearch
       const body = {
-        productId: product._id.toString(),
         name: product.name,
         description: product.description,
         shortDescription: product.shortDescription,
-        categories: product.categories, // Index full categories array
+        categories: Array.isArray(product.categories) ? product.categories.map(c => 
+          typeof c === 'object' ? { name: c.name, slug: c.slug } : c
+        ) : [],
         brand: product.brand,
         price: product.price,
         originalPrice: product.originalPrice,
@@ -308,19 +323,17 @@ class ElasticsearchService {
         updatedAt: product.updatedAt,
         vehicle_makes: vehicleMakes,
         vehicle_models: vehicleModels,
-        primaryImage: Array.isArray(product.images) && product.images.length > 0 
-          ? (product.images.find(img => img.isPrimary) || product.images[0]).url 
-          : (typeof product.images === 'string' ? product.images : null)
+        primaryImage: primaryImage
       };
 
       await this.client.index({
         index: this.indexName,
         id: product._id.toString(),
-        body
+        document: body
       });
     } catch (error) {
       console.error('Error indexing product:', error);
-      throw error;
+      // Don't throw error to prevent blocking main flow
     }
   }
 
