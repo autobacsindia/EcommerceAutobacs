@@ -38,7 +38,7 @@ interface Product {
   images: { url: string; alt: string; isPrimary: boolean }[];
   features?: string[];
   packageContents?: string[];
-  variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number }> }>;
+  variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number; image?: string }> }>;
   compatibleVehicles?: Vehicle[];
   qna?: Array<{ question: string; answer: string }>;
   tags?: string[];
@@ -84,7 +84,7 @@ export default function EditProductPage() {
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<{ url: string; alt: string; isPrimary: boolean }[]>([]);
-  const [variableSpecs, setVariableSpecs] = useState<Array<{ key: string; options: Array<{ label: string; price: number }> }>>([]);
+  const [variableSpecs, setVariableSpecs] = useState<Array<{ key: string; options: Array<{ label: string; price: number; image?: string; images?: string[] }> }>>([]);
   const [features, setFeatures] = useState<string[]>([]);
   const [packageContents, setPackageContents] = useState<string[]>([]);
   const [qna, setQna] = useState<{ question: string; answer: string }[]>([]);
@@ -222,15 +222,29 @@ export default function EditProductPage() {
         return;
       }
     }
+
+    const price = parseFloat(formData.price);
+    if (isNaN(price)) {
+      alert('Please enter a valid price');
+      setSubmitting(false);
+      return;
+    }
+
+    const stock = parseInt(formData.stock);
+    if (isNaN(stock)) {
+      alert('Please enter a valid stock quantity');
+      setSubmitting(false);
+      return;
+    }
     
     try {
       const validQna = qna.filter(item => item.question.trim() !== '' && item.answer.trim() !== '');
       
       const productData = {
         ...formData,
-        price: parseFloat(formData.price),
+        price,
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
-        stock: parseInt(formData.stock),
+        stock,
         // category: formData.category || undefined, // Replaced by categories
         categories: selectedCategories, // Send array directly, even if empty
         tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
@@ -253,6 +267,8 @@ export default function EditProductPage() {
         }
       });
       
+      console.log('Submitting product data:', productData);
+
       await apiClient.put(`/products/${productId}`, productData);
       alert('Product updated successfully');
       router.push('/admin/products');
@@ -700,7 +716,7 @@ export default function EditProductPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
                     <div className="space-y-2">
                       {spec.options.map((opt, oi) => (
-                        <div key={oi} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div key={oi} className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-gray-50 rounded">
                           <input
                             type="text"
                             placeholder="Label"
@@ -729,6 +745,126 @@ export default function EditProductPage() {
                             }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md"
                           />
+                          
+                          {/* Image Selection */}
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Option Images (Select multiple)</label>
+                            {existingImages.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {existingImages.map((img, imgIdx) => {
+                                  // Check if this image is selected (either via image property or images array)
+                                  const isSelected = opt.images?.includes(img.url) || opt.image === img.url;
+                                  
+                                  return (
+                                    <div 
+                                      key={imgIdx}
+                                      className={`relative w-12 h-12 border-2 rounded cursor-pointer ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`}
+                                      onClick={() => {
+                                        const v = [...variableSpecs];
+                                        const currentOption = v[si].options[oi];
+                                        
+                                        // Initialize images array if needed, including legacy image if present
+                                        let currentImages = currentOption.images ? [...currentOption.images] : [];
+                                        if (currentOption.image && !currentImages.includes(currentOption.image)) {
+                                          currentImages.push(currentOption.image);
+                                        }
+                                        
+                                        if (isSelected) {
+                                          // Deselect: remove from images array
+                                          currentImages = currentImages.filter(url => url !== img.url);
+                                          // Also clear legacy image field if it matches
+                                          if (currentOption.image === img.url) {
+                                            v[si].options[oi].image = undefined;
+                                          }
+                                        } else {
+                                          // Select: add to images array
+                                          if (!currentImages.includes(img.url)) {
+                                            currentImages.push(img.url);
+                                          }
+                                        }
+                                        
+                                        // Update images array
+                                        v[si].options[oi].images = currentImages;
+                                        // For backward compatibility/UI logic, set the first image as 'image'
+                                        v[si].options[oi].image = currentImages.length > 0 ? currentImages[0] : undefined;
+                                        
+                                        setVariableSpecs(v);
+                                      }}
+                                      title={img.alt || 'Product Image'}
+                                    >
+                                      <img src={img.url} alt={img.alt} className="w-full h-full object-cover rounded-sm" />
+                                      {isSelected && (
+                                        <div className="absolute -top-1 -right-1 bg-blue-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
+                                          ✓
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-500 italic">Upload product images first to assign them to options.</p>
+                            )}
+                            <p className="text-[10px] text-gray-500 mt-1">Click to select/deselect images. Selected images will be displayed when this variant is chosen.</p>
+                            
+                            {/* Selected Images Preview with Remove Option */}
+                            {(opt.images?.length > 0 || opt.image) && (
+                              <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-100">
+                                <label className="block text-xs font-medium text-blue-800 mb-2">Selected for this Variant:</label>
+                                <div className="flex flex-wrap gap-2">
+                                  {/* Combine and deduplicate images */}
+                                  {Array.from(new Set([...(opt.images || []), ...(opt.image ? [opt.image] : [])])).map((imgUrl, idx) => {
+                                    // Find matching existing image for details, or fallback
+                                    const imgDetails = existingImages.find(ei => ei.url === imgUrl);
+                                    
+                                    return (
+                                      <div key={idx} className="relative w-14 h-14 border border-blue-200 rounded bg-white group">
+                                        <img 
+                                          src={imgUrl} 
+                                          alt={imgDetails?.alt || 'Variant Image'} 
+                                          className="w-full h-full object-cover rounded-sm" 
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const v = [...variableSpecs];
+                                            const currentOption = v[si].options[oi];
+                                            let currentImages = currentOption.images ? [...currentOption.images] : [];
+                                            
+                                            // Ensure we have the current state captured
+                                            if (currentOption.image && !currentImages.includes(currentOption.image)) {
+                                              currentImages.push(currentOption.image);
+                                            }
+                                            
+                                            // Remove the specific image
+                                            currentImages = currentImages.filter(url => url !== imgUrl);
+                                            
+                                            // Update legacy field if needed
+                                            if (currentOption.image === imgUrl) {
+                                              v[si].options[oi].image = undefined;
+                                            }
+                                            
+                                            v[si].options[oi].images = currentImages;
+                                            // If legacy was cleared, try to set it to next available
+                                            if (!v[si].options[oi].image && currentImages.length > 0) {
+                                              v[si].options[oi].image = currentImages[0];
+                                            }
+                                            
+                                            setVariableSpecs(v);
+                                          }}
+                                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md hover:bg-red-600 transition-all z-10"
+                                          title="Remove from variant"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
                           <div className="md:col-span-2 flex justify-end">
                             <button
                               type="button"
@@ -738,7 +874,7 @@ export default function EditProductPage() {
                                 v[si] = { ...v[si], options: opts.filter((_, idx) => idx !== oi) };
                                 setVariableSpecs(v);
                               }}
-                              className="px-3 py-2 border rounded-md"
+                              className="px-3 py-2 border rounded-md text-red-600 hover:bg-red-50"
                             >
                               Remove Option
                             </button>

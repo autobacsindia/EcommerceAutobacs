@@ -76,7 +76,7 @@ export function ProductDetailPageClient({ product }: { product: any }) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(false);
-  const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number } | null>(null);
+  const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number; image?: string; images?: string[] } | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
 
   // Get currently compared products from URL
@@ -122,13 +122,95 @@ export function ProductDetailPageClient({ product }: { product: any }) {
         setSelectedSpecOption({
           key: vs[0].key,
           label: vs[0].options[0].label,
-          price: vs[0].options[0].price
+          price: vs[0].options[0].price,
+          image: vs[0].options[0].image,
+          images: vs[0].options[0].images
         });
       } else {
         setSelectedSpecOption(null);
       }
     }
   }, [product?._id]); // Only re-run when product ID changes
+
+  const displayImages = (() => {
+    // If multiple images are assigned to the variant, use ONLY those (or prioritize them)
+    // The user requirement "images related to that specific product will display" implies showing relevant images.
+    // If we have variant images, we should show them.
+    // If we want to show ONLY variant images, we return them.
+    // If we want to show variant images FIRST, then others, we merge.
+    // Let's assume "Prioritize" for now, as usually users still want to see general product shots.
+    // Actually, "images related to that specific product" (singular product context, plural images) might mean "Show ONLY these".
+    // But let's stick to "Prioritize" to be safe, or maybe filtered?
+    // If I have a Red Shirt, I probably only want to see Red Shirt images.
+    // Let's try to Prioritize first.
+    
+    let baseImages = product.images && product.images.length > 0 
+      ? product.images.map((img: any, index: number) => ({
+          id: img._id || index,
+          src: img.url,
+          alt: img.alt || `${product.name} image ${index + 1}`,
+          name: img.alt
+        }))
+      : [];
+
+    if (selectedSpecOption?.images && selectedSpecOption.images.length > 0) {
+      // We have specific images for this variant.
+      // Filter baseImages to find matches and move them to top, OR create new entries if they are not in baseImages.
+      // Actually, if we have specific images, maybe we should just show those?
+      // "when each variant is selected the images related to that specific product will display"
+      // Let's go with: Show Variant Images + Remaining Base Images (sorted to bottom)
+      
+      const variantImageUrls = selectedSpecOption.images;
+      const variantImages = [];
+      const otherImages = [];
+      
+      // Split base images into variant-matching and others
+      baseImages.forEach((img: any) => {
+        if (variantImageUrls.includes(img.src)) {
+          variantImages.push(img);
+        } else {
+          otherImages.push(img);
+        }
+      });
+      
+      // Also check if there are any URLs in variantImageUrls that were NOT in baseImages (unlikely if selected from existing, but possible)
+      variantImageUrls.forEach((url: string) => {
+        if (!variantImages.find(img => img.src === url)) {
+           variantImages.push({
+             id: url,
+             src: url,
+             alt: selectedSpecOption.label,
+             name: selectedSpecOption.label
+           });
+        }
+      });
+      
+      // Sort variant images based on the order in selectedSpecOption.images
+      variantImages.sort((a, b) => {
+        return variantImageUrls.indexOf(a.src) - variantImageUrls.indexOf(b.src);
+      });
+      
+      return [...variantImages, ...otherImages];
+    }
+
+    // Fallback for single image legacy support
+    if (selectedSpecOption?.image) {
+      const existingIndex = baseImages.findIndex((img: any) => img.src === selectedSpecOption.image);
+      if (existingIndex !== -1) {
+        const [item] = baseImages.splice(existingIndex, 1);
+        baseImages.unshift(item);
+      } else {
+        baseImages.unshift({
+          id: 'variant-image',
+          src: selectedSpecOption.image,
+          alt: selectedSpecOption.label,
+          name: selectedSpecOption.label
+        });
+      }
+    }
+    
+    return baseImages;
+  })();
 
   const handleWishlistToggle = async () => {
     if (!isAuthenticated) {
@@ -279,15 +361,7 @@ export function ProductDetailPageClient({ product }: { product: any }) {
           {/* Left: Images */}
           <div>
             <ImageGallery
-              images={product.images && product.images.length > 0 
-                ? product.images.map((img: any, index: number) => ({
-                    id: img._id || index,
-                    src: img.url,
-                    alt: img.alt || `${product.name} image ${index + 1}`,
-                    name: img.alt
-                  }))
-                : []
-              }
+              images={displayImages}
               className="sticky top-8"
             />
           </div>
@@ -368,7 +442,13 @@ export function ProductDetailPageClient({ product }: { product: any }) {
                           <button
                             key={oi}
                             type="button"
-                            onClick={() => setSelectedSpecOption({ key: specGroup.key, label: opt.label, price: opt.price })}
+                            onClick={() => setSelectedSpecOption({ 
+                              key: specGroup.key, 
+                              label: opt.label, 
+                              price: opt.price,
+                              image: opt.image,
+                              images: opt.images 
+                            })}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                               selected 
                                 ? 'bg-blue-600 text-white shadow-md' 

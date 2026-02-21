@@ -99,7 +99,9 @@ const ProductSchema = new mongoose.Schema({
     key: { type: String, required: true },
     options: [{
       label: { type: String, required: true },
-      price: { type: Number, required: true, min: 0 }
+      price: { type: Number, required: true, min: 0 },
+      image: { type: String }, // Keep for backward compatibility
+      images: [String] // Array of image URLs
     }]
   }],
   externalId: {

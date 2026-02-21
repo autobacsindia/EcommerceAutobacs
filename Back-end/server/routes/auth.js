@@ -228,7 +228,7 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
 // @desc    Refresh access token using refresh token
 // @access  Public
 router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
   try {
     // Decode refresh token to get user ID (without verification for now)
