@@ -3,8 +3,12 @@ import mongoose from "mongoose";
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 import elasticsearchService from "./services/elasticsearchService.js";
 import { app, cronService, adaptiveThrottlingService, setCronService } from "./app.js";
+import { initSentry } from "./config/sentry.js";
 
 dotenv.config();
+
+// Initialize Sentry early in the boot process
+initSentry();
 
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {

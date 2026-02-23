@@ -33,6 +33,7 @@ import returnRoutes from "./routes/returnRoutes.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
+import * as Sentry from "@sentry/node";
 // Sanitization middleware
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
 import cookieParser from "cookie-parser";
@@ -55,6 +56,11 @@ import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
 
 dotenv.config();
 const app = express();
+
+// The request handler must be the first middleware on the app
+app.use(Sentry.Handlers.requestHandler());
+// TracingHandler creates a trace for every incoming request
+app.use(Sentry.Handlers.tracingHandler());
 
 // Initialize cron service
 const cronService = new CronService();
@@ -213,6 +219,9 @@ app.use("/dashboard", adminRateLimit, dashboardRoutes);
 // Location service (general rate limiting)
 app.use(["/location", "/api/location"], apiRateLimit, locationRoutes);
 app.use(["/contact", "/api/contact"], apiRateLimit, contactRoutes);
+
+// The error handler must be before any other error middleware and after all controllers
+app.use(Sentry.Handlers.errorHandler());
 
 // Error handling middleware (must be after routes)
 app.use(notFound);
