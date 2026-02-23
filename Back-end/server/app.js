@@ -61,11 +61,6 @@ const app = express();
 // This ensures req.ip correctly identifies the client IP via X-Forwarded-For
 app.set('trust proxy', 1);
 
-// The request handler must be the first middleware on the app
-app.use(Sentry.Handlers.requestHandler());
-// TracingHandler creates a trace for every incoming request
-app.use(Sentry.Handlers.tracingHandler());
-
 // Initialize cron service
 const cronService = new CronService();
 
@@ -224,8 +219,8 @@ app.use("/dashboard", adminRateLimit, dashboardRoutes);
 app.use(["/location", "/api/location"], apiRateLimit, locationRoutes);
 app.use(["/contact", "/api/contact"], apiRateLimit, contactRoutes);
 
-// The error handler must be before any other error middleware and after all controllers
-app.use(Sentry.Handlers.errorHandler());
+// Sentry Error Handler (must be before any other error middleware)
+Sentry.setupExpressErrorHandler(app);
 
 // Error handling middleware (must be after routes)
 app.use(notFound);
