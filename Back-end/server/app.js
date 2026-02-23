@@ -57,6 +57,10 @@ import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
 dotenv.config();
 const app = express();
 
+// Trust the first proxy (required for Cloudflare/Railway/Heroku)
+// This ensures req.ip correctly identifies the client IP via X-Forwarded-For
+app.set('trust proxy', 1);
+
 // The request handler must be the first middleware on the app
 app.use(Sentry.Handlers.requestHandler());
 // TracingHandler creates a trace for every incoming request

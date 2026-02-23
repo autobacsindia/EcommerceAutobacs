@@ -27,8 +27,10 @@ export const rateLimit = (options = {}) => {
     const adjustedMax = adaptiveThrottlingService.getAdjustedLimit(endpoint, max);
     const effectiveMax = adjustedMax;
     
-    // Generate key based on IP and optional key generator
-    const baseKey = keyGenerator ? keyGenerator(req) : req.ip || req.connection.remoteAddress;
+    // Generate key based on IP (prioritize Cloudflare header if available)
+    const baseKey = keyGenerator 
+      ? keyGenerator(req) 
+      : req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
     const now = Date.now();
     
     // Clean up old entries
