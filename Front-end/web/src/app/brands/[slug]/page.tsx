@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Filter, Grid, List, Search, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Filter, Search, RefreshCw } from 'lucide-react';
 import { use } from 'react';
 import ProductGrid from '@/components/products/ProductGrid';
 import Pagination from '@/components/layout/Pagination';
@@ -130,7 +130,7 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
   const [brandLoading, setBrandLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [brand, setBrand] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
   
   // Get current page from URL parameters
   const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
@@ -279,26 +279,7 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
             )}
           </p>
 
-          {/* Controls */}
-          <div className="flex items-center gap-4">
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-white shadow-sm' : ''}`}
-                aria-label="Grid view"
-              >
-                <Grid className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}
-                aria-label="List view"
-              >
-                <List className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+
         </div>
 
         {/* Error State */}

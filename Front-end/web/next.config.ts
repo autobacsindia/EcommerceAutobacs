@@ -95,6 +95,7 @@ const pwaConfig = withPWA({
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: 'standalone',
   reactCompiler: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === "production"
