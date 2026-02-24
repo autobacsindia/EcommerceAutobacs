@@ -36,10 +36,10 @@ export const getReviews = async (
       order
     });
     
-    const response = await apiClient.get(`/reviews/products/${productId}?${params.toString()}`);
+    const apiResponse = await apiClient.get(`/reviews/products/${productId}?${params.toString()}`) as any;
     
     // Transform the response to match our frontend types
-    const transformedReviews: Review[] = (response as any).reviews.map((review: any) => ({
+    const transformedReviews: Review[] = apiResponse.reviews.map((review: any) => ({
       id: review.id,
       user: {
         id: review.user.id,
@@ -58,11 +58,11 @@ export const getReviews = async (
     return {
       reviews: transformedReviews,
       pagination: {
-        currentPage: response.pagination.currentPage,
-        totalPages: response.pagination.totalPages,
-        totalReviews: response.pagination.totalReviews,
-        hasNext: response.pagination.hasNext,
-        hasPrev: response.pagination.hasPrev
+        currentPage: apiResponse.pagination.currentPage,
+        totalPages: apiResponse.pagination.totalPages,
+        totalReviews: apiResponse.pagination.totalReviews,
+        hasNext: apiResponse.pagination.hasNext,
+        hasPrev: apiResponse.pagination.hasPrev
       }
     };
   } catch (error) {
