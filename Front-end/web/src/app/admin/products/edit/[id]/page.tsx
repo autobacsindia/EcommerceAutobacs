@@ -808,7 +808,7 @@ export default function EditProductPage() {
                             <p className="text-[10px] text-gray-500 mt-1">Click to select/deselect images. Selected images will be displayed when this variant is chosen.</p>
                             
                             {/* Selected Images Preview with Remove Option */}
-                            {(opt.images?.length > 0 || opt.image) && (
+                            {((opt.images && opt.images.length > 0) || opt.image) && (
                               <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-100">
                                 <label className="block text-xs font-medium text-blue-800 mb-2">Selected for this Variant:</label>
                                 <div className="flex flex-wrap gap-2">
