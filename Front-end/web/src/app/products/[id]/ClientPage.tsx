@@ -161,8 +161,8 @@ export function ProductDetailPageClient({ product }: { product: any }) {
       // Let's go with: Show Variant Images + Remaining Base Images (sorted to bottom)
       
       const variantImageUrls = selectedSpecOption.images;
-      const variantImages = [];
-      const otherImages = [];
+      const variantImages: any[] = [];
+      const otherImages: any[] = [];
       
       // Split base images into variant-matching and others
       baseImages.forEach((img: any) => {
