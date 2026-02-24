@@ -78,7 +78,7 @@ export const submitReview = async (
   reviewData: ReviewSubmissionData
 ): Promise<{ success: boolean; message: string; review?: any }> => {
   try {
-    const response = await apiClient.post(`/reviews/products/${productId}`, reviewData);
+    const response = await apiClient.post(`/reviews/products/${productId}`, reviewData) as any;
     return {
       success: response.success,
       message: response.message,
