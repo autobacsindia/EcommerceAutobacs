@@ -37,6 +37,9 @@
     "assign-header-nav-categories": "node assign-header-categories.js",
     "test-validate-categories": "node test-validate-product-categories.js"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@elastic/elasticsearch": "^8.15.0",
     "@sendgrid/mail": "^8.1.6",

@@ -19,6 +19,9 @@
     "extract-vehicles": "node scripts/extract-vehicles.js",
     "import-vehicle-images": "node scripts/download-vehicle-images.js"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
     "@sentry/nextjs": "^10.39.0",
