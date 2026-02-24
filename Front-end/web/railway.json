@@ -5,7 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "node .next/standalone/server.js",
     "runtime": "V2",
     "numReplicas": 1,
     "sleepApplication": false,

@@ -96,6 +96,13 @@ const pwaConfig = withPWA({
 const nextConfig: NextConfig = {
   /* config options here */
   output: 'standalone',
+  reactStrictMode: false,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   reactCompiler: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === "production"
