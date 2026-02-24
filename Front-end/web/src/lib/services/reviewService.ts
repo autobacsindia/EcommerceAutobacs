@@ -12,7 +12,7 @@ export interface ReviewSubmissionData {
 export const getReviewSummary = async (productId: string): Promise<ReviewSummary> => {
   try {
     const response = await apiClient.get(`/reviews/products/${productId}/summary`);
-    return response.summary;
+    return (response as any).summary;
   } catch (error) {
     if (process.env.NODE_ENV !== 'test') {
       console.error('Error fetching review summary:', error);
@@ -39,7 +39,7 @@ export const getReviews = async (
     const response = await apiClient.get(`/reviews/products/${productId}?${params.toString()}`);
     
     // Transform the response to match our frontend types
-    const transformedReviews: Review[] = response.reviews.map((review: any) => ({
+    const transformedReviews: Review[] = (response as any).reviews.map((review: any) => ({
       id: review.id,
       user: {
         id: review.user.id,
