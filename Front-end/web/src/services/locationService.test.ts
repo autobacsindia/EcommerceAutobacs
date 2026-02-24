@@ -205,7 +205,7 @@ describe('LocationService', () => {
   describe('calculateShippingCost', () => {
     it('posts to shipping-cost endpoint', async () => {
       const request = {
-        postalCode: '123456',
+        pinCode: '123456',
         items: [{ productId: 'p1', quantity: 1 }],
       };
       const apiResponse = { cost: 50, currency: 'INR' };
@@ -285,7 +285,20 @@ describe('LocationService', () => {
 
   describe('selectWarehouseForOrder', () => {
     it('selects warehouse for order', async () => {
-      const data = { orderId: 'ord_123', warehouseId: 'wh_1' };
+      const data = { 
+        orderId: 'ord_123', 
+        warehouseId: 'wh_1',
+        orderItems: [{ productId: 'p1', quantity: 1 }],
+        deliveryAddress: {
+           street: '123 Main St',
+           city: 'Test City',
+           state: 'Test State',
+           zipCode: '123456',
+           country: 'Test Country',
+           postalCode: '123456',
+           coordinates: { latitude: 10, longitude: 20 }
+         }
+      };
       const response = { success: true };
       mockedApiClient.post.mockResolvedValue(response);
 

@@ -40,7 +40,7 @@ jest.mock('@/contexts/CurrencyContext', () => ({
 }));
 
 jest.mock('react-hot-toast', () => {
-  const mockToast = jest.fn();
+  const mockToast = jest.fn() as any;
   mockToast.success = jest.fn();
   mockToast.error = jest.fn();
   return {

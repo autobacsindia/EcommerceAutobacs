@@ -95,10 +95,10 @@ describe('Integration: Add to Cart Flow', () => {
     _id: 'prod-1',
     name: 'Test Product',
     price: 100,
-    description: 'A test product',
-    images: ['/test-image.jpg'],
-    category: { _id: 'cat-1', name: 'Category', slug: 'category' },
-    brand: { _id: 'brand-1', name: 'Brand', slug: 'brand' },
+    description: 'Test Description',
+    images: ['test-image.jpg'],
+    category: { _id: 'cat-1', name: 'Category', slug: 'category', isActive: true, order: 1 },
+    brand: 'Brand',
     stock: 10,
     sku: 'TEST-SKU',
     specifications: [],
@@ -106,6 +106,8 @@ describe('Integration: Add to Cart Flow', () => {
     isFeatured: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    averageRating: 4.5,
+    totalReviews: 10,
   };
 
   it('updates cart count and navigates to checkout when user adds item and proceeds', async () => {
