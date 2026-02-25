@@ -8,6 +8,7 @@ const execPromise = promisify(exec);
 const mongooseOptions = {
   serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
   socketTimeoutMS: 10000, // Close sockets after 10 seconds of inactivity
+  family: 4,
   
   // SSL/TLS specific options - configurable via environment variables
   tls: process.env.MONGO_TLS === 'true',
