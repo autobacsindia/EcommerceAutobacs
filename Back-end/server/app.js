@@ -173,6 +173,35 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 });
 
+// Health check endpoints
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+app.get('/ready', (req, res) => {
+  const isReady = mongoose.connection.readyState === 1;
+  res.status(isReady ? 200 : 503).json({
+    status: isReady ? 'ready' : 'not ready',
+    database: isReady ? 'connected' : 'disconnected'
+  });
+});
+
+// API status endpoint
+app.get('/api/status', (req, res) => {
+  res.status(200).json({
+    status: 'operational',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Mount routes with specific e-commerce rate limiting strategy
 // Auth routes already have their own stricter rate limiting (5 req/min)
 app.use(["/auth", "/api/auth"], authRoutes);
