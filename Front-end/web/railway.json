@@ -5,7 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "npm run start",
+    "startCommand": "next start -p $PORT",
     "runtime": "V2",
     "numReplicas": 1,
     "sleepApplication": false,
