@@ -101,12 +101,17 @@ app.use(cookieParser());
 // This will set the XSRF-TOKEN cookie and validate headers for state-changing requests
 app.use(csrfProtection);
 
+const frontendUrlsEnv = process.env.FRONTEND_URLS;
+const frontendUrls = frontendUrlsEnv
+  ? frontendUrlsEnv.split(',').map(u => u.trim()).filter(Boolean)
+  : [];
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:5173', // Vite default
+  'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL
+  process.env.FRONTEND_URL,
+  ...frontendUrls
 ].filter(Boolean);
 
 app.use(cors({
