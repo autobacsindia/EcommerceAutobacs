@@ -20,7 +20,7 @@ COPY . .
 # RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 
 # Create app directory
 WORKDIR /app
