@@ -31,17 +31,9 @@ router.get('/google', (req, res) => {
   const clientId = GOOGLE_CLIENT_ID.trim();
   const callbackUrl = GOOGLE_CALLBACK_URL.trim();
 
-  // Log for debugging
-  console.log('--- Google Auth Start ---');
-  console.log('Client ID:', clientId);
-  console.log('Callback URL:', callbackUrl);
-
   // Use the exact callback URL configured in environment
   const redirectUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=${encodeURIComponent(scopes.join(' '))}&access_type=offline&prompt=consent`;
   
-  console.log('Redirecting to:', redirectUrl);
-  console.log('-------------------------');
-
   res.redirect(redirectUrl);
 });
 
