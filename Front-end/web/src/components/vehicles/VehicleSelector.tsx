@@ -59,7 +59,8 @@ export default function VehicleSelector({
       }
 
       try {
-        const response: any = await apiClient.get(`/vehicles/models/${selectedMake}`);
+        const encodedMake = encodeURIComponent(selectedMake);
+        const response: any = await apiClient.get(`/vehicles/models/${encodedMake}`);
         setModels(response.models.map((model: string) => ({
           _id: model,
           name: model,

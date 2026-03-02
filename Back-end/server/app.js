@@ -5,6 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import authRoutes from "./routes/auth.js";
+import socialAuthRoutes from "./routes/socialAuth.js";
 import orderRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
 import scheduledTasksRoutes from "./routes/scheduledTasks.js";
@@ -210,6 +211,7 @@ app.get('/api/status', (req, res) => {
 // Mount routes with specific e-commerce rate limiting strategy
 // Auth routes already have their own stricter rate limiting (5 req/min)
 app.use(["/auth", "/api/auth"], authRoutes);
+app.use(["/auth", "/api/auth"], socialAuthRoutes);
 
 // Public browsing endpoints (300 req/min, burst 100) - catalog, products, categories
 app.use(["/products", "/api/products"], publicBrowsingRateLimit, productRoutes);

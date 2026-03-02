@@ -69,7 +69,7 @@ class LocationService {
         placeId = placeDetails.placeId;
         addressComponents = placeDetails.addressComponents;
       } else if (locationData.coordinates) {
-        // Trust provided coordinates and avoid reverse geocoding
+        // Trust provided coordinates but try to reverse geocode if address is missing
         let latitude, longitude;
         if (Array.isArray(locationData.coordinates)) {
           [longitude, latitude] = locationData.coordinates;
@@ -78,20 +78,52 @@ class LocationService {
           longitude = locationData.coordinates.longitude;
         }
         coordinates = { latitude, longitude };
-        const city = locationData.address?.city || 'Unknown';
-        const state = locationData.address?.state || 'India';
-        const postalCode = locationData.postalCode || locationData.address?.postalCode || '';
+        
+        let city = locationData.address?.city;
+        let state = locationData.address?.state;
+        let postalCode = locationData.postalCode || locationData.address?.postalCode;
+        let street = locationData.address?.street || '';
+        let country = locationData.address?.country || 'India';
+        
+        // If critical info is missing, try reverse geocoding
+        if (!city || city === 'Unknown' || !state) {
+          try {
+            console.log(`Attempting reverse geocode for ${latitude}, ${longitude}`);
+            const geocoded = await googleMapsService.reverseGeocode(latitude, longitude);
+            if (geocoded && geocoded.addressComponents) {
+              city = geocoded.addressComponents.city || city;
+              state = geocoded.addressComponents.state || state;
+              postalCode = geocoded.addressComponents.postalCode || postalCode;
+              street = geocoded.addressComponents.street || street;
+              country = geocoded.addressComponents.country || country;
+              formatted = geocoded.formatted;
+              placeId = geocoded.placeId;
+            }
+          } catch (err) {
+            console.warn("Reverse geocoding failed, falling back to basic info:", err.message);
+            // Fallback will use whatever we have or defaults below
+          }
+        }
+
+        city = city || 'Unknown';
+        state = state || 'India';
+        postalCode = postalCode || '';
+        
         addressComponents = {
-          street: locationData.address?.street || '',
+          street,
           city,
           state,
           postalCode,
-          country: locationData.address?.country || 'India'
+          country
         };
-        formatted = city && state
-          ? `${city}, ${state}${postalCode ? ' ' + postalCode : ''}, ${addressComponents.country}`
-          : `${latitude.toFixed(5)}, ${longitude.toFixed(5)} (${addressComponents.country})`;
-        placeId = null;
+        
+        if (!formatted) {
+          formatted = city && state
+            ? `${city}, ${state}${postalCode ? ' ' + postalCode : ''}, ${country}`
+            : `${latitude.toFixed(5)}, ${longitude.toFixed(5)} (${country})`;
+        }
+        
+        if (!placeId) placeId = null;
       } else if (locationData.postalCode || (locationData.address && typeof locationData.address === 'object' && locationData.address.postalCode)) {
         const pinCode = locationData.postalCode || locationData.address.postalCode;
         const city = locationData.address?.city || 'Unknown';
