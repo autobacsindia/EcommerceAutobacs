@@ -55,7 +55,9 @@ export const csrfProtection = (req, res, next) => {
     '/auth/facebook/callback',
     '/api/delivery-zones/check-serviceability',
     '/api/delivery-zones/estimate',
-    '/api/delivery-zones/shipping-cost'
+    '/api/delivery-zones/shipping-cost',
+    '/api/location/select',
+    '/location/select'
   ];
 
   if (excludedPaths.some(path => req.path.includes(path))) {

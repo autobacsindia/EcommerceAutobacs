@@ -413,6 +413,9 @@ class APIClient {
       if ((error as any)?.responseStatus !== undefined) {
         errorDetails.responseStatus = (error as any).responseStatus;
       }
+      if ((error as any)?.rawData !== undefined) {
+        errorDetails.rawData = (error as any).rawData;
+      }
     
       // Don't log expected 404 errors for location endpoints (user hasn't set location yet)
       // or category endpoints (category might not exist)

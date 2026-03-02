@@ -1,5 +1,4 @@
 import UserLocation from "../models/UserLocation.js";
-import DeliveryZone from "../models/DeliveryZone.js";
 import Warehouse from "../models/Warehouse.js";
 import googleMapsService from "./googleMapsService.js";
 
@@ -11,6 +10,34 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * Location Service for managing user locations and delivery zones
  */
 class LocationService {
+  /**
+   * Compute generic India-wide delivery estimate
+   */
+  computeGenericEstimate(minDays = 3, maxDays = 7, processingDays = 1) {
+    const startDate = new Date();
+    const addBusinessDays = (date, days) => {
+      let d = new Date(date);
+      let added = 0;
+      while (added < days) {
+        d.setDate(d.getDate() + 1);
+        if (d.getDay() !== 0) {
+          added++;
+        }
+      }
+      return d;
+    };
+    const afterProcessing = addBusinessDays(startDate, processingDays);
+    const minDate = addBusinessDays(afterProcessing, minDays);
+    const maxDate = addBusinessDays(afterProcessing, maxDays);
+    const options = { month: "short", day: "numeric" };
+    const minStr = minDate.toLocaleDateString("en-IN", options);
+    const maxStr = maxDate.toLocaleDateString("en-IN", options);
+    return {
+      minDate,
+      maxDate,
+      formattedRange: minStr === maxStr ? `by ${minStr}` : `between ${minStr} and ${maxStr}`
+    };
+  }
   /**
    * Select and save user location
    * @param {Object} identifier - { userId, sessionId }
@@ -42,32 +69,33 @@ class LocationService {
         placeId = placeDetails.placeId;
         addressComponents = placeDetails.addressComponents;
       } else if (locationData.coordinates) {
-        // Reverse geocode coordinates
+        // Trust provided coordinates and avoid reverse geocoding
         let latitude, longitude;
-        
         if (Array.isArray(locationData.coordinates)) {
-          // Handle [longitude, latitude] format
           [longitude, latitude] = locationData.coordinates;
         } else {
-          // Handle { latitude, longitude } format
           latitude = locationData.coordinates.latitude;
           longitude = locationData.coordinates.longitude;
         }
-
-        const geocoded = await googleMapsService.reverseGeocode(latitude, longitude);
-        coordinates = geocoded.coordinates;
-        formatted = geocoded.formatted;
-        placeId = geocoded.placeId;
-        addressComponents = geocoded.addressComponents;
+        coordinates = { latitude, longitude };
+        const city = locationData.address?.city || 'Unknown';
+        const state = locationData.address?.state || 'India';
+        const postalCode = locationData.postalCode || locationData.address?.postalCode || '';
+        addressComponents = {
+          street: locationData.address?.street || '',
+          city,
+          state,
+          postalCode,
+          country: locationData.address?.country || 'India'
+        };
+        formatted = city && state
+          ? `${city}, ${state}${postalCode ? ' ' + postalCode : ''}, ${addressComponents.country}`
+          : `${latitude.toFixed(5)}, ${longitude.toFixed(5)} (${addressComponents.country})`;
+        placeId = null;
       } else if (locationData.postalCode || (locationData.address && typeof locationData.address === 'object' && locationData.address.postalCode)) {
-        // Handle PIN code-only submission (no Google Maps needed)
         const pinCode = locationData.postalCode || locationData.address.postalCode;
-        const deliveryZone = await DeliveryZone.findByPinCode(pinCode);
-        
-        // Use zone data to construct address
-        const city = locationData.address?.city || deliveryZone?.cities?.[0] || 'Unknown';
-        const state = locationData.address?.state || deliveryZone?.states?.[0] || 'India';
-        
+        const city = locationData.address?.city || 'Unknown';
+        const state = locationData.address?.state || 'India';
         addressComponents = {
           street: locationData.address?.street || '',
           city,
@@ -75,16 +103,11 @@ class LocationService {
           postalCode: pinCode,
           country: locationData.address?.country || 'India'
         };
-
         formatted = `${city}, ${state} ${pinCode}, ${addressComponents.country}`;
-        
-        // Use zone's approximate center or default India coordinates
-        // Since we don't have exact coordinates, use approximate
         coordinates = {
-          latitude: 20.5937, // Center of India (approximate)
+          latitude: 20.5937,
           longitude: 78.9629
         };
-        
         placeId = null;
       } else if (locationData.address && typeof locationData.address === 'string') {
         // Geocode manual address string
@@ -97,29 +120,6 @@ class LocationService {
         throw new Error("Invalid location data provided");
       }
 
-      // Find delivery zone by PIN code or assign based on city
-      let deliveryZone;
-      if (!locationData.postalCode && !(locationData.address && locationData.address.postalCode)) {
-        deliveryZone = await DeliveryZone.findByPinCode(addressComponents.postalCode);
-        
-        // If no specific PIN code match, assign zone based on city tier
-        if (!deliveryZone) {
-          deliveryZone = await this.assignZoneByCity(addressComponents.city, addressComponents.state);
-        }
-      } else {
-        // Check for PIN code match first
-        deliveryZone = await DeliveryZone.findByPinCode(addressComponents.postalCode);
-        
-        // If no specific PIN code match, assign zone based on city tier
-        if (!deliveryZone) {
-          deliveryZone = await this.assignZoneByCity(addressComponents.city, addressComponents.state);
-        }
-      }
-      
-      if (!deliveryZone) {
-        throw new Error(`Unable to determine delivery zone for this location`);
-      }
-
       // Find nearest warehouse
       const nearestWarehouses = await Warehouse.findNearest(
         coordinates.longitude,
@@ -127,6 +127,10 @@ class LocationService {
       );
       
       const nearestWarehouse = nearestWarehouses.length > 0 ? nearestWarehouses[0]._id : null;
+
+      // Always proceed without delivery zone logic (India-wide service)
+
+      // If zone found, proceed as usual
 
       // Create location data
       const locationPayload = {
@@ -142,7 +146,7 @@ class LocationService {
             coordinates: [coordinates.longitude, coordinates.latitude]
           }
         },
-        deliveryZone: deliveryZone._id,
+        deliveryZone: undefined,
         nearestWarehouse,
         placeId
       };
@@ -152,33 +156,28 @@ class LocationService {
 
       // Cache the location data
       const cacheKey = identifier.userId ? `user:${identifier.userId}` : `session:${identifier.sessionId}`;
+      const genericEstimate = this.computeGenericEstimate();
       locationCache.set(cacheKey, {
         data: {
           location: savedLocation,
-          deliveryZone: deliveryZone,
+          deliveryZone: null,
           nearestWarehouse: nearestWarehouses.length > 0 ? nearestWarehouses[0] : null,
-          deliveryEstimate: deliveryZone.estimateDeliveryDate()
+          deliveryEstimate: genericEstimate
         },
         timestamp: Date.now()
       });
 
       return {
         location: savedLocation,
-        deliveryZone: deliveryZone,
+        deliveryZone: null,
         nearestWarehouse: nearestWarehouses.length > 0 ? nearestWarehouses[0] : null,
-        deliveryEstimate: deliveryZone.estimateDeliveryDate()
+        deliveryEstimate: this.computeGenericEstimate()
       };
     } catch (error) {
       console.error("Select location error:", error);
       throw error;
     }
   }
-
-  /**
-   * Get current user location
-   * @param {Object} identifier - { userId, sessionId }
-   * @returns {Promise<Object|null>} Current location or null
-   */
   async getCurrentLocation(identifier) {
     try {
       // Check cache first
@@ -241,20 +240,12 @@ class LocationService {
    */
   async validateAddress(postalCode) {
     try {
-      const deliveryZone = await DeliveryZone.findByPinCode(postalCode);
-
-      if (!deliveryZone) {
-        return {
-          serviceable: false,
-          message: `Delivery not available for PIN code: ${postalCode}`
-        };
-      }
-
+      const genericEstimate = this.computeGenericEstimate();
       return {
         serviceable: true,
-        zone: deliveryZone,
-        deliveryEstimate: deliveryZone.estimateDeliveryDate(),
-        message: `Delivery available in ${deliveryZone.deliveryTime.minDays}-${deliveryZone.deliveryTime.maxDays} days`
+        zone: null,
+        deliveryEstimate: genericEstimate,
+        message: `Delivery available across India in ${genericEstimate.formattedRange}`
       };
     } catch (error) {
       console.error("Validate address error:", error);
@@ -322,15 +313,9 @@ class LocationService {
    */
   async getDeliveryEstimate(postalCode) {
     try {
-      const deliveryZone = await DeliveryZone.findByPinCode(postalCode);
-
-      if (!deliveryZone) {
-        throw new Error(`Delivery zone not found for PIN code: ${postalCode}`);
-      }
-
       return {
-        zone: deliveryZone,
-        estimate: deliveryZone.estimateDeliveryDate()
+        zone: null,
+        estimate: this.computeGenericEstimate()
       };
     } catch (error) {
       console.error("Get delivery estimate error:", error);
@@ -345,19 +330,7 @@ class LocationService {
    * @returns {Promise<Object|null>} Delivery zone or null
    */
   async assignZoneByCity(city, state) {
-    try {
-      // This is a simplified implementation - in a real app, you'd have more sophisticated logic
-      // For now, we'll just find any zone that serves this state
-      const zones = await DeliveryZone.find({
-        states: state,
-        isServiceable: true
-      }).sort({ priority: -1 });
-      
-      return zones.length > 0 ? zones[0] : null;
-    } catch (error) {
-      console.error("Assign zone by city error:", error);
-      return null;
-    }
+    return null;
   }
 }
 

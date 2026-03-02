@@ -4,6 +4,7 @@ import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 import elasticsearchService from "./services/elasticsearchService.js";
 import { app, cronService, adaptiveThrottlingService, setCronService } from "./app.js";
 import { initSentry } from "./config/sentry.js";
+import net from "net";
 
 dotenv.config();
 
@@ -73,19 +74,53 @@ async function initializeServer() {
     }
     console.log('---------------------------------------\n');
 
-    // Start server
-    const PORT = process.env.PORT || 5001;  // Default to 5001 to avoid conflicts
-    app.listen(PORT, () => {
-      console.log(`✓ Server running on port ${PORT}`);
-      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`✓ API Documentation: http://localhost:${PORT}/`);
+    // Start server with port fallback if in use
+    const candidates = [
+      typeof process.env.PORT === 'string' ? parseInt(process.env.PORT, 10) : undefined,
+      5000, 5001, 5002
+    ].filter(Boolean);
 
-      // Show database connection status
-      if (dbConnection) {
-        console.log('✓ Database connection established');
+    const isPortAvailable = (port) => {
+      return new Promise((resolve) => {
+        const tester = net.createServer()
+          .once('error', () => resolve(false))
+          .once('listening', () => tester.close(() => resolve(true)))
+          .listen(port);
+      });
+    };
+
+    let selectedPort = null;
+    for (const p of candidates) {
+      // eslint-disable-next-line no-await-in-loop
+      const available = await isPortAvailable(p);
+      if (available) {
+        selectedPort = p;
+        break;
       } else {
-        console.log('⚠ Database connection not available');
+        console.warn(`⚠ Port ${p} unavailable (in use).`);
       }
+    }
+
+    if (!selectedPort) {
+      throw new Error('No available ports to start server');
+    }
+
+    await new Promise((resolve) => {
+      const server = app.listen(selectedPort, () => {
+        console.log(`✓ Server running on port ${selectedPort}`);
+        console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`✓ API Documentation: http://localhost:${selectedPort}/`);
+        if (dbConnection) {
+          console.log('✓ Database connection established');
+        } else {
+          console.log('⚠ Database connection not available');
+        }
+        resolve();
+      });
+      server.on('error', (err) => {
+        console.error('✗ Server listen error:', err);
+        process.exit(1);
+      });
     });
   } catch (error) {
     console.error('✗ Failed to initialize server:', error.message);

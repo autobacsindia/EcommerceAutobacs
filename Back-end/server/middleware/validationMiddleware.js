@@ -542,8 +542,28 @@ export const validateLocationSelect = [
     .optional(), // Can be string or object depending on implementation
   body('coordinates')
     .optional()
-    .isArray({ min: 2, max: 2 })
-    .withMessage('Coordinates must be an array of [longitude, latitude]'),
+    .custom((value) => {
+      if (Array.isArray(value)) {
+        return (
+          value.length === 2 &&
+          typeof value[0] === 'number' &&
+          typeof value[1] === 'number' &&
+          value[0] >= -180 && value[0] <= 180 &&
+          value[1] >= -90 && value[1] <= 90
+        );
+      }
+      if (value && typeof value === 'object') {
+        const { latitude, longitude } = value;
+        return (
+          typeof latitude === 'number' &&
+          typeof longitude === 'number' &&
+          longitude >= -180 && longitude <= 180 &&
+          latitude >= -90 && latitude <= 90
+        );
+      }
+      return false;
+    })
+    .withMessage('Coordinates must be [longitude, latitude] or { latitude, longitude }'),
   body('street')
     .optional()
     .trim(),

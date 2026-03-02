@@ -149,6 +149,8 @@ export default function LocationSelector({
       
       let errorMessage = message || 'Failed to detect location';
       
+      // Zone-not-found is no longer an error; backend always serviceable across India
+      
       if (isReverseGeocodeError) {
         errorMessage = 'Unable to determine your address from location.';
         toast((t) => (

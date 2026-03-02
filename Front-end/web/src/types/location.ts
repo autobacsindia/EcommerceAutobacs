@@ -130,8 +130,8 @@ export interface LocationSelectRequest {
 export interface LocationSelectResponse {
   success: boolean;
   location: UserLocation;
-  deliveryZone: DeliveryZone;
-  nearestWarehouse: Warehouse;
+  deliveryZone: DeliveryZone | null;
+  nearestWarehouse: Warehouse | null;
   deliveryEstimate: DeliveryEstimate;
 }
 
