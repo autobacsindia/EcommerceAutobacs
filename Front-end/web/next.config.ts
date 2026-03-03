@@ -117,7 +117,11 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60,
   },
   async rewrites() {
+    // When running in standalone mode, process.env might not be populated from .env files
+    // in the same way. However, for client-side calls, we rely on NEXT_PUBLIC_API_URL.
+    // For server-side rewrites (if any), we use the environment variable directly.
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
+    console.log('Rewriting API requests to:', apiUrl);
     return [
       {
         source: '/api/:path*',
@@ -126,6 +130,9 @@ const nextConfig: NextConfig = {
     ];
   },
   env: {
+    // This makes process.env.API_BASE_URL available in the browser/server code
+    // It will be baked in at build time if not careful, but NEXT_PUBLIC_ variables are generally safer.
+    // Ideally, use publicRuntimeConfig or just NEXT_PUBLIC_ prefixes.
     API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000',
   },
 };
