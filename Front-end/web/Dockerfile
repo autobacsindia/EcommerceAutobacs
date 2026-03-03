@@ -24,9 +24,10 @@ ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
 # Copy standalone output from builder
-# Next.js 13+ standalone build creates server.js at .next/standalone/server.js
-# But when copying, we need to preserve the structure or adjust the CMD
-COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/standalone/Autobacs/Front-end/web/server.js ./server.js
+COPY --from=builder /app/.next/standalone/Autobacs/Front-end/web/.next ./.next
+COPY --from=builder /app/.next/standalone/node_modules ./node_modules
+COPY --from=builder /app/.next/standalone/Autobacs/Front-end/web/package.json ./package.json
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
@@ -34,6 +35,4 @@ COPY --from=builder /app/public ./public
 EXPOSE 3000
 
 # Start command
-# Standalone build might put server.js in a subdirectory if not configured otherwise
-# Let's try finding where server.js is or use the standard path
 CMD ["node", "server.js"]
