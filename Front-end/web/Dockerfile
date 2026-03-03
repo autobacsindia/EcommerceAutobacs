@@ -37,4 +37,5 @@ COPY --from=builder /app/public ./public
 EXPOSE 3000
 
 # Start command
+# We use node directly to avoid npm start which might look for different paths
 CMD ["node", "server.js"]

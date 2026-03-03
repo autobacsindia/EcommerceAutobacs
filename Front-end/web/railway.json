@@ -4,6 +4,7 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
+    "startCommand": "node server.js",
     "runtime": "V2",
     "numReplicas": 1,
     "sleepApplication": false,
