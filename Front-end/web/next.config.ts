@@ -120,12 +120,25 @@ const nextConfig: NextConfig = {
     // When running in standalone mode, process.env might not be populated from .env files
     // in the same way. However, for client-side calls, we rely on NEXT_PUBLIC_API_URL.
     // For server-side rewrites (if any), we use the environment variable directly.
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
-    console.log('Rewriting API requests to:', apiUrl);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    
+    if (!apiUrl) {
+      console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined! API requests will fail in production.');
+    } else {
+      console.log('Rewriting API requests to:', apiUrl);
+    }
+    
+    // Fallback to localhost ONLY if not in production, otherwise use the provided URL or fail explicitly
+    const targetUrl = apiUrl || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5000');
+
+    if (process.env.NODE_ENV === 'production' && !targetUrl) {
+       console.error('CRITICAL: Production build missing API URL. Please set NEXT_PUBLIC_API_URL.');
+    }
+
     return [
       {
         source: '/api/:path*',
-        destination: `${apiUrl}/api/:path*`,
+        destination: `${targetUrl}/api/:path*`,
       },
     ];
   },
@@ -133,7 +146,7 @@ const nextConfig: NextConfig = {
     // This makes process.env.API_BASE_URL available in the browser/server code
     // It will be baked in at build time if not careful, but NEXT_PUBLIC_ variables are generally safer.
     // Ideally, use publicRuntimeConfig or just NEXT_PUBLIC_ prefixes.
-    API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000',
+    API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5000'),
   },
 };
 
