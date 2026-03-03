@@ -16,6 +16,7 @@
     "manage-whitelist": "node utils/mongodb-whitelist-cli.js",
     "check-ip-scheduled": "node utils/mongodb-ip-diagnostic.js --json",
     "add-current-ip-to-mongodb-whitelist": "node utils/add-ip-to-mongodb-whitelist.js",
+    "seed": "node scripts/populate-vehicles.mjs && node add-sample-products.js",
     "count-products": "node count-products.js",
     "add-sample-products": "node add-sample-products.js",
     "bulk-import-products": "node bulk-import-products.js",

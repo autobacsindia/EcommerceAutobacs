@@ -6,7 +6,7 @@ dotenv.config();
 // MongoDB connection
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/autobacs', {
+    const conn = await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/autobacs', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

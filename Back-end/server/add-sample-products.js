@@ -62,6 +62,7 @@ async function addSampleProducts() {
         sku: 'BP-001',
         isActive: true,
         isFeatured: true,
+        isFastMoving: true,
         tags: ['brake', 'performance', 'pads'],
         specifications: [
           { key: 'Material', value: 'Ceramic' },
@@ -100,6 +101,7 @@ async function addSampleProducts() {
         sku: 'CB-001',
         isActive: true,
         isFeatured: true,
+        isFastMoving: true,
         tags: ['battery', 'electronics', 'power'],
         specifications: [
           { key: 'Voltage', value: '12V' },
