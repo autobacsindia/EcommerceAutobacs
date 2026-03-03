@@ -4,12 +4,14 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json ./
+# Install all dependencies (including devDependencies) for the build step
 RUN npm ci
 
 # Copy source
 COPY . .
 
 # Build Next.js app
+# The build script uses tailwindcss, postcss, autoprefixer which are now in dependencies
 RUN npm run build
 
 # Stage 2: Run
@@ -17,16 +19,17 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
-ENV PORT 8080
+ENV PORT 3000
+# Ensure hostname is set for Railway
+ENV HOSTNAME "0.0.0.0"
 
-# Copy only necessary files from builder
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
+# Copy standalone output from builder
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # Expose port
-EXPOSE 8080
+EXPOSE 3000
 
-# Start command (uses your package.json script)
-CMD ["npm", "run", "start"]
+# Start command
+CMD ["node", "server.js"]
