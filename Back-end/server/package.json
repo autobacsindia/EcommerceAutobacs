@@ -1,4 +1,7 @@
 {
+  "name": "autobacs-server",
+  "version": "1.0.1",
+  "description": "Autobacs India Backend Server",
   "type": "module",
   "scripts": {
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
