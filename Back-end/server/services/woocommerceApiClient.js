@@ -8,12 +8,14 @@ class WooCommerceApiClient {
     this.wordpressApiVersion = process.env.WORDPRESS_API_VERSION || 'wc/v3';
     
     // Validate required configuration
-    if (!this.wordpressSiteUrl || !this.wordpressApiKey || !this.wordpressApiSecret) {
-      throw new Error('Missing required WordPress API configuration');
-    }
+    // if (!this.wordpressSiteUrl || !this.wordpressApiKey || !this.wordpressApiSecret) {
+    //   throw new Error('Missing required WordPress API configuration');
+    // }
     
     // Remove trailing slash from site URL if present
-    this.wordpressSiteUrl = this.wordpressSiteUrl.replace(/\/$/, '');
+    if (this.wordpressSiteUrl) {
+      this.wordpressSiteUrl = this.wordpressSiteUrl.replace(/\/$/, '');
+    }
   }
 
   /**
@@ -23,6 +25,11 @@ class WooCommerceApiClient {
    * @returns {Promise} Axios response promise
    */
   async makeRequest(endpoint, params = {}) {
+    if (!this.wordpressSiteUrl || !this.wordpressApiKey || !this.wordpressApiSecret) {
+      console.warn('WordPress API not configured, returning empty response');
+      return { data: [], headers: {} };
+    }
+
     const url = `${this.wordpressSiteUrl}/wp-json/${this.wordpressApiVersion}/${endpoint}`;
     
     try {
