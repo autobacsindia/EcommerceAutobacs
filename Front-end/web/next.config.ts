@@ -134,6 +134,10 @@ const nextConfig: NextConfig = {
     if (process.env.NODE_ENV === 'production' && !targetUrl) {
        console.error('CRITICAL: Production build missing API URL. Please set NEXT_PUBLIC_API_URL.');
     }
+    
+    // Log the final target URL for debugging
+    console.log(`[NextConfig] Environment: ${process.env.NODE_ENV}`);
+    console.log(`[NextConfig] API Rewrite Target: ${targetUrl || '(empty - will fail)'}`);
 
     return [
       {
