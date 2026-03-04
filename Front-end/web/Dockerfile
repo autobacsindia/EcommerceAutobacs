@@ -21,7 +21,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
-ENV PORT 3000
+# Remove PORT env var to allow Railway to set it dynamically
+# ENV PORT 3000
 # Ensure hostname is set for Railway
 ENV HOSTNAME "0.0.0.0"
 
