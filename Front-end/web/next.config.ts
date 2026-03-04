@@ -120,8 +120,13 @@ const nextConfig: NextConfig = {
     // When running in standalone mode, process.env might not be populated from .env files
     // in the same way. However, for client-side calls, we rely on NEXT_PUBLIC_API_URL.
     // For server-side rewrites (if any), we use the environment variable directly.
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    let apiUrl = process.env.NEXT_PUBLIC_API_URL;
     
+    if (apiUrl) {
+      // Sanitize the URL: remove whitespace and trailing slashes
+      apiUrl = apiUrl.trim().replace(/\/+$/, '');
+    }
+
     if (!apiUrl) {
       console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined! API requests will fail in production.');
     } else {
