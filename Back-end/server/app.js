@@ -198,6 +198,8 @@ app.get('/ready', (req, res) => {
   });
 });
 
+import debugRoutes from "./routes/debug.js";
+
 // API status endpoint
 app.get('/api/status', (req, res) => {
   res.status(200).json({
@@ -207,6 +209,9 @@ app.get('/api/status', (req, res) => {
     environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Debug endpoint for environment variables
+app.use('/api/debug', debugRoutes);
 
 // Mount routes with specific e-commerce rate limiting strategy
 // Auth routes already have their own stricter rate limiting (5 req/min)
