@@ -21,8 +21,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
-# Remove PORT env var to allow Railway to set it dynamically
-# ENV PORT 3000
+# Railway usually defaults to 8080, so we explicitly set it and expose it here
+ENV PORT 8080
 # Ensure hostname is set for Railway
 ENV HOSTNAME "0.0.0.0"
 
@@ -35,7 +35,7 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # Expose port
-EXPOSE 3000
+EXPOSE 8080
 
 # Start command
 # We use node directly to avoid npm start which might look for different paths
