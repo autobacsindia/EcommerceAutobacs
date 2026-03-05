@@ -85,7 +85,7 @@ async function initializeServer() {
         const tester = net.createServer()
           .once('error', () => resolve(false))
           .once('listening', () => tester.close(() => resolve(true)))
-          .listen(port);
+          .listen(port, '0.0.0.0');
       });
     };
 
@@ -106,7 +106,7 @@ async function initializeServer() {
     }
 
     await new Promise((resolve) => {
-      const server = app.listen(selectedPort, () => {
+      const server = app.listen(selectedPort, '0.0.0.0', () => {
         console.log(`✓ Server running on port ${selectedPort}`);
         console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`✓ API Documentation: http://localhost:${selectedPort}/`);

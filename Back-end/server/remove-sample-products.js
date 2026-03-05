@@ -2,83 +2,42 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import Product from './models/Product.js';
 
-// Load environment variables
 dotenv.config();
+
+console.log('Removing sample products from MongoDB...');
+
+const sampleSkus = [
+  'BP-001', 'EOF-001', 'CB-001', 'AF-001', 'SP-001', 
+  'FF-001', 'CAF-001', 'SA-001', 'MUF-001', 'O2S-001', 
+  'ALT-001', 'RAD-001', 'BR-001', 'TF-001', 'SR-001'
+];
 
 async function removeSampleProducts() {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    
-    // Define the sample product SKUs that were added
-    const sampleProductSkus = [
-      'BP-001',    // Premium Brake Pads
-      'EOF-001',   // Engine Oil Filter
-      'CB-001',    // Car Battery
-      'AF-001',    // Air Filter
-      'SP-001',    // Spark Plugs
-      'FF-001',    // Fuel Filter
-      'CAF-001',   // Cabin Air Filter
-      'SA-001',    // Shock Absorbers
-      'MUF-001',   // Muffler
-      'O2S-001',   // Oxygen Sensor
-      'ALT-001',   // Alternator
-      'RAD-001',   // Radiator
-      'BR-001',    // Brake Rotors
-      'TF-001',    // Transmission Filter
-      'SR-001',    // Steering Rack
-      'BP-CSV-001' // Premium Brake Pads (CSV version)
-    ];
-    
-    console.log('Removing sample products...');
-    
-    // Remove products with these SKUs
-    const result = await Product.deleteMany({
-      sku: { $in: sampleProductSkus }
+    // Connect to MongoDB
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
     });
     
-    console.log(`Removed ${result.deletedCount} sample products`);
+    console.log('✓ Connected to MongoDB');
+    console.log('Database name:', mongoose.connection.name);
     
-    // Also remove any products that might have been created without SKUs but match the sample names
-    const sampleProductNames = [
-      'Premium Brake Pads',
-      'Engine Oil Filter',
-      'Car Battery',
-      'Air Filter',
-      'Spark Plugs',
-      'Fuel Filter',
-      'Cabin Air Filter',
-      'Shock Absorbers',
-      'Muffler',
-      'Oxygen Sensor',
-      'Alternator',
-      'Radiator',
-      'Brake Rotors',
-      'Transmission Filter',
-      'Steering Rack'
-    ];
+    // Delete products with matching SKUs
+    const result = await Product.deleteMany({ sku: { $in: sampleSkus } });
     
-    const result2 = await Product.deleteMany({
-      name: { $in: sampleProductNames },
-      sku: { $exists: false }
-    });
+    console.log(`Deleted ${result.deletedCount} sample products.`);
     
-    if (result2.deletedCount > 0) {
-      console.log(`Removed ${result2.deletedCount} additional sample products without SKUs`);
-    }
-    
-    // Final count
+    // Verify count
     const totalProducts = await Product.countDocuments({});
     console.log(`Total products remaining in database: ${totalProducts}`);
     
+    // Close connection
     await mongoose.connection.close();
     console.log('\n✓ Disconnected from MongoDB');
     
   } catch (error) {
     console.error('✗ Error removing sample products:', error.message);
-    console.error('Error stack:', error.stack);
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.close();
-    }
     process.exit(1);
   }
 }
