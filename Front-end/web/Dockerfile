@@ -11,32 +11,31 @@ RUN npm ci
 COPY . .
 
 # Build Next.js app
-# The build script uses tailwindcss, postcss, autoprefixer which are now in dependencies
+ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
-# Debug: List standalone directory structure to verify paths
-RUN ls -la /app/.next/standalone
 
 # Stage 2: Run
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
-# Railway usually defaults to 8080, so we explicitly set it and expose it here
+ENV NEXT_TELEMETRY_DISABLED 1
 ENV PORT 8080
-# Ensure hostname is set for Railway
 ENV HOSTNAME "0.0.0.0"
 
-# Copy standalone output from builder
-COPY --from=builder /app/.next/standalone/server.js ./server.js
-COPY --from=builder /app/.next/standalone/package.json ./package.json
-COPY --from=builder /app/.next/standalone/.next ./.next
-COPY --from=builder /app/.next/standalone/node_modules ./node_modules
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# Create a non-root user for security (optional but good practice)
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Expose port
+# Copy the standalone output
+# This recursively copies everything from the standalone directory
+# which handles both monorepo and single-repo structures correctly.
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+USER nextjs
+
 EXPOSE 8080
 
-# Start command
-# We use node directly to avoid npm start which might look for different paths
 CMD ["node", "server.js"]
