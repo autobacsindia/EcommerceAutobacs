@@ -9,7 +9,7 @@ RUN npm ci
 # Copy source
 COPY . .
 
-# Build Next.js app
+# Build Next.js app (Standard Build)
 ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
@@ -26,10 +26,8 @@ ENV HOSTNAME "0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# STANDARD DEPLOYMENT STRATEGY (Non-Standalone)
-# Since standalone is proving difficult with paths, we will copy the standard build
-# and use 'npm start'. This is slightly larger but guaranteed to work.
-
+# COPY EVERYTHING FOR STANDARD BUILD
+# We are NOT using standalone mode anymore.
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/package-lock.json ./package-lock.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
@@ -40,4 +38,5 @@ USER nextjs
 
 EXPOSE 8080
 
+# Use standard Next.js start command
 CMD ["npm", "start"]
