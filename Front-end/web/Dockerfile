@@ -4,7 +4,6 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json ./
-# Install all dependencies (including devDependencies) for the build step
 RUN npm ci
 
 # Copy source
@@ -27,21 +26,18 @@ ENV HOSTNAME "0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# DEBUG: Copy everything from standalone to see what's inside
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# STANDARD DEPLOYMENT STRATEGY (Non-Standalone)
+# Since standalone is proving difficult with paths, we will copy the standard build
+# and use 'npm start'. This is slightly larger but guaranteed to work.
 
-# Copy static assets
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/package-lock.json ./package-lock.json
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 USER nextjs
 
 EXPOSE 8080
 
-# LIST FILES TO DEBUG
-# This will show us where server.js actually is in the logs
-RUN echo "Listing files in /app:" && ls -R /app
-
-# Start command - adjusted to use the root server.js if it exists, 
-# or fallback to standard next start if we can't find it
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
