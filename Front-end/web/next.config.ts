@@ -95,7 +95,7 @@ const pwaConfig = withPWA({
 
 const nextConfig: NextConfig = {
   /* config options here */
-  // output: 'standalone',
+  output: 'standalone',
   // Disable standalone mode for now as it's causing path resolution issues in Docker
   // output: 'standalone',
   reactStrictMode: false,
