@@ -29,6 +29,9 @@ WORKDIR /app
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
+# Install curl for health check
+RUN apk add --no-cache curl
+
 # Copy package files
 COPY package*.json ./
 
