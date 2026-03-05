@@ -74,55 +74,25 @@ async function initializeServer() {
     }
     console.log('---------------------------------------\n');
 
-    // Start server with port fallback if in use
-    const railwayPort = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
-    const candidates = [
-      railwayPort,
-      5000, 5001, 5002
-    ].filter(Boolean);
-
-    const isPortAvailable = (port) => {
-      return new Promise((resolve) => {
-        const tester = net.createServer()
-          .once('error', () => resolve(false))
-          .once('listening', () => tester.close(() => resolve(true)))
-          .listen(port, '0.0.0.0');
-      });
-    };
-
-    let selectedPort = null;
-    for (const p of candidates) {
-      // eslint-disable-next-line no-await-in-loop
-      const available = await isPortAvailable(p);
-      if (available) {
-        selectedPort = p;
-        break;
+    // Start server directly on the provided port
+    const PORT = process.env.PORT || 8080;
+    
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✓ Server running on port ${PORT}`);
+      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✓ API Documentation: http://localhost:${PORT}/`);
+      if (dbConnection) {
+        console.log('✓ Database connection established');
       } else {
-        console.warn(`⚠ Port ${p} unavailable (in use).`);
+        console.log('⚠ Database connection not available');
       }
-    }
-
-    if (!selectedPort) {
-      throw new Error('No available ports to start server');
-    }
-
-    await new Promise((resolve) => {
-      const server = app.listen(selectedPort, '0.0.0.0', () => {
-        console.log(`✓ Server running on port ${selectedPort}`);
-        console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`✓ API Documentation: http://localhost:${selectedPort}/`);
-        if (dbConnection) {
-          console.log('✓ Database connection established');
-        } else {
-          console.log('⚠ Database connection not available');
-        }
-        resolve();
-      });
-      server.on('error', (err) => {
-        console.error('✗ Server listen error:', err);
-        process.exit(1);
-      });
     });
+
+    server.on('error', (err) => {
+      console.error('✗ Server listen error:', err);
+      process.exit(1);
+    });
+
   } catch (error) {
     console.error('✗ Failed to initialize server:', error.message);
     process.exit(1);

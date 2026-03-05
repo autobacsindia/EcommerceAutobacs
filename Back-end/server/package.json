@@ -1,6 +1,6 @@
 {
   "name": "autobacs-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Autobacs India Backend Server",
   "type": "module",
   "scripts": {
