@@ -27,7 +27,7 @@ mongoose.connection.on('connected', () => {
 
   // Set the cron service instance for the scheduled tasks routes
   setCronService(cronService);
-  
+
   // Initialize adaptive throttling service
   adaptiveThrottlingService.initialize().catch(err => {
     console.error('Failed to initialize adaptive throttling service:', err);
@@ -66,7 +66,7 @@ async function initializeServer() {
     // Test Elasticsearch connection
     console.log('\n--- Elasticsearch Connection Check ---');
     const esStatus = await elasticsearchService.testConnection();
-    
+
     if (esStatus.connected) {
       console.log('✓ Elasticsearch features enabled');
     } else if (esStatus.enabled) {
@@ -75,8 +75,9 @@ async function initializeServer() {
     console.log('---------------------------------------\n');
 
     // Start server with port fallback if in use
+    const railwayPort = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
     const candidates = [
-      typeof process.env.PORT === 'string' ? parseInt(process.env.PORT, 10) : undefined,
+      railwayPort,
       5000, 5001, 5002
     ].filter(Boolean);
 
