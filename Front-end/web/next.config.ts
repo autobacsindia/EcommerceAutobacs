@@ -119,9 +119,8 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60,
   },
   async rewrites() {
-    // When running in standalone mode, process.env might not be populated from .env files
-    // in the same way. However, for client-side calls, we rely on NEXT_PUBLIC_API_URL.
-    // For server-side rewrites (if any), we use the environment variable directly.
+    // Production: Must have NEXT_PUBLIC_API_URL set in Railway Dashboard
+    // Development: Falls back to localhost if not set
     let apiUrl = process.env.NEXT_PUBLIC_API_URL;
     
     if (apiUrl) {
@@ -129,22 +128,25 @@ const nextConfig: NextConfig = {
       apiUrl = apiUrl.trim().replace(/\/+$/, '');
     }
 
-    if (!apiUrl) {
-      console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined! API requests will fail in production.');
-    } else {
-      console.log('Rewriting API requests to:', apiUrl);
+    if (!apiUrl && process.env.NODE_ENV === 'production') {
+      console.error('CRITICAL ERROR: Production build requires NEXT_PUBLIC_API_URL environment variable!');
+      console.error('Set it in Railway Dashboard → Frontend → Variables');
+      console.error('Example: NEXT_PUBLIC_API_URL=https://ecommerceautobacs-production.up.railway.app');
+      throw new Error('NEXT_PUBLIC_API_URL is required in production');
     }
     
-    // Fallback to localhost ONLY if not in production, otherwise use the provided URL or fail explicitly
-    const targetUrl = apiUrl || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5000');
-
-    if (process.env.NODE_ENV === 'production' && !targetUrl) {
-       console.error('CRITICAL: Production build missing API URL. Please set NEXT_PUBLIC_API_URL.');
+    if (!apiUrl) {
+      console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined. Using localhost for development.');
+      apiUrl = 'http://localhost:8080';
+    } else {
+      console.log('✓ Rewriting API requests to:', apiUrl);
     }
+    
+    const targetUrl = apiUrl;
     
     // Log the final target URL for debugging
     console.log(`[NextConfig] Environment: ${process.env.NODE_ENV}`);
-    console.log(`[NextConfig] API Rewrite Target: ${targetUrl || '(empty - will fail)'}`);
+    console.log(`[NextConfig] API Rewrite Target: ${targetUrl}`);
 
     return [
       {
