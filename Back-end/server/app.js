@@ -62,14 +62,32 @@ const app = express();
 // This ensures req.ip correctly identifies the client IP via X-Forwarded-For
 app.set('trust proxy', 1);
 
-// Request logging middleware for debugging
+// Request logging middleware for debugging - MUST BE FIRST
 app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} from ${req.ip}`);
   const start = Date.now();
+  
+  // Set request timeout to prevent hanging
+  if (!res.headersSent) {
+    req.setTimeout(30000, () => {
+      console.error(`Request timeout: ${req.method} ${req.path}`);
+      if (!res.headersSent) {
+        res.status(504).json({ error: 'Gateway timeout' });
+      }
+    });
+  }
+  
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
   });
   next();
+});
+
+// Catch-all OPTIONS handler for CORS preflight
+app.options('*', (req, res) => {
+  console.log('OPTIONS preflight request received');
+  res.sendStatus(200);
 });
 
 // Initialize cron service
@@ -154,35 +172,41 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Data Sanitization against XSS and trimming
 app.use(requestSanitization);
 
-// Test route
+// Test route - MUST RESPOND QUICKLY
 app.get("/", (req, res) => {
   console.log('Root endpoint hit - returning response');
-  res.json({
-    success: true,
-    message: "Autobacs India API is running",
-    version: "1.0.0",
-    endpoints: {
-      auth: "/auth",
-      products: "/products",
-      categories: "/categories",
-      vehicles: "/vehicles",
-      cart: "/cart",
-      wishlist: "/wishlist",
-      orders: "/orders",
-      location: "/location",
-      warehouses: "/warehouses",
-      deliveryZones: "/delivery-zones",
-      razorpay: "/razorpay",
-      brands: "/brands",
-      wordpress: "/wordpress",
-      admin: {
-        tokenIntrospection: "/admin/token",
-        rateLimitDashboard: "/admin/rate-limits/dashboard",
-        adaptiveThrottling: "/admin/adaptive-throttling",
-        dashboard: "/dashboard"
+  try {
+    res.json({
+      success: true,
+      message: "Autobacs India API is running",
+      version: "1.0.0",
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        auth: "/auth",
+        products: "/products",
+        categories: "/categories",
+        vehicles: "/vehicles",
+        cart: "/cart",
+        wishlist: "/wishlist",
+        orders: "/orders",
+        location: "/location",
+        warehouses: "/warehouses",
+        deliveryZones: "/delivery-zones",
+        razorpay: "/razorpay",
+        brands: "/brands",
+        wordpress: "/wordpress",
+        admin: {
+          tokenIntrospection: "/admin/token",
+          rateLimitDashboard: "/admin/rate-limits/dashboard",
+          adaptiveThrottling: "/admin/adaptive-throttling",
+          dashboard: "/dashboard"
+        }
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.error('Error in root route:', error);
+    res.status(500).json({ error: 'Internal error' });
+  }
 });
 
 // Handle favicon requests to prevent 404 errors
