@@ -27,7 +27,6 @@ WORKDIR /app
 
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
-ENV PORT 8080
 ENV HOSTNAME "::"
 
 # Create a non-root user
@@ -47,8 +46,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
-
-EXPOSE 8080
 
 # Run the standalone server
 CMD ["node", "server.js"]

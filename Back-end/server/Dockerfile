@@ -25,12 +25,12 @@ FROM node:20-alpine AS runner
 # Create app directory
 WORKDIR /app
 
+# Install curl for health check
+RUN apk add --no-cache curl
+
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
-
-# Install curl for health check
-RUN apk add --no-cache curl
 
 # Copy package files
 COPY package*.json ./
@@ -41,15 +41,14 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy built application from builder stage
 COPY --from=builder /app ./
 
-# Change ownership to non-root user
-RUN chown -R nextjs:nodejs /app
-USER nextjs
+# Create logs directory and set proper permissions BEFORE changing ownership
+RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app
 
-# Create logs directory
-RUN mkdir -p /app/logs
+USER nextjs
 
 # Run on dynamic port specified by Railway (process.env.PORT)
 ENV NODE_ENV=production
+ENV PORT=8080
 
 # Start application
 CMD ["node", "server.js"]
