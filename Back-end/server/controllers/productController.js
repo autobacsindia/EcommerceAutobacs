@@ -70,18 +70,32 @@ export const removeSearchHistoryTerm = async (req, res) => {
 };
 
 export const getFeaturedProducts = async (req, res) => {
-  const { limit = 6 } = req.query;
+  try {
+    const { limit = 6 } = req.query;
 
-  const products = await Product.find({ isActive: true, isFeatured: true })
-    .populate('categories', 'name slug')
-    .limit(Number(limit))
-    .sort({ createdAt: -1 });
+    const products = await Product.find({ isActive: true, isFeatured: true })
+      .populate('categories', 'name slug')
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
 
-  res.json({
-    success: true,
-    count: products.length,
-    products
-  });
+    console.log(`getFeaturedProducts: Found ${products.length} products`);
+
+    res.json({
+      success: true,
+      count: products.length,
+      products
+    });
+  } catch (error) {
+    console.error('Error in getFeaturedProducts:', error);
+    console.error('Stack trace:', error.stack);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch featured products',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 };
 
 export const getOfferProducts = async (req, res) => {

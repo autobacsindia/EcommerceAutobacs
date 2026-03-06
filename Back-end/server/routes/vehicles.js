@@ -34,13 +34,28 @@ router.get("/", asyncHandler(async (req, res) => {
 // @desc    Get all vehicle makes
 // @access  Public
 router.get("/makes", asyncHandler(async (req, res) => {
-  const makes = await Vehicle.distinct("make", { isActive: true }).sort();
+  try {
+    const Vehicle = (await import('../models/Vehicle.js')).default;
+    const makes = await Vehicle.distinct("make", { isActive: true }).sort();
+    
+    console.log(`vehicles/makes: Found ${makes.length} makes`);
 
-  res.json({
-    success: true,
-    count: makes.length,
-    makes
-  });
+    res.json({
+      success: true,
+      count: makes.length,
+      makes
+    });
+  } catch (error) {
+    console.error('Error in vehicles/makes:', error);
+    console.error('Stack trace:', error.stack);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch vehicle makes',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 }));
 
 // @route   GET /vehicles/models/:make
