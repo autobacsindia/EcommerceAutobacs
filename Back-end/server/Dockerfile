@@ -48,16 +48,8 @@ USER nextjs
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Expose port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
-
-# Environment variables (set during deployment)
+# Run on dynamic port specified by Railway (process.env.PORT)
 ENV NODE_ENV=production
-ENV PORT=8080
 
 # Start application
 CMD ["node", "server.js"]

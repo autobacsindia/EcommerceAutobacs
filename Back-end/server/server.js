@@ -56,9 +56,9 @@ async function initializeServer() {
     // This ensures Railway Health Checks pass immediately and prevents 502 Bad Gateway
     const PORT = process.env.PORT || 8080;
 
-    // Bind explicitly to 0.0.0.0 to ensure Railway's proxy can route traffic from outside the container
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✓ Server running on port ${PORT} (0.0.0.0)`);
+    // Bind explicitly to '::' (IPv6) to ensure Railway's proxy can route traffic from outside the container
+    const server = app.listen(PORT, '::', () => {
+      console.log(`✓ Server running on port ${PORT} (::)`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/`);
     });
