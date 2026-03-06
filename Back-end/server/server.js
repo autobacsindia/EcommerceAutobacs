@@ -52,6 +52,21 @@ process.on('SIGINT', async () => {
 // Initialize server with pre-flight IP check
 async function initializeServer() {
   try {
+    // Start server directly on the provided port BEFORE heavy DB operations
+    // This ensures Railway Health Checks pass immediately and prevents 502 Bad Gateway
+    const PORT = process.env.PORT || 8080;
+    
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✓ Server running on port ${PORT}`);
+      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✓ API Documentation: http://localhost:${PORT}/`);
+    });
+
+    server.on('error', (err) => {
+      console.error('✗ Server listen error:', err);
+      process.exit(1);
+    });
+
     // Perform pre-flight IP check
     const ipCheckPassed = await preFlightIPCheck();
 
@@ -63,6 +78,12 @@ async function initializeServer() {
     // Initial connection using the new retry logic
     const dbConnection = await connectWithRetry();
 
+    if (dbConnection) {
+      console.log('✓ Database connection established');
+    } else {
+      console.log('⚠ Database connection not available');
+    }
+
     // Test Elasticsearch connection
     console.log('\n--- Elasticsearch Connection Check ---');
     const esStatus = await elasticsearchService.testConnection();
@@ -73,25 +94,6 @@ async function initializeServer() {
       console.log('⚠ Elasticsearch enabled but not connected - using MongoDB fallback');
     }
     console.log('---------------------------------------\n');
-
-    // Start server directly on the provided port
-    const PORT = process.env.PORT || 8080;
-    
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✓ Server running on port ${PORT}`);
-      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`✓ API Documentation: http://localhost:${PORT}/`);
-      if (dbConnection) {
-        console.log('✓ Database connection established');
-      } else {
-        console.log('⚠ Database connection not available');
-      }
-    });
-
-    server.on('error', (err) => {
-      console.error('✗ Server listen error:', err);
-      process.exit(1);
-    });
 
   } catch (error) {
     console.error('✗ Failed to initialize server:', error.message);
