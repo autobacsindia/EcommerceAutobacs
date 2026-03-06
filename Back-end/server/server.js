@@ -82,16 +82,34 @@ async function initializeServer() {
     // This ensures Railway Health Checks pass immediately and prevents 502 Bad Gateway
     const PORT = process.env.PORT || 8080;
 
-    // Bind explicitly to '::' (IPv6) to ensure Railway's proxy can route traffic from outside the container
-    const server = app.listen(PORT, '::', () => {
-      console.log(`✓ Server running on port ${PORT} (::)`);
+    // Bind explicitly to '0.0.0.0' (all interfaces - both IPv4 and IPv6) to ensure Railway's proxy can route traffic
+    // Using '0.0.0.0' instead of '::' for better compatibility with Railway's networking
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✓ Server running on port ${PORT} (0.0.0.0)`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/`);
+      console.log(`✓ Accessible at: http://0.0.0.0:${PORT}/`);
+      
+      // Log server address information for debugging
+      const address = server.address();
+      console.log('Server address:', JSON.stringify(address, null, 2));
     });
 
     server.on('error', (err) => {
       console.error('✗ Server listen error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error syscall:', err.syscall);
+      if (err.code === 'EADDRINUSE') {
+        console.error(`✗ Port ${PORT} is already in use!`);
+      } else if (err.code === 'EACCES') {
+        console.error(`✗ Permission denied to bind to port ${PORT}`);
+      }
       process.exit(1);
+    });
+
+    // Handle server close event
+    server.on('close', () => {
+      console.log('Server closed');
     });
 
     // Perform pre-flight IP check
