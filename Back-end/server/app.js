@@ -62,6 +62,13 @@ const app = express();
 // This ensures req.ip correctly identifies the client IP via X-Forwarded-For
 app.set('trust proxy', 1);
 
+// ULTRA-SIMPLE TEST ENDPOINT - NO MIDDLEWARE, NO DATABASE
+// Use this to verify Express is responding at all
+app.get('/ping', (req, res) => {
+  console.log('>>> PING endpoint hit from', req.ip);
+  res.send('pong');
+});
+
 // Request logging middleware for debugging - MUST BE FIRST
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} from ${req.ip}`);
