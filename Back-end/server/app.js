@@ -62,6 +62,16 @@ const app = express();
 // This ensures req.ip correctly identifies the client IP via X-Forwarded-For
 app.set('trust proxy', 1);
 
+// Request logging middleware for debugging
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+  });
+  next();
+});
+
 // Initialize cron service
 const cronService = new CronService();
 
@@ -146,6 +156,7 @@ app.use(requestSanitization);
 
 // Test route
 app.get("/", (req, res) => {
+  console.log('Root endpoint hit - returning response');
   res.json({
     success: true,
     message: "Autobacs India API is running",
@@ -181,6 +192,7 @@ app.get('/favicon.ico', (req, res) => {
 
 // Health check endpoints
 app.get('/health', (req, res) => {
+  console.log('Health check endpoint hit');
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -191,6 +203,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/ready', (req, res) => {
+  console.log('Ready check endpoint hit');
   const isReady = mongoose.connection.readyState === 1;
   res.status(isReady ? 200 : 503).json({
     status: isReady ? 'ready' : 'not ready',
@@ -202,6 +215,7 @@ import debugRoutes from "./routes/debug.js";
 
 // API status endpoint
 app.get('/api/status', (req, res) => {
+  console.log('API status endpoint hit');
   res.status(200).json({
     status: 'operational',
     version: '1.0.0',
