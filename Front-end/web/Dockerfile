@@ -12,6 +12,13 @@ COPY . .
 
 # Build Next.js app (Standalone Mode)
 ENV NEXT_TELEMETRY_DISABLED 1
+
+# Accept build arguments for environment variables that Next.js needs during build time
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
 RUN npm run build
 
 # Stage 2: Run
@@ -21,7 +28,7 @@ WORKDIR /app
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV PORT 8080
-ENV HOSTNAME "0.0.0.0"
+ENV HOSTNAME "::"
 
 # Create a non-root user
 RUN addgroup --system --gid 1001 nodejs

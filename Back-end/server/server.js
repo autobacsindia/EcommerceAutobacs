@@ -55,8 +55,9 @@ async function initializeServer() {
     // Start server directly on the provided port BEFORE heavy DB operations
     // This ensures Railway Health Checks pass immediately and prevents 502 Bad Gateway
     const PORT = process.env.PORT || 8080;
-    
-    const server = app.listen(PORT, '0.0.0.0', () => {
+
+    // Omit '0.0.0.0' to allow Node to bind to IPv6 (::) which Railway edge proxy uses
+    const server = app.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✓ API Documentation: http://localhost:${PORT}/`);
