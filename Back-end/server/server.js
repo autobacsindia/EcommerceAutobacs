@@ -11,6 +11,28 @@ dotenv.config();
 // Initialize Sentry early in the boot process
 initSentry();
 
+// Handle uncaught exceptions and rejections
+process.on('uncaughtException', (err) => {
+  console.error('✗ Uncaught Exception:', err);
+  console.error('Stack trace:', err.stack);
+  
+  // Attempt graceful shutdown
+  setTimeout(() => {
+    console.log('✗ Process terminated due to uncaught exception');
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('✗ Unhandled Rejection at:', promise);
+  console.error('✗ Reason:', reason);
+  
+  // Log but don't exit - this allows the app to continue
+  if (process.env.NODE_ENV === 'development') {
+    console.error('Full stack:', reason instanceof Error ? reason.stack : reason);
+  }
+});
+
 // Enhanced MongoDB connection with better options and retry logic
 const mongooseOptions = {
   serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of default 30s
@@ -52,6 +74,10 @@ process.on('SIGINT', async () => {
 // Initialize server with pre-flight IP check
 async function initializeServer() {
   try {
+    console.log('=== Starting Autobacs Backend Server ===');
+    console.log('Environment:', process.env.NODE_ENV || 'development');
+    console.log('Port configuration:', process.env.PORT || 'default (8080)');
+    
     // Start server directly on the provided port BEFORE heavy DB operations
     // This ensures Railway Health Checks pass immediately and prevents 502 Bad Gateway
     const PORT = process.env.PORT || 8080;
@@ -96,8 +122,31 @@ async function initializeServer() {
     }
     console.log('---------------------------------------\n');
 
+    // Initialize cron jobs after everything is set up
+    console.log('Initializing services...');
+    cronService.initializeCronJobs();
+    setCronService(cronService);
+
+    // Initialize adaptive throttling service with error handling
+    console.log('Initializing adaptive throttling service...');
+    try {
+      await adaptiveThrottlingService.initialize();
+      console.log('✓ Adaptive Throttling Service initialized successfully');
+    } catch (throttleError) {
+      console.error('⚠ Failed to initialize adaptive throttling service:', throttleError.message);
+      console.error('Full error:', throttleError);
+      // Don't exit - continue without this service
+    }
+
+    console.log('\n=== Server Initialization Complete ===');
+    console.log('Server is ready to accept connections');
+    console.log('Health check: http://localhost:' + PORT + '/health');
+    console.log('Ready check: http://localhost:' + PORT + '/ready');
+    console.log('=====================================\n');
+
   } catch (error) {
     console.error('✗ Failed to initialize server:', error.message);
+    console.error('Stack trace:', error.stack);
     process.exit(1);
   }
 }
