@@ -91,30 +91,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// CRITICAL: Catch-all for unmatched routes BEFORE CORS preflight
-// This ensures Railway never gets a silent failure
-app.use((req, res, next) => {
-  // If no route matches, send a helpful 404
-  if (!req.route && res.headersSent === false) {
-    console.log(`[404] No route found for ${req.method} ${req.path}`);
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `Route ${req.method} ${req.path} not found`,
-      availableEndpoints: [
-        'GET /',
-        'GET /health',
-        'GET /ready',
-        'GET /api/status',
-        'POST /auth/*',
-        'GET /products/*',
-        'GET /categories/*',
-        'GET /brands/*'
-      ]
-    });
-  }
-  next();
-});
-
 // Catch-all OPTIONS handler for CORS preflight
 app.options('*', (req, res) => {
   console.log('OPTIONS preflight request received');
@@ -343,6 +319,28 @@ app.use("/dashboard", adminRateLimit, dashboardRoutes);
 // Location service (general rate limiting)
 app.use(["/location", "/api/location"], apiRateLimit, locationRoutes);
 app.use(["/contact", "/api/contact"], apiRateLimit, contactRoutes);
+
+// ========================================
+// 404 Handler - MUST BE AFTER ALL ROUTES
+// ========================================
+// This catches any unmatched routes and returns a helpful 404
+app.use((req, res) => {
+  console.log(`[404] No route found for ${req.method} ${req.path}`);
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Route ${req.method} ${req.path} not found`,
+    availableEndpoints: [
+      'GET /',
+      'GET /health',
+      'GET /ready',
+      'GET /api/status',
+      'POST /auth/*',
+      'GET /products/*',
+      'GET /categories/*',
+      'GET /brands/*'
+    ]
+  });
+});
 
 // Sentry Error Handler (must be before any other error middleware)
 Sentry.setupExpressErrorHandler(app);
