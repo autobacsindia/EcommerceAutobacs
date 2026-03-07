@@ -11,6 +11,8 @@ const missingVehicles = [
     name: 'Isuzu D-Max',
     slug: 'isuzu-dmax',
     make: 'Isuzu',
+    model: 'D-Max',
+    year: 2024,
     type: 'Pickup Truck',
     active: true
   },
@@ -18,6 +20,8 @@ const missingVehicles = [
     name: 'Kia Carens',
     slug: 'kia-carens',
     make: 'Kia',
+    model: 'Carens',
+    year: 2024,
     type: 'MPV',
     active: true
   },
@@ -25,6 +29,8 @@ const missingVehicles = [
     name: 'Kia Seltos',
     slug: 'kia-seltos',
     make: 'Kia',
+    model: 'Seltos',
+    year: 2024,
     type: 'SUV',
     active: true
   },
@@ -32,6 +38,8 @@ const missingVehicles = [
     name: 'Hyundai Creta',
     slug: 'hyundai-creta',
     make: 'Hyundai',
+    model: 'Creta',
+    year: 2024,
     type: 'SUV',
     active: true
   },
@@ -39,6 +47,8 @@ const missingVehicles = [
     name: 'Hyundai Verna',
     slug: 'hyundai-verna',
     make: 'Hyundai',
+    model: 'Verna',
+    year: 2024,
     type: 'Sedan',
     active: true
   },
@@ -46,6 +56,8 @@ const missingVehicles = [
     name: 'Hyundai Tucson',
     slug: 'hyundai-tucson',
     make: 'Hyundai',
+    model: 'Tucson',
+    year: 2024,
     type: 'SUV',
     active: true
   }
