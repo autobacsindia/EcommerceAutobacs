@@ -79,92 +79,64 @@ async function initializeServer() {
     console.log('Port configuration:', process.env.PORT || 'default (8080)');
     
     // Start server directly on the provided port BEFORE heavy DB operations
-    // This ensures Railway Health Checks pass immediately and prevents 502 Bad Gateway
     const PORT = process.env.PORT || 8080;
 
-    // Bind explicitly to '0.0.0.0' (all interfaces - both IPv4 and IPv6) to ensure Railway's proxy can route traffic
-    // Using '0.0.0.0' instead of '::' for better compatibility with Railway's networking
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`✓ Server running on port ${PORT} (0.0.0.0)`);
-      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`✓ API Documentation: http://localhost:${PORT}/`);
-      console.log(`✓ Accessible at: http://0.0.0.0:${PORT}/`);
-      
-      // Log server address information for debugging
-      const address = server.address();
-      console.log('Server address:', JSON.stringify(address, null, 2));
+      console.log(`✓ Health check: http://0.0.0.0:${PORT}/health`);
+      console.log(`✓ Ready check: http://0.0.0.0:${PORT}/ready`);
     });
 
     server.on('error', (err) => {
       console.error('✗ Server listen error:', err);
-      console.error('Error code:', err.code);
-      console.error('Error syscall:', err.syscall);
-      if (err.code === 'EADDRINUSE') {
-        console.error(`✗ Port ${PORT} is already in use!`);
-      } else if (err.code === 'EACCES') {
-        console.error(`✗ Permission denied to bind to port ${PORT}`);
-      }
       process.exit(1);
     });
 
-    // Handle server close event
-    server.on('close', () => {
-      console.log('Server closed');
+    // Set timeouts to prevent hanging
+    server.timeout = 30000;
+    server.headersTimeout = 31000;
+
+    // Log incoming requests
+    server.on('request', (req, res) => {
+      console.log(`📩 Incoming: ${req.method} ${req.url}`);
     });
 
-    // Perform pre-flight IP check
+    // Initialize database (non-blocking)
+    console.log('\n⏳ Initializing database...');
     const ipCheckPassed = await preFlightIPCheck();
-
     if (!ipCheckPassed) {
-      console.warn('⚠ Warning: IP mismatch detected. Starting server anyway, but database connection may fail.');
-      console.warn('Run "npm run diagnose-ip" for assistance with IP whitelist issues.');
+      console.warn('⚠ IP mismatch but continuing');
     }
 
-    // Initial connection using the new retry logic
     const dbConnection = await connectWithRetry();
-
     if (dbConnection) {
-      console.log('✓ Database connection established');
-    } else {
-      console.log('⚠ Database connection not available');
+      console.log('✓ Database connected');
     }
 
-    // Test Elasticsearch connection
-    console.log('\n--- Elasticsearch Connection Check ---');
-    const esStatus = await elasticsearchService.testConnection();
+    // Elasticsearch in background
+    console.log('⏳ Services initializing...');
+    elasticsearchService.testConnection().catch(() => {});
 
-    if (esStatus.connected) {
-      console.log('✓ Elasticsearch features enabled');
-    } else if (esStatus.enabled) {
-      console.log('⚠ Elasticsearch enabled but not connected - using MongoDB fallback');
-    }
-    console.log('---------------------------------------\n');
+    // Delay non-critical services
+    setTimeout(() => {
+      cronService.initializeCronJobs();
+      setCronService(cronService);
+      console.log('✓ Cron jobs initialized');
+    }, 100);
 
-    // Initialize cron jobs after everything is set up
-    console.log('Initializing services...');
-    cronService.initializeCronJobs();
-    setCronService(cronService);
+    setTimeout(async () => {
+      try {
+        await adaptiveThrottlingService.initialize();
+        console.log('✓ Adaptive throttling initialized');
+      } catch (e) {
+        console.log('⚠ Throttling skipped');
+      }
+    }, 200);
 
-    // Initialize adaptive throttling service with error handling
-    console.log('Initializing adaptive throttling service...');
-    try {
-      await adaptiveThrottlingService.initialize();
-      console.log('✓ Adaptive Throttling Service initialized successfully');
-    } catch (throttleError) {
-      console.error('⚠ Failed to initialize adaptive throttling service:', throttleError.message);
-      console.error('Full error:', throttleError);
-      // Don't exit - continue without this service
-    }
-
-    console.log('\n=== Server Initialization Complete ===');
-    console.log('Server is ready to accept connections');
-    console.log('Health check: http://localhost:' + PORT + '/health');
-    console.log('Ready check: http://localhost:' + PORT + '/ready');
-    console.log('=====================================\n');
+    console.log('\n=== Server Ready ===\n');
 
   } catch (error) {
-    console.error('✗ Failed to initialize server:', error.message);
-    console.error('Stack trace:', error.stack);
+    console.error('✗ Failed to start server:', error.message);
     process.exit(1);
   }
 }
