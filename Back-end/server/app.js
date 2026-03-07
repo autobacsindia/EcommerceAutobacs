@@ -91,6 +91,30 @@ app.use((req, res, next) => {
   next();
 });
 
+// CRITICAL: Catch-all for unmatched routes BEFORE CORS preflight
+// This ensures Railway never gets a silent failure
+app.use((req, res, next) => {
+  // If no route matches, send a helpful 404
+  if (!req.route && res.headersSent === false) {
+    console.log(`[404] No route found for ${req.method} ${req.path}`);
+    return res.status(404).json({
+      error: 'Not Found',
+      message: `Route ${req.method} ${req.path} not found`,
+      availableEndpoints: [
+        'GET /',
+        'GET /health',
+        'GET /ready',
+        'GET /api/status',
+        'POST /auth/*',
+        'GET /products/*',
+        'GET /categories/*',
+        'GET /brands/*'
+      ]
+    });
+  }
+  next();
+});
+
 // Catch-all OPTIONS handler for CORS preflight
 app.options('*', (req, res) => {
   console.log('OPTIONS preflight request received');
@@ -179,16 +203,22 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Data Sanitization against XSS and trimming
 app.use(requestSanitization);
 
-// Test route - MUST RESPOND QUICKLY
+// Test route - MUST RESPOND QUICKLY - Enhanced for Railway
 app.get("/", (req, res) => {
-  console.log('Root endpoint hit - returning response');
+  console.log('[ROOT] Root endpoint hit from:', req.ip);
+  console.log('[ROOT] Headers:', JSON.stringify(req.headers));
   try {
-    res.json({
+    const responseData = {
       success: true,
       message: "Autobacs India API is running",
-      version: "1.0.0",
+      version: "1.0.3",
       timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      port: process.env.PORT || 8080,
       endpoints: {
+        health: "/health",
+        ready: "/ready",
+        apiStatus: "/api/status",
         auth: "/auth",
         products: "/products",
         categories: "/categories",
@@ -209,10 +239,15 @@ app.get("/", (req, res) => {
           dashboard: "/dashboard"
         }
       }
-    });
+    };
+    console.log('[ROOT] Sending response:', JSON.stringify(responseData, null, 2));
+    res.status(200).json(responseData);
   } catch (error) {
-    console.error('Error in root route:', error);
-    res.status(500).json({ error: 'Internal error' });
+    console.error('[ROOT] Error in root route:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message 
+    });
   }
 });
 
@@ -221,16 +256,20 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 });
 
-// Health check endpoints
+// Health check endpoints - Enhanced for Railway
 app.get('/health', (req, res) => {
-  console.log('Health check endpoint hit');
-  res.status(200).json({
+  console.log('[HEALTH] Health check endpoint hit from:', req.ip);
+  const healthData = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-  });
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    nodeVersion: process.version,
+    platform: process.platform
+  };
+  console.log('[HEALTH] Response:', JSON.stringify(healthData, null, 2));
+  res.status(200).json(healthData);
 });
 
 app.get('/ready', (req, res) => {
