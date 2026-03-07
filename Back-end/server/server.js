@@ -80,11 +80,17 @@ async function initializeServer() {
     
     // Start server directly on the provided port BEFORE heavy DB operations
     const PORT = process.env.PORT || 8080;
+    const HOST = '0.0.0.0'; // Explicitly bind to all interfaces
 
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✓ Server running on port ${PORT} (0.0.0.0)`);
-      console.log(`✓ Health check: http://0.0.0.0:${PORT}/health`);
-      console.log(`✓ Ready check: http://0.0.0.0:${PORT}/ready`);
+    const server = app.listen(PORT, HOST, () => {
+      console.log(`✓ Server running on ${HOST}:${PORT}`);
+      console.log(`✓ Public URL: https://ecommerceautobacs-production.up.railway.app`);
+      console.log(`✓ Health check: http://${HOST}:${PORT}/health`);
+      console.log(`✓ Ready check: http://${HOST}:${PORT}/ready`);
+      
+      // Log the actual server address for verification
+      const addr = server.address();
+      console.log(`✓ Bound to: ${addr.address}:${addr.port} (family: ${addr.family})`);
     });
 
     server.on('error', (err) => {
