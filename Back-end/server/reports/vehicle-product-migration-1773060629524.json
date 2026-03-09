@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-03-09T12:50:11.287Z",
+  "processedProducts": 890,
+  "mappingsCreated": 770,
+  "vehiclesMatched": [
+    "toyota-hilux",
+    "land-rover-defender",
+    "ford-endeavour",
+    "toyota-fortuner",
+    "hyundai-creta",
+    "isuzu-d-max",
+    "volkswagen-polo",
+    "bmw-x5",
+    "mahindra-thar",
+    "jeep-wrangler",
+    "maruti-jimny",
+    "mercedes-benz-g-class",
+    "ford-ranger",
+    "audi-q7",
+    "kia-seltos"
+  ],
+  "errors": [],
+  "vehicleMatches": {
+    "toyota-hilux": 220,
+    "land-rover-defender": 41,
+    "ford-endeavour": 66,
+    "toyota-fortuner": 90,
+    "hyundai-creta": 23,
+    "isuzu-d-max": 40,
+    "volkswagen-polo": 23,
+    "bmw-x5": 42,
+    "mahindra-thar": 128,
+    "jeep-wrangler": 32,
+    "maruti-jimny": 29,
+    "mercedes-benz-g-class": 12,
+    "ford-ranger": 13,
+    "audi-q7": 6,
+    "kia-seltos": 5
+  }
+}

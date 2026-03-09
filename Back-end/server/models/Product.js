@@ -19,6 +19,13 @@ const ProductSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  slug: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
   originalPrice: {
     type: Number,
     min: 0
