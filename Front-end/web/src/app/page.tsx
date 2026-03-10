@@ -15,7 +15,7 @@ import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton'
 import { Skeleton } from '@/components/ui/Skeleton';
 
 // Dynamically import components to improve initial load time
-const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), { 
+const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), {
   ssr: false,
   loading: () => <VehicleSelectorSkeleton />
 });
@@ -53,7 +53,7 @@ const KeepShoppingWidget = dynamic(() => import('@/components/products/KeepShopp
 });
 
 const RecentlyViewedProducts = dynamic(() => import('@/components/products/RecentlyViewedProducts'), {
-  ssr: false 
+  ssr: false
 });
 
 const SuperCarsBanner = dynamic(() => import('@/components/layout/SuperCarsBanner'), {
@@ -94,13 +94,13 @@ export default function Home() {
               Select your vehicle to see compatible parts and accessories
             </p>
           </div>
-          
+
           <div className="max-w-2xl mx-auto">
             <VehicleSelector onVehicleSelect={handleVehicleSelect} />
-            
+
             {selectedVehicle.make && selectedVehicle.model && (
               <div className="mt-6 text-center">
-                <Link 
+                <Link
                   href={`/model/${generateVehicleSlug(selectedVehicle.make, selectedVehicle.model)}`}
                   className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
                 >
@@ -114,9 +114,9 @@ export default function Home() {
           <div className="mt-12">
             <div className="grid grid-cols-5 gap-4">
               {FEATURED_VEHICLES.slice(0, 4).map((vehicle) => (
-                <Link 
-                  key={vehicle.id} 
-                  href={`/model/${vehicle.slug}`} 
+                <Link
+                  key={vehicle.id}
+                  href={`/model/${vehicle.slug}`}
                   className="group"
                 >
                   <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">
@@ -139,22 +139,22 @@ export default function Home() {
                   </div>
                 </Link>
               ))}
-              
+
               {/* See More Card */}
               <Link href="/vehicles" className="group">
                 <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center p-6">
                   <div className="text-white text-center">
-                    <svg 
-                      className="w-12 h-12 mx-auto mb-3 group-hover:scale-110 transition-transform" 
-                      fill="none" 
-                      stroke="currentColor" 
+                    <svg
+                      className="w-12 h-12 mx-auto mb-3 group-hover:scale-110 transition-transform"
+                      fill="none"
+                      stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M9 5l7 7-7 7" 
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
                       />
                     </svg>
                     <h3 className="text-lg font-bold mb-1">See More</h3>
@@ -192,7 +192,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/ironman" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/ironman-4x4" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -219,7 +219,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/option" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/option4wd" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -247,7 +247,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/ironman" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/ironman-4x4" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -274,7 +274,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/option" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/option4wd" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"

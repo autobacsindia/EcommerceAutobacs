@@ -6,7 +6,7 @@ import ProductImportService from "../services/productImportService.js";
 import BrandProductImportService from "../services/brandProductImportService.js";
 import ScheduledImportService from "../services/scheduledImportService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { 
+import {
   validateProduct,
   validateProductIdParam,
   validateProductUpdate,
@@ -92,20 +92,40 @@ router.get('/brands', asyncHandler(getBrands));
 // @access  Public
 router.get('/brands/:brandName', asyncHandler(async (req, res) => {
   const { brandName } = req.params;
-  
+
   try {
+    const Brand = (await import('../models/Brand.js')).default;
+
+    // Attempt to resolve brandName (which might be a slug) to official name
+    const normalizedSlug = brandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    const brandDoc = await Brand.findOne({
+      $or: [
+        { slug: brandName },
+        { slug: normalizedSlug },
+        { name: { $regex: new RegExp(`^${brandName}$`, 'i') } }
+      ]
+    });
+
+    const searchBrand = brandDoc ? brandDoc.name : brandName;
+
     // Use the search service to find products by brand
     const searchResults = await SearchService.searchProducts({
-      brand: brandName,
+      brand: searchBrand, // Use official name if resolved
       page: req.query.page || 1,
       limit: req.query.limit || 12
     });
-    
+
     res.json({
       success: true,
       count: searchResults.products.length,
       ...searchResults.pagination,
-      products: searchResults.products
+      products: searchResults.products,
+      brand: brandDoc ? {
+        name: brandDoc.name,
+        slug: brandDoc.slug,
+        id: brandDoc._id.toString()
+      } : null
     });
   } catch (error) {
     res.status(500).json({
@@ -121,28 +141,35 @@ router.get('/brands/:brandName', asyncHandler(async (req, res) => {
 // @access  Public
 router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
   const { brandName } = req.params;
-  
+
   try {
     const Brand = (await import('../models/Brand.js')).default;
-    
+
     // Normalize the slug
     const normalizedSlug = brandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    
+
     // Find brand by name or slug
-    let brandDoc = await Brand.findOne({ 
+    let brandDoc = await Brand.findOne({
       $or: [
-        { name: { $regex: new RegExp(`^${brandName}$`, 'i') } },
+        { name: { $regex: new RegExp(`^${brandName.replace(/-/g, '[.\\s-]')}$`, 'i') } },
+        { slug: brandName },
         { slug: normalizedSlug }
       ]
     });
-    
+
     if (!brandDoc) {
-      // Check if any products exist with this brand name
+      // Check if any products exist with this brand name or a similar name
+      const variations = [
+        brandName,
+        brandName.replace(/-/g, ' '),
+        brandName.replace(/-/g, '.')
+      ];
+
       const productCount = await Product.countDocuments({
-        brand: { $regex: new RegExp(`^${brandName}$`, 'i') },
+        brand: { $in: variations.map(v => new RegExp(`^${v}$`, 'i')) },
         isActive: true
       });
-      
+
       if (productCount === 0) {
         // Brand doesn't exist anywhere
         return res.status(404).json({
@@ -150,17 +177,23 @@ router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
           message: 'Brand not found'
         });
       }
-      
+
       // Brand exists in products but not in Brand collection - create placeholder
       // Find the exact brand name from products
+      const productVariations = [
+        brandName,
+        brandName.replace(/-/g, ' '),
+        brandName.replace(/-/g, '.')
+      ];
+
       const product = await Product.findOne({
-        brand: { $regex: new RegExp(`^${brandName}$`, 'i') },
+        brand: { $in: productVariations.map(v => new RegExp(`^${v}$`, 'i')) },
         isActive: true
       });
-      
+
       const actualBrandName = product ? product.brand : brandName;
-      const slug = actualBrandName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      
+      const slug = actualBrandName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
       return res.json({
         success: true,
         brand: {
@@ -172,7 +205,7 @@ router.get('/brands/:brandName/details', asyncHandler(async (req, res) => {
         }
       });
     }
-    
+
     res.json({
       success: true,
       brand: {
@@ -222,7 +255,7 @@ router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
 router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res, next) => {
   const product = new Product(req.body);
   const savedProduct = await product.save();
-  
+
   // Store product in response locals for middleware
   res.locals.product = savedProduct;
 
@@ -262,7 +295,7 @@ router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate
       req.body,
       { new: true, runValidators: true }
     ).populate('categories', 'name slug');
-    
+
     // Store product in response locals for middleware
     res.locals.product = updatedProduct;
 
@@ -297,7 +330,7 @@ router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async
   // Soft delete
   product.isActive = false;
   await product.save();
-  
+
   // Store product in response locals for middleware
   res.locals.product = product;
 
@@ -316,13 +349,13 @@ router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async
 router.post("/:id/stock", protect, admin, validateStockUpdate, asyncHandler(async (req, res, next) => {
   const { stock } = req.body;
   const id = req.params.id; // Sanitized by middleware
-  
+
   const product = await Product.findByIdAndUpdate(
     id,
     { stock },
     { new: true }
   );
-  
+
   // Store product in response locals for middleware
   res.locals.product = product;
 
@@ -349,17 +382,17 @@ router.post("/:id/stock", protect, admin, validateStockUpdate, asyncHandler(asyn
 router.post("/import/wordpress", protect, admin, asyncHandler(async (req, res) => {
   try {
     const importService = new ProductImportService();
-    
+
     // Generate a unique job ID
     const jobId = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Start import process
     const importResult = await importService.importAllProducts(jobId, req.user._id, (progress) => {
       // In a real implementation, we would emit progress events to the client
       // For now, we'll just log to console
       console.log(`Import progress: ${progress.progress}%`);
     });
-    
+
     if (importResult.success) {
       res.status(200).json({
         success: true,
@@ -438,17 +471,17 @@ router.post("/import/brand/:brandName", protect, admin, validateBrandParam, asyn
   try {
     const { brandName } = req.params;
     const importService = new BrandProductImportService();
-    
+
     // Generate a unique job ID
     const jobId = `import-brand-${brandName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Start import process
     const importResult = await importService.importBrandProducts(jobId, brandName, req.user._id, (progress) => {
       // In a real implementation, we would emit progress events to the client
       // For now, we'll just log to console
       console.log(`Import progress for ${brandName}: ${progress.progress}%`);
     });
-    
+
     if (importResult.success) {
       res.status(200).json({
         success: true,
@@ -482,7 +515,7 @@ router.get("/import/status", protect, admin, asyncHandler(async (req, res) => {
     const importJobs = await ImportJob.find({})
       .sort({ createdAt: -1 })
       .limit(10);
-    
+
     res.json({
       success: true,
       jobs: importJobs
@@ -502,14 +535,14 @@ router.get("/import/status", protect, admin, asyncHandler(async (req, res) => {
 router.get("/import/status/:jobId", protect, admin, asyncHandler(async (req, res) => {
   try {
     const importJob = await ImportJob.findOne({ jobId: req.params.jobId });
-    
+
     if (!importJob) {
       return res.status(404).json({
         success: false,
         message: 'Import job not found'
       });
     }
-    
+
     res.json({
       success: true,
       job: importJob
@@ -530,7 +563,7 @@ router.get("/import/schedule", protect, admin, asyncHandler(async (req, res) => 
   try {
     const scheduledImportService = new ScheduledImportService();
     const schedules = scheduledImportService.getScheduledImports();
-    
+
     res.json({
       success: true,
       schedules
@@ -550,17 +583,17 @@ router.get("/import/schedule", protect, admin, asyncHandler(async (req, res) => 
 router.post("/import/schedule", protect, admin, asyncHandler(async (req, res) => {
   try {
     const { frequency, time } = req.body;
-    
+
     if (!frequency || !time) {
       return res.status(400).json({
         success: false,
         message: 'Frequency and time are required'
       });
     }
-    
+
     const scheduledImportService = new ScheduledImportService();
     const result = await scheduledImportService.scheduleImport(frequency, time, req.user._id);
-    
+
     if (result.success) {
       res.status(200).json({
         success: true,
@@ -590,17 +623,17 @@ router.post("/import/wordpress/full", protect, admin, asyncHandler(async (req, r
   try {
     const MigrationOrchestrationService = (await import('../services/migrationOrchestrationService.js')).default;
     const migrationService = new MigrationOrchestrationService();
-    
+
     // Generate a unique job ID
     const jobId = `import-full-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Start full migration process
     const migrationResult = await migrationService.executeFullMigration(jobId, req.user._id, (progress) => {
       // In a real implementation, we would emit progress events to the client
       // For now, we'll just log to console
       console.log(`Migration progress - ${progress.phase}: ${progress.message}`);
     });
-    
+
     if (migrationResult.success) {
       res.status(200).json({
         success: true,
@@ -632,17 +665,17 @@ router.post("/import/wordpress/categories", protect, admin, asyncHandler(async (
   try {
     const MigrationOrchestrationService = (await import('../services/migrationOrchestrationService.js')).default;
     const migrationService = new MigrationOrchestrationService();
-    
+
     // Generate a unique job ID
     const jobId = `import-categories-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Start category migration process
     const migrationResult = await migrationService.executeCategoryMigration(jobId, req.user._id, (progress) => {
       // In a real implementation, we would emit progress events to the client
       // For now, we'll just log to console
       console.log(`Category migration progress: ${progress.message}`);
     });
-    
+
     if (migrationResult.success) {
       res.status(200).json({
         success: true,
@@ -673,10 +706,10 @@ router.post("/import/wordpress/categories", protect, admin, asyncHandler(async (
 router.post("/cleanup/wordpress", protect, admin, asyncHandler(async (req, res) => {
   try {
     const { batchSize } = req.body || {};
-    
+
     // Start cleanup process
     const cleanupResult = await cleanupWordPressProducts(batchSize);
-    
+
     if (cleanupResult.success) {
       res.status(200).json({
         success: true,
