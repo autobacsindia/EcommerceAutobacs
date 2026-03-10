@@ -130,17 +130,16 @@ const nextConfig: NextConfig = {
     }
 
     if (!apiUrl && process.env.NODE_ENV === 'production') {
-      console.error('CRITICAL ERROR: Production build requires NEXT_PUBLIC_API_URL environment variable!');
-      console.error('Set it in Railway Dashboard → Frontend → Variables');
-      console.error('Example: NEXT_PUBLIC_API_URL=https://ecommerceautobacs-production.up.railway.app');
-      throw new Error('NEXT_PUBLIC_API_URL is required in production');
+      // Fallback to production URL if env var not set during build
+      apiUrl = 'https://ecommerceautobacs-production.up.railway.app';
+     console.warn('Using fallback production API URL:', apiUrl);
     }
     
     if (!apiUrl) {
-      console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined. Using localhost for development.');
+     console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined. Using localhost for development.');
       apiUrl = 'http://localhost:8080';
     } else {
-      console.log('✓ Rewriting API requests to:', apiUrl);
+     console.log('✓ Rewriting API requests to:', apiUrl);
     }
     
     const targetUrl = apiUrl;

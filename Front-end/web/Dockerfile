@@ -10,16 +10,23 @@ RUN npm ci
 # Copy source
 COPY . .
 
-# Build Next.js app (Standalone Mode)
+# Disable Next.js telemetry
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# ✅ Read environment variables from Railway's environment
-# These will be available from Railway Dashboard → Variables
+# ✅ Accept build arguments from Railway
+# These must be passed as build args in Railway dashboard
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_APP_URL
+ARG NODE_ENV=production
+
+# Set them as environment variables for the build
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
-ENV NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV:-production}
 
+# Build Next.js app
 RUN npm run build
 
 # Stage 2: Run
