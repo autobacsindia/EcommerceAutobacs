@@ -13,11 +13,12 @@ COPY . .
 # Build Next.js app (Standalone Mode)
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Accept build arguments for environment variables that Next.js needs during build time
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_API_BASE_URL
-ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+# ✅ Read environment variables from Railway's environment
+# These will be available from Railway Dashboard → Variables
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV NODE_ENV=production
 
 RUN npm run build
 
