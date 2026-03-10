@@ -117,6 +117,7 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 60,
+   unoptimized: process.env.NODE_ENV === 'production', // Disable optimization in production to fix 400 errors
   },
   async rewrites() {
     // Production: Must have NEXT_PUBLIC_API_URL set in Railway Dashboard
