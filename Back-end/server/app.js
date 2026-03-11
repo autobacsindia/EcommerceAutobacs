@@ -91,11 +91,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Catch-all OPTIONS handler for CORS preflight
-app.options('*', (req, res) => {
-  console.log('OPTIONS preflight request received');
-  res.sendStatus(200);
-});
+// CORS preflight is handled below after corsOptions is defined
 
 // Initialize cron service
 const cronService = new CronService();
@@ -168,7 +164,8 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id', 'X-XSRF-TOKEN', 'X-CSRF-Token']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id', 'X-XSRF-TOKEN', 'X-CSRF-Token'],
+  maxAge: 0 // Disable preflight caching so browser never uses a stale cached result
 };
 
 // Handle ALL preflight OPTIONS requests immediately before any other middleware
