@@ -6,21 +6,22 @@ const execPromise = promisify(exec);
 
 // Mongoose connection options with enhanced SSL/TLS support
 const mongooseOptions = {
-  serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
-  socketTimeoutMS: 10000, // Close sockets after 10 seconds of inactivity
-  family: 4,
+  serverSelectionTimeoutMS: 30000, // 30s for Atlas DNS resolution
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 30000,
+  // Do NOT force family:4 — Atlas SRV needs flexible DNS resolution
   
-  // SSL/TLS specific options - configurable via environment variables
-  tls: process.env.MONGO_TLS === 'true',
-  tlsAllowInvalidCertificates: process.env.MONGO_TLS_ALLOW_INVALID_CERTIFICATES === 'true',
-  tlsAllowInvalidHostnames: process.env.MONGO_TLS_ALLOW_INVALID_HOSTNAMES === 'true',
-  tlsCAFile: process.env.MONGO_TLS_CA_FILE || undefined,
-  tlsCertificateKeyFile: process.env.MONGO_TLS_CERTIFICATE_KEY_FILE || undefined,
+  // Do NOT set tls:false — mongodb+srv handles TLS automatically
+  // Only override if explicitly set in env
+  ...(process.env.MONGO_TLS === 'true' ? { tls: true } : {}),
+  ...(process.env.MONGO_TLS_ALLOW_INVALID_CERTIFICATES === 'true' ? { tlsAllowInvalidCertificates: true } : {}),
+  ...(process.env.MONGO_TLS_ALLOW_INVALID_HOSTNAMES === 'true' ? { tlsAllowInvalidHostnames: true } : {}),
+  ...(process.env.MONGO_TLS_CA_FILE ? { tlsCAFile: process.env.MONGO_TLS_CA_FILE } : {}),
+  ...(process.env.MONGO_TLS_CERTIFICATE_KEY_FILE ? { tlsCertificateKeyFile: process.env.MONGO_TLS_CERTIFICATE_KEY_FILE } : {}),
   
-  // Enhanced retry configuration
   retryWrites: true,
   maxPoolSize: 10,
-  heartbeatFrequencyMS: 5000
+  heartbeatFrequencyMS: 10000
 };
 
 // Enhanced connection retry logic with SSL error handling and fallback mechanisms
