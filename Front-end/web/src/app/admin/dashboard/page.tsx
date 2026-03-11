@@ -121,7 +121,7 @@ export default function AdminDashboardPage() {
   const apiUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:5000';
+    'http://localhost:8080';
   const sseUrl = `${apiUrl}/dashboard/stream`;
 
   // Handle SSE messages
@@ -150,7 +150,11 @@ export default function AdminDashboardPage() {
   }, []);
 
   const handleError = useCallback((error: Error) => {
-    console.error('SSE Error:', error);
+    // Network errors are already logged as console.log inside useSSE; avoid double-logging
+    const isNetworkError = error instanceof TypeError && error.message === 'Failed to fetch';
+    if (!isNetworkError) {
+      console.error('SSE Error:', error);
+    }
   }, []);
 
   const handleConnect = useCallback(() => {

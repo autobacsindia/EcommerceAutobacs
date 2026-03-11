@@ -172,7 +172,10 @@ export function useSSE({
 
         if (!isMountedRef.current) return;
         setConnectionState('error');
-        onErrorRef.current?.(error);
+        // Don't surface network errors to onError — backend being down is expected/retriable
+        if (!isNetworkError) {
+          onErrorRef.current?.(error);
+        }
 
         const maxAttempts = maxReconnectAttemptsRef.current;
         if (reconnectAttemptsRef.current < maxAttempts) {
@@ -183,7 +186,7 @@ export function useSSE({
           reconnectAttemptsRef.current++;
           console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
-            connectFnRef.current();
+            connectFnRef.current().catch(() => {});
           }, delay);
         } else {
           console.error('Max reconnection attempts reached');
@@ -211,7 +214,8 @@ export function useSSE({
   // Re-runs only when url or enabled changes (meaningful reconnect triggers)
   useEffect(() => {
     isMountedRef.current = true;
-    connectFnRef.current();
+    // Explicitly catch here so Next.js dev overlay never sees an unhandled rejection
+    connectFnRef.current().catch(() => {});
     return () => {
       isMountedRef.current = false;
       disconnect();
