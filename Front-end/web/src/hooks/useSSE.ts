@@ -131,6 +131,7 @@ export function useSSE({
         if (!isMountedRef.current) return;
         setConnectionState('connected');
         reconnectAttemptsRef.current = 0;
+        console.log('SSE: Connected successfully');
         onConnectRef.current?.();
 
         const reader = response.body.getReader();
@@ -210,18 +211,31 @@ export function useSSE({
     reconnectAttemptsRef.current = 0;
   }, []);
 
-  // Single effect: mount → connect, unmount → disconnect
-  // Re-runs only when url or enabled changes (meaningful reconnect triggers)
+  // Re-run whenever url, enabled, or token changes (token arriving late must trigger connection)
+  // Reset attempt counter on each fresh trigger so retries start from 0.
   useEffect(() => {
     isMountedRef.current = true;
+    reconnectAttemptsRef.current = 0; // Fresh trigger = fresh retry budget
+
+    // Abort any in-flight connection / pending retry from previous run
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     // Explicitly catch here so Next.js dev overlay never sees an unhandled rejection
     connectFnRef.current().catch(() => {});
+
     return () => {
       isMountedRef.current = false;
       disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, enabled]);
+  }, [url, enabled, token]);
 
   const connect = useCallback(() => connectFnRef.current(), []);
 
