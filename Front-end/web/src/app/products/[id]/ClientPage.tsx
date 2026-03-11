@@ -404,11 +404,11 @@ export function ProductDetailPageClient({ product }: { product: any }) {
             <div className="mb-8">
               <div className="flex items-baseline gap-3">
                 <span className="text-4xl font-bold text-gray-900">
-                  ₹{(selectedSpecOption?.price ?? product.price ?? 0).toLocaleString()}
+                  {formatPrice(selectedSpecOption?.price ?? product.price ?? 0)}
                 </span>
                 {product.originalPrice && product.originalPrice > product.price && (
                   <span className="text-xl text-gray-400 line-through">
-                    ₹{product.originalPrice?.toLocaleString()}
+                    {formatPrice(product.originalPrice)}
                   </span>
                 )}
                 {product.originalPrice && product.originalPrice > product.price && (

@@ -242,11 +242,16 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
           <div className="flex flex-col md:flex-row items-center">
             <div className="mb-6 md:mb-0 md:mr-8">
               <div className="bg-white rounded-lg p-4 w-32 h-32 flex items-center justify-center">
-                <img 
-                  src={brand.logo} 
-                  alt={brand.name} 
-                  className="max-w-full max-h-full object-contain"
-                />
+                {brand.logo ? (
+                  <img 
+                    src={brand.logo} 
+                    alt={brand.name} 
+                    className="max-w-full max-h-full object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="text-2xl font-bold text-gray-400">{brand.name?.charAt(0)}</span>
+                )}
               </div>
             </div>
             <div className="text-center md:text-left">
