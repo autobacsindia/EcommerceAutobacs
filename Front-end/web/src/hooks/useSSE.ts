@@ -12,8 +12,8 @@ type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 interface UseSSEOptions {
   url: string;
-  token: string | null; // Token passed from AuthContext
-  enabled?: boolean; // Allow disabling the connection
+  token: string | null;
+  enabled?: boolean;
   onMessage: (message: SSEMessage) => void;
   onError?: (error: Error) => void;
   onConnect?: () => void;
@@ -32,180 +32,194 @@ export function useSSE({
   maxReconnectAttempts = 10
 }: UseSSEOptions) {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+
+  // Store all mutable state and callbacks in refs to avoid stale closures
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const isConnectedRef = useRef(false);
-  const tokenRef = useRef(token);
   const isRefreshingRef = useRef(false);
+  const isMountedRef = useRef(false);
 
-  // Update tokenRef when token prop changes
+  // Keep latest prop values in refs so the connect loop never goes stale
+  const urlRef = useRef(url);
+  const tokenRef = useRef(token);
+  const enabledRef = useRef(enabled);
+  const onMessageRef = useRef(onMessage);
+  const onErrorRef = useRef<((error: Error) => void) | undefined>(onError);
+  const onConnectRef = useRef<(() => void) | undefined>(onConnect);
+  const reconnectDelayRef = useRef(reconnectDelay);
+  const maxReconnectAttemptsRef = useRef(maxReconnectAttempts);
+
+  // Sync all refs on every render — zero dependency arrays needed
+  urlRef.current = url;
+  tokenRef.current = token;
+  enabledRef.current = enabled;
+  onMessageRef.current = onMessage;
+  onErrorRef.current = onError;
+  onConnectRef.current = onConnect;
+  reconnectDelayRef.current = reconnectDelay;
+  maxReconnectAttemptsRef.current = maxReconnectAttempts;
+
+  // connectFnRef holds the stable connect function so setTimeout can always
+  // call the latest version without capturing stale variables.
+  const connectFnRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+  // Build the connect logic once (stable ref, never recreated)
   useEffect(() => {
-    tokenRef.current = token;
-  }, [token]);
+    const connectInternal = async () => {
+      if (!isMountedRef.current) return;
 
-  const connect = useCallback(async () => {
-    // Use tokenRef.current to get the latest token
-    const currentToken = tokenRef.current;
+      const currentToken = tokenRef.current;
+      const currentEnabled = enabledRef.current;
+      const currentUrl = urlRef.current;
 
-    // Don't connect if disabled or no token
-    if (!enabled || !currentToken) {
-      if (!currentToken) {
-        console.log('SSE: No token available, skipping connection');
-      }
-      return;
-    }
-
-    // Cancel any existing connection
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Clear any pending reconnect
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    setConnectionState('connecting');
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      console.log(`SSE: Connecting to ${url}`);
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${currentToken}`,
-          'Accept': 'text/event-stream'
-        },
-        signal: abortController.signal
-      });
-
-      if (!response.ok) {
-        // Handle 401 Unauthorized with token refresh
-        if (response.status === 401 && !isRefreshingRef.current) {
-          console.log('SSE: 401 Unauthorized, attempting to refresh token...');
-          isRefreshingRef.current = true;
-          try {
-            const newToken = await apiClient.refreshSession();
-            isRefreshingRef.current = false;
-            
-            if (newToken) {
-              console.log('SSE: Token refreshed successfully, reconnecting...');
-              tokenRef.current = newToken;
-              // Retry connection immediately with new token
-              return connect();
-            } else {
-              throw new Error('SSE: Token refresh returned null');
-            }
-          } catch (refreshError) {
-            isRefreshingRef.current = false;
-            console.error('SSE: Token refresh failed:', refreshError);
-            throw new Error('SSE connection failed: 401 Unauthorized and refresh failed');
-          }
-        }
-
-        throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
-      }
-
-      if (!response.body) {
-        throw new Error('Response body is null');
-      }
-
-      setConnectionState('connected');
-      isConnectedRef.current = true;
-      reconnectAttemptsRef.current = 0;
-      onConnect?.();
-
-      // Read the stream
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          console.log('SSE stream ended');
-          break;
-        }
-
-        // Decode the chunk and add to buffer
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete messages
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || ''; // Keep incomplete message in buffer
-
-        for (const line of lines) {
-          if (line.trim().startsWith('data: ')) {
-            try {
-              const data = line.substring(6); // Remove 'data: ' prefix
-              const message = JSON.parse(data);
-              onMessage(message);
-            } catch (error) {
-              console.error('Error parsing SSE message:', error);
-            }
-          }
-        }
-      }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.log('SSE connection aborted');
+      if (!currentEnabled || !currentToken) {
+        if (!currentToken) console.log('SSE: No token available, skipping connection');
         return;
       }
 
-      console.error('SSE connection error:', error);
-      setConnectionState('error');
-      isConnectedRef.current = false;
-      onError?.(error);
-
-      // Attempt to reconnect with exponential backoff
-      if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-        const delay = reconnectDelay * Math.pow(2, reconnectAttemptsRef.current);
-        const cappedDelay = Math.min(delay, 15000); // Cap at 15 seconds
-        
-        reconnectAttemptsRef.current++;
-        console.log(`Reconnecting in ${cappedDelay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, cappedDelay);
-      } else {
-        console.error('Max reconnection attempts reached');
-        setConnectionState('error');
+      // Cancel any existing connection
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-    }
-  }, [url, token, enabled, onMessage, onError, onConnect, reconnectDelay, maxReconnectAttempts]);
+      // Clear any pending reconnect timer
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+
+      setConnectionState('connecting');
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      try {
+        console.log(`SSE: Connecting to ${currentUrl}`);
+        const response = await fetch(currentUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${currentToken}`,
+            'Accept': 'text/event-stream'
+          },
+          signal: abortController.signal
+        });
+
+        if (!response.ok) {
+          if (response.status === 401 && !isRefreshingRef.current) {
+            console.log('SSE: 401 Unauthorized, attempting to refresh token...');
+            isRefreshingRef.current = true;
+            try {
+              const newToken = await apiClient.refreshSession();
+              isRefreshingRef.current = false;
+              if (newToken) {
+                console.log('SSE: Token refreshed successfully, reconnecting...');
+                tokenRef.current = newToken;
+                return connectFnRef.current();
+              } else {
+                throw new Error('SSE: Token refresh returned null');
+              }
+            } catch (refreshError) {
+              isRefreshingRef.current = false;
+              console.error('SSE: Token refresh failed:', refreshError);
+              throw new Error('SSE connection failed: 401 Unauthorized and refresh failed');
+            }
+          }
+          throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
+        }
+
+        if (!response.body) throw new Error('Response body is null');
+
+        if (!isMountedRef.current) return;
+        setConnectionState('connected');
+        reconnectAttemptsRef.current = 0;
+        onConnectRef.current?.();
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (!isMountedRef.current) break;
+          if (done) { console.log('SSE stream ended'); break; }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.trim().startsWith('data: ')) {
+              try {
+                const message = JSON.parse(line.substring(6));
+                onMessageRef.current(message);
+              } catch (e) {
+                console.error('Error parsing SSE message:', e);
+              }
+            }
+          }
+        }
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.log('SSE connection aborted');
+          return;
+        }
+
+        const isNetworkError = error instanceof TypeError && error.message === 'Failed to fetch';
+        if (isNetworkError) {
+          console.log('SSE: Backend unreachable, will retry...');
+        } else {
+          console.error('SSE connection error:', error);
+        }
+
+        if (!isMountedRef.current) return;
+        setConnectionState('error');
+        onErrorRef.current?.(error);
+
+        const maxAttempts = maxReconnectAttemptsRef.current;
+        if (reconnectAttemptsRef.current < maxAttempts) {
+          const delay = Math.min(
+            reconnectDelayRef.current * Math.pow(2, reconnectAttemptsRef.current),
+            15000
+          );
+          reconnectAttemptsRef.current++;
+          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxAttempts})`);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connectFnRef.current();
+          }, delay);
+        } else {
+          console.error('Max reconnection attempts reached');
+        }
+      }
+    };
+
+    connectFnRef.current = connectInternal;
+  });
 
   const disconnect = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-
     setConnectionState('disconnected');
-    isConnectedRef.current = false;
     reconnectAttemptsRef.current = 0;
   }, []);
 
+  // Single effect: mount → connect, unmount → disconnect
+  // Re-runs only when url or enabled changes (meaningful reconnect triggers)
   useEffect(() => {
-    connect();
-
+    isMountedRef.current = true;
+    connectFnRef.current();
     return () => {
+      isMountedRef.current = false;
       disconnect();
     };
-  }, [connect, disconnect]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, enabled]);
 
-  return {
-    connectionState,
-    connect,
-    disconnect
-  };
+  const connect = useCallback(() => connectFnRef.current(), []);
+
+  return { connectionState, connect, disconnect };
 }
