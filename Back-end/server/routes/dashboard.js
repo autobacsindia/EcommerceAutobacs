@@ -33,15 +33,17 @@ router.get('/stream', protect, admin, async (req, res) => {
   activeConnections++;
   console.log(`Dashboard SSE connection established. Active connections: ${activeConnections}`);
 
-  // Set SSE headers — must explicitly include CORS headers since writeHead
-  // overwrites any headers already set by the cors() middleware.
-  const origin = req.headers.origin || '';
+  // Set SSE headers.
+  // Note: CORS headers are intentionally repeated here because res.writeHead()
+  // replaces all previously-set headers, including those added by cors() middleware.
+  const requestOrigin = req.headers.origin;
+  const corsOrigin = requestOrigin || 'http://localhost:3000';
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no', // Disable nginx buffering
-    'Access-Control-Allow-Origin': origin || '*',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Credentials': 'true'
   });
 
