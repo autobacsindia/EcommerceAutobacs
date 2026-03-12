@@ -138,10 +138,13 @@ const frontendUrls = frontendUrlsEnv
   ? frontendUrlsEnv.split(',').map(u => u.trim()).filter(Boolean)
   : [];
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:5173',
+  // Localhost origins for development only
+  ...(process.env.NODE_ENV !== 'production' ? [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+  ] : []),
   process.env.FRONTEND_URL,
   ...frontendUrls
 ].filter(Boolean);
@@ -165,18 +168,18 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id', 'X-XSRF-TOKEN', 'X-CSRF-Token'],
-  maxAge: 0 // Disable preflight caching so browser never uses a stale cached result
+  maxAge: process.env.NODE_ENV === 'production' ? 86400 : 0 // Cache preflight 24h in prod
 };
 
 // Handle ALL preflight OPTIONS requests immediately before any other middleware
 app.options('*', cors(corsOptions));
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Data Sanitization against NoSQL query injection
-// app.use(mongoSanitization);
+app.use(mongoSanitization);
 
 // Data Sanitization against XSS and trimming
 app.use(requestSanitization);
@@ -272,8 +275,10 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// Debug endpoint for environment variables
-app.use('/api/debug', debugRoutes);
+// Debug endpoint — development only (never expose in production)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/debug', debugRoutes);
+}
 
 // Mount routes with specific e-commerce rate limiting strategy
 // Auth routes already have their own stricter rate limiting (5 req/min)

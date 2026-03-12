@@ -29,7 +29,7 @@ export const introspectToken = async (token, tokenTypeHint = 'access_token') => 
     
     // Step 1: Verify JWT signature and decode
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
       signatureValid = true;
     } catch (err) {
       // Token invalid or expired

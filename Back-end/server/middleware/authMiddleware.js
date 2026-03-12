@@ -20,7 +20,7 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   try {
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
 
     // Get user from token (exclude password)
     req.user = await User.findById(decoded.id).select('-passwordHash');
@@ -70,7 +70,7 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
 
   try {
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
 
     // Get user from token (exclude password)
     req.user = await User.findById(decoded.id).select('-passwordHash');
@@ -97,7 +97,7 @@ export const authMiddleware = (req, res, next) => {
   if (!token) return res.status(401).json({ msg: "Token missing" });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     req.user = decoded; // attach user info to request
     next();
   } catch (err) {

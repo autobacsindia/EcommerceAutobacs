@@ -8,6 +8,18 @@ import net from "net";
 
 dotenv.config();
 
+// ── JWT Secret strength validation ─────────────────────────────────────────
+// Fail fast on startup rather than silently accepting a weak secret.
+const _jwtSecret = process.env.JWT_SECRET || '';
+if (_jwtSecret.length < 64) {
+  console.error(
+    '✗ FATAL: JWT_SECRET is missing or too short (minimum 64 chars). ' +
+    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))". ' +
+    'Set it in .env (local) and in Railway environment variables (production).'
+  );
+  process.exit(1);
+}
+
 // Initialize Sentry early in the boot process
 initSentry();
 
@@ -34,10 +46,10 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Enhanced MongoDB connection with better options and retry logic
+// NOTE: family:4 removed — Atlas SRV requires flexible DNS resolution
 const mongooseOptions = {
-  serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of default 30s
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-  family: 4 // Use IPv4, skip trying IPv6
+  serverSelectionTimeoutMS: 30000,
+  socketTimeoutMS: 45000,
 };
 
 // Connection event listeners
