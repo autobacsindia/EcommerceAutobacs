@@ -3,7 +3,11 @@
 .env.local
 .env.*.local
 .env.backup
-
+.env.production
+.env.staging
+.env.development
+# Keep only .env.example (no real secrets)
+!.env.example
 # Logs
 logs
 *.log
@@ -59,19 +63,6 @@ Thumbs.db
 
 # Optional REPL history
 .node_repl_history
-
-# Production environment files (should be managed separately)
-.env.production
-
-# API keys and secrets (redundant safety)
-*.pem
-*.key
-*.cert
-credentials.json
-
-# Package lock files (optional - uncomment if needed)
-# package-lock.json
-# yarn.lock
 
 # Backup files
 *.backup
