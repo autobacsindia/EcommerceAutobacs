@@ -11,13 +11,19 @@ dotenv.config();
 // ── JWT Secret strength validation ─────────────────────────────────────────
 // Fail fast on startup rather than silently accepting a weak secret.
 const _jwtSecret = process.env.JWT_SECRET || '';
+console.log(`[Startup] JWT_SECRET length: ${_jwtSecret.length} chars`);
 if (_jwtSecret.length < 64) {
-  console.error(
-    '✗ FATAL: JWT_SECRET is missing or too short (minimum 64 chars). ' +
-    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))". ' +
-    'Set it in .env (local) and in Railway environment variables (production).'
-  );
-  process.exit(1);
+  const msg = `✗ FATAL: JWT_SECRET is missing or too short (${_jwtSecret.length} chars, minimum 64). ` +
+    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"';
+  console.error(msg);
+  // In production, exit immediately. In dev/test, warn but continue.
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    console.warn('[Startup] ⚠ Continuing with weak JWT_SECRET in non-production environment.');
+  }
+} else {
+  console.log('[Startup] ✓ JWT_SECRET strength OK');
 }
 
 // Initialize Sentry early in the boot process
