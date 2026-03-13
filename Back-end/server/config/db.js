@@ -6,7 +6,7 @@ const execPromise = promisify(exec);
 
 // Mongoose connection options with enhanced SSL/TLS support
 const mongooseOptions = {
-  serverSelectionTimeoutMS: 30000, // 30s for Atlas DNS resolution
+  serverSelectionTimeoutMS: 5000,  // 5s — fail fast if Atlas nodes are unreachable; connectWithRetry handles startup retries
   socketTimeoutMS: 45000,
   connectTimeoutMS: 30000,
   // Do NOT force family:4 — Atlas SRV needs flexible DNS resolution
@@ -20,7 +20,8 @@ const mongooseOptions = {
   ...(process.env.MONGO_TLS_CERTIFICATE_KEY_FILE ? { tlsCertificateKeyFile: process.env.MONGO_TLS_CERTIFICATE_KEY_FILE } : {}),
   
   retryWrites: true,
-  maxPoolSize: 10,
+  maxPoolSize: 20,      // increased from 10 — handles concurrent admin + storefront traffic
+  minPoolSize: 5,       // keep warm connections ready; avoids cold-start latency spikes
   heartbeatFrequencyMS: 10000
 };
 

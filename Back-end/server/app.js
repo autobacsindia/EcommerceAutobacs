@@ -64,15 +64,13 @@ app.set('trust proxy', 1);
 // ULTRA-SIMPLE TEST ENDPOINT - NO MIDDLEWARE, NO DATABASE
 // Use this to verify Express is responding at all
 app.get('/ping', (req, res) => {
-  console.log('>>> PING endpoint hit from', req.ip);
   res.send('pong');
 });
 
-// Request logging middleware for debugging - MUST BE FIRST
+// Request logging middleware — single log line per request (on finish, not on entry)
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} from ${req.ip}`);
   const start = Date.now();
-  
+
   // Set request timeout to prevent hanging
   if (!res.headersSent) {
     req.setTimeout(30000, () => {
@@ -82,7 +80,7 @@ app.use((req, res, next) => {
       }
     });
   }
-  
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
@@ -154,7 +152,6 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    console.log('[CORS] Incoming origin:', origin);
     if (allowedOrigins.indexOf(origin) === -1 && !process.env.Review_App) {
       // In development, we might want to be more lenient or log it
       if (process.env.NODE_ENV === 'development') {
@@ -168,15 +165,15 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id', 'X-XSRF-TOKEN', 'X-CSRF-Token'],
-  maxAge: process.env.NODE_ENV === 'production' ? 86400 : 0 // Cache preflight 24h in prod
+  maxAge: process.env.NODE_ENV === 'production' ? 7200 : 0  // Cache preflight 2h in prod (safe default; avoids stale CORS failures)
 };
 
 // Handle ALL preflight OPTIONS requests immediately before any other middleware
 app.options('*', cors(corsOptions));
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '500kb' }));
+app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
 // Data Sanitization against NoSQL query injection
 app.use(mongoSanitization);
@@ -186,8 +183,6 @@ app.use(requestSanitization);
 
 // Test route - MUST RESPOND QUICKLY - Enhanced for Railway
 app.get("/", (req, res) => {
-  console.log('[ROOT] Root endpoint hit from:', req.ip);
-  console.log('[ROOT] Headers:', JSON.stringify(req.headers));
   try {
     const responseData = {
       success: true,
@@ -221,7 +216,6 @@ app.get("/", (req, res) => {
         }
       }
     };
-    console.log('[ROOT] Sending response:', JSON.stringify(responseData, null, 2));
     res.status(200).json(responseData);
   } catch (error) {
     console.error('[ROOT] Error in root route:', error);
@@ -239,7 +233,6 @@ app.get('/favicon.ico', (req, res) => {
 
 // Health check endpoints - Enhanced for Railway
 app.get('/health', (req, res) => {
-  console.log('[HEALTH] Health check endpoint hit from:', req.ip);
   const healthData = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -249,12 +242,10 @@ app.get('/health', (req, res) => {
     nodeVersion: process.version,
     platform: process.platform
   };
-  console.log('[HEALTH] Response:', JSON.stringify(healthData, null, 2));
   res.status(200).json(healthData);
 });
 
 app.get('/ready', (req, res) => {
-  console.log('Ready check endpoint hit');
   const isReady = mongoose.connection.readyState === 1;
   res.status(isReady ? 200 : 503).json({
     status: isReady ? 'ready' : 'not ready',
