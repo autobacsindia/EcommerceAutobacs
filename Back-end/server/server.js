@@ -1,22 +1,18 @@
 import dotenv from "dotenv";
-import mongoose from "mongoose";
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 import elasticsearchService from "./services/elasticsearchService.js";
 import { app, cronService, adaptiveThrottlingService, setCronService } from "./app.js";
 import { initSentry } from "./config/sentry.js";
-import net from "net";
 
 dotenv.config();
 
 // ── JWT Secret strength validation ─────────────────────────────────────────
-// Fail fast on startup rather than silently accepting a weak secret.
 const _jwtSecret = process.env.JWT_SECRET || '';
 console.log(`[Startup] JWT_SECRET length: ${_jwtSecret.length} chars`);
 if (_jwtSecret.length < 64) {
   const msg = `✗ FATAL: JWT_SECRET is missing or too short (${_jwtSecret.length} chars, minimum 64). ` +
     'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"';
   console.error(msg);
-  // In production, exit immediately. In dev/test, warn but continue.
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   } else {
@@ -26,145 +22,91 @@ if (_jwtSecret.length < 64) {
   console.log('[Startup] ✓ JWT_SECRET strength OK');
 }
 
-// Initialize Sentry early in the boot process
+// Initialize Sentry early
 initSentry();
 
-// Handle uncaught exceptions and rejections
+// ── Global error guards ─────────────────────────────────────────────────────────
 process.on('uncaughtException', (err) => {
-  console.error('✗ Uncaught Exception:', err);
-  console.error('Stack trace:', err.stack);
-  
-  // Attempt graceful shutdown
-  setTimeout(() => {
-    console.log('✗ Process terminated due to uncaught exception');
-    process.exit(1);
-  }, 1000);
+  console.error('✗ Uncaught Exception:', err.stack || err);
+  setTimeout(() => process.exit(1), 1000);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('✗ Unhandled Rejection at:', promise);
-  console.error('✗ Reason:', reason);
-  
-  // Log but don't exit - this allows the app to continue
-  if (process.env.NODE_ENV === 'development') {
-    console.error('Full stack:', reason instanceof Error ? reason.stack : reason);
-  }
+process.on('unhandledRejection', (reason) => {
+  console.error('✗ Unhandled Rejection:', reason instanceof Error ? reason.stack : reason);
 });
 
-// Enhanced MongoDB connection with better options and retry logic
-// NOTE: family:4 removed — Atlas SRV requires flexible DNS resolution
-const mongooseOptions = {
-  serverSelectionTimeoutMS: 30000,
-  socketTimeoutMS: 45000,
-};
-
-// Connection event listeners
-mongoose.connection.on('connected', () => {
-  console.log('✓ Mongoose connected to MongoDB');
-
-  // Initialize cron jobs after database connection is established
-  cronService.initializeCronJobs();
-
-  // Set the cron service instance for the scheduled tasks routes
-  setCronService(cronService);
-
-  // Initialize adaptive throttling service
-  adaptiveThrottlingService.initialize().catch(err => {
-    console.error('Failed to initialize adaptive throttling service:', err);
-  });
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('⚠ Mongoose disconnected from MongoDB');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('✗ Mongoose connection error:', err);
-});
-
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  await mongoose.connection.close();
-  console.log('✓ Mongoose connection closed through app termination');
-  process.exit(0);
-});
-
-// Initialize server with pre-flight IP check
-async function initializeServer() {
+// ── Single bootstrap: DB → services → HTTP ─────────────────────────────────────
+async function bootstrap() {
   try {
     console.log('=== Starting Autobacs Backend Server ===');
     console.log('Environment:', process.env.NODE_ENV || 'development');
-    console.log('Port configuration:', process.env.PORT || 'default (8080)');
-    
-    // Start server directly on the provided port BEFORE heavy DB operations
+
+    // 1. Connect database first — everything depends on it
+    console.log('⏳ Connecting to database...');
+    const ipCheckPassed = await preFlightIPCheck();
+    if (!ipCheckPassed) console.warn('⚠ IP pre-flight mismatch, continuing anyway');
+
+    await connectWithRetry();
+    console.log('✓ Database connected');
+
+    // 2. Start cron jobs now that DB is ready
+    cronService.initializeCronJobs();
+    setCronService(cronService);
+    console.log('✓ Cron jobs started');
+
+    // 3. Start adaptive throttling (non-fatal if it fails)
+    try {
+      await adaptiveThrottlingService.initialize();
+      console.log('✓ Adaptive throttling initialized');
+    } catch (e) {
+      console.warn('⚠ Adaptive throttling skipped:', e.message);
+    }
+
+    // 4. Elasticsearch in background (optional, non-fatal)
+    elasticsearchService.testConnection().catch(() => {});
+
+    // 5. Start HTTP server last, after all services are ready
     const PORT = process.env.PORT || 8080;
-    const HOST = '0.0.0.0'; // Explicitly bind to all interfaces
+    const HOST = '0.0.0.0';
 
     const server = app.listen(PORT, HOST, () => {
-      console.log(`✓ Server running on ${HOST}:${PORT}`);
-      console.log(`✓ Public URL: https://ecommerceautobacs-production.up.railway.app`);
-      console.log(`✓ Health check: http://${HOST}:${PORT}/health`);
-      console.log(`✓ Ready check: http://${HOST}:${PORT}/ready`);
-      
-      // Log the actual server address for verification
       const addr = server.address();
-      console.log(`✓ Bound to: ${addr.address}:${addr.port} (family: ${addr.family})`);
+      console.log(`✓ HTTP server listening on ${addr.address}:${addr.port}`);
+      console.log('✓ Health: /health | Ready: /ready');
+      console.log('=== Server Ready ===');
     });
 
     server.on('error', (err) => {
-      console.error('✗ Server listen error:', err);
+      console.error('✗ HTTP server error:', err);
       process.exit(1);
     });
 
-    // Set timeouts to prevent hanging
+    // Reasonable timeouts
     server.timeout = 30000;
     server.headersTimeout = 31000;
 
-    // Log incoming requests
-    server.on('request', (req, res) => {
-      console.log(`📩 Incoming: ${req.method} ${req.url}`);
-    });
-
-    // Initialize database (non-blocking)
-    console.log('\n⏳ Initializing database...');
-    const ipCheckPassed = await preFlightIPCheck();
-    if (!ipCheckPassed) {
-      console.warn('⚠ IP mismatch but continuing');
-    }
-
-    const dbConnection = await connectWithRetry();
-    if (dbConnection) {
-      console.log('✓ Database connected');
-    }
-
-    // Elasticsearch in background
-    console.log('⏳ Services initializing...');
-    elasticsearchService.testConnection().catch(() => {});
-
-    // Delay non-critical services
-    setTimeout(() => {
-      cronService.initializeCronJobs();
-      setCronService(cronService);
-      console.log('✓ Cron jobs initialized');
-    }, 100);
-
-    setTimeout(async () => {
-      try {
-        await adaptiveThrottlingService.initialize();
-        console.log('✓ Adaptive throttling initialized');
-      } catch (e) {
-        console.log('⚠ Throttling skipped');
-      }
-    }, 200);
-
-    console.log('\n=== Server Ready ===\n');
+    // Graceful shutdown
+    const shutdown = async (signal) => {
+      console.log(`⏹ ${signal} received, shutting down gracefully...`);
+      server.close(async () => {
+        try {
+          await mongoose.connection.close();
+          console.log('✓ DB connection closed');
+        } catch (_) {}
+        process.exit(0);
+      });
+      // Force exit after 10 s if close hangs
+      setTimeout(() => process.exit(1), 10000);
+    };
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   } catch (error) {
-    console.error('✗ Failed to start server:', error.message);
+    console.error('✗ Bootstrap failed:', error.message);
     process.exit(1);
   }
 }
 
-// Initialize server
-initializeServer();
+import mongoose from "mongoose";
+bootstrap();
 

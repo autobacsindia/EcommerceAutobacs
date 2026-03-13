@@ -1,6 +1,5 @@
 import express from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -55,7 +54,7 @@ import CronService from "./services/cronService.js";
 // Import adaptive throttling service
 import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
 
-dotenv.config();
+// NOTE: dotenv.config() is called once in server.js before this module is loaded
 const app = express();
 
 // Trust the first proxy (required for Cloudflare/Railway/Heroku)
@@ -93,7 +92,8 @@ app.use((req, res, next) => {
 
 // CORS preflight is handled below after corsOptions is defined
 
-// Initialize cron service
+// CronService is instantiated here so server.js can import and control it.
+// initializeCronJobs() is called by server.js AFTER the DB connects — not here.
 const cronService = new CronService();
 
 // Apply middleware before routes
@@ -280,52 +280,50 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
 
-// Mount routes with specific e-commerce rate limiting strategy
-// Auth routes already have their own stricter rate limiting (5 req/min)
-app.use(["/auth", "/api/auth"], authRoutes);
-app.use(["/auth", "/api/auth"], socialAuthRoutes);
+// ── Route mounting ─────────────────────────────────────────────────────────
+// All routes use a single canonical /api/* prefix.
+// The Next.js frontend rewrites /api/:path* → BACKEND/api/:path*
+// so every browser request naturally resolves here.
 
-// Public browsing endpoints (300 req/min, burst 100) - catalog, products, categories
-app.use(["/products", "/api/products"], publicBrowsingRateLimit, productRoutes);
-app.use(["/categories", "/api/categories"], publicBrowsingRateLimit, categoryRoutes);
-app.use(["/vehicles", "/api/vehicles"], publicBrowsingRateLimit, vehicleRoutes);
-app.use(["/brands", "/api/brands"], publicBrowsingRateLimit, brandRoutes);
-app.use(["/product-questions", "/api/product-questions"], publicBrowsingRateLimit, productQuestionRoutes);
+// Auth routes (own stricter rate limiting: 5 req/min)
+app.use("/api/auth", authRoutes);
+app.use("/api/auth", socialAuthRoutes);
 
-// Authenticated user endpoints (600 req/min, burst 200) - cart, profile, wishlist
-app.use(["/cart", "/api/cart"], authenticatedUserRateLimit, cartRoutes);
-app.use(["/wishlist", "/api/wishlist"], authenticatedUserRateLimit, wishlistRoutes);
-app.use(["/profile", "/api/profile"], authenticatedUserRateLimit, profileRoutes);
-app.use(["/users", "/api/users"], authenticatedUserRateLimit, userRoutes);
-app.use(["/reviews", "/api/reviews"], authenticatedUserRateLimit, reviewRoutes);
+// Public browsing (300 req/min)
+app.use("/api/products", publicBrowsingRateLimit, productRoutes);
+app.use("/api/categories", publicBrowsingRateLimit, categoryRoutes);
+app.use("/api/vehicles", publicBrowsingRateLimit, vehicleRoutes);
+app.use("/api/brands", publicBrowsingRateLimit, brandRoutes);
+app.use("/api/product-questions", publicBrowsingRateLimit, productQuestionRoutes);
 
-// Checkout/Payment endpoints (60 req/min, burst 20) - prevent duplicate orders
-app.use(["/orders", "/api/orders"], checkoutRateLimit, orderRoutes);
-app.use(["/returns", "/api/returns"], returnRoutes);
-app.use(["/razorpay", "/api/razorpay"], checkoutRateLimit, razorpayRoutes);
-app.use(["/payment-methods", "/api/payment-methods"], checkoutRateLimit, paymentMethodRoutes);
+// Authenticated user endpoints (600 req/min)
+app.use("/api/cart", authenticatedUserRateLimit, cartRoutes);
+app.use("/api/wishlist", authenticatedUserRateLimit, wishlistRoutes);
+app.use("/api/profile", authenticatedUserRateLimit, profileRoutes);
+app.use("/api/users", authenticatedUserRateLimit, userRoutes);
+app.use("/api/reviews", authenticatedUserRateLimit, reviewRoutes);
 
-// Admin/Management endpoints (120 req/min) - warehouses, delivery zones, scheduled tasks
-app.use(["/scheduled-tasks", "/api/scheduled-tasks"], adminRateLimit, scheduledTasksRoutes);
-app.use(["/warehouses", "/api/warehouses"], adminRateLimit, warehouseRoutes);
-app.use(["/delivery-zones", "/api/delivery-zones"], adminRateLimit, deliveryZoneRoutes);
-app.use(["/wordpress", "/api/wordpress"], adminRateLimit, wordpressRoutes);
+// Checkout / Payment (60 req/min)
+app.use("/api/orders", checkoutRateLimit, orderRoutes);
+app.use("/api/returns", returnRoutes);
+app.use("/api/razorpay", checkoutRateLimit, razorpayRoutes);
+app.use("/api/payment-methods", checkoutRateLimit, paymentMethodRoutes);
 
-// Admin-only token introspection endpoints (separate rate limiting inside routes)
-app.use("/admin/token", tokenIntrospectionRoutes);
+// Admin / Management (120 req/min)
+app.use("/api/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
+app.use("/api/warehouses", adminRateLimit, warehouseRoutes);
+app.use("/api/delivery-zones", adminRateLimit, deliveryZoneRoutes);
+app.use("/api/wordpress", adminRateLimit, wordpressRoutes);
 
-// Admin-only rate limit dashboard endpoints
-app.use("/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
+// Admin-only introspection / dashboards
+app.use("/api/admin/token", tokenIntrospectionRoutes);
+app.use("/api/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
+app.use("/api/admin/adaptive-throttling", adaptiveThrottlingRoutes);
+app.use("/api/dashboard", adminRateLimit, dashboardRoutes);
 
-// Admin-only adaptive throttling endpoints
-app.use("/admin/adaptive-throttling", adaptiveThrottlingRoutes);
-
-// Dashboard endpoints (requires admin authentication)
-app.use("/dashboard", adminRateLimit, dashboardRoutes);
-
-// Location service (general rate limiting)
-app.use(["/location", "/api/location"], apiRateLimit, locationRoutes);
-app.use(["/contact", "/api/contact"], apiRateLimit, contactRoutes);
+// Location & Contact
+app.use("/api/location", apiRateLimit, locationRoutes);
+app.use("/api/contact", apiRateLimit, contactRoutes);
 
 // ========================================
 // 404 Handler - MUST BE AFTER ALL ROUTES

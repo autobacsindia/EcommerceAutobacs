@@ -497,11 +497,13 @@ class APIClient {
         let API_BASE_URL =
           process.env.NEXT_PUBLIC_API_BASE_URL ||
           process.env.NEXT_PUBLIC_API_URL ||
-          'http://127.0.0.1:5000';
+          'http://127.0.0.1:8080';
           
         if (typeof window !== 'undefined') {
           API_BASE_URL = '/api';
-        } else if (API_BASE_URL.includes('localhost')) {
+        } else {
+          API_BASE_URL = API_BASE_URL.replace(/\/+$/, '');
+          if (!API_BASE_URL.endsWith('/api')) API_BASE_URL = `${API_BASE_URL}/api`;
           API_BASE_URL = API_BASE_URL.replace('localhost', '127.0.0.1');
         }
         
@@ -529,14 +531,19 @@ class APIClient {
     let API_BASE_URL =
       process.env.NEXT_PUBLIC_API_BASE_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      'http://127.0.0.1:5000';
+      'http://127.0.0.1:8080';
 
-    // Use relative path /api when running in browser to leverage Next.js rewrites
-    // This avoids CORS issues and ensures cookies work correctly across domains
+    // Browser: use relative /api path to go through Next.js rewrites (avoids CORS)
+    // Server: append /api to the backend base URL since all routes are under /api/*
     if (typeof window !== 'undefined') {
       API_BASE_URL = '/api';
-    } else if (API_BASE_URL.includes('localhost')) {
-      // Server-side: Replace localhost with 127.0.0.1 to prevent IPv6 errors
+    } else {
+      // Normalize: strip trailing slash, then append /api
+      API_BASE_URL = API_BASE_URL.replace(/\/+$/, '');
+      if (!API_BASE_URL.endsWith('/api')) {
+        API_BASE_URL = `${API_BASE_URL}/api`;
+      }
+      // Server-side: replace localhost with 127.0.0.1 to prevent IPv6 errors
       API_BASE_URL = API_BASE_URL.replace('localhost', '127.0.0.1');
     }
     const isCompleteUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
