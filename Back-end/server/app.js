@@ -265,11 +265,11 @@ app.get('/ready', (req, res) => {
 import debugRoutes from "./routes/debug.js";
 
 // API status endpoint
-app.get('/api/status', (req, res) => {
-  console.log('API status endpoint hit');
+app.get('/api/v1/status', (req, res) => {
   res.status(200).json({
     status: 'operational',
     version: '1.0.0',
+    apiVersion: 'v1',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
@@ -277,81 +277,65 @@ app.get('/api/status', (req, res) => {
 
 // Debug endpoint — development only (never expose in production)
 if (process.env.NODE_ENV !== 'production') {
-  app.use('/api/debug', debugRoutes);
+  app.use('/api/v1/debug', debugRoutes);
 }
 
-// ── Route mounting ─────────────────────────────────────────────────────────
-// All routes use a single canonical /api/* prefix.
-// The Next.js frontend rewrites /api/:path* → BACKEND/api/:path*
-// so every browser request naturally resolves here.
+// ── Route mounting — /api/v1/* ──────────────────────────────────────────────
+// Single canonical versioned prefix. Frontend rewrites /api/v1/:path* → here.
+// Adding v2 later: mount new router at /api/v2/* alongside these.
 
 // Auth routes (own stricter rate limiting: 5 req/min)
-app.use("/api/auth", authRoutes);
-app.use("/api/auth", socialAuthRoutes);
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth", socialAuthRoutes);
 
 // Public browsing (300 req/min)
-app.use("/api/products", publicBrowsingRateLimit, productRoutes);
-app.use("/api/categories", publicBrowsingRateLimit, categoryRoutes);
-app.use("/api/vehicles", publicBrowsingRateLimit, vehicleRoutes);
-app.use("/api/brands", publicBrowsingRateLimit, brandRoutes);
-app.use("/api/product-questions", publicBrowsingRateLimit, productQuestionRoutes);
+app.use("/api/v1/products", publicBrowsingRateLimit, productRoutes);
+app.use("/api/v1/categories", publicBrowsingRateLimit, categoryRoutes);
+app.use("/api/v1/vehicles", publicBrowsingRateLimit, vehicleRoutes);
+app.use("/api/v1/brands", publicBrowsingRateLimit, brandRoutes);
+app.use("/api/v1/product-questions", publicBrowsingRateLimit, productQuestionRoutes);
 
 // Authenticated user endpoints (600 req/min)
-app.use("/api/cart", authenticatedUserRateLimit, cartRoutes);
-app.use("/api/wishlist", authenticatedUserRateLimit, wishlistRoutes);
-app.use("/api/profile", authenticatedUserRateLimit, profileRoutes);
-app.use("/api/users", authenticatedUserRateLimit, userRoutes);
-app.use("/api/reviews", authenticatedUserRateLimit, reviewRoutes);
+app.use("/api/v1/cart", authenticatedUserRateLimit, cartRoutes);
+app.use("/api/v1/wishlist", authenticatedUserRateLimit, wishlistRoutes);
+app.use("/api/v1/profile", authenticatedUserRateLimit, profileRoutes);
+app.use("/api/v1/users", authenticatedUserRateLimit, userRoutes);
+app.use("/api/v1/reviews", authenticatedUserRateLimit, reviewRoutes);
 
 // Checkout / Payment (60 req/min)
-app.use("/api/orders", checkoutRateLimit, orderRoutes);
-app.use("/api/returns", returnRoutes);
-app.use("/api/razorpay", checkoutRateLimit, razorpayRoutes);
-app.use("/api/payment-methods", checkoutRateLimit, paymentMethodRoutes);
+app.use("/api/v1/orders", checkoutRateLimit, orderRoutes);
+app.use("/api/v1/returns", returnRoutes);
+app.use("/api/v1/razorpay", checkoutRateLimit, razorpayRoutes);
+app.use("/api/v1/payment-methods", checkoutRateLimit, paymentMethodRoutes);
 
 // Admin / Management (120 req/min)
-app.use("/api/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
-app.use("/api/warehouses", adminRateLimit, warehouseRoutes);
-app.use("/api/delivery-zones", adminRateLimit, deliveryZoneRoutes);
-app.use("/api/wordpress", adminRateLimit, wordpressRoutes);
+app.use("/api/v1/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
+app.use("/api/v1/warehouses", adminRateLimit, warehouseRoutes);
+app.use("/api/v1/delivery-zones", adminRateLimit, deliveryZoneRoutes);
+app.use("/api/v1/wordpress", adminRateLimit, wordpressRoutes);
 
 // Admin-only introspection / dashboards
-app.use("/api/admin/token", tokenIntrospectionRoutes);
-app.use("/api/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
-app.use("/api/admin/adaptive-throttling", adaptiveThrottlingRoutes);
-app.use("/api/dashboard", adminRateLimit, dashboardRoutes);
+app.use("/api/v1/admin/token", tokenIntrospectionRoutes);
+app.use("/api/v1/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
+app.use("/api/v1/admin/adaptive-throttling", adaptiveThrottlingRoutes);
+app.use("/api/v1/dashboard", adminRateLimit, dashboardRoutes);
 
 // Location & Contact
-app.use("/api/location", apiRateLimit, locationRoutes);
-app.use("/api/contact", apiRateLimit, contactRoutes);
+app.use("/api/v1/location", apiRateLimit, locationRoutes);
+app.use("/api/v1/contact", apiRateLimit, contactRoutes);
 
-// ========================================
-// 404 Handler - MUST BE AFTER ALL ROUTES
-// ========================================
-// This catches any unmatched routes and returns a helpful 404
-app.use((req, res) => {
-  console.log(`[404] No route found for ${req.method} ${req.path}`);
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.method} ${req.path} not found`,
-    availableEndpoints: [
-      'GET /',
-      'GET /health',
-      'GET /ready',
-      'GET /api/status',
-      'POST /auth/*',
-      'GET /products/*',
-      'GET /categories/*',
-      'GET /brands/*'
-    ]
-  });
-});
+// ── Error handling ──────────────────────────────────────────────────────────────
+// Correct middleware order:
+//   routes → Sentry (captures thrown errors) → notFound (converts unmatched to AppError 404)
+//        → errorHandler (formats & sends all errors consistently)
 
-// Sentry Error Handler (must be before any other error middleware)
+// 1. Sentry must come first so it can capture errors before they are formatted
 Sentry.setupExpressErrorHandler(app);
 
-// Error handling middleware (must be after routes)
+// 2. notFound converts any unmatched request into an AppError(404) and calls next(error)
 app.use(notFound);
+
+// 3. errorHandler formats every AppError (including 404s) into a consistent JSON response
 app.use(errorHandler);
 
 export { app, cronService, adaptiveThrottlingService, setCronService };

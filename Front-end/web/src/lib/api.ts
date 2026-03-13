@@ -500,10 +500,11 @@ class APIClient {
           'http://127.0.0.1:8080';
           
         if (typeof window !== 'undefined') {
-          API_BASE_URL = '/api';
+          API_BASE_URL = '/api/v1';
         } else {
           API_BASE_URL = API_BASE_URL.replace(/\/+$/, '');
-          if (!API_BASE_URL.endsWith('/api')) API_BASE_URL = `${API_BASE_URL}/api`;
+          API_BASE_URL = API_BASE_URL.replace(/\/api(\/v1)?$/, '');
+          API_BASE_URL = `${API_BASE_URL}/api/v1`;
           API_BASE_URL = API_BASE_URL.replace('localhost', '127.0.0.1');
         }
         
@@ -533,15 +534,17 @@ class APIClient {
       process.env.NEXT_PUBLIC_API_URL ||
       'http://127.0.0.1:8080';
 
-    // Browser: use relative /api path to go through Next.js rewrites (avoids CORS)
-    // Server: append /api to the backend base URL since all routes are under /api/*
+    // Browser: use relative /api/v1 path to go through Next.js rewrites (avoids CORS)
+    // Server: append /api/v1 to the backend base URL since all routes are versioned
     if (typeof window !== 'undefined') {
-      API_BASE_URL = '/api';
+      API_BASE_URL = '/api/v1';
     } else {
-      // Normalize: strip trailing slash, then append /api
+      // Normalize: strip trailing slash, then append /api/v1
       API_BASE_URL = API_BASE_URL.replace(/\/+$/, '');
-      if (!API_BASE_URL.endsWith('/api')) {
-        API_BASE_URL = `${API_BASE_URL}/api`;
+      if (!API_BASE_URL.endsWith('/api/v1')) {
+        // Strip any existing /api suffix before adding versioned path
+        API_BASE_URL = API_BASE_URL.replace(/\/api$/, '');
+        API_BASE_URL = `${API_BASE_URL}/api/v1`;
       }
       // Server-side: replace localhost with 127.0.0.1 to prevent IPv6 errors
       API_BASE_URL = API_BASE_URL.replace('localhost', '127.0.0.1');

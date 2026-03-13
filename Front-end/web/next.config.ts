@@ -150,10 +150,10 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        // Proxy all /api/* calls to the backend at /api/*
-        // Backend now has a single canonical /api/* prefix — no dual mounting.
-        source: '/api/:path*',
-        destination: `${targetUrl}/api/:path*`,
+        // Proxy /api/v1/* calls through to the backend's /api/v1/* routes.
+        // All backend routes are versioned under /api/v1/.
+        source: '/api/v1/:path*',
+        destination: `${targetUrl}/api/v1/:path*`,
       },
     ];
   },
