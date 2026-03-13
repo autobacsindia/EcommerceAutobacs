@@ -212,7 +212,7 @@ export default function AdminOrderDetailPage() {
             <div className="divide-y">
               {order.items.map((item, index) => (
                 <div key={index} className="p-6 flex items-center gap-4">
-                  {item.product.images && item.product.images.length > 0 ? (
+                  {item.product?.images && item.product.images.length > 0 ? (
                     <img 
                       src={item.product.images[0].url} 
                       alt={item.product.name}
@@ -224,7 +224,7 @@ export default function AdminOrderDetailPage() {
                     </div>
                   )}
                   <div className="flex-1">
-                    <h3 className="font-medium">{item.product.name}</h3>
+                    <h3 className="font-medium">{item.product?.name ?? '[Product no longer available]'}</h3>
                     <p className="text-gray-500 text-sm">Qty: {item.quantity}</p>
                   </div>
                   <div className="text-right">

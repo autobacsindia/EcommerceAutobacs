@@ -3,13 +3,18 @@ import Category from "../models/Category.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
+import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
+
+// TTLs — categories change rarely; 10 min is safe
+const CATEGORY_LIST_TTL  = 10 * 60; // 10 min
+const CATEGORY_ITEM_TTL  = 10 * 60; // 10 min
 
 // @route   GET /categories
 // @desc    Get all active categories
 // @access  Public
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", cacheResponse(CATEGORY_LIST_TTL), asyncHandler(async (req, res) => {
   const categories = await Category.find({ isActive: true })
     .populate('parent', 'name slug')
     .sort({ order: 1, name: 1 });
@@ -24,7 +29,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // @route   GET /categories/:id
 // @desc    Get category by ID
 // @access  Public
-router.get("/:id", validateIdParam, asyncHandler(async (req, res) => {
+router.get("/:id", validateIdParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandler(async (req, res) => {
   const category = await Category.findById(req.params.id)
     .populate('parent', 'name slug');
 
@@ -44,7 +49,7 @@ router.get("/:id", validateIdParam, asyncHandler(async (req, res) => {
 // @route   GET /categories/slug/:slug
 // @desc    Get category by slug (supports both hyphenated and non-hyphenated versions)
 // @access  Public
-router.get("/slug/:slug", validateSlugParam, asyncHandler(async (req, res) => {
+router.get("/slug/:slug", validateSlugParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandler(async (req, res) => {
   let category = await Category.findOne({ slug: req.params.slug, isActive: true })
     .populate('parent', 'name slug');
 
@@ -103,6 +108,8 @@ router.post("/", protect, admin, validateCategory, asyncHandler(async (req, res)
     order
   });
 
+  invalidateCache('categories');
+
   res.status(201).json({
     success: true,
     message: 'Category created successfully',
@@ -127,6 +134,8 @@ router.put("/:id", protect, admin, validateCategoryUpdate, asyncHandler(async (r
     });
   }
 
+  invalidateCache('categories');
+
   res.json({
     success: true,
     message: 'Category updated successfully',
@@ -149,6 +158,8 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 
   category.isActive = false;
   await category.save();
+
+  invalidateCache('categories');
 
   res.json({
     success: true,

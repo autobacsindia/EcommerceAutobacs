@@ -92,17 +92,37 @@ export const getOrderById = async (req, res) => {
     });
   }
 
-  // Ensure user can only access their own orders (unless admin)
-  if (order.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+  // Guard: user may be null if the account was deleted after the order was placed.
+  // Admins can still view orphaned orders; regular users cannot.
+  const orderUserId = order.user?._id?.toString();
+  const isOwner    = orderUserId && orderUserId === req.user.id;
+  const isAdmin    = req.user.role === 'admin';
+
+  if (!isOwner && !isAdmin) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this order'
     });
   }
 
+  // Normalize items: product may be null if it was deleted after the order was placed.
+  // Replace null with a tombstone object so the frontend never receives null.
+  const normalizedOrder = {
+    ...order,
+    items: order.items.map(item => ({
+      ...item,
+      product: item.product ?? {
+        _id: item.product,
+        name: '[Product no longer available]',
+        images: [],
+        price: item.price
+      }
+    }))
+  };
+
   res.json({
     success: true,
-    order
+    order: normalizedOrder
   });
 };
 
@@ -269,7 +289,7 @@ export const markPaymentFailed = async (req, res) => {
   }
 
   // Ensure user owns the order
-  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Not authorized'
@@ -324,7 +344,7 @@ export const deleteOrder = async (req, res) => {
   }
 
   // Ensure user owns the order (or is admin)
-  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to delete this order'
@@ -515,7 +535,7 @@ export const getStatusHistory = async (req, res) => {
   }
 
   // Ensure user can only access their own orders (unless admin)
-  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this order'
@@ -552,7 +572,7 @@ export const getValidTransitions = async (req, res) => {
   }
 
   // Ensure user can only access their own orders (unless admin)
-  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this order'
@@ -576,7 +596,6 @@ export const getValidTransitions = async (req, res) => {
   });
 };
 
-// @desc    Get order status statistics (Admin only)
 // @route   GET /orders/analytics/status-stats
 // @access  Private/Admin
 export const getStatusStats = async (req, res) => {
@@ -686,7 +705,7 @@ export const getTracking = async (req, res) => {
   }
 
   // Ensure user can only access their own orders (unless admin)
-  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this order'
@@ -872,7 +891,7 @@ export const submitReturnRequest = async (req, res) => {
   }
   
   // Verify user owns the order
-  if (order.user.toString() !== req.user.id) {
+  if (order.user?.toString() !== req.user.id) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this order'
@@ -943,7 +962,7 @@ export const getReturnRequest = async (req, res) => {
   }
   
   // Verify user owns the order (unless admin)
-  if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this order'

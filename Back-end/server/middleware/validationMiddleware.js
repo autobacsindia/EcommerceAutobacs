@@ -102,8 +102,8 @@ export const validateOrderStatusUpdate = [
   body('status')
     .notEmpty()
     .withMessage('Status is required')
-    .isIn(['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'failed', 'refunded', 'returned'])
-    .withMessage('Invalid order status'),
+    .isIn(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'failed', 'refunded', 'returned'])
+    .withMessage('Invalid order status. Must be one of: pending, confirmed, processing, shipped, delivered, cancelled, failed, refunded, returned'),
   body('reason')
     .optional()
     .trim(),

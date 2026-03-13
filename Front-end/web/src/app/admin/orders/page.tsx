@@ -9,6 +9,27 @@ import Link from 'next/link';
 import OrderFiltersPanel, { OrderFilters } from '@/components/orders/OrderFiltersPanel';
 import BulkActionsBar from '@/components/orders/BulkActionsBar';
 
+// Mirror of orderStatusService STATUS_TRANSITIONS — admins can force any transition
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  pending:    ['confirmed', 'cancelled', 'failed'],
+  confirmed:  ['processing', 'cancelled'],
+  processing: ['shipped', 'cancelled'],
+  shipped:    ['delivered'],
+  delivered:  ['refunded'],
+  cancelled:  [],
+  refunded:   [],
+  returned:   [],
+  failed:     [],
+};
+
+const ALL_STATUSES = Object.keys(STATUS_TRANSITIONS) as string[];
+
+/** Statuses an admin can move to from currentStatus (all statuses for admin = any force-move) */
+function getAdminNextStatuses(currentStatus: string): string[] {
+  // Admins bypass transition rules — show all except the current one
+  return ALL_STATUSES.filter(s => s !== currentStatus);
+}
+
 interface Order {
   _id: string;
   orderNumber: string;
@@ -446,13 +467,15 @@ export default function AdminOrdersPage() {
                       onChange={(e) => handleStatusChange(order._id, e.target.value)}
                       className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
                     >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="processing">Processing</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="failed">Failed</option>
+                      {/* Current status — always shown as selected, disabled so user must pick a different one */}
+                      <option value={order.status} disabled>
+                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (current)
+                      </option>
+                      {getAdminNextStatuses(order.status).map(s => (
+                        <option key={s} value={s}>
+                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

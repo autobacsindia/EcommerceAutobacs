@@ -11,8 +11,14 @@ import {
   validateRouteProductId,
   validateBrandQuery
 } from "../middleware/validationMiddleware.js";
+import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
+
+// TTLs
+const BRAND_LIST_TTL    = 10 * 60; // 10 min — brands rarely change
+const BRAND_ITEM_TTL    = 10 * 60; // 10 min
+const BRAND_PRODUCT_TTL =  5 * 60; //  5 min — product associations change more often
 
 // Helper function to generate slug from name
 const generateSlug = (name) => {
@@ -22,7 +28,7 @@ const generateSlug = (name) => {
 // @route   GET /brands
 // @desc    Get all brands with pagination
 // @access  Public
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", cacheResponse(BRAND_LIST_TTL), asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const search = req.query.search || '';
@@ -128,6 +134,8 @@ router.post("/", protect, admin, validateBrand, asyncHandler(async (req, res) =>
     isActive: true
   });
 
+  invalidateCache('brands');
+
   res.status(201).json({
     success: true,
     message: 'Brand created successfully',
@@ -181,6 +189,8 @@ router.put("/:id", protect, admin, validateBrandUpdate, asyncHandler(async (req,
 
   await brand.save();
 
+  invalidateCache('brands', 'products');
+
   res.json({
     success: true,
     message: 'Brand updated successfully',
@@ -209,6 +219,8 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
   // Hard delete
   await Brand.findByIdAndDelete(req.params.id);
 
+  invalidateCache('brands', 'products');
+
   res.json({
     success: true,
     message: `Brand deleted successfully. ${productCount} product(s) were associated with this brand.`,
@@ -219,7 +231,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 // @route   GET /brands/:id/products
 // @desc    Get products for a specific brand
 // @access  Public
-router.get("/:id/products", asyncHandler(async (req, res) => {
+router.get("/:id/products", cacheResponse(BRAND_PRODUCT_TTL), asyncHandler(async (req, res) => {
   const brand = await Brand.findById(req.params.id);
 
   if (!brand) {
@@ -279,6 +291,8 @@ router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandl
     { $set: { brand: brand.name } }
   );
 
+  invalidateCache('brands', 'products');
+
   res.json({
     success: true,
     message: `${result.modifiedCount} product(s) mapped to ${brand.name}`,
@@ -312,6 +326,8 @@ router.delete("/:id/products/:productId", protect, admin, validateIdParam, valid
   product.brand = '';
   await product.save();
 
+  invalidateCache('brands', 'products');
+
   res.json({
     success: true,
     message: `Product unmapped from ${brand.name}`
@@ -333,6 +349,8 @@ router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler
 
   brand.isActive = !brand.isActive;
   await brand.save();
+
+  invalidateCache('brands');
 
   res.json({
     success: true,

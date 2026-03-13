@@ -11,7 +11,7 @@ class DashboardAnalyticsService {
   constructor() {
     this.lastAnalyticsData = null;
     this.lastCalculationTime = 0;
-    this.CACHE_TTL = 2000; // 2 second cache for analytics
+    this.CACHE_TTL = 10000; // 10 s — matches SSE analytics interval
   }
 
   /**

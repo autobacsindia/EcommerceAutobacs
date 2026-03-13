@@ -10,7 +10,7 @@ class HealthCalculatorService {
     this.lastHealthData = null;
     this.lastCalculationTime = 0;
     this.alertHistory = [];
-    this.CACHE_TTL = 1000; // 1 second cache
+    this.CACHE_TTL = 8000; // 8 s — slightly under SSE health interval (10 s)
   }
 
   /**
@@ -149,19 +149,16 @@ class HealthCalculatorService {
         };
       }
 
-      // Get connection pool stats if available
-      const db = mongoose.connection.db;
-      let poolStats = null;
-      
-      try {
-        const serverStatus = await db.admin().serverStatus();
-        poolStats = {
-          connections: serverStatus.connections || {},
-          network: serverStatus.network || {}
-        };
-      } catch (err) {
-        console.warn('Could not fetch server status:', err.message);
-      }
+      // Connection pool stats require the clusterMonitor role on the admin
+      // database, which a standard Atlas app user does not have.
+      // Mongoose exposes the pool size via its own connection object, which
+      // is sufficient for health monitoring without needing admin privileges.
+      const poolStats = {
+        connections: {
+          current: mongoose.connection.pool?.totalConnectionCount ?? null,
+          available: mongoose.connection.pool?.availableConnectionCount ?? null
+        }
+      };
 
       // Calculate score based on connection state
       let score = 100;

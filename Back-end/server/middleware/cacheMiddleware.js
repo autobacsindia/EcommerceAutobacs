@@ -1,41 +1,56 @@
 import cacheService from '../services/cacheService.js';
 
 /**
- * Middleware to cache GET requests
- * @param {number} duration - Cache duration in seconds (default: 300s / 5m)
+ * Cache GET responses by full URL.
+ * Skips cache for authenticated requests (user/admin-specific data).
+ *
+ * @param {number} ttlSeconds - TTL in seconds (default: 300 = 5 min)
  */
-export const cacheResponse = (duration = 300) => (req, res, next) => {
+export const cacheResponse = (ttlSeconds = 300) => (req, res, next) => {
   // Only cache GET requests
-  if (req.method !== 'GET') {
-    return next();
-  }
+  if (req.method !== 'GET') return next();
 
-  // Skip caching if authenticated (admin/user specific data)
-  if (req.headers.authorization) {
-    return next();
-  }
+  // Skip caching for authenticated requests (user-personalised data)
+  if (req.headers.authorization) return next();
 
-  // Generate cache key based on URL
   const key = `route:${req.originalUrl}`;
-  
-  const cachedResponse = cacheService.get(key);
+  const cached = cacheService.get(key);
 
-  if (cachedResponse) {
-    // Add header to indicate cached response
+  if (cached) {
     res.setHeader('X-Cache', 'HIT');
-    return res.json(cachedResponse);
+    return res.json(cached);
   }
 
-  // Override res.json to cache the response before sending
-  const originalJson = res.json;
+  // Intercept res.json to store the response body before sending
+  const originalJson = res.json.bind(res);
   res.json = function (body) {
-    // Only cache successful responses
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      cacheService.set(key, body, duration * 1000); // Convert to ms
+      // cacheService.set() expects milliseconds
+      cacheService.set(key, body, ttlSeconds * 1000);
     }
     res.setHeader('X-Cache', 'MISS');
-    return originalJson.call(this, body);
+    return originalJson(body);
   };
 
   next();
+};
+
+/**
+ * Invalidate all cached routes whose key contains any of the given patterns.
+ * Call this in write routes (POST / PUT / PATCH / DELETE) so stale data
+ * is never served after a mutation.
+ *
+ * @param {...string} patterns - Substrings to match against cache keys
+ *
+ * Usage:
+ *   import { invalidateCache } from '../middleware/cacheMiddleware.js';
+ *   // inside an async handler after the DB write:
+ *   invalidateCache('brands', 'products');
+ */
+export const invalidateCache = (...patterns) => {
+  let total = 0;
+  for (const pattern of patterns) {
+    total += cacheService.clearPattern(pattern);
+  }
+  return total;
 };

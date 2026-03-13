@@ -118,11 +118,37 @@ export default function AdminDashboardPage() {
     }
   }, [isAuthenticated, user, authLoading, router]);
 
-  const apiUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:8080';
-  const sseUrl = `${apiUrl}/dashboard/stream`;
+  // Fetch initial data immediately on mount so the dashboard is populated
+  // before the first SSE health/analytics ticks arrive (2-3 s delay).
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== 'admin' || !token) return;
+
+    const fetchInitialStats = async () => {
+      try {
+        const response = await fetch('/api/v1/dashboard/stats', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) return;
+        const json = await response.json();
+        if (json.success && json.data) {
+          if (json.data.health)     setHealth(json.data.health);
+          if (json.data.analytics)  setAnalytics(json.data.analytics);
+          if (json.data.alerts?.length) setAlerts(json.data.alerts);
+          setLastUpdate(new Date());
+        }
+      } catch {
+        // Non-critical — SSE will populate data when it connects
+      }
+    };
+
+    fetchInitialStats().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user?.role, token]);
+
+  // SSE must go through the Next.js rewrite proxy (/api/v1/* → backend)
+  // so it inherits the correct host and avoids CORS issues.
+  // Direct backend URL (localhost:8080) would bypass the proxy and miss the /api/v1 prefix.
+  const sseUrl = '/api/v1/dashboard/stream';
 
   // Handle SSE messages
   const handleMessage = useCallback((message: any) => {

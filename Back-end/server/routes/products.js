@@ -19,7 +19,7 @@ import {
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { cacheResponse } from "../middleware/cacheMiddleware.js";
+import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 import { cleanupWordPressProducts } from "../utils/wordpressProductCleanup.js";
 import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
 import {
@@ -70,12 +70,12 @@ router.delete("/history/:term", validateSearchTermParam, asyncHandler(removeSear
 // @route   GET /products/featured
 // @desc    Get featured products
 // @access  Public
-router.get("/featured", asyncHandler(getFeaturedProducts));
+router.get("/featured", cacheResponse(5 * 60), asyncHandler(getFeaturedProducts));
 
 // @route   GET /products/offers
 // @desc    Get products to showcase on Offers page
 // @access  Public
-router.get("/offers", asyncHandler(getOfferProducts));
+router.get("/offers", cacheResponse(5 * 60), asyncHandler(getOfferProducts));
 
 // @route   GET /products/by-vehicle/:vehicleId
 // @desc    Get products compatible with a specific vehicle
@@ -256,6 +256,8 @@ router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res, 
   const product = new Product(req.body);
   const savedProduct = await product.save();
 
+  invalidateCache('products');
+
   // Store product in response locals for middleware
   res.locals.product = savedProduct;
 
@@ -299,6 +301,8 @@ router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate
     // Store product in response locals for middleware
     res.locals.product = updatedProduct;
 
+    invalidateCache('products');
+
     res.json({
       success: true,
       message: 'Product updated successfully',
@@ -330,6 +334,8 @@ router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async
   // Soft delete
   product.isActive = false;
   await product.save();
+
+  invalidateCache('products');
 
   // Store product in response locals for middleware
   res.locals.product = product;

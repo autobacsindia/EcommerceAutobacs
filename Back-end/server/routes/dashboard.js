@@ -8,10 +8,10 @@ import dashboardAnalyticsService from '../services/dashboardAnalyticsService.js'
 const router = express.Router();
 
 // Configuration from environment variables
-const DASHBOARD_MAX_CONNECTIONS = parseInt(process.env.DASHBOARD_MAX_CONNECTIONS) || 50;
-const DASHBOARD_HEALTH_INTERVAL = parseInt(process.env.DASHBOARD_HEALTH_INTERVAL) || 2000;
-const DASHBOARD_ANALYTICS_INTERVAL = parseInt(process.env.DASHBOARD_ANALYTICS_INTERVAL) || 3000;
-const DASHBOARD_HEARTBEAT_INTERVAL = parseInt(process.env.DASHBOARD_HEARTBEAT_INTERVAL) || 30000;
+const DASHBOARD_MAX_CONNECTIONS      = parseInt(process.env.DASHBOARD_MAX_CONNECTIONS)      || 50;
+const DASHBOARD_HEALTH_INTERVAL      = parseInt(process.env.DASHBOARD_HEALTH_INTERVAL)      || 10000;  // 10 s
+const DASHBOARD_ANALYTICS_INTERVAL   = parseInt(process.env.DASHBOARD_ANALYTICS_INTERVAL)   || 15000;  // 15 s
+const DASHBOARD_HEARTBEAT_INTERVAL   = parseInt(process.env.DASHBOARD_HEARTBEAT_INTERVAL)   || 30000;  // 30 s
 
 // Track active connections
 let activeConnections = 0;
