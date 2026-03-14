@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, type ReadonlyURLSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import ProductFetchError from '@/components/products/ProductFetchError';
 import Pagination from '@/components/layout/Pagination';
@@ -235,7 +236,7 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
   throw lastError;
 }
 
-export default function ProductsPageClient() {
+function ProductsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
@@ -492,5 +493,13 @@ export default function ProductsPageClient() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <ProductsPageInner />
+    </Suspense>
   );
 }

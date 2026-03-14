@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, ORDER_STATUS_COLORS } from '@/lib/constants';
 import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
@@ -60,7 +61,7 @@ interface OrdersResponse {
 type SortField = 'createdAt' | 'totalAmount' | 'status';
 type SortOrder = 'asc' | 'desc';
 
-export default function AdminOrdersPage() {
+function AdminOrdersPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -543,5 +544,13 @@ export default function AdminOrdersPage() {
         onBulkDelete={handleBulkDelete}
       />
     </div>
+  );
+}
+
+export default function AdminOrdersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <AdminOrdersPageInner />
+    </Suspense>
   );
 }

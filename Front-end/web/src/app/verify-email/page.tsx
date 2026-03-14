@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
-export default function VerifyEmailPage() {
+function VerifyEmailPageInner() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
@@ -83,5 +84,13 @@ export default function VerifyEmailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <VerifyEmailPageInner />
+    </Suspense>
   );
 }

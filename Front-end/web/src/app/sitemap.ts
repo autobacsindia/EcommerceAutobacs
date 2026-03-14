@@ -1,9 +1,8 @@
 import { MetadataRoute } from 'next'
+import { getServerApiBase } from '@/lib/server-api';
 
 // Configuration
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-// Using 127.0.0.1:5000 as per project memories for backend connection
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 
 type ChangeFrequency = 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never';
 
@@ -38,7 +37,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     // Fetch Categories
     // Use caching strategies appropriate for sitemap
-    const categoriesRes = await fetch(`${API_URL}/categories`, { next: { revalidate: 3600 } });
+    const categoriesRes = await fetch(`${getServerApiBase()}/categories`, { next: { revalidate: 3600 } });
     
     if (categoriesRes.ok) {
       const categoriesData = await categoriesRes.json();
@@ -58,7 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Fetch Products
     // We fetch a reasonable limit to avoid timeout. 
     // In a large production app, this should be split into multiple sitemaps (sitemap index).
-    const productsRes = await fetch(`${API_URL}/products?limit=1000`, { next: { revalidate: 3600 } });
+    const productsRes = await fetch(`${getServerApiBase()}/products?limit=1000`, { next: { revalidate: 3600 } });
     
     if (productsRes.ok) {
       const productsData = await productsRes.json();

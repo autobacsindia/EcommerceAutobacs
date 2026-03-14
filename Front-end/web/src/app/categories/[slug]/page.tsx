@@ -1,11 +1,10 @@
 import { Metadata } from 'next';
 import ClientPage from './ClientPage';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+import { getServerApiBase } from '@/lib/server-api';
 
 async function getCategoryForMetadata(slug: string) {
   try {
-    const res = await fetch(`${API_URL}/categories/slug/${slug}`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${getServerApiBase()}/categories/slug/${slug}`, { next: { revalidate: 3600 } });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.success && data.category) {

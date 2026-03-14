@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
@@ -64,9 +64,9 @@ export default function Home() {
   const isMounted = useIsMounted();
   const [selectedVehicle, setSelectedVehicle] = useState({ make: '', model: '' });
 
-  const handleVehicleSelect = (make: string, model: string) => {
+  const handleVehicleSelect = useCallback((make: string, model: string) => {
     setSelectedVehicle({ make, model });
-  };
+  }, []);
 
   // Helper function to generate vehicle slug from make and model
   const generateVehicleSlug = (make: string, model: string): string => {

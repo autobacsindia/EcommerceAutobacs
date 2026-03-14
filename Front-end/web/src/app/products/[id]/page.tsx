@@ -1,11 +1,10 @@
 import { Metadata } from 'next';
 import ClientPage from './ClientPage';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+import { getServerApiBase } from '@/lib/server-api';
 
 async function getProductForMetadata(id: string) {
   try {
-    const res = await fetch(`${API_URL}/products/${id}`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${getServerApiBase()}/products/${id}`, { next: { revalidate: 3600 } });
     if (!res.ok) return null;
     const data = await res.json();
     return data.product;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { ShoppingCart, User, Menu, Search, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
@@ -21,7 +21,6 @@ export default function Header() {
   const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
   const { itemCount } = useCart();
   const { wishlistCount } = useWishlist();
-  const router = useRouter();
   const pathname = usePathname();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);

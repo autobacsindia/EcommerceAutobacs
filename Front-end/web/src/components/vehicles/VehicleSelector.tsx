@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import apiClient from '@/lib/api';
 import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
 
@@ -27,6 +27,13 @@ export default function VehicleSelector({
   const [selectedModel, setSelectedModel] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep a stable ref to the callback so the effect below never re-fires
+  // due to a parent re-render creating a new function identity.
+  const onVehicleSelectRef = useRef(onVehicleSelect);
+  useEffect(() => {
+    onVehicleSelectRef.current = onVehicleSelect;
+  });
 
   // Fetch vehicle makes on component mount
   useEffect(() => {
@@ -78,11 +85,11 @@ export default function VehicleSelector({
   // Notify parent when both make and model are selected
   useEffect(() => {
     if (selectedMake && selectedModel) {
-      onVehicleSelect(selectedMake, selectedModel);
+      onVehicleSelectRef.current(selectedMake, selectedModel);
     } else if (!selectedMake) {
-      onVehicleSelect('', '');
+      onVehicleSelectRef.current('', '');
     }
-  }, [selectedMake, selectedModel, onVehicleSelect]);
+  }, [selectedMake, selectedModel]);
 
   const handleMakeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const make = e.target.value;

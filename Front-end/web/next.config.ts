@@ -102,7 +102,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  reactCompiler: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === "production"
   },

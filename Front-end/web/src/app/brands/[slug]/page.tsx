@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Filter, Search, RefreshCw } from 'lucide-react';
 import { use } from 'react';
@@ -121,7 +122,7 @@ async function getBrandProducts(brandName: string, page: number = 1, limit: numb
   }
 }
 
-export default function BrandPage({ params }: { params: Promise<{ slug: string }> }) {
+function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -347,5 +348,13 @@ export default function BrandPage({ params }: { params: Promise<{ slug: string }
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default function BrandPage({ params }: { params: Promise<{ slug: string }> }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <BrandPageInner params={params} />
+    </Suspense>
   );
 }

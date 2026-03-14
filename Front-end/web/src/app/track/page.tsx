@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import trackingService from '@/services/trackingService';
 import { TrackingData } from '@/types/tracking';
@@ -9,7 +10,7 @@ import { TrackingTimeline } from '@/components/tracking/TrackingTimeline';
 import { TrackingMap } from '@/components/tracking/TrackingMap';
 import { getStatusBadgeColor } from '@/utils/trackingHelpers';
 
-export default function TrackOrderPage() {
+function TrackOrderPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -271,5 +272,13 @@ export default function TrackOrderPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function TrackOrderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <TrackOrderPageInner />
+    </Suspense>
   );
 }

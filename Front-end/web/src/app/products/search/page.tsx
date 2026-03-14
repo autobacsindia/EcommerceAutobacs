@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import Pagination from '@/components/layout/Pagination';
@@ -109,7 +110,7 @@ async function getSearchCorrections(searchTerm: string) {
   }
 }
 
-export default function SearchPage() {
+function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<any>({ products: [], pagination: {} });
@@ -335,5 +336,13 @@ export default function SearchPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <SearchPageInner />
+    </Suspense>
   );
 }

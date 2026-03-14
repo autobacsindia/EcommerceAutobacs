@@ -91,8 +91,7 @@ export default function RegisterPage() {
   };
 
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
-    const url = `${apiBaseUrl}/auth/${provider}`;
+    const url = `/api/v1/auth/${provider}`;
     navigateTo(url);
   };
 

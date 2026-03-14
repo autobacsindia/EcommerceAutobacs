@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { Suspense } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
@@ -8,10 +9,11 @@ import { WishlistProvider } from "@/context/WishlistContext";
 import { LocationProvider } from "@/contexts/LocationContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { RateLimitProvider } from "@/contexts/RateLimitContext";
-import LayoutWrapper from "@/components/layout/LayoutWrapper";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
+import ConditionalHeader from "@/components/layout/ConditionalHeader";
+import ConditionalFooter from "@/components/layout/ConditionalFooter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,6 +48,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+      <Suspense fallback={null}>
         <ErrorBoundary>
           <AuthProvider>
             <CartProvider>
@@ -54,7 +57,9 @@ export default function RootLayout({
                   <LocationProvider>
                     <CurrencyProvider>
                       <GlobalLoadingBar />
-                      <LayoutWrapper>{children}</LayoutWrapper>
+                      <ConditionalHeader />
+                      <main className="flex-1 flex flex-col min-h-screen">{children}</main>
+                      <ConditionalFooter />
                       <Toaster position="top-right" />
                       <Script
                         id="razorpay-checkout"
@@ -84,6 +89,7 @@ export default function RootLayout({
             </CartProvider>
           </AuthProvider>
         </ErrorBoundary>
+      </Suspense>
       </body>
     </html>
   );

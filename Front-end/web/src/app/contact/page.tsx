@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { MapPin, Phone, Mail, Clock, Send, AlertCircle, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 
-export default function ContactPage() {
+function ContactPageInner() {
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     name: '',
@@ -325,5 +326,13 @@ export default function ContactPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function ContactPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <ContactPageInner />
+    </Suspense>
   );
 }
