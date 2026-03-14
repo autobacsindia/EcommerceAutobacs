@@ -291,7 +291,9 @@ export const validateRegister = [
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('Name must be between 2 and 100 characters'),
+    .withMessage('Name must be between 2 and 100 characters')
+    .matches(/^[a-zA-Z\s'\-\.]+$/)
+    .withMessage('Name may only contain letters, spaces, hyphens, apostrophes, and periods'),
   body('email')
     .isEmail()
     .withMessage('Valid email is required')
