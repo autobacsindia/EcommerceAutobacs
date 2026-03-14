@@ -290,15 +290,17 @@ export const validateBrandParam = [
 export const validateRegister = [
   body('name')
     .trim()
-    .isLength({ min: 2 })
-    .withMessage('Name must be at least 2 characters long'),
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
   body('email')
     .isEmail()
     .withMessage('Valid email is required')
+    .isLength({ max: 254 })
+    .withMessage('Email must not exceed 254 characters')
     .normalizeEmail(),
   body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+    .isLength({ min: 8, max: 72 })
+    .withMessage('Password must be between 8 and 72 characters'),
   validateRequest
 ];
 
@@ -308,10 +310,14 @@ export const validateLogin = [
     .withMessage('Email is required')
     .isEmail()
     .withMessage('Valid email is required')
+    .isLength({ max: 254 })
+    .withMessage('Email must not exceed 254 characters')
     .normalizeEmail(),
   body('password')
     .notEmpty()
-    .withMessage('Password is required'),
+    .withMessage('Password is required')
+    .isLength({ max: 72 })
+    .withMessage('Password must not exceed 72 characters'),
   validateRequest
 ];
 
@@ -381,8 +387,8 @@ export const validateResetPassword = [
   body('password')
     .notEmpty()
     .withMessage('New password is required')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters'),
+    .isLength({ min: 8, max: 72 })
+    .withMessage('Password must be between 8 and 72 characters'),
   validateRequest
 ];
 
