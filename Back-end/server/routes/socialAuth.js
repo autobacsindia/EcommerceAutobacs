@@ -9,7 +9,7 @@ const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 // Ensure no trailing slash and consistent protocol/port
-const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:5000/auth/google/callback';
+const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:8080/api/v1/auth/google/callback';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // @route   GET /auth/google
