@@ -1,10 +1,10 @@
 import dotenv from "dotenv";
+dotenv.config();
+
 import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 import elasticsearchService from "./services/elasticsearchService.js";
 import { app, cronService, adaptiveThrottlingService, setCronService } from "./app.js";
 import { initSentry } from "./config/sentry.js";
-
-dotenv.config();
 
 // ── JWT Secret strength validation ─────────────────────────────────────────
 const _jwtSecret = process.env.JWT_SECRET || '';
