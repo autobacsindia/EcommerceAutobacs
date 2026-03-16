@@ -6,19 +6,25 @@ import { asyncHandler } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-// Ensure no trailing slash and consistent protocol/port
-const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:8080/api/v1/auth/google/callback';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+// Read env vars at request time (not module load time) to avoid ES module hoisting issues
+function getConfig() {
+  return {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:8080/api/v1/auth/google/callback',
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  };
+}
 
 // @route   GET /auth/google
 // @desc    Initiate Google OAuth flow
 // @access  Public
 router.get('/google', (req, res) => {
-  if (!GOOGLE_CLIENT_ID) {
+  const { clientId, callbackUrl, frontendUrl } = getConfig();
+
+  if (!clientId) {
     console.error('GOOGLE_CLIENT_ID is not defined');
-    return res.redirect(`${FRONTEND_URL}/login?error=Google login not configured`);
+    return res.redirect(`${frontendUrl}/login?error=Google login not configured`);
   }
 
   const scopes = [
@@ -26,14 +32,10 @@ router.get('/google', (req, res) => {
     'https://www.googleapis.com/auth/userinfo.email',
     'openid'
   ];
-  
-  // Clean keys
-  const clientId = GOOGLE_CLIENT_ID.trim();
-  const callbackUrl = GOOGLE_CALLBACK_URL.trim();
 
   // Use the exact callback URL configured in environment
-  const redirectUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=${encodeURIComponent(scopes.join(' '))}&access_type=offline&prompt=consent`;
-  
+  const redirectUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId.trim()}&redirect_uri=${encodeURIComponent(callbackUrl.trim())}&response_type=code&scope=${encodeURIComponent(scopes.join(' '))}&access_type=offline&prompt=consent`;
+
   res.redirect(redirectUrl);
 });
 
@@ -41,19 +43,20 @@ router.get('/google', (req, res) => {
 // @desc    Handle Google OAuth callback
 // @access  Public
 router.get('/google/callback', asyncHandler(async (req, res) => {
+  const { clientId, clientSecret, callbackUrl, frontendUrl } = getConfig();
   const { code } = req.query;
-  
+
   if (!code) {
-    return res.redirect(`${FRONTEND_URL}/login?error=Google login failed`);
+    return res.redirect(`${frontendUrl}/login?error=Google login failed`);
   }
 
   try {
     // Exchange code for tokens
     const { data } = await axios.post('https://oauth2.googleapis.com/token', {
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       code,
-      redirect_uri: GOOGLE_CALLBACK_URL,
+      redirect_uri: callbackUrl,
       grant_type: 'authorization_code',
     });
 
@@ -102,11 +105,12 @@ router.get('/google/callback', asyncHandler(async (req, res) => {
     await logLoginAttempt(user, true, ipAddress, userAgent);
 
     // Redirect to frontend with token
-    res.redirect(`${FRONTEND_URL}/auth/social-callback?token=${tokens.accessToken}`);
-    
+    res.redirect(`${frontendUrl}/auth/social-callback?token=${tokens.accessToken}`);
+
   } catch (error) {
     console.error('Google Auth Error:', error.response?.data || error.message);
-    res.redirect(`${FRONTEND_URL}/login?error=Google authentication failed`);
+    const { frontendUrl: furl } = getConfig();
+    res.redirect(`${furl}/login?error=Google authentication failed`);
   }
 }));
 

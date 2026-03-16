@@ -749,8 +749,8 @@ router.get("/google", (req, res) => {
   }
 
   const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI ||
-    `${req.protocol}://${req.get("host")}/auth/google/callback`;
+    process.env.GOOGLE_CALLBACK_URL ||
+    `${req.protocol}://${req.get("host")}/api/v1/auth/google/callback`;
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -787,8 +787,8 @@ router.get(
     }
 
     const redirectUri =
-      process.env.GOOGLE_REDIRECT_URI ||
-      `${req.protocol}://${req.get("host")}/auth/google/callback`;
+      process.env.GOOGLE_CALLBACK_URL ||
+      `${req.protocol}://${req.get("host")}/api/v1/auth/google/callback`;
 
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
