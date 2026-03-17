@@ -57,7 +57,9 @@ export const csrfProtection = (req, res, next) => {
     '/api/delivery-zones/estimate',
     '/api/delivery-zones/shipping-cost',
     '/api/location/select',
-    '/location/select'
+    '/location/select',
+    '/consultation',   // public lead-capture, no cookie auth
+    '/contact',        // public contact form, no cookie auth
   ];
 
   if (excludedPaths.some(path => req.path.includes(path))) {

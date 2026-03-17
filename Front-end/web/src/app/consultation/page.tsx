@@ -124,6 +124,7 @@ export default function ConsultationPage() {
       }
       const waErr = validateWhatsApp(form.whatsapp);
       if (waErr) { setWhatsappError(waErr); setError(waErr); return; }
+      setWhatsappError(''); // clear on valid
     }
     if (step === 1 && !form.makeModel) {
       setError('Please enter your vehicle make & model.'); return;
@@ -135,14 +136,13 @@ export default function ConsultationPage() {
 
   function prevStep() {
     setError('');
+    setWhatsappError('');
     setStep(s => Math.max(s - 1, 0));
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
   async function submit() {
-    if (!form.notes.trim() && step === 5) {
-      setError('Please describe your build goals.'); return;
-    }
+    // notes is optional — do not block on empty notes
     setSubmitting(true);
     setError('');
     try {
