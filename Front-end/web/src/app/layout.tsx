@@ -50,7 +50,7 @@ export default function RootLayout({
         <link
           rel="preload"
           as="image"
-          href="https://autobacsindia.com/wp-content/uploads/2025/10/banner-new.jpg"
+          href="/images/hero-banner.jpg"
           fetchPriority="high"
         />
       </head>
