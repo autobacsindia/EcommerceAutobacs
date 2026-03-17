@@ -43,7 +43,7 @@ export default function HeroBanner({ className = '' }: BannerProps) {
             className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/25 group"
           >
             <Zap className="h-4 w-4" />
-            Get Build Consultation
+            Get Free Consultation
           </Link>
         </div>
       </div>
