@@ -45,6 +45,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Preload the hero banner image — critical for LCP */}
+        <link
+          rel="preload"
+          as="image"
+          href="https://autobacsindia.com/wp-content/uploads/2025/10/banner-new.jpg"
+          fetchPriority="high"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

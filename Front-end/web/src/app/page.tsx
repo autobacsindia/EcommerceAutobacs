@@ -1,24 +1,12 @@
-'use client';
-
-import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
-import PageLoader from '@/components/layout/PageLoader';
-import useIsMounted from '@/lib/hooks/useIsMounted';
 import dynamic from 'next/dynamic';
-
 import HeroBanner from '@/components/layout/HeroBanner';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
-import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 import { Skeleton } from '@/components/ui/Skeleton';
-
-// Dynamically import components to improve initial load time
-const VehicleSelector = dynamic(() => import('@/components/vehicles/VehicleSelector'), {
-  ssr: false,
-  loading: () => <VehicleSelectorSkeleton />
-});
+import { VehicleSelectorSection, RecentlyViewedSection } from './HomeClientSection';
 
 const FastMovingProducts = dynamic(() => import('@/components/products/FastMovingProducts'), {
   loading: () => (
@@ -52,34 +40,11 @@ const KeepShoppingWidget = dynamic(() => import('@/components/products/KeepShopp
   loading: () => <Skeleton className="h-64 rounded-lg w-full" />
 });
 
-const RecentlyViewedProducts = dynamic(() => import('@/components/products/RecentlyViewedProducts'), {
-  ssr: false
-});
-
 const SuperCarsBanner = dynamic(() => import('@/components/layout/SuperCarsBanner'), {
   loading: () => <Skeleton className="h-80 w-full" />
 });
 
 export default function Home() {
-  const isMounted = useIsMounted();
-  const [selectedVehicle, setSelectedVehicle] = useState({ make: '', model: '' });
-
-  const handleVehicleSelect = useCallback((make: string, model: string) => {
-    setSelectedVehicle({ make, model });
-  }, []);
-
-  // Helper function to generate vehicle slug from make and model
-  const generateVehicleSlug = (make: string, model: string): string => {
-    const makeSlug = make.toLowerCase().replace(/\s+/g, '-');
-    const modelSlug = model.toLowerCase().replace(/\s+/g, '-');
-    return `${makeSlug}-${modelSlug}`;
-  };
-
-  // Show skeleton loader until component is mounted to prevent hydration issues
-  if (!isMounted) {
-    return <PageLoader type="home" />;
-  }
-
   return (
     <div className="flex min-h-screen flex-col">
       {/* Hero Banner */}
@@ -95,20 +60,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="max-w-2xl mx-auto">
-            <VehicleSelector onVehicleSelect={handleVehicleSelect} />
-
-            {selectedVehicle.make && selectedVehicle.model && (
-              <div className="mt-6 text-center">
-                <Link
-                  href={`/model/${generateVehicleSlug(selectedVehicle.make, selectedVehicle.model)}`}
-                  className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  View {selectedVehicle.make} {selectedVehicle.model} Parts
-                </Link>
-              </div>
-            )}
-          </div>
+          <VehicleSelectorSection />
 
           {/* Vehicle Images Row - 4 cars + See More */}
           <div className="mt-12">
@@ -405,7 +357,7 @@ export default function Home() {
       </section>
 
       {/* Recently Viewed Section */}
-      <RecentlyViewedProducts />
+      <RecentlyViewedSection />
 
       {/* CTA Section */}
       <section className="bg-blue-600 text-white py-16">
