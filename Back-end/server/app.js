@@ -28,7 +28,9 @@ import tokenIntrospectionRoutes from "./routes/tokenIntrospection.js";
 import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
 import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import mediaRoutes from "./routes/media.js";
 import contactRoutes from "./routes/contact.js";
+import consultationRoutes from "./routes/consultation.js";
 import returnRoutes from "./routes/returnRoutes.js";
 
 // Import middleware
@@ -311,9 +313,13 @@ app.use("/api/v1/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
 app.use("/api/v1/admin/adaptive-throttling", adaptiveThrottlingRoutes);
 app.use("/api/v1/dashboard", adminRateLimit, dashboardRoutes);
 
+// Media & News
+app.use("/api/v1/media", publicBrowsingRateLimit, mediaRoutes);
+
 // Location & Contact
 app.use("/api/v1/location", apiRateLimit, locationRoutes);
 app.use("/api/v1/contact", apiRateLimit, contactRoutes);
+app.use("/api/v1/consultation", apiRateLimit, consultationRoutes);
 
 // ── Error handling ──────────────────────────────────────────────────────────────
 // Correct middleware order:

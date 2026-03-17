@@ -21,7 +21,9 @@ import {
   Mail,
   Home,
   LogOut,
-  User
+  User,
+  Newspaper,
+  Zap
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -78,6 +80,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { icon: MessageCircle, label: 'Reviews', href: '/admin/reviews' },
     { icon: HelpCircle, label: 'Questions', href: '/admin/questions' },
     { icon: Mail, label: 'Messages', href: '/admin/messages' },
+    { icon: Newspaper, label: 'Media & News', href: '/admin/media' },
+    { icon: Zap, label: 'Consultations', href: '/admin/consultation' },
     { icon: Users, label: 'Users', href: '/admin/users' },
   ];
 

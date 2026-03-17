@@ -72,6 +72,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       
       routes.push(...productUrls);
     }
+
+    // Media section static routes
+    const mediaStaticRoutes = [
+      { url: `${BASE_URL}/media`, priority: 0.8 },
+      { url: `${BASE_URL}/media/news`, priority: 0.8 },
+      { url: `${BASE_URL}/media/blogs`, priority: 0.8 },
+      { url: `${BASE_URL}/media/gallery`, priority: 0.6 },
+      { url: `${BASE_URL}/media/videos`, priority: 0.6 },
+    ].map(r => ({ ...r, lastModified: new Date(), changeFrequency: 'daily' as ChangeFrequency }));
+    routes.push(...mediaStaticRoutes);
+
+    // Fetch published articles for sitemap
+    const articlesRes = await fetch(`${getServerApiBase()}/media/articles?limit=500&page=1`, { next: { revalidate: 3600 } });
+    if (articlesRes.ok) {
+      const articlesData = await articlesRes.json();
+      const articles = articlesData.data || [];
+      const articleUrls = articles.map((article: any) => ({
+        url: `${BASE_URL}/media/${article.type}/${article.slug}`,
+        lastModified: new Date(article.updatedAt || article.publishedAt || new Date()),
+        changeFrequency: 'weekly' as ChangeFrequency,
+        priority: 0.7,
+      }));
+      routes.push(...articleUrls);
+    }
   } catch (error) {
     console.error('Sitemap generation error:', error);
     // Continue with static routes even if API fails

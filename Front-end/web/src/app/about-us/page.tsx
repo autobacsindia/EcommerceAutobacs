@@ -58,11 +58,12 @@ export default function AboutUsPage() {
       <section className="relative bg-gradient-to-r from-gray-900 to-gray-700 text-white">
         <div className="absolute inset-0">
           <Image
-            src="https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2000&q=80"
+            src="https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1400&q=60&fm=webp"
             alt="Automotive background"
-            layout="fill"
-            objectFit="cover"
-            className="opacity-30"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover opacity-30"
           />
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">

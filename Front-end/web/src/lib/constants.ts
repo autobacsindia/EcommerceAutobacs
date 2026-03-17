@@ -97,6 +97,26 @@ export const API_ENDPOINTS = {
 
   // Contact
   CONTACT: '/contact',
+
+  // Media & News
+  MEDIA_ARTICLES: '/media/articles',
+  MEDIA_ARTICLE_BY_SLUG: (slug: string) => `/media/articles/${slug}`,
+  MEDIA_ARTICLE_CATEGORIES: '/media/articles-categories',
+  MEDIA_GALLERY: '/media/gallery',
+  MEDIA_VIDEOS: '/media/videos',
+  // Admin
+  ADMIN_MEDIA_ARTICLES: '/media/admin/articles',
+  ADMIN_MEDIA_ARTICLE: (id: string) => `/media/admin/articles/${id}`,
+  ADMIN_MEDIA_ITEMS: '/media/admin/media-items',
+  ADMIN_MEDIA_ITEM: (id: string) => `/media/admin/media-items/${id}`,
+  MEDIA_STATS: '/media/stats',
+  MEDIA_TRENDING: '/media/trending',
+
+  // Consultation
+  CONSULTATION_SUBMIT: '/consultation',
+  ADMIN_CONSULTATIONS: '/consultation/admin',
+  ADMIN_CONSULTATION: (id: string) => `/consultation/admin/${id}`,
+  ADMIN_CONSULTATION_STATUS: (id: string) => `/consultation/admin/${id}/status`,
 };
 
 // Order Status
@@ -181,6 +201,8 @@ export const FOOTER_LINKS = {
     { href: '/about', label: 'About Us' },
     { href: '/contact', label: 'Contact' },
     { href: '/careers', label: 'Careers' },
+    { href: '/media/news', label: 'News' },
+    { href: '/media/blogs', label: 'Blog' },
   ],
   support: [
     { href: '/faq', label: 'FAQ' },
