@@ -45,15 +45,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        {/* Preload the hero banner image — critical for LCP */}
-        <link
-          rel="preload"
-          as="image"
-          href="/images/hero-banner.jpg"
-          fetchPriority="high"
-        />
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

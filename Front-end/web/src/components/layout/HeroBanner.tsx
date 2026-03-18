@@ -16,8 +16,8 @@ export default function HeroBanner({ className = '' }: BannerProps) {
       <Link href="/offers" className="relative w-full block cursor-pointer hover:opacity-95 transition-opacity">
         <div className="relative w-full">
           <Image
-            src="/images/hero-banner.jpg"
-            alt="Autobacs India - Off-Road with Confidence - Why Your Beast Needs Upgrades"
+            src="/images/hero-banner-v2.jpg"
+            alt="Autobacs India - Drive Beyond Limit"
             width={1600}
             height={264}
             priority
