@@ -177,7 +177,7 @@ export default function ConsultationPage() {
             Want a faster response? Ping us on WhatsApp now.
           </p>
           <a
-            href={`https://wa.me/919999999999?text=${waMsg}`}
+            href={`https://wa.me/919895502139?text=${waMsg}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-8 py-4 bg-green-500 hover:bg-green-400 text-white font-bold rounded-xl text-lg transition-all shadow-lg shadow-green-500/30"
@@ -241,7 +241,7 @@ export default function ConsultationPage() {
               <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </button>
             <a
-              href="https://wa.me/919999999999"
+              href="https://wa.me/919895502139"
               target="_blank"
               rel="noopener noreferrer"
               className="px-8 py-4 bg-green-600/20 hover:bg-green-600/30 border border-green-500/40 text-green-400 font-semibold rounded-xl text-lg transition-all flex items-center justify-center gap-2"
@@ -633,7 +633,7 @@ export default function ConsultationPage() {
 
       {/* ── Floating WhatsApp ─────────────────────────────────────────────────── */}
       <a
-        href="https://wa.me/919999999999"
+        href="https://wa.me/919895502139"
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-green-500 hover:bg-green-400 rounded-full flex items-center justify-center shadow-2xl shadow-green-500/40 transition-all hover:scale-110"
