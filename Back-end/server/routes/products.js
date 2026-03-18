@@ -34,6 +34,19 @@ import {
   getProductsByVehicle,
   getBrands
 } from "../controllers/productController.js";
+import {
+  createProductWithImages,
+  updateProductWithImages,
+  deleteProductWithImages,
+  uploadProductImages,
+  deleteProductImage,
+} from "../controllers/productImageController.js";
+import {
+  uploadMultiple,
+  uploadFields,
+  handleMulterError,
+  validateUploadedFiles,
+} from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
@@ -250,104 +263,68 @@ router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
 }));
 
 // @route   POST /products
-// @desc    Create a new product
+// @desc    Create a new product (supports multipart/form-data with images)
 // @access  Private/Admin
-router.post("/", protect, admin, validateProduct, asyncHandler(async (req, res, next) => {
-  const product = new Product(req.body);
-  const savedProduct = await product.save();
-
-  invalidateCache('products');
-
-  // Store product in response locals for middleware
-  res.locals.product = savedProduct;
-
-  res.status(201).json({
-    success: true,
-    message: 'Product created successfully',
-    product: savedProduct
-  });
-
-  // Proceed to sync middleware
-  next();
-}), ElasticsearchSyncMiddleware.syncProduct);
+router.post(
+  "/",
+  protect,
+  admin,
+  uploadMultiple('images', 8),
+  handleMulterError,
+  validateUploadedFiles,
+  asyncHandler(createProductWithImages),
+  ElasticsearchSyncMiddleware.syncProduct
+);
 
 // @route   PUT /products/:id
-// @desc    Update product
+// @desc    Update product (supports multipart/form-data with optional new images)
 // @access  Private/Admin
-router.put("/:id", protect, admin, validateProductIdParam, validateProductUpdate, asyncHandler(async (req, res, next) => {
-  console.log('PUT /products/:id body:', req.body);
-  try {
-    const product = await Product.findById(req.params.id);
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: 'Product not found'
-      });
-    }
-
-    // Handle categories specifically if needed, but Mongoose usually handles array of IDs fine
-    // Ensure unique elements if it's an array
-    if (Array.isArray(req.body.categories)) {
-      req.body.categories = [...new Set(req.body.categories)];
-    }
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('categories', 'name slug');
-
-    // Store product in response locals for middleware
-    res.locals.product = updatedProduct;
-
-    invalidateCache('products');
-
-    res.json({
-      success: true,
-      message: 'Product updated successfully',
-      product: updatedProduct
-    });
-
-    // Proceed to sync middleware
-    next();
-  } catch (error) {
-    console.error('Error updating product:', error);
-    // Pass to global error handler
-    throw error;
-  }
-}), ElasticsearchSyncMiddleware.syncProduct);
+router.put(
+  "/:id",
+  protect,
+  admin,
+  validateProductIdParam,
+  uploadMultiple('images', 8),
+  handleMulterError,
+  validateUploadedFiles,
+  asyncHandler(updateProductWithImages),
+  ElasticsearchSyncMiddleware.syncProduct
+);
 
 // @route   DELETE /products/:id
-// @desc    Delete product (soft delete by setting isActive to false)
+// @desc    Soft-delete product + remove all Cloudinary images
 // @access  Private/Admin
-router.delete("/:id", protect, admin, validateProductIdParam, asyncHandler(async (req, res, next) => {
-  const product = await Product.findById(req.params.id);
+router.delete(
+  "/:id",
+  protect,
+  admin,
+  validateProductIdParam,
+  asyncHandler(deleteProductWithImages),
+  ElasticsearchSyncMiddleware.syncProduct
+);
 
-  if (!product) {
-    return res.status(404).json({
-      success: false,
-      message: 'Product not found'
-    });
-  }
+// @route   POST /products/:id/images
+// @desc    Add more images to an existing product
+// @access  Private/Admin
+router.post(
+  "/:id/images",
+  protect,
+  admin,
+  uploadMultiple('images', 8),
+  handleMulterError,
+  validateUploadedFiles,
+  asyncHandler(uploadProductImages)
+);
 
-  // Soft delete
-  product.isActive = false;
-  await product.save();
-
-  invalidateCache('products');
-
-  // Store product in response locals for middleware
-  res.locals.product = product;
-
-  res.json({
-    success: true,
-    message: 'Product deleted successfully'
-  });
-
-  // Proceed to sync middleware
-  next();
-}), ElasticsearchSyncMiddleware.syncProduct);
+// @route   DELETE /products/:id/images/:encodedPublicId
+// @desc    Remove a single image from a product (public_id base64-encoded in URL)
+// @access  Private/Admin
+router.delete(
+  "/:id/images/:encodedPublicId",
+  protect,
+  admin,
+  asyncHandler(deleteProductImage)
+);
 
 // @route   POST /products/:id/stock
 // @desc    Update product stock

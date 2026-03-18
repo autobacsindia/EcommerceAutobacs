@@ -12,6 +12,8 @@ import {
   validateBrandQuery
 } from "../middleware/validationMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
+import { uploadSingle, handleMulterError, validateUploadedFiles } from "../middleware/uploadMiddleware.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
 const router = express.Router();
 
@@ -106,100 +108,107 @@ router.get("/:id", asyncHandler(async (req, res) => {
 }));
 
 // @route   POST /brands
-// @desc    Create new brand
+// @desc    Create new brand (optionally with logo file upload)
 // @access  Private/Admin
-router.post("/", protect, admin, validateBrand, asyncHandler(async (req, res) => {
-  const { name, logo, description } = req.body;
+router.post(
+  "/",
+  protect,
+  admin,
+  uploadSingle('logo'),
+  handleMulterError,
+  validateUploadedFiles,
+  validateBrand,
+  asyncHandler(async (req, res) => {
+    const { name, description } = req.body;
+    const slug = generateSlug(name);
 
-  // Generate slug from name
-  const slug = generateSlug(name);
-
-  // Check if brand with same name or slug exists
-  const existingBrand = await Brand.findOne({
-    $or: [{ name: { $regex: new RegExp(`^${name}$`, 'i') } }, { slug }]
-  });
-
-  if (existingBrand) {
-    return res.status(400).json({
-      success: false,
-      message: 'A brand with this name already exists'
-    });
-  }
-
-  const brand = await Brand.create({
-    name,
-    slug,
-    logo,
-    description,
-    isActive: true
-  });
-
-  invalidateCache('brands');
-
-  res.status(201).json({
-    success: true,
-    message: 'Brand created successfully',
-    brand
-  });
-}));
-
-// @route   PUT /brands/:id
-// @desc    Update brand
-// @access  Private/Admin
-router.put("/:id", protect, admin, validateBrandUpdate, asyncHandler(async (req, res) => {
-  const { name, logo, description, isActive } = req.body;
-
-  const brand = await Brand.findById(req.params.id);
-
-  if (!brand) {
-    return res.status(404).json({
-      success: false,
-      message: 'Brand not found'
-    });
-  }
-
-  // If name is being changed, check for duplicates and update slug
-  if (name && name !== brand.name) {
     const existingBrand = await Brand.findOne({
-      name: { $regex: new RegExp(`^${name}$`, 'i') },
-      _id: { $ne: req.params.id }
+      $or: [{ name: { $regex: new RegExp(`^${name}$`, 'i') } }, { slug }]
     });
-
     if (existingBrand) {
-      return res.status(400).json({
-        success: false,
-        message: 'A brand with this name already exists'
-      });
+      return res.status(400).json({ success: false, message: 'A brand with this name already exists' });
     }
 
-    // Update products with the old brand name to the new name
-    const oldBrandName = brand.name;
-    await Product.updateMany(
-      { brand: { $regex: new RegExp(`^${oldBrandName}$`, 'i') } },
-      { $set: { brand: name } }
-    );
+    let logoData = { url: req.body.logo || '', public_id: '' };
 
-    brand.name = name;
-    brand.slug = generateSlug(name);
-  }
+    if (req.file) {
+      const uploaded = await uploadToCloudinary(req.file.buffer, {
+        folder: 'autobacs/brands',
+      });
+      logoData = { url: uploaded.secure_url, public_id: uploaded.public_id };
+    }
 
-  if (logo !== undefined) brand.logo = logo;
-  if (description !== undefined) brand.description = description;
-  if (isActive !== undefined) brand.isActive = isActive;
+    const brand = await Brand.create({ name, slug, logo: logoData, description, isActive: true });
 
-  await brand.save();
+    invalidateCache('brands');
 
-  invalidateCache('brands', 'products');
+    res.status(201).json({ success: true, message: 'Brand created successfully', brand });
+  })
+);
 
-  res.json({
-    success: true,
-    message: 'Brand updated successfully',
-    brand
-  });
-}));
+// @route   PUT /brands/:id
+// @desc    Update brand (optionally replace logo via file upload)
+// @access  Private/Admin
+router.put(
+  "/:id",
+  protect,
+  admin,
+  uploadSingle('logo'),
+  handleMulterError,
+  validateUploadedFiles,
+  validateBrandUpdate,
+  asyncHandler(async (req, res) => {
+    const { name, description, isActive } = req.body;
+
+    const brand = await Brand.findById(req.params.id);
+    if (!brand) {
+      return res.status(404).json({ success: false, message: 'Brand not found' });
+    }
+
+    if (name && name !== brand.name) {
+      const existingBrand = await Brand.findOne({
+        name: { $regex: new RegExp(`^${name}$`, 'i') },
+        _id: { $ne: req.params.id }
+      });
+      if (existingBrand) {
+        return res.status(400).json({ success: false, message: 'A brand with this name already exists' });
+      }
+
+      const oldBrandName = brand.name;
+      await Product.updateMany(
+        { brand: { $regex: new RegExp(`^${oldBrandName}$`, 'i') } },
+        { $set: { brand: name } }
+      );
+      brand.name = name;
+      brand.slug = generateSlug(name);
+    }
+
+    // Replace logo if a new file was uploaded
+    if (req.file) {
+      if (brand.logo?.public_id) {
+        await deleteFromCloudinary(brand.logo.public_id);
+      }
+      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/brands' });
+      brand.logo = { url: uploaded.secure_url, public_id: uploaded.public_id };
+    } else if (req.body.logo !== undefined) {
+      // Plain URL string passed (no file) — keep existing public_id if URL unchanged
+      if (typeof req.body.logo === 'string') {
+        brand.logo = { url: req.body.logo, public_id: brand.logo?.public_id || '' };
+      }
+    }
+
+    if (description !== undefined) brand.description = description;
+    if (isActive !== undefined)    brand.isActive = isActive;
+
+    await brand.save();
+    invalidateCache('brands', 'products');
+
+    res.json({ success: true, message: 'Brand updated successfully', brand });
+  })
+);
 
 // @route   DELETE /brands/:id
-// @desc    Delete brand
+// @desc    Delete brand (also removes Cloudinary logo)
 // @access  Private/Admin
 router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const brand = await Brand.findById(req.params.id);
@@ -215,6 +224,11 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
   const productCount = await Product.countDocuments({ 
     brand: { $regex: new RegExp(`^${brand.name}$`, 'i') } 
   });
+
+  // Delete logo from Cloudinary
+  if (brand.logo?.public_id) {
+    await deleteFromCloudinary(brand.logo.public_id);
+  }
 
   // Hard delete
   await Brand.findByIdAndDelete(req.params.id);

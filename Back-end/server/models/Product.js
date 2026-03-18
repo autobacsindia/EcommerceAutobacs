@@ -39,9 +39,10 @@ const ProductSchema = new mongoose.Schema({
     trim: true
   },
   images: [{
-    url: { type: String, required: true },
-    alt: { type: String },
-    isPrimary: { type: Boolean, default: false }
+    url:        { type: String, required: true },   // Cloudinary secure_url
+    public_id:  { type: String, default: '' },      // Cloudinary public_id (used for deletion)
+    alt:        { type: String },
+    isPrimary:  { type: Boolean, default: false }
   }],
   stock: { 
     type: Number, 

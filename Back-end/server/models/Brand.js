@@ -18,7 +18,8 @@ const BrandSchema = new mongoose.Schema({
     index: true
   },
   logo: {
-    type: String
+    url:       { type: String, default: '' },  // Cloudinary secure_url
+    public_id: { type: String, default: '' },  // Cloudinary public_id (for deletion)
   },
   description: {
     type: String

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
-import { ArrowLeft, Upload } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import ImageUploader from '@/components/ui/ImageUploader';
 
 interface Category {
   _id: string;
@@ -107,36 +108,59 @@ export default function CreateProductPage() {
     setSubmitting(true);
     
     try {
-      // In a real implementation, we would upload images first and get URLs
-      // For now, we'll submit without images
-      
       const validQna = qna.filter(item => item.question.trim() !== '' && item.answer.trim() !== '');
 
-      const productData = {
-        ...formData,
-        price: parseFloat(formData.price),
-        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
-        stock: parseInt(formData.stock),
-        // category: formData.category || undefined, // Removed single category
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-        tags: tagsInput.split(',').map(t => t.trim()).filter(t => t).length > 0 
-          ? tagsInput.split(',').map(t => t.trim()).filter(t => t) 
-          : undefined,
-        variableSpecs: variableSpecs.length > 0 ? variableSpecs : undefined,
-        compatibleVehicles: selectedVehicles.length > 0 ? selectedVehicles : undefined,
-        features: features.length > 0 ? features : undefined,
-        packageContents: packageContents.length > 0 ? packageContents : undefined,
-        qna: validQna.length > 0 ? validQna : undefined,
-      };
-      
-      // Remove empty fields
-      Object.keys(productData).forEach(key => {
-        if (productData[key as keyof typeof productData] === '') {
-          delete productData[key as keyof typeof productData];
-        }
+      // Build multipart/form-data so images travel with the product data
+      const fd = new FormData();
+
+      // ── Scalar fields ──────────────────────────────────────────────────
+      fd.append('name',             formData.name);
+      fd.append('description',      formData.description);
+      fd.append('price',            formData.price);
+      fd.append('stock',            formData.stock);
+      fd.append('isActive',         String(formData.isActive));
+      fd.append('isFeatured',       String(formData.isFeatured));
+      fd.append('isFastMoving',     String(formData.isFastMoving));
+      if (formData.shortDescription) fd.append('shortDescription', formData.shortDescription);
+      if (formData.originalPrice)    fd.append('originalPrice',    formData.originalPrice);
+      if (formData.brand)            fd.append('brand',            formData.brand);
+      if (formData.sku)              fd.append('sku',              formData.sku);
+
+      // ── JSON-encoded arrays ────────────────────────────────────────────
+      if (selectedCategories.length)  fd.append('categories',        JSON.stringify(selectedCategories));
+      if (selectedVehicles.length)    fd.append('compatibleVehicles', JSON.stringify(selectedVehicles));
+      if (variableSpecs.length)       fd.append('variableSpecs',     JSON.stringify(variableSpecs));
+      if (features.filter(f => f).length) fd.append('features', JSON.stringify(features.filter(f => f)));
+      if (packageContents.filter(p => p).length) fd.append('packageContents', JSON.stringify(packageContents.filter(p => p)));
+      if (validQna.length)            fd.append('qna',              JSON.stringify(validQna));
+
+      const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
+      if (tags.length) fd.append('tags', JSON.stringify(tags));
+
+      // ── Image files ────────────────────────────────────────────────────
+      images.forEach((file) => fd.append('images', file));
+
+      // Use raw fetch so we can send multipart without apiClient JSON serialization
+      const token = typeof window !== 'undefined'
+        ? document.cookie.match(/(?:^|;\s*)token=([^;]*)/)?.[1] ?? ''
+        : '';
+      const csrfToken = typeof window !== 'undefined'
+        ? document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? ''
+        : '';
+
+      const res = await fetch('/api/v1/products', {
+        method: 'POST',
+        headers: {
+          ...(token      ? { Authorization: `Bearer ${token}` } : {}),
+          ...(csrfToken  ? { 'X-XSRF-TOKEN': decodeURIComponent(csrfToken) } : {}),
+        },
+        credentials: 'include',
+        body: fd,
       });
-      
-      await apiClient.post('/products', productData);
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to create product');
+
       alert('Product created successfully');
       router.push('/admin/products');
     } catch (err: any) {
@@ -732,40 +756,12 @@ export default function CreateProductPage() {
           {/* Images */}
           <div className="md:col-span-2">
             <h2 className="text-xl font-semibold mb-4">Product Images</h2>
-            
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <Upload className="mx-auto h-12 w-12 text-gray-400" />
-              <div className="mt-4">
-                <label htmlFor="image-upload" className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                  Select Images
-                </label>
-                <input
-                  id="image-upload"
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
-                <p className="mt-2 text-sm text-gray-500">
-                  PNG, JPG, GIF up to 10MB
-                </p>
-              </div>
-              
-              {imagePreviews.length > 0 && (
-                <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                  {imagePreviews.map((preview, index) => (
-                    <div key={index} className="relative">
-                      <img 
-                        src={preview} 
-                        alt={`Preview ${index}`} 
-                        className="h-24 w-full object-cover rounded-md"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ImageUploader
+              label="Upload product images (JPG, PNG, WebP · max 5 MB each)"
+              maxFiles={10}
+              onFilesChange={(files) => setImages(files)}
+              disabled={submitting}
+            />
           </div>
         </div>
         

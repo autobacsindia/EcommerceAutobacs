@@ -74,6 +74,12 @@ const UserSchema = new mongoose.Schema({
     userAgent: String
   }],
 
+  // Profile avatar
+  avatar: {
+    url:       { type: String, default: '' },  // Cloudinary secure_url
+    public_id: { type: String, default: '' },  // Cloudinary public_id (for deletion)
+  },
+
   // Store Credits / Wallet
   wallet: {
     balance: { type: Number, default: 0 },

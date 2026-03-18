@@ -3,6 +3,8 @@ import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { validateProfileUpdate } from "../middleware/validationMiddleware.js";
+import { uploadSingle, handleMulterError } from "../middleware/uploadMiddleware.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
 const router = express.Router();
 
@@ -83,3 +85,64 @@ router.put("/", protect, validateProfileUpdate, asyncHandler(async (req, res) =>
 }));
 
 export default router;
+
+// @route   POST /profile/avatar
+// @desc    Upload or replace user avatar
+// @access  Private
+router.post(
+  "/avatar",
+  protect,
+  uploadSingle('avatar'),
+  handleMulterError,
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image file provided' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Delete old avatar from Cloudinary if it exists
+    if (user.avatar?.public_id) {
+      await deleteFromCloudinary(user.avatar.public_id);
+    }
+
+    const uploaded = await uploadToCloudinary(req.file.buffer, {
+      folder: 'autobacs/users',
+    });
+
+    user.avatar = { url: uploaded.secure_url, public_id: uploaded.public_id };
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Avatar uploaded successfully',
+      avatar: user.avatar,
+    });
+  })
+);
+
+// @route   DELETE /profile/avatar
+// @desc    Remove user avatar
+// @access  Private
+router.delete(
+  "/avatar",
+  protect,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.avatar?.public_id) {
+      await deleteFromCloudinary(user.avatar.public_id);
+    }
+
+    user.avatar = { url: '', public_id: '' };
+    await user.save();
+
+    res.json({ success: true, message: 'Avatar removed successfully' });
+  })
+);

@@ -22,8 +22,9 @@ const CategorySchema = new mongoose.Schema({
     default: null
   },
   image: {
-    url: String,
-    alt: String
+    url:       String,  // Cloudinary secure_url
+    public_id: String,  // Cloudinary public_id (for deletion/replacement)
+    alt:       String
   },
   isActive: {
     type: Boolean,

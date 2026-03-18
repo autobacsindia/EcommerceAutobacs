@@ -4,6 +4,8 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
+import { uploadSingle, handleMulterError, validateUploadedFiles } from "../middleware/uploadMiddleware.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
 const router = express.Router();
 
@@ -94,54 +96,99 @@ router.get("/slug/:slug", validateSlugParam, cacheResponse(CATEGORY_ITEM_TTL), a
 }));
 
 // @route   POST /categories
-// @desc    Create new category
+// @desc    Create new category (optionally with image file upload)
 // @access  Private/Admin
-router.post("/", protect, admin, validateCategory, asyncHandler(async (req, res) => {
-  const { name, slug, description, parent, image, order } = req.body;
+router.post(
+  "/",
+  protect,
+  admin,
+  uploadSingle('image'),
+  handleMulterError,
+  validateUploadedFiles,
+  validateCategory,
+  asyncHandler(async (req, res) => {
+    const { name, slug, description, parent, order } = req.body;
 
-  const category = await Category.create({
-    name,
-    slug,
-    description,
-    parent,
-    image,
-    order
-  });
+    let imageData = req.body.image || {};  // allow plain URL object from JSON
 
-  invalidateCache('categories');
+    // If a file was uploaded, send it to Cloudinary
+    if (req.file) {
+      const uploaded = await uploadToCloudinary(req.file.buffer, {
+        folder: 'autobacs/categories',
+      });
+      imageData = {
+        url:       uploaded.secure_url,
+        public_id: uploaded.public_id,
+        alt:       name,
+      };
+    }
 
-  res.status(201).json({
-    success: true,
-    message: 'Category created successfully',
-    category
-  });
-}));
+    const category = await Category.create({
+      name,
+      slug,
+      description,
+      parent,
+      image: imageData,
+      order,
+    });
+
+    invalidateCache('categories');
+
+    res.status(201).json({
+      success: true,
+      message: 'Category created successfully',
+      category,
+    });
+  })
+);
 
 // @route   PUT /categories/:id
-// @desc    Update category
+// @desc    Update category (optionally replace image via file upload)
 // @access  Private/Admin
-router.put("/:id", protect, admin, validateCategoryUpdate, asyncHandler(async (req, res) => {
-  const category = await Category.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true, runValidators: true }
-  );
+router.put(
+  "/:id",
+  protect,
+  admin,
+  uploadSingle('image'),
+  handleMulterError,
+  validateUploadedFiles,
+  validateCategoryUpdate,
+  asyncHandler(async (req, res) => {
+    const category = await Category.findById(req.params.id);
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'Category not found' });
+    }
 
-  if (!category) {
-    return res.status(404).json({
-      success: false,
-      message: 'Category not found'
-    });
-  }
+    const updateData = { ...req.body };
 
-  invalidateCache('categories');
+    // If a new file was uploaded, replace old Cloudinary image
+    if (req.file) {
+      // Delete old image if it has a public_id
+      if (category.image?.public_id) {
+        await deleteFromCloudinary(category.image.public_id);
+      }
 
-  res.json({
-    success: true,
-    message: 'Category updated successfully',
-    category
-  });
-}));
+      const uploaded = await uploadToCloudinary(req.file.buffer, {
+        folder: 'autobacs/categories',
+      });
+      updateData.image = {
+        url:       uploaded.secure_url,
+        public_id: uploaded.public_id,
+        alt:       updateData.name || category.name,
+      };
+    }
+
+    const updated = await Category.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    invalidateCache('categories');
+
+    res.json({ success: true, message: 'Category updated successfully', category: updated });
+  })
+);
 
 // @route   DELETE /categories/:id
 // @desc    Delete category (soft delete)
