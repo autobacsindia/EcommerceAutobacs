@@ -8,7 +8,15 @@
  * buildOptimizedUrl(publicId, transforms)      — optimized URL builder
  */
 import cloudinary from '../config/cloudinary.js';
-import { AppError } from '../middleware/errorMiddleware.js';
+
+/** Lightweight HTTP error — carries a statusCode for the Express error handler */
+class AppError extends Error {
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = 'AppError';
+  }
+}
 
 /** Formats accepted at Cloudinary level (second defence after multer) */
 const ALLOWED_FORMATS = ['jpg', 'jpeg', 'png', 'webp'];

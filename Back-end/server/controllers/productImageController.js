@@ -21,8 +21,17 @@ import {
   deleteFromCloudinary,
   deleteManyFromCloudinary,
 } from '../utils/cloudinaryHelpers.js';
-import { AppError } from '../middleware/errorMiddleware.js';
+import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+
+/** Lightweight HTTP error — carries a statusCode for the Express error handler */
+class AppError extends Error {
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = 'AppError';
+  }
+}
 
 const BASE_FOLDER = 'autobacs/products';
 
