@@ -7,18 +7,22 @@
  *
  * Security hardening applied:
  *   1. File type: MIME allowlist (multer fileFilter) + magic-byte verification
- *   2. Size limit: 3 MB per file (not 5 MB)
+ *   2. Size limit: 3 MB per file
  *   3. Count limit: 8 files per request
  *   4. Empty-file rejection: 0-byte files are rejected
+ *   5. Dimension guard: rejects images wider/taller than MAX_DIMENSION px
+ *   6. Duplicate guard: rejects files whose SHA-256 hash matches another in the same request
+ *   7. Concurrency guard: rejects uploads when too many requests are uploading simultaneously
  *
  * Exports:
  *   uploadSingle(fieldName)         — single file upload
  *   uploadMultiple(fieldName, max)  — multiple files (default max 8)
  *   uploadFields(fieldsConfig)      — mixed fields
  *   handleMulterError               — Express error handler for multer errors
- *   validateUploadedFiles           — post-multer server-side magic-byte check
+ *   validateUploadedFiles           — post-multer server-side validation chain
  */
 import multer from 'multer';
+import crypto from 'crypto';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -27,6 +31,22 @@ const MAX_FILE_SIZE = 3 * 1024 * 1024;
 
 /** Max files per request — keeps RAM predictable */
 const MAX_FILES = 8;
+
+/**
+ * Max image dimension in pixels (width OR height).
+ * A 3000×3000 JPEG can be <3 MB but still expensive to store/transform.
+ * Reject anything wider/taller than this.
+ */
+const MAX_DIMENSION = 4000;
+
+/**
+ * Max simultaneous upload requests server-wide.
+ * Prevents 10 admins × 8 × 3 MB = 240 MB RAM spikes.
+ */
+const MAX_CONCURRENT_UPLOADS = 5;
+
+/** Module-level counter shared across all requests in this process */
+let activeUploads = 0;
 
 /** Accepted MIME types */
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
@@ -62,6 +82,65 @@ const matchesMagicBytes = (buffer, mime) => {
   return entry.sigs.some((sig) => buffer.length >= sig.length && buffer.slice(0, sig.length).equals(sig));
 };
 
+// ── Dimension parser (pure-buffer, no extra dependency) ──────────────────────
+/**
+ * Read width/height from raw image bytes without fully decoding the image.
+ * Supports JPEG (SOF markers), PNG (IHDR chunk), WebP (VP8/VP8L/VP8X chunks).
+ * Returns null if dimensions can’t be determined (treated as a pass).
+ */
+const getDimensions = (buffer, mime) => {
+  try {
+    const effectiveMime = mime === 'image/jpg' ? 'image/jpeg' : mime;
+
+    if (effectiveMime === 'image/png') {
+      // PNG IHDR: bytes 16-23 are width (4) + height (4) big-endian
+      if (buffer.length < 24) return null;
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+
+    if (effectiveMime === 'image/jpeg') {
+      // Scan for SOF0/SOF1/SOF2 markers (FF C0, FF C1, FF C2)
+      let i = 2;
+      while (i < buffer.length - 8) {
+        if (buffer[i] !== 0xFF) break;
+        const marker = buffer[i + 1];
+        if (marker >= 0xC0 && marker <= 0xC3) {
+          // SOF: precision(1) + height(2) + width(2)
+          return { height: buffer.readUInt16BE(i + 5), width: buffer.readUInt16BE(i + 7) };
+        }
+        const segLen = buffer.readUInt16BE(i + 2);
+        i += 2 + segLen;
+      }
+      return null;
+    }
+
+    if (effectiveMime === 'image/webp') {
+      if (buffer.length < 30) return null;
+      const chunkType = buffer.slice(12, 16).toString('ascii');
+      if (chunkType === 'VP8 ' && buffer.length >= 34) {
+        // Lossy: width/height at bytes 26-29 (14-bit little-endian, minus 1)
+        const w = (buffer.readUInt16LE(26) & 0x3FFF) + 1;
+        const h = (buffer.readUInt16LE(28) & 0x3FFF) + 1;
+        return { width: w, height: h };
+      }
+      if (chunkType === 'VP8L' && buffer.length >= 25) {
+        // Lossless
+        const bits = buffer.readUInt32LE(21);
+        return { width: (bits & 0x3FFF) + 1, height: ((bits >> 14) & 0x3FFF) + 1 };
+      }
+      if (chunkType === 'VP8X' && buffer.length >= 34) {
+        const w = buffer.readUIntLE(24, 3) + 1;
+        const h = buffer.readUIntLE(27, 3) + 1;
+        return { width: w, height: h };
+      }
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 // ── Storage ────────────────────────────────────────────────────────────────
 const storage = multer.memoryStorage();
 
@@ -92,14 +171,48 @@ const upload = multer({
 // ── Post-multer server-side validation middleware ──────────────────────────
 
 /**
- * validateUploadedFiles — place AFTER multer middleware, BEFORE controller.
+ * concurrentUploadGuard — place BEFORE multer to block overloaded upload slots.
  *
- * Performs:
- *   1. Empty-file rejection (0 bytes)
- *   2. Magic-byte verification (prevents MIME spoofing)
+ * Increments activeUploads on entry, decrements on res.finish.
+ * Returns 429 immediately if the server is already at MAX_CONCURRENT_UPLOADS.
  *
  * @example
- *   router.post('/', protect, admin, uploadMultiple('images'), validateUploadedFiles, asyncHandler(createProduct))
+ *   router.post('/', protect, admin, concurrentUploadGuard, uploadMultiple('images'), ...)
+ */
+export const concurrentUploadGuard = (req, res, next) => {
+  if (activeUploads >= MAX_CONCURRENT_UPLOADS) {
+    console.warn(
+      `[Upload] Concurrent upload limit reached (${activeUploads}/${MAX_CONCURRENT_UPLOADS}). Rejecting request.`
+    );
+    return res.status(429).json({
+      success: false,
+      message: 'Server is busy processing other uploads. Please try again in a moment.',
+    });
+  }
+
+  activeUploads++;
+  console.log(`[Upload] Upload slot acquired. Active: ${activeUploads}/${MAX_CONCURRENT_UPLOADS}`);
+
+  // Always release the slot when the response finishes (success or error)
+  res.on('finish', () => {
+    activeUploads = Math.max(0, activeUploads - 1);
+    console.log(`[Upload] Upload slot released. Active: ${activeUploads}/${MAX_CONCURRENT_UPLOADS}`);
+  });
+
+  next();
+};
+
+/**
+ * validateUploadedFiles — place AFTER multer middleware, BEFORE controller.
+ *
+ * Validation chain (in order):
+ *   1. Empty-file rejection (0 bytes)
+ *   2. Magic-byte verification (prevents MIME spoofing)
+ *   3. Dimension guard (rejects oversized images by pixel count)
+ *   4. Duplicate guard (rejects identical files in the same request via SHA-256)
+ *
+ * @example
+ *   router.post('/', protect, admin, concurrentUploadGuard, uploadMultiple('images'), validateUploadedFiles, asyncHandler(createProduct))
  */
 export const validateUploadedFiles = (req, res, next) => {
   const files = req.files
@@ -111,8 +224,10 @@ export const validateUploadedFiles = (req, res, next) => {
   // No files is OK — controller decides whether files are required
   if (!files.length) return next();
 
+  const seenHashes = new Set();
+
   for (const file of files) {
-    // Reject empty files
+    // 1. Reject empty files
     if (!file.buffer || file.buffer.length === 0) {
       return res.status(400).json({
         success: false,
@@ -120,7 +235,7 @@ export const validateUploadedFiles = (req, res, next) => {
       });
     }
 
-    // Magic-byte check
+    // 2. Magic-byte check (prevent MIME spoofing)
     if (!matchesMagicBytes(file.buffer, file.mimetype)) {
       console.warn(
         `[Upload] Magic-byte mismatch: "${file.originalname}" claims ${file.mimetype} but content doesn't match.`
@@ -131,8 +246,36 @@ export const validateUploadedFiles = (req, res, next) => {
       });
     }
 
+    // 3. Dimension guard — read pixel dimensions without decoding the full image
+    const dims = getDimensions(file.buffer, file.mimetype);
+    if (dims) {
+      if (dims.width > MAX_DIMENSION || dims.height > MAX_DIMENSION) {
+        console.warn(
+          `[Upload] Dimension rejected: "${file.originalname}" is ${dims.width}×${dims.height}px (max ${MAX_DIMENSION}px)`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Image "${file.originalname}" is too large (${dims.width}×${dims.height}px). ` +
+                   `Maximum allowed dimension is ${MAX_DIMENSION}×${MAX_DIMENSION}px.`,
+        });
+      }
+    }
+
+    // 4. Duplicate detection — SHA-256 of file content
+    const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+    if (seenHashes.has(hash)) {
+      console.warn(`[Upload] Duplicate file detected: "${file.originalname}" (SHA-256: ${hash.slice(0, 16)}…)`);
+      return res.status(400).json({
+        success: false,
+        message: `Duplicate file detected: "${file.originalname}" is identical to another file in this upload.`,
+      });
+    }
+    seenHashes.add(hash);
+
     console.log(
-      `[Upload] Validated: "${file.originalname}" | ${file.mimetype} | ${(file.buffer.length / 1024).toFixed(1)} KB`
+      `[Upload] Validated: "${file.originalname}" | ${file.mimetype} | ` +
+      `${(file.buffer.length / 1024).toFixed(1)} KB` +
+      (dims ? ` | ${dims.width}×${dims.height}px` : '')
     );
   }
 

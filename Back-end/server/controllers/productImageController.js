@@ -133,6 +133,18 @@ export const updateProductWithImages = async (req, res) => {
   const replaceImages = fields.replaceImages === 'true' || fields.replaceImages === true;
   delete fields.replaceImages;
 
+  // public_ids the client staged for deletion (deferred from UI remove actions)
+  // These are deleted AFTER DB save — never before — to keep Cloudinary + DB in sync
+  let clientPendingDeletes = [];
+  if (fields.deletePublicIds) {
+    try {
+      clientPendingDeletes = JSON.parse(fields.deletePublicIds);
+    } catch {
+      clientPendingDeletes = [];
+    }
+    delete fields.deletePublicIds;
+  }
+
   console.log(
     `[ProductController] UPDATE product: ${product._id} | "${product.name}" | ${files.length} new image(s) | replaceImages=${replaceImages}`
   );
@@ -194,11 +206,24 @@ export const updateProductWithImages = async (req, res) => {
     throw dbError;
   }
 
-  // ── Step 4: Delete OLD images from Cloudinary (AFTER DB confirmed) ────
-  // Only delete if we replaced images. If we appended, old images are still referenced.
-  if (replaceImages && newUploads.length > 0 && oldPublicIds.length > 0) {
-    console.log(`[ProductController] Deleting ${oldPublicIds.length} replaced image(s) from Cloudinary`);
-    await deleteManyFromCloudinary(oldPublicIds);
+  // ── Step 4: Delete images from Cloudinary (AFTER DB confirmed) ──────
+  //
+  // Two sources of IDs to clean up:
+  //   A) replaceImages=true  → delete all OLD product images (gallery replaced)
+  //   B) clientPendingDeletes → images the admin individually removed in the UI
+  //
+  // Failures here are logged with [CLEANUP_REQUIRED] by deleteFromCloudinary but
+  // do NOT throw — the DB is already consistent at this point, so we never
+  // unwind a successful save over a Cloudinary cleanup failure.
+  const toDelete = new Set();
+  if (replaceImages && oldPublicIds.length > 0) {
+    oldPublicIds.forEach((id) => toDelete.add(id));
+  }
+  clientPendingDeletes.forEach((id) => typeof id === 'string' && id && toDelete.add(id));
+
+  if (toDelete.size > 0) {
+    console.log(`[ProductController] Cleaning up ${toDelete.size} Cloudinary asset(s) post-save`);
+    await deleteManyFromCloudinary([...toDelete]);
   }
 
   invalidateCache('products');
@@ -290,7 +315,11 @@ export const deleteProductImage = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) throw new AppError('Product not found', 404);
 
-  const publicId = Buffer.from(req.params.encodedPublicId, 'base64').toString('utf8');
+  // Decode URL-safe base64 (- → +, _ → /, pad back to multiple-of-4)
+  const raw = req.params.encodedPublicId
+    .replace(/-/g, '+').replace(/_/g, '/') +
+    '=='.slice(0, (4 - (req.params.encodedPublicId.length % 4)) % 4);
+  const publicId = Buffer.from(raw, 'base64').toString('utf8');
 
   console.log(`[ProductController] DELETE image from ${product._id}: public_id="${publicId}"`);
 

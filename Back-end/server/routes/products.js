@@ -46,6 +46,7 @@ import {
   uploadFields,
   handleMulterError,
   validateUploadedFiles,
+  concurrentUploadGuard,
 } from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
@@ -269,6 +270,7 @@ router.post(
   "/",
   protect,
   admin,
+  concurrentUploadGuard,
   uploadMultiple('images', 8),
   handleMulterError,
   validateUploadedFiles,
@@ -284,6 +286,7 @@ router.put(
   protect,
   admin,
   validateProductIdParam,
+  concurrentUploadGuard,
   uploadMultiple('images', 8),
   handleMulterError,
   validateUploadedFiles,
@@ -310,6 +313,7 @@ router.post(
   "/:id/images",
   protect,
   admin,
+  concurrentUploadGuard,
   uploadMultiple('images', 8),
   handleMulterError,
   validateUploadedFiles,

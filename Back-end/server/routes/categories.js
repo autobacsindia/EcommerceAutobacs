@@ -4,7 +4,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
-import { uploadSingle, handleMulterError, validateUploadedFiles } from "../middleware/uploadMiddleware.js";
+import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
 const router = express.Router();
@@ -102,6 +102,7 @@ router.post(
   "/",
   protect,
   admin,
+  concurrentUploadGuard,
   uploadSingle('image'),
   handleMulterError,
   validateUploadedFiles,
@@ -149,6 +150,7 @@ router.put(
   "/:id",
   protect,
   admin,
+  concurrentUploadGuard,
   uploadSingle('image'),
   handleMulterError,
   validateUploadedFiles,

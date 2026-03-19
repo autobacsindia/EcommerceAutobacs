@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import apiClient from '@/lib/api';
-import { ArrowLeft, Upload } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
 
 interface Category {
   _id: string;
@@ -35,7 +36,7 @@ interface Product {
   offerStartDate?: string;
   offerEndDate?: string;
   isActive: boolean;
-  images: { url: string; alt: string; isPrimary: boolean }[];
+  images: { url: string; public_id: string; alt: string; isPrimary: boolean }[];
   features?: string[];
   packageContents?: string[];
   variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number; image?: string }> }>;
@@ -81,9 +82,12 @@ export default function EditProductPage() {
     isActive: true,
   });
   
-  const [images, setImages] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [existingImages, setExistingImages] = useState<{ url: string; alt: string; isPrimary: boolean }[]>([]);
+  const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<CloudinaryImage[]>([]);
+  // Track pending deletions — applied atomically on submit (avoids race conditions)
+  const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
+  // Replace mode: when true, existing gallery is wiped and replaced by new uploads
+  const [replaceMode, setReplaceMode] = useState(false);
   const [variableSpecs, setVariableSpecs] = useState<Array<{ key: string; options: Array<{ label: string; price: number; image?: string; images?: string[] }> }>>([]);
   const [features, setFeatures] = useState<string[]>([]);
   const [packageContents, setPackageContents] = useState<string[]>([]);
@@ -124,7 +128,14 @@ export default function EditProductPage() {
       const productData = response.product;
       
       setProduct(productData);
-      setExistingImages(productData.images || []);
+      // Normalise to CloudinaryImage shape (old images may have no public_id)
+      const imgs: CloudinaryImage[] = (productData.images || []).map((img: any) => ({
+        url:       img.url || '',
+        public_id: img.public_id || '',
+        alt:       img.alt || '',
+        isPrimary: img.isPrimary || false,
+      }));
+      setExistingImages(imgs);
       setVariableSpecs(productData.variableSpecs || []);
       setFeatures(productData.features || []);
       setPackageContents(productData.packageContents || []);
@@ -192,19 +203,27 @@ export default function EditProductPage() {
     }));
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setImages(files);
-      
-      // Create previews
-      const previews = files.map(file => URL.createObjectURL(file));
-      setImagePreviews(previews);
+  /**
+   * Called by ImageUploader when admin removes an existing image.
+   *
+   * Design: deferred deletion — we DON'T call the API immediately.
+   * Instead we queue the public_id into pendingDeletes and remove from UI.
+   * The actual Cloudinary DELETE fires inside handleSubmit after the PUT
+   * succeeds, which means:
+   *   ✅ No race condition between delete and submit
+   *   ✅ Atomic — if submit fails, images are never deleted
+   *   ✅ Single mutation path (one source of truth)
+   *
+   * If the image has no public_id (legacy migrated images), it is simply
+   * dropped from the form — it will be absent from the next PUT payload.
+   */
+  const handleRemoveExisting = (publicId: string, index: number) => {
+    // Remove from UI immediately
+    setExistingImages((prev) => prev.filter((_, i) => i !== index));
+    // Queue for deletion after submit succeeds
+    if (publicId) {
+      setPendingDeletes((prev) => [...prev, publicId]);
     }
-  };
-
-  const removeExistingImage = (index: number) => {
-    setExistingImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -239,37 +258,77 @@ export default function EditProductPage() {
     
     try {
       const validQna = qna.filter(item => item.question.trim() !== '' && item.answer.trim() !== '');
-      
-      const productData = {
-        ...formData,
-        price,
-        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
-        stock,
-        // category: formData.category || undefined, // Replaced by categories
-        categories: selectedCategories, // Send array directly, even if empty
-        tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
-        offerStartDate: formData.offerStartDate || null,
-        offerEndDate: formData.offerEndDate || null,
-        // In a real implementation, we would handle image uploads
-        // For now, we'll just send existing images
-        images: existingImages,
-        variableSpecs: variableSpecs.length > 0 ? variableSpecs : undefined,
-        compatibleVehicles: selectedVehicles.length > 0 ? selectedVehicles : undefined,
-        features: features.length > 0 ? features : undefined,
-        packageContents: packageContents.length > 0 ? packageContents : undefined,
-        qna: validQna.length > 0 ? validQna : undefined,
-      };
-      
-      // Remove empty fields
-      Object.keys(productData).forEach(key => {
-        if (productData[key as keyof typeof productData] === '') {
-          delete productData[key as keyof typeof productData];
-        }
-      });
-      
-      console.log('Submitting product data:', productData);
 
-      await apiClient.put(`/products/${productId}`, productData);
+      // Build multipart FormData so new image files travel as binary
+      const fd = new FormData();
+
+      // ── Scalar fields ──────────────────────────────────────────────────────
+      fd.append('name',             formData.name);
+      fd.append('description',      formData.description);
+      fd.append('shortDescription', formData.shortDescription);
+      fd.append('price',            String(price));
+      if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
+      fd.append('stock',      String(stock));
+      fd.append('sku',        formData.sku);
+      fd.append('brand',      formData.brand);
+      fd.append('isActive',   String(formData.isActive));
+      fd.append('isFeatured', String(formData.isFeatured));
+      fd.append('isFastMoving',    String(formData.isFastMoving));
+      fd.append('isOfferFeatured', String(formData.isOfferFeatured));
+      if (formData.offerStartDate) fd.append('offerStartDate', formData.offerStartDate);
+      if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
+
+      // ── JSON-encoded arrays ────────────────────────────────────────────────
+      fd.append('categories',      JSON.stringify(selectedCategories));
+      fd.append('tags',            JSON.stringify(tagsInput.split(',').map(t => t.trim()).filter(Boolean)));
+      fd.append('compatibleVehicles', JSON.stringify(selectedVehicles));
+      if (features.length)       fd.append('features',       JSON.stringify(features));
+      if (packageContents.length) fd.append('packageContents', JSON.stringify(packageContents));
+      if (variableSpecs.length)  fd.append('variableSpecs',  JSON.stringify(variableSpecs));
+      if (validQna.length)       fd.append('qna',            JSON.stringify(validQna));
+
+      // ── Existing images (keep them as-is, append mode) ────────────────────
+      // replaceMode=true → controller deletes old gallery and uses only new uploads
+      // replaceMode=false (default) → controller appends new files to existing gallery
+      fd.append('replaceImages', String(replaceMode));
+
+      // ── Deferred deletes ──────────────────────────────────────
+      // Images the admin removed from UI are sent here so the BACKEND deletes
+      // them from Cloudinary AFTER the DB save succeeds.
+      // This way:
+      //   ✅ If PUT fails   → images are never deleted (DB + Cloudinary stay in sync)
+      //   ✅ If DELETE fails → backend logs [CLEANUP_REQUIRED] for later retry
+      //   ✅ No orphan risk from in-flight frontend fetch racing the submit
+      if (pendingDeletes.length > 0) {
+        fd.append('deletePublicIds', JSON.stringify(pendingDeletes));
+      }
+
+      // ── New image files (binary) ───────────────────────────────────────────
+      newImageFiles.forEach((file) => fd.append('images', file));
+
+      // ── Send ──────────────────────────────────────────────────────────────
+      const token = localStorage.getItem('authToken') || '';
+      const csrfToken = document.cookie
+        .split('; ')
+        .find((c) => c.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1] || '';
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/products/${productId}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization:  `Bearer ${token}`,
+            'X-XSRF-TOKEN': csrfToken,
+          },
+          credentials: 'include',
+          body: fd,
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update product');
+
       alert('Product updated successfully');
       router.push('/admin/products');
     } catch (err: any) {
@@ -1046,73 +1105,36 @@ export default function EditProductPage() {
           {/* Images */}
           <div className="md:col-span-2">
             <h2 className="text-xl font-semibold mb-4">Product Images</h2>
-            
-            {/* Existing Images */}
-            {existingImages.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-medium mb-3">Existing Images</h3>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                  {existingImages.map((image, index) => (
-                    <div key={index} className="relative group">
-                      <img 
-                        src={image.url} 
-                        alt={image.alt || `Product image ${index + 1}`} 
-                        className="h-24 w-full object-cover rounded-md"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeExistingImage(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                      {image.isPrimary && (
-                        <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
-                          Primary
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Add New Images */}
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <Upload className="mx-auto h-12 w-12 text-gray-400" />
-              <div className="mt-4">
-                <label htmlFor="image-upload" className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                  Add Images
-                </label>
-                <input
-                  id="image-upload"
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
-                <p className="mt-2 text-sm text-gray-500">
-                  PNG, JPG, GIF up to 10MB
-                </p>
-              </div>
-              
-              {imagePreviews.length > 0 && (
-                <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                  {imagePreviews.map((preview, index) => (
-                    <div key={index} className="relative">
-                      <img 
-                        src={preview} 
-                        alt={`Preview ${index}`} 
-                        className="h-24 w-full object-cover rounded-md"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+
+            {/* Replace mode toggle */}
+            <div className="mb-3 flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <input
+                id="replaceMode"
+                type="checkbox"
+                checked={replaceMode}
+                onChange={(e) => setReplaceMode(e.target.checked)}
+                className="h-4 w-4 text-amber-600 border-gray-300 rounded"
+              />
+              <label htmlFor="replaceMode" className="text-sm text-amber-800 font-medium cursor-pointer">
+                Replace entire gallery
+                <span className="ml-1 font-normal text-amber-600">
+                  — all existing images will be removed and replaced by new uploads
+                </span>
+              </label>
             </div>
+
+            <ImageUploader
+              value={replaceMode ? [] : existingImages}
+              onRemoveExisting={handleRemoveExisting}
+              onFilesChange={(files) => setNewImageFiles(files)}
+              maxFiles={8}
+              label=""
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              {replaceMode
+                ? 'Replace mode: upload new images above — existing gallery will be cleared on save.'
+                : 'Existing images can be removed individually. New images are appended on save.'}
+            </p>
           </div>
         </div>
         
