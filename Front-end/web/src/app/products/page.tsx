@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter, type ReadonlyURLSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
+import { SlidersHorizontal, X } from 'lucide-react';
 import ProductFetchError from '@/components/products/ProductFetchError';
 import Pagination from '@/components/layout/Pagination';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
@@ -242,6 +243,7 @@ function ProductsPageInner() {
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
@@ -375,119 +377,146 @@ function ProductsPageInner() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="lg:grid lg:grid-cols-4 lg:gap-8">
-          {/* Filters Sidebar */}
-          <aside className="hidden lg:block space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        {/* ── Mobile filter drawer backdrop ── */}
+        {mobileFiltersOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={() => setMobileFiltersOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* ── Mobile filter drawer ── */}
+        <div
+          className={`fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white shadow-xl transform transition-transform duration-300 ease-in-out lg:hidden overflow-y-auto ${
+            mobileFiltersOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h2 className="text-lg font-bold text-gray-900">Filters</h2>
+            <button
+              onClick={() => setMobileFiltersOpen(false)}
+              className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+              aria-label="Close filters"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="p-4">
             <ProductFilters />
+          </div>
+        </div>
+
+        {/* ── Toolbar: mobile filter toggle + sort ── */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          {/* Left: result count */}
+          <p className="text-sm text-gray-600">
+            {loading ? 'Loading…' : data.products.length > 0 ? (
+              showAll
+                ? `Showing all ${data.products.length} product${data.products.length !== 1 ? 's' : ''}`
+                : `Showing ${data.products.length}${getPaginationTotal(data.pagination) ? ` of ${getPaginationTotal(data.pagination)}` : ''} product${data.products.length !== 1 ? 's' : ''}`
+            ) : 'No products found'}
+          </p>
+
+          {/* Right: controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Mobile “Filters” button — only visible below lg */}
+            <button
+              onClick={() => setMobileFiltersOpen(true)}
+              className="lg:hidden inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+            </button>
+
+            {/* Show All toggle */}
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showAll}
+                onChange={handleShowAllToggle}
+                className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+              />
+              <span className={showAll ? 'text-blue-600 font-medium' : ''}>
+                Show all{showAll ? ' (on)' : ''}
+              </span>
+            </label>
+
+            {/* Sort */}
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={currentSort}
+              onChange={handleSortChange}
+              disabled={loading}
+            >
+              <option value="createdAt_desc">Newest First</option>
+              <option value="price_asc">Price: Low → High</option>
+              <option value="price_desc">Price: High → Low</option>
+              <option value="name_asc">Name: A – Z</option>
+              <option value="rating_desc">Highest Rated</option>
+            </select>
+          </div>
+        </div>
+
+        {/* ── Sidebar + grid ── */}
+        <div className="flex gap-8">
+          {/* Desktop sidebar */}
+          <aside className="hidden lg:block w-64 flex-shrink-0">
+            <div className="sticky top-24">
+              <ProductFilters />
+            </div>
           </aside>
 
-          {/* Products Grid */}
-          <div className="lg:col-span-3">
-            {/* Results Header */}
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-gray-600">
-                {loading ? (
-                  'Loading products...'
-                ) : data.products.length > 0 ? (
-                  <>
-                    {showAll ? (
-                      `Showing all ${data.products.length} product${data.products.length !== 1 ? 's' : ''}`
-                    ) : (
-                      <>
-                        Showing {data.products.length} product{data.products.length !== 1 ? 's' : ''}
-                        {getPaginationTotal(data.pagination) && ` of ${getPaginationTotal(data.pagination)}`}
-                      </>
-                    )}
-                  </>
-                ) : (
-                  'No products found'
-                )}
-              </p>
-
-              {/* Controls */}
-              <div className="flex items-center gap-4">
-                {/* Show All Toggle */}
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="showAll"
-                    checked={showAll}
-                    onChange={handleShowAllToggle}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                  <label htmlFor="showAll" className={`ml-2 text-sm ${showAll ? 'text-blue-600 font-medium' : 'text-gray-700'}`}>
-                    Show All {showAll && '(Active)'}
-                  </label>
-                </div>
-
-                {/* Sort Dropdown */}
-                <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-gray-600">
-                    Sort by:
-                  </label>
-                  <select
-                    id="sort"
-                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={currentSort}
-                    onChange={handleSortChange}
-                    disabled={loading}
-                  >
-                    <option value="createdAt_desc">Newest First</option>
-                    <option value="price_asc">Price: Low to High</option>
-                    <option value="price_desc">Price: High to Low</option>
-                    <option value="name_asc">Name: A to Z</option>
-                    <option value="rating_desc">Highest Rated</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Error State */}
+          {/* Products area */}
+          <div className="flex-1 min-w-0">
+            {/* Error */}
             {error && !loading && (
               <ProductFetchError onRetry={handleRetry} error={error} />
             )}
 
-            {/* Loading state */}
-            {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
-                    <div className="h-48 bg-gray-200"></div>
-                    <div className="p-4">
-                      <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-4"></div>
-                      <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                      <div className="flex justify-between">
-                        <div className="h-10 bg-gray-200 rounded w-24"></div>
-                        <div className="h-10 bg-gray-200 rounded w-24"></div>
-                      </div>
+            {/* Loading skeleton */}
+            {loading && (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg shadow-sm overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-gray-200" />
+                    <div className="p-3">
+                      <div className="h-4 bg-gray-200 rounded mb-2" />
+                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-3" />
+                      <div className="h-8 bg-gray-200 rounded" />
                     </div>
                   </div>
                 ))}
               </div>
-            ) : !error && data.products.length > 0 ? (
-              <ProductGrid products={data.products} />
-            ) : !error ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found matching your criteria</p>
-                <Link
-                  href="/products"
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
+            )}
+
+            {/* Products grid */}
+            {!loading && !error && data.products.length > 0 && (
+              <>
+                <ProductGrid products={data.products} />
+                {!showAll && data.pagination && (
+                  <div className="mt-8">
+                    <Pagination
+                      pagination={data.pagination}
+                      currentPage={getPaginationPage(data.pagination) || 1}
+                      basePath="/products"
+                      searchParams={new URLSearchParams(searchParams.toString())}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Empty state */}
+            {!loading && !error && data.products.length === 0 && (
+              <div className="text-center py-16">
+                <p className="text-gray-500 text-lg mb-4">No products found</p>
+                <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium">
                   Clear filters
                 </Link>
               </div>
-            ) : null}
-
-            {/* Pagination */}
-            {!loading && !error && !showAll && (
-              <Pagination
-                pagination={data.pagination}
-                currentPage={currentPage}
-                basePath="/products"
-                searchParams={searchParams}
-              />
             )}
           </div>
         </div>

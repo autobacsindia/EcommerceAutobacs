@@ -268,7 +268,7 @@ export default function ProductFilters() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
+    <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
       <h2 className="text-lg font-bold mb-4">Filters</h2>
 
       <div className="mb-6">
