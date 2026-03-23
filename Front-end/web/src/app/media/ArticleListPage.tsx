@@ -18,6 +18,7 @@ interface Article {
   author: string;
   views: number;
   publishedAt: string;
+  createdAt?: string;
   featured: boolean;
 }
 

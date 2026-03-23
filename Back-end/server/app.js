@@ -47,6 +47,7 @@ import {
   publicBrowsingRateLimit,
   authenticatedUserRateLimit,
   checkoutRateLimit,
+  returnsRateLimit,
   adminRateLimit
 } from "./middleware/rateLimitMiddleware.js";
 
@@ -297,7 +298,7 @@ app.use("/api/v1/reviews", authenticatedUserRateLimit, reviewRoutes);
 
 // Checkout / Payment (60 req/min)
 app.use("/api/v1/orders", checkoutRateLimit, orderRoutes);
-app.use("/api/v1/returns", returnRoutes);
+app.use("/api/v1/returns", returnsRateLimit, returnRoutes);
 app.use("/api/v1/razorpay", checkoutRateLimit, razorpayRoutes);
 app.use("/api/v1/payment-methods", checkoutRateLimit, paymentMethodRoutes);
 

@@ -79,5 +79,14 @@ const ReturnRequestSchema = new mongoose.Schema({
 // Index for faster lookups
 ReturnRequestSchema.index({ user: 1, status: 1 });
 ReturnRequestSchema.index({ order: 1 });
+// DB-level idempotency: one active (non-cancelled) return per order+product pair.
+// Closes the race-condition window between the controller's findOne check and create.
+ReturnRequestSchema.index(
+  { order: 1, 'items.product': 1 },
+  {
+    name: 'unique_active_return_per_order_product',
+    partialFilterExpression: { status: { $ne: 'cancelled' } }
+  }
+);
 
 export default mongoose.model("ReturnRequest", ReturnRequestSchema);

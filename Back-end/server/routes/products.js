@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import Product from "../models/Product.js";
+import ImportJob from "../models/ImportJob.js";
 import SearchService from "../services/searchService.js";
 import ProductImportService from "../services/productImportService.js";
 import BrandProductImportService from "../services/brandProductImportService.js";
@@ -502,6 +503,14 @@ router.get("/import/status", protect, admin, asyncHandler(async (req, res) => {
     const importJobs = await ImportJob.find({})
       .sort({ createdAt: -1 })
       .limit(10);
+
+    if (!importJobs.length) {
+      return res.json({
+        success: true,
+        jobs: [],
+        message: 'No import jobs found'
+      });
+    }
 
     res.json({
       success: true,

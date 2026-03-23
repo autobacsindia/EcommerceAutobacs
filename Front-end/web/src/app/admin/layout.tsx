@@ -32,30 +32,42 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [messageCount, setMessageCount] = useState(0);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.replace('/login');
+      } else if (user?.role !== 'admin') {
+        router.replace('/');
+      }
     }
-    // In production, check if user.role === 'admin'
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, user, router]);
 
   useEffect(() => {
     if (isAuthenticated) {
+      const controller = new AbortController();
+
       const fetchStats = async () => {
         try {
-          const res = await apiClient.get<{ success: boolean; data: { newCount: number } }>('/contact/stats');
+          const res = await apiClient.get<{ success: boolean; data: { newCount: number } }>(
+            '/contact/stats',
+            { signal: controller.signal }
+          );
           if (res.success) {
             setMessageCount(res.data.newCount);
           }
-        } catch (error) {
+        } catch (error: any) {
+          if (error.name === 'AbortError') return;
           console.error('Failed to fetch stats:', error);
         }
       };
 
       fetchStats();
       
-      // Optional: Poll every 30 seconds
+      // Poll every 30 seconds
       const interval = setInterval(fetchStats, 30000);
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+        controller.abort();
+      };
     }
   }, [isAuthenticated]);
 
@@ -63,7 +75,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return <div className="text-center py-8">Loading...</div>;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || user?.role !== 'admin') {
     return null;
   }
 

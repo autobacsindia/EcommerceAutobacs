@@ -202,12 +202,15 @@ export default function EnhancedProductFilters() {
   
   // Fetch categories
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await apiClient.get('/categories');
+        const response = await apiClient.get('/categories', { signal: controller.signal });
         setCategories((response as any).data || (response as any).categories || []);
-      } catch (err) {
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
         console.error('Failed to fetch categories:', err);
         // Fallback to hardcoded categories if API fails
         setCategories([
@@ -217,11 +220,12 @@ export default function EnhancedProductFilters() {
           { _id: '5', name: 'Lighting', slug: 'lighting' } as Category,
         ]);
       } finally {
-        setLoadingCategories(false);
+        if (!controller.signal.aborted) setLoadingCategories(false);
       }
     };
 
     fetchCategories();
+    return () => controller.abort();
   }, []);
 
   // Fetch brands (for now we'll use a static list since there's no API endpoint)

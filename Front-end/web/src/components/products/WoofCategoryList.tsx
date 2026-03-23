@@ -22,10 +22,12 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchCategories = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get('/categories');
+        const response = await apiClient.get('/categories', { signal: controller.signal });
         const allCategories = (response as any).data || (response as any).categories || [];
         
         // Build hierarchical structure
@@ -39,14 +41,16 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
         }));
         
         setCategories(categoriesWithChildren);
-      } catch (err) {
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
         console.error('Failed to fetch categories:', err);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchCategories();
+    return () => controller.abort();
   }, []);
 
   const toggleCategory = (categoryId: string) => {

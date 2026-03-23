@@ -21,9 +21,10 @@ async function fetchArticle(slug: string) {
 export async function generateMetadata({
   params,
 }: {
-  params: { type: string; slug: string };
+  params: Promise<{ type: string; slug: string }>;
 }): Promise<Metadata> {
-  const data = await fetchArticle(params.slug);
+  const { slug } = await params;
+  const data = await fetchArticle(slug);
   if (!data) return { title: 'Article Not Found | Autobacs India' };
 
   const article = data.data;
@@ -67,16 +68,17 @@ export async function generateMetadata({
 export default async function ArticleDetailPage({
   params,
 }: {
-  params: { type: string; slug: string };
+  params: Promise<{ type: string; slug: string }>;
 }) {
-  const data = await fetchArticle(params.slug);
+  const { type, slug } = await params;
+  const data = await fetchArticle(slug);
   if (!data) return notFound();
 
   return (
     <ArticleDetailClient
       article={data.data}
       related={data.related || []}
-      type={params.type}
+      type={type}
     />
   );
 }

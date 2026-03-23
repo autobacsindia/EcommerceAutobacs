@@ -1,22 +1,44 @@
 // Rate limiting middleware to prevent API abuse
 // Implements sliding window algorithm with burst capacity support
+//
+// Store: Redis (Upstash) when REDIS_URL is set, in-memory Map as fallback.
+// Redis ensures rate limit state survives restarts and is shared across instances.
 
 import rateLimitEventEmitter from '../services/rateLimitEventEmitter.js';
 import adaptiveThrottlingService from '../services/adaptiveThrottlingService.js';
+import { Redis } from '@upstash/redis';
 
-const rateLimitStore = new Map();
+// ── Redis client (shared with cacheService) ───────────────────────────
+let redisClient = null;
 
-// Simple in-memory rate limiter with burst capacity
+if (process.env.REDIS_URL) {
+  try {
+    redisClient = new Redis({
+      url: process.env.REDIS_URL,
+      token: process.env.REDIS_TOKEN || '',
+    });
+    console.log('[RateLimit] Redis client initialised (Upstash)');
+  } catch (err) {
+    console.warn('[RateLimit] Redis init failed – falling back to in-memory store:', err.message);
+  }
+} else {
+  console.log('[RateLimit] REDIS_URL not set – using in-memory store (single-instance only)');
+}
+
+const rateLimitStore = new Map(); // in-memory fallback
+
+// Simple rate limiter with Redis-backed store and in-memory fallback
 export const rateLimit = (options = {}) => {
   const {
     windowMs = 15 * 60 * 1000, // 15 minutes
     max = 100, // limit each IP to 100 requests per windowMs
     burst = null, // Optional burst capacity
     message = 'Too many requests, please try again later',
-    keyGenerator // Function to generate custom keys
+    keyGenerator, // Function to generate custom keys
+    handler = null  // Optional custom rate-limit handler
   } = options;
 
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // Bypass rate limiting in test environment
     if (process.env.NODE_ENV === 'test') {
       return next();
@@ -26,13 +48,90 @@ export const rateLimit = (options = {}) => {
     const endpoint = req.originalUrl || req.url;
     const adjustedMax = adaptiveThrottlingService.getAdjustedLimit(endpoint, max);
     const effectiveMax = adjustedMax;
-    
+
     // Generate key based on IP (prioritize Cloudflare header if available)
-    const baseKey = keyGenerator 
-      ? keyGenerator(req) 
+    const baseKey = keyGenerator
+      ? keyGenerator(req)
       : req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
     const now = Date.now();
-    
+    const windowSec = Math.ceil(windowMs / 1000);
+
+    // ── Redis path: atomic INCR + EXPIRE ───────────────────────────────────────
+    if (redisClient) {
+      try {
+        const redisKey = `rl:${baseKey}`;
+        // INCR is atomic. Set TTL on first increment only.
+        // If expire fails, delete the key to avoid a permanent block.
+        const count = await redisClient.incr(redisKey);
+        if (count === 1) {
+          try {
+            await redisClient.expire(redisKey, windowSec);
+          } catch (expireErr) {
+            // expire failed — delete the key so it doesn't become permanent
+            await redisClient.del(redisKey).catch(() => {});
+            console.warn('[RateLimit] expire failed, key deleted to prevent permanent block:', expireErr.message);
+            return next();
+          }
+        }
+        // TTL remaining
+        const ttl = count === 1 ? windowSec : await redisClient.ttl(redisKey);
+        const resetTime = now + ttl * 1000;
+
+        res.set('X-RateLimit-Limit', effectiveMax.toString());
+        res.set('X-RateLimit-Remaining', Math.max(0, effectiveMax - count).toString());
+        res.set('X-RateLimit-Reset', new Date(resetTime).toISOString());
+
+        if (count > effectiveMax) {
+          const retryAfter = ttl > 0 ? ttl : 1;
+          rateLimitEventEmitter.emitBlock({
+            endpoint,
+            method: req.method,
+            ipAddress: req.ip || req.connection.remoteAddress,
+            userId: req.user?.id || req.user?._id,
+            userEmail: req.user?.email,
+            limitType: 'window',
+            currentLimit: effectiveMax,
+            attemptCount: count,
+            retryAfter,
+            userAgent: req.get('user-agent'),
+            deviceInfo: req.get('user-agent'),
+            adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
+          });
+
+          res.set('Retry-After', retryAfter.toString());
+          res.set('X-RateLimit-Remaining', '0');
+
+          if (handler) return handler(req, res);
+          return res.status(429).json({
+            success: false,
+            message,
+            rateLimitInfo: { retryAfter, resetTime, type: 'window' }
+          });
+        }
+
+        rateLimitEventEmitter.emitHit({
+          endpoint,
+          method: req.method,
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userId: req.user?.id || req.user?._id,
+          userEmail: req.user?.email,
+          limitType: 'window',
+          currentLimit: effectiveMax,
+          attemptCount: count,
+          userAgent: req.get('user-agent'),
+          deviceInfo: req.get('user-agent'),
+          adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
+        });
+
+        return next();
+      } catch (err) {
+        // Redis error – fail open (allow request) and log
+        console.warn('[RateLimit] Redis error, allowing request:', err.message);
+        return next();
+      }
+    }
+
+    // ── In-memory fallback path (single-instance only) ────────────────────────
     // Clean up old entries
     for (const [key, value] of rateLimitStore.entries()) {
       if (now - value.resetTime > windowMs) {
@@ -169,6 +268,7 @@ export const rateLimit = (options = {}) => {
       res.set('X-RateLimit-Remaining', '0');
       res.set('X-RateLimit-Reset', new Date(record.resetTime + windowMs).toISOString());
       
+      if (handler) return handler(req, res);
       return res.status(429).json({
         success: false,
         message,
@@ -228,6 +328,26 @@ export const checkoutRateLimit = rateLimit({
   burst: 20, // burst up to 20 requests/second
   message: 'Too many checkout requests. Please slow down to prevent duplicate orders.',
   keyGenerator: (req) => `rate_limit:checkout:${req.user?.id || req.ip}`
+});
+
+// Returns API — tighter limit (returns are low-frequency; 15/min leaves plenty of headroom)
+export const returnsRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 15, // 15 requests per minute per user/IP
+  message: 'Too many return requests. Please slow down.',
+  keyGenerator: (req) => `rate_limit:returns:${req.user?.id || req.ip}`,
+  // Log every rate-limit block for abuse monitoring
+  handler: (req, res) => {
+    console.warn(
+      `[RateLimit] /returns blocked | IP: ${req.ip} | user: ${req.user?.id || 'unauthenticated'} | ` +
+      `UA: ${req.get('user-agent') || 'unknown'}`
+    );
+    res.status(429).json({
+      success: false,
+      message: 'Too many return requests. Please slow down.',
+      rateLimitInfo: { retryAfter: 60, type: 'returns' }
+    });
+  }
 });
 
 // Admin APIs

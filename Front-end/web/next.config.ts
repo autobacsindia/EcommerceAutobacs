@@ -98,14 +98,8 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   // Disable standalone mode for now as it's causing path resolution issues in Docker
   // output: 'standalone',
-  reactStrictMode: false,
+  reactStrictMode: true,
   devIndicators: false,
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   compiler: {
     removeConsole: process.env.NODE_ENV === "production"
   },

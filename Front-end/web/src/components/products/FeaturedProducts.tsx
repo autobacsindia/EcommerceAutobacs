@@ -39,13 +39,16 @@ export default function FeaturedProducts() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchFeaturedProducts = async () => {
       try {
         setLoading(true);
         // Use the dedicated endpoint for featured products
-        const response: any = await apiClient.get('/products/featured?limit=6');
+        const response: any = await apiClient.get('/products/featured?limit=6', { signal: controller.signal });
         setProducts(response.products);
       } catch (err: any) {
+        if (err.name === 'AbortError') return;
         console.error('Failed to fetch featured products:', err);
         // Handle rate limit errors specifically
         if (err.status === 429) {
@@ -55,11 +58,12 @@ export default function FeaturedProducts() {
           setError('Failed to load featured products');
         }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchFeaturedProducts();
+    return () => controller.abort();
   }, []);
 
   if (loading) {

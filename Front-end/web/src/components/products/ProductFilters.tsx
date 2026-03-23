@@ -156,35 +156,42 @@ export default function ProductFilters() {
   
   // Fetch categories
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response: any = await apiClient.get('/categories');
-      } catch (err) {
+        const response: any = await apiClient.get('/categories', { signal: controller.signal });
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
         console.error('Failed to fetch categories:', err);
       } finally {
-        setLoadingCategories(false);
+        if (!controller.signal.aborted) setLoadingCategories(false);
       }
     };
 
     fetchCategories();
+    return () => controller.abort();
   }, []);
 
   // Fetch brands
   useEffect(() => {
+    let ignore = false;
+
     const fetchBrands = async () => {
       try {
         setLoadingBrands(true);
         const brandsData = await productService.getBrands();
-        setBrands(brandsData);
+        if (!ignore) setBrands(brandsData);
       } catch (err) {
-        console.error('Failed to fetch brands:', err);
+        if (!ignore) console.error('Failed to fetch brands:', err);
       } finally {
-        setLoadingBrands(false);
+        if (!ignore) setLoadingBrands(false);
       }
     };
 
     fetchBrands();
+    return () => { ignore = true; };
   }, []);
 
   const handleBrandToggle = (brandName: string) => {
