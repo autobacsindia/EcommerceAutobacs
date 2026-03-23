@@ -12,20 +12,23 @@
  * - Transparent Redis / in-memory switching
  */
 
-import { Redis } from '@upstash/redis';
+import Redis from 'ioredis';
 
 // ── Redis client (lazy – only created when REDIS_URL is present) ────────────
 let redisClient = null;
 
 if (process.env.REDIS_URL) {
   try {
-    // Upstash REST Redis: REDIS_URL must be the HTTPS REST URL.
-    // Set REDIS_TOKEN separately, or embed as REDIS_URL=https://<host>?token=<token>
-    redisClient = new Redis({
-      url: process.env.REDIS_URL,
-      token: process.env.REDIS_TOKEN || '',
+    redisClient = new Redis(process.env.REDIS_URL, {
+      // Prevent ioredis from retrying indefinitely on startup failures
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: false,
+      lazyConnect: true,
     });
-    console.log('[CacheService] Redis client initialised (Upstash)');
+    redisClient.on('error', (err) => {
+      console.warn('[CacheService] Redis error:', err.message);
+    });
+    console.log('[CacheService] Redis client initialised (ioredis / Railway)');
   } catch (err) {
     console.warn('[CacheService] Redis init failed – falling back to in-memory cache:', err.message);
     redisClient = null;
@@ -113,7 +116,9 @@ class CacheService {
 
     if (redisClient) {
       try {
-        await redisClient.set(key, value, { ex: ttlSeconds });
+        // ioredis SET with EX (seconds TTL)
+        const serialised = typeof value === 'string' ? value : JSON.stringify(value);
+        await redisClient.set(key, serialised, 'EX', ttlSeconds);
         this.stats.sets++;
         return;
       } catch (err) {
@@ -177,17 +182,17 @@ class CacheService {
   async clearPattern(pattern) {
     if (redisClient) {
       try {
-        // Upstash SCAN to find matching keys, then delete in batch
-        let cursor = 0;
+        // ioredis SCAN to find matching keys, then delete in batch
+        let cursor = '0';
         const keysToDelete = [];
         do {
-          const [nextCursor, keys] = await redisClient.scan(cursor, { match: `*${pattern}*`, count: 100 });
-          cursor = Number(nextCursor);
+          const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', `*${pattern}*`, 'COUNT', '100');
+          cursor = nextCursor;
           keysToDelete.push(...keys);
-        } while (cursor !== 0);
+        } while (cursor !== '0');
 
         if (keysToDelete.length > 0) {
-          await redisClient.del(...keysToDelete);
+          await redisClient.del(keysToDelete);
           this.stats.deletes += keysToDelete.length;
         }
         return keysToDelete.length;

@@ -1,23 +1,27 @@
 // Rate limiting middleware to prevent API abuse
 // Implements sliding window algorithm with burst capacity support
 //
-// Store: Redis (Upstash) when REDIS_URL is set, in-memory Map as fallback.
+// Store: Redis (ioredis / Railway) when REDIS_URL is set, in-memory Map as fallback.
 // Redis ensures rate limit state survives restarts and is shared across instances.
 
 import rateLimitEventEmitter from '../services/rateLimitEventEmitter.js';
 import adaptiveThrottlingService from '../services/adaptiveThrottlingService.js';
-import { Redis } from '@upstash/redis';
+import Redis from 'ioredis';
 
-// ── Redis client (shared with cacheService) ───────────────────────────
+// ── Redis client ───────────────────────────────────────────────────────
 let redisClient = null;
 
 if (process.env.REDIS_URL) {
   try {
-    redisClient = new Redis({
-      url: process.env.REDIS_URL,
-      token: process.env.REDIS_TOKEN || '',
+    redisClient = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: false,
+      lazyConnect: true,
     });
-    console.log('[RateLimit] Redis client initialised (Upstash)');
+    redisClient.on('error', (err) => {
+      console.warn('[RateLimit] Redis error:', err.message);
+    });
+    console.log('[RateLimit] Redis client initialised (ioredis / Railway)');
   } catch (err) {
     console.warn('[RateLimit] Redis init failed – falling back to in-memory store:', err.message);
   }
