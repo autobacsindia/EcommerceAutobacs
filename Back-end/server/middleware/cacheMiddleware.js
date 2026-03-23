@@ -6,7 +6,7 @@ import cacheService from '../services/cacheService.js';
  *
  * @param {number} ttlSeconds - TTL in seconds (default: 300 = 5 min)
  */
-export const cacheResponse = (ttlSeconds = 300) => (req, res, next) => {
+export const cacheResponse = (ttlSeconds = 300) => async (req, res, next) => {
   // Only cache GET requests
   if (req.method !== 'GET') return next();
 
@@ -14,9 +14,9 @@ export const cacheResponse = (ttlSeconds = 300) => (req, res, next) => {
   if (req.headers.authorization) return next();
 
   const key = `route:${req.originalUrl}`;
-  const cached = cacheService.get(key);
+  const cached = await cacheService.get(key);
 
-  if (cached) {
+  if (cached && typeof cached === 'object' && Object.keys(cached).length > 0) {
     res.setHeader('X-Cache', 'HIT');
     return res.json(cached);
   }
@@ -25,7 +25,7 @@ export const cacheResponse = (ttlSeconds = 300) => (req, res, next) => {
   const originalJson = res.json.bind(res);
   res.json = function (body) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      // cacheService.set() expects milliseconds
+      // cacheService.set() expects milliseconds — convert from seconds
       cacheService.set(key, body, ttlSeconds * 1000);
     }
     res.setHeader('X-Cache', 'MISS');

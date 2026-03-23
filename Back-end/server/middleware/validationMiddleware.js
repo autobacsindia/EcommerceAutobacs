@@ -369,6 +369,16 @@ export const validateOrder = [
   body('shippingAddress.postalCode')
     .notEmpty()
     .withMessage('Postal code is required'),
+  // Numeric fields: must be non-negative if provided.
+  // discount is intentionally excluded — it is always ignored server-side.
+  body('shippingCost')
+    .optional()
+    .isFloat({ min: 0, max: 10000 })
+    .withMessage('shippingCost must be a number between 0 and 10000'),
+  body('tax')
+    .optional()
+    .isFloat({ min: 0, max: 100000 })
+    .withMessage('tax must be a non-negative number'),
   validateRequest
 ];
 

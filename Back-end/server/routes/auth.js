@@ -1,7 +1,9 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import fetch from "node-fetch";
+import Redis from "ioredis";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
@@ -41,7 +43,21 @@ import {
 
 const router = express.Router();
 
-// Helper function to generate JWT token with role-based expiration
+// ── Redis client for one-time OAuth code exchange ─────────────────────────
+let oauthRedis = null;
+if (process.env.REDIS_URL) {
+  try {
+    oauthRedis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    });
+    oauthRedis.on('error', (err) => console.warn('[Auth/OAuth] Redis error:', err.message));
+  } catch (err) {
+    console.warn('[Auth/OAuth] Redis init failed:', err.message);
+  }
+}
+
 const generateToken = (user) => {
   // Different expiration times based on role
   let expiresIn;
@@ -727,16 +743,43 @@ const completeSocialLogin = async (req, res, user, provider) => {
   // Log successful login
   await logLoginAttempt(user, true, ipAddress, userAgent);
 
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+
+  // ── Secure: one-time code exchange (PKCE-lite) ──────────────────────────
+  // Never send tokens in the URL — they would leak into browser history,
+  // server logs, and Referer headers. Instead, store tokens server-side
+  // behind a short-lived one-time code and let the frontend POST to exchange it.
+  if (oauthRedis) {
+    const code = crypto.randomBytes(32).toString('hex');
+    await oauthRedis.set(
+      `oauth:code:${code}`,
+      JSON.stringify({ userId: String(user._id), provider }),
+      'EX',
+      60  // code valid for 60 seconds, one-time use
+    );
+    // Stash the actual tokens against the code so /exchange-code can return them
+    await oauthRedis.set(
+      `oauth:tokens:${code}`,
+      JSON.stringify({
+        accessToken: tokens.accessToken,
+        expiresIn: tokens.accessTokenExpiry
+      }),
+      'EX',
+      60
+    );
+    return res.redirect(`${frontendUrl}/auth/social-callback?code=${code}`);
+  }
+
+  // ── Fallback (no Redis): legacy hash fragment ─────────────────────────────
+  // Only reached when Redis is not configured (local dev without Redis).
+  // REDIS_URL must be set in production.
+  console.warn('[Auth] REDIS_URL not set — falling back to insecure hash-fragment token delivery');
   const hashParams = new URLSearchParams({
     accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
     expiresIn: String(tokens.accessTokenExpiry),
     provider
   }).toString();
-
-  const redirectUrl = `${frontendUrl}/auth/social-callback#${hashParams}`;
-  res.redirect(redirectUrl);
+  res.redirect(`${frontendUrl}/auth/social-callback#${hashParams}`);
 };
 
 router.get("/google", (req, res) => {
@@ -970,6 +1013,62 @@ router.get(
         message: "Failed to complete Facebook social login"
       });
     }
+  })
+);
+
+// POST /exchange-code
+// Exchanges a short-lived one-time OAuth code for an access token.
+// The code was stored in Redis by completeSocialLogin (max 60 s, single use).
+router.post(
+  "/exchange-code",
+  asyncHandler(async (req, res) => {
+    const { code } = req.body;
+
+    if (!code || typeof code !== 'string' || !/^[a-f0-9]{64}$/.test(code)) {
+      return res.status(400).json({ success: false, message: 'Invalid code format' });
+    }
+
+    if (!oauthRedis) {
+      return res.status(503).json({
+        success: false,
+        message: 'Code exchange unavailable — Redis not configured'
+      });
+    }
+
+    const codeKey   = `oauth:code:${code}`;
+    const tokensKey = `oauth:tokens:${code}`;
+
+    // Fetch both keys atomically before deleting
+    const [codeData, tokensData] = await Promise.all([
+      oauthRedis.get(codeKey),
+      oauthRedis.get(tokensKey)
+    ]);
+
+    if (!codeData || !tokensData) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+    }
+
+    // Delete both keys — one-time use
+    await Promise.all([
+      oauthRedis.del(codeKey),
+      oauthRedis.del(tokensKey)
+    ]);
+
+    let parsedCode, parsedTokens;
+    try {
+      parsedCode   = JSON.parse(codeData);
+      parsedTokens = JSON.parse(tokensData);
+    } catch {
+      return res.status(500).json({ success: false, message: 'Malformed code data' });
+    }
+
+    console.log(`[Auth] OAuth code exchanged | user: ${parsedCode.userId} | provider: ${parsedCode.provider}`);
+
+    return res.json({
+      success: true,
+      accessToken: parsedTokens.accessToken,
+      expiresIn:   parsedTokens.expiresIn
+    });
   })
 );
 

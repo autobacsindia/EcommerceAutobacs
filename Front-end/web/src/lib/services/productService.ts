@@ -215,9 +215,12 @@ class ProductService {
     } else {
       try {
         const response: any = await apiClient.get(`/brands?limit=${limit}`);
-        return response.brands.map((brand: any) => ({
+        const list: any[] = Array.isArray(response.brands) ? response.brands
+                          : Array.isArray(response.data)   ? response.data
+                          : [];
+        return list.map((brand: any) => ({
           name: brand.name,
-          _id: brand._id,
+          _id: brand._id ?? brand.id ?? brand.slug ?? brand.name,
           productCount: brand.productCount
         }));
       } catch (error) {

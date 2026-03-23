@@ -130,7 +130,16 @@ export const getOrderById = async (req, res) => {
 // @route   POST /orders
 // @access  Private
 export const createOrder = async (req, res) => {
-  const { items, shippingAddress, shippingCost = 0, tax = 0, discount = 0 } = req.body;
+  const { items, shippingAddress } = req.body;
+
+  // ── Price integrity: never trust client-submitted prices ──────────────────
+  // shippingCost and tax are accepted from the client but bounded/validated.
+  // discount is IGNORED entirely — any discounts must be applied server-side
+  // via coupon codes or cart-level logic, never a raw client number.
+  const shippingCost = Math.max(0, Number(req.body.shippingCost) || 0);
+  const tax          = Math.max(0, Number(req.body.tax)          || 0);
+  // Discount is always 0 unless a validated coupon system sets it server-side.
+  const discount = 0;
 
   if (!items || items.length === 0) {
     return res.status(400).json({
@@ -160,6 +169,7 @@ export const createOrder = async (req, res) => {
       });
     }
 
+    // Always use DB price — never item.price from the request
     orderItems.push({
       product: product._id,
       quantity: item.quantity,
@@ -171,7 +181,14 @@ export const createOrder = async (req, res) => {
     subtotal += product.price * item.quantity;
   }
 
-  const totalAmount = subtotal + Number(shippingCost) + Number(tax) - Number(discount);
+  const totalAmount = subtotal + shippingCost + tax - discount;
+
+  if (totalAmount <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Order total must be greater than zero'
+    });
+  }
 
   // Create order
   const order = await Order.create({
