@@ -190,7 +190,42 @@ export const createOrder = async (req, res) => {
     });
   }
 
-  // Create order
+  // ── Atomic stock reservation ───────────────────────────────────────────────
+  // Use findOneAndUpdate with a $gte guard so the deduction and the availability
+  // check are a single atomic MongoDB operation. If two requests race for the
+  // last unit, exactly one will receive null (the guard fails) and we roll back
+  // any units already deducted for this order before returning 409.
+  const reserved = []; // track successfully deducted items for rollback
+
+  for (const item of orderItems) {
+    const updated = await Product.findOneAndUpdate(
+      { _id: item.product, stock: { $gte: item.quantity } }, // atomic lock condition
+      { $inc: { stock: -item.quantity } },
+      { new: false } // we only need to know if the update matched
+    );
+
+    if (!updated) {
+      // Rollback all units already reserved in this loop before this failure
+      if (reserved.length > 0) {
+        await Promise.all(
+          reserved.map((r) =>
+            Product.findByIdAndUpdate(r.product, { $inc: { stock: r.quantity } })
+          )
+        );
+      }
+      // Re-fetch to report the real current stock in the error message
+      const current = await Product.findById(item.product).select('name stock');
+      const available = current?.stock ?? 0;
+      return res.status(409).json({
+        success: false,
+        message: `${current?.name ?? 'Product'} is out of stock. ${available > 0 ? `Only ${available} left` : 'No units available'}.`
+      });
+    }
+
+    reserved.push({ product: item.product, quantity: item.quantity });
+  }
+
+  // Stock is now atomically reserved — persist the order
   const order = await Order.create({
     user: req.user.id,
     items: orderItems,
@@ -202,13 +237,6 @@ export const createOrder = async (req, res) => {
     totalAmount,
     status: 'pending'
   });
-
-  // Update product stock
-  for (const item of orderItems) {
-    await Product.findByIdAndUpdate(item.product, {
-      $inc: { stock: -item.quantity }
-    });
-  }
 
   // Clear user's cart after successful order
   await Cart.findOneAndUpdate(

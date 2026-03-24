@@ -307,18 +307,23 @@ export default function EditProductPage() {
       newImageFiles.forEach((file) => fd.append('images', file));
 
       // ── Send ──────────────────────────────────────────────────────────────
-      const token = localStorage.getItem('authToken') || '';
+      // Use the relative /api/v1 path so the request goes through the Next.js
+      // rewrite proxy → avoids CORS and works in all environments.
+      // apiClient cannot be used here because it JSON.stringify()s the body,
+      // which would corrupt the multipart FormData stream.
       const csrfToken = document.cookie
         .split('; ')
         .find((c) => c.startsWith('XSRF-TOKEN='))
         ?.split('=')[1] || '';
 
+      const authHeader = `Bearer ${apiClient.getAuthToken() ?? localStorage.getItem('authToken') ?? ''}`;
+
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/products/${productId}`,
+        `/api/v1/products/${productId}`,
         {
           method: 'PUT',
           headers: {
-            Authorization:  `Bearer ${token}`,
+            Authorization:  authHeader,
             'X-XSRF-TOKEN': csrfToken,
           },
           credentials: 'include',

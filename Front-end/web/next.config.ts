@@ -39,16 +39,18 @@ const nextConfig: NextConfig = {
     }
 
     if (!apiUrl && process.env.NODE_ENV === 'production') {
-      // Fallback to production URL if env var not set during build
-      apiUrl = 'https://ecommerceautobacs-production.up.railway.app';
-     console.warn('Using fallback production API URL:', apiUrl);
+      // No silent hardcoded fallback — force the env var to be set explicitly.
+      // A missing NEXT_PUBLIC_API_URL in production must be caught at deploy time.
+      throw new Error(
+        '[next.config.ts] NEXT_PUBLIC_API_URL is required in production. Set it in Railway Dashboard.'
+      );
     }
-    
+
     if (!apiUrl) {
-     console.warn('WARNING: NEXT_PUBLIC_API_URL is not defined. Using localhost for development.');
+      console.warn('[next.config.ts] NEXT_PUBLIC_API_URL not set — using http://localhost:8080 for development.');
       apiUrl = 'http://localhost:8080';
     } else {
-     console.log('✓ Rewriting API requests to:', apiUrl);
+      console.log('[next.config.ts] ✓ API rewrite target:', apiUrl);
     }
     
     const targetUrl = apiUrl;

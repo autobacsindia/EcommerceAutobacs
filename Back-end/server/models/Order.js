@@ -106,8 +106,7 @@ const OrderSchema = new mongoose.Schema({
     description: String,
     scannedBy: String
   }],
-  estimatedDeliveryDate: Date,
-  actualDeliveryDate: Date,
+  // estimatedDeliveryDate and actualDeliveryDate removed — unused duplicates of estimatedDelivery / deliveredAt
   estimatedDelivery: Date,
   deliveredAt: Date,
   cancelledAt: Date,
