@@ -39,8 +39,8 @@ const ProductSchema = new mongoose.Schema({
     trim: true
   },
   images: [{
-    url:        { type: String, required: true },   // Cloudinary secure_url
-    public_id:  { type: String, default: '' },      // Cloudinary public_id (used for deletion)
+    url:        { type: String, required: true },   // Cloudinary secure_url or external URL
+    public_id:  { type: String },                   // Cloudinary public_id — absent for WordPress-imported images
     alt:        { type: String },
     isPrimary:  { type: Boolean, default: false }
   }],

@@ -66,22 +66,6 @@ export default function RootLayout({
                         src="https://checkout.razorpay.com/v1/checkout.js"
                         strategy="lazyOnload"
                       />
-                      <Script
-                        id="unregister-sw"
-                        strategy="afterInteractive"
-                        dangerouslySetInnerHTML={{
-                          __html: `
-                            if ('serviceWorker' in navigator) {
-                              navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                                for(let registration of registrations) {
-                                  registration.unregister();
-                                  console.log('Service Worker unregistered');
-                                }
-                              });
-                            }
-                          `,
-                        }}
-                      />
                     </CurrencyProvider>
                   </LocationProvider>
                 </RateLimitProvider>

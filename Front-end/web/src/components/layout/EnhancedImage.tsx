@@ -59,6 +59,10 @@ export default function EnhancedImage({
     // Basic URL validation
     try {
       const urlObj = new URL(source.startsWith('http') ? source : `http://example.com${source}`);
+      // Reject non-HTTP(S) protocols (data:, blob:, file:, etc.)
+      if (!['http:', 'https:'].includes(urlObj.protocol)) {
+        return false;
+      }
       return true;
     } catch {
       // If it's not a valid URL, it might be a relative path which is okay
