@@ -296,7 +296,7 @@ export interface PaymentMethodsData {
  *
  * Usage: `<Link href={productUrl(product)}>`
  */
-export function productUrl(product: { slug?: string | null; _id?: string; id?: string }): string {
-  const identifier = product.slug || product._id || product.id || '';
+export function productUrl(product: { slug?: string | null; _id?: string; id?: string | number }): string {
+  const identifier = product.slug || product._id || (product.id != null ? String(product.id) : '') || '';
   return identifier ? `/products/${identifier}` : '#';
 }
