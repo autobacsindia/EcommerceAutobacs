@@ -1,0 +1,78 @@
+# CI — Backend test suite
+#
+# Runs on every push and pull-request that touches Back-end/server/** or
+# this workflow file itself.  Blocks merges / Railway auto-deploys when
+# any test fails or the 60 % line-coverage floor is breached.
+#
+# Jobs
+#   test  — install deps, run jest --coverage, upload the lcov report
+#
+# Coverage threshold is enforced by jest.config.js (coverageThreshold.global.lines = 60).
+# If the threshold is not met, jest exits non-zero and this job fails.
+
+name: Backend CI
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "Back-end/server/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "Back-end/server/**"
+      - ".github/workflows/ci.yml"
+
+defaults:
+  run:
+    working-directory: Back-end/server
+
+jobs:
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        node-version: ["20.x"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: Back-end/server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Provide the minimum env vars the app reads at module-import time.
+      # Real secrets (Cloudinary, Razorpay, SendGrid) are never needed because
+      # those integrations are fully mocked in the test suite.
+      - name: Run tests with coverage
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-test-jwt-secret-not-for-production
+          RAZORPAY_KEY_ID: rzp_test_placeholder
+          RAZORPAY_KEY_SECRET: placeholder_secret
+          SENDGRID_API_KEY: SG.placeholder
+          SENDGRID_FROM_EMAIL: ci@example.com
+          EMAIL_FROM: ci@example.com
+          WORDPRESS_SITE_URL: http://localhost
+          WORDPRESS_API_KEY: ck_placeholder
+          WORDPRESS_API_SECRET: cs_placeholder
+        run: npm run test:coverage -- --forceExit --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: Back-end/server/coverage/
+          retention-days: 14
