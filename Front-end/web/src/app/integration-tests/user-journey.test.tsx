@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ProductsPageClient from '@/app/products/page';
-import ProductDetailClientPage from '@/app/products/[id]/ClientPage';
+import ProductDetailClientPage from '@/app/products/[slug]/ClientPage';
 import CartPage from '@/app/cart/page';
 import CheckoutPage from '@/app/checkout/page';
 import apiClient from '@/lib/api';
@@ -278,7 +278,7 @@ describe('User Journey Integration Flow', () => {
     // This is a simplified simulation of routing
     if (currentPath.startsWith('/products/p1')) {
       return { 
-        ...render(<ProductDetailClientPage id="p1" />),
+        ...render(<ProductDetailClientPage slug="p1" />),
         mockPush: pushMock 
       };
     } else if (currentPath === '/cart') {

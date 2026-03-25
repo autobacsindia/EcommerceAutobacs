@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ProductDetailPageClient } from '../products/[id]/ClientPage'; // Adjust path
+import { ProductDetailPageClient } from '../products/[slug]/ClientPage'; // Adjust path
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';

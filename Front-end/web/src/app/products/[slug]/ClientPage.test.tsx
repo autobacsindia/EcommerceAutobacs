@@ -149,7 +149,7 @@ describe('ClientPage', () => {
   });
 
   it('renders product details correctly after loading', async () => {
-    render(<ClientPage id="p1" />);
+    render(<ClientPage slug="p1" />);
 
     // Initial loading state
     expect(screen.getByText('Loading product...')).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe('ClientPage', () => {
   });
 
   it('handles variable specifications selection', async () => {
-    render(<ClientPage id="p1" />);
+    render(<ClientPage slug="p1" />);
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
@@ -191,7 +191,7 @@ describe('ClientPage', () => {
   });
 
   it('handles add to cart', async () => {
-    render(<ClientPage id="p1" />);
+    render(<ClientPage slug="p1" />);
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
@@ -212,7 +212,7 @@ describe('ClientPage', () => {
       user: null
     });
 
-    render(<ClientPage id="p1" />);
+    render(<ClientPage slug="p1" />);
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
