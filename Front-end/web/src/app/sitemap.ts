@@ -52,7 +52,7 @@ async function fetchProductPage(page: number): Promise<MetadataRoute.Sitemap> {
   );
   return dedup(
     (data.products ?? []).map((p: any) => ({
-      url: `${BASE_URL}/products/${p._id}`,
+      url: `${BASE_URL}/products/${p.slug || p._id}`,
       lastModified: safeDate(p.updatedAt),
       changeFrequency: 'daily' as ChangeFreq,
       priority: 0.6,

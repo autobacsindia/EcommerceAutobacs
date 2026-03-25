@@ -6,7 +6,7 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
-import { ProductImage } from '@/lib/types';
+import { ProductImage, productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
 import SkeletonLoader from '@/components/layout/SkeletonLoader';
 
@@ -129,7 +129,7 @@ export default function CartPage() {
                     <div className="flex gap-4">
                       {/* Product Image */}
                       <Link
-                        href={`/products/${item.product._id}`}
+                        href={productUrl(item.product)}
                         className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded-md overflow-hidden"
                       >
                         <EnhancedImage
@@ -147,7 +147,7 @@ export default function CartPage() {
                         <div className="flex justify-between">
                           <div>
                             <Link
-                              href={`/products/${item.product._id}`}
+                              href={productUrl(item.product)}
                               className="font-semibold text-gray-900 hover:text-blue-600"
                             >
                               {item.product.name}

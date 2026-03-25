@@ -15,6 +15,7 @@ import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterS
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
+import { productUrl } from '@/lib/types';
 
 export default function VehicleModelPage({ params }: { params: Promise<{ slug: string; page: string }> }) {
   // All hooks in consistent order
@@ -482,10 +483,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                   {paginatedProducts.map((product) => {
                     const rawId = (product && ((product as any)._id || product.id)) ?? null;
                     const productId = rawId != null ? rawId.toString() : '';
-                    const productUrl =
+                    const productPageUrl =
                       typeof (product as any).permalink === 'string' && (product as any).permalink.trim() !== ''
                         ? (product as any).permalink
-                        : (productId ? `/products/${productId}` : '#');
+                        : productUrl(product as any);
 
                     let imageSrc: string | undefined;
                     let imageAlt: string | undefined;
@@ -544,7 +545,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
                     >
                       {/* Product Image */}
-                      <Link href={productUrl} className="block relative h-52 bg-gray-100">
+                      <Link href={productPageUrl} className="block relative h-52 bg-gray-100">
                         {imageSrc ? (
                           <ProductImage
                             src={imageSrc}
@@ -606,7 +607,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         </p>
 
                         {/* Product Name */}
-                        <Link href={productUrl}>
+                        <Link href={productPageUrl}>
                           <h3 className="font-bold text-gray-900 mb-3 line-clamp-2 hover:text-blue-600 transition-colors">
                             {product.name}
                           </h3>

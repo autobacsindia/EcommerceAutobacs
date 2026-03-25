@@ -32,6 +32,7 @@ export interface ProductSpecification {
 export interface Product {
   _id: string;
   name: string;
+  slug?: string;
   description: string;
   shortDescription?: string;
   price: number;
@@ -286,4 +287,16 @@ export interface PaymentMethod {
 export interface PaymentMethodsData {
   paymentMethods: PaymentMethod[];
   count: number;
+}
+
+/**
+ * Returns the canonical URL for a product page.
+ * Prefers the human-readable slug; falls back to ObjectId for legacy documents
+ * that pre-date slug generation.
+ *
+ * Usage: `<Link href={productUrl(product)}>`
+ */
+export function productUrl(product: { slug?: string | null; _id?: string; id?: string }): string {
+  const identifier = product.slug || product._id || product.id || '';
+  return identifier ? `/products/${identifier}` : '#';
 }

@@ -18,6 +18,23 @@ export async function getProduct(req, res) {
   res.json({ success: true, product });
 }
 
+// @desc    Get product by slug (SEO-friendly URL lookup)
+// @route   GET /products/slug/:slug
+// @access  Public
+export async function getProductBySlug(req, res) {
+  const { slug } = req.params;
+
+  const product = await Product.findOne({ slug, isActive: true })
+    .populate('categories', 'name slug description')
+    .populate('compatibleVehicles', 'make model year variant');
+
+  if (!product) {
+    return res.status(404).json({ success: false, message: 'Product not found' });
+  }
+
+  res.json({ success: true, product });
+}
+
 // @route   POST /products/:id/stock
 // @desc    Update product stock
 // @access  Private/Admin

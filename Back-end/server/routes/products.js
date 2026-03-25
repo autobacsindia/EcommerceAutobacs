@@ -47,6 +47,7 @@ import {
 } from "../controllers/productBrandController.js";
 import {
   getProduct,
+  getProductBySlug,
   updateStock,
   cleanupWordPress,
   getCleanupStatus,
@@ -191,6 +192,11 @@ router.post("/cleanup/wordpress", protect, admin, asyncHandler(cleanupWordPress)
 router.get("/cleanup/status", protect, admin, asyncHandler(getCleanupStatus));
 
 // ── Product CRUD ───────────────────────────────────────────────────────────────
+
+// @route   GET /products/slug/:slug
+// @desc    Get product by slug (SEO-friendly canonical URL)
+// @access  Public
+router.get("/slug/:slug", asyncHandler(getProductBySlug));
 
 // @route   GET /products/:id
 // @desc    Get product by ID

@@ -17,48 +17,24 @@ import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 import { toast } from 'react-hot-toast';
 
-async function getProduct(id: string): Promise<any> {
+async function getProduct(slugOrId: string): Promise<any> {
+  // 1. Try the slug-based endpoint first (canonical SEO URL)
   try {
-    // Use the API client which has proper timeout handling
-    const response: any = await apiClient.get(`/products/${id}`);
-    return response?.product || null; // Changed from data.data to data.product to match backend response
-  } catch (error: any) {
-    // Handle invalid ID format gracefully (e.g. when a slug or invalid ID is passed that the backend rejects)
-    const isInvalidId = error?.message?.includes('Invalid ID format') || error?.message?.includes('Cast to ObjectId failed');
-    
-    // If ID is invalid or not found (404), try to find by search (fallback mechanism)
-    // This handles cases where search suggestions might pass a slug or name instead of an ObjectId
-    if (isInvalidId || error?.status === 404) {
-      try {
-        // Search for the product using the ID as a keyword
-        let searchResponse: any = await apiClient.get(`/products?search=${encodeURIComponent(id)}&limit=1`);
-        
-        // If first attempt fails and the ID looks like a slug (has dashes), try replacing dashes with spaces
-        if ((!searchResponse?.products || searchResponse.products.length === 0) && id.includes('-')) {
-          const cleanName = id.replace(/-/g, ' ');
-          searchResponse = await apiClient.get(`/products?search=${encodeURIComponent(cleanName)}&limit=1`);
-        }
-
-        if (searchResponse?.products && searchResponse.products.length > 0) {
-          const foundProduct = searchResponse.products[0];
-          
-          // If we found a product, fetch full details using the real ID
-          if (foundProduct._id) {
-             try {
-               const fullProductResponse: any = await apiClient.get(`/products/${foundProduct._id}`);
-               return fullProductResponse?.product || foundProduct;
-             } catch (detailError) {
-               // If fetching details fails, return the search result (better than nothing)
-               return foundProduct;
-             }
-          }
-          return foundProduct;
-        }
-      } catch (fallbackError) {
-        // Fallback failed, proceed to return null
-      }
+    const response: any = await apiClient.get(`/products/slug/${encodeURIComponent(slugOrId)}`);
+    if (response?.product) return response.product;
+  } catch (slugError: any) {
+    // 404 from slug endpoint → fall through to ObjectId lookup
+    if (slugError?.status !== 404) {
+      console.error('Slug lookup error:', slugError);
     }
+  }
 
+  // 2. Legacy ObjectId fallback (handles old bookmarks / internal admin links)
+  try {
+    const response: any = await apiClient.get(`/products/${slugOrId}`);
+    return response?.product || null;
+  } catch (error: any) {
+    const isInvalidId = error?.message?.includes('Invalid ID format') || error?.message?.includes('Cast to ObjectId failed');
     if (!isInvalidId) {
       console.error('Error fetching product:', error);
     }
@@ -715,11 +691,11 @@ export function ProductDetailPageClient({ product }: { product: any }) {
 }
 
 export default function ClientPage({
-  id,
+  slug,
 }: {
-  id: string;
+  slug: string;
 }) {
-  const productId = id;
+  const productId = slug;
   
   // Use state and effect to handle async data fetching
   const [product, setProduct] = useState<any>(null);

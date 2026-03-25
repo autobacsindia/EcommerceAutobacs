@@ -15,6 +15,7 @@ import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterS
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
+import { productUrl } from '@/lib/types';
 
 // Extended product type to handle both local and WordPress products
 interface LocalProductImage {
@@ -507,7 +508,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                       className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
                     >
                       {/* Product Image */}
-                      <Link href={`/products/${product._id || product.id}`} className="block relative h-52 bg-gray-100">
+                      <Link href={productUrl(product)} className="block relative h-52 bg-gray-100">
                         {(product.images && product.images.length > 0) ? (
                           <ProductImage
                             src={typeof product.images[0] === 'object' ? product.images[0].src || product.images[0].url : product.images[0]}
@@ -570,7 +571,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                         </p>
 
                         {/* Product Name */}
-                        <Link href={`/products/${product._id || product.id}`}>
+                        <Link href={productUrl(product)}>
                           <h3 className="font-bold text-gray-900 mb-3 line-clamp-2 hover:text-blue-600 transition-colors">
                             {product.name}
                           </h3>

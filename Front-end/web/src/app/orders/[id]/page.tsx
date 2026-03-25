@@ -19,6 +19,7 @@ import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
+import { productUrl } from '@/lib/types';
 import OrderDetailSkeleton from '@/components/skeletons/OrderDetailSkeleton';
 
 interface OrderDetail {
@@ -633,7 +634,7 @@ export default function OrderDetailPage() {
                 <div className="flex-1">
                   {product?._id ? (
                     <Link
-                      href={`/products/${product._id}`}
+                      href={productUrl(product)}
                       className="font-semibold hover:text-blue-600 transition"
                     >
                       {productName}

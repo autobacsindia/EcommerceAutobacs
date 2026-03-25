@@ -9,6 +9,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
+import { productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
 
 export default function WishlistPage() {
@@ -133,7 +134,7 @@ export default function WishlistPage() {
         {wishlistItems.map((item: any) => (
           <div key={item.product._id} className="border rounded-lg p-4 hover:shadow-lg transition-shadow duration-300">
             <div className="relative aspect-square bg-gray-100 rounded-lg mb-4 overflow-hidden">
-              <Link href={`/products/${item.product._id}`} className="block w-full h-full">
+              <Link href={productUrl(item.product)} className="block w-full h-full">
                 <EnhancedImage
                   src={getFirstImageUrl(item.product?.images)}
                   alt={item.product?.name || 'Product'}
@@ -155,7 +156,7 @@ export default function WishlistPage() {
             </div>
 
             <div className="flex flex-col h-full">
-              <Link href={`/products/${item.product._id}`} className="hover:text-blue-600 transition-colors">
+              <Link href={productUrl(item.product)} className="hover:text-blue-600 transition-colors">
                 <h3 className="font-semibold text-lg mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
               </Link>
               

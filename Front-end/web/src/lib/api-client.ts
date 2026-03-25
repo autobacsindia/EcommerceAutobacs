@@ -378,6 +378,9 @@ class APIClient {
       const isLocationEndpoint = (response as any).url?.includes('/location/current');
       const isCategoryEndpoint = (response as any).url?.includes('/categories/slug/');
       const isVehiclesEndpoint = (response as any).url?.includes('/vehicles/slug/');
+      // /products/slug/:slug is tried first for every product page load; a 404 means
+      // the segment is an ObjectId (legacy link) — fall through to /products/:id is expected.
+      const isProductSlugEndpoint = (response as any).url?.includes('/products/slug/');
       const isVehicleProductsEndpoint = (response as any).url?.includes('/products/by-vehicle/');
       const is404Error = (error as any)?.status === 404 || (response as any).status === 404;
     
@@ -404,7 +407,7 @@ class APIClient {
       const isRateLimitError = (error as any)?.status === 429 || (response as any).status === 429;
     
       // Suppress expected/handled errors to reduce console noise
-      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint || isInvalidIdError || isAuthError || isOrderStatusError;
+      const shouldSuppressLog = ((isLocationEndpoint || isCategoryEndpoint || isVehiclesEndpoint || isProductSlugEndpoint) && (is404Error || isApiError404)) || isVehicleProductsEndpoint || isInvalidIdError || isAuthError || isOrderStatusError;
     
       if (!shouldSuppressLog) {
         if (!isRateLimitError) {

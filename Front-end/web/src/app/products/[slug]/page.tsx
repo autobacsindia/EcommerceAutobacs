@@ -2,11 +2,18 @@ import { Metadata } from 'next';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
 
-async function getProductForMetadata(id: string) {
+async function getProductForMetadata(slug: string) {
   try {
-    const res = await fetch(`${getServerApiBase()}/products/${id}`, { next: { revalidate: 3600 } });
-    if (!res.ok) return null;
-    const data = await res.json();
+    // Try slug-based lookup first (SEO canonical URL)
+    const slugRes = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 3600 } });
+    if (slugRes.ok) {
+      const data = await slugRes.json();
+      return data.product;
+    }
+    // Fallback: legacy ObjectId URL (e.g. old bookmarks / internal admin links)
+    const idRes = await fetch(`${getServerApiBase()}/products/${slug}`, { next: { revalidate: 3600 } });
+    if (!idRes.ok) return null;
+    const data = await idRes.json();
     return data.product;
   } catch (error) {
     console.error('Metadata fetch error:', error);
@@ -14,9 +21,9 @@ async function getProductForMetadata(id: string) {
   }
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const { id } = await params;
-  const product = await getProductForMetadata(id);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductForMetadata(slug);
 
   if (!product) {
     return {
@@ -56,7 +63,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
 }
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return <ClientPage id={id} />;
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  return <ClientPage slug={slug} />;
 }
