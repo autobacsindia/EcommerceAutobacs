@@ -8,15 +8,61 @@ import auditLogger from "../services/auditLogger.js";
 const router = express.Router();
 
 // @route   GET /users
-// @desc    Get all users
+// @desc    Get all users with pagination
 // @access  Private/Admin
 router.get("/", protect, admin, asyncHandler(async (req, res) => {
-  const users = await User.find({}).select('-passwordHash').sort({ createdAt: -1 });
-  
+  const DEFAULT_LIMIT = 20;
+  const MAX_LIMIT = 100;
+
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit) || DEFAULT_LIMIT));
+  const skip = (page - 1) * limit;
+
+  const filter = {};
+  if (req.query.search) {
+    filter.$or = [
+      { name: { $regex: req.query.search, $options: 'i' } },
+      { email: { $regex: req.query.search, $options: 'i' } }
+    ];
+  }
+  if (req.query.role) {
+    filter.role = req.query.role;
+  }
+
+  // Exclude all sensitive / bulky fields from the list view
+  const EXCLUDE = [
+    '-passwordHash',
+    '-resetPasswordToken',
+    '-resetPasswordExpire',
+    '-resetPasswordUsed',
+    '-verificationToken',
+    '-verificationTokenExpire',
+    '-refreshTokens',
+    '-loginAttempts',
+    '-addresses',           // large nested array; not needed in admin list
+    '-wallet.transactions'  // potentially large; balance alone is enough
+  ].join(' ');
+
+  const [users, total] = await Promise.all([
+    User.find(filter)
+      .select(EXCLUDE)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    User.countDocuments(filter)
+  ]);
+
   res.json({
     success: true,
     count: users.length,
-    users
+    users,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit
+    }
   });
 }));
 

@@ -182,11 +182,15 @@ class CacheService {
   async clearPattern(pattern) {
     if (redisClient) {
       try {
-        // ioredis SCAN to find matching keys, then delete in batch
+        // Anchor to the route cache namespace so we never accidentally scan
+        // unrelated key spaces (e.g. wp:products:*, vehicle:*, rate-limit:*).
+        // All route-cache keys have the form:  route:/<path>
+        // so  route:/*pattern*  is both precise and non-blocking.
+        const scanPattern = pattern.startsWith('route:') ? `${pattern}*` : `route:*${pattern}*`;
         let cursor = '0';
         const keysToDelete = [];
         do {
-          const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', `*${pattern}*`, 'COUNT', '100');
+          const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', scanPattern, 'COUNT', '100');
           cursor = nextCursor;
           keysToDelete.push(...keys);
         } while (cursor !== '0');
@@ -201,10 +205,13 @@ class CacheService {
       }
     }
 
-    // In-memory fallback
+    // In-memory fallback — mirror the same route: namespace anchoring
+    const matchFn = pattern.startsWith('route:')
+      ? (key) => key.startsWith(pattern)
+      : (key) => key.startsWith('route:') && key.includes(pattern);
     const keysToDelete = [];
     for (const key of this.cache.keys()) {
-      if (key.includes(pattern)) keysToDelete.push(key);
+      if (matchFn(key)) keysToDelete.push(key);
     }
     for (const key of keysToDelete) await this.delete(key);
     return keysToDelete.length;

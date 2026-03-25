@@ -37,8 +37,8 @@ export const cacheResponse = (ttlSeconds = 300) => async (req, res, next) => {
 
 /**
  * Invalidate all cached routes whose key contains any of the given patterns.
- * Call this in write routes (POST / PUT / PATCH / DELETE) so stale data
- * is never served after a mutation.
+ * Fire-and-forget: does NOT block the HTTP response. Errors are logged but
+ * never propagated to the caller.
  *
  * @param {...string} patterns - Substrings to match against cache keys
  *
@@ -48,9 +48,14 @@ export const cacheResponse = (ttlSeconds = 300) => async (req, res, next) => {
  *   invalidateCache('brands', 'products');
  */
 export const invalidateCache = (...patterns) => {
-  let total = 0;
-  for (const pattern of patterns) {
-    total += cacheService.clearPattern(pattern);
-  }
-  return total;
+  // Run all pattern clears in parallel, fire-and-forget.
+  // We intentionally do NOT await so the HTTP response is never delayed.
+  Promise.all(patterns.map((pattern) => cacheService.clearPattern(pattern)))
+    .then((counts) => {
+      const total = counts.reduce((sum, n) => sum + (n || 0), 0);
+      console.log(`[Cache] Invalidated ${total} key(s) for patterns:`, patterns);
+    })
+    .catch((err) => {
+      console.warn(`[Cache] Invalidation failed for patterns: ${patterns.join(', ')}`, err);
+    });
 };

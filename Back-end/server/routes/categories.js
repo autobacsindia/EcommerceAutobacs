@@ -14,17 +14,39 @@ const CATEGORY_LIST_TTL  = 10 * 60; // 10 min
 const CATEGORY_ITEM_TTL  = 10 * 60; // 10 min
 
 // @route   GET /categories
-// @desc    Get all active categories
+// @desc    Get all active categories with optional pagination
 // @access  Public
 router.get("/", cacheResponse(CATEGORY_LIST_TTL), asyncHandler(async (req, res) => {
-  const categories = await Category.find({ isActive: true })
-    .populate('parent', 'name slug')
-    .sort({ order: 1, name: 1 });
+  // Categories are a small, bounded collection (rarely > 100).
+  // Still cap at 200 as a safety guard; clients that need all categories
+  // for nav menus can omit page/limit and get the full list up to the cap.
+  const MAX_LIMIT = 200;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit) || MAX_LIMIT));
+  const skip = (page - 1) * limit;
+
+  const filter = { isActive: true };
+
+  const [categories, total] = await Promise.all([
+    Category.find(filter)
+      .populate('parent', 'name slug')
+      .sort({ order: 1, name: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Category.countDocuments(filter)
+  ]);
 
   res.json({
     success: true,
     count: categories.length,
-    categories
+    categories,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit
+    }
   });
 }));
 

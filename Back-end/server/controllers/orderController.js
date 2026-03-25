@@ -896,26 +896,33 @@ export const getTrackingStats = async (req, res) => {
 // @route   GET /orders/admin/all
 // @access  Private/Admin
 export const getAllOrdersAdmin = async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
+  const DEFAULT_LIMIT = 20;
+  const MAX_LIMIT = 100;
 
-  const query = status ? { status } : {};
-  const skip = (Number(page) - 1) * Number(limit);
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit) || DEFAULT_LIMIT));
+  const skip = (page - 1) * limit;
 
-  const orders = await Order.find(query)
-    .populate('user', 'name email')
-    .populate('items.product', 'name')
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(Number(limit));
+  const query = {};
+  if (req.query.status) query.status = req.query.status;
 
-  const total = await Order.countDocuments(query);
+  const [orders, total] = await Promise.all([
+    Order.find(query)
+      .populate('user', 'name email')
+      .populate('items.product', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Order.countDocuments(query)
+  ]);
 
   res.json({
     success: true,
     count: orders.length,
     total,
-    pages: Math.ceil(total / Number(limit)),
-    currentPage: Number(page),
+    pages: Math.ceil(total / limit),
+    currentPage: page,
     orders
   });
 };
