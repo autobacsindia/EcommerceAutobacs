@@ -102,11 +102,17 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
+      // NOTE: 'unsafe-inline' required by Razorpay checkout script injection.
+      // Once Razorpay supports nonce/hash, remove 'unsafe-inline' here.
       scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
       connectSrc: ["'self'", "https://api.razorpay.com", "https://lumberjack.razorpay.com"],
       frameSrc: ["'self'", "https://api.razorpay.com"],
+      // Block Flash, Java, and other plugin content
+      objectSrc: ["'none'"],
+      // Prevent base-tag hijacking attacks
+      baseUri: ["'self'"],
       upgradeInsecureRequests: [],
     },
   },

@@ -10,13 +10,15 @@ import {
   validateIdParam,
   validateProductIdParam
 } from "../middleware/validationMiddleware.js";
+import { cleanHTML } from "../utils/htmlSanitizer.js";
+import { questionSubmitRateLimit, questionAnswerRateLimit } from "../middleware/rateLimitMiddleware.js";
 
 const router = express.Router();
 
 // @desc    Submit a question
 // @route   POST /api/product-questions
 // @access  Public
-router.post("/", validateProductQuestion, asyncHandler(async (req, res) => {
+router.post("/", questionSubmitRateLimit, validateProductQuestion, asyncHandler(async (req, res) => {
   const { productId, question, userName, email } = req.body;
 
   const product = await Product.findById(productId);
@@ -30,7 +32,7 @@ router.post("/", validateProductQuestion, asyncHandler(async (req, res) => {
     user: req.user ? req.user._id : undefined,
     userName: req.user ? req.user.name : userName,
     email: req.user ? req.user.email : email,
-    question
+    question: cleanHTML(question)
   });
 
   res.status(201).json({
@@ -86,7 +88,7 @@ router.get("/admin", protect, admin, validateProductQuestionQuery, asyncHandler(
 // @desc    Answer a question
 // @route   PUT /api/product-questions/:id/answer
 // @access  Private/Admin
-router.put("/:id/answer", protect, admin, validateIdParam, validateProductQuestionAnswer, asyncHandler(async (req, res) => {
+router.put("/:id/answer", protect, admin, questionAnswerRateLimit, validateIdParam, validateProductQuestionAnswer, asyncHandler(async (req, res) => {
   const { answer, isPublic } = req.body;
   
   const question = await ProductQuestion.findById(req.params.id);
@@ -96,7 +98,7 @@ router.put("/:id/answer", protect, admin, validateIdParam, validateProductQuesti
     throw new Error("Question not found");
   }
 
-  question.answer = answer;
+  question.answer = cleanHTML(answer);
   question.status = "answered";
   question.isPublic = isPublic !== undefined ? isPublic : true;
   

@@ -1425,7 +1425,9 @@ export const validateProductQuestion = [
     .withMessage('Question is required')
     .trim()
     .isLength({ min: 10 })
-    .withMessage('Question must be at least 10 characters long'),
+    .withMessage('Question must be at least 10 characters long')
+    .isLength({ max: 500 })
+    .withMessage('Question must be less than 500 characters'),
   body('userName')
     .optional()
     .trim(),
@@ -1440,7 +1442,9 @@ export const validateProductQuestionAnswer = [
   body('answer')
     .notEmpty()
     .withMessage('Answer is required')
-    .trim(),
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage('Answer must be less than 2000 characters'),
   body('isPublic')
     .optional()
     .isBoolean()

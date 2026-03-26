@@ -10,6 +10,8 @@ import {
   validateRouteProductId,
   validateAdminReviewQuery
 } from "../middleware/validationMiddleware.js";
+import { cleanHTML } from "../utils/htmlSanitizer.js";
+import { reviewSubmitRateLimit } from "../middleware/rateLimitMiddleware.js";
 
 const router = express.Router();
 
@@ -214,10 +216,14 @@ router.get("/user", protect, asyncHandler(async (req, res) => {
 // @route   POST /reviews/products/:productId
 // @desc    Submit a new review for a product
 // @access  Private (authenticated users)
-router.post("/products/:productId", protect, validateReviewSubmission, asyncHandler(async (req, res) => {
+router.post("/products/:productId", protect, reviewSubmitRateLimit, validateReviewSubmission, asyncHandler(async (req, res) => {
   const { rating, title, comment, images } = req.body;
   const productId = req.params.productId;
   const userId = req.user._id;
+
+  // Sanitize rich-text fields before storage
+  const safeTitle   = cleanHTML(title);
+  const safeComment = cleanHTML(comment);
 
   // Check if product exists
   const product = await Product.findById(productId);
@@ -245,8 +251,8 @@ router.post("/products/:productId", protect, validateReviewSubmission, asyncHand
     product: productId,
     user: userId,
     rating,
-    title,
-    comment,
+    title: safeTitle,
+    comment: safeComment,
     images,
     isVerifiedPurchase,
     isApproved: false // Default to pending approval
@@ -280,6 +286,10 @@ router.put("/:reviewId", protect, validateReviewUpdate, asyncHandler(async (req,
   const reviewId = req.params.reviewId;
   const userId = req.user._id;
 
+  // Sanitize rich-text fields before storage
+  const safeTitle   = cleanHTML(title);
+  const safeComment = cleanHTML(comment);
+
   // Find review
   const review = await Review.findById(reviewId);
   if (!review) {
@@ -299,8 +309,8 @@ router.put("/:reviewId", protect, validateReviewUpdate, asyncHandler(async (req,
 
   // Update review
   review.rating = rating;
-  review.title = title;
-  review.comment = comment;
+  review.title = safeTitle;
+  review.comment = safeComment;
   review.images = images;
   // Reset approval status when updating
   review.isApproved = false;

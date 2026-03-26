@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import DOMPurify from 'isomorphic-dompurify';
 import Link from 'next/link';
 import { ArrowLeft, Calendar, Eye, Tag, User, Newspaper, BookOpen, Flame } from 'lucide-react';
 
@@ -119,6 +120,12 @@ export default function ArticleDetailClient({ article, related, type }: Props) {
   const backHref = `/media/${article.type}`;
   const backLabel = article.type === 'news' ? 'Back to News' : 'Back to Blog';
   const Icon = article.type === 'news' ? Newspaper : BookOpen;
+
+  // Sanitize HTML content to prevent XSS before rendering
+  const safeContent = useMemo(
+    () => DOMPurify.sanitize(article.content ?? ''),
+    [article.content]
+  );
   const colorBadge = article.type === 'news' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700';
 
   return (
@@ -177,7 +184,7 @@ export default function ArticleDetailClient({ article, related, type }: Props) {
               {/* Rich HTML content */}
               <div
                 className="prose prose-gray max-w-none prose-headings:font-bold prose-a:text-red-600 prose-img:rounded-lg"
-                dangerouslySetInnerHTML={{ __html: article.content }}
+                dangerouslySetInnerHTML={{ __html: safeContent }}
               />
 
               {/* Tags */}

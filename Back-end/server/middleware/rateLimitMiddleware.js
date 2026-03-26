@@ -450,3 +450,25 @@ export const verifyEmailRateLimit = rateLimit({
   message: 'Too many verification attempts. Please try again later',
   keyGenerator: (req) => `rate_limit:verify_email:${req.ip || req.connection.remoteAddress}`
 });
+
+// UGC submission rate limiters — reviews, questions, and admin answers
+export const reviewSubmitRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5, // 5 review submissions per 10 min per authenticated user
+  message: 'Too many review submissions. Please wait before submitting again.',
+  keyGenerator: (req) => `rate_limit:review_submit:${req.user?._id || req.ip}`
+});
+
+export const questionSubmitRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10, // 10 questions per 10 min per IP (public endpoint)
+  message: 'Too many question submissions. Please wait before asking again.',
+  keyGenerator: (req) => `rate_limit:question_submit:${req.ip || req.connection.remoteAddress}`
+});
+
+export const questionAnswerRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 20, // 20 admin answers per 10 min
+  message: 'Too many answer submissions. Please slow down.',
+  keyGenerator: (req) => `rate_limit:question_answer:${req.user?._id || req.ip}`
+});

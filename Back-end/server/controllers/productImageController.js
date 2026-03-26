@@ -23,6 +23,7 @@ import {
 } from '../utils/cloudinaryHelpers.js';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { cleanHTML } from '../utils/htmlSanitizer.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -54,6 +55,10 @@ const parseProductFields = (body) => {
   if (fields.price !== undefined)         fields.price         = Number(fields.price);
   if (fields.originalPrice !== undefined) fields.originalPrice = Number(fields.originalPrice);
   if (fields.stock !== undefined)         fields.stock         = Number(fields.stock);
+
+  // Sanitize rich-text fields — strip unsafe HTML before storage
+  if (fields.description)  fields.description  = cleanHTML(fields.description);
+  if (fields.shortDescription) fields.shortDescription = cleanHTML(fields.shortDescription);
 
   ['isActive', 'isFeatured', 'isFastMoving', 'isOfferFeatured'].forEach((key) => {
     if (fields[key] !== undefined) fields[key] = fields[key] === 'true' || fields[key] === true;

@@ -13,6 +13,7 @@ import QuestionForm from '@/components/products/QuestionForm';
 import QuestionList from '@/components/products/QuestionList';
 import TrustBadges from '@/components/products/TrustBadges';
 import RecentlyViewed from '@/components/products/RecentlyViewed';
+import ShareButton from '@/components/products/ShareButton';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 import { toast } from 'react-hot-toast';
@@ -474,6 +475,11 @@ export function ProductDetailPageClient({ product }: { product: any }) {
               >
                 <GitCompare className="h-6 w-6" />
               </button>
+
+              <ShareButton
+                productName={product.name}
+                price={selectedSpecOption?.price ?? product.price}
+              />
             </div>
 
             <div className="mb-8 space-y-3 text-sm text-gray-600 border-t pt-4">
