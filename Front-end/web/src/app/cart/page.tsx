@@ -129,7 +129,7 @@ export default function CartPage() {
                     <div className="flex gap-4">
                       {/* Product Image */}
                       <Link
-                        href={productUrl(item.product)}
+                        href={productUrl(item.product, '/products') || '/products'}
                         className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded-md overflow-hidden"
                       >
                         <EnhancedImage
@@ -147,7 +147,7 @@ export default function CartPage() {
                         <div className="flex justify-between">
                           <div>
                             <Link
-                              href={productUrl(item.product)}
+                              href={productUrl(item.product, '/products') || '/products'}
                               className="font-semibold text-gray-900 hover:text-blue-600"
                             >
                               {item.product.name}
