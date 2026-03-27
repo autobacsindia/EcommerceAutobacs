@@ -22,7 +22,8 @@ const mongooseOptions = {
   retryWrites: true,
   maxPoolSize: 20,      // increased from 10 — handles concurrent admin + storefront traffic
   minPoolSize: 5,       // keep warm connections ready; avoids cold-start latency spikes
-  heartbeatFrequencyMS: 10000
+  heartbeatFrequencyMS: 10000,
+  autoIndex: true,      // ensure Mongoose schema indexes (e.g. slug unique) are always synced to DB
 };
 
 // Enhanced connection retry logic with SSL error handling and fallback mechanisms
@@ -112,6 +113,8 @@ mongoose.connection.on('connected', () => {
   console.log('✓ Mongoose connected to MongoDB');
   // Log successful connection details for monitoring
   logSuccessfulConnection(mongooseOptions);
+  // Verify critical indexes exist (idempotent — createIndex is a no-op if already present)
+  ensureCriticalIndexes();
 });
 
 mongoose.connection.on('disconnected', () => {
@@ -217,6 +220,37 @@ process.on('SIGINT', async () => {
   console.log('✓ Mongoose connection closed through app termination');
   process.exit(0);
 });
+
+/**
+ * Verify that critical MongoDB indexes exist and create them if missing.
+ * Uses native driver createIndex() which is idempotent — safe to run on every startup.
+ * Mongoose autoIndex covers schema-declared indexes, but this provides an explicit
+ * safety net for production environments where autoIndex may be bypassed.
+ */
+async function ensureCriticalIndexes() {
+  try {
+    const db = mongoose.connection.db;
+    const productsCol = db.collection('products');
+
+    // 1. slug unique index — prevents duplicate-content SEO disasters
+    await productsCol.createIndex({ slug: 1 }, { unique: true, background: true });
+
+    // 2. Confirm the index is in place
+    const indexes = await productsCol.indexInformation();
+    const hasSlugUnique = Object.values(indexes).some(
+      (idx) => idx.some(([field]) => field === 'slug')
+    );
+
+    if (hasSlugUnique) {
+      console.log('✓ Product slug unique index confirmed');
+    } else {
+      console.error('✗ WARNING: Product slug unique index NOT found after creation attempt');
+    }
+  } catch (err) {
+    // Log but never crash the server over index verification
+    console.error('✗ ensureCriticalIndexes error:', err.message);
+  }
+}
 
 // Export connection function and helper functions
 export { connectWithRetry, mongoose, preFlightIPCheck, categorizeSSLError, logConnectionDiagnostics };

@@ -19,28 +19,16 @@ import apiClient from '@/lib/api';
 import { toast } from 'react-hot-toast';
 
 async function getProduct(slugOrId: string): Promise<any> {
-  // 1. Try the slug-based endpoint first (canonical SEO URL)
+  // Resolve exclusively via slug endpoint (canonical SEO URL)
   try {
     const response: any = await apiClient.get(`/products/slug/${encodeURIComponent(slugOrId)}`);
     if (response?.product) return response.product;
   } catch (slugError: any) {
-    // 404 from slug endpoint → fall through to ObjectId lookup
     if (slugError?.status !== 404) {
       console.error('Slug lookup error:', slugError);
     }
   }
-
-  // 2. Legacy ObjectId fallback (handles old bookmarks / internal admin links)
-  try {
-    const response: any = await apiClient.get(`/products/${slugOrId}`);
-    return response?.product || null;
-  } catch (error: any) {
-    const isInvalidId = error?.message?.includes('Invalid ID format') || error?.message?.includes('Cast to ObjectId failed');
-    if (!isInvalidId) {
-      console.error('Error fetching product:', error);
-    }
-    return null;
-  }
+  return null;
 }
 
 export function ProductDetailPageClient({ product }: { product: any }) {
@@ -701,22 +689,27 @@ export default function ClientPage({
 }: {
   slug: string;
 }) {
-  const productId = slug;
-  
-  // Use state and effect to handle async data fetching
+  const router = useRouter();
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchProduct() {
       setLoading(true);
-      const fetchedProduct = await getProduct(productId);
+      const fetchedProduct = await getProduct(slug);
       setProduct(fetchedProduct);
       setLoading(false);
+
+      // Client-side canonical redirect: if the URL segment looks like a MongoDB ObjectId
+      // but the product resolved to a real slug, replace URL to preserve back-button UX
+      // (backend already issues HTTP 301 for direct hits; this handles in-app navigation)
+      if (fetchedProduct?.slug && fetchedProduct.slug !== slug) {
+        router.replace(`/products/${fetchedProduct.slug}`, { scroll: false });
+      }
     }
-    
+
     fetchProduct();
-  }, [productId]);
+  }, [slug, router]);
 
   if (loading) {
     return (

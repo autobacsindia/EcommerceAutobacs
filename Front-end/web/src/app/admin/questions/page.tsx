@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import Link from 'next/link';
+import { productUrl } from '@/lib/types';
 
 interface ProductQuestion {
   _id: string;
   product: {
     _id: string;
+    slug?: string;
     name: string;
   };
   user?: string;
@@ -181,7 +183,7 @@ export default function AdminQuestionsPage() {
                     {new Date(q.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
-                    <Link href={`/products/${q.product._id}`} target="_blank" className="text-blue-600 hover:underline">
+                    <Link href={productUrl(q.product, '/admin/products')} target="_blank" className="text-blue-600 hover:underline">
                       {q.product?.name || 'Unknown Product'}
                     </Link>
                   </td>

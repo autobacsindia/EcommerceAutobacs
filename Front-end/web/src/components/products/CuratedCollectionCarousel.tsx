@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
+import { productUrl } from '@/lib/types';
 
 interface ProductImageType {
   url: string;
@@ -241,10 +242,12 @@ export default function CuratedCollectionCarousel({
               msOverflowStyle: 'none'
             }}
           >
-            {products.map((product) => (
+            {products.map((product) => {
+              const url = productUrl(product, '/products');
+              return (
               <Link
                 key={product._id}
-                href={`/products/${product._id}`}
+                href={url}
                 className="group/card flex-shrink-0 w-52 hover:shadow-lg transition-shadow duration-200 rounded"
               >
                 {/* Vertical Card Layout - Amazon Style */}
@@ -336,7 +339,8 @@ export default function CuratedCollectionCarousel({
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
 
             {/* See All Card at the End */}
             <Link

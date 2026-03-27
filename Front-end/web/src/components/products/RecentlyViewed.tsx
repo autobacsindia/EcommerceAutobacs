@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import { productUrl } from '@/lib/types';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -61,10 +62,12 @@ const RecentlyViewed = () => {
           </button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {products.map((product) => (
+          {products.map((product) => {
+            const url = productUrl(product, '/products');
+            return (
             <Link 
               key={product._id} 
-              href={`/products/${product._id}`}
+              href={url}
               className="group block bg-white border border-gray-100 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
             >
               <div className="aspect-square relative bg-gray-50">
@@ -93,7 +96,8 @@ const RecentlyViewed = () => {
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

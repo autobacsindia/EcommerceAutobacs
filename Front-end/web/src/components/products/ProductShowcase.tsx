@@ -5,7 +5,7 @@ import Link from 'next/link';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import productService from '@/lib/services/productService';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import { Product } from '@/lib/types';
+import { Product, productUrl } from '@/lib/types';
 
 interface ProductCardProps {
   product: Product;
@@ -13,6 +13,7 @@ interface ProductCardProps {
 
 const ProductCard = ({ product }: ProductCardProps) => {
   const { formatPrice } = useCurrency();
+  const url = productUrl(product, '/products');
   // Get primary image or fallback
   const primaryImage = product.images && Array.isArray(product.images) 
     ? product.images.find(img => img.isPrimary)?.url || product.images[0]?.url
@@ -62,7 +63,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           )}
         </div>
         <Link 
-          href={`/products/${product._id}`} 
+          href={url}
           className="mt-3 inline-block w-full text-center bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors"
         >
           View Details

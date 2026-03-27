@@ -290,13 +290,24 @@ export interface PaymentMethodsData {
 }
 
 /**
- * Returns the canonical URL for a product page.
- * Prefers the human-readable slug; falls back to ObjectId for legacy documents
- * that pre-date slug generation.
+ * Returns the canonical slug-based URL for a product page, or `null` if the
+ * product has no slug (pre-migration doc).  Components should skip rendering
+ * the link entirely when this returns `null` — dead `href="#"` links are bad
+ * for accessibility and confuse crawlers.
  *
- * Usage: `<Link href={productUrl(product)}>`
+ * ⚠️  Do NOT fall back to `_id` here — that would expose ObjectId URLs and create
+ * duplicate-content issues. The backend issues a 301 redirect for any /:id hit.
+ *
+ * Usage:
+ *   `const url = productUrl(product);  if (!url) return null;`
+ *   `const url = productUrl(product, '/products'); // guaranteed string`
  */
-export function productUrl(product: { slug?: string | null; _id?: string; id?: string | number }): string {
-  const identifier = product.slug || product._id || (product.id != null ? String(product.id) : '') || '';
-  return identifier ? `/products/${identifier}` : '#';
+export function productUrl(product: { slug?: string | null; _id?: string; id?: string | number }, fallback: string): string;
+export function productUrl(product: { slug?: string | null; _id?: string; id?: string | number }): string | null;
+export function productUrl(
+  product: { slug?: string | null; _id?: string; id?: string | number },
+  fallback?: string
+): string | null {
+  if (product.slug) return `/products/${product.slug}`;
+  return fallback ?? null;
 }

@@ -52,6 +52,7 @@ import {
   cleanupWordPress,
   getCleanupStatus,
 } from "../controllers/productAdminController.js";
+import Product from "../models/Product.js";
 import {
   importWordPressProducts,
   getMissingWordPressProducts,
@@ -199,9 +200,23 @@ router.get("/cleanup/status", protect, admin, asyncHandler(getCleanupStatus));
 router.get("/slug/:slug", asyncHandler(getProductBySlug));
 
 // @route   GET /products/:id
-// @desc    Get product by ID
+// @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing
 // @access  Public
-router.get("/:id", validateProductIdParam, asyncHandler(getProduct));
+router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id).select('slug').lean();
+
+  if (!product) {
+    return res.status(404).json({ success: false, message: 'Product not found' });
+  }
+
+  if (product.slug) {
+    // Permanent redirect — consolidates SEO authority and prevents duplicate indexing
+    return res.redirect(301, `/products/${product.slug}`);
+  }
+
+  // Product exists but has no slug yet (pre-migration doc) — serve directly
+  return (await import('../controllers/productAdminController.js')).getProduct(req, res);
+}));
 
 // @route   POST /products
 // @desc    Create a new product (supports multipart/form-data with images)

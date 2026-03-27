@@ -10,7 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
-import { Product } from '@/lib/types';
+import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface ProductCardProps {
@@ -89,9 +89,12 @@ export default function ProductCard({
     }
   };
 
+  const url = productUrl(product);  // null = product has no slug yet (rare post-migration)
+
   return (
     <div className={cn("bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group", className)}>
-      <Link href={`/products/${product._id}`} className="block relative h-48 bg-gray-200">
+      {url ? (
+        <Link href={url} className="block relative h-48 bg-gray-200">
         {product.images && (
           Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
             <ProductImage
@@ -175,10 +178,32 @@ export default function ProductCard({
           )}
         </div>
       </Link>
+      ) : (
+        <div className="relative h-48 bg-gray-200">
+          {product.images && (
+            Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
+              <ProductImage
+                src={product.images[0].url}
+                alt={product.images[0].alt || product.name}
+                className="object-cover w-full h-full"
+              />
+            ) : typeof product.images === 'string' && product.images !== '' ? (
+              <ProductImage
+                src={product.images}
+                alt={product.name}
+                className="object-cover w-full h-full"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                <span className="text-gray-400">No image available</span>
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       {/* Product Info */}
       <div className="p-4">
-        {/* Category */}
         <p className="text-xs text-gray-500 uppercase mb-1">
           {product.categories && product.categories.length > 0 ? (
             product.categories[0].name.toUpperCase()
@@ -188,11 +213,17 @@ export default function ProductCard({
         </p>
 
         {/* Product Name */}
-        <Link href={`/products/${product._id}`}>
-          <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 hover:text-blue-600">
+        {url ? (
+          <Link href={url}>
+            <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 hover:text-blue-600">
+              {product.name}
+            </h3>
+          </Link>
+        ) : (
+          <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
             {product.name}
           </h3>
-        </Link>
+        )}
 
         {/* Rating */}
         {product.averageRating > 0 && (

@@ -12,6 +12,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import ViewAllCard from './ViewAllCard';
 import { toast } from 'react-hot-toast';
+import { productUrl } from '@/lib/types';
 import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 
 interface ProductImageType {
@@ -221,10 +222,12 @@ export default function FastMovingProducts({
         {/* Products Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
           {/* Product Cards */}
-          {products.map((product) => (
+          {products.map((product) => {
+            const url = productUrl(product, '/products');
+            return (
             <Link
               key={product._id}
-              href={`/products/${product._id}`}
+              href={url}
               className="group"
             >
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300">
@@ -333,7 +336,8 @@ export default function FastMovingProducts({
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
 
           {/* View All Card */}
           <ViewAllCard

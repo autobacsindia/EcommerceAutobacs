@@ -6,17 +6,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsIndia.com';
 
 async function getProductForMetadata(slug: string) {
   try {
-    // Try slug-based lookup first (SEO canonical URL)
-    const slugRes = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 3600 } });
-    if (slugRes.ok) {
-      const data = await slugRes.json();
-      return data.product;
-    }
-    // Fallback: legacy ObjectId URL (e.g. old bookmarks / internal admin links)
-    const idRes = await fetch(`${getServerApiBase()}/products/${slug}`, { next: { revalidate: 3600 } });
-    if (!idRes.ok) return null;
-    const data = await idRes.json();
-    return data.product;
+    // Slug-only lookup — ObjectId URLs are permanently redirected by the backend
+    const res = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 3600 } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.product ?? null;
   } catch (error) {
     console.error('Metadata fetch error:', error);
     return null;
@@ -40,9 +34,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       ? product.description.substring(0, 160).replace(/\n/g, ' ')
       : 'Shop premium automotive accessories, body kits, and performance parts at Autobacs India.';
 
-  // Build canonical URL
-  const canonicalSlug = product.slug || slug;
-  const url = `${SITE_URL}/products/${canonicalSlug}`;
+  // Build canonical URL — slug is the only identifier; no _id fallback
+  const url = product.slug ? `${SITE_URL}/products/${product.slug}` : null;
+  if (!url) {
+    // Product predates slug generation — treat as unavailable for metadata
+    return { title: 'Product | Autobacs India' };
+  }
 
   // Build OG image list with width/height for richer previews
   const ogImages: { url: string; width: number; height: number; alt: string }[] = [];
@@ -96,5 +93,42 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return <ClientPage slug={slug} />;
+  const product = await getProductForMetadata(slug);
+
+  // Build JSON-LD structured data for Google rich results
+  const jsonLd = product?.slug ? {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: product.shortDescription || product.description || '',
+    url: `${SITE_URL}/products/${product.slug}`,
+    ...(product.images?.[0] && {
+      image: typeof product.images[0] === 'string' ? product.images[0] : product.images[0]?.url,
+    }),
+    brand: product.brand
+      ? { '@type': 'Brand', name: typeof product.brand === 'string' ? product.brand : product.brand.name }
+      : undefined,
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'INR',
+      price: product.price,
+      availability: product.stock > 0
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+      url: `${SITE_URL}/products/${product.slug}`,
+      seller: { '@type': 'Organization', name: 'Autobacs India' },
+    },
+  } : null;
+
+  return (
+    <>
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
+      <ClientPage slug={slug} />
+    </>
+  );
 }

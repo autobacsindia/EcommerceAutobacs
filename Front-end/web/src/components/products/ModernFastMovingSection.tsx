@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { toast } from 'react-hot-toast';
+import { productUrl } from '@/lib/types';
 import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 import dynamic from 'next/dynamic';
 
@@ -154,7 +155,9 @@ export default function ModernFastMovingSection({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {products.map((product, index) => (
+          {products.map((product, index) => {
+            const url = productUrl(product, '/products');
+            return (
             <div 
               key={product._id} 
               className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 overflow-hidden flex flex-col relative"
@@ -162,8 +165,7 @@ export default function ModernFastMovingSection({
             >
               {/* Product Image */}
               <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-                <Link href={`/products/${product._id}`}>
-                  <div className="w-full h-full transform group-hover:scale-110 transition-transform duration-500">
+                <Link href={url}>
                     {product.images && Array.isArray(product.images) && product.images.length > 0 ? (
                       <ProductImage 
                         src={product.images[0].url} 
@@ -183,7 +185,6 @@ export default function ModernFastMovingSection({
                         <span className="text-gray-400">No Image</span>
                       </div>
                     )}
-                  </div>
                 </Link>
                 
                 {/* Overlay Actions */}
@@ -221,7 +222,7 @@ export default function ModernFastMovingSection({
                 <div className="text-xs text-blue-600 font-semibold mb-2 uppercase tracking-wide">
                   {typeof product.category === 'string' ? 'Auto Parts' : product.category?.name}
                 </div>
-                <Link href={`/products/${product._id}`} className="block mb-2">
+                <Link href={url} className="block mb-2">
                   <h3 className="text-lg font-bold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
                     {product.name}
                   </h3>
@@ -245,7 +246,8 @@ export default function ModernFastMovingSection({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {/* "See More" Card as the last item if we have products */}
            <Link 

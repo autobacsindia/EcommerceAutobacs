@@ -9,9 +9,11 @@ import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { toast } from 'react-hot-toast';
+import { productUrl } from '@/lib/types';
 
 interface RecentProduct {
   _id: string;
+  slug?: string;
   name: string;
   price: number;
   originalPrice?: number;
@@ -68,9 +70,11 @@ export default function RecentlyViewedProducts() {
         </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {products.slice(0, 5).map((product) => (
+          {products.slice(0, 5).map((product) => {
+            const url = productUrl(product, '/products');
+            return (
             <div key={product._id} className="group bg-white rounded-lg border border-gray-100 hover:shadow-lg transition-all duration-300">
-              <Link href={`/products/${product._id}`} className="block relative aspect-[4/3] overflow-hidden rounded-t-lg bg-gray-50">
+              <Link href={url} className="block relative aspect-[4/3] overflow-hidden rounded-t-lg bg-gray-50">
                 {product.image && !imageErrors[product._id] ? (
                   <Image
                     src={product.image}
@@ -87,7 +91,7 @@ export default function RecentlyViewedProducts() {
               </Link>
               
               <div className="p-4">
-                <Link href={`/products/${product._id}`}>
+                <Link href={url}>
                   <h3 className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5em] group-hover:text-blue-600 transition-colors">
                     {product.name}
                   </h3>
@@ -126,7 +130,8 @@ export default function RecentlyViewedProducts() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

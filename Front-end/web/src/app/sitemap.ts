@@ -51,12 +51,14 @@ async function fetchProductPage(page: number): Promise<MetadataRoute.Sitemap> {
     {}
   );
   return dedup(
-    (data.products ?? []).map((p: any) => ({
-      url: `${BASE_URL}/products/${p.slug || p._id}`,
-      lastModified: safeDate(p.updatedAt),
-      changeFrequency: 'daily' as ChangeFreq,
-      priority: 0.6,
-    }))
+    (data.products ?? [])
+      .filter((p: any) => p.slug)  // skip products without a slug — they cannot have a canonical URL
+      .map((p: any) => ({
+        url: `${BASE_URL}/products/${p.slug}`,
+        lastModified: safeDate(p.updatedAt),
+        changeFrequency: 'daily' as ChangeFreq,
+        priority: 0.6,
+      }))
   );
 }
 

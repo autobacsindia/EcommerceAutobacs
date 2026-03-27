@@ -5,6 +5,7 @@ import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
+import { productUrl } from '@/lib/types';
 
 interface ProductImageType {
   url: string;
@@ -106,10 +107,12 @@ export default function KeepShoppingWidget({
 
         {/* 2x2 Grid - Exactly 4 Products */}
         <div className="grid grid-cols-2 gap-3 mb-3">
-          {products.slice(0, 4).map((product) => (
+          {products.slice(0, 4).map((product) => {
+            const url = productUrl(product, '/products');
+            return (
             <Link
               key={product._id}
-              href={`/products/${product._id}`}
+              href={url}
               className="group block"
             >
               {/* Product Image - Square */}
@@ -145,7 +148,8 @@ export default function KeepShoppingWidget({
                 {formatPrice(product.price)}
               </p>
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         {/* See more Link */}

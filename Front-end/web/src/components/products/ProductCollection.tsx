@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
+import { productUrl } from '@/lib/types';
 
 interface ProductImageType {
   url: string;
@@ -223,10 +224,12 @@ export default function ProductCollection({
         
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {products.map((product) => (
+          {products.map((product) => {
+            const url = productUrl(product, '/products');
+            return (
             <Link
               key={product._id}
-              href={`/products/${product._id}`}
+              href={url}
               className="group"
             >
               <div className="bg-white rounded-lg overflow-hidden hover:shadow-2xl transition-all duration-300 h-full flex flex-col">
@@ -330,7 +333,8 @@ export default function ProductCollection({
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         {/* View More Link */}
