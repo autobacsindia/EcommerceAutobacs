@@ -83,7 +83,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               _id: item.product._id,
               name: item.product.name,
               price: item.product.price,
-              images: item.product.images,
+              images: Array.isArray(item.product.images) ? item.product.images : [],
               stock: item.product.stock
             },
             quantity: item.quantity
@@ -138,7 +138,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               _id: item.product._id,
               name: item.product.name,
               price: item.product.price,
-              images: item.product.images,
+              images: Array.isArray(item.product.images) ? item.product.images : [],
               stock: item.product.stock
             },
             quantity: item.quantity
@@ -180,7 +180,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               _id: item.product._id,
               name: item.product.name,
               price: item.product.price,
-              images: item.product.images,
+              images: Array.isArray(item.product.images) ? item.product.images : [],
               stock: item.product.stock
             },
             quantity: item.quantity
@@ -224,7 +224,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               _id: item.product._id,
               name: item.product.name,
               price: item.product.price,
-              images: item.product.images,
+              images: Array.isArray(item.product.images) ? item.product.images : [],
               stock: item.product.stock
             },
             quantity: item.quantity
