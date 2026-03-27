@@ -510,7 +510,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                     >
                       {/* Product Image */}
                       <Link href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined })} className="block relative h-52 bg-gray-100">
-                        {(product.images && product.images.length > 0) ? (
+                        {(Array.isArray(product.images) && product.images.length > 0) ? (
                           <ProductImage
                             src={typeof product.images[0] === 'object' ? product.images[0].src || product.images[0].url : product.images[0]}
                             alt={(typeof product.images[0] === 'object' ? product.images[0].alt : null) || product.name}
