@@ -18,7 +18,6 @@ interface RecentProduct {
   price: number;
   originalPrice?: number;
   image?: string;
-  slug?: string;
 }
 
 export default function RecentlyViewedProducts() {
