@@ -9,7 +9,6 @@ import { WishlistProvider } from "@/context/WishlistContext";
 import { LocationProvider } from "@/contexts/LocationContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { RateLimitProvider } from "@/contexts/RateLimitContext";
-import ErrorBoundary from "@/components/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
@@ -48,32 +47,28 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-      <Suspense fallback={null}>
-        <ErrorBoundary>
-          <AuthProvider>
-            <CartProvider>
-              <WishlistProvider>
-                <RateLimitProvider>
-                  <LocationProvider>
-                    <CurrencyProvider>
-                      <GlobalLoadingBar />
-                      <ConditionalHeader />
-                      <main className="flex-1 flex flex-col min-h-screen">{children}</main>
-                      <ConditionalFooter />
-                      <Toaster position="top-right" />
-                      <Script
-                        id="razorpay-checkout"
-                        src="https://checkout.razorpay.com/v1/checkout.js"
-                        strategy="lazyOnload"
-                      />
-                    </CurrencyProvider>
-                  </LocationProvider>
-                </RateLimitProvider>
-              </WishlistProvider>
-            </CartProvider>
-          </AuthProvider>
-        </ErrorBoundary>
-      </Suspense>
+        <AuthProvider>
+          <CartProvider>
+            <WishlistProvider>
+              <RateLimitProvider>
+                <LocationProvider>
+                  <CurrencyProvider>
+                    <GlobalLoadingBar />
+                    <ConditionalHeader />
+                    <main className="flex-1 flex flex-col min-h-screen">{children}</main>
+                    <ConditionalFooter />
+                    <Toaster position="top-right" />
+                    <Script
+                      id="razorpay-checkout"
+                      src="https://checkout.razorpay.com/v1/checkout.js"
+                      strategy="lazyOnload"
+                    />
+                  </CurrencyProvider>
+                </LocationProvider>
+              </RateLimitProvider>
+            </WishlistProvider>
+          </CartProvider>
+        </AuthProvider>
       </body>
     </html>
   );
