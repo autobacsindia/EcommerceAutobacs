@@ -486,7 +486,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     const productPageUrl =
                       typeof (product as any).permalink === 'string' && (product as any).permalink.trim() !== ''
                         ? (product as any).permalink
-                        : productUrl(product as any);
+                        : (productUrl(product as any, '/products') || '/products');
 
                     let imageSrc: string | undefined;
                     let imageAlt: string | undefined;
