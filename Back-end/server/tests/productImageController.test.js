@@ -21,6 +21,20 @@
 import { jest } from '@jest/globals';
 import * as dbHandler from './db-handler.js';
 
+// Suppress console.error during tests - we expect errors in negative test cases
+// This prevents "Simulated failure" logs from being treated as test failures
+const originalConsoleError = console.error;
+beforeAll(() => {
+  // Mock console.error to suppress expected error logs during tests
+  // Only suppress in this specific test file where we intentionally trigger errors
+  console.error = jest.fn();
+});
+
+afterAll(() => {
+  // Restore original console.error after tests complete
+  console.error = originalConsoleError;
+});
+
 // ── Cloudinary mock (must happen before app/controller import) ────────────────
 
 const mockUploadMany   = jest.fn();
