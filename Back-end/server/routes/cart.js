@@ -8,14 +8,37 @@ import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from
 const router = express.Router();
 
 // @route   GET /cart
-// @desc    Get user's cart
-// @access  Private
-router.get("/", protect, asyncHandler(async (req, res) => {
-  let cart = await Cart.findOne({ user: req.user.id })
-    .populate('items.product', 'name price images stock isActive');
+// @desc    Get user's cart (supports both authenticated and guest users)
+// @access  Public (optional auth)
+router.get("/", asyncHandler(async (req, res) => {
+  // Determine if user is authenticated or guest
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
 
-  if (!cart) {
-    cart = await Cart.create({ user: req.user.id, items: [] });
+  let cart;
+  if (isAuthenticated) {
+    // Authenticated user - find by user ID
+    cart = await Cart.findOne({ user: req.user.id })
+      .populate('items.product', 'name price images stock isActive');
+    
+    if (!cart) {
+      cart = await Cart.create({ user: req.user.id, items: [], isGuest: false });
+    }
+  } else {
+    // Guest user - find by session ID
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest cart operations'
+      });
+    }
+    
+    cart = await Cart.findOne({ sessionId })
+      .populate('items.product', 'name price images stock isActive');
+    
+    if (!cart) {
+      cart = await Cart.create({ sessionId, items: [], isGuest: true });
+    }
   }
 
   // Filter out inactive products
@@ -31,7 +54,7 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 // @route   POST /cart/add
 // @desc    Add item to cart
 // @access  Private
-router.post("/add", protect, validateCartItem, asyncHandler(async (req, res) => {
+router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   const { productId, quantity = 1 } = req.body;
 
   // Check if product exists and is active
@@ -51,10 +74,35 @@ router.post("/add", protect, validateCartItem, asyncHandler(async (req, res) => 
     });
   }
 
-  let cart = await Cart.findOne({ user: req.user.id });
+  // Determine if user is authenticated or guest
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
 
-  if (!cart) {
-    cart = new Cart({ user: req.user.id, items: [] });
+  // Find cart by user ID or session ID
+  let cart;
+  if (isAuthenticated) {
+    // Authenticated user - find by user ID
+    cart = await Cart.findOne({ user: req.user.id })
+      .populate('items.product', 'name price images stock isActive');
+    
+    if (!cart) {
+      cart = new Cart({ user: req.user.id, items: [], isGuest: false });
+    }
+  } else {
+    // Guest user - find by session ID
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest cart operations'
+      });
+    }
+    
+    cart = await Cart.findOne({ sessionId })
+      .populate('items.product', 'name price images stock isActive');
+    
+    if (!cart) {
+      cart = new Cart({ sessionId, items: [], isGuest: true });
+    }
   }
 
   // Check if product already in cart
@@ -94,11 +142,27 @@ router.post("/add", protect, validateCartItem, asyncHandler(async (req, res) => 
 
 // @route   PUT /cart/update/:productId
 // @desc    Update cart item quantity
-// @access  Private
-router.put("/update/:productId", protect, validateCartUpdate, asyncHandler(async (req, res) => {
+// @access  Public (optional auth)
+router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, res) => {
   const { quantity } = req.body;
 
-  const cart = await Cart.findOne({ user: req.user.id });
+  // Determine if user is authenticated or guest
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+
+  // Find cart by user ID or session ID
+  let cart;
+  if (isAuthenticated) {
+    cart = await Cart.findOne({ user: req.user.id });
+  } else {
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest cart operations'
+      });
+    }
+    cart = await Cart.findOne({ sessionId });
+  }
 
   if (!cart) {
     return res.status(404).json({
@@ -142,9 +206,25 @@ router.put("/update/:productId", protect, validateCartUpdate, asyncHandler(async
 
 // @route   DELETE /cart/remove/:productId
 // @desc    Remove item from cart
-// @access  Private
-router.delete("/remove/:productId", protect, validateCartProductIdParam, asyncHandler(async (req, res) => {
-  const cart = await Cart.findOne({ user: req.user.id });
+// @access  Public (optional auth)
+router.delete("/remove/:productId", validateCartProductIdParam, asyncHandler(async (req, res) => {
+  // Determine if user is authenticated or guest
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+
+  // Find cart by user ID or session ID
+  let cart;
+  if (isAuthenticated) {
+    cart = await Cart.findOne({ user: req.user.id });
+  } else {
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest cart operations'
+      });
+    }
+    cart = await Cart.findOne({ sessionId });
+  }
 
   if (!cart) {
     return res.status(404).json({
@@ -169,9 +249,25 @@ router.delete("/remove/:productId", protect, validateCartProductIdParam, asyncHa
 
 // @route   DELETE /cart/clear
 // @desc    Clear entire cart
-// @access  Private
-router.delete("/clear", protect, asyncHandler(async (req, res) => {
-  const cart = await Cart.findOne({ user: req.user.id });
+// @access  Public (optional auth)
+router.delete("/clear", asyncHandler(async (req, res) => {
+  // Determine if user is authenticated or guest
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+
+  // Find cart by user ID or session ID
+  let cart;
+  if (isAuthenticated) {
+    cart = await Cart.findOne({ user: req.user.id });
+  } else {
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest cart operations'
+      });
+    }
+    cart = await Cart.findOne({ sessionId });
+  }
 
   if (!cart) {
     return res.status(404).json({

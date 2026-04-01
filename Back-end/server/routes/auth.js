@@ -27,6 +27,11 @@ import {
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { generateTokenPair as generateCryptoTokenPair, hashToken } from "../utils/tokenUtils.js";
 import { passwordResetEmail, emailVerificationEmail, passwordChangedEmail } from "../utils/emailTemplates.js";
+import { 
+  requestMagicLink,
+  verifyMagicLink,
+  resendMagicLink
+} from "../controllers/magicLinkController.js";
 import emailHandler from "../services/emailHandler.js";
 import { 
   generateTokenPair as generateSessionTokenPair,
@@ -1071,5 +1076,24 @@ router.post(
     });
   })
 );
+
+// ========================================
+// MAGIC LINK AUTHENTICATION ROUTES
+// ========================================
+
+// @route   POST /auth/magic-link/request
+// @desc    Request magic link for guest order claiming
+// @access  Public
+router.post("/magic-link/request", asyncHandler(requestMagicLink));
+
+// @route   POST /auth/magic-link/verify
+// @desc    Verify magic link and claim account
+// @access  Public
+router.post("/magic-link/verify", asyncHandler(verifyMagicLink));
+
+// @route   POST /auth/magic-link/resend
+// @desc    Resend magic link
+// @access  Public
+router.post("/magic-link/resend", asyncHandler(resendMagicLink));
 
 export default router;

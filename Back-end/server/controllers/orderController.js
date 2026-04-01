@@ -1,8 +1,12 @@
 import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
+import User from "../models/User.js";
 import orderStatusService from "../services/orderStatusService.js";
 import orderTrackingService from "../services/orderTrackingService.js";
+import emailHandler from "../services/emailHandler.js";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 // @desc    Get all orders for logged-in user with pagination
 // @route   GET /orders
@@ -250,6 +254,196 @@ export const createOrder = async (req, res) => {
     order
   });
 };
+
+// @desc    Create guest order (no authentication required)
+// @route   POST /orders/guest
+// @access  Public
+export const createGuestOrder = async (req, res) => {
+  try {
+    const { items, shippingAddress, paymentMethod, email, phone } = req.body;
+    
+    // Validate contact info (at least one required)
+    if (!email && !phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either email or phone is required'
+      });
+    }
+    
+    // Validate items
+    if (!items || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No order items provided'
+      });
+    }
+    
+    // Find or create guest user
+    let user;
+    const searchCriteria = email 
+      ? { email: email.toLowerCase() }
+      : { phone };
+    
+    user = await User.findOne(searchCriteria);
+    
+    if (!user) {
+      // Create temporary guest user with random password
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(randomPassword, salt);
+      
+      user = await User.create({
+        name: shippingAddress.fullName || 'Guest User',
+        email: email?.toLowerCase(),
+        phone,
+        passwordHash,
+        isGuest: true,
+        isVerified: false,
+        addresses: [shippingAddress]
+      });
+    } else if (user.isGuest) {
+      // Update existing guest user's address
+      user.addresses.push(shippingAddress);
+      await user.save();
+    }
+    
+    // Reuse existing order creation logic (extract core logic)
+    const { createOrderInternal } = await import('./orderController.js');
+    const order = await createOrderInternal(user, items, shippingAddress, paymentMethod, req.body);
+    
+    // Generate magic link token for claiming account
+    const magicToken = crypto.randomBytes(32).toString('hex');
+    user.magicLinkToken = magicToken;
+    user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    await user.save();
+    
+    // Send magic link email
+    if (email) {
+      try {
+        await emailHandler.sendMagicLinkEmail(email, magicToken, order._id.toString());
+        console.log('[GUEST_ORDER] Magic link sent to:', email);
+      } catch (emailError) {
+        console.error('[GUEST_ORDER] Failed to send magic link:', emailError.message);
+        // Don't fail the order if email fails - we'll log it
+      }
+    }
+    
+    res.status(201).json({
+      success: true,
+      order: {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        status: order.status
+      },
+      isGuest: true,
+      message: 'Order created successfully! Check your email to claim your account.',
+      // In development, include token for testing
+      ...(process.env.NODE_ENV === 'development' && { 
+        magicLinkToken: magicToken,
+        debugMessage: 'Token included for development testing only'
+      })
+    });
+    
+  } catch (error) {
+    console.error('[GUEST_ORDER_ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create guest order',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Internal helper for order creation (used by both authenticated and guest orders)
+ */
+export async function createOrderInternal(user, items, shippingAddress, paymentMethod, orderData) {
+  const shippingCost = Math.max(0, Number(orderData.shippingCost) || 0);
+  const tax = Math.max(0, Number(orderData.tax) || 0);
+  const discount = 0;
+  
+  // Validate all products and calculate totals
+  let subtotal = 0;
+  const orderItems = [];
+  
+  for (const item of items) {
+    const product = await Product.findById(item.product);
+    
+    if (!product || !product.isActive) {
+      throw new Error(`Product ${item.product} not found or not available`);
+    }
+    
+    if (product.stock < item.quantity) {
+      throw new Error(`Insufficient stock for ${product.name}. Only ${product.stock} available`);
+    }
+    
+    orderItems.push({
+      product: product._id,
+      quantity: item.quantity,
+      price: product.price,
+      name: product.name,
+      image: product.images[0]?.url
+    });
+    
+    subtotal += product.price * item.quantity;
+  }
+  
+  const totalAmount = subtotal + shippingCost + tax - discount;
+  
+  if (totalAmount <= 0) {
+    throw new Error('Order total must be greater than zero');
+  }
+  
+  // Atomic stock reservation
+  const reserved = [];
+  
+  for (const item of orderItems) {
+    const updated = await Product.findOneAndUpdate(
+      { _id: item.product, stock: { $gte: item.quantity } },
+      { $inc: { stock: -item.quantity } },
+      { new: false }
+    );
+    
+    if (!updated) {
+      // Rollback
+      if (reserved.length > 0) {
+        await Promise.all(
+          reserved.map((r) =>
+            Product.findByIdAndUpdate(r.product, { $inc: { stock: r.quantity } })
+          )
+        );
+      }
+      const current = await Product.findById(item.product).select('name stock');
+      const available = current?.stock ?? 0;
+      throw new Error(`${current?.name ?? 'Product'} is out of stock. ${available > 0 ? `Only ${available} left` : 'No units available'}.`);
+    }
+    
+    reserved.push({ product: item.product, quantity: item.quantity });
+  }
+  
+  // Create order
+  const order = await Order.create({
+    user: user._id,
+    items: orderItems,
+    shippingAddress,
+    subtotal,
+    shippingCost: Number(shippingCost),
+    tax: Number(tax),
+    discount: Number(discount),
+    totalAmount,
+    status: 'pending',
+    paymentMethod
+  });
+  
+  // Clear user's cart after successful order
+  await Cart.findOneAndUpdate(
+    { user: user._id },
+    { items: [] }
+  );
+  
+  return order;
+}
 
 // @desc    Cancel an order with validation and refund initiation
 // @route   PUT /orders/:id/cancel

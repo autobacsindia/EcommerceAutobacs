@@ -37,12 +37,6 @@ export default function ProductCard({
     e.preventDefault(); // Prevent navigation if clicked inside a Link
     e.stopPropagation();
 
-    if (!isAuthenticated) {
-      toast.error('Please log in to add items to cart');
-      router.push('/login');
-      return;
-    }
-
     try {
       await addToCart(product._id, 1);
       toast.success('Added to cart');

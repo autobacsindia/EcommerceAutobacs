@@ -16,6 +16,7 @@ import { ApiError, ErrorCategory, type FetchOptions, type RateLimitInfo } from '
 // Storage key for JWT token
 const TOKEN_KEY = 'autobacs_auth_token';
 const REFRESH_TOKEN_KEY = 'autobacs_refresh_token';
+const SESSION_ID_KEY = 'autobacs_session_id';
 
 // Define location-related endpoints that need special rate limit handling
 const locationEndpoints = ['/location/current', '/location/select', '/location/estimate'];
@@ -37,6 +38,8 @@ class APIClient {
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem(TOKEN_KEY);
       this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      // Initialize or generate session ID for guest cart support
+      this.getSessionId();
     }
   }
 
@@ -84,6 +87,32 @@ class APIClient {
    */
   getRefreshToken(): string | null {
     return this.refreshToken;
+  }
+
+  /**
+   * Get or generate session ID for guest cart support
+   */
+  private getSessionId(): string {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    
+    let sessionId = localStorage.getItem(SESSION_ID_KEY);
+    if (!sessionId) {
+      sessionId = this.generateSessionId();
+      localStorage.setItem(SESSION_ID_KEY, sessionId);
+    }
+    return sessionId;
+  }
+
+  /**
+   * Generate a cryptographically secure random session ID
+   */
+  private generateSessionId(): string {
+    const randomPart = crypto.getRandomValues(new Uint8Array(16))
+      .reduce((acc, byte) => acc + byte.toString(16).padStart(2, '0'), '');
+    const timestamp = Date.now().toString(36);
+    return `sess_${randomPart}_${timestamp}`;
   }
 
   /**
@@ -168,6 +197,12 @@ class APIClient {
 
     if (this.token) {
       (headers as any)['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // Add session ID for guest cart support (always include, even for authenticated users)
+    const sessionId = this.getSessionId();
+    if (sessionId) {
+      (headers as any)['x-session-id'] = sessionId;
     }
 
     // Add CSRF token if available
@@ -559,39 +594,43 @@ class APIClient {
         const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/refresh');
         
         if (error.status === 401 && !isAuthEndpoint) {
-          // Try to refresh even if we don't have a stored refresh token (might be in httpOnly cookie)
-          if (!this.refreshToken) {
-            console.debug('No stored refresh token, attempting cookie-based refresh...');
-          }
-
-          if (!this.isRefreshing) {
-             this.isRefreshing = true;
-             try {
-               const newToken = await this.refreshSession();
-               if (newToken) {
-                 this.onRefreshed(newToken);
-               }
-               this.isRefreshing = false;
-               // Retry the request immediately
-               continue;
-             } catch (refreshError) {
-              this.isRefreshing = false;
-              this.clearAuthToken();
-              console.error('Token refresh failed:', refreshError);
-              if (typeof window !== 'undefined') {
-                window.location.href = '/login?reason=refresh_failed';
+          // Only attempt refresh if we have a refresh token (skip for guest users)
+          if (this.refreshToken) {
+            console.debug('401 detected, attempting token refresh...');
+            
+            if (!this.isRefreshing) {
+               this.isRefreshing = true;
+               try {
+                 const newToken = await this.refreshSession();
+                 if (newToken) {
+                   this.onRefreshed(newToken);
+                 }
+                 this.isRefreshing = false;
+                 // Retry the request immediately
+                 continue;
+               } catch (refreshError) {
+                this.isRefreshing = false;
+                this.clearAuthToken();
+                console.error('Token refresh failed:', refreshError);
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/login?reason=refresh_failed';
+                }
+                throw refreshError;
               }
-              throw refreshError;
-            }
-          } else {
-             // Wait for refresh to complete
-             return new Promise<T>((resolve, reject) => {
-               this.addSubscriber(() => {
-                 // Retry request after token refresh
-                 resolve(this.executeRequest<T>(method, endpoint, data, options));
+            } else {
+               // Wait for refresh to complete
+               return new Promise<T>((resolve, reject) => {
+                 this.addSubscriber(() => {
+                   // Retry request after token refresh
+                   resolve(this.executeRequest<T>(method, endpoint, data, options));
+                 });
                });
-             });
-           }
+             }
+          } else {
+            // No refresh token - this is a guest user, don't attempt refresh
+            // Just throw the 401 error normally
+            console.debug('401 detected but no refresh token available (guest user)');
+          }
         }
         
         lastError = error;

@@ -15,16 +15,32 @@ router.use(attachTokenRefreshInfo);
 // @route   POST /razorpay/create-order
 // @desc    Create a Razorpay order
 // @access  Private
-router.post("/create-order", protect, validateRazorpayOrder, asyncHandler(async (req, res) => {
+router.post("/create-order", validateRazorpayOrder, asyncHandler(async (req, res) => {
   try {
     const { orderId, amount, currency, receipt } = req.body;
     
-    // Verify the order belongs to the user
-    const order = await Order.findOne({ _id: orderId, user: req.user.id });
+    // Determine if user is authenticated or guest
+    const isAuthenticated = req.user && req.user.id;
+    const sessionId = req.headers['x-session-id'] || req.sessionID;
+    
+    // Verify the order exists and belongs to user/session
+    let order;
+    if (isAuthenticated) {
+      order = await Order.findOne({ _id: orderId, user: req.user.id });
+    } else {
+      if (!sessionId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Session ID required for guest operations'
+        });
+      }
+      order = await Order.findOne({ _id: orderId, sessionId });
+    }
+    
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found or does not belong to user'
+        message: 'Order not found or does not belong to user/session'
       });
     }
     
@@ -49,9 +65,9 @@ router.post("/create-order", protect, validateRazorpayOrder, asyncHandler(async 
 }));
 
 // @route   POST /razorpay/verify-payment
-// @desc    Verify Razorpay payment and update order status
-// @access  Private
-router.post("/verify-payment", protect, validateRazorpayVerification, asyncHandler(async (req, res) => {
+// @desc    Verify Razorpay payment and update order status (supports both authenticated and guest users)
+// @access  Public (optional auth)
+router.post("/verify-payment", validateRazorpayVerification, asyncHandler(async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
     
@@ -85,11 +101,28 @@ router.post("/verify-payment", protect, validateRazorpayVerification, asyncHandl
       });
     }
     
+    // Determine if user is authenticated or guest
+    const isAuthenticated = req.user && req.user.id;
+    const sessionId = req.headers['x-session-id'] || req.sessionID;
+    
+    // Verify order belongs to user/session (skip for guest orders with sessionId)
+    if (isAuthenticated && order.user && order.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to verify this order'
+      });
+    } else if (!isAuthenticated && !sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest operations'
+      });
+    }
+    
     // Process successful payment
     const result = await razorpayService.processPaymentSuccess(
       order._id.toString(),
       verificationResult.payment,
-      req.user.id
+      isAuthenticated ? req.user.id : null
     );
     
     res.json({

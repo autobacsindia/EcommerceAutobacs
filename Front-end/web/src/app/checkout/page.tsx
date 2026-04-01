@@ -39,10 +39,15 @@ interface SavedAddress {
 export default function CheckoutPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const { cart, clearCart } = useCart();
+  const { cart, clearCart, isLoading: cartLoading } = useCart();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Guest checkout state
+  const [isGuest, setIsGuest] = useState(!isAuthenticated);
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   
   const { processPayment, isProcessing: isRazorpayProcessing } = useRazorpay({
     onSuccess: async (orderId) => {
@@ -113,22 +118,30 @@ export default function CheckoutPage() {
           console.error('Failed to fetch profile', error);
           setShowAddressForm(true);
         }
+      } else {
+        // Guest user - show address form immediately
+        setShowAddressForm(true);
       }
     };
     fetchProfile();
   }, [isAuthenticated]); // removed user dependency to avoid infinite loop if user object changes
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
+    // Only redirect if NOT guest checkout AND not authenticated
+    if (!authLoading && !isAuthenticated && !isGuest) {
       router.push('/login');
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, isGuest]);
 
   useEffect(() => {
-    if (!cart || cart.items?.length === 0) {
-      router.push('/cart');
+    // Only redirect if cart is truly empty (not still loading) AND not a guest with session cart
+    // Wait for both auth and cart to finish loading before checking
+    if (!authLoading && !cartLoading) {
+      if (!cart || cart.items?.length === 0) {
+        router.push('/cart');
+      }
     }
-  }, [cart, router]);
+  }, [cart, router, authLoading, cartLoading]);
 
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +156,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (shouldSaveAddress) {
+    // Only save address to profile for authenticated users
+    if (shouldSaveAddress && isAuthenticated) {
       try {
         const newAddress: SavedAddress = {
           fullName: address.fullName,
@@ -168,7 +182,7 @@ export default function CheckoutPage() {
         toast.success('Address saved to profile');
       } catch (error) {
         console.error('Failed to save address', error);
-        // Continue anyway
+        // Continue anyway - address is still used for this order
       }
     }
 
@@ -179,11 +193,23 @@ export default function CheckoutPage() {
     try {
       setLoading(true);
       
+      // Validate guest contact info
+      if (isGuest && !guestEmail && !guestPhone) {
+        toast.error('Please enter email or phone number for guest checkout');
+        setLoading(false);
+        return;
+      }
+      
       const subtotal = cart?.total || 0;
       const tax = subtotal * 0.18;
       const totalAmount = subtotal + tax;
       
       const orderData = {
+        // Guest checkout fields
+        ...(isGuest && { 
+          email: guestEmail, 
+          phone: guestPhone 
+        }),
         shippingAddress: {
           fullName: address.fullName,
           addressLine1: address.street,
@@ -206,14 +232,26 @@ export default function CheckoutPage() {
         totalAmount,
       };
 
-      const response = await orderService.createOrder(orderData) as any;
+      // Use guest endpoint or regular endpoint based on isGuest flag
+      const endpoint = isGuest ? '/orders/guest' : '/orders';
+      const response = await apiClient.post(endpoint, orderData) as any;
       const newOrderId = response.order._id;
+      
+      // Store guest claim information
+      if (isGuest) {
+        localStorage.setItem('pendingClaim', JSON.stringify({
+          orderId: newOrderId,
+          email: guestEmail,
+          phone: guestPhone,
+          magicToken: response.magicLinkToken, // Development only
+        }));
+      }
       
       // If Razorpay is selected, initiate Razorpay checkout
       if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
         await processPayment(newOrderId, response.order.totalAmount, {
            name: user?.name || address.fullName,
-           email: user?.email || '',
+           email: user?.email || guestEmail || '',
            phone: address.phone
         });
       } else {
@@ -229,11 +267,23 @@ export default function CheckoutPage() {
     }
   };
 
-  if (authLoading || !isAuthenticated) {
+  // Show loading while auth or cart is loading
+  if (authLoading || cartLoading) {
+    return (
+      <div className="container mx-auto px-4 py-16 text-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading checkout...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && !isGuest) {
     return null;
   }
 
   if (currentStep === 'confirmation' && orderId) {
+    const isGuestOrder = localStorage.getItem('pendingClaim');
+    
     return (
       <div className="container mx-auto px-4 py-16">
         <div className="max-w-2xl mx-auto text-center">
@@ -243,6 +293,33 @@ export default function CheckoutPage() {
           <h1 className="text-3xl font-bold mb-4">Order Placed Successfully!</h1>
           <p className="text-gray-600 mb-2">Thank you for your order</p>
           <p className="text-lg font-semibold mb-8">Order ID: #{orderId}</p>
+          
+          {/* Guest Claim Account Section */}
+          {isGuestOrder && (
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 mb-8 border border-purple-200">
+              <h3 className="font-bold text-xl mb-3 text-purple-900">
+                🎉 Claim Your Account!
+              </h3>
+              <p className="text-purple-800 mb-4 text-left">
+                We've sent a magic link to your email. Click the link below to:
+              </p>
+              <ul className="text-left text-purple-700 mb-6 space-y-2">
+                <li>✅ Track your order in real-time</li>
+                <li>✅ Get shipping updates</li>
+                <li>✅ View order history</li>
+                <li>✅ Easy returns & support</li>
+              </ul>
+              <a
+                href={`/claim-order?orderId=${orderId}`}
+                className="inline-block bg-purple-600 text-white px-8 py-3 rounded-lg hover:bg-purple-700 font-semibold transition-colors"
+              >
+                🚀 Claim My Account Now
+              </a>
+              <p className="text-xs text-purple-600 mt-3">
+                Or check your email for the magic link
+              </p>
+            </div>
+          )}
           
           <div className="bg-gray-50 rounded-lg p-6 mb-8 max-w-md mx-auto text-left">
             <h3 className="font-semibold text-lg mb-4 text-center">Payment Details</h3>
@@ -266,7 +343,10 @@ export default function CheckoutPage() {
               View Order Details
             </button>
             <button
-              onClick={() => router.push('/products')}
+              onClick={() => {
+                localStorage.removeItem('pendingClaim');
+                router.push('/products');
+              }}
               className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-300"
             >
               Continue Shopping
@@ -364,6 +444,53 @@ export default function CheckoutPage() {
       {currentStep === 'address' && (
         <div className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">Shipping Address</h2>
+          
+          {/* Guest Contact Information */}
+          {!isAuthenticated && (
+            <div className="mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span className="text-2xl">📧</span>
+                Contact Information
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required={!guestPhone}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required={!guestEmail}
+                  />
+                </div>
+                
+                <div className="bg-blue-50 p-4 rounded-lg mt-4">
+                  <p className="text-sm text-blue-800">
+                    ✨ <strong>Quick Checkout:</strong> No account needed! 
+                    We'll send you a magic link to track your order and claim your account.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Saved Addresses List */}
           {!showAddressForm && savedAddresses.length > 0 && (

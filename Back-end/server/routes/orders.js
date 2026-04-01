@@ -26,6 +26,7 @@ import {
   getRefunds,
   getOrderById,
   createOrder,
+  createGuestOrder,
   cancelOrder,
   markPaymentFailed,
   deleteOrder,
@@ -74,6 +75,11 @@ router.get("/:id", protect, validateIdParam, asyncHandler(getOrderById));
 // @desc    Create new order from cart
 // @access  Private
 router.post("/", protect, validateOrder, asyncHandler(createOrder));
+
+// @route   POST /orders/guest
+// @desc    Create guest order (no authentication required)
+// @access  Public
+router.post("/guest", validateOrder, asyncHandler(createGuestOrder));
 
 // @route   PUT /orders/:id/cancel
 // @desc    Cancel an order with validation and refund initiation

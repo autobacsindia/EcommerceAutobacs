@@ -124,8 +124,8 @@ export default function CartPage() {
 
               {/* Items List */}
               <div className="divide-y">
-                {cart.items.map((item) => (
-                  <div key={item.product._id} className="p-6">
+                {cart.items.map((item, index) => (
+                  <div key={`${item.product._id}-${index}`} className="p-6">
                     <div className="flex gap-4">
                       {/* Product Image */}
                       <Link

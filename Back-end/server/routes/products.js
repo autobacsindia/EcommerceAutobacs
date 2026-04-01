@@ -211,7 +211,8 @@ router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
 
   if (product.slug) {
     // Permanent redirect — consolidates SEO authority and prevents duplicate indexing
-    return res.redirect(301, `/products/${product.slug}`);
+    // Redirect to the slug-based endpoint with /api/v1/ prefix
+    return res.redirect(301, `/api/v1/products/slug/${product.slug}`);
   }
 
   // Product exists but has no slug yet (pre-migration doc) — serve directly

@@ -1,11 +1,22 @@
 import mongoose from "mongoose";
 
 const CartSchema = new mongoose.Schema({
+  // Support both authenticated users and guest sessions
   user: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "User",
-    required: true,
+    required: false, // Make optional for guest checkout
     unique: true
+  },
+  sessionId: {
+    type: String,
+    required: false, // Optional for guest sessions
+    unique: true,
+    sparse: true // Allow multiple nulls but ensure unique non-null values
+  },
+  isGuest: {
+    type: Boolean,
+    default: false
   },
   items: [{
     product: {

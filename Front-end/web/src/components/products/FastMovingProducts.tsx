@@ -88,12 +88,6 @@ export default function FastMovingProducts({
     e.preventDefault();
     e.stopPropagation(); // Prevent navigation to product page
 
-    if (!isAuthenticated) {
-      toast.error('Please login to add items to cart');
-      router.push('/login?redirect=/');
-      return;
-    }
-
     try {
       await addToCart(productId, 1);
       toast.success('Added to cart!');

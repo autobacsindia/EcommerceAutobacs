@@ -92,7 +92,19 @@ const UserSchema = new mongoose.Schema({
       expiryDate: Date,
       createdAt: { type: Date, default: Date.now }
     }]
-  }
+  },
+
+  // Guest checkout fields
+  isGuest: { type: Boolean, default: false, index: true },
+  magicLinkToken: String,
+  magicLinkExpires: Date,
+  claimedOrders: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Order'
+  }],
+  
+  // Phone number field (optional, for OTP/guest checkout)
+  phone: String
 }, { timestamps: true });
 
 export default mongoose.model("User", UserSchema);
