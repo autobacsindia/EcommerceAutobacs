@@ -41,13 +41,98 @@ router.get("/", asyncHandler(async (req, res) => {
     }
   }
 
-  // Filter out inactive products
-  cart.items = cart.items.filter(item => item.product && item.product.isActive);
-  await cart.save();
+  // 🟡 LAYER 1: Cart-Level Stock Validation
+  // Filter out inactive AND out-of-stock products
+  const originalItemsCount = cart.items.length;
+  const removedItems = [];
+  const adjustedItems = [];
+
+  cart.items = cart.items.filter(item => {
+    if (!item.product || !item.product.isActive) {
+      removedItems.push({
+        productId: item.product._id,
+        productName: item.product.name,
+        previousQuantity: item.quantity
+      });
+      return false;
+    }
+    if (item.product.stock <= 0) {
+      removedItems.push({
+        productId: item.product._id,
+        productName: item.product.name,
+        previousQuantity: item.quantity
+      });
+      return false;
+    }
+    return true;
+  });
+
+  // Auto-adjust quantities that exceed available stock
+  let adjustedCount = 0;
+  cart.items.forEach(item => {
+    if (item.quantity > item.product.stock) {
+      adjustedItems.push({
+        productId: item.product._id,
+        productName: item.product.name,
+        previousQuantity: item.quantity,
+        newQuantity: item.product.stock
+      });
+      item.quantity = item.product.stock;
+      adjustedCount++;
+    }
+  });
+
+  // Log changes for transparency
+  const changesToLog = [];
+  
+  if (removedItems.length > 0) {
+    changesToLog.push(...removedItems.map(item => ({
+      type: 'REMOVED_OUT_OF_STOCK',
+      productId: item.productId,
+      productName: item.productName,
+      previousQuantity: item.previousQuantity,
+      newQuantity: 0,
+      message: `${item.productName} was removed because it's now out of stock`
+    })));
+  }
+  
+  if (adjustedItems.length > 0) {
+    changesToLog.push(...adjustedItems.map(item => ({
+      type: 'QUANTITY_ADJUSTED',
+      productId: item.productId,
+      productName: item.productName,
+      previousQuantity: item.previousQuantity,
+      newQuantity: item.newQuantity,
+      message: `${item.productName} quantity adjusted from ${item.previousQuantity} to ${item.newQuantity} based on availability`
+    })));
+  }
+
+  // Save changes if items were removed or adjusted
+  if (originalItemsCount !== cart.items.length || adjustedCount > 0) {
+    if (changesToLog.length > 0) {
+      cart.recentChanges.push(...changesToLog);
+      // Keep only last 10 changes to prevent bloat
+      if (cart.recentChanges.length > 10) {
+        cart.recentChanges = cart.recentChanges.slice(-10);
+      }
+    }
+    await cart.save();
+  }
+
+  // Build stock validation messages
+  const stockMessages = [];
+  if (originalItemsCount !== cart.items.length) {
+    stockMessages.push(`${originalItemsCount - cart.items.length} item(s) removed - out of stock`);
+  }
+  if (adjustedCount > 0) {
+    stockMessages.push(`${adjustedCount} item(s) quantity adjusted based on availability`);
+  }
 
   res.json({
     success: true,
-    cart
+    cart,
+    stockMessages: stockMessages.length > 0 ? stockMessages : undefined,
+    recentChanges: cart.recentChanges.filter(c => c.createdAt > Date.now() - 300000) // Last 5 min
   });
 }));
 
@@ -182,12 +267,23 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
     });
   }
 
-  // Check stock
+  // 🟡 LAYER 1: Stock Validation on Quantity Update
   const product = await Product.findById(req.params.productId);
+  
+  // Check if product is out of stock
+  if (product.stock <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: `This item is now out of stock`
+    });
+  }
+  
+  // Check if requested quantity exceeds available stock
   if (quantity > product.stock) {
     return res.status(400).json({
       success: false,
-      message: `Only ${product.stock} items available in stock`
+      message: `Only ${product.stock} items available in stock`,
+      maxQuantity: product.stock
     });
   }
 
@@ -283,6 +379,92 @@ router.delete("/clear", asyncHandler(async (req, res) => {
     success: true,
     message: 'Cart cleared',
     cart
+  });
+}));
+
+// @route   POST /cart/validate-checkout
+// @desc    🟠 LAYER 2: Pre-checkout stock validation (blocking check)
+// @access  Public (optional auth)
+router.post("/validate-checkout", asyncHandler(async (req, res) => {
+  // Determine if user is authenticated or guest
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+
+  // Find cart
+  let cart;
+  if (isAuthenticated) {
+    cart = await Cart.findOne({ user: req.user.id })
+      .populate('items.product', 'name price images stock isActive');
+  } else {
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID required for guest cart operations'
+      });
+    }
+    
+    cart = await Cart.findOne({ sessionId })
+      .populate('items.product', 'name price images stock isActive');
+  }
+
+  if (!cart || cart.items.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Your cart is empty'
+    });
+  }
+
+  // 🟠 LAYER 2: Pre-Checkout Validation - Validate ALL items
+  const validationErrors = [];
+  const validItems = [];
+
+  for (const item of cart.items) {
+    if (!item.product || !item.product.isActive) {
+      validationErrors.push({
+        productId: item.product?._id || item.product,
+        message: 'Product no longer available',
+        type: 'unavailable'
+      });
+      continue;
+    }
+
+    if (item.product.stock <= 0) {
+      validationErrors.push({
+        productId: item.product._id,
+        name: item.product.name,
+        message: 'This item is out of stock',
+        type: 'out_of_stock'
+      });
+      continue;
+    }
+
+    if (item.quantity > item.product.stock) {
+      validationErrors.push({
+        productId: item.product._id,
+        name: item.product.name,
+        message: `Only ${item.product.stock} left in stock`,
+        availableStock: item.product.stock,
+        requestedQuantity: item.quantity,
+        type: 'insufficient_stock'
+      });
+      continue;
+    }
+
+    // Item is valid
+    validItems.push(item);
+  }
+
+  const isValid = validationErrors.length === 0;
+
+  res.json({
+    success: isValid,
+    isValid,
+    validationErrors: isValid ? [] : validationErrors,
+    validItemsCount: validItems.length,
+    totalItems: cart.items.length,
+    message: isValid 
+      ? 'All items are available and ready for checkout'
+      : `${validationErrors.length} item(s) have stock issues`
   });
 }));
 

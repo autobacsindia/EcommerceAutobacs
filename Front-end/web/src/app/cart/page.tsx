@@ -1,29 +1,117 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { ProductImage, productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
 import SkeletonLoader from '@/components/layout/SkeletonLoader';
+import apiClient from '@/lib/api';
+import { API_ENDPOINTS } from '@/lib/constants';
+import { useAuth } from '@/context/AuthContext';
 
 export default function CartPage() {
-  const { cart, removeFromCart, updateQuantity, clearCart, isLoading } = useCart();
+  const { cart, removeFromCart, updateQuantity, clearCart, isLoading, refreshCart } = useCart();
+  const { isAuthenticated } = useAuth();
   const { formatPrice } = useCurrency();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
+  const [recentChanges, setRecentChanges] = useState<any[]>([]);
+  const [hasShownChanges, setHasShownChanges] = useState(false);
 
+  // 🟡 LAYER 1: Fetch cart on mount to get stock messages and recent changes
+  useEffect(() => {
+    const fetchCartWithStockCheck = async () => {
+      try {
+        const response: any = await apiClient.get(API_ENDPOINTS.CART);
+        
+        // Handle recent changes for transparency
+        if (response.recentChanges && response.recentChanges.length > 0) {
+          setRecentChanges(response.recentChanges);
+          
+          // Show toast notifications for each change (only first time)
+          if (!hasShownChanges) {
+            response.recentChanges.forEach((change: any) => {
+              if (change.type === 'REMOVED_OUT_OF_STOCK') {
+                toast.error(change.message, {
+                  icon: '❌',
+                  duration: 6000,
+                });
+              } else if (change.type === 'QUANTITY_ADJUSTED') {
+                toast(change.message, {
+                  icon: '⚠️',
+                  style: {
+                    background: '#FFA726',
+                    color: '#FFFFFF',
+                  },
+                  duration: 6000,
+                });
+              }
+            });
+            setHasShownChanges(true);
+            
+            // Clear the flag after 5 seconds
+            setTimeout(() => setHasShownChanges(false), 5000);
+          }
+        }
+        
+        // Also handle legacy stockMessages
+        if (response.stockMessages && response.stockMessages.length > 0) {
+          response.stockMessages.forEach((msg: string) => {
+            toast(msg, {
+              icon: '⚠️',
+              style: {
+                background: '#FFA726',
+                color: '#FFFFFF',
+              },
+            });
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch cart:', error);
+      }
+    };
+
+    if (isAuthenticated && !isLoading) {
+      fetchCartWithStockCheck();
+    }
+  }, [isAuthenticated, isLoading]);
+
+  // 🟡 LAYER 1: Enhanced quantity update with better error handling
   const handleQuantityChange = async (productId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
     
     try {
       setUpdatingItem(productId);
       await updateQuantity(productId, newQuantity);
-    } catch (error) {
+      toast.success('Cart updated');
+    } catch (error: any) {
       console.error('Failed to update quantity:', error);
-      toast.error('Failed to update quantity');
+      
+      // Handle stock-related errors
+      if (error.message?.includes('out of stock')) {
+        toast.error('This item is now out of stock', {
+          icon: '❌',
+        });
+        // Remove from cart after delay
+        setTimeout(() => {
+          removeFromCart(productId);
+        }, 2000);
+      } else if (error.message?.includes('Only') && error.message?.includes('available')) {
+        toast.error(error.message, {
+          icon: '⚠️',
+        });
+        // Auto-adjust quantity if maxQuantity is provided
+        if (error.maxQuantity) {
+          setTimeout(async () => {
+            await updateQuantity(productId, error.maxQuantity);
+          }, 1500);
+        }
+      } else {
+        toast.error('Failed to update quantity');
+      }
     } finally {
       setUpdatingItem(null);
     }
@@ -106,6 +194,48 @@ export default function CartPage() {
           <h1 className="text-3xl font-bold text-gray-900">Shopping Cart</h1>
           <p className="text-gray-600 mt-1">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in your cart</p>
         </div>
+
+        {/* 🟡 Recent Changes Notification Banner */}
+        {recentChanges.length > 0 && (
+          <div className="mb-6 bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-400 rounded-lg p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-6 w-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-orange-800">
+                  Cart Updates Due to Stock Changes
+                </h3>
+                <ul className="mt-2 space-y-1">
+                  {recentChanges.map((change, idx) => (
+                    <li key={idx} className="text-sm text-orange-700 flex items-start gap-2">
+                      <span className="text-orange-500 mt-0.5">•</span>
+                      <span>
+                        {change.type === 'REMOVED_OUT_OF_STOCK' ? (
+                          <strong>{change.productName}</strong>
+                        ) : change.type === 'QUANTITY_ADJUSTED' ? (
+                          <>
+                            <strong>{change.productName}</strong>: Quantity changed from{' '}
+                            <span className="font-mono">{change.previousQuantity}</span> to{' '}
+                            <span className="font-mono">{change.newQuantity}</span>
+                          </>
+                        ) : null}{' '}
+                        {change.message.includes('because') && (
+                          <span className="text-orange-600 italic">
+                            ({change.message.split('because')[1]})
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-orange-600 mt-3">
+                  💡 These changes were made automatically based on current stock availability
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="lg:grid lg:grid-cols-12 lg:gap-8">
           {/* Cart Items */}
@@ -199,12 +329,24 @@ export default function CartPage() {
                           </p>
                         </div>
 
-                        {/* Stock Warning */}
-                        {item.quantity >= item.product.stock && (
+                        {/* 🟡 LAYER 1: Enhanced Stock Warnings */}
+                        {item.product.stock === 0 ? (
+                          <div className="mt-2 flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span className="text-sm font-medium">This item is now out of stock</span>
+                          </div>
+                        ) : item.quantity >= item.product.stock ? (
+                          <div className="mt-2 flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-md">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              Maximum available: {item.product.stock} {item.product.stock === 1 ? 'item' : 'items'}
+                            </span>
+                          </div>
+                        ) : item.product.stock <= 5 ? (
                           <p className="text-sm text-orange-600 mt-2">
-                            Maximum available: {item.product.stock}
+                            ⚠️ Only {item.product.stock} left in stock
                           </p>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>

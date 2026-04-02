@@ -7,7 +7,7 @@ import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
-import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
@@ -39,10 +39,11 @@ interface SavedAddress {
 export default function CheckoutPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const { cart, clearCart, isLoading: cartLoading } = useCart();
+  const { cart, clearCart, isLoading: cartLoading, refreshCart } = useCart();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [stockValidationErrors, setStockValidationErrors] = useState<any[]>([]);
   
   // Guest checkout state
   const [isGuest, setIsGuest] = useState(!isAuthenticated);
@@ -78,6 +79,41 @@ export default function CheckoutPage() {
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null);
+
+  // 🟠 LAYER 2: Pre-Checkout Validation - Run when entering checkout
+  useEffect(() => {
+    const validateCartStock = async () => {
+      if (!cart || cart.items.length === 0) return;
+
+      try {
+        const response: any = await apiClient.post(API_ENDPOINTS.CART_VALIDATE_CHECKOUT, {});
+        
+        if (!response.isValid) {
+          setStockValidationErrors(response.validationErrors || []);
+          
+          // Show error toasts for each validation error
+          (response.validationErrors || []).forEach((error: any) => {
+            toast.error(error.message, {
+              icon: '⚠️',
+              duration: 5000,
+            });
+          });
+
+          // Refresh cart to sync with latest stock
+          await refreshCart();
+        } else {
+          setStockValidationErrors([]);
+        }
+      } catch (error) {
+        console.error('Pre-checkout validation failed:', error);
+        setStockValidationErrors([{ message: 'Unable to validate stock availability' }]);
+      }
+    };
+
+    if (currentStep === 'cart' && cart && cart.items.length > 0) {
+      validateCartStock();
+    }
+  }, [currentStep, cart?.items?.length]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -399,6 +435,38 @@ export default function CheckoutPage() {
       {currentStep === 'cart' && (
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">Review Your Cart</h2>
+          
+          {/* 🟠 LAYER 2: Pre-Checkout Stock Validation Errors */}
+          {stockValidationErrors.length > 0 && (
+            <div className="mb-6 space-y-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Stock Availability Issues
+                </h3>
+                <ul className="space-y-2">
+                  {stockValidationErrors.map((error, idx) => (
+                    <li key={idx} className="text-red-700 text-sm flex items-start gap-2">
+                      <span className="text-red-500 mt-1">•</span>
+                      <span>
+                        {error.name ? <strong>{error.name}:</strong> : null}{' '}
+                        {error.message}
+                        {error.availableStock !== undefined && (
+                          <span className="block text-xs mt-1">
+                            Available: {error.availableStock} | In cart: {error.requestedQuantity}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-sm text-gray-600">
+                Please update your cart before proceeding to checkout.
+              </p>
+            </div>
+          )}
+          
           <div className="space-y-4 mb-8">
             {cart?.items.map((item: any) => (
               <div key={item.product._id} className="flex items-center gap-4 border rounded-lg p-4">
@@ -433,7 +501,8 @@ export default function CheckoutPage() {
           </div>
           <button
             onClick={() => setCurrentStep('address')}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700"
+            disabled={stockValidationErrors.length > 0}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Continue to Shipping
           </button>

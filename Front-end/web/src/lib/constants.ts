@@ -40,6 +40,7 @@ export const API_ENDPOINTS = {
   CART_UPDATE: (productId: string) => `/cart/update/${productId}`,
   CART_REMOVE: (productId: string) => `/cart/remove/${productId}`,
   CART_CLEAR: '/cart/clear',
+  CART_VALIDATE_CHECKOUT: '/cart/validate-checkout',
   
   // Wishlist
   WISHLIST: '/wishlist',

@@ -46,10 +46,34 @@ const CartSchema = new mongoose.Schema({
   totalPrice: {
     type: Number,
     default: 0
-  }
+  },
+  // Track recent cart changes for user transparency
+  recentChanges: [{
+    type: {
+      type: String,
+      enum: ['REMOVED_OUT_OF_STOCK', 'QUANTITY_ADJUSTED', 'PRICE_UPDATED'],
+      required: true
+    },
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product'
+    },
+    productName: String,
+    previousQuantity: Number,
+    newQuantity: Number,
+    message: String,
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      expires: 300 // Auto-expire after 5 minutes (TTL index)
+    }
+  }]
 }, { 
   timestamps: true 
 });
+
+// Create TTL index for recentChanges
+CartSchema.index({ recentChanges: 1 }, { expireAfterSeconds: 300 });
 
 // Calculate totals before saving
 CartSchema.pre('save', function(next) {
