@@ -10,13 +10,16 @@ interface BannerProps {
 }
 
 export default function HeroBanner({ className = '' }: BannerProps) {
+  // Cache busting: Update version number when image changes
+  const IMAGE_VERSION = 'v3'; // Change this to force refresh: v1, v2, v3, etc.
+  
   return (
     <div className={`relative w-full ${className}`}>
       {/* Banner image */}
       <Link href="/offers" className="relative w-full block cursor-pointer hover:opacity-95 transition-opacity">
         <div className="relative w-full">
           <Image
-            src="/images/Hero_Banner3.jpeg"
+            src={`/images/Hero_Banner3.jpeg?v=${IMAGE_VERSION}`}
             alt="Autobacs India - Drive Beyond Limit"
             width={1600}
             height={264}
