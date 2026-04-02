@@ -11,7 +11,7 @@ interface BannerProps {
 
 export default function HeroBanner({ className = '' }: BannerProps) {
   // Cache busting: Update version number when image changes
-  const IMAGE_VERSION = 'v3'; // Change this to force refresh: v1, v2, v3, etc.
+  const IMAGE_VERSION = 'v4'; // Change this to force refresh: v1, v2, v3, etc.
   
   return (
     <div className={`relative w-full ${className}`}>
