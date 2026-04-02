@@ -15,11 +15,11 @@ export default function HeroBanner({ className = '' }: BannerProps) {
   
   return (
     <div className={`relative w-full ${className}`}>
-      {/* Banner image */}
+      {/* Banner image - OPTIMIZED WebP format */}
       <Link href="/offers" className="relative w-full block cursor-pointer hover:opacity-95 transition-opacity">
         <div className="relative w-full">
           <Image
-            src={`/images/Hero_Banner3.jpeg?v=${IMAGE_VERSION}`}
+            src={`/images/Hero_Banner3_optimized.webp?v=${IMAGE_VERSION}`}
             alt="Autobacs India - Drive Beyond Limit"
             width={1600}
             height={264}
