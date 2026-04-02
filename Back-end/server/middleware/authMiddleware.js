@@ -34,7 +34,10 @@ export const protect = asyncHandler(async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error('[Auth] Token verification failed:', error.message);
+    // Only log in non-test environments to reduce test output noise
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[Auth] Token verification failed:', error.message);
+    }
     return res.status(401).json({
       success: false,
       message: 'Not authorized, token failed'
@@ -83,7 +86,10 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
     next();
   } catch (error) {
     // If token is invalid, just continue without req.user
-    console.warn('Invalid token in optional auth:', error.message);
+    // Only log in non-test environments
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Invalid token in optional auth:', error.message);
+    }
     next();
   }
 });
