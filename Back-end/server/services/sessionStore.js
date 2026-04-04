@@ -8,27 +8,79 @@
 
 import Redis from 'ioredis';
 
+/**
+ * Circuit Breaker States
+ */
+const CircuitState = {
+  CLOSED: 'CLOSED',      // Normal operation
+  OPEN: 'OPEN',          // Failing, reject requests
+  HALF_OPEN: 'HALF_OPEN' // Testing if recovered
+};
+
 class SessionStore {
   constructor() {
     this.redis = null;
     
+    // Circuit breaker state
+    this.circuitState = CircuitState.CLOSED;
+    this.failureCount = 0;
+    this.lastFailureTime = null;
+    this.successCount = 0;
+    
+    // Circuit breaker configuration
+    this.FAILURE_THRESHOLD = 5; // Open circuit after 5 failures
+    this.RECOVERY_TIMEOUT = 30000; // 30s before trying again (HALF_OPEN)
+    this.SUCCESS_THRESHOLD = 3; // Close circuit after 3 successes in HALF_OPEN
+    
+    // Metrics
+    this.metrics = {
+      totalRequests: 0,
+      successfulRequests: 0,
+      failedRequests: 0,
+      circuitOpens: 0,
+      averageLatency: 0,
+      latencySamples: [],
+      cacheHits: 0,
+      cacheMisses: 0,
+      rehydrations: 0,
+      stampedePrevented: 0,
+    };
+    
     if (process.env.REDIS_URL) {
       try {
         this.redis = new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 3,
+          maxRetriesPerRequest: 1, // Prevent retry storms
           enableReadyCheck: false,
           lazyConnect: true,
+          connectTimeout: 2000, // 2s timeout (CIRCUIT BREAKER)
+          commandTimeout: 50, // 50ms per command (prevents thread pile-up)
+          retryStrategy: (times) => {
+            // Exponential backoff with max 3 retries
+            if (times > 3) return null; // Stop retrying
+            return Math.min(times * 100, 3000);
+          },
         });
         
         this.redis.on('error', (err) => {
           console.error('[SessionStore] Redis error:', err.message);
+          this.recordFailure();
         });
         
         this.redis.on('connect', () => {
           console.log('[SessionStore] Connected to Redis successfully');
+          this.recordSuccess();
         });
         
-        console.log('[SessionStore] Redis session store initialized');
+        this.redis.on('close', () => {
+          console.warn('[SessionStore] Redis connection closed');
+          this.recordFailure();
+        });
+        
+        this.redis.on('ready', () => {
+          console.log('[SessionStore] Redis ready for commands');
+        });
+        
+        console.log('[SessionStore] Redis session store initialized with circuit breaker + metrics');
       } catch (err) {
         console.warn('[SessionStore] Redis init failed:', err.message);
         this.redis = null;
@@ -39,15 +91,132 @@ class SessionStore {
   }
 
   /**
-   * Store session in Redis
+   * Record successful operation for circuit breaker
+   */
+  recordSuccess() {
+    this.successCount++;
+    this.metrics.successfulRequests++;
+    
+    if (this.circuitState === CircuitState.HALF_OPEN) {
+      if (this.successCount >= this.SUCCESS_THRESHOLD) {
+        // Recovery confirmed - close circuit
+        this.circuitState = CircuitState.CLOSED;
+        this.failureCount = 0;
+        this.successCount = 0;
+        console.log('[CircuitBreaker] Circuit CLOSED - Redis recovered');
+      }
+    } else {
+      // Reset failure count on success
+      this.failureCount = 0;
+    }
+  }
+
+  /**
+   * Record failed operation for circuit breaker
+   */
+  recordFailure() {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    this.metrics.failedRequests++;
+    
+    if (this.circuitState === CircuitState.CLOSED) {
+      if (this.failureCount >= this.FAILURE_THRESHOLD) {
+        // Too many failures - open circuit
+        this.circuitState = CircuitState.OPEN;
+        this.metrics.circuitOpens++;
+        console.error(`[CircuitBreaker] Circuit OPENED after ${this.failureCount} failures`);
+      }
+    }
+  }
+
+  /**
+   * Check if circuit breaker allows request
+   * @returns {boolean} - True if request allowed
+   */
+  isCircuitClosed() {
+    if (this.circuitState === CircuitState.CLOSED) {
+      return true;
+    }
+    
+    if (this.circuitState === CircuitState.OPEN) {
+      // Check if recovery timeout has elapsed
+      const timeSinceFailure = Date.now() - this.lastFailureTime;
+      if (timeSinceFailure >= this.RECOVERY_TIMEOUT) {
+        // Transition to HALF_OPEN - allow one test request
+        this.circuitState = CircuitState.HALF_OPEN;
+        this.successCount = 0;
+        console.log('[CircuitBreaker] Circuit HALF_OPEN - testing recovery');
+        return true;
+      }
+      return false; // Still in OPEN state, reject request
+    }
+    
+    // HALF_OPEN - allow test requests
+    return true;
+  }
+
+  /**
+   * Track request latency for metrics
+   * @param {number} latencyMs - Request latency in milliseconds
+   */
+  trackLatency(latencyMs) {
+    this.metrics.latencySamples.push(latencyMs);
+    
+    // Keep only last 100 samples
+    if (this.metrics.latencySamples.length > 100) {
+      this.metrics.latencySamples.shift();
+    }
+    
+    // Calculate rolling average
+    const sum = this.metrics.latencySamples.reduce((a, b) => a + b, 0);
+    this.metrics.averageLatency = Math.round(sum / this.metrics.latencySamples.length);
+  }
+
+  /**
+   * Get comprehensive metrics
+   * @returns {Object} - Metrics data
+   */
+  getMetrics() {
+    const total = this.metrics.totalRequests;
+    const successRate = total > 0 ? ((this.metrics.successfulRequests / total) * 100).toFixed(2) : 0;
+    
+    return {
+      ...this.metrics,
+      totalRequests: total,
+      successRate: `${successRate}%`,
+      circuitState: this.circuitState,
+      failureCount: this.failureCount,
+      uptime: this.redis ? 'connected' : 'disconnected',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Store session in Redis with sliding expiration
    * @param {string} userId - User ID
    * @param {string} sessionId - Session identifier (refresh token hash)
    * @param {Object} sessionData - Session metadata (IP, device info)
    * @param {number} ttl - Time to live in seconds (default: 30 days)
    */
   async storeSession(userId, sessionId, sessionData = {}, ttl = 30 * 24 * 60 * 60) {
+    const startTime = Date.now();
+    this.metrics.totalRequests++;
+    
+    // Check circuit breaker
+    if (!this.isCircuitClosed()) {
+      console.warn('[SessionStore] Circuit OPEN - rejecting storeSession request');
+      throw new Error('Redis circuit breaker is OPEN - service temporarily unavailable');
+    }
+    
     if (!this.redis) {
-      console.warn('[SessionStore] Redis not available, skipping Redis session storage');
+      // In production, refuse to operate without Redis (prevents split-brain)
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[SessionStore] CRITICAL: Redis unavailable in production - refusing to store session');
+        throw new Error('Redis unavailable - cannot maintain consistent session state');
+      }
+      
+      // In development, log warning but continue (graceful degradation for local testing)
+      console.warn('[SessionStore] Redis not available, skipping Redis session storage (dev mode)');
       return;
     }
 
@@ -59,7 +228,7 @@ class SessionStore {
         lastAccessedAt: new Date().toISOString(),
       });
       
-      // Store session with TTL
+      // Store session with EXPLICIT TTL (prevents memory leak)
       await this.redis.setex(key, ttl, value);
       
       // Also maintain a set of all sessions for this user (for bulk revocation)
@@ -67,10 +236,50 @@ class SessionStore {
       await this.redis.sadd(userSessionsKey, sessionId);
       await this.redis.expire(userSessionsKey, ttl);
       
-      console.log(`[SessionStore] Session stored for user ${userId}`);
+      // Record success and latency
+      this.recordSuccess();
+      this.trackLatency(Date.now() - startTime);
+      
+      console.log(`[SessionStore] Session stored for user ${userId} (TTL: ${ttl}s)`);
     } catch (err) {
       console.error('[SessionStore] Failed to store session:', err.message);
-      // Don't throw - fail gracefully to avoid blocking login
+      this.recordFailure();
+      
+      // In production, re-throw to prevent inconsistent state
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(`Failed to store session in Redis: ${err.message}`);
+      }
+      // In dev, fail silently to avoid blocking local development
+    }
+  }
+
+  /**
+   * Refresh session TTL (sliding expiration)
+   * Called on each valid request to keep active sessions alive
+   * @param {string} userId - User ID
+   * @param {string} sessionId - Session identifier
+   * @param {number} ttl - New TTL in seconds
+   */
+  async refreshSessionTTL(userId, sessionId, ttl = 30 * 24 * 60 * 60) {
+    if (!this.redis) {
+      return; // Silent fail - don't block requests
+    }
+
+    try {
+      const key = `session:${userId}:${sessionId}`;
+      const exists = await this.redis.exists(key);
+      
+      if (exists === 1) {
+        // Extend TTL (sliding expiration)
+        await this.redis.expire(key, ttl);
+        
+        // Also refresh the user's session set
+        const userSessionsKey = `user:sessions:${userId}`;
+        await this.redis.expire(userSessionsKey, ttl);
+      }
+    } catch (err) {
+      // Don't throw - TTL refresh is best-effort
+      console.warn('[SessionStore] Failed to refresh TTL:', err.message);
     }
   }
 
@@ -81,8 +290,27 @@ class SessionStore {
    * @returns {Promise<boolean>} - True if session is valid
    */
   async validateSession(userId, sessionId) {
+    const startTime = Date.now();
+    this.metrics.totalRequests++;
+    
+    // Check circuit breaker
+    if (!this.isCircuitClosed()) {
+      console.warn('[SessionStore] Circuit OPEN - rejecting validateSession request');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Redis circuit breaker is OPEN - service temporarily unavailable');
+      }
+      return true; // Dev mode: allow through
+    }
+    
     if (!this.redis) {
-      // Fallback: assume valid (current MongoDB-only behavior)
+      // In production, refuse to validate without Redis (prevents split-brain auth)
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[SessionStore] CRITICAL: Redis unavailable in production - cannot validate session');
+        throw new Error('Redis unavailable - cannot validate session consistently');
+      }
+      
+      // In development, assume valid (graceful degradation for local testing)
+      console.warn('[SessionStore] Redis not available, assuming session valid (dev mode)');
       return true;
     }
 
@@ -91,16 +319,109 @@ class SessionStore {
       const exists = await this.redis.exists(key);
       
       if (exists === 1) {
-        // Update last accessed time
+        // Update last accessed time (extend TTL on access)
         await this.redis.hset(key, 'lastAccessedAt', new Date().toISOString());
+        
+        // Record cache hit
+        this.metrics.cacheHits++;
+        this.recordSuccess();
+        this.trackLatency(Date.now() - startTime);
+        
         return true;
       }
+      
+      // Record cache miss
+      this.metrics.cacheMisses++;
+      this.recordSuccess();
+      this.trackLatency(Date.now() - startTime);
       
       return false;
     } catch (err) {
       console.error('[SessionStore] Failed to validate session:', err.message);
-      // Fail open to avoid blocking legitimate users
+      this.recordFailure();
+      
+      // In production, fail closed (deny access) rather than fail open
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(`Failed to validate session in Redis: ${err.message}`);
+      }
+      
+      // In dev, fail open to avoid blocking development
       return true;
+    }
+  }
+
+  /**
+   * Acquire distributed lock for cache rehydration (prevents stampede)
+   * Uses token-based locking for safety
+   * @param {string} lockKey - Lock key (e.g., 'lock:session:USER_ID:SESSION_ID')
+   * @param {number} ttl - Lock TTL in seconds (default: 5s)
+   * @returns {Promise<string|null>} - Lock token if acquired, null otherwise
+   */
+  async acquireLock(lockKey, ttl = 5) {
+    const startTime = Date.now();
+    this.metrics.totalRequests++;
+    
+    // Check circuit breaker
+    if (!this.isCircuitClosed()) {
+      console.warn('[SessionStore] Circuit OPEN - rejecting lock acquisition');
+      return null;
+    }
+    
+    if (!this.redis) {
+      return null;
+    }
+
+    try {
+      // Generate unique token for this lock
+      const crypto = await import('crypto');
+      const token = crypto.randomBytes(16).toString('hex');
+      
+      // SET NX EX = Set if Not eXists with EXpiry (atomic)
+      const result = await this.redis.set(lockKey, token, 'NX', 'EX', ttl);
+      
+      if (result === 'OK') {
+        // Lock acquired - return token
+        this.recordSuccess();
+        this.trackLatency(Date.now() - startTime);
+        this.metrics.stampedePrevented++;
+        return token;
+      }
+      
+      // Lock not acquired
+      this.recordSuccess();
+      this.trackLatency(Date.now() - startTime);
+      return null;
+    } catch (err) {
+      console.error('[SessionStore] Failed to acquire lock:', err.message);
+      this.recordFailure();
+      return null;
+    }
+  }
+
+  /**
+   * Release distributed lock (token-based for safety)
+   * @param {string} lockKey - Lock key
+   * @param {string} token - Lock token (must match)
+   */
+  async releaseLock(lockKey, token) {
+    if (!this.redis || !token) {
+      return;
+    }
+
+    try {
+      // Use Lua script for atomic check-and-delete (prevents deleting someone else's lock)
+      const luaScript = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      
+      await this.redis.eval(luaScript, 1, lockKey, token);
+    } catch (err) {
+      console.warn('[SessionStore] Failed to release lock:', err.message);
+      // Don't throw - lock will expire automatically
     }
   }
 

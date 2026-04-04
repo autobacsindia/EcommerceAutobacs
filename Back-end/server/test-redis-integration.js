@@ -139,6 +139,74 @@ async function testRedisHealth(token) {
   }
 }
 
+// Test 5: Rate Limiting on Admin Endpoints
+async function testRateLimiting(token) {
+  if (!token) {
+    console.log('Test 5: Rate Limiting - SKIPPED (no token)\n');
+    return;
+  }
+  
+  console.log('Test 5: Rate Limiting Protection');
+  try {
+    // Send 12 requests rapidly (limit is 10 per minute)
+    const promises = [];
+    for (let i = 0; i < 12; i++) {
+      promises.push(
+        fetch(`${BASE_URL}/api/v1/admin/redis/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+      );
+    }
+    
+    const responses = await Promise.all(promises);
+    const statusCodes = responses.map(r => r.status);
+    
+    const rateLimited = statusCodes.filter(code => code === 429).length;
+    const success = statusCodes.filter(code => code === 200).length;
+    
+    console.log(`  Total Requests: 12`);
+    console.log(`  Successful (200): ${success}`);
+    console.log(`  Rate Limited (429): ${rateLimited}`);
+    
+    if (rateLimited > 0 && success <= 10) {
+      console.log('  ✅ PASS: Rate limiting is working\n');
+    } else {
+      console.log('  ⚠️  WARNING: Rate limiting may not be enforced\n');
+    }
+  } catch (err) {
+    console.log('  ❌ FAIL:', err.message, '\n');
+  }
+}
+
+// Test 6: Cache Clear Confirmation Header
+async function testCacheClearProtection(token) {
+  if (!token) {
+    console.log('Test 6: Cache Clear Protection - SKIPPED (no token)\n');
+    return;
+  }
+  
+  console.log('Test 6: Cache Clear Confirmation Required');
+  try {
+    // Try without confirmation header (should fail)
+    const response = await fetch(`${BASE_URL}/api/v1/admin/redis/cache/clear`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    
+    const data = await response.json();
+    
+    if (response.status === 400 && data.error?.includes('confirmation')) {
+      console.log('  ✅ PASS: Cache clear requires confirmation header\n');
+    } else {
+      console.log('  ❌ FAIL: Cache clear should require X-Confirm-Cache-Clear header\n');
+    }
+  } catch (err) {
+    console.log('  ❌ FAIL:', err.message, '\n');
+  }
+}
+
 // Main test runner
 async function runTests() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -155,12 +223,20 @@ async function runTests() {
   // Test 4: Redis health
   await testRedisHealth(token);
   
+  // Test 5: Rate limiting
+  await testRateLimiting(token);
+  
+  // Test 6: Cache clear protection
+  await testCacheClearProtection(token);
+  
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   console.log('📊 Summary:');
   console.log('  - Health Check:', healthPassed ? '✅ PASS' : '❌ FAIL');
   console.log('  - Session Creation:', token ? '✅ PASS' : '❌ FAIL');
   console.log('  - Redis Stats:', token ? '✅ Tested' : '⏭️  Skipped');
   console.log('  - Redis Health:', token ? '✅ Tested' : '⏭️  Skipped');
+  console.log('  - Rate Limiting:', token ? '✅ Tested' : '⏭️  Skipped');
+  console.log('  - Cache Protection:', token ? '✅ Tested' : '⏭️  Skipped');
   console.log('\n🎯 Next Steps:');
   console.log('  1. If all tests pass → Redis is ready for production');
   console.log('  2. If health check fails → Check REDIS_URL in Railway');

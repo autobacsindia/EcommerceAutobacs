@@ -106,15 +106,75 @@ export const validateRefreshToken = async (user, refreshToken) => {
   const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
   
   // FIRST check Redis (fast path for distributed validation)
-  const redisValid = await sessionStore.validateSession(user._id.toString(), hashedToken);
-  if (!redisValid) {
-    return false; // Session revoked or expired in Redis
+  try {
+    const redisValid = await sessionStore.validateSession(user._id.toString(), hashedToken);
+    if (!redisValid) {
+      return false; // Session revoked or expired in Redis
+    }
+    
+    // SLIDING EXPIRATION: Refresh TTL on each valid request
+    const ttlSeconds = 30 * 24 * 60 * 60; // 30 days
+    await sessionStore.refreshSessionTTL(user._id.toString(), hashedToken, ttlSeconds);
+  } catch (err) {
+    // If Redis fails in production, throw error (fail closed)
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Session] Redis validation failed:', err.message);
+      throw new Error(`Session validation failed: ${err.message}`);
+    }
+    // In dev, continue to MongoDB fallback
+    console.warn('[Session] Redis unavailable, falling back to MongoDB (dev mode)');
   }
   
-  // THEN check MongoDB (fallback/backup validation)
+  // THEN check MongoDB (source of truth + cache rehydration with stampede protection)
   const tokenRecord = user.refreshTokens.find(
     rt => rt.token === hashedToken && rt.expiresAt > new Date()
   );
+  
+  // If MongoDB has it but Redis doesn't, rehydrate Redis cache (cache miss recovery)
+  if (tokenRecord && process.env.NODE_ENV === 'production') {
+    const lockKey = `lock:rehydrate:${user._id}:${hashedToken}`;
+    
+    try {
+      // ACQUIRE LOCK with TOKEN (prevents cache stampede)
+      const lockToken = await sessionStore.acquireLock(lockKey, 5); // 5s lock
+      
+      if (lockToken) {
+        try {
+          // Double-check after acquiring lock (another request may have rehydrated)
+          const alreadyRehydrated = await sessionStore.validateSession(user._id.toString(), hashedToken);
+          
+          if (!alreadyRehydrated) {
+            // Only ONE request rehydrates
+            const ttlSeconds = Math.floor((tokenRecord.expiresAt - new Date()) / 1000);
+            await sessionStore.storeSession(
+              user._id.toString(),
+              hashedToken,
+              { ipAddress: tokenRecord.ipAddress, deviceInfo: tokenRecord.deviceInfo },
+              ttlSeconds
+            );
+            console.log(`[Session] Rehydrated Redis cache for user ${user._id} (stampede protected)`);
+          } else {
+            console.log(`[Session] Cache already rehydrated by another request`);
+          }
+        } finally {
+          // ALWAYS release lock with TOKEN (safety)
+          await sessionStore.releaseLock(lockKey, lockToken);
+        }
+      } else {
+        // Lock not acquired - another request is rehydrating
+        // Wait briefly and retry validation
+        await new Promise(resolve => setTimeout(resolve, 100)); // 100ms wait
+        const retryValid = await sessionStore.validateSession(user._id.toString(), hashedToken);
+        
+        if (retryValid) {
+          console.log(`[Session] Used rehydrated cache from concurrent request`);
+        }
+      }
+    } catch (rehydrateErr) {
+      console.error('[Session] Failed to rehydrate Redis cache:', rehydrateErr.message);
+      // Don't fail the request - just log the error
+    }
+  }
   
   return !!tokenRecord;
 };

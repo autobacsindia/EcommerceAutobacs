@@ -255,10 +255,13 @@ app.get('/health', redisHealthCheck, (req, res) => {
     platform: process.platform
   };
   
-  // Return 503 if Redis is down in production (degraded state)
+  // If Redis is down in production, mark as degraded (but don't return 503)
+  // This prevents load balancer from killing the service entirely
   if (process.env.NODE_ENV === 'production' && !req.redisHealthy) {
     healthData.status = 'degraded';
-    return res.status(503).json(healthData);
+    console.warn('[HealthCheck] System running in degraded mode (Redis unavailable)');
+    // Return 200 with degraded status - allows monitoring but doesn't kill LB
+    return res.status(200).json(healthData);
   }
   
   res.status(200).json(healthData);

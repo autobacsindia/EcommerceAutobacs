@@ -64,6 +64,10 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
   }],
   
+  // Session versioning for instant "logout from all devices"
+  // Increment this to invalidate ALL sessions immediately
+  sessionVersion: { type: Number, default: 0, index: true },
+  
   // Security audit fields
   lastLoginAt: Date,
   lastLoginIp: String,
