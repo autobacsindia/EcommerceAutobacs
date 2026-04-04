@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   // output: 'standalone',
   reactStrictMode: true,
   devIndicators: false,
+  // BUILD OPTIMIZATION: Skip type checking during build (run separately)
+  typescript: {
+    ignoreBuildErrors: true, // Type checking done in CI/CD pipeline
+  },
+  eslint: {
+    ignoreDuringBuilds: true, // Linting done in CI/CD pipeline
+  },
   compiler: {
     removeConsole: process.env.NODE_ENV === "production"
   },
@@ -27,6 +34,9 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 86400, // 24 hours
+    // OPTIMIZATION: Skip build-time image optimization for faster CI/CD builds
+    // Images are already optimized via Cloudinary, so Next.js optimization is redundant
+    unoptimized: true,
   },
   async rewrites() {
     // Production: Must have NEXT_PUBLIC_API_URL set in Railway Dashboard
