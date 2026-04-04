@@ -53,12 +53,13 @@ class SessionStore {
           enableReadyCheck: false,
           lazyConnect: true,
           connectTimeout: 5000, // 5s timeout for initial connection
-          commandTimeout: 2000, // 2s per command (reasonable for production)
+          commandTimeout: 2000, // 2s per command (FIXED: was 50ms causing timeouts)
           retryStrategy: (times) => {
             // Exponential backoff with max 3 retries
             if (times > 3) return null; // Stop retrying
             return Math.min(times * 100, 3000);
           },
+          // v2.1 - Fixed command timeout from 50ms to 2000ms
         });
         
         this.redis.on('error', (err) => {

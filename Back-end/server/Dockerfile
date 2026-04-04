@@ -1,5 +1,6 @@
 # Dockerfile for Autobacs Backend (Express.js)
 # Multi-stage build for optimal production deployment
+# BUILD v2.1 - Fixed Redis command timeout (50ms → 2000ms)
 
 # Build stage
 FROM node:20-alpine AS builder
