@@ -17,6 +17,8 @@ if (process.env.REDIS_URL) {
       maxRetriesPerRequest: 3,
       enableReadyCheck: false,
       lazyConnect: true,
+      connectTimeout: 5000, // 5s timeout for initial connection
+      commandTimeout: 2000, // 2s per command (reasonable for production)
     });
     redisClient.on('error', (err) => {
       console.warn('[RateLimit] Redis error:', err.message);

@@ -56,6 +56,8 @@ if (process.env.REDIS_URL) {
       maxRetriesPerRequest: 3,
       enableReadyCheck: false,
       lazyConnect: true,
+      connectTimeout: 5000, // 5s timeout for initial connection
+      commandTimeout: 2000, // 2s per command (reasonable for production)
     });
     oauthRedis.on('error', (err) => console.warn('[Auth/OAuth] Redis error:', err.message));
   } catch (err) {

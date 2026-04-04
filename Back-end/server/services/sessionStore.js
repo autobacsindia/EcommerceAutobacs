@@ -52,8 +52,8 @@ class SessionStore {
           maxRetriesPerRequest: 1, // Prevent retry storms
           enableReadyCheck: false,
           lazyConnect: true,
-          connectTimeout: 2000, // 2s timeout (CIRCUIT BREAKER)
-          commandTimeout: 50, // 50ms per command (prevents thread pile-up)
+          connectTimeout: 5000, // 5s timeout for initial connection
+          commandTimeout: 2000, // 2s per command (reasonable for production)
           retryStrategy: (times) => {
             // Exponential backoff with max 3 retries
             if (times > 3) return null; // Stop retrying
