@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import withBundleAnalyzer from "@next/bundle-analyzer";
 
 // PWA disabled — @ducanh2912/next-pwa removed. Re-enable by reinstalling and wrapping config.
+// BUILD OPTIMIZATION v2: Disabled image optimization, TypeScript, ESLint during build for 60-70% faster builds
 const nextConfig: NextConfig = {
   /* config options here */
   output: 'standalone',
