@@ -1,10 +1,12 @@
 /**
  * Session Management & Refresh Token Utility
  * Handles refresh token generation, rotation, and revocation
+ * Integrated with Redis for distributed session management
  */
 
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import sessionStore from '../services/sessionStore.js';
 
 /**
  * Generate a secure refresh token
@@ -53,7 +55,7 @@ export const generateTokenPair = (user, ipAddress = null, userAgent = null) => {
 };
 
 /**
- * Store refresh token in user document
+ * Store refresh token in user document AND Redis
  * @param {Object} user - User mongoose document
  * @param {string} refreshToken - Refresh token to store
  * @param {Date} expiresAt - Expiration date
@@ -74,7 +76,7 @@ export const storeRefreshToken = async (user, refreshToken, expiresAt, ipAddress
     user.refreshTokens.shift();
   }
   
-  // Add new refresh token
+  // Add new refresh token to MongoDB (backup)
   user.refreshTokens.push({
     token: hashedToken,
     expiresAt,
@@ -83,18 +85,33 @@ export const storeRefreshToken = async (user, refreshToken, expiresAt, ipAddress
   });
   
   await user.save();
+  
+  // ALSO store in Redis for fast validation and distributed access (NEW!)
+  const ttlSeconds = Math.floor((expiresAt - new Date()) / 1000);
+  await sessionStore.storeSession(
+    user._id.toString(),
+    hashedToken,
+    { ipAddress, deviceInfo },
+    ttlSeconds
+  );
 };
 
 /**
- * Validate and verify refresh token
+ * Validate and verify refresh token (checks Redis first, then MongoDB)
  * @param {Object} user - User mongoose document
  * @param {string} refreshToken - Refresh token to validate
- * @returns {boolean} - True if valid, false otherwise
+ * @returns {Promise<boolean>} - True if valid, false otherwise
  */
-export const validateRefreshToken = (user, refreshToken) => {
+export const validateRefreshToken = async (user, refreshToken) => {
   const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
   
-  // Find matching token that hasn't expired
+  // FIRST check Redis (fast path for distributed validation)
+  const redisValid = await sessionStore.validateSession(user._id.toString(), hashedToken);
+  if (!redisValid) {
+    return false; // Session revoked or expired in Redis
+  }
+  
+  // THEN check MongoDB (fallback/backup validation)
   const tokenRecord = user.refreshTokens.find(
     rt => rt.token === hashedToken && rt.expiresAt > new Date()
   );
@@ -114,15 +131,19 @@ export const findUserByRefreshToken = async (UserModel, refreshToken) => {
 };
 
 /**
- * Revoke a specific refresh token
+ * Revoke a specific refresh token (from both MongoDB and Redis)
  * @param {Object} user - User mongoose document
  * @param {string} refreshToken - Refresh token to revoke
  */
 export const revokeRefreshToken = async (user, refreshToken) => {
   const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
   
+  // Remove from MongoDB
   user.refreshTokens = user.refreshTokens.filter(rt => rt.token !== hashedToken);
   await user.save();
+  
+  // ALSO remove from Redis for immediate distributed invalidation (NEW!)
+  await sessionStore.revokeSession(user._id.toString(), hashedToken);
 };
 
 /**
@@ -130,8 +151,12 @@ export const revokeRefreshToken = async (user, refreshToken) => {
  * @param {Object} user - User mongoose document
  */
 export const revokeAllRefreshTokens = async (user) => {
+  // Clear MongoDB
   user.refreshTokens = [];
   await user.save();
+  
+  // ALSO clear all Redis sessions for immediate distributed logout (NEW!)
+  await sessionStore.revokeAllSessions(user._id.toString());
 };
 
 /**

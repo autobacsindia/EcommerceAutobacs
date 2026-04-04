@@ -32,6 +32,7 @@ import mediaRoutes from "./routes/media.js";
 import contactRoutes from "./routes/contact.js";
 import consultationRoutes from "./routes/consultation.js";
 import returnRoutes from "./routes/returnRoutes.js";
+import redisMonitorRoutes from "./routes/redisMonitor.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
@@ -40,6 +41,7 @@ import * as Sentry from "@sentry/node";
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
 import cookieParser from "cookie-parser";
 import csrfProtection from "./middleware/csrfMiddleware.js";
+import { redisHealthCheck } from "./middleware/redisHealthCheck.js";
 import { 
   apiRateLimit, 
   wishlistRateLimit, 
@@ -241,16 +243,24 @@ app.get('/favicon.ico', (req, res) => {
 });
 
 // Health check endpoints - Enhanced for Railway
-app.get('/health', (req, res) => {
+app.get('/health', redisHealthCheck, (req, res) => {
   const healthData = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    redis: req.redisHealthy ? 'connected' : 'disconnected', // NEW!
     nodeVersion: process.version,
     platform: process.platform
   };
+  
+  // Return 503 if Redis is down in production (degraded state)
+  if (process.env.NODE_ENV === 'production' && !req.redisHealthy) {
+    healthData.status = 'degraded';
+    return res.status(503).json(healthData);
+  }
+  
   res.status(200).json(healthData);
 });
 
@@ -318,6 +328,7 @@ app.use("/api/v1/wordpress", adminRateLimit, wordpressRoutes);
 app.use("/api/v1/admin/token", tokenIntrospectionRoutes);
 app.use("/api/v1/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
 app.use("/api/v1/admin/adaptive-throttling", adaptiveThrottlingRoutes);
+app.use("/api/v1/admin/redis", redisMonitorRoutes); // NEW!
 app.use("/api/v1/dashboard", adminRateLimit, dashboardRoutes);
 
 // Media & News
