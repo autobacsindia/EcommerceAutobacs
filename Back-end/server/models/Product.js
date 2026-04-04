@@ -122,7 +122,9 @@ const ProductSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-ProductSchema.index({ name: 'text', description: 'text', tags: 'text', brand: 'text' });
+// OPTIMIZED: Removed 'description' from text index to reduce RAM usage
+// Description fields are large (KBs per product) and waste memory
+ProductSchema.index({ name: 'text', tags: 'text', brand: 'text' });
 ProductSchema.index({ categories: 1, isActive: 1 });
 ProductSchema.index({ price: 1 });
 ProductSchema.index({ brand: 1 });
