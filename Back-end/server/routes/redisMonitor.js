@@ -9,13 +9,19 @@ import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import sessionStore from '../services/sessionStore.js';
 import cacheService from '../services/cacheService.js';
-import { apiRateLimit } from '../middleware/rateLimitMiddleware.js';
+import { rateLimit } from '../middleware/rateLimitMiddleware.js';
 import AuditLog from '../models/AuditLog.js';
 
 const router = express.Router();
 
 // Apply strict rate limiting to all Redis admin endpoints (max 10 requests per minute)
-router.use(apiRateLimit({ windowMin: 1, max: 10 }));
+const redisAdminRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute
+  message: 'Too many admin requests - rate limit exceeded. Try again in 1 minute.'
+});
+
+router.use(redisAdminRateLimit);
 
 // IP Allowlist middleware (optional - only if ALLOWED_IPS is configured)
 const ipAllowlist = (req, res, next) => {
