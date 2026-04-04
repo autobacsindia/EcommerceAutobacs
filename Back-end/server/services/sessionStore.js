@@ -48,18 +48,18 @@ class SessionStore {
     
     if (process.env.REDIS_URL) {
       try {
+        // BUILD_ID: 20260404-REDIS-TIMEOUT-FIX-v3
         this.redis = new Redis(process.env.REDIS_URL, {
           maxRetriesPerRequest: 1, // Prevent retry storms
           enableReadyCheck: false,
           lazyConnect: true,
           connectTimeout: 5000, // 5s timeout for initial connection
-          commandTimeout: 2000, // 2s per command (FIXED: was 50ms causing timeouts)
+          commandTimeout: 2000, // FIXED: was 50ms, now 2000ms (prevents constant timeouts)
           retryStrategy: (times) => {
             // Exponential backoff with max 3 retries
             if (times > 3) return null; // Stop retrying
             return Math.min(times * 100, 3000);
           },
-          // v2.1 - Fixed command timeout from 50ms to 2000ms
         });
         
         this.redis.on('error', (err) => {
