@@ -23,10 +23,10 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
         <Image
           src={logoSrc}
           alt={logoAlt}
-          width={260}
-          height={87}
+          width={475}
+          height={159}
           priority
-          className="object-contain h-16 w-auto"
+          className="object-contain h-24 w-auto"
           style={imageStyle}
         />
       </Link>
@@ -38,10 +38,10 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
       <Image
         src={logoSrc}
         alt={logoAlt}
-        width={326}
-        height={109}
+        width={596}
+        height={199}
         priority
-        className="object-contain h-20 w-auto"
+        className="object-contain h-28 w-auto"
         style={imageStyle}
       />
     </Link>
