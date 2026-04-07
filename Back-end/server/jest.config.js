@@ -24,12 +24,14 @@ export default {
   ],
   coverageReporters: ['text', 'lcov', 'clover', 'html'],
   // Coverage thresholds — regression guard.
-  // Global floor is set to current measured baseline so it can only go up.
-  // Per-file floors lock in coverage for the three files our test suite
-  // directly targets; lower these values ONLY by adding replacement tests.
+  // Updated to enforce 60%+ coverage across the codebase.
+  // Per-file floors lock in coverage for critical files.
   coverageThreshold: {
     global: {
-      lines: 10,
+      lines: 60,
+      functions: 60,
+      branches: 50,
+      statements: 60,
     },
     './controllers/productImageController.js': {
       lines: 65,
@@ -39,6 +41,12 @@ export default {
     },
     './services/orderStatusService.js': {
       lines: 60,
+    },
+    './services/razorpayService.js': {
+      lines: 70,
+    },
+    './routes/razorpay.js': {
+      lines: 75,
     },
   },
 };
