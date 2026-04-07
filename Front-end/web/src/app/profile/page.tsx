@@ -9,11 +9,11 @@ import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
 
-// SEO: Prevent indexing of profile page (privacy, user-specific)
+// SEO: Prevent indexing but allow following links (preserves link equity)
 export const metadata = {
   robots: {
     index: false,
-    follow: false,
+    follow: true,  // Allow link equity to flow
   },
 };
 

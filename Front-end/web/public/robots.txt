@@ -1,17 +1,17 @@
 # robots.txt for Autobacs E-Commerce
 # https://ecommerceautobacs-production-1716.up.railway.app
 
+# BEST PRACTICE: Allow crawling of sensitive pages
+# so Google can see the noindex meta tags
 User-agent: *
 Allow: /
 Allow: /products/
 Allow: /categories/
 Allow: /media/
 
+# Only block truly private/system paths
 Disallow: /api/
 Disallow: /admin/
-Disallow: /cart/
-Disallow: /checkout/
-Disallow: /profile/
 Disallow: /_next/static/
 
 Sitemap: https://ecommerceautobacs-production-1716.up.railway.app/sitemap.xml

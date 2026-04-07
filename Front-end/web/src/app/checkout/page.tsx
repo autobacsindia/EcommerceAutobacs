@@ -12,11 +12,11 @@ import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 
-// SEO: Prevent indexing of checkout page (security, user-specific)
+// SEO: Prevent indexing but allow following links (preserves link equity)
 export const metadata = {
   robots: {
     index: false,
-    follow: false,
+    follow: true,  // Allow link equity to flow
   },
 };
 
