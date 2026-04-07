@@ -1,6 +1,6 @@
 # Dockerfile for Autobacs Backend (Express.js)
 # Multi-stage build for optimal production deployment
-# BUILD_ID: 20260404-REDIS-FIX-v3 - commandTimeout 50ms -> 2000ms
+# BUILD_HASH: 8f3k29d-TLS-FIX-FINAL-20260407
 
 # Build stage
 FROM node:20-alpine AS builder

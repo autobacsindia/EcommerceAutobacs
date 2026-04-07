@@ -48,7 +48,8 @@ class SessionStore {
     
     if (process.env.REDIS_URL) {
       try {
-        // BUILD_ID: 20260404-REDIS-TIMEOUT-FIX-v3
+        // BUILD_HASH: 8f3k29d-TLS-FIX-FINAL
+        // Deployed: 2026-04-07T05:30:00Z
         this.redis = new Redis(process.env.REDIS_URL, {
           maxRetriesPerRequest: 1, // Prevent retry storms
           enableReadyCheck: false,
