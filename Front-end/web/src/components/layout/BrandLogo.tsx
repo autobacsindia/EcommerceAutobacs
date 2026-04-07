@@ -11,8 +11,7 @@ interface BrandLogoProps {
 }
 
 export default function BrandLogo({ variant = 'full', theme = 'dark', className = '' }: BrandLogoProps) {
-  // Try Cloudinary first, fallback to local
-  const logoSrc = '/logo.png'; // Local file in /public folder
+  const logoSrc = 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1775543920/Roavion-Logo_xwqbx9.png';
   const logoAlt = 'Roavion';
   
   // Use inline style for filter to ensure it works regardless of Tailwind config
