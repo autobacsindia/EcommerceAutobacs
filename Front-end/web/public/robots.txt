@@ -1,0 +1,17 @@
+# robots.txt for Autobacs E-Commerce
+# https://ecommerceautobacs-production-1716.up.railway.app
+
+User-agent: *
+Allow: /
+Allow: /products/
+Allow: /categories/
+Allow: /media/
+
+Disallow: /api/
+Disallow: /admin/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /profile/
+Disallow: /_next/static/
+
+Sitemap: https://ecommerceautobacs-production-1716.up.railway.app/sitemap.xml
