@@ -11,8 +11,8 @@ interface BrandLogoProps {
 }
 
 export default function BrandLogo({ variant = 'full', theme = 'dark', className = '' }: BrandLogoProps) {
-  const logoSrc = 'https://autobacsindia.com/wp-content/uploads/elementor/thumbs/Powered-By-Autobacs-India_W-rct5j6nyasgbfkiut06tthjrlw9nwcdky6he1x7g92.png.webp';
-  const logoAlt = 'Roavion - Powered by AutoBacs India';
+  const logoSrc = 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1775543920/Roavion-Logo_xwqbc9.png';
+  const logoAlt = 'Roavion';
   
   // Use inline style for filter to ensure it works regardless of Tailwind config
   const imageStyle = theme === 'light' ? { filter: 'invert(1)' } : undefined;
