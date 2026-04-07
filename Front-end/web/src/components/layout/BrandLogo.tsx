@@ -26,8 +26,8 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
           width={120}
           height={40}
           priority
-          className="object-contain"
-          style={{ ...imageStyle, maxWidth: '120px', maxHeight: '40px' }}
+          className="object-contain h-10 w-auto"
+          style={imageStyle}
         />
       </Link>
     );
@@ -41,8 +41,8 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
         width={150}
         height={50}
         priority
-        className="object-contain"
-        style={{ ...imageStyle, maxWidth: '150px', maxHeight: '50px' }}
+        className="object-contain h-12 w-auto"
+        style={imageStyle}
       />
     </Link>
   );
