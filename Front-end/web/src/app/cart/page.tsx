@@ -13,6 +13,14 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
 
+// SEO: Prevent indexing of cart page (duplicate content, user-specific)
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, isLoading, refreshCart } = useCart();
   const { isAuthenticated } = useAuth();

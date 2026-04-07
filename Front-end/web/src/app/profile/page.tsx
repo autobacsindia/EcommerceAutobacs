@@ -9,6 +9,14 @@ import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
 
+// SEO: Prevent indexing of profile page (privacy, user-specific)
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();

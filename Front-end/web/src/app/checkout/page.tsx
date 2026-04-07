@@ -12,6 +12,14 @@ import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 
+// SEO: Prevent indexing of checkout page (security, user-specific)
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
 interface Address {
