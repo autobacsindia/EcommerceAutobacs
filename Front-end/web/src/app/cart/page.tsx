@@ -13,14 +13,6 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
 
-// SEO: Prevent indexing but allow following links (preserves link equity)
-export const metadata = {
-  robots: {
-    index: false,
-    follow: true,  // Allow link equity to flow
-  },
-};
-
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, isLoading, refreshCart } = useCart();
   const { isAuthenticated } = useAuth();
