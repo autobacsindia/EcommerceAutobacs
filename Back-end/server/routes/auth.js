@@ -58,6 +58,8 @@ if (process.env.REDIS_URL) {
       lazyConnect: true,
       connectTimeout: 5000, // 5s timeout for initial connection
       commandTimeout: 2000, // 2s per command (reasonable for production)
+      // Add TLS support for Redis (required for most cloud providers)
+      tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
     });
     oauthRedis.on('error', (err) => console.warn('[Auth/OAuth] Redis error:', err.message));
   } catch (err) {

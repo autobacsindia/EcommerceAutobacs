@@ -60,6 +60,8 @@ class SessionStore {
             if (times > 3) return null; // Stop retrying
             return Math.min(times * 100, 3000);
           },
+          // Add TLS support for Redis (required for most cloud providers)
+          tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
         });
         
         this.redis.on('error', (err) => {

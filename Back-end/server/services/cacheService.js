@@ -26,6 +26,8 @@ if (process.env.REDIS_URL) {
       lazyConnect: true,
       connectTimeout: 5000, // 5s timeout for initial connection
       commandTimeout: 2000, // 2s per command (reasonable for production)
+      // Add TLS support for Redis (required for most cloud providers)
+      tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
     });
     redisClient.on('error', (err) => {
       console.warn('[CacheService] Redis error:', err.message);
