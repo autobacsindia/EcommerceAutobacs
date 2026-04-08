@@ -33,16 +33,16 @@ describe('Login Debug', () => {
     
     // Login
     const res = await request(app)
-      .post('/auth/login')
+      .post('/api/v1/auth/login')
       .send({
         email: testUser.email,
         password: testUser.password
       });
       
-    console.log('Login Status:', res.status);
+    console.log('Login Status:', res.statusCode);
     console.log('Login Body:', JSON.stringify(res.body, null, 2));
     
-    expect(res.status).toBe(200);
+    expect(res.statusCode).toBe(200);
     expect(res.body.accessToken).toBeDefined();
   });
 });

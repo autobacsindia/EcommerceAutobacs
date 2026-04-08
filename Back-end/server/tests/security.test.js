@@ -52,8 +52,8 @@ describe('Security - JWT Validation', () => {
       .post(`${AUTH_BASE}/register`)
       .send(TEST_USER);
     
-    authToken = res.body.data.accessToken;
-    userId = res.body.data.user._id;
+    authToken = res.body.accessToken;
+    userId = res.body.user._id;
   });
 
   it('should reject expired JWT token', async () => {
@@ -131,9 +131,9 @@ describe('Security - Session Invalidation', () => {
       .post(`${AUTH_BASE}/register`)
       .send(TEST_USER);
     
-    authToken = res.body.data.accessToken;
-    refreshToken = res.body.data.refreshToken;
-    userId = res.body.data.user._id;
+    authToken = res.body.accessToken;
+    refreshToken = res.body.refreshToken;
+    userId = res.body.user._id;
   });
 
   it('should invalidate ALL sessions after logout-all', async () => {
@@ -152,8 +152,8 @@ describe('Security - Session Invalidation', () => {
         password: TEST_USER.password,
       });
 
-    const token1 = login1.body.data.accessToken;
-    const token2 = login2.body.data.accessToken;
+    const token1 = login1.body.accessToken;
+    const token2 = login2.body.accessToken;
 
     // Verify both tokens work
     const check1 = await request(app)
@@ -215,10 +215,10 @@ describe('Security - Authorization Bypass Prevention', () => {
         password: 'SecurePass123!',
       });
 
-    user1Token = user1.body.data.accessToken;
-    user2Token = user2.body.data.accessToken;
-    user1Id = user1.body.data.user._id;
-    user2Id = user2.body.data.user._id;
+    user1Token = user1.body.accessToken;
+    user2Token = user2.body.accessToken;
+    user1Id = user1.body.user._id;
+    user2Id = user2.body.user._id;
   });
 
   it('should prevent user1 from accessing user2 profile', async () => {
