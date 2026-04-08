@@ -73,7 +73,7 @@ async function checkCloudinaryHealth() {
       console.log('   Estimated storage cost: ~$50/month');
     } else {
       const percentage = ((productsWithMissingIds / totalProducts) * 100).toFixed(2);
-      console.log(`⚠️  WARNING: ${productsWithMissingIds} products (${percentage%) have missing public_id`);
+      console.log(`⚠️  WARNING: ${productsWithMissingIds} products (${percentage} percent) have missing public_id`);
       console.log(`   ${totalImagesMissing} images cannot be cleaned up`);
       console.log('');
       console.log('   IMPACT:');

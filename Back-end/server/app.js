@@ -3,6 +3,22 @@ import mongoose from "mongoose";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
+import * as Sentry from "@sentry/node";
+import { randomUUID } from "crypto";
+
+// Initialize Sentry FIRST (before any other code)
+// This ensures all errors are captured from the start
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || "development",
+    tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE) || 0.1,
+  });
+  console.log('[Sentry] Initialized successfully');
+} else {
+  console.warn('[Sentry] DSN not configured - error tracking disabled');
+}
+
 import authRoutes from "./routes/auth.js";
 import socialAuthRoutes from "./routes/socialAuth.js";
 import orderRoutes from "./routes/orders.js";
@@ -36,9 +52,9 @@ import redisMonitorRoutes from "./routes/redisMonitor.js";
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
-import * as Sentry from "@sentry/node";
 // Sanitization middleware
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
+import { sentryContextMiddleware } from "./middleware/sentryContext.js";
 import cookieParser from "cookie-parser";
 import csrfProtection from "./middleware/csrfMiddleware.js";
 import { redisHealthCheck } from "./middleware/redisHealthCheck.js";
@@ -72,23 +88,405 @@ app.get('/ping', (req, res) => {
   res.send('pong');
 });
 
-// Request logging middleware — single log line per request (on finish, not on entry)
+// ── Request ID (Correlation ID for Debugging) ───────────────────────────────
+// MUST be first middleware for all logs to include request ID
+app.use((req, res, next) => {
+  req.id = randomUUID();
+  res.setHeader('X-Request-ID', req.id);
+  next();
+});
+
+// ── Timeout & Performance Monitoring ────────────────────────────────────────
+/**
+ * Route-Based Timeout Middleware Factory
+ * Use for endpoints that need custom timeout durations
+ * 
+ * NOTE: This only stops HTTP response, NOT MongoDB queries or external APIs.
+ * Those should use their own timeout mechanisms (maxTimeMS, AbortController).
+ * 
+ * @param {number} ms - Timeout in milliseconds
+ * @returns {Function} Express middleware
+ */
+function setRequestTimeout(ms) {
+  return (req, res, next) => {
+    req.setTimeout(ms, () => {
+      if (!res.headersSent) {
+        console.error(`[TIMEOUT] ${req.method} ${req.originalUrl} exceeded ${ms}ms (Request ID: ${req.id})`);
+        
+        // Capture in Sentry for monitoring
+        if (process.env.SENTRY_DSN) {
+          Sentry.withScope((scope) => {
+            scope.setTag('request_id', req.id);
+            scope.setTag('timeout_ms', ms);
+            scope.setTag('route', req.originalUrl);
+            Sentry.captureMessage('Request timeout', { level: 'error' });
+          });
+        }
+        
+        res.status(504).json({ 
+          success: false,
+          error: 'Request timeout',
+          message: `Request exceeded ${ms}ms time limit`,
+          requestId: req.id
+        });
+      }
+    });
+    next();
+  };
+}
+
+// ── Performance Metrics (Sliding Window + Percentiles) ──────────────────────
+/**
+ * Production-Grade Performance Metrics
+ * 
+ * Features:
+ * - Sliding window (doesn't reset on request)
+ * - P50, P95, P99 percentile tracking
+ * - Auto-alert thresholds
+ * - Top N slowest endpoints
+ * - Rate limiting recommendations
+ */
+class PerformanceMetrics {
+  constructor() {
+    // Sliding window: last 10 minutes
+    this.windowMs = 10 * 60 * 1000;
+    
+    // All request durations (for percentile calculation)
+    this.durations = [];
+    
+    // Per-endpoint metrics
+    this.endpoints = {};
+    
+    // Alert thresholds
+    this.alerts = {
+      slowRequestRate: 0.05,    // Alert if > 5% requests are slow
+      timeoutRate: 0.02,        // Alert if > 2% requests timeout
+      p95Threshold: 3000,       // Alert if P95 > 3s
+      p99Threshold: 5000        // Alert if P99 > 5s
+    };
+    
+    // Last alert times (prevent alert spam)
+    this.lastAlertTime = {};
+    this.alertCooldown = 5 * 60 * 1000; // 5 minutes between alerts
+    
+    // Start cleanup interval
+    this._startCleanup();
+  }
+  
+  // Record a request duration
+  record(endpoint, duration, statusCode, method) {
+    const now = Date.now();
+    
+    // Add to global durations
+    this.durations.push({ time: now, duration });
+    
+    // Add to endpoint-specific
+    if (!this.endpoints[endpoint]) {
+      this.endpoints[endpoint] = {
+        count: 0,
+        durations: [],
+        errors: 0,
+        timeouts: 0,
+        methods: {}
+      };
+    }
+    
+    const ep = this.endpoints[endpoint];
+    ep.count++;
+    ep.durations.push({ time: now, duration });
+    ep.methods[method] = (ep.methods[method] || 0) + 1;
+    
+    // Track errors (5xx status codes)
+    if (statusCode >= 500) {
+      ep.errors++;
+    }
+    
+    // Track timeouts (504)
+    if (statusCode === 504) {
+      ep.timeouts++;
+    }
+    
+    // Check alert thresholds
+    this._checkAlerts();
+  }
+  
+  // Calculate percentile
+  _percentile(sortedDurations, percentile) {
+    if (sortedDurations.length === 0) return 0;
+    const index = Math.ceil((percentile / 100) * sortedDurations.length) - 1;
+    return sortedDurations[Math.max(0, index)].duration;
+  }
+  
+  // Get metrics for a time window
+  getMetrics(windowMs = this.windowMs) {
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    
+    // Filter to window
+    const recentDurations = this.durations.filter(d => d.time >= cutoff);
+    const sorted = recentDurations.sort((a, b) => a.duration - b.duration);
+    
+    // Global metrics
+    const metrics = {
+      total: recentDurations.length,
+      window: `${Math.floor(windowMs / 60000)} minutes`,
+      percentiles: {
+        p50: this._percentile(sorted, 50),
+        p95: this._percentile(sorted, 95),
+        p99: this._percentile(sorted, 99),
+        max: sorted.length > 0 ? sorted[sorted.length - 1].duration : 0
+      },
+      slowRequests: recentDurations.filter(d => d.duration > 1000).length,
+      slowRequestRate: recentDurations.length > 0 
+        ? (recentDurations.filter(d => d.duration > 1000).length / recentDurations.length * 100).toFixed(2)
+        : '0.00'
+    };
+    
+    // Per-endpoint metrics
+    metrics.byEndpoint = {};
+    for (const [endpoint, data] of Object.entries(this.endpoints)) {
+      const epRecent = data.durations.filter(d => d.time >= cutoff);
+      const epSorted = epRecent.sort((a, b) => a.duration - b.duration);
+      
+      if (epRecent.length > 0) {
+        metrics.byEndpoint[endpoint] = {
+          count: epRecent.length,
+          percentiles: {
+            p50: this._percentile(epSorted, 50),
+            p95: this._percentile(epSorted, 95),
+            p99: this._percentile(epSorted, 99)
+          },
+          errors: data.errors,
+          timeouts: data.timeouts,
+          errorRate: ((data.errors / data.count) * 100).toFixed(2),
+          methods: data.methods
+        };
+      }
+    }
+    
+    // Top 5 slowest endpoints (by P95)
+    metrics.topSlowest = Object.entries(metrics.byEndpoint)
+      .sort((a, b) => b[1].percentiles.p95 - a[1].percentiles.p95)
+      .slice(0, 5)
+      .map(([endpoint, data]) => ({
+        endpoint,
+        p95: data.percentiles.p95,
+        count: data.count,
+        recommendation: this._getRecommendation(endpoint, data)
+      }));
+    
+    // Rate limiting recommendations
+    metrics.rateLimitRecommendations = this._getRateLimitRecommendations(metrics.byEndpoint);
+    
+    return metrics;
+  }
+  
+  // Get optimization recommendation for endpoint
+  _getRecommendation(endpoint, data) {
+    if (data.percentiles.p95 > 5000) {
+      return 'CRITICAL: Consider async processing or caching';
+    }
+    if (data.percentiles.p95 > 3000) {
+      return 'HIGH: Add database indexes or query optimization';
+    }
+    if (data.percentiles.p95 > 2000) {
+      return 'MEDIUM: Review N+1 queries or add caching';
+    }
+    if (data.errorRate > 5) {
+      return 'WARNING: High error rate, investigate failures';
+    }
+    return 'OK';
+  }
+  
+  // Get rate limiting recommendations
+  _getRateLimitRecommendations(endpoints) {
+    const recommendations = [];
+    
+    for (const [endpoint, data] of Object.entries(endpoints)) {
+      // Slow endpoints need stricter limits
+      if (data.percentiles.p95 > 2000) {
+        recommendations.push({
+          endpoint,
+          currentLimit: 'default',
+          recommendedLimit: Math.max(10, Math.floor(60 / (data.percentiles.p95 / 1000))),
+          reason: `P95 latency is ${data.percentiles.p95}ms`,
+          windowMs: 60000
+        });
+      }
+      
+      // High error rate endpoints need circuit breaker
+      if (data.errorRate > 10) {
+        recommendations.push({
+          endpoint,
+          action: 'circuit_breaker',
+          recommendedLimit: 5,
+          reason: `Error rate is ${data.errorRate}%`,
+          windowMs: 60000
+        });
+      }
+    }
+    
+    return recommendations;
+  }
+  
+  // Check alert thresholds
+  _checkAlerts() {
+    const now = Date.now();
+    const metrics = this.getMetrics(5 * 60 * 1000); // Last 5 minutes
+    
+    if (metrics.total < 10) return; // Need minimum data
+    
+    // Check slow request rate
+    const slowRate = parseFloat(metrics.slowRequestRate) / 100;
+    if (slowRate > this.alerts.slowRequestRate) {
+      this._triggerAlert('high_slow_request_rate', {
+        rate: metrics.slowRequestRate,
+        threshold: (this.alerts.slowRequestRate * 100) + '%',
+        total: metrics.total
+      });
+    }
+    
+    // Check P95
+    if (metrics.percentiles.p95 > this.alerts.p95Threshold) {
+      this._triggerAlert('high_p95_latency', {
+        p95: metrics.percentiles.p95,
+        threshold: this.alerts.p95Threshold
+      });
+    }
+    
+    // Check P99
+    if (metrics.percentiles.p99 > this.alerts.p99Threshold) {
+      this._triggerAlert('high_p99_latency', {
+        p99: metrics.percentiles.p99,
+        threshold: this.alerts.p99Threshold
+      });
+    }
+  }
+  
+  // Trigger alert (with cooldown)
+  _triggerAlert(type, data) {
+    const now = Date.now();
+    
+    // Check cooldown
+    if (this.lastAlertTime[type] && 
+        (now - this.lastAlertTime[type]) < this.alertCooldown) {
+      return; // Still in cooldown
+    }
+    
+    this.lastAlertTime[type] = now;
+    
+    // Log alert
+    console.error(`[⚠️ METRIC ALERT] ${type}:`, data);
+    
+    // Send to Sentry
+    if (process.env.SENTRY_DSN) {
+      Sentry.withScope((scope) => {
+        scope.setTag('alert_type', type);
+        scope.setLevel('warning');
+        scope.setContext('metrics', data);
+        Sentry.captureMessage(`Performance Alert: ${type}`, { level: 'warning' });
+      });
+    }
+  }
+  
+  // Cleanup old data (prevent memory leak)
+  _startCleanup() {
+    setInterval(() => {
+      const cutoff = Date.now() - this.windowMs;
+      
+      // Clean global durations
+      this.durations = this.durations.filter(d => d.time >= cutoff);
+      
+      // Clean endpoint durations
+      for (const endpoint of Object.keys(this.endpoints)) {
+        this.endpoints[endpoint].durations = 
+          this.endpoints[endpoint].durations.filter(d => d.time >= cutoff);
+      }
+    }, 60000); // Cleanup every minute
+  }
+}
+
+const performanceMetrics = new PerformanceMetrics();
+
+// ── Request Logging & Performance Tracking ─────────────────────────────────
 app.use((req, res, next) => {
   const start = Date.now();
 
-  // Set request timeout to prevent hanging
-  if (!res.headersSent) {
-    req.setTimeout(30000, () => {
-      console.error(`Request timeout: ${req.method} ${req.path}`);
-      if (!res.headersSent) {
-        res.status(504).json({ error: 'Gateway timeout' });
-      }
-    });
-  }
-
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+    const timestamp = new Date().toISOString();
+    const endpoint = req.route?.path || req.originalUrl.split('?')[0];
+
+    // Record in performance metrics (for percentiles & alerts)
+    performanceMetrics.record(endpoint, duration, res.statusCode, req.method);
+
+    // Log slow requests (over 1 second)
+    if (duration > 1000) {
+      // Warning: Slow request (> 1s)
+      console.warn('[SLOW_REQUEST]', {
+        requestId: req.id,
+        method: req.method,
+        path: req.originalUrl,
+        duration: `${duration}ms`,
+        statusCode: res.statusCode,
+        ip: req.ip
+      });
+
+      // Capture in Sentry for trending
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setTag('request_id', req.id);
+          scope.setTag('route', req.originalUrl);
+          scope.setTag('duration_ms', duration);
+          scope.setContext('performance', {
+            duration,
+            endpoint,
+            method: req.method
+          });
+          
+          // Critical: Very slow request (> 5s)
+          if (duration > 5000) {
+            console.error('[CRITICAL_SLOW_REQUEST]', {
+              requestId: req.id,
+              path: req.originalUrl,
+              duration: `${duration}ms`
+            });
+            Sentry.captureMessage('Critical slow request', { level: 'error' });
+          } else {
+            Sentry.captureMessage('Slow request', { level: 'warning' });
+          }
+        });
+      }
+    }
+
+    // Log all requests (with request ID)
+    console.log(`[${timestamp}] [${req.id}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+  });
+
+  next();
+});
+
+// ── Global Request Timeout (30s default) ────────────────────────────────────
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    if (!res.headersSent) {
+      console.error(`[TIMEOUT] ${req.method} ${req.originalUrl} exceeded 30000ms (global default) [Request ID: ${req.id}]`);
+      
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setTag('request_id', req.id);
+          scope.setTag('timeout_type', 'global_default');
+          Sentry.captureMessage('Global request timeout', { level: 'error' });
+        });
+      }
+      
+      res.status(504).json({ 
+        success: false,
+        error: 'Gateway timeout',
+        message: 'Request exceeded 30 second time limit',
+        requestId: req.id
+      });
+    }
   });
   next();
 });
@@ -142,41 +540,46 @@ app.use(cookieParser());
 // This will set the XSRF-TOKEN cookie and validate headers for state-changing requests
 app.use(csrfProtection);
 
-const frontendUrlsEnv = process.env.FRONTEND_URLS;
-const frontendUrls = frontendUrlsEnv
-  ? frontendUrlsEnv.split(',').map(u => u.trim()).filter(Boolean)
-  : [];
+// ── CORS Configuration ──────────────────────────────────────────────────────
+// Centralized allowed origins list (validated in ALL environments)
 const allowedOrigins = [
-  // Localhost origins for development only
-  ...(process.env.NODE_ENV !== 'production' ? [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5173',
-  ] : []),
+  // Localhost origins for development
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  // Production frontend URLs
   process.env.FRONTEND_URL,
-  ...frontendUrls
+  // Additional frontend URLs (comma-separated in env var)
+  ...(process.env.FRONTEND_URLS 
+    ? process.env.FRONTEND_URLS.split(',').map(u => u.trim()).filter(Boolean) 
+    : []
+  ),
+  // Railway review apps (if enabled)
+  ...(process.env.Review_App ? [process.env.RAILWAY_PUBLIC_URL].filter(Boolean) : [])
 ].filter(Boolean);
 
 const corsOptions = {
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow non-browser requests (Postman, curl, mobile apps)
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1 && !process.env.Review_App) {
-      // In development, we might want to be more lenient or log it
-      if (process.env.NODE_ENV === 'development') {
-        return callback(null, true);
-      }
-      var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+
+    // Normalize origin (remove trailing slash)
+    const normalizedOrigin = origin.replace(/\/$/, '');
+
+    // Check against whitelist
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
     }
-    return callback(null, true);
+
+    // Block unauthorized origins (even in development)
+    console.warn('[CORS BLOCKED] Unauthorized origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-session-id', 'X-Session-Id', 'X-XSRF-TOKEN', 'X-CSRF-Token'],
-  maxAge: process.env.NODE_ENV === 'production' ? 7200 : 0  // Cache preflight 2h in prod (safe default; avoids stale CORS failures)
+  maxAge: process.env.NODE_ENV === 'production' ? 7200 : 0  // Cache preflight 2h in prod
 };
 
 // Handle ALL preflight OPTIONS requests immediately before any other middleware
@@ -185,6 +588,10 @@ app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
+
+// Sentry context middleware - adds user/request context to error tracking
+// Must be AFTER body parsing but BEFORE routes
+app.use(sentryContextMiddleware);
 
 // Data Sanitization against NoSQL query injection
 app.use(mongoSanitization);
@@ -275,6 +682,17 @@ app.get('/ready', (req, res) => {
   });
 });
 
+// Performance metrics endpoint (admin only in production)
+app.get('/api/v1/metrics/performance', (req, res) => {
+  const metrics = performanceMetrics.getMetrics();
+  
+  res.json({
+    success: true,
+    metrics,
+    timestamp: new Date().toISOString()
+  });
+});
+
 import debugRoutes from "./routes/debug.js";
 
 // API status endpoint
@@ -302,6 +720,8 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/auth", socialAuthRoutes);
 
 // Public browsing (300 req/min)
+// Product search may take longer due to complex queries
+app.use("/api/v1/products/search", setRequestTimeout(60000), publicBrowsingRateLimit, productRoutes);
 app.use("/api/v1/products", publicBrowsingRateLimit, productRoutes);
 app.use("/api/v1/categories", publicBrowsingRateLimit, categoryRoutes);
 app.use("/api/v1/vehicles", publicBrowsingRateLimit, vehicleRoutes);
@@ -316,16 +736,18 @@ app.use("/api/v1/users", authenticatedUserRateLimit, userRoutes);
 app.use("/api/v1/reviews", authenticatedUserRateLimit, reviewRoutes);
 
 // Checkout / Payment (60 req/min)
-app.use("/api/v1/orders", checkoutRateLimit, orderRoutes);
-app.use("/api/v1/returns", returnsRateLimit, returnRoutes);
-app.use("/api/v1/razorpay", checkoutRateLimit, razorpayRoutes);
+// Orders and payments need longer timeouts for external API calls
+app.use("/api/v1/orders", setRequestTimeout(120000), checkoutRateLimit, orderRoutes);
+app.use("/api/v1/returns", setRequestTimeout(60000), returnsRateLimit, returnRoutes);
+app.use("/api/v1/razorpay", setRequestTimeout(120000), checkoutRateLimit, razorpayRoutes);
 app.use("/api/v1/payment-methods", checkoutRateLimit, paymentMethodRoutes);
 
 // Admin / Management (120 req/min)
+// WordPress sync can take longer for bulk operations
 app.use("/api/v1/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
 app.use("/api/v1/warehouses", adminRateLimit, warehouseRoutes);
 app.use("/api/v1/delivery-zones", adminRateLimit, deliveryZoneRoutes);
-app.use("/api/v1/wordpress", adminRateLimit, wordpressRoutes);
+app.use("/api/v1/wordpress", setRequestTimeout(120000), adminRateLimit, wordpressRoutes);
 
 // Admin-only introspection / dashboards
 app.use("/api/v1/admin/token", tokenIntrospectionRoutes);

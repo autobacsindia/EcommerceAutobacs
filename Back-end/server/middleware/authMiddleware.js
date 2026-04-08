@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { asyncHandler } from "./errorMiddleware.js";
+import * as Sentry from "@sentry/node";
 
 // Protect routes - verify JWT token
 export const protect = asyncHandler(async (req, res, next) => {

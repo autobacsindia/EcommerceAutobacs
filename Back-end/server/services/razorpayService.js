@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import Order from '../models/Order.js';
 import Payment from '../models/Payment.js';
 import orderStatusService from './orderStatusService.js';
+import * as Sentry from '@sentry/node';
 
 class RazorpayService {
   constructor() {
@@ -65,6 +66,14 @@ class RazorpayService {
         receipt: razorpayOrder.receipt
       };
     } catch (error) {
+      // Capture payment order creation errors in Sentry
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('payment_order', { orderId, amount, currency });
+          scope.setTag('payment_action', 'create_order');
+          Sentry.captureException(error);
+        });
+      }
       throw new Error(`Failed to create Razorpay order: ${error.message}`);
     }
   }
@@ -107,6 +116,17 @@ class RazorpayService {
         payment: payment
       };
     } catch (error) {
+      // Capture payment verification failures in Sentry
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('payment_verification', { 
+            razorpay_order_id, 
+            razorpay_payment_id 
+          });
+          scope.setTag('payment_action', 'verify_payment');
+          Sentry.captureException(error);
+        });
+      }
       return {
         success: false,
         verified: false,
@@ -176,6 +196,20 @@ class RazorpayService {
         paymentId: paymentRecord._id
       };
     } catch (error) {
+      // Capture critical payment processing errors in Sentry
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('payment_processing', { 
+            orderId, 
+            paymentId: paymentData.id,
+            userId 
+          });
+          scope.setTag('payment_action', 'process_payment_success');
+          scope.setTag('severity', 'critical');
+          Sentry.captureException(error);
+        });
+      }
+      
       // If we created a payment record, mark it as failed
       try {
         const paymentRecord = await Payment.findOne({ order: orderId, gatewayPaymentId: paymentData.id });
@@ -187,6 +221,9 @@ class RazorpayService {
       } catch (updateError) {
         // Log but don't throw to avoid masking original error
         console.error('Failed to update payment record status:', updateError);
+        if (process.env.SENTRY_DSN) {
+          Sentry.captureException(updateError);
+        }
       }
       
       throw new Error(`Failed to process payment: ${error.message}`);
@@ -257,6 +294,17 @@ class RazorpayService {
         message: 'Webhook processed successfully'
       };
     } catch (error) {
+      // Capture webhook processing errors in Sentry
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('webhook_processing', { 
+            eventType: webhookData?.event,
+            hasSignature: !!signature
+          });
+          scope.setTag('payment_action', 'handle_webhook');
+          Sentry.captureException(error);
+        });
+      }
       throw new Error(`Webhook processing failed: ${error.message}`);
     }
   }
@@ -303,6 +351,17 @@ class RazorpayService {
       console.log(`Payment failure processed for payment ${paymentEntity.id}`);
     } catch (error) {
       console.error('Error handling payment failure:', error);
+      // Capture payment failure handling errors
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('payment_failure_handling', { 
+            paymentId: paymentEntity?.id,
+            orderId: paymentEntity?.notes?.orderId
+          });
+          scope.setTag('payment_action', 'handle_payment_failure');
+          Sentry.captureException(error);
+        });
+      }
     }
   }
 }

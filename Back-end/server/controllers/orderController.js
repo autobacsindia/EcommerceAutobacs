@@ -7,6 +7,7 @@ import orderTrackingService from "../services/orderTrackingService.js";
 import emailHandler from "../services/emailHandler.js";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import * as Sentry from "@sentry/node";
 
 // @desc    Get all orders for logged-in user with pagination
 // @route   GET /orders
@@ -347,6 +348,20 @@ export const createGuestOrder = async (req, res) => {
     
   } catch (error) {
     console.error('[GUEST_ORDER_ERROR]', error);
+    
+    // Capture guest order creation errors in Sentry
+    if (process.env.SENTRY_DSN) {
+      Sentry.withScope((scope) => {
+        scope.setContext('guest_order', { 
+          email: req.body?.email,
+          itemCount: req.body?.items?.length 
+        });
+        scope.setTag('order_type', 'guest_checkout');
+        scope.setTag('severity', 'high');
+        Sentry.captureException(error);
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Failed to create guest order',
