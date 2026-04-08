@@ -170,8 +170,8 @@ describe('Payment - Signature Verification (FRAUD PREVENTION)', () => {
       .post('/api/v1/auth/register')
       .send(TEST_USER);
     
-    authToken = userRes.body.accessToken || userRes.body.data?.accessToken;
-    userId = userRes.body.user?._id || userRes.body.data?.user?._id;
+    authToken = userRes.body.accessToken;
+    userId = userRes.body.user._id;
     testOrder = await createTestOrder();
   });
 
@@ -254,8 +254,8 @@ describe('Payment - Idempotency (NO DUPLICATE ORDERS)', () => {
       .post('/api/v1/auth/register')
       .send(TEST_USER);
     
-    authToken = userRes.body.accessToken || userRes.body.data?.accessToken;
-    userId = userRes.body.user?._id || userRes.body.data?.user?._id;
+    authToken = userRes.body.accessToken;
+    userId = userRes.body.user._id;
     testOrder = await createTestOrder();
   });
 
@@ -366,8 +366,8 @@ describe('Payment - Edge Cases & Error Handling', () => {
       .post('/api/v1/auth/register')
       .send(TEST_USER);
     
-    authToken = userRes.body.data.accessToken;
-    userId = userRes.body.data.user._id;
+    authToken = userRes.body.accessToken;
+    userId = userRes.body.user._id;
   });
 
   it('should handle payment for non-existent order gracefully', async () => {
