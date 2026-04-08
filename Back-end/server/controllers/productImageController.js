@@ -155,6 +155,14 @@ export const updateProductWithImages = async (req, res) => {
   );
 
   // Capture old public_ids BEFORE any changes (needed for cleanup if replacing)
+  // CRITICAL: Check for missing public_ids and log warning
+  const missingPublicIds = product.images.filter(img => !img.public_id && img.url.includes('cloudinary.com'));
+  
+  if (missingPublicIds.length > 0) {
+    console.error(`[CRITICAL] Product ${product._id} has ${missingPublicIds.length} Cloudinary image(s) missing public_id`);
+    console.error('[CRITICAL] These images cannot be cleaned up. Run backfill script.');
+  }
+  
   const oldPublicIds = product.images.map((img) => img.public_id).filter(Boolean);
 
   // ── Step 1: Upload new images (if any) ────────────────────────────────
@@ -246,6 +254,14 @@ export const updateProductWithImages = async (req, res) => {
 export const deleteProductWithImages = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) throw new AppError('Product not found', 404);
+
+  // CRITICAL: Check for missing public_ids before deletion
+  const missingPublicIds = product.images.filter(img => !img.public_id && img.url.includes('cloudinary.com'));
+  
+  if (missingPublicIds.length > 0) {
+    console.error(`[CRITICAL] Product ${product._id} has ${missingPublicIds.length} Cloudinary image(s) missing public_id`);
+    console.error('[CRITICAL] These images will become orphaned. Run backfill script before deleting products.');
+  }
 
   const publicIds = product.images.map((img) => img.public_id).filter(Boolean);
 

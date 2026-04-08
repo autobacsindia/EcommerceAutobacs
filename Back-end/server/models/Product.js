@@ -40,7 +40,14 @@ const ProductSchema = new mongoose.Schema({
   },
   images: [{
     url:        { type: String, required: true },   // Cloudinary secure_url or external URL
-    public_id:  { type: String },                   // Cloudinary public_id — absent for WordPress-imported images
+    public_id:  { 
+                  type: String,
+                  // Require public_id ONLY for Cloudinary images
+                  // External images (if any) won't break
+                  required: function() {
+                    return this.url && this.url.includes('cloudinary.com');
+                  }
+                },                   // Cloudinary public_id — required for cleanup
     alt:        { type: String },
     isPrimary:  { type: Boolean, default: false }
   }],
