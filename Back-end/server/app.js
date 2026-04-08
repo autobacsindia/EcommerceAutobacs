@@ -66,7 +66,10 @@ import {
   authenticatedUserRateLimit,
   checkoutRateLimit,
   returnsRateLimit,
-  adminRateLimit
+  adminRateLimit,
+  locationRateLimit,
+  contactFormRateLimit,
+  consultationRateLimit
 } from "./middleware/rateLimitMiddleware.js";
 
 // Import cron service
@@ -760,9 +763,12 @@ app.use("/api/v1/dashboard", adminRateLimit, dashboardRoutes);
 app.use("/api/v1/media", publicBrowsingRateLimit, mediaRoutes);
 
 // Location & Contact
-app.use("/api/v1/location", apiRateLimit, locationRoutes);
-app.use("/api/v1/contact", apiRateLimit, contactRoutes);
-app.use("/api/v1/consultation", apiRateLimit, consultationRoutes);
+// Location API uses Google Maps (costs money) - strict limit
+app.use("/api/v1/location", locationRateLimit, locationRoutes);
+// Contact form - spam prevention
+app.use("/api/v1/contact", contactFormRateLimit, contactRoutes);
+// Consultation booking - spam prevention
+app.use("/api/v1/consultation", consultationRateLimit, consultationRoutes);
 
 // ── Error handling ──────────────────────────────────────────────────────────────
 // Correct middleware order:

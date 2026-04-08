@@ -401,6 +401,28 @@ export const apiRateLimit = rateLimit({
   max: 200  // Increased from 100 to 200 requests per 15 minutes
 });
 
+// Strict rate limit for costly external API calls (Google Maps, etc.)
+// These endpoints cost money per request
+export const locationRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 30,  // Only 30 requests per 15 min (prevents Google Maps bill explosion)
+  message: 'Too many location requests. Please try again later or contact support.'
+});
+
+// Strict rate limit for contact forms (spam prevention)
+export const contactFormRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 10,  // Only 10 submissions per hour per IP
+  message: 'Too many contact form submissions. Please wait before trying again.'
+});
+
+// Strict rate limit for consultation bookings (spam prevention)
+export const consultationRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 5,  // Only 5 bookings per hour per IP
+  message: 'Too many consultation requests. Please wait before trying again.'
+});
+
 // More permissive rate limit for frequently accessed routes
 export const frequentAccessRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -413,13 +435,6 @@ export const wishlistRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // Increase limit for frequent wishlist operations
   message: 'Too many wishlist requests, please try again later'
-});
-
-// Special rate limiter for location routes with higher limits
-export const locationRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Higher limit for location endpoints
-  message: 'Too many location requests, please try again later'
 });
 
 // Password reset rate limiters
