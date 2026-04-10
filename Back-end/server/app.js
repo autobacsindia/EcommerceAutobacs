@@ -19,36 +19,14 @@ if (process.env.SENTRY_DSN) {
   console.warn('[Sentry] DSN not configured - error tracking disabled');
 }
 
-import authRoutes from "./routes/auth.js";
-import socialAuthRoutes from "./routes/socialAuth.js";
-import orderRoutes from "./routes/orders.js";
-import productRoutes from "./routes/products.js";
-import scheduledTasksRoutes from "./routes/scheduledTasks.js";
-import { setCronService } from "./routes/scheduledTasks.js";
-import categoryRoutes from "./routes/categories.js";
-import vehicleRoutes from "./routes/vehicles.js";
-import cartRoutes from "./routes/cart.js";
-import wishlistRoutes from "./routes/wishlist.js";
-import userRoutes from "./routes/users.js";
-import reviewRoutes from "./routes/reviews.js";
-import profileRoutes from "./routes/profile.js";
-import paymentMethodRoutes from "./routes/paymentMethods.js";
-import locationRoutes from "./routes/location.js";
-import warehouseRoutes from "./routes/warehouses.js";
-import deliveryZoneRoutes from "./routes/deliveryZones.js";
-import razorpayRoutes from "./routes/razorpay.js";
-import brandRoutes from "./routes/brands.js";
-import wordpressRoutes from "./routes/wordpress.js";
-import productQuestionRoutes from "./routes/productQuestions.js";
-import tokenIntrospectionRoutes from "./routes/tokenIntrospection.js";
-import rateLimitDashboardRoutes from "./routes/rateLimitDashboard.js";
-import adaptiveThrottlingRoutes from "./routes/adaptiveThrottling.js";
-import dashboardRoutes from "./routes/dashboard.js";
-import mediaRoutes from "./routes/media.js";
-import contactRoutes from "./routes/contact.js";
-import consultationRoutes from "./routes/consultation.js";
-import returnRoutes from "./routes/returnRoutes.js";
-import redisMonitorRoutes from "./routes/redisMonitor.js";
+// ── Import domain router (aggregates all /api/v1/* routes) ──────────────────
+import apiRouter from './routes/index.js';
+
+// ── Import debug routes (development only) ──────────────────────────────────
+import debugRoutes from './routes/debug.js';
+
+// ── Import cron service setter ──────────────────────────────────────────────
+import { setCronService } from './routes/scheduledTasks.js';
 
 // Import middleware
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
@@ -110,7 +88,13 @@ app.use((req, res, next) => {
  * @param {number} ms - Timeout in milliseconds
  * @returns {Function} Express middleware
  */
-function setRequestTimeout(ms) {
+/**
+ * Set request timeout for specific routes
+ * Factory function that returns middleware
+ * @param {number} ms - Timeout in milliseconds
+ * @returns {Function} Express middleware
+ */
+export function setRequestTimeout(ms) {
   return (req, res, next) => {
     req.setTimeout(ms, () => {
       if (!res.headersSent) {
@@ -696,8 +680,6 @@ app.get('/api/v1/metrics/performance', (req, res) => {
   });
 });
 
-import debugRoutes from "./routes/debug.js";
-
 // API status endpoint
 app.get('/api/v1/status', (req, res) => {
   res.status(200).json({
@@ -715,60 +697,22 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ── Route mounting — /api/v1/* ──────────────────────────────────────────────
-// Single canonical versioned prefix. Frontend rewrites /api/v1/:path* → here.
-// Adding v2 later: mount new router at /api/v2/* alongside these.
+// Single domain-driven router aggregates all API routes with proper middleware.
+// See routes/index.js for domain grouping and rate limit configuration.
+//
+// Architecture:
+// - Auth Domain: /auth/*, /admin/token/*
+// - Product Domain: /products/*, /categories/*, /brands/*, /vehicles/*
+// - User Domain: /users/*, /profile/*, /cart/*, /wishlist/*, /reviews/*
+// - Order Domain: /orders/*, /returns/*, /razorpay/*, /payment-methods/*
+// - Admin Domain: /dashboard/*, /warehouses/*, /delivery-zones/*, /wordpress/*
+// - Location Domain: /location/*
+// - Contact Domain: /contact/*, /consultation/*
+// - Monitoring Domain: /admin/rate-limits/*, /admin/redis, /admin/adaptive-throttling
+//
+// Adding v2 later: import apiRouterV2 and mount at /api/v2/*
 
-// Auth routes (own stricter rate limiting: 5 req/min)
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/auth", socialAuthRoutes);
-
-// Public browsing (300 req/min)
-// Product search may take longer due to complex queries
-app.use("/api/v1/products/search", setRequestTimeout(60000), publicBrowsingRateLimit, productRoutes);
-app.use("/api/v1/products", publicBrowsingRateLimit, productRoutes);
-app.use("/api/v1/categories", publicBrowsingRateLimit, categoryRoutes);
-app.use("/api/v1/vehicles", publicBrowsingRateLimit, vehicleRoutes);
-app.use("/api/v1/brands", publicBrowsingRateLimit, brandRoutes);
-app.use("/api/v1/product-questions", publicBrowsingRateLimit, productQuestionRoutes);
-
-// Authenticated user endpoints (600 req/min)
-app.use("/api/v1/cart", authenticatedUserRateLimit, cartRoutes);
-app.use("/api/v1/wishlist", authenticatedUserRateLimit, wishlistRoutes);
-app.use("/api/v1/profile", authenticatedUserRateLimit, profileRoutes);
-app.use("/api/v1/users", authenticatedUserRateLimit, userRoutes);
-app.use("/api/v1/reviews", authenticatedUserRateLimit, reviewRoutes);
-
-// Checkout / Payment (60 req/min)
-// Orders and payments need longer timeouts for external API calls
-app.use("/api/v1/orders", setRequestTimeout(120000), checkoutRateLimit, orderRoutes);
-app.use("/api/v1/returns", setRequestTimeout(60000), returnsRateLimit, returnRoutes);
-app.use("/api/v1/razorpay", setRequestTimeout(120000), checkoutRateLimit, razorpayRoutes);
-app.use("/api/v1/payment-methods", checkoutRateLimit, paymentMethodRoutes);
-
-// Admin / Management (120 req/min)
-// WordPress sync can take longer for bulk operations
-app.use("/api/v1/scheduled-tasks", adminRateLimit, scheduledTasksRoutes);
-app.use("/api/v1/warehouses", adminRateLimit, warehouseRoutes);
-app.use("/api/v1/delivery-zones", adminRateLimit, deliveryZoneRoutes);
-app.use("/api/v1/wordpress", setRequestTimeout(120000), adminRateLimit, wordpressRoutes);
-
-// Admin-only introspection / dashboards
-app.use("/api/v1/admin/token", tokenIntrospectionRoutes);
-app.use("/api/v1/admin/rate-limits/dashboard", rateLimitDashboardRoutes);
-app.use("/api/v1/admin/adaptive-throttling", adaptiveThrottlingRoutes);
-app.use("/api/v1/admin/redis", redisMonitorRoutes); // NEW!
-app.use("/api/v1/dashboard", adminRateLimit, dashboardRoutes);
-
-// Media & News
-app.use("/api/v1/media", publicBrowsingRateLimit, mediaRoutes);
-
-// Location & Contact
-// Location API uses Google Maps (costs money) - strict limit
-app.use("/api/v1/location", locationRateLimit, locationRoutes);
-// Contact form - spam prevention
-app.use("/api/v1/contact", contactFormRateLimit, contactRoutes);
-// Consultation booking - spam prevention
-app.use("/api/v1/consultation", consultationRateLimit, consultationRoutes);
+app.use('/api/v1', apiRouter);
 
 // ── Error handling ──────────────────────────────────────────────────────────────
 // Correct middleware order:
