@@ -196,11 +196,14 @@ const OrderSchema = new mongoose.Schema({
 });
 
 // Indexes for order queries
-OrderSchema.index({ user: 1, createdAt: -1 });
-OrderSchema.index({ status: 1 });
-OrderSchema.index({ trackingNumber: 1 });
-OrderSchema.index({ 'returnRequest.status': 1 });
-OrderSchema.index({ 'refundDetails.status': 1 });
+// COMPOUND indexes for common query patterns
+OrderSchema.index({ user: 1, createdAt: -1 }); // User order history (sorted by date)
+OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by status, sort by date)
+
+// SINGLE-FIELD indexes for specific lookups
+OrderSchema.index({ trackingNumber: 1 }); // Tracking lookup
+OrderSchema.index({ 'returnRequest.status': 1 }); // Return request queries
+OrderSchema.index({ 'refundDetails.status': 1 }); // Refund status queries
 
 // Pre-save middleware to add initial status to history
 OrderSchema.pre('save', function(next) {

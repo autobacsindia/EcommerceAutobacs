@@ -132,14 +132,20 @@ const ProductSchema = new mongoose.Schema({
 // OPTIMIZED: Removed 'description' from text index to reduce RAM usage
 // Description fields are large (KBs per product) and waste memory
 ProductSchema.index({ name: 'text', tags: 'text', brand: 'text' });
-ProductSchema.index({ categories: 1, isActive: 1 });
-ProductSchema.index({ price: 1 });
-ProductSchema.index({ brand: 1 });
-ProductSchema.index({ averageRating: -1 });
-ProductSchema.index({ stock: 1 });
-ProductSchema.index({ createdAt: -1 });
-ProductSchema.index({ compatibleVehicles: 1 });
-ProductSchema.index({ isFeatured: 1 });
-ProductSchema.index({ isFastMoving: 1 });
+
+// UNIQUE indexes
+ProductSchema.index({ slug: 1 }, { unique: true }); // Product URLs
+
+// COMPOUND indexes for common query patterns
+ProductSchema.index({ brand: 1, isActive: 1, createdAt: -1 }); // Brand filtering + sorting (NEW ARRIVALS by brand)
+ProductSchema.index({ categories: 1, price: 1, isActive: 1 }); // Category + price range filtering
+ProductSchema.index({ isActive: 1, createdAt: -1 }); // New arrivals / homepage (filters + sorts)
+
+// SINGLE-FIELD indexes for specific queries
+ProductSchema.index({ averageRating: -1 }); // Top rated products
+ProductSchema.index({ stock: 1 }); // Stock management
+ProductSchema.index({ compatibleVehicles: 1 }); // Vehicle-specific products
+ProductSchema.index({ isFeatured: 1 }); // Featured products
+ProductSchema.index({ isFastMoving: 1 }); // Fast-moving products
 
 export default mongoose.model("Product", ProductSchema);
