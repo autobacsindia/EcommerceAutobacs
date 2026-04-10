@@ -5,8 +5,7 @@ import { MapPin, Phone, Mail, Clock, Send, AlertCircle, CheckCircle } from 'luci
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { ContactService } from '@/lib/services';
 
 function ContactPageInner() {
   const searchParams = useSearchParams();
@@ -50,7 +49,7 @@ function ContactPageInner() {
     setSubmitStatus(null);
 
     try {
-      await apiClient.post(API_ENDPOINTS.CONTACT, formData);
+      await ContactService.submit(formData);
       
       setSubmitStatus({
         type: 'success',

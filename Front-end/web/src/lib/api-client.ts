@@ -11,7 +11,7 @@
  */
 
 import rateLimitLogger from './rateLimitLogger';
-import { ApiError, ErrorCategory, type FetchOptions, type RateLimitInfo } from './api-types';
+import { ApiError, ErrorCategory, type FetchOptions, type RateLimitInfo, type RequestInterceptor, type ResponseInterceptor } from './api-types';
 
 // Storage key for JWT token
 const TOKEN_KEY = 'autobacs_auth_token';
@@ -32,6 +32,13 @@ class APIClient {
   private refreshSubscribers: ((token: string) => void)[] = [];
   private loadingCount = 0;
   private loadingListeners: Array<(isLoading: boolean, count: number) => void> = [];
+  
+  // Interceptors
+  private requestInterceptors: RequestInterceptor[] = [];
+  private responseInterceptors: ResponseInterceptor[] = [];
+  
+  // Request logging
+  private enableLogging = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
 
   constructor() {
     // Initialize token from localStorage if available (client-side only)
@@ -164,6 +171,80 @@ class APIClient {
     if (index > -1) {
       this.loadingListeners.splice(index, 1);
     }
+  }
+
+  /**
+   * Register a request interceptor
+   * Interceptors run in order of registration before each request
+   */
+  addRequestInterceptor(interceptor: RequestInterceptor): void {
+    this.requestInterceptors.push(interceptor);
+  }
+
+  /**
+   * Register a response interceptor
+   * Interceptors run in order of registration after each response
+   */
+  addResponseInterceptor(interceptor: ResponseInterceptor): void {
+    this.responseInterceptors.push(interceptor);
+  }
+
+  /**
+   * Enable/disable request logging
+   */
+  setLogging(enabled: boolean): void {
+    this.enableLogging = enabled;
+  }
+
+  /**
+   * Execute request interceptors
+   */
+  private async executeRequestInterceptors(
+    method: string,
+    endpoint: string,
+    data: any,
+    headers: HeadersInit
+  ): Promise<{ method: string; endpoint: string; data: any; headers: HeadersInit }> {
+    let config: { method: string; endpoint: string; data: any; headers: HeadersInit } = 
+      { method, endpoint, data, headers };
+    
+    for (const interceptor of this.requestInterceptors) {
+      if (interceptor.onRequest) {
+        try {
+          config = await interceptor.onRequest(config);
+        } catch (error) {
+          if (interceptor.onError) {
+            return await interceptor.onError(error);
+          }
+          throw error;
+        }
+      }
+    }
+    
+    return config;
+  }
+
+  /**
+   * Execute response interceptors
+   */
+  private async executeResponseInterceptors(response: any): Promise<any> {
+    let result = response;
+    
+    for (const interceptor of this.responseInterceptors) {
+      if (interceptor.onResponse) {
+        try {
+          result = await interceptor.onResponse(result);
+        } catch (error) {
+          if (interceptor.onError) {
+            result = await interceptor.onError(error);
+          } else {
+            throw error;
+          }
+        }
+      }
+    }
+    
+    return result;
   }
 
   private notifyLoadingChange() {
@@ -513,9 +594,21 @@ class APIClient {
       const separator = finalUrl.includes('?') ? '&' : '?';
       finalUrl = `${finalUrl}${separator}${params.toString()}`;
     }
-
-    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
-      console.log(`[API] Executing request: ${method} ${finalUrl}`);
+    
+    // Start performance timer
+    const startTime = performance.now();
+    
+    // Run request interceptors
+    const initialHeaders = this.getHeaders(options?.headers);
+    const interceptedConfig = await this.executeRequestInterceptors(
+      method,
+      endpoint,
+      data,
+      initialHeaders
+    );
+    
+    if (this.enableLogging) {
+      console.log(`[API] ${interceptedConfig.method} ${interceptedConfig.endpoint}`);
     }
     
     // Default settings
@@ -558,13 +651,13 @@ class APIClient {
         
         const fetchOptions: RequestInit = {
           ...restOptions,
-          method,
-          headers: this.getHeaders(optionHeaders),
+          method: interceptedConfig.method,
+          headers: interceptedConfig.headers,
           signal
         };
 
-        if (data !== undefined) {
-          fetchOptions.body = JSON.stringify(data);
+        if (interceptedConfig.data !== undefined) {
+          fetchOptions.body = JSON.stringify(interceptedConfig.data);
         }
         
         this.loadingCount++;
@@ -575,7 +668,18 @@ class APIClient {
         
         if (timeoutId) clearTimeout(timeoutId);
         
-        return await this.handleResponse(response);
+        // Calculate request duration
+        const duration = performance.now() - startTime;
+        
+        // Log slow requests (>1s)
+        if (this.enableLogging && duration > 1000) {
+          console.warn(`[API SLOW] ${interceptedConfig.method} ${interceptedConfig.endpoint} took ${duration.toFixed(0)}ms`);
+        }
+        
+        const responseData = await this.handleResponse(response);
+        
+        // Run response interceptors
+        return await this.executeResponseInterceptors(responseData);
       } catch (error: any) {
         this.loadingCount = Math.max(0, this.loadingCount - 1);
         this.notifyLoadingChange();
