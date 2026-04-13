@@ -1,31 +1,52 @@
 export default {
   testTimeout: 300000,
   testEnvironment: 'node',
-  setupFiles: ['<rootDir>/tests/setupEnv.js'],
+  
+  // Setup files (run before each test file)
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  
+  // ESM configuration
   transform: {},
-  // No moduleNameMapper needed: Jest with --experimental-vm-modules resolves
-  // ESM imports natively. Adding a .js stripper breaks .cjs internal shims.
-  testMatch: ['**/tests/**/*.test.js', '**/?(*.)+(spec|test).js'],
+  
+  // Test file patterns
+  testMatch: [
+    '**/tests/**/*.test.js',
+    '**/?(*.)+(spec|test).js'
+  ],
+  
+  // Verbosity and exit behavior
   verbose: true,
   forceExit: true,
-  clearMocks: true,
-  resetMocks: true,
-  restoreMocks: true,
+  
+  // Mock isolation (CRITICAL for reliable tests)
+  clearMocks: true,      // Clear mock calls between tests
+  resetMocks: true,      // Reset mock implementations
+  restoreMocks: true,    // Restore original implementations
+  
+  // Detect open handles (prevent hanging tests)
+  detectOpenHandles: true,
+  
+  // Coverage configuration
   coverageDirectory: 'coverage',
+  collectCoverage: true,
   collectCoverageFrom: [
     'controllers/**/*.js',
-    'middleware/uploadMiddleware.js',
+    'middleware/**/*.js',
     'models/**/*.js',
     'routes/**/*.js',
     'services/**/*.js',
+    'utils/**/*.js',
     '!**/node_modules/**',
     '!**/vendor/**',
     '!**/tests/**',
+    '!server.js',         // Entry point, hard to test
+    '!app.js',            // App configuration, hard to test
   ],
   coverageReporters: ['text', 'lcov', 'clover', 'html'],
-  // Coverage thresholds — regression guard.
-  // Temporarily reduced to 55% to unblock CI while fixing remaining tests.
-  // Target: Gradually increase back to 70%+ as tests are fixed.
+  
+  // Coverage thresholds — regression guard
+  // Current: 55% (being improved)
+  // Target: 70%+ for production readiness
   coverageThreshold: {
     global: {
       lines: 55,
@@ -33,6 +54,7 @@ export default {
       branches: 45,
       statements: 55,
     },
+    // Critical files require higher coverage
     './controllers/productImageController.js': {
       lines: 65,
     },

@@ -41,7 +41,21 @@
     "assign-header-nav-categories": "node assign-header-categories.js",
     "test-validate-categories": "node test-validate-product-categories.js",
     "backfill-cloudinary-ids": "node scripts/backfill-cloudinary-public-ids.js",
-    "check-cloudinary-health": "node scripts/check-cloudinary-health.js"
+    "check-cloudinary-health": "node scripts/check-cloudinary-health.js",
+    
+    "load-test:quick": "artillery run ../../artillery-quick-test.yml --output ../../quick-report.json",
+    "load-test:full": "artillery run ../../artillery-config.yml --output ../../report.json",
+    "load-test:stress": "artillery run ../../artillery-stress-test.yml --output ../../stress-report.json",
+    "load-test:advanced": "artillery run ../../artillery-advanced-test.yml --output ../../advanced-report.json",
+    "load-test:soak": "artillery run ../../artillery-soak-test.yml --output ../../soak-report.json",
+    "load-test:mocked": "artillery run ../../artillery-mocked-test.yml --output ../../mocked-report.json",
+    "load-test:report": "artillery report ../../report.json",
+    "load-test:stress-report": "artillery report ../../stress-report.json",
+    "load-test:advanced-report": "artillery report ../../advanced-report.json",
+    "load-test:soak-report": "artillery report ../../soak-report.json",
+    "load-test:track": "node track-load-test.js --file",
+    "load-test:compare": "node track-load-test.js --compare",
+    "load-test:history": "node track-load-test.js --history"
   },
   "engines": {
     "node": ">=20.9.0"
