@@ -18,7 +18,7 @@ import { protect } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // Track processed action IDs (in production, use Redis)
-const processedActions = new Map<string, number>();
+const processedActions = new Map();
 const ACTION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
@@ -181,7 +181,7 @@ router.post('/sync', protect, async (req, res) => {
       idempotent: false
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Cart Sync] Error:', error);
     
     res.status(500).json({
@@ -214,8 +214,8 @@ router.post('/sync/batch', protect, async (req, res) => {
       // Simulate individual sync call
       const syncReq = { ...req, body: action };
       const syncRes = {
-        json: (data: any) => data,
-        status: (code: number) => ({ json: (data: any) => ({ ...data, statusCode: code }) })
+        json: (data) => data,
+        status: (code) => ({ json: (data) => ({ ...data, statusCode: code }) })
       };
       
       // Reuse sync logic
@@ -234,7 +234,7 @@ router.post('/sync/batch', protect, async (req, res) => {
       actionsProcessed: results.length
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Cart Sync Batch] Error:', error);
     
     res.status(500).json({
@@ -247,7 +247,7 @@ router.post('/sync/batch', protect, async (req, res) => {
 /**
  * Helper: Process single sync action
  */
-async function handleSyncAction(userId: string, action: any) {
+async function handleSyncAction(userId, action) {
   // Simplified version of sync logic
   // In production, refactor to shared service
   return {

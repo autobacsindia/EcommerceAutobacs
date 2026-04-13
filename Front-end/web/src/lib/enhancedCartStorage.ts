@@ -473,7 +473,7 @@ export const cleanup = async (): Promise<void> => {
     .toArray();
   
   if (failedActions.length > 0) {
-    await cartDB.syncQueue.bulkDelete(failedActions.map(a => a.id));
+    await cartDB.syncQueue.bulkDelete(failedActions.map((a: SyncQueueItem) => a.id));
     console.log(`[Cart] Cleaned up ${failedActions.length} failed sync actions`);
   }
 };
