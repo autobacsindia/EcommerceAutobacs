@@ -29,12 +29,66 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
-  title: "Autobacs India | Premium Automotive Accessories",
-  description: "Shop premium automotive accessories, body kits, and performance parts",
+  title: {
+    default: "Autobacs India | Premium Automotive Accessories",
+    template: "%s | Autobacs India"
+  },
+  description: "Shop premium automotive accessories, body kits, and performance parts from India's trusted auto parts retailer",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
+  },
+  
+  // Canonical URL
+  alternates: {
+    canonical: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  },
+  
+  // Open Graph metadata for social sharing
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    siteName: "Autobacs India",
+    title: "Autobacs India | Premium Automotive Accessories",
+    description: "Shop premium automotive accessories, body kits, and performance parts from India's trusted auto parts retailer",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Autobacs India - Premium Automotive Accessories",
+      },
+    ],
+  },
+  
+  // Twitter Card metadata
+  twitter: {
+    card: "summary_large_image",
+    title: "Autobacs India | Premium Automotive Accessories",
+    description: "Shop premium automotive accessories, body kits, and performance parts",
+    images: ["/og-image.jpg"],
+    creator: "@autobacsindia",
+    site: "@autobacsindia",
+  },
+  
+  // Additional metadata
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  
+  // Verification
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
   },
 };
 
