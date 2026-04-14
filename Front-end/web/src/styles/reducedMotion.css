@@ -1,0 +1,96 @@
+/**
+ * Reduced Motion Support
+ * 
+ * Respects user's preference for reduced motion
+ * Important for users with vestibular disorders
+ * 
+ * Usage: Import in global CSS or layout
+ */
+
+/* ── Reduced Motion Media Query ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Disable all animations */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Disable Framer Motion animations */
+  [data-framer-motion] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ── Manual Reduced Motion Class ────────────────────────────────────────────── */
+
+/* For users who toggle reduced motion in app settings */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── Accessible Animation Alternatives ──────────────────────────────────────── */
+
+/* Instead of animation, use static visual indicators */
+@media (prefers-reduced-motion: reduce) {
+  /* Loading states: use static spinner instead of rotating */
+  .loading-spinner {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  /* Hover states: use color change instead of transform */
+  .button-hover {
+    transform: none;
+    background-color: var(--hover-bg);
+  }
+
+  /* Modal open: use opacity instead of scale */
+  .modal-enter {
+    animation: none;
+    opacity: 1;
+  }
+
+  /* Page transitions: instant instead of fade */
+  .page-transition {
+    transition: none;
+  }
+}
+
+/* ── JavaScript Detection ───────────────────────────────────────────────────── */
+
+/* For dynamic adjustments based on motion preference */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined') return false;
+  
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/* Listen for changes */
+export function onReducedMotionChange(callback: (matches: boolean) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  
+  const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  
+  const handler = (e: MediaQueryListEvent) => {
+    callback(e.matches);
+  };
+  
+  mediaQuery.addEventListener('change', handler);
+  
+  // Initial call
+  callback(mediaQuery.matches);
+  
+  // Return cleanup
+  return () => mediaQuery.removeEventListener('change', handler);
+}
