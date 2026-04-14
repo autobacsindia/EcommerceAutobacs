@@ -105,9 +105,22 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     ...(product.images?.[0] && {
       image: typeof product.images[0] === 'string' ? product.images[0] : product.images[0]?.url,
     }),
+    ...(product.sku && { sku: product.sku }),
     brand: product.brand
       ? { '@type': 'Brand', name: typeof product.brand === 'string' ? product.brand : product.brand.name }
       : undefined,
+    
+    // Aggregate ratings (if available) - HUGE CTR boost in search results
+    ...(product.rating && product.reviewCount && {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: product.rating,
+        reviewCount: product.reviewCount,
+        bestRating: 5,
+        worstRating: 1,
+      },
+    }),
+    
     offers: {
       '@type': 'Offer',
       priceCurrency: 'INR',
@@ -117,7 +130,41 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         : 'https://schema.org/OutOfStock',
       url: `${SITE_URL}/products/${product.slug}`,
       seller: { '@type': 'Organization', name: 'Autobacs India' },
+      ...(product.originalPrice && product.originalPrice > product.price && {
+        priceValidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+      }),
     },
+  } : null;
+
+  // Build breadcrumb schema for enhanced search navigation
+  const breadcrumbSchema = product?.slug ? {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: SITE_URL,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Products',
+        item: `${SITE_URL}/products`,
+      },
+      ...(product.category ? [{
+        '@type': 'ListItem',
+        position: 3,
+        name: typeof product.category === 'string' ? product.category : product.category.name,
+        item: `${SITE_URL}/categories/${typeof product.category === 'string' ? product.category : product.category.slug}`,
+      }] : []),
+      {
+        '@type': 'ListItem',
+        position: product.category ? 4 : 3,
+        name: product.name,
+      },
+    ],
   } : null;
 
   return (
@@ -126,6 +173,12 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
+      {breadcrumbSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
         />
       )}
       <ClientPage slug={slug} />
