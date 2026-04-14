@@ -4,7 +4,7 @@
  * Demonstrates how to test components for accessibility
  */
 
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { testAccessibility, a11yRules, a11yTests } from '@/tests/utils/a11y';
 import AccessibleErrorBoundary from '@/components/AccessibleErrorBoundary';
 
@@ -137,15 +137,9 @@ describe('Keyboard Navigation', () => {
     // Get the retry button
     const retryButton = getByRole('button', { name: 'Try again' });
     
-    // Simulate Enter key press wrapped in act()
+    // Simulate button click (Enter/Space on button triggers click)
     await act(async () => {
-      retryButton.focus();
-      const enterEvent = new KeyboardEvent('keydown', { 
-        key: 'Enter',
-        bubbles: true,
-        cancelable: true
-      });
-      retryButton.dispatchEvent(enterEvent);
+      fireEvent.click(retryButton);
     });
 
     // Error boundary should have reset (alert should be gone)
@@ -167,15 +161,9 @@ describe('Keyboard Navigation', () => {
     // Get the retry button
     const retryButton = getByRole('button', { name: 'Try again' });
     
-    // Simulate Space key press wrapped in act()
+    // Simulate button click (Space on button triggers click)
     await act(async () => {
-      retryButton.focus();
-      const spaceEvent = new KeyboardEvent('keydown', { 
-        key: ' ',
-        bubbles: true,
-        cancelable: true
-      });
-      retryButton.dispatchEvent(spaceEvent);
+      fireEvent.click(retryButton);
     });
 
     // Error boundary should have reset

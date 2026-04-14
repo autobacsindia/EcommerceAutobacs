@@ -44,6 +44,18 @@ export function ProductDetailPageClient({ product }: { product: any }) {
   const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number; image?: string; images?: string[] } | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
 
+  // Show loading state if product is null
+  if (!product) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading product...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Get currently compared products from URL
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
   const isCompared = product ? comparedProductIds.includes(product._id) : false;
@@ -717,6 +729,35 @@ export default function ClientPage({
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading product...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Product not found
+  if (!product) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="text-6xl mb-4">🔍</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h2>
+          <p className="text-gray-600 mb-6">
+            The product you're looking for doesn't exist or has been removed.
+          </p>
+          <div className="space-x-4">
+            <Link 
+              href="/products" 
+              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+            >
+              Browse Products
+            </Link>
+            <Link 
+              href="/" 
+              className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Go Home
+            </Link>
+          </div>
         </div>
       </div>
     );
