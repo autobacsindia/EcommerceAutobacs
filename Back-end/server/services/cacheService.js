@@ -1,340 +1,425 @@
 /**
- * Cache Service
- *
- * Redis-backed when REDIS_URL is set (production / Railway).
- * Falls back to in-memory Map for local development or when Redis is unavailable.
- *
+ * Enhanced Cache Service - Production Hardened
+ * 
  * Features:
- * - Time-based expiration
- * - Automatic cleanup of expired in-memory entries
- * - Memory usage monitoring
- * - Cache statistics
- * - Transparent Redis / in-memory switching
+ * - Tag-based invalidation
+ * - Cache metrics & observability  
+ * - SWR with backpressure control
+ * - Centralized TTL config
+ * - Failure fallback strategies
+ * - Pattern-based invalidation
  */
 
 import Redis from 'ioredis';
 
-// ── Redis client (lazy – only created when REDIS_URL is present) ────────────
+// ── TTL Configuration (centralized) ─────────────────────────────────────────
+export const TTL = {
+  // Products
+  PRODUCT_DETAIL: 3600,        // 1 hour
+  PRODUCT_LIST: 300,           // 5 minutes
+  PRODUCT_SEARCH: 60,          // 1 minute
+  PRODUCT_FEATURED: 3600,      // 1 hour
+  PRODUCT_OFFERS: 1800,        // 30 minutes
+  
+  // Categories & Brands
+  CATEGORIES: 7200,            // 2 hours
+  BRANDS: 7200,                // 2 hours
+  
+  // User data
+  USER_PROFILE: 300,           // 5 minutes
+  USER_CART: 60,               // 1 minute
+  
+  // Inventory (critical accuracy)
+  INVENTORY: 60,               // 1 minute
+  
+  // Search
+  SEARCH_SUGGESTIONS: 300,     // 5 minutes
+};
+
+// ── Redis client ────────────────────────────────────────────────────────────
 let redisClient = null;
 
 if (process.env.REDIS_URL) {
   try {
     redisClient = new Redis(process.env.REDIS_URL, {
-      // Prevent ioredis from retrying indefinitely on startup failures
       maxRetriesPerRequest: 3,
       enableReadyCheck: false,
       lazyConnect: true,
-      connectTimeout: 5000, // 5s timeout for initial connection
-      commandTimeout: 2000, // 2s per command (reasonable for production)
-      // Add TLS support for Redis (required for most cloud providers)
+      connectTimeout: 5000,
+      commandTimeout: 2000,
       tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
     });
     redisClient.on('error', (err) => {
       console.warn('[CacheService] Redis error:', err.message);
     });
-    console.log('[CacheService] Redis client initialised (ioredis / Railway)');
+    console.log('[CacheService] Redis client initialised');
   } catch (err) {
-    console.warn('[CacheService] Redis init failed – falling back to in-memory cache:', err.message);
+    console.warn('[CacheService] Redis init failed – using in-memory:', err.message);
     redisClient = null;
   }
 } else {
-  console.log('[CacheService] REDIS_URL not set – using in-memory cache (single-instance only)');
+  console.log('[CacheService] REDIS_URL not set – using in-memory cache');
 }
 
 class CacheService {
   constructor() {
-    // In-memory fallback store
     this.cache = new Map();
-    this.stats = {
+    
+    // Tag-based invalidation
+    this.tagMap = new Map(); // tag -> Set<keys>
+    this.keyTags = new Map(); // key -> Set<tags>
+    
+    // Metrics
+    this.metrics = {
       hits: 0,
       misses: 0,
       sets: 0,
-      deletes: 0
+      deletes: 0,
+      errors: 0,
+      tagInvalidations: 0,
+      patternInvalidations: 0,
+      stalenessServed: 0,
+      stampedePrevented: 0,
+      fallbackToDB: 0,
+      fallbackToStale: 0
     };
 
-    // Reduced default TTL: 90 s keeps stale-data window short
-    // while Redis is not yet provisioned.
     this.defaultTTL = 90 * 1000;
-
-    // In-memory cleanup (no-op when Redis is active)
     this.startCleanup();
   }
 
-  /**
-   * Get value from cache
-   * @param {string} key - Cache key
-   * @returns {Promise<any|null>} - Cached value or null if not found/expired
-   */
+  // ── Core Methods ──────────────────────────────────────────────────────────
+
+  generateKey(prefix, params = {}) {
+    const parts = [prefix];
+    const sortedKeys = Object.keys(params).sort();
+    for (const key of sortedKeys) {
+      const value = params[key];
+      if (value !== undefined && value !== null) {
+        parts.push(`${key}=${value}`);
+      }
+    }
+    return parts.join(':');
+  }
+
+  async wrap(key, fn, options = {}) {
+    const { ttl = 300, strategy = 'basic', tags = [] } = options;
+    
+    try {
+      if (strategy === 'swr') {
+        return this.getStaleWhileRevalidateWithLock(key, fn, ttl, tags);
+      }
+      
+      if (strategy === 'lock') {
+        return this.getWithLock(key, fn, ttl, tags);
+      }
+      
+      // Basic strategy
+      const cached = await this.get(key);
+      if (cached) return cached;
+      
+      const result = await fn();
+      await this.set(key, result, ttl, tags);
+      return result;
+    } catch (error) {
+      this.metrics.errors++;
+      console.error(`[CacheService] wrap error for ${key}:`, error.message);
+      throw error;
+    }
+  }
+
   async get(key) {
-    if (redisClient) {
-      try {
+    try {
+      if (redisClient) {
         const value = await redisClient.get(key);
         if (value === null || value === undefined) {
-          this.stats.misses++;
+          this.metrics.misses++;
           return null;
         }
-        // Upstash returns already-parsed JSON for objects/arrays.
-        // For string values that look like JSON, guard against corruption.
         if (typeof value === 'string') {
           try {
             const parsed = JSON.parse(value);
-            this.stats.hits++;
+            this.metrics.hits++;
             return parsed;
           } catch {
-            // Corrupted string in cache — evict and treat as miss
             await redisClient.del(key).catch(() => {});
-            this.stats.misses++;
+            this.metrics.misses++;
             return null;
           }
         }
-        this.stats.hits++;
+        this.metrics.hits++;
         return value;
-      } catch (err) {
-        console.warn('[CacheService] Redis GET error, falling back to memory:', err.message);
       }
-    }
 
-    // In-memory fallback
-    const entry = this.cache.get(key);
-    if (!entry) {
-      this.stats.misses++;
+      const entry = this.cache.get(key);
+      if (!entry) {
+        this.metrics.misses++;
+        return null;
+      }
+      if (Date.now() > entry.expiry) {
+        this.cache.delete(key);
+        this.metrics.misses++;
+        return null;
+      }
+      this.metrics.hits++;
+      return entry.value;
+    } catch (error) {
+      this.metrics.errors++;
+      console.warn('[CacheService] GET error:', error.message);
       return null;
     }
-    if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
-      this.stats.misses++;
-      return null;
-    }
-    this.stats.hits++;
-    return entry.value;
   }
 
-  /**
-   * Set value in cache
-   * @param {string} key - Cache key
-   * @param {any} value - Value to cache
-   * @param {number} ttl - Time to live in milliseconds (optional)
-   */
-  async set(key, value, ttl = this.defaultTTL) {
-    const ttlSeconds = Math.ceil(ttl / 1000);
-
-    if (redisClient) {
-      try {
-        // ioredis SET with EX (seconds TTL)
-        const serialised = typeof value === 'string' ? value : JSON.stringify(value);
-        await redisClient.set(key, serialised, 'EX', ttlSeconds);
-        this.stats.sets++;
-        return;
-      } catch (err) {
-        console.warn('[CacheService] Redis SET error, falling back to memory:', err.message);
+  async set(key, value, ttl = 300, tags = []) {
+    try {
+      if (redisClient) {
+        await redisClient.set(key, JSON.stringify(value), 'EX', ttl);
+      } else {
+        this.cache.set(key, {
+          value,
+          expiry: Date.now() + (ttl * 1000)
+        });
       }
-    }
 
-    // In-memory fallback
-    this.cache.set(key, {
-      value,
-      expiresAt: Date.now() + ttl,
-      createdAt: Date.now()
-    });
-    this.stats.sets++;
+      // Track tags
+      if (tags.length > 0) {
+        this.trackTags(key, tags);
+      }
+
+      this.metrics.sets++;
+    } catch (error) {
+      this.metrics.errors++;
+      console.warn('[CacheService] SET error:', error.message);
+    }
   }
 
-  /**
-   * Delete value from cache
-   * @param {string} key - Cache key
-   * @returns {Promise<boolean>} - True if deleted, false if not found
-   */
   async delete(key) {
-    if (redisClient) {
-      try {
-        const deleted = await redisClient.del(key);
-        if (deleted) this.stats.deletes++;
-        return deleted > 0;
-      } catch (err) {
-        console.warn('[CacheService] Redis DEL error, falling back to memory:', err.message);
+    try {
+      if (redisClient) {
+        await redisClient.del(key);
+      } else {
+        this.cache.delete(key);
       }
-    }
 
-    const deleted = this.cache.delete(key);
-    if (deleted) this.stats.deletes++;
-    return deleted;
+      // Clean up tags
+      this.untrackTags(key);
+      this.metrics.deletes++;
+    } catch (error) {
+      this.metrics.errors++;
+      console.warn('[CacheService] DELETE error:', error.message);
+    }
   }
 
-  /**
-   * Clear all cache entries
-   */
-  async clear() {
-    if (redisClient) {
-      try {
-        await redisClient.flushdb();
-        this.stats = { hits: 0, misses: 0, sets: 0, deletes: 0 };
-        return;
-      } catch (err) {
-        console.warn('[CacheService] Redis FLUSHDB error, falling back to memory clear:', err.message);
-      }
-    }
+  // ── Tag-Based Invalidation ────────────────────────────────────────────────
 
-    this.cache.clear();
-    this.stats = { hits: 0, misses: 0, sets: 0, deletes: 0 };
+  trackTags(key, tags) {
+    for (const tag of tags) {
+      if (!this.tagMap.has(tag)) {
+        this.tagMap.set(tag, new Set());
+      }
+      this.tagMap.get(tag).add(key);
+
+      if (!this.keyTags.has(key)) {
+        this.keyTags.set(key, new Set());
+      }
+      this.keyTags.get(key).add(tag);
+    }
   }
 
-  /**
-   * Clear cache entries matching a pattern
-   * @param {string} pattern - Pattern to match
-   * @returns {Promise<number>} - Number of keys deleted
-   */
-  async clearPattern(pattern) {
-    if (redisClient) {
-      try {
-        // Anchor to the route cache namespace so we never accidentally scan
-        // unrelated key spaces (e.g. wp:products:*, vehicle:*, rate-limit:*).
-        // All route-cache keys have the form:  route:/<path>
-        // so  route:/*pattern*  is both precise and non-blocking.
-        const scanPattern = pattern.startsWith('route:') ? `${pattern}*` : `route:*${pattern}*`;
-        let cursor = '0';
-        const keysToDelete = [];
-        do {
-          const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', scanPattern, 'COUNT', '100');
-          cursor = nextCursor;
-          keysToDelete.push(...keys);
-        } while (cursor !== '0');
+  untrackTags(key) {
+    const tags = this.keyTags.get(key);
+    if (tags) {
+      for (const tag of tags) {
+        this.tagMap.get(tag)?.delete(key);
+      }
+      this.keyTags.delete(key);
+    }
+  }
 
-        if (keysToDelete.length > 0) {
-          await redisClient.del(keysToDelete);
-          this.stats.deletes += keysToDelete.length;
+  async invalidateTag(tag) {
+    const keys = this.tagMap.get(tag);
+    if (!keys || keys.size === 0) return;
+
+    console.log(`[CacheService] Invalidating tag '${tag}': ${keys.size} keys`);
+
+    const deletePromises = Array.from(keys).map(key => this.delete(key));
+    await Promise.all(deletePromises);
+
+    this.metrics.tagInvalidations++;
+  }
+
+  // ── Pattern-Based Invalidation ────────────────────────────────────────────
+
+  async invalidatePattern(pattern) {
+    console.log(`[CacheService] Invalidating pattern: ${pattern}`);
+
+    if (redisClient) {
+      // Use SCAN for production-safe pattern matching
+      let cursor = '0';
+      const keys = [];
+      
+      do {
+        const result = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = result[0];
+        keys.push(...result[1]);
+      } while (cursor !== '0');
+
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+      }
+    } else {
+      // In-memory fallback
+      for (const key of this.cache.keys()) {
+        if (this.matchesPattern(key, pattern)) {
+          await this.delete(key);
         }
-        return keysToDelete.length;
-      } catch (err) {
-        console.warn('[CacheService] Redis SCAN/DEL error, falling back to memory clear:', err.message);
       }
     }
 
-    // In-memory fallback — mirror the same route: namespace anchoring
-    const matchFn = pattern.startsWith('route:')
-      ? (key) => key.startsWith(pattern)
-      : (key) => key.startsWith('route:') && key.includes(pattern);
-    const keysToDelete = [];
-    for (const key of this.cache.keys()) {
-      if (matchFn(key)) keysToDelete.push(key);
-    }
-    for (const key of keysToDelete) await this.delete(key);
-    return keysToDelete.length;
+    this.metrics.patternInvalidations++;
   }
 
-  /**
-   * Get cache statistics
-   * @returns {object} - Cache statistics
-   */
-  getStats() {
-    const hitRate = this.stats.hits + this.stats.misses > 0
-      ? (this.stats.hits / (this.stats.hits + this.stats.misses) * 100).toFixed(2)
-      : 0;
+  matchesPattern(key, pattern) {
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    return regex.test(key);
+  }
+
+  // ── SWR with Backpressure Control ─────────────────────────────────────────
+
+  async getStaleWhileRevalidateWithLock(key, fn, ttl, tags = [], staleWindow = 60) {
+    const cached = await this.get(key);
     
+    if (cached) {
+      // Serve stale + revalidate in background (with lock to prevent thundering herd)
+      this.metrics.stalenessServed++;
+      this.revalidateWithLock(key, fn, ttl, tags).catch(err => {
+        console.warn(`[CacheService] Background revalidation failed:`, err.message);
+      });
+      return cached;
+    }
+    
+    // Cache miss - fetch with lock
+    return this.getWithLock(key, fn, ttl, tags);
+  }
+
+  async revalidateWithLock(key, fn, ttl, tags) {
+    const lockKey = `${key}:lock`;
+    const acquired = await this.acquireLock(lockKey, 5000);
+    
+    if (!acquired) {
+      return; // Another request is already revalidating
+    }
+
+    try {
+      const result = await fn();
+      await this.set(key, result, ttl, tags);
+    } finally {
+      await this.releaseLock(lockKey);
+    }
+  }
+
+  // ── Cache with Lock (Stampede Protection) ─────────────────────────────────
+
+  async getWithLock(key, fn, ttl, tags = [], lockTimeout = 5000) {
+    const cached = await this.get(key);
+    if (cached) return cached;
+    
+    const lockKey = `${key}:lock`;
+    const acquired = await this.acquireLock(lockKey, lockTimeout);
+    
+    if (!acquired) {
+      // Another request is fetching - wait and retry
+      this.metrics.stampedePrevented++;
+      await this.sleep(100);
+      return this.getWithLock(key, fn, ttl, tags, lockTimeout);
+    }
+    
+    try {
+      const result = await fn();
+      await this.set(key, result, ttl, tags);
+      return result;
+    } finally {
+      await this.releaseLock(lockKey);
+    }
+  }
+
+  async acquireLock(lockKey, timeout) {
+    if (redisClient) {
+      const acquired = await redisClient.set(lockKey, '1', 'PX', timeout, 'NX');
+      return acquired === 'OK';
+    }
+    
+    if (!this.cache.has(lockKey)) {
+      this.cache.set(lockKey, Date.now() + timeout);
+      return true;
+    }
+    
+    const expiry = this.cache.get(lockKey);
+    if (Date.now() > expiry) {
+      this.cache.delete(lockKey);
+      this.cache.set(lockKey, Date.now() + timeout);
+      return true;
+    }
+    
+    return false;
+  }
+
+  async releaseLock(lockKey) {
+    if (redisClient) {
+      await redisClient.del(lockKey);
+    } else {
+      this.cache.delete(lockKey);
+    }
+  }
+
+  // ── Metrics & Observability ───────────────────────────────────────────────
+
+  getMetrics() {
+    const total = this.metrics.hits + this.metrics.misses;
+    const hitRate = total > 0 ? (this.metrics.hits / total * 100).toFixed(2) : 0;
+
     return {
-      ...this.stats,
+      ...this.metrics,
       hitRate: `${hitRate}%`,
-      size: this.cache.size,
-      memoryUsage: this.getMemoryUsage()
+      totalRequests: total,
+      cacheSize: redisClient ? 'redis' : this.cache.size
     };
   }
 
-  /**
-   * Get approximate memory usage
-   * @returns {string} - Memory usage in MB
-   */
-  getMemoryUsage() {
-    let totalSize = 0;
-    
-    for (const entry of this.cache.values()) {
-      // Rough estimation
-      totalSize += JSON.stringify(entry.value).length;
-    }
-    
-    return `${(totalSize / 1024 / 1024).toFixed(2)} MB`;
+  resetMetrics() {
+    this.metrics = {
+      hits: 0,
+      misses: 0,
+      sets: 0,
+      deletes: 0,
+      errors: 0,
+      tagInvalidations: 0,
+      patternInvalidations: 0,
+      stalenessServed: 0,
+      stampedePrevented: 0,
+      fallbackToDB: 0,
+      fallbackToStale: 0
+    };
   }
 
-  /**
-   * Start automatic cleanup of expired entries
-   */
+  // ── Utilities ─────────────────────────────────────────────────────────────
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   startCleanup() {
-    // Run cleanup every minute
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 60 * 1000);
-  }
-
-  /**
-   * Stop automatic cleanup
-   */
-  stopCleanup() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
-  }
-
-  /**
-   * Cleanup expired entries
-   * @returns {number} - Number of entries removed
-   */
-  cleanup() {
-    const now = Date.now();
-    let removed = 0;
+    if (redisClient) return;
     
-    for (const [key, entry] of this.cache.entries()) {
-      if (now > entry.expiresAt) {
-        this.cache.delete(key);
-        removed++;
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.cache.entries()) {
+        if (now > entry.expiry) {
+          this.cache.delete(key);
+        }
       }
-    }
-    
-    if (removed > 0) {
-      console.log(`Cache cleanup: Removed ${removed} expired entries`);
-    }
-    
-    return removed;
-  }
-
-  /**
-   * Generate cache key for WordPress products
-   * @param {string} vehicle - Vehicle slug
-   * @param {number} page - Page number
-   * @param {number} perPage - Items per page
-   * @returns {string} - Cache key
-   */
-  generateProductCacheKey(vehicle, page, perPage) {
-    return `wp:products:${vehicle}:${page}:${perPage}`;
-  }
-
-  /**
-   * Generate cache key for WordPress categories
-   * @returns {string} - Cache key
-   */
-  generateCategoryCacheKey() {
-    return 'wp:categories:all';
-  }
-
-  /**
-   * Generate cache key for vehicle data
-   * @param {string} identifier - Vehicle ID or slug
-   * @returns {string} - Cache key
-   */
-  generateVehicleCacheKey(identifier) {
-    return `vehicle:${identifier}`;
+    }, 60000);
   }
 }
 
-// Create singleton instance
-const cacheService = new CacheService();
-
-// Graceful shutdown cleanup
-process.on('SIGINT', () => {
-  console.log('Stopping cache cleanup...');
-  cacheService.stopCleanup();
-});
-
-process.on('SIGTERM', () => {
-  console.log('Stopping cache cleanup...');
-  cacheService.stopCleanup();
-});
-
-export default cacheService;
+export default new CacheService();

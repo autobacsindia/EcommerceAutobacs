@@ -1,6 +1,18 @@
-import Product from "../models/Product.js";
+/**
+ * Product Controller - HTTP LAYER ONLY
+ * 
+ * This layer is responsible for:
+ * - Handling HTTP requests/responses
+ * - Request validation (via middleware)
+ * - Calling service layer
+ * - Formatting API responses
+ * 
+ * NO business logic!
+ * NO direct database calls!
+ */
+
+import productService from "../services/productService.js";
 import SearchService from "../services/searchService.js";
-import mongoose from "mongoose";
 
 export const getProducts = async (req, res) => {
   const searchResults = await SearchService.searchProducts(req.query);
@@ -69,16 +81,11 @@ export const removeSearchHistoryTerm = async (req, res) => {
   });
 };
 
-export const getFeaturedProducts = async (req, res) => {
+export const getFeaturedProducts = async (req, res, next) => {
   try {
     const { limit = 6 } = req.query;
 
-    const products = await Product.find({ isActive: true, isFeatured: true })
-      .populate('categories', 'name slug')
-      .limit(Number(limit))
-      .sort({ createdAt: -1 });
-
-    console.log(`getFeaturedProducts: Found ${products.length} products`);
+    const products = await productService.getFeaturedProducts(Number(limit));
 
     res.json({
       success: true,
@@ -86,51 +93,15 @@ export const getFeaturedProducts = async (req, res) => {
       products
     });
   } catch (error) {
-    console.error('Error in getFeaturedProducts:', error);
-    console.error('Stack trace:', error.stack);
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch featured products',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    next(error);
   }
 };
 
-export const getOfferProducts = async (req, res) => {
+export const getOfferProducts = async (req, res, next) => {
   try {
     const { limit = 24 } = req.query;
-    const now = new Date();
 
-    const products = await Product.find({
-      isActive: true,
-      $and: [
-        {
-          $or: [
-            { isOfferFeatured: true },
-            { $expr: { $gt: ["$originalPrice", "$price"] } }
-          ]
-        },
-        {
-          $or: [
-            { offerStartDate: { $exists: false } },
-            { offerStartDate: null },
-            { offerStartDate: { $lte: now } }
-          ]
-        },
-        {
-          $or: [
-            { offerEndDate: { $exists: false } },
-            { offerEndDate: null },
-            { offerEndDate: { $gte: now } }
-          ]
-        }
-      ]
-    })
-      .populate('categories', 'name slug')
-      .limit(Number(limit))
-      .sort({ createdAt: -1 });
+    const products = await productService.getOfferProducts(Number(limit));
 
     res.json({
       success: true,
@@ -138,140 +109,45 @@ export const getOfferProducts = async (req, res) => {
       products
     });
   } catch (error) {
-    console.error('Error in getOfferProducts:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch offer products',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    next(error);
   }
 };
 
-export const getProductsByVehicle = async (req, res) => {
-  const { vehicleId } = req.params;
-  
+export const getProductsByVehicle = async (req, res, next) => {
   try {
-    let vehicle;
-    
-    if (mongoose.Types.ObjectId.isValid(vehicleId)) {
-      const Vehicle = (await import('../models/Vehicle.js')).default;
-      vehicle = await Vehicle.findById(vehicleId);
-    } else {
-      const Vehicle = (await import('../models/Vehicle.js')).default;
-      vehicle = await Vehicle.findOne({ slug: vehicleId, isActive: true });
-    }
-    
-    if (!vehicle) {
+    const { vehicleId } = req.params;
+
+    const result = await productService.getProductsByVehicle(vehicleId, req.query);
+
+    if (!result) {
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
       });
     }
-    
-    const queryParams = {
-      vehicle: vehicle._id.toString(),
-      page: req.query.page || 1,
-      limit: req.query.limit || 12,
-      sortBy: req.query.sortBy || 'createdAt',
-      order: req.query.order || 'desc'
-    };
-    
-    if (req.query.category && req.query.category !== 'undefined' && req.query.category !== 'null') {
-      queryParams.category = req.query.category;
-    }
-    if (req.query.brand && req.query.brand !== 'undefined' && req.query.brand !== 'null') {
-      queryParams.brand = req.query.brand;
-    }
-    if (req.query.minPrice && req.query.minPrice !== 'undefined' && req.query.minPrice !== 'null') {
-      queryParams.minPrice = req.query.minPrice;
-    }
-    if (req.query.maxPrice && req.query.maxPrice !== 'undefined' && req.query.maxPrice !== 'null') {
-      queryParams.maxPrice = req.query.maxPrice;
-    }
-    if (req.query.inStock && req.query.inStock !== 'undefined' && req.query.inStock !== 'null') {
-      queryParams.inStock = req.query.inStock;
-    }
-    
-    const searchResults = await SearchService.searchProducts(queryParams);
-    
+
     res.json({
       success: true,
-      vehicle: {
-        _id: vehicle._id,
-        make: vehicle.make,
-        model: vehicle.model,
-        year: vehicle.year,
-        slug: vehicle.slug,
-        name: `${vehicle.make} ${vehicle.model}`
-      },
-      count: searchResults.products.length,
-      ...searchResults.pagination,
-      products: searchResults.products,
-      facets: searchResults.facets
+      vehicle: result.vehicle,
+      count: result.products.length,
+      ...result.pagination,
+      products: result.products,
+      facets: result.facets
     });
   } catch (error) {
-    console.error('Error fetching products by vehicle:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch products for vehicle',
-      error: error.message
-    });
+    next(error);
   }
 };
 
-export const getBrands = async (req, res) => {
+export const getBrands = async (req, res, next) => {
   try {
-    const Brand = (await import('../models/Brand.js')).default;
-    
-    const brands = await Brand.find({ isActive: true }).sort({ name: 1 });
-    
-    const brandNames = brands.map(b => b.name);
-    
-    const productCounts = await Product.aggregate([
-      {
-        $match: {
-          brand: { $in: brandNames },
-          isActive: true
-        }
-      },
-      {
-        $group: {
-          _id: '$brand',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-    
-    const countMap = {};
-    productCounts.forEach(item => {
-      countMap[item._id] = item.count;
-    });
-    
-    const brandInfo = brands
-      .map(brand => {
-        const productCount = countMap[brand.name] || 0;
-        return {
-          id: brand._id.toString(),
-          name: brand.name,
-          slug: brand.slug,
-          productCount: productCount,
-          logo: brand.logo || null,
-          description: brand.description || null
-        };
-      })
-      .filter(b => b.productCount > 0);
-    
+    const brands = await productService.getBrandsWithCounts();
+
     res.json({
       success: true,
-      brands: brandInfo
+      brands
     });
   } catch (error) {
-    console.error('Error fetching brands:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch brands',
-      error: error.message
-    });
+    next(error);
   }
 };
