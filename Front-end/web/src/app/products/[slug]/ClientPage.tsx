@@ -325,12 +325,33 @@ export function ProductDetailPageClient({ product }: { product: any }) {
       
       <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
-        <nav className="mb-8 text-sm text-gray-500">
-          <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
-          <span className="mx-2">/</span>
-          <Link href="/products" className="hover:text-blue-600 transition-colors">Products</Link>
-          <span className="mx-2">/</span>
-          <span className="text-gray-900 font-medium">{product.name}</span>
+        <nav className="mb-8 text-sm text-gray-500" aria-label="Breadcrumb">
+          <ol className="inline-flex items-center space-x-2">
+            <li>
+              <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
+            </li>
+            <li><span className="mx-2">/</span></li>
+            <li>
+              <Link href="/products" className="hover:text-blue-600 transition-colors">Products</Link>
+            </li>
+            {product.category && (
+              <>
+                <li><span className="mx-2">/</span></li>
+                <li>
+                  <Link 
+                    href={`/categories/${typeof product.category === 'string' ? product.category : product.category.slug}`} 
+                    className="hover:text-blue-600 transition-colors"
+                  >
+                    {typeof product.category === 'string' ? product.category : product.category.name}
+                  </Link>
+                </li>
+              </>
+            )}
+            <li><span className="mx-2">/</span></li>
+            <li>
+              <span className="text-gray-900 font-medium" aria-current="page">{product.name}</span>
+            </li>
+          </ol>
         </nav>
 
         {/* Top Section: Title, Price, Images, Purchase Options */}

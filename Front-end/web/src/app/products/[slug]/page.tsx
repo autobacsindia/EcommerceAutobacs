@@ -99,18 +99,29 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const jsonLd = product?.slug ? {
     '@context': 'https://schema.org',
     '@type': 'Product',
+    '@id': `${SITE_URL}/products/${product.slug}#product`,  // Entity ID for deduplication
+    mainEntityOfPage: {  // Links product to this page
+      '@type': 'WebPage',
+      '@id': `${SITE_URL}/products/${product.slug}`,
+    },
     name: product.name,
     description: product.shortDescription || product.description || '',
-    url: `${SITE_URL}/products/${product.slug}`,
-    ...(product.images?.[0] && {
-      image: typeof product.images[0] === 'string' ? product.images[0] : product.images[0]?.url,
+    url: `${SITE_URL}/products/${product.slug}`,  // Canonical URL (matches @id base)
+    
+    // Multiple images preferred by Google (≥ 1200px width)
+    ...(product.images && product.images.length > 0 && {
+      image: product.images
+        .map((img: any) => typeof img === 'string' ? img : img?.url)
+        .filter(Boolean)
+        .slice(0, 8),  // Google recommends up to 8 images
     }),
+    
     ...(product.sku && { sku: product.sku }),
     brand: product.brand
       ? { '@type': 'Brand', name: typeof product.brand === 'string' ? product.brand : product.brand.name }
       : undefined,
     
-    // Aggregate ratings (if available) - HUGE CTR boost in search results
+    // Aggregate ratings (ONLY if real reviews exist and are displayed on page)
     ...(product.rating && product.reviewCount && {
       aggregateRating: {
         '@type': 'AggregateRating',
@@ -118,6 +129,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         reviewCount: product.reviewCount,
         bestRating: 5,
         worstRating: 1,
+        // Note: Ensure reviews are actually displayed on the page!
       },
     }),
     
@@ -130,8 +142,13 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         : 'https://schema.org/OutOfStock',
       url: `${SITE_URL}/products/${product.slug}`,
       seller: { '@type': 'Organization', name: 'Autobacs India' },
-      ...(product.originalPrice && product.originalPrice > product.price && {
-        priceValidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+      
+      // Item condition (new/used/refurbished)
+      itemCondition: 'https://schema.org/NewCondition',  // Default for new products
+      
+      // Only include priceValidUntil for ACTUAL sales/discounts with end date
+      ...(product.originalPrice && product.originalPrice > product.price && product.saleEndDate && {
+        priceValidUntil: new Date(product.saleEndDate).toISOString().split('T')[0],
       }),
     },
   } : null;
@@ -140,6 +157,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const breadcrumbSchema = product?.slug ? {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
+    '@id': `${SITE_URL}/products/${product.slug}#breadcrumb`,  // Entity ID
     itemListElement: [
       {
         '@type': 'ListItem',
