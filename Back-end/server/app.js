@@ -47,7 +47,9 @@ import {
   adminRateLimit,
   locationRateLimit,
   contactFormRateLimit,
-  consultationRateLimit
+  consultationRateLimit,
+  healthCheckRateLimit,
+  metricsRateLimit
 } from "./middleware/rateLimitMiddleware.js";
 
 // Import cron service
@@ -637,7 +639,7 @@ app.get('/favicon.ico', (req, res) => {
 });
 
 // Health check endpoints - Enhanced for Railway
-app.get('/health', redisHealthCheck, (req, res) => {
+app.get('/health', healthCheckRateLimit, redisHealthCheck, (req, res) => {
   const healthData = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -661,7 +663,7 @@ app.get('/health', redisHealthCheck, (req, res) => {
   res.status(200).json(healthData);
 });
 
-app.get('/ready', (req, res) => {
+app.get('/ready', healthCheckRateLimit, (req, res) => {
   const isReady = mongoose.connection.readyState === 1;
   res.status(isReady ? 200 : 503).json({
     status: isReady ? 'ready' : 'not ready',
@@ -670,7 +672,7 @@ app.get('/ready', (req, res) => {
 });
 
 // Performance metrics endpoint (admin only in production)
-app.get('/api/v1/metrics/performance', (req, res) => {
+app.get('/api/v1/metrics/performance', metricsRateLimit, (req, res) => {
   const metrics = performanceMetrics.getMetrics();
   
   res.json({

@@ -301,6 +301,27 @@ export const rateLimit = (options = {}) => {
   };
 };
 
+// Rate limiting configuration for public endpoints
+export const healthCheckRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute (reasonable for health checks)
+  message: {
+    success: false,
+    error: 'Too many health check requests',
+    message: 'Please reduce health check frequency'
+  }
+});
+
+export const metricsRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute (metrics should be polled infrequently)
+  message: {
+    success: false,
+    error: 'Too many metrics requests',
+    message: 'Please reduce metrics polling frequency'
+  }
+});
+
 // E-commerce specific rate limiters
 
 // Public browsing endpoints (catalog, product pages)
