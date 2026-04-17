@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
-import BrandLogo from '@/components/layout/BrandLogo';
+import Image from 'next/image';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
@@ -87,7 +87,17 @@ export default function LoginPage() {
     <div className="min-h-screen bg-white flex flex-col items-center">
       {/* Logo Section */}
       <div className="py-8">
-        <BrandLogo className="mx-auto" theme="light" />
+        <a href="/" className="block mx-auto">
+          <Image
+            src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1775543920/Roavion-Logo_xwqbx9.png"
+            alt="Roavion"
+            width={596}
+            height={199}
+            priority
+            className="object-contain h-28 w-auto mx-auto"
+            style={{ filter: 'invert(1) brightness(0)' }}
+          />
+        </a>
       </div>
 
       {/* Login Card */}
