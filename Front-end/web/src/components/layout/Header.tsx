@@ -16,6 +16,7 @@ import LocationDisplay from '@/components/location/LocationDisplay';
 import BrandLogo from './BrandLogo';
 import CurrencySwitcherDropdown from './CurrencySwitcherDropdown';
 import MobileMenu from './MobileMenu';
+import HeaderVehicleSelector from './HeaderVehicleSelector';
 
 export default function Header() {
   const { isAuthenticated, user, logout, isLoading: authLoading } = useAuth();
@@ -145,7 +146,45 @@ export default function Header() {
 
         {/* Bottom Row - Navigation Menu */}
         <nav className="hidden md:flex items-center justify-between gap-2 w-full h-10" data-version="v4">
-          {NAV_LINKS.map((link, index) => {
+          {/* Shop Link */}
+          <Link
+            key="/shop"
+            href="/shop"
+            className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
+              pathname === '/shop'
+                ? 'text-white'
+                : 'text-white hover:text-green-200'
+            }`}
+          >
+            Shop
+            {pathname === '/shop' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+            )}
+          </Link>
+
+          {/* Brand Link */}
+          <Link
+            key="/brands"
+            href="/brands"
+            className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
+              pathname === '/brands' || pathname.startsWith('/brands')
+                ? 'text-white'
+                : 'text-white hover:text-green-200'
+            }`}
+          >
+            Brand
+            {(pathname === '/brands' || pathname.startsWith('/brands')) && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+            )}
+          </Link>
+
+          {/* Vehicle Selector Dropdown */}
+          <div key="vehicle-selector" className="flex items-center">
+            <HeaderVehicleSelector />
+          </div>
+
+          {/* Render remaining nav links (Accessories, Exterior, etc.) */}
+          {NAV_LINKS.map((link) => {
             const isActive = pathname === link.href || 
               (link.href !== '/' && pathname.startsWith(link.href));
             

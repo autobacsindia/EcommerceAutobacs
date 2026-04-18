@@ -6,7 +6,6 @@ import Link from 'next/link';
 import apiClient from '@/lib/api';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
-import VehicleFilterSidebar from '@/components/vehicles/VehicleFilterSidebar';
 import Pagination from '@/components/layout/Pagination';
 import Breadcrumb from '@/components/layout/Breadcrumb';
 import { getMainCategory } from '@/lib/categoryMapping';
@@ -368,7 +367,6 @@ export default function ClientPage({ slug }: { slug: string }) {
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
           <aside className="hidden lg:block space-y-6">
-            <VehicleFilterSidebar />
             <ProductFilters />
           </aside>
 

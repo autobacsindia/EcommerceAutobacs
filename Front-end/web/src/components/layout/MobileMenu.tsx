@@ -6,6 +6,7 @@ import { X, Home, ShoppingBag, Tag, Car, Heart, Gift, User, LogOut } from 'lucid
 import { useAuth } from '@/context/AuthContext';
 import { NAV_LINKS } from '@/lib/constants';
 import { usePathname } from 'next/navigation';
+import HeaderVehicleSelector from './HeaderVehicleSelector';
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -61,6 +62,15 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
         return <Heart className="h-5 w-5" />;
       case '/offers':
         return <Gift className="h-5 w-5" />;
+      case '/categories/accessories':
+      case '/categories/exterior':
+      case '/categories/interior':
+      case '/categories/bodykit':
+      case '/categories/performance':
+      case '/categories/suspension':
+      case '/categories/audio':
+      case '/categories/lights':
+        return <ShoppingBag className="h-5 w-5" />;
       default:
         return <ShoppingBag className="h-5 w-5" />;
     }
@@ -121,6 +131,42 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             </li>
 
             {/* Main Navigation Links */}
+            
+            {/* Shop */}
+            <li>
+              <Link
+                href="/shop"
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors ${
+                  pathname === '/shop' ? 'bg-blue-50 text-blue-600 font-medium' : ''
+                }`}
+              >
+                <ShoppingBag className="h-5 w-5" />
+                <span>Shop</span>
+              </Link>
+            </li>
+
+            {/* Brand */}
+            <li>
+              <Link
+                href="/brands"
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors ${
+                  pathname === '/brands' || pathname.startsWith('/brands') ? 'bg-blue-50 text-blue-600 font-medium' : ''
+                }`}
+              >
+                <Tag className="h-5 w-5" />
+                <span>Brand</span>
+              </Link>
+            </li>
+
+            {/* Vehicle Selector */}
+            <li className="px-4 py-3 border-t border-b border-gray-200 my-2">
+              <div className="text-sm font-medium text-gray-700 mb-2">Select Your Vehicle</div>
+              <HeaderVehicleSelector />
+            </li>
+
+            {/* Render remaining nav links from NAV_LINKS (Accessories, Exterior, etc.) */}
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <Link

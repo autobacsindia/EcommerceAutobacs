@@ -181,10 +181,8 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 };
 
 // Navigation Links - Bottom Row (Main Navigation)
+// Note: Shop, Brand, and Vehicle are rendered separately in Header component
 export const NAV_LINKS = [
-  { href: '/shop', label: 'Shop' },
-  { href: '/brands', label: 'Brand' },
-  { href: '/vehicles', label: 'Vehicle' },
   { href: '/categories/accessories', label: 'Accessories' },
   { href: '/categories/exterior', label: 'Exterior' },
   { href: '/categories/interior', label: 'Interior' },

@@ -21,10 +21,6 @@ const ProductFilters = dynamic(() => import('@/components/products/ProductFilter
   ssr: false
 });
 
-const VehicleFilterSidebar = dynamic(() => import('@/components/vehicles/VehicleFilterSidebar'), {
-  loading: () => <SidebarSkeleton />
-});
-
 // Define types for our data
 interface ProductImage {
   url: string;
