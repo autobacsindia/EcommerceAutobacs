@@ -64,6 +64,7 @@ import consultationRoutes from './consultation.js';
 import rateLimitDashboardRoutes from './rateLimitDashboard.js';
 import adaptiveThrottlingRoutes from './adaptiveThrottling.js';
 import redisMonitorRoutes from './redisMonitor.js';
+import securityRoutes from './security.js';
 
 const apiRouter = express.Router();
 
@@ -147,5 +148,12 @@ apiRouter.use('/location', locationRateLimit, locationRoutes);
 // ============================================================================
 apiRouter.use('/contact', contactFormRateLimit, contactRoutes);
 apiRouter.use('/consultation', consultationRateLimit, consultationRoutes);
+
+// ============================================================================
+// SECURITY DOMAIN
+// Routes: /security/* (CSP reports, security headers test)
+// Rate Limit: None for CSP reports (browsers send automatically), protected by rate limiting middleware
+// ============================================================================
+apiRouter.use('/security', securityRoutes);
 
 export default apiRouter;

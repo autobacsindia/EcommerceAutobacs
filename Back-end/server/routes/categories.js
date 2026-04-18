@@ -4,6 +4,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
+import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
@@ -16,7 +17,7 @@ const CATEGORY_ITEM_TTL  = 10 * 60; // 10 min
 // @route   GET /categories
 // @desc    Get all active categories with optional pagination
 // @access  Public
-router.get("/", cacheResponse(CATEGORY_LIST_TTL), asyncHandler(async (req, res) => {
+router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL), asyncHandler(async (req, res) => {
   // Categories are a small, bounded collection (rarely > 100).
   // Still cap at 200 as a safety guard; clients that need all categories
   // for nav menus can omit page/limit and get the full list up to the cap.

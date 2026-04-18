@@ -14,6 +14,7 @@ import {
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
+import { cacheMiddleware } from "../middleware/cacheControl.js";
 import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
 import {
   uploadMultiple,
@@ -71,7 +72,7 @@ const router = express.Router();
 // @route   GET /products
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
-router.get("/", cacheResponse(300), validateProductSearch, asyncHandler(getProducts));
+router.get("/", cacheMiddleware('product-listing'), cacheResponse(300), validateProductSearch, asyncHandler(getProducts));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
@@ -197,7 +198,7 @@ router.get("/cleanup/status", protect, admin, asyncHandler(getCleanupStatus));
 // @route   GET /products/slug/:slug
 // @desc    Get product by slug (SEO-friendly canonical URL)
 // @access  Public
-router.get("/slug/:slug", asyncHandler(getProductBySlug));
+router.get("/slug/:slug", cacheMiddleware('product-detail'), asyncHandler(getProductBySlug));
 
 // @route   GET /products/:id
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing

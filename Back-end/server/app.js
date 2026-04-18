@@ -503,6 +503,9 @@ app.use(helmet({
       // Prevent base-tag hijacking attacks
       baseUri: ["'self'"],
       upgradeInsecureRequests: [],
+      // Report CSP violations to endpoint for monitoring
+      // NOTE: report-uri is deprecated in favor of report-to, but has better browser support
+      reportUri: "/api/v1/security/csp-report",
     },
   },
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -531,22 +534,26 @@ app.use(csrfProtection);
 
 // ── CORS Configuration ──────────────────────────────────────────────────────
 // Centralized allowed origins list (validated in ALL environments)
+// SECURITY: No dynamic origins in production - all must be explicitly whitelisted
 const allowedOrigins = [
   // Localhost origins for development
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
-  // Production frontend URLs
-  process.env.FRONTEND_URL,
+  // Production frontend URLs (must be set in environment variables)
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   // Additional frontend URLs (comma-separated in env var)
   ...(process.env.FRONTEND_URLS 
     ? process.env.FRONTEND_URLS.split(',').map(u => u.trim()).filter(Boolean) 
     : []
-  ),
-  // Railway review apps (if enabled)
-  ...(process.env.Review_App ? [process.env.RAILWAY_PUBLIC_URL].filter(Boolean) : [])
+  )
 ].filter(Boolean);
+
+// Log warning if no production origins configured
+if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+  console.warn('[SECURITY WARNING] FRONTEND_URL not set in production - CORS will block all origins');
+}
 
 const corsOptions = {
   origin: function(origin, callback) {

@@ -26,11 +26,9 @@ const mongooseOptions = {
   autoIndex: true,      // ensure Mongoose schema indexes (e.g. slug unique) are always synced to DB
 };
 
-// Enhanced connection retry logic with SSL error handling and fallback mechanisms
+// Enhanced connection retry logic with SSL error handling
+// SECURITY: No TLS fallback in production - connection fails if TLS cannot be established
 const connectWithRetry = async (retries = 4, interval = 2000) => {
-  // Store original options for potential fallback
-  const originalOptions = { ...mongooseOptions };
-  
   for (let i = 0; i < retries; i++) {
     try {
       await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
@@ -60,45 +58,30 @@ const connectWithRetry = async (retries = 4, interval = 2000) => {
         console.error('- This may indicate server-side SSL configuration issues');
         console.error('- Check MongoDB server SSL certificate validity');
         console.error('- Verify network connectivity during SSL handshake');
-        
-        // Implement fallback strategy based on attempt number
-        if (i === 0) {
-          console.log('Attempting fallback: Disabling TLS...');
-          mongooseOptions.tls = false;
-        } else if (i === 1 && originalOptions.tls !== false) {
-          console.log('Attempting fallback: Allowing invalid certificates...');
-          mongooseOptions.tls = originalOptions.tls;
-          mongooseOptions.tlsAllowInvalidCertificates = true;
-        } else if (i === 2) {
-          console.log('Attempting fallback: Allowing invalid hostnames...');
-          mongooseOptions.tlsAllowInvalidHostnames = true;
-        }
+        console.error('[SECURITY] TLS connection failed - will NOT fallback to unencrypted connection');
       } else if (errorCategory === 'CERTIFICATE_VALIDATION') {
         console.error('Certificate Validation Error:');
         console.error('- SSL certificate may be expired or invalid');
-        console.error('- Consider setting MONGO_TLS_ALLOW_INVALID_CERTIFICATES=true for development');
-        
-        // Implement certificate validation fallback
-        if (i === 0) {
-          console.log('Attempting fallback: Allowing invalid certificates...');
-          mongooseOptions.tlsAllowInvalidCertificates = true;
-        }
+        console.error('- Contact MongoDB Atlas support or check certificate configuration');
+        console.error('[SECURITY] TLS certificate validation failed - connection rejected');
       } else if (errorCategory === 'HOSTNAME_MISMATCH') {
         console.error('Hostname Mismatch Error:');
         console.error('- SSL certificate hostname does not match server hostname');
-        console.error('- Consider setting MONGO_TLS_ALLOW_INVALID_HOSTNAMES=true for development');
-        
-        // Implement hostname validation fallback
-        if (i === 0) {
-          console.log('Attempting fallback: Allowing invalid hostnames...');
-          mongooseOptions.tlsAllowInvalidHostnames = true;
-        }
+        console.error('- This may indicate a DNS or certificate configuration issue');
+        console.error('[SECURITY] TLS hostname validation failed - connection rejected');
       }
       
       if (i === retries - 1) {
         console.error("✗ MongoDB connection failed after max retries");
-        console.warn("⚠ Warning: Starting server without database connection. Some features may not work properly.");
-        return null; // Return null instead of throwing error
+        
+        // In production, NEVER start without database connection
+        if (process.env.NODE_ENV === 'production') {
+          console.error('[FATAL] Production environment requires MongoDB connection. Exiting.');
+          process.exit(1);
+        }
+        
+        console.warn("⚠ Warning: Starting server without database connection in development mode. Some features may not work properly.");
+        return null; // Return null only in development
       }
       // Exponential backoff
       const delay = interval * Math.pow(2, i);
