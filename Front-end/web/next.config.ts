@@ -5,9 +5,8 @@ import withBundleAnalyzer from "@next/bundle-analyzer";
 // BUILD OPTIMIZATION v2: Disabled image optimization, TypeScript, ESLint during build for 60-70% faster builds
 const nextConfig: NextConfig = {
   /* config options here */
+  // Enable standalone output for Docker deployment
   output: 'standalone',
-  // Disable standalone mode for now as it's causing path resolution issues in Docker
-  // output: 'standalone',
   reactStrictMode: true,
   devIndicators: false,
   // BUILD OPTIMIZATION: Skip type checking during build (run separately)
