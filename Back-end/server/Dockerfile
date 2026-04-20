@@ -1,6 +1,6 @@
 # Dockerfile for Autobacs Backend (Express.js)
 # Multi-stage build for optimal production deployment
-# BUILD_HASH: 8f3k29d-TLS-FIX-FINAL-20260407
+# BUILD_HASH: FORCE-REBUILD-20260420-122008
 
 # Build stage
 FROM node:20-alpine AS builder

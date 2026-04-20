@@ -1,3 +1,4 @@
+# BUILD_TRIGGER: FORCE-REBUILD-20260420-122015
 
 # Stage 1: Build
 FROM node:20-alpine AS builder
