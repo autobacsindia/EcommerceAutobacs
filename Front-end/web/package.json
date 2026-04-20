@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.1.3",
+  "version": "0.1.4-vehicle-update",
   "private": true,
   "scripts": {
     "dev": "next dev",
