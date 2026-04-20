@@ -8,7 +8,6 @@ yarn-error.log*
 .next
 dist
 build
-out
 
 # Environment variables
 .env
@@ -40,16 +39,10 @@ LICENSE
 
 # Test files
 *.test.js
-*.test.ts
 *.spec.js
-*.spec.ts
 __tests__
 coverage
 
 # Logs
 logs
 *.log
-
-# Development
-*.tsx.bak
-*.js.bak
