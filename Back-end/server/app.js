@@ -645,6 +645,52 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 });
 
+// Privacy Policy page (required for Google OAuth)
+app.get('/privacy', (req, res) => {
+  res.type('html').send(`
+    <!DOCTYPE html>
+    <html>
+    <head><title>Privacy Policy - Autobacs India</title></head>
+    <body>
+      <h1>Privacy Policy</h1>
+      <p>Last updated: April 2026</p>
+      <p>Autobacs India respects your privacy and is committed to protecting your personal data.</p>
+      <h2>Information We Collect</h2>
+      <p>We collect information you provide directly, such as account information, payment details, and communication preferences.</p>
+      <h2>How We Use Your Information</h2>
+      <p>We use your information to process orders, improve our services, and communicate with you.</p>
+      <h2>Data Security</h2>
+      <p>We implement appropriate security measures to protect your personal information.</p>
+      <h2>Contact Us</h2>
+      <p>For privacy-related questions, contact us at info@autobacsindia.com</p>
+    </body>
+    </html>
+  `);
+});
+
+// Terms of Service page (required for Google OAuth)
+app.get('/terms', (req, res) => {
+  res.type('html').send(`
+    <!DOCTYPE html>
+    <html>
+    <head><title>Terms of Service - Autobacs India</title></head>
+    <body>
+      <h1>Terms of Service</h1>
+      <p>Last updated: April 2026</p>
+      <p>By accessing and using the Autobacs India website, you accept and agree to be bound by these terms.</p>
+      <h2>Use of Website</h2>
+      <p>You may use this website for lawful purposes only.</p>
+      <h2>Orders and Payments</h2>
+      <p>All orders are subject to availability and acceptance. Prices are subject to change without notice.</p>
+      <h2>Limitation of Liability</h2>
+      <p>Autobacs India shall not be liable for any indirect, incidental, or consequential damages.</p>
+      <h2>Contact Us</h2>
+      <p>For questions about these terms, contact us at info@autobacsindia.com</p>
+    </body>
+    </html>
+  `);
+});
+
 // Health check endpoints - Enhanced for Railway
 app.get('/health', healthCheckRateLimit, redisHealthCheck, (req, res) => {
   const healthData = {
