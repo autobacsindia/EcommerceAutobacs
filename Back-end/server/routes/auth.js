@@ -800,9 +800,14 @@ router.get("/google", (req, res) => {
     });
   }
 
-  const redirectUri =
-    process.env.GOOGLE_CALLBACK_URL ||
-    `${req.protocol}://${req.get("host")}/api/v1/auth/google/callback`;
+  // Force exact callback URL from environment variable (no fallback)
+  const redirectUri = process.env.GOOGLE_CALLBACK_URL;
+  if (!redirectUri) {
+    return res.status(500).json({
+      success: false,
+      message: "GOOGLE_CALLBACK_URL environment variable is not configured"
+    });
+  }
 
   const params = new URLSearchParams({
     client_id: clientId,
