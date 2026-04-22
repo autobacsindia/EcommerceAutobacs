@@ -74,7 +74,9 @@ const apiRouter = express.Router();
 // Rate Limit: 5 req/min (strict for security)
 // ============================================================================
 apiRouter.use('/auth', authRoutes);
-apiRouter.use('/auth', socialAuthRoutes);
+// DISABLED: socialAuthRoutes conflicts with auth.js Google OAuth implementation
+// The auth.js version uses secure one-time code exchange (PKCE-lite) with Redis
+// apiRouter.use('/auth', socialAuthRoutes);
 apiRouter.use('/admin/token', tokenIntrospectionRoutes);
 
 // ============================================================================

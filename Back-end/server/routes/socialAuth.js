@@ -1,3 +1,17 @@
+/**
+ * DEPRECATED: This file is no longer used.
+ * 
+ * Google OAuth has been migrated to auth.js with a more secure implementation:
+ * - One-time code exchange (PKCE-lite pattern)
+ * - Redis-backed token storage (prevents token leakage in URLs)
+ * - Proper CSRF protection
+ * - Secure cookie-based refresh tokens
+ * 
+ * The socialAuthRoutes has been disabled in routes/index.js to prevent conflicts.
+ * If you need to restore this, uncomment the line in routes/index.js, but this
+ * is NOT recommended for production.
+ */
+
 import express from 'express';
 import axios from 'axios';
 import User from '../models/User.js';
