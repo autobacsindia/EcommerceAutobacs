@@ -10,6 +10,13 @@ import mongoose from "mongoose";
 // ── JWT Secret strength validation ─────────────────────────────────────────
 const _jwtSecret = process.env.JWT_SECRET || '';
 console.log(`[Startup] JWT_SECRET length: ${_jwtSecret.length} chars`);
+
+// Critical: JWT_SECRET must exist in production
+if (process.env.NODE_ENV === 'production' && !_jwtSecret) {
+  console.error('✗ FATAL: JWT_SECRET must be set in production');
+  process.exit(1);
+}
+
 if (_jwtSecret.length < 64) {
   const msg = `✗ FATAL: JWT_SECRET is missing or too short (${_jwtSecret.length} chars, minimum 64). ` +
     'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"';
@@ -21,6 +28,53 @@ if (_jwtSecret.length < 64) {
   }
 } else {
   console.log('[Startup] ✓ JWT_SECRET strength OK');
+}
+
+// ── Production Environment Safety Check ─────────────────────────────────────
+// Platform-agnostic: works on Railway, Vercel, AWS, Heroku, CI/CD, etc.
+// Prevents accidental deployment with NODE_ENV=development to ANY production platform
+const isProductionPlatform = 
+  process.env.RAILWAY_ENVIRONMENT ||  // Railway
+  process.env.VERCEL_ENV === 'production' ||  // Vercel
+  process.env.NODE_ENV === 'production' ||  // Explicit production
+  process.env.CI === 'true' ||  // CI/CD pipelines
+  process.env.AWS_EXECUTION_ENV ||  // AWS Lambda/ECS
+  process.env.DYNO ||  // Heroku
+  process.env.CONTAINER ||  // Generic container
+  (process.env.DEPLOYMENT_TARGET && process.env.DEPLOYMENT_TARGET !== 'local');  // Custom deployments
+
+if (isProductionPlatform && process.env.NODE_ENV !== 'production') {
+  console.error('✗ FATAL: Invalid NODE_ENV in production environment');
+  console.error('  NODE_ENV must be "production" when deploying to any platform');
+  console.error('  Current NODE_ENV:', process.env.NODE_ENV || 'undefined');
+  console.error('  Detected platform:', {
+    railway: !!process.env.RAILWAY_ENVIRONMENT,
+    vercel: process.env.VERCEL_ENV,
+    ci: process.env.CI,
+    aws: !!process.env.AWS_EXECUTION_ENV,
+    heroku: !!process.env.DYNO,
+    container: !!process.env.CONTAINER
+  });
+  console.error('');
+  console.error('  FIX: Set NODE_ENV=production in your deployment platform environment variables');
+  process.exit(1);
+}
+
+// Positive assertion for debugging
+if (process.env.NODE_ENV === 'production') {
+  console.log('[Startup] ✓ Production mode verified - security hardening enabled');
+  
+  // Advanced: Warn if .env file is detected in production (should use platform variables)
+  const fs = await import('fs');
+  const path = await import('path');
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    console.warn('[Startup] ⚠ .env file detected in production - this should not be used');
+    console.warn('[Startup] ⚠ Production should use platform environment variables only');
+  }
+} else {
+  console.warn('[Startup] ⚠ Running in development mode:', process.env.NODE_ENV || 'development');
+  console.warn('[Startup] ⚠ Debug routes enabled, verbose error messages active');
 }
 
 // Initialize Sentry early

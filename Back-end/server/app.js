@@ -61,8 +61,14 @@ import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
 // NOTE: dotenv.config() is called once in server.js before this module is loaded
 const app = express();
 
+// ── Explicit Environment Configuration ──────────────────────────────────────
+// Don't rely on Express defaults - explicitly set based on NODE_ENV
+const isProd = process.env.NODE_ENV === 'production';
+app.set('env', isProd ? 'production' : 'development');
+
 // Trust the first proxy (required for Cloudflare/Railway/Heroku)
 // This ensures req.ip correctly identifies the client IP via X-Forwarded-For
+// In production, this is critical for rate limiting, security, and logging
 app.set('trust proxy', 1);
 
 // ULTRA-SIMPLE TEST ENDPOINT - NO MIDDLEWARE, NO DATABASE
