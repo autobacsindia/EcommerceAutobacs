@@ -285,6 +285,61 @@ router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler
   });
 }));
 
+// @route   GET /vehicles/make-model/:make/:model/products
+// @desc    Get products mapped to a vehicle by make and model (PUBLIC)
+// @access  Public
+router.get('/make-model/:make/:model/products', validateMakeModelParam, asyncHandler(async (req, res) => {
+  const vehicle = await Vehicle.findOne({ 
+    make: req.params.make, 
+    model: req.params.model, 
+    isActive: true 
+  });
+
+  if (!vehicle) {
+    return res.status(404).json({
+      success: false,
+      message: 'Vehicle not found'
+    });
+  }
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const search = req.query.search;
+
+  const query = {
+    compatibleVehicles: vehicle._id,
+    isActive: true
+  };
+
+  if (search) {
+    query.name = { $regex: search, $options: 'i' };
+  }
+
+  const total = await Product.countDocuments(query);
+
+  const products = await Product.find(query)
+    .select('name price images brand slug stock')
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  res.json({
+    success: true,
+    vehicle: {
+      id: vehicle._id,
+      name: `${vehicle.make} ${vehicle.model}`,
+      slug: vehicle.slug,
+      productCount: total
+    },
+    products,
+    pagination: {
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      limit
+    }
+  });
+}));
+
 // @route   GET /vehicles/:id/products
 // @desc    Get products mapped to a vehicle
 // @access  Private/Admin
