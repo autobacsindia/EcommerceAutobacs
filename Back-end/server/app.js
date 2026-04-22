@@ -454,8 +454,18 @@ app.use((req, res, next) => {
       }
     }
 
-    // Log all requests (with request ID)
-    console.log(`[${timestamp}] [${req.id}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+    // SECURITY: Never log sensitive data in production
+    // Only log basic request info (no bodies, no tokens, no secrets)
+    if (!isProd) {
+      // Development: verbose logging for debugging
+      console.log(`[${timestamp}] [${req.id}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+    } else {
+      // Production: minimal logging (no request bodies, no sensitive data)
+      // Only log if there's an error or it's a slow request
+      if (duration > 1000 || res.statusCode >= 400) {
+        console.log(`[${timestamp}] [${req.id}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+      }
+    }
   });
 
   next();
@@ -541,12 +551,17 @@ app.use(csrfProtection);
 // ── CORS Configuration ──────────────────────────────────────────────────────
 // Centralized allowed origins list (validated in ALL environments)
 // SECURITY: No dynamic origins in production - all must be explicitly whitelisted
+// This prevents malicious frontends from calling your API
+// NOTE: isProd is already defined at line 66
+
 const allowedOrigins = [
-  // Localhost origins for development
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:5173',
+  // Localhost origins for development ONLY
+  ...(isProd ? [] : [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+  ]),
   // Production frontend URLs (must be set in environment variables)
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   // Additional frontend URLs (comma-separated in env var)
@@ -557,8 +572,14 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 // Log warning if no production origins configured
-if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+if (isProd && !process.env.FRONTEND_URL) {
   console.warn('[SECURITY WARNING] FRONTEND_URL not set in production - CORS will block all origins');
+}
+
+if (isProd) {
+  console.log(`[CORS] Production mode - allowing ${allowedOrigins.length} origin(s):`, allowedOrigins);
+} else {
+  console.log(`[CORS] Development mode - allowing ${allowedOrigins.length} origin(s) including localhost`);
 }
 
 const corsOptions = {

@@ -5,30 +5,14 @@ import { connectWithRetry, preFlightIPCheck } from "./config/db.js";
 import elasticsearchService from "./services/elasticsearchService.js";
 import { app, cronService, adaptiveThrottlingService, setCronService } from "./app.js";
 import { initSentry } from "./config/sentry.js";
+import { validateEnvironment, logEnvironmentInfo } from "./config/validateEnv.js";
 import mongoose from "mongoose";
 
-// ── JWT Secret strength validation ─────────────────────────────────────────
-const _jwtSecret = process.env.JWT_SECRET || '';
-console.log(`[Startup] JWT_SECRET length: ${_jwtSecret.length} chars`);
-
-// Critical: JWT_SECRET must exist in production
-if (process.env.NODE_ENV === 'production' && !_jwtSecret) {
-  console.error('✗ FATAL: JWT_SECRET must be set in production');
-  process.exit(1);
-}
-
-if (_jwtSecret.length < 64) {
-  const msg = `✗ FATAL: JWT_SECRET is missing or too short (${_jwtSecret.length} chars, minimum 64). ` +
-    'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"';
-  console.error(msg);
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
-  } else {
-    console.warn('[Startup] ⚠ Continuing with weak JWT_SECRET in non-production environment.');
-  }
-} else {
-  console.log('[Startup] ✓ JWT_SECRET strength OK');
-}
+// ── Centralized Environment Validation ─────────────────────────────────────
+// Validates ALL critical environment variables in one place
+// This replaces scattered individual checks throughout the codebase
+validateEnvironment();
+logEnvironmentInfo();
 
 // ── Production Environment Safety Check ─────────────────────────────────────
 // Platform-agnostic: works on Railway, Vercel, AWS, Heroku, CI/CD, etc.

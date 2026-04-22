@@ -2,8 +2,9 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { asyncHandler } from "./errorMiddleware.js";
 import * as Sentry from "@sentry/node";
+import { verifyTokenWithRotation } from "../utils/jwtSecretManager.js";
 
-// Protect routes - verify JWT token
+// Protect routes - verify JWT token with rotation support
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
@@ -20,8 +21,8 @@ export const protect = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    // Verify token with rotation support (tries all active secrets)
+    const decoded = verifyTokenWithRotation(token, { algorithms: ['HS256'] });
 
     // Get user from token (exclude password)
     req.user = await User.findById(decoded.id).select('-passwordHash');
@@ -73,8 +74,8 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    // Verify token with rotation support
+    const decoded = verifyTokenWithRotation(token, { algorithms: ['HS256'] });
 
     // Get user from token (exclude password)
     req.user = await User.findById(decoded.id).select('-passwordHash');

@@ -7,6 +7,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import sessionStore from '../services/sessionStore.js';
+import { signToken } from './jwtSecretManager.js';
 
 /**
  * Generate a secure refresh token
@@ -32,9 +33,9 @@ export const generateTokenPair = (user, ipAddress = null, userAgent = null) => {
     accessTokenExpiry = process.env.JWT_EXPIRE || '30m'; // 30 minutes for regular users
   }
   
-  const accessToken = jwt.sign(
+  // Use rotation-aware signing (always uses primary secret)
+  const accessToken = signToken(
     { id: user._id, role: user.role },
-    process.env.JWT_SECRET,
     { expiresIn: accessTokenExpiry }
   );
 
