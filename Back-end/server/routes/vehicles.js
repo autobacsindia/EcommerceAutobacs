@@ -97,9 +97,10 @@ router.get('/slug/:slug', asyncHandler(async (req, res) => {
 // @desc    Get vehicle by make and model
 // @access  Public
 router.get('/make-model/:make/:model', validateMakeModelParam, asyncHandler(async (req, res) => {
+  // Case-insensitive search for vehicle by make and model
   const vehicle = await Vehicle.findOne({ 
-    make: req.params.make, 
-    model: req.params.model, 
+    make: { $regex: new RegExp(`^${req.params.make}$`, 'i') },
+    model: { $regex: new RegExp(`^${req.params.model}$`, 'i') },
     isActive: true 
   });
 
@@ -120,9 +121,10 @@ router.get('/make-model/:make/:model', validateMakeModelParam, asyncHandler(asyn
 // @desc    Get products mapped to a vehicle by make and model (PUBLIC)
 // @access  Public
 router.get('/make-model/:make/:model/products', validateMakeModelParam, asyncHandler(async (req, res) => {
+  // Case-insensitive search for vehicle by make and model
   const vehicle = await Vehicle.findOne({ 
-    make: req.params.make, 
-    model: req.params.model, 
+    make: { $regex: new RegExp(`^${req.params.make}$`, 'i') },
+    model: { $regex: new RegExp(`^${req.params.model}$`, 'i') },
     isActive: true 
   });
 
