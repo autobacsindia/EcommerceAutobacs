@@ -549,10 +549,54 @@ app.use(cookieParser());
 app.use(csrfProtection);
 
 // ── CORS Configuration ──────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// CORS Security Configuration
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Origin validation helper - prevents malicious origins in FRONTEND_URLS
+const isValidOrigin = (url) => {
+  // Must be https:// in production, http:// allowed in dev
+  const pattern = isProd 
+    ? /^https:\/\/[a-zA-Z0-9.-]+(:[0-9]+)?$/
+    : /^(https?|http):\/\/[a-zA-Z0-9.-]+(:[0-9]+)?$/;
+  
+  return pattern.test(url) && !url.includes('*') && !url.includes(' ');
+};
+
+// Subdomain validation - explicitly allow controlled subdomains
+const isAllowedSubdomain = (origin) => {
+  // Extract base domain from FRONTEND_URL if configured
+  if (!process.env.FRONTEND_URL) return false;
+  
+  try {
+    const baseUrl = new URL(process.env.FRONTEND_URL);
+    const baseDomain = baseUrl.hostname;
+    
+    // Check if origin is a subdomain of the base domain
+    // e.g., www.autobacs.com is subdomain of autobacs.com
+    return origin.endsWith(`.${baseDomain}`);
+  } catch {
+    return false;
+  }
+};
+
 // Centralized allowed origins list (validated in ALL environments)
 // SECURITY: No dynamic origins in production - all must be explicitly whitelisted
 // This prevents malicious frontends from calling your API
 // NOTE: isProd is already defined at line 66
+
+// Parse and validate FRONTEND_URLS with strict validation
+const parsedFrontendUrls = process.env.FRONTEND_URLS
+  ? process.env.FRONTEND_URLS.split(',')
+      .map(u => u.trim())
+      .filter(u => {
+        const isValid = isValidOrigin(u);
+        if (!isValid && u) {
+          console.error(`[CORS SECURITY] Rejected invalid origin in FRONTEND_URLS: "${u}"`);
+        }
+        return isValid;
+      })
+  : [];
 
 const allowedOrigins = [
   // Localhost origins for development ONLY
@@ -563,17 +607,21 @@ const allowedOrigins = [
     'http://127.0.0.1:5173',
   ]),
   // Production frontend URLs (must be set in environment variables)
-  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-  // Additional frontend URLs (comma-separated in env var)
-  ...(process.env.FRONTEND_URLS 
-    ? process.env.FRONTEND_URLS.split(',').map(u => u.trim()).filter(Boolean) 
-    : []
-  )
+  ...(process.env.FRONTEND_URL && isValidOrigin(process.env.FRONTEND_URL) 
+    ? [process.env.FRONTEND_URL] 
+    : []),
+  // Additional frontend URLs (validated and sanitized)
+  ...parsedFrontendUrls
 ].filter(Boolean);
 
 // Log warning if no production origins configured
 if (isProd && !process.env.FRONTEND_URL) {
-  console.warn('[SECURITY WARNING] FRONTEND_URL not set in production - CORS will block all origins');
+  console.error('[SECURITY WARNING] FRONTEND_URL not set in production - CORS will block all origins');
+}
+
+// Log rejected origins from FRONTEND_URLS (security monitoring)
+if (isProd && parsedFrontendUrls.length > 0) {
+  console.log(`[CORS] Validated ${parsedFrontendUrls.length} origin(s) from FRONTEND_URLS`);
 }
 
 if (isProd) {
@@ -585,18 +633,35 @@ if (isProd) {
 const corsOptions = {
   origin: function(origin, callback) {
     // Allow non-browser requests (Postman, curl, mobile apps)
+    // NOTE: This does NOT bypass authentication - all endpoints still require auth where needed
     if (!origin) return callback(null, true);
 
     // Normalize origin (remove trailing slash)
     const normalizedOrigin = origin.replace(/\/$/, '');
 
-    // Check against whitelist
+    // Check against explicit whitelist
     if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
 
+    // Check for allowed subdomains (controlled wildcard)
+    if (isProd && isAllowedSubdomain(normalizedOrigin)) {
+      console.log(`[CORS] Allowed subdomain: ${normalizedOrigin}`);
+      return callback(null, true);
+    }
+
     // Block unauthorized origins (even in development)
-    console.warn('[CORS BLOCKED] Unauthorized origin:', origin);
+    // SECURITY: This goes to logging aggregation in production
+    if (isProd) {
+      // In production, use structured logging for security events
+      console.error(`[CORS BLOCKED] Unauthorized origin: ${origin} | Path: ${req?.url || 'unknown'} | IP: ${req?.ip || 'unknown'}`);
+      
+      // TODO: Integrate with Sentry/Datadog for security alerting
+      // Example: sentry.captureMessage(`CORS blocked: ${origin}`, { level: 'warning' });
+    } else {
+      console.warn('[CORS BLOCKED] Unauthorized origin:', origin);
+    }
+    
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
