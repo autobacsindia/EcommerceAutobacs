@@ -11,7 +11,6 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
-import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
@@ -352,9 +351,6 @@ export default function ClientPage({ slug }: { slug: string }) {
           {/* Vehicle and Category Filters Sidebar */}
           <aside className="hidden lg:block">
             <div className="space-y-6">
-              {/* Vehicle Filter Sidebar */}
-              <VehicleModelFilterSidebar currentVehicleSlug={slug} />
-              
               {/* Category Filters */}
               <div className="bg-white rounded-xl shadow-md p-6 sticky top-24 border border-gray-100">
                 <h2 className="text-lg font-bold mb-5 flex items-center text-gray-900">
@@ -747,6 +743,7 @@ export default function ClientPage({ slug }: { slug: string }) {
 
                           let imageUrl: string | undefined;
 
+                          // Check for specific vehicle models with hardcoded mappings
                           if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
                             imageUrl = VEHICLE_IMAGE_MAP['fortuner'];
                           } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
@@ -755,6 +752,16 @@ export default function ClientPage({ slug }: { slug: string }) {
                             imageUrl = VEHICLE_IMAGE_MAP['thar'];
                           } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
                             imageUrl = VEHICLE_IMAGE_MAP['jimny'];
+                          } else if (slugKey.includes('wrangler') || nameKey.includes('wrangler')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['wrangler'];
+                          } else if (slugKey.includes('endeavour') || nameKey.includes('endeavour')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['endeavour'];
+                          } else if (slugKey.includes('ranger') || nameKey.includes('ranger')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['ranger'];
+                          } else if (slugKey.includes('defender') || nameKey.includes('defender')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['defender'];
+                          } else if (slugKey.includes('isuzu') || nameKey.includes('isuzu') || slugKey.includes('dmax') || nameKey.includes('dmax')) {
+                            imageUrl = VEHICLE_IMAGE_MAP['isuzu-dmax'];
                           }
 
                           if (!imageUrl) {
@@ -787,6 +794,16 @@ export default function ClientPage({ slug }: { slug: string }) {
                                   target.src = VEHICLE_IMAGE_MAP['thar'];
                                 } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
                                   target.src = VEHICLE_IMAGE_MAP['jimny'];
+                                } else if (slugKey.includes('wrangler') || nameKey.includes('wrangler')) {
+                                  target.src = VEHICLE_IMAGE_MAP['wrangler'];
+                                } else if (slugKey.includes('endeavour') || nameKey.includes('endeavour')) {
+                                  target.src = VEHICLE_IMAGE_MAP['endeavour'];
+                                } else if (slugKey.includes('ranger') || nameKey.includes('ranger')) {
+                                  target.src = VEHICLE_IMAGE_MAP['ranger'];
+                                } else if (slugKey.includes('defender') || nameKey.includes('defender')) {
+                                  target.src = VEHICLE_IMAGE_MAP['defender'];
+                                } else if (slugKey.includes('isuzu') || nameKey.includes('isuzu') || slugKey.includes('dmax') || nameKey.includes('dmax')) {
+                                  target.src = VEHICLE_IMAGE_MAP['isuzu-dmax'];
                                 } else {
                                   target.src = '/images/fallback-product.png';
                                 }

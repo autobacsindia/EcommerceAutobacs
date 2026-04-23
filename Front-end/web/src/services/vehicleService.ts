@@ -44,7 +44,7 @@ export const VEHICLE_IMAGE_MAP: Record<string, string> = {
   'ford-endeavour': '/images/vehicles/Untitled-design-2024-01-04T133626.142.png',
   'audi': '/images/vehicles/A240553_web_2880-scaled.jpg',
   'bmw': '/images/vehicles/bmw-3-series.jpg',
-  'ford-ranger': '/images/vehicles/Ford-Ranger.jpg', 
+  'ford-ranger': '/images/vehicles/Untitled-design-2024-01-04T133626.142.png', // TEMP: Using Endeavour image until Ranger image is added
   'land-rover-defender': '/images/vehicles/land-rover-defender-1333693509.jpg',
   'mercedes-benz': '/images/vehicles/Mercedes-Benz-E-Class.jpg',
 
@@ -55,7 +55,7 @@ export const VEHICLE_IMAGE_MAP: Record<string, string> = {
   
   // Aliases for robustness
   'isuzu-dmax': '/images/vehicles/1778470-1920x1300-desktop-hd-isuzu-wallpaper-photo.jpg',
-  'ranger': '/images/vehicles/Ford-Ranger.jpg',
+  'ranger': '/images/vehicles/Untitled-design-2024-01-04T133626.142.png', // TEMP: Using Endeavour image until Ranger image is added
   'endeavour': '/images/vehicles/Untitled-design-2024-01-04T133626.142.png',
   'wrangler': '/images/vehicles/181709-3000x1688-desktop-hd-jeep-background-photo-scaled.jpg',
   'defender': '/images/vehicles/land-rover-defender-1333693509.jpg',
@@ -72,14 +72,14 @@ export const CROSS_RELATED_SLUG_MAP: Record<string, string[]> = {
   // Isuzu <-> Ranger/Hilux
   'isuzu-dmax-v-cross': ['ford-ranger', 'ranger', 'toyota-hilux', 'hilux'],
   'isuzu-dmax': ['ford-ranger', 'ranger', 'toyota-hilux', 'hilux'],
-  'ford-ranger': ['isuzu-dmax-v-cross', 'isuzu-dmax'],
-  'ranger': ['isuzu-dmax-v-cross', 'isuzu-dmax'],
+  'ford-ranger': ['isuzu-dmax-v-cross', 'isuzu-dmax', 'ford-endeavour', 'endeavour'],
+  'ranger': ['isuzu-dmax-v-cross', 'isuzu-dmax', 'ford-endeavour', 'endeavour'],
   
   // Fortuner <-> Endeavour/Hilux
   'toyota-fortuner': ['ford-endeavour', 'endeavour', 'toyota-hilux', 'hilux'],
   'fortuner': ['ford-endeavour', 'endeavour', 'toyota-hilux', 'hilux'],
-  'ford-endeavour': ['toyota-fortuner', 'fortuner'],
-  'endeavour': ['toyota-fortuner', 'fortuner'],
+  'ford-endeavour': ['toyota-fortuner', 'fortuner', 'ford-ranger', 'ranger'],
+  'endeavour': ['toyota-fortuner', 'fortuner', 'ford-ranger', 'ranger'],
   'toyota-hilux': ['toyota-fortuner', 'fortuner', 'isuzu-dmax-v-cross', 'isuzu-dmax'],
   'hilux': ['toyota-fortuner', 'fortuner', 'isuzu-dmax-v-cross', 'isuzu-dmax'],
   
