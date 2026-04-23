@@ -129,7 +129,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             params: {
               page: pageNumber,
               limit: itemsPerPage,
-              category: selectedCategory || undefined,
+              ...(selectedCategory && { category: selectedCategory }),
               sortBy: currentSort === 'date' ? 'createdAt' : currentSort === 'price_asc' ? 'price' : currentSort === 'price_desc' ? 'price' : currentSort === 'name_asc' ? 'name' : 'averageRating',
               order: currentSort === 'price_asc' || currentSort === 'name_asc' ? 'asc' : 'desc'
             },
