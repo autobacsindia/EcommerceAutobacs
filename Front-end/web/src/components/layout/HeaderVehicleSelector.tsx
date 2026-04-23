@@ -98,8 +98,10 @@ export default function HeaderVehicleSelector() {
     if (selectedMake && selectedModel) {
       const makeSlug = selectedMake.toLowerCase().replace(/\s+/g, '-');
       const modelSlug = selectedModel.toLowerCase().replace(/\s+/g, '-');
+      const vehicleSlug = `${makeSlug}-${modelSlug}`;
       setIsOpen(false);
-      router.push(`/vehicles/${makeSlug}/${modelSlug}`);
+      // Navigate to /model/[slug] which already works in production
+      router.push(`/model/${vehicleSlug}`);
     }
   };
 
