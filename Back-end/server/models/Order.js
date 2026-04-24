@@ -73,6 +73,18 @@ const OrderSchema = new mongoose.Schema({
     enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded", "failed"], 
     default: "pending" 
   },
+  
+  // Guest checkout session binding (prevents order hijacking)
+  sessionId: String,  // Client-provided session ID (for initial order lookup)
+  guestSessionHash: String,  // SHA256 hash of server-generated session token (defense-in-depth)
+  sessionCreatedAt: Date,  // Timestamp when session was created (anti-replay)
+  guestIPHash: String,  // SHA256 hash of guest IP (forensic visibility)
+  guestUAHash: String,  // SHA256 hash of guest User-Agent (anomaly detection)
+  securityFlags: [{  // Security event tracking
+    type: String,
+    enum: ['SESSION_EXPIRED_DURING_PAYMENT', 'SESSION_MISMATCH', 'REDIS_UNAVAILABLE', 'GUEST_UA_MISMATCH', 'GUEST_IP_MISMATCH']
+  }],
+  
   statusHistory: [{
     status: {
       type: String,

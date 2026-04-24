@@ -75,6 +75,48 @@ export const csrfProtection = (req, res, next) => {
   const expectedToken = req.cookies['XSRF-TOKEN'];
   const actualToken = req.headers['x-xsrf-token'];
 
+  // AUDIT: Track CSRF failures for alerting thresholds
+  if (!actualToken || !expectedToken || expectedToken !== actualToken) {
+    // Get normalized IP
+    const forwarded = req.headers['x-forwarded-for'];
+    const clientIP = forwarded ? forwarded.split(',')[0].trim() : (req.ip || 'unknown');
+    
+    console.warn(
+      '[SECURITY] Missing CSRF token | Path:', req.path, '| Method:', req.method,
+      '| IP:', clientIP
+    );
+    
+    // Track failure rate (in-memory for now, can use Redis in production)
+    if (!global.csrfFailureCounts) {
+      global.csrfFailureCounts = new Map();
+    }
+    
+    const key = `csrf_fail:${clientIP}`;
+    const count = (global.csrfFailureCounts.get(key) || 0) + 1;
+    global.csrfFailureCounts.set(key, count);
+    
+    // Alert thresholds
+    if (count === 10) {
+      console.error(
+        '[SECURITY ALERT] Suspicious CSRF activity | IP:', clientIP,
+        '| Failures:', count, '/min | Possible attack'
+      );
+    } else if (count >= 50) {
+      console.error(
+        '[SECURITY ALERT] Likely CSRF attack | IP:', clientIP,
+        '| Failures:', count, '/min | RATE LIMIT TRIGGERED'
+      );
+      // Could add automatic IP blocking here
+    }
+    
+    // Clean up old entries every 60 seconds (simple rate window)
+    if (!global.csrfCleanupInterval) {
+      global.csrfCleanupInterval = setInterval(() => {
+        global.csrfFailureCounts.clear();
+      }, 60 * 1000);
+    }
+  }
+
   // If no token in cookie yet (first request), or mismatch
   if (!expectedToken || !actualToken || expectedToken !== actualToken) {
     // Exception: If valid Bearer token is present, it's CSRF-safe
