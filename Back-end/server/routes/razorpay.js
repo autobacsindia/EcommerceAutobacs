@@ -38,26 +38,108 @@ function getUserAgent(req) {
   return req.get('user-agent') || 'unknown';
 }
 
-// RATE LIMITING: Per-IP rate limiter (prevent spam/DoS)
-const ipRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per IP per 15 min
+/**
+ * Razorpay Webhook Signature Verification Middleware
+ * MUST run before rate limiting to prevent attackers from burning rate limits with invalid requests
+ */
+const verifyRazorpaySignature = (req, res, next) => {
+  const signature = req.headers['x-razorpay-signature'];
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  
+  if (!signature) {
+    console.error('[SECURITY] Razorpay webhook missing signature');
+    return res.status(400).end();
+  }
+  
+  if (!webhookSecret) {
+    console.error('[CONFIG] RAZORPAY_WEBHOOK_SECRET not configured');
+    return res.status(500).end();
+  }
+  
+  // Compute expected signature using RAW body (Buffer, not JSON.stringify)
+  const expectedSignature = crypto
+    .createHmac('sha256', webhookSecret)
+    .update(req.body) // req.body is raw Buffer from express.raw()
+    .digest('hex');
+  
+  // TIMING-SAFE comparison (prevents timing attacks)
+  // IMPORTANT: Check length first to avoid timingSafeEqual crash
+  if (
+    !signature ||
+    signature.length !== expectedSignature.length ||
+    !crypto.timingSafeEqual(
+      Buffer.from(expectedSignature),
+      Buffer.from(signature)
+    )
+  ) {
+    console.error('[SECURITY] Invalid Razorpay webhook signature');
+    return res.status(400).end();
+  }
+  
+  // Signature valid - continue to rate limiting and handler
+  next();
+};
+
+// RATE LIMITING: /create-order - Identity-based (prevent API quota exhaustion)
+const createOrderLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 15, // 15 orders per identity per 10 min
+  keyGenerator: (req) => {
+    // Identity-based: user > guest session > order ID > IP
+    return (
+      req.user?.id ||
+      req.cookies.guest_session ||
+      `ip:${req.ip || 'unknown'}`
+    );
+  },
   message: {
     success: false,
-    message: 'Too many requests, please try again later'
+    message: 'Too many orders created. Please try again later.'
   },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-// RATE LIMITING: Per-order-ID rate limiter (prevent order enumeration spam)
-const orderRateLimit = rateLimit({
+// RATE LIMITING: /verify-payment - Identity-based (prevent spam)
+const verifyIPRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // 50 requests per identity per 15 min
+  keyGenerator: (req) => {
+    // Identity-based: user > guest session > IP
+    return (
+      req.user?.id ||
+      req.cookies.guest_session ||
+      `ip:${req.ip || 'unknown'}`
+    );
+  },
+  message: {
+    success: false,
+    message: 'Too many verification attempts. Please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// RATE LIMITING: /verify-payment - Per-order-ID (prevent brute force)
+const verifyOrderRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 attempts per order ID per 15 min
   keyGenerator: (req) => `verify:${req.body.razorpay_order_id || 'unknown'}`,
   message: {
     success: false,
     message: 'Too many verification attempts for this order'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// RATE LIMITING: /webhook - Burst protection (NOT strict limiting)
+const webhookBurstLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 events per minute (high threshold for Razorpay retries)
+  message: {
+    success: false,
+    message: 'Webhook rate limit exceeded'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -70,7 +152,8 @@ router.use(attachTokenRefreshInfo);
 // @route   POST /razorpay/create-order
 // @desc    Create a Razorpay order with session binding (SECURED)
 // @access  Private (or guest with session)
-router.post("/create-order", validateRazorpayOrder, asyncHandler(async (req, res) => {
+// SECURITY: Rate limited to prevent API quota exhaustion
+router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHandler(async (req, res) => {
   try {
     const { orderId, amount, currency, receipt } = req.body;
     
@@ -118,6 +201,15 @@ router.post("/create-order", validateRazorpayOrder, asyncHandler(async (req, res
       // Store in Redis: razorpayOrderId -> serverSessionToken (30 min expiry)
       let redisClient = null;
       try {
+        // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
+        if (!razorpayOrder.orderId || !razorpayOrder.orderId.startsWith('order_')) {
+          console.error('[SECURITY] Invalid Razorpay order ID format:', razorpayOrder.orderId);
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid order ID format'
+          });
+        }
+        
         redisClient = new Redis.default(process.env.REDIS_URL, {
           maxRetriesPerRequest: 1,
           connectTimeout: 2000,
@@ -181,11 +273,11 @@ router.post("/create-order", validateRazorpayOrder, asyncHandler(async (req, res
 // @route   POST /razorpay/verify-payment
 // @desc    Verify Razorpay payment and update order status (supports both authenticated and guest users)
 // @access  Public (optional auth)
-// SECURITY: CSRF protection + Rate limiting required
+// SECURITY: Rate limiting + CSRF protection required
 router.post("/verify-payment", 
-  ipRateLimit,           // Per-IP rate limit (100 req/15min)
-  orderRateLimit,        // Per-order-ID rate limit (10 req/15min)
-  csrfProtection,        // CSRF token validation
+  verifyIPRateLimit,       // Per-IP rate limit (50 req/15min)
+  verifyOrderRateLimit,    // Per-order-ID rate limit (10 req/15min)
+  csrfProtection,          // CSRF token validation
   validateRazorpayVerification, 
   asyncHandler(async (req, res) => {
   try {
@@ -248,6 +340,15 @@ router.post("/verify-payment",
       try {
         const Redis = await import('ioredis');
         const crypto = await import('crypto');
+        
+        // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
+        if (!razorpay_order_id || !razorpay_order_id.startsWith('order_')) {
+          console.error('[SECURITY] Invalid Razorpay order ID format:', razorpay_order_id);
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid order ID format'
+          });
+        }
         
         redisClient = new Redis.default(process.env.REDIS_URL, {
           maxRetriesPerRequest: 1,
@@ -385,14 +486,11 @@ router.post("/verify-payment",
     
     // Note: Idempotency check already done at line 159 (handles webhook race + retries)
     
-    // Process successful payment
-    const result = await razorpayService.processPaymentSuccess(
-      order._id.toString(),
-      verificationResult.payment,
-      isAuthenticated ? req.user.id : null
-    );
+    // PAYMENT AUTHORITY: Webhook is sole authority for payment confirmation
+    // Client endpoint validates signature + session, but DOES NOT update DB
+    // This eliminates race complexity and dual-writer issues
     
-    // SESSION ROTATION: Invalidate session after successful verification (one-time use)
+    // SESSION ROTATION: Invalidate session after successful validation (one-time use)
     if (!isAuthenticated) {
       try {
         const Redis = await import('ioredis');
@@ -414,10 +512,18 @@ router.post("/verify-payment",
       }
     }
     
+    // Return pending status - UI should poll /order-status or use WebSocket
+    // Webhook will update order status to 'completed' asynchronously
     res.json({
       success: true,
-      message: 'Payment verified and order updated',
-      data: result
+      message: 'Payment signature verified. Awaiting webhook confirmation.',
+      data: {
+        orderId: order._id,
+        razorpayOrderId,
+        razorpayPaymentId,
+        status: 'pending_webhook',
+        note: 'Order will be confirmed once Razorpay webhook is received'
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -430,43 +536,27 @@ router.post("/verify-payment",
 // @route   POST /razorpay/webhook
 // @desc    Handle Razorpay webhook events (SECURED)
 // @access  Public (secured by HMAC-SHA256 signature verification)
-router.post("/webhook", express.raw({ type: 'application/json' }), asyncHandler(async (req, res) => {
+// SECURITY: Signature FIRST, then burst protection, then handler
+router.post("/webhook", 
+  express.raw({ type: 'application/json' }), 
+  verifyRazorpaySignature,   // SIGNATURE FIRST (prevents rate limit burning)
+  webhookBurstLimiter,       // THEN rate limiting (only valid signatures)
+  asyncHandler(async (req, res) => {
   try {
-    // SECURITY STEP 1: Verify HMAC-SHA256 signature
-    const signature = req.headers['x-razorpay-signature'];
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    // WEBHOOK SECURITY: IP allowlist (soft validation - log mismatches, don't block)
+    const clientIP = getClientIP(req);
+    const allowedWebhookIPs = process.env.RAZORPAY_WEBHOOK_IPS?.split(',').map(ip => ip.trim()) || [];
     
-    if (!signature) {
-      console.error('[SECURITY] Razorpay webhook missing signature');
-      return res.status(400).end();
+    if (allowedWebhookIPs.length > 0 && !allowedWebhookIPs.includes(clientIP)) {
+      console.warn(
+        '[SECURITY] Webhook from unknown IP | IP:', clientIP,
+        '| Allowed IPs:', allowedWebhookIPs.join(', ')
+      );
+      // Don't block - signature verification is the real protection
+      // Log for monitoring (could indicate misconfiguration or attack)
     }
     
-    if (!webhookSecret) {
-      console.error('[CONFIG] RAZORPAY_WEBHOOK_SECRET not configured');
-      return res.status(500).end();
-    }
-    
-    // Compute expected signature using RAW body (Buffer, not JSON.stringify)
-    const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(req.body) // req.body is raw Buffer from express.raw()
-      .digest('hex');
-    
-    // TIMING-SAFE comparison (prevents timing attacks)
-    // IMPORTANT: Check length first to avoid timingSafeEqual crash
-    if (
-      !signature ||
-      signature.length !== expectedSignature.length ||
-      !crypto.timingSafeEqual(
-        Buffer.from(expectedSignature),
-        Buffer.from(signature)
-      )
-    ) {
-      console.error('[SECURITY] Invalid Razorpay webhook signature');
-      return res.status(400).end();
-    }
-    
-    // Parse webhook data (after signature verified)
+    // Parse webhook data (signature already verified)
     const webhookData = JSON.parse(req.body.toString());
     const eventId = webhookData.id;
     const eventType = webhookData.event;
@@ -475,6 +565,12 @@ router.post("/webhook", express.raw({ type: 'application/json' }), asyncHandler(
     // SECURITY STEP 2: Replay protection - Check event ID
     let redisClient = null;
     try {
+      // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
+      if (!eventId || !eventId.startsWith('evt_')) {
+        console.error('[SECURITY] Invalid Razorpay event ID format:', eventId);
+        return res.status(400).end();
+      }
+      
       redisClient = new Redis(process.env.REDIS_URL, {
         maxRetriesPerRequest: 1,
         connectTimeout: 2000,
@@ -497,6 +593,8 @@ router.post("/webhook", express.raw({ type: 'application/json' }), asyncHandler(
     }
     
     // SECURITY STEP 3: Timestamp validation (10-minute window with clock skew tolerance)
+    // NOTE: Ensure server has NTP sync enabled (critical for production)
+    // Railway/Heroku/AWS handle this automatically
     const eventTime = createdAt * 1000; // Convert to milliseconds
     const now = Date.now();
     const tolerance = 10 * 60 * 1000; // 10 minutes
@@ -505,7 +603,7 @@ router.post("/webhook", express.raw({ type: 'application/json' }), asyncHandler(
     if (eventTime > now + tolerance) {
       console.error(
         `[SECURITY] Razorpay webhook from future | Event: ${eventId} | ` +
-        `Event time: ${new Date(eventTime).toISOString()}`
+        `Event time: ${new Date(eventTime).toISOString()} | Server time: ${new Date(now).toISOString()}`
       );
       return res.status(400).end();
     }
