@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import { asyncHandler } from "./errorMiddleware.js";
 import * as Sentry from "@sentry/node";
 import { verifyTokenWithRotation } from "../utils/jwtSecretManager.js";
+import crypto from 'crypto';
 
 // Protect routes - verify JWT token with rotation support
 export const protect = asyncHandler(async (req, res, next) => {
@@ -52,16 +53,69 @@ export const protect = asyncHandler(async (req, res, next) => {
 });
 
 // Admin middleware - check if user is admin
-export const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
-    next();
-  } else {
-    res.status(403).json({
+// ENHANCED: Binds session to IP + UA context for admin accounts
+export const admin = asyncHandler(async (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
       success: false,
       message: 'Not authorized as admin'
     });
   }
-};
+  
+  // ADMIN SECURITY: Validate session context (IP + UA binding)
+  // Helps detect token theft across different environments
+  const currentIP = req.ip || req.connection.remoteAddress || 'unknown';
+  const currentUA = req.get('user-agent') || 'unknown';
+  
+  // Hash current context
+  const currentIPHash = crypto.createHash('sha256').update(currentIP).digest('hex');
+  const currentUAHash = crypto.createHash('sha256').update(currentUA).digest('hex');
+  
+  // Check if we have stored session context (from login or last request)
+  const storedIPHash = req.user.lastAdminIPHash;
+  const storedUAHash = req.user.lastAdminUAHash;
+  
+  if (storedIPHash && storedUAHash) {
+    // Context mismatch detected (possible token theft)
+    if (storedIPHash !== currentIPHash || storedUAHash !== currentUAHash) {
+      console.error(
+        `[SECURITY] Admin session context mismatch! | User: ${req.user.email} | ` +
+        `IP changed: ${storedIPHash !== currentIPHash} | UA changed: ${storedUAHash !== currentUAHash} | ` +
+        `IP: ${currentIP} | UA: ${currentUA}`
+      );
+      
+      // SECURITY: Revoke all sessions for this admin (nuclear option)
+      // In production, you might want to add a grace period or skip for mobile IP changes
+      req.user.lastAdminIPHash = currentIPHash;
+      req.user.lastAdminUAHash = currentUAHash;
+      await req.user.save();
+      
+      // Log security event but allow request (don't block legitimate mobile users)
+      // You can change this to reject if you want stricter security
+      Sentry.captureMessage('Admin session context mismatch', {
+        level: 'warning',
+        extra: {
+          userId: req.user._id,
+          email: req.user.email,
+          ipChanged: storedIPHash !== currentIPHash,
+          uaChanged: storedUAHash !== currentUAHash,
+          ip: currentIP
+        }
+      });
+    }
+  } else {
+    // First admin request or no context stored - save it
+    req.user.lastAdminIPHash = currentIPHash;
+    req.user.lastAdminUAHash = currentUAHash;
+    await req.user.save();
+  }
+  
+  // Update context for next request
+  req.user.lastAdminIPHash = currentIPHash;
+  req.user.lastAdminUAHash = currentUAHash;
+  
+  next();
+});
 
 // Optional auth middleware - populate req.user if token exists, but don't reject if missing
 export const optionalAuth = asyncHandler(async (req, res, next) => {

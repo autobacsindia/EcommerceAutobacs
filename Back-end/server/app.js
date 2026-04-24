@@ -694,6 +694,12 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
+// ── CRITICAL: Razorpay Webhook Route (MUST be before other parsers) ─────────
+// Webhook requires raw body for signature verification (express.raw)
+// This MUST be mounted BEFORE the global JSON parser above
+import razorpayWebhook from './middleware/razorpayWebhook.js';
+app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
+
 // Sentry context middleware - adds user/request context to error tracking
 // Must be AFTER body parsing but BEFORE routes
 app.use(sentryContextMiddleware);

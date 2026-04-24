@@ -249,30 +249,19 @@ class RazorpayService {
   }
 
   /**
-   * Handle Razorpay webhook events
-   * @param {string|Buffer} rawBody - Raw webhook body for signature verification
-   * @param {string} signature - Webhook signature
+   * Handle Razorpay webhook events (SECURED)
+   * @param {Object} webhookData - Parsed webhook data (already signature-verified)
+   * @param {string} eventType - Event type (validated whitelist)
    * @returns {Promise<Object>} Processing result
    */
-  async handleWebhook(rawBody, signature) {
+  async handleWebhook(webhookData, eventType) {
     try {
-      // Verify webhook signature
-      const shasum = crypto.createHmac('sha256', this.key_secret);
-      shasum.update(rawBody);
-      const digest = shasum.digest('hex');
-      
-      if (digest !== signature) {
-        throw new Error('Webhook signature verification failed');
-      }
-      
-      const webhookData = JSON.parse(rawBody.toString());
-      const event = webhookData.event;
       const payload = webhookData.payload;
       
-      switch (event) {
+      switch (eventType) {
         case 'payment.captured':
-          // Payment captured - already handled in frontend verification
-          console.log('Payment captured:', payload.payment.entity.id);
+          // SECURITY STEP 5: Cross-check order in DB
+          await this.handlePaymentCaptured(payload);
           break;
           
         case 'payment.failed':
@@ -281,12 +270,13 @@ class RazorpayService {
           break;
           
         case 'order.paid':
-          // Order paid - already handled in frontend verification
-          console.log('Order paid:', payload.order.entity.id);
+          // Order paid - redundant with payment.captured, but handle safely
+          console.log('[Webhook] Order paid event (redundant):', payload.order.entity.id);
           break;
           
         default:
-          console.log('Unhandled Razorpay webhook event:', event);
+          // Should not reach here (filtered by route)
+          console.log('[Webhook] Unhandled event type:', eventType);
       }
       
       return {
@@ -298,8 +288,8 @@ class RazorpayService {
       if (process.env.SENTRY_DSN) {
         Sentry.withScope((scope) => {
           scope.setContext('webhook_processing', { 
-            eventType: webhookData?.event,
-            hasSignature: !!signature
+            eventType,
+            eventId: webhookData?.id
           });
           scope.setTag('payment_action', 'handle_webhook');
           Sentry.captureException(error);
@@ -307,6 +297,58 @@ class RazorpayService {
       }
       throw new Error(`Webhook processing failed: ${error.message}`);
     }
+  }
+  
+  /**
+   * Handle payment.captured event (with full DB validation)
+   * @param {Object} payload - Webhook payload
+   */
+  async handlePaymentCaptured(payload) {
+    const paymentEntity = payload.payment.entity;
+    const orderId = paymentEntity.notes?.orderId;
+    
+    if (!orderId) {
+      console.error('[SECURITY] Webhook payment missing orderId in notes');
+      throw new Error('Missing orderId in payment notes');
+    }
+    
+    // SECURITY: Find order in DB
+    const order = await Order.findById(orderId);
+    if (!order) {
+      console.error(`[SECURITY] Webhook payment for non-existent order: ${orderId}`);
+      throw new Error('Order not found');
+    }
+    
+    // SECURITY: Validate amount (prevent amount manipulation)
+    const webhookAmount = paymentEntity.amount; // in paise
+    const orderAmount = order.totalAmount * 100; // convert to paise
+    
+    if (webhookAmount !== orderAmount) {
+      console.error(
+        `[SECURITY] Amount mismatch! | Order: ${orderId} | ` +
+        `Expected: ${orderAmount} paise | Got: ${webhookAmount} paise`
+      );
+      throw new Error('Amount mismatch');
+    }
+    
+    // SECURITY: Validate currency
+    if (paymentEntity.currency !== 'INR') {
+      console.error(
+        `[SECURITY] Currency mismatch! | Order: ${orderId} | ` +
+        `Expected: INR | Got: ${paymentEntity.currency}`
+      );
+      throw new Error('Currency mismatch');
+    }
+    
+    // SECURITY: Check if already processed (idempotency)
+    if (order.payment && order.payment.status === 'completed') {
+      console.log(`[Webhook] Payment already processed for order: ${orderId}`);
+      return; // Already done, skip
+    }
+    
+    // Process payment (same as frontend verification)
+    console.log(`[Webhook] Processing payment for order: ${orderId}`);
+    await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString());
   }
 
   /**

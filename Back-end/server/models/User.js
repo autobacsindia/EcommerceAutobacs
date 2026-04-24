@@ -77,6 +77,11 @@ const UserSchema = new mongoose.Schema({
     success: Boolean,
     userAgent: String
   }],
+  
+  // Admin session context binding (IP + UA hash)
+  // Helps detect token theft across different environments
+  lastAdminIPHash: String,  // SHA256 hash of last admin request IP
+  lastAdminUAHash: String,  // SHA256 hash of last admin request User-Agent
 
   // Profile avatar
   avatar: {
