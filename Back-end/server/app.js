@@ -49,7 +49,8 @@ import {
   contactFormRateLimit,
   consultationRateLimit,
   healthCheckRateLimit,
-  metricsRateLimit
+  metricsRateLimit,
+  globalApiRateLimit
 } from "./middleware/rateLimitMiddleware.js";
 
 // Import cron service
@@ -509,10 +510,26 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       // NOTE: 'unsafe-inline' required by Razorpay checkout script injection.
       // Once Razorpay supports nonce/hash, remove 'unsafe-inline' here.
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",  // Required for Razorpay (temporary until nonce/hash support)
+        "https://checkout.razorpay.com",
+        // Third-party scripts (limit to trusted domains only)
+        "https://cdn.logrocket.com",        // LogRocket session replay
+        "https://*.sentry-cdn.com",          // Sentry error tracking
+        "https://www.googletagmanager.com",  // Google Analytics/Tag Manager
+        "https://www.google-analytics.com"   // Google Analytics
+      ],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
-      connectSrc: ["'self'", "https://api.razorpay.com", "https://lumberjack.razorpay.com"],
+      connectSrc: [
+        "'self'",
+        "https://api.razorpay.com",
+        "https://lumberjack.razorpay.com",
+        "https://*.logrocket.com",           // LogRocket
+        "https://*.sentry.io",               // Sentry
+        "https://www.google-analytics.com"   // Google Analytics
+      ],
       frameSrc: ["'self'", "https://api.razorpay.com"],
       // Block Flash, Java, and other plugin content
       objectSrc: ["'none'"],
@@ -858,6 +875,9 @@ if (process.env.NODE_ENV !== 'production') {
 // - Monitoring Domain: /admin/rate-limits/*, /admin/redis, /admin/adaptive-throttling
 //
 // Adding v2 later: import apiRouterV2 and mount at /api/v2/*
+
+// Apply global rate limiter as safety net (500 req/15min per IP)
+app.use('/api/v1', globalApiRateLimit);
 
 app.use('/api/v1', apiRouter);
 

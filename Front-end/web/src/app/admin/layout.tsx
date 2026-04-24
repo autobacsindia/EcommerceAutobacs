@@ -1,169 +1,71 @@
-'use client';
+/**
+ * Admin Layout - Server Component
+ * 
+ * This layout runs on the SERVER before any HTML is sent to the client.
+ * It verifies admin role via BACKEND API (signature verified).
+ * 
+ * Protection Layers:
+ * 1. Middleware (middleware.ts) - Fast pre-filter, UX optimization
+ * 2. Server Component (this file) - REAL verification via backend ✅
+ * 3. Backend API - Final enforcement (RBAC)
+ * 4. Client redirect - UX fallback (redundant)
+ * 
+ * SECURITY: This component calls backend /auth/me to verify:
+ * - JWT signature (backend verifies with JWT_SECRET)
+ * - Token expiration (backend checks exp)
+ * - User role (backend checks database)
+ * - Token not revoked (backend checks Redis)
+ * 
+ * This prevents forged tokens from rendering admin HTML.
+ */
 
-import { ReactNode, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
-import apiClient from '@/lib/api';
-import { 
-  LayoutDashboard, 
-  Package, 
-  FolderOpen, 
-  Tag, 
-  Car,
-  ShoppingCart, 
-  Users, 
-  RotateCcw,
-  DollarSign,
-  GitBranch,
-  MessageCircle,
-  HelpCircle,
-  Mail,
-  Home,
-  LogOut,
-  User,
-  Newspaper,
-  Zap
-} from 'lucide-react';
+import { ReactNode } from 'react';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import AdminLayoutClient from './AdminLayoutClient';
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
-  const [messageCount, setMessageCount] = useState(0);
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (!isAuthenticated) {
-        router.replace('/login');
-      } else if (user?.role !== 'admin') {
-        router.replace('/');
-      }
+export default async function AdminLayout({ children }: { children: ReactNode }) {
+  // Get all cookies to forward to backend
+  const cookieStore = await cookies();
+  const allCookies = cookieStore.toString();
+  
+  // Verify admin role via backend (signature verified, role from database)
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  
+  try {
+    const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
+      method: 'GET',
+      headers: {
+        'Cookie': allCookies,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',  // Never cache auth checks
+    });
+    
+    // Token invalid/expired/revoked → redirect to login
+    if (!response.ok) {
+      console.log(`[Admin Layout] Auth check failed: ${response.status}`);
+      redirect('/login?redirect=/admin');
     }
-  }, [isAuthenticated, isLoading, user, router]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      const controller = new AbortController();
-
-      const fetchStats = async () => {
-        try {
-          const res = await apiClient.get<{ success: boolean; data: { newCount: number } }>(
-            '/contact/stats',
-            { signal: controller.signal }
-          );
-          if (res.success) {
-            setMessageCount(res.data.newCount);
-          }
-        } catch (error: any) {
-          if (error.name === 'AbortError') return;
-          console.error('Failed to fetch stats:', error);
-        }
-      };
-
-      fetchStats();
-      
-      // Poll every 30 seconds
-      const interval = setInterval(fetchStats, 30000);
-      return () => {
-        clearInterval(interval);
-        controller.abort();
-      };
+    
+    const userData = await response.json();
+    
+    // Verify admin role (from trusted backend source)
+    if (!userData.success || userData.user?.role !== 'admin') {
+      console.warn(
+        `[Admin Layout] Non-admin access attempt | User: ${userData.user?.id || 'unknown'}`
+      );
+      redirect('/');
     }
-  }, [isAuthenticated]);
-
-  if (isLoading) {
-    return <div className="text-center py-8">Loading...</div>;
+    
+    // Admin verified by backend → render admin layout
+    return <AdminLayoutClient userId={userData.user.id}>{children}</AdminLayoutClient>;
+    
+  } catch (error) {
+    // Backend unreachable or error → deny access (fail closed)
+    console.error(
+      `[Admin Layout] Backend auth check failed | Error: ${error instanceof Error ? error.message : 'Unknown'}`
+    );
+    redirect('/login?redirect=/admin');
   }
-
-  if (!isAuthenticated || user?.role !== 'admin') {
-    return null;
-  }
-
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard' },
-    { icon: FolderOpen, label: 'Categories', href: '/admin/categories' },
-    { icon: Tag, label: 'Brands', href: '/admin/brands' },
-    { icon: Car, label: 'Vehicles', href: '/admin/vehicles' },
-    { icon: Package, label: 'Products', href: '/admin/products' },
-    { icon: ShoppingCart, label: 'Orders', href: '/admin/orders' },
-    { icon: RotateCcw, label: 'Returns', href: '/admin/returns' },
-    { icon: DollarSign, label: 'Refunds', href: '/admin/refunds' },
-    { icon: GitBranch, label: 'Workflows', href: '/admin/workflows' },
-    { icon: MessageCircle, label: 'Reviews', href: '/admin/reviews' },
-    { icon: HelpCircle, label: 'Questions', href: '/admin/questions' },
-    { icon: Mail, label: 'Messages', href: '/admin/messages' },
-    { icon: Newspaper, label: 'Media & News', href: '/admin/media' },
-    { icon: Zap, label: 'Consultations', href: '/admin/consultation' },
-    { icon: Users, label: 'Users', href: '/admin/users' },
-  ];
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 text-white flex flex-col">
-        <div className="p-6 flex-1 overflow-y-auto">
-          <h2 className="text-2xl font-bold mb-8">Admin Panel</h2>
-          <nav className="space-y-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-800 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5" />
-                    {item.label}
-                  </div>
-                  {item.href === '/admin/messages' && messageCount > 0 && (
-                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                      {messageCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Admin Header */}
-        <header className="bg-white shadow-sm h-16 flex items-center justify-between px-6 flex-none z-10">
-          <div className="font-semibold text-gray-700">
-            {/* You could add dynamic breadcrumbs here */}
-          </div>
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="text-gray-500 hover:text-gray-900 flex items-center text-sm font-medium transition-colors">
-              <Home className="h-4 w-4 mr-1.5" />
-              View Website
-            </Link>
-            <div className="h-6 w-px bg-gray-300 mx-2"></div>
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center text-sm text-gray-700 font-medium">
-                <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mr-2">
-                  <User className="h-4 w-4" />
-                </div>
-                <span>{user?.name || 'Admin'}</span>
-              </div>
-              <button 
-                onClick={logout}
-                className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-full hover:bg-red-50"
-                title="Logout"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Page Content Container */}
-        <div className="flex-1 overflow-auto">
-          {children}
-        </div>
-      </main>
-    </div>
-  );
 }

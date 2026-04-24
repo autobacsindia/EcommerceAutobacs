@@ -222,14 +222,37 @@ export const revokeAllRefreshTokens = async (user) => {
 
 /**
  * Rotate refresh token (generate new one and revoke old one)
+ * DETECTS TOKEN REUSE: If old token was already revoked, this is a reuse attack
  * @param {Object} user - User mongoose document
  * @param {string} oldRefreshToken - Old refresh token to revoke
  * @param {string} ipAddress - Client IP address
  * @param {string} userAgent - Client user agent
  * @returns {Object} - New token pair
+ * @throws {Error} - If token reuse is detected
  */
 export const rotateRefreshToken = async (user, oldRefreshToken, ipAddress = null, userAgent = null) => {
-  // Revoke old token
+  const hashedToken = crypto.createHash('sha256').update(oldRefreshToken).digest('hex');
+  
+  // SECURITY CHECK: Verify the old token exists before revoking
+  // If it doesn't exist, it was already revoked → TOKEN REUSE ATTACK!
+  const tokenExists = user.refreshTokens.some(rt => rt.token === hashedToken);
+  
+  if (!tokenExists) {
+    // TOKEN REUSE DETECTED!
+    // Someone is trying to use an already-revoked refresh token
+    console.error(
+      `[SECURITY] Refresh token reuse detected! | User: ${user.email} | IP: ${ipAddress} | ` +
+      `UA: ${userAgent}`
+    );
+    
+    // NUCLEAR OPTION: Revoke ALL sessions for this user
+    await revokeAllRefreshTokens(user);
+    
+    // Throw error to be caught by auth route handler
+    throw new Error('REFRESH_TOKEN_REUSE_DETECTED');
+  }
+  
+  // Normal rotation: revoke old token, generate new one
   await revokeRefreshToken(user, oldRefreshToken);
   
   // Generate new token pair
@@ -295,6 +318,57 @@ export const cleanupExpiredTokens = async (UserModel) => {
 };
 
 /**
+ * Set access token cookie on response
+ * @param {Object} res - Express response object
+ * @param {string} token - Access token
+ * @param {string|number} expiresIn - Token expiry (e.g., '30m' or 1800)
+ */
+export const setAccessTokenCookie = (res, token, expiresIn) => {
+  // Parse expiry time to milliseconds
+  let maxAge;
+  if (typeof expiresIn === 'string') {
+    // Parse '30m', '15m', '1h', etc.
+    const match = expiresIn.match(/^(\d+)([mhd])$/);
+    if (match) {
+      const value = parseInt(match[1]);
+      const unit = match[2];
+      maxAge = value * (unit === 'm' ? 60 : unit === 'h' ? 3600 : 86400) * 1000;
+    } else {
+      maxAge = 30 * 60 * 1000; // Default: 30 minutes
+    }
+  } else if (typeof expiresIn === 'number') {
+    maxAge = expiresIn * 1000; // Convert seconds to ms
+  } else {
+    maxAge = 30 * 60 * 1000; // Default: 30 minutes
+  }
+  
+  const cookieOptions = {
+    httpOnly: true,              // JavaScript cannot read
+    secure: process.env.NODE_ENV === 'production',  // HTTPS only in prod
+    sameSite: 'lax',             // Lax for OAuth/payment callback compatibility + CSRF token for state-changing routes
+    path: '/',
+    maxAge: maxAge,
+    priority: 'high'             // Helps browsers prioritize auth cookies under pressure
+  };
+  
+  res.cookie('accessToken', token, cookieOptions);
+};
+
+/**
+ * Clear access token cookie on response
+ * @param {Object} res - Express response object
+ */
+export const clearAccessTokenCookie = (res) => {
+  res.clearCookie('accessToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    priority: 'high'
+  });
+};
+
+/**
  * Set refresh token cookie on response
  * @param {Object} res - Express response object
  * @param {string} token - Refresh token
@@ -304,9 +378,10 @@ export const setRefreshTokenCookie = (res, token, expiresAt) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // Strict for production
+    sameSite: 'lax',  // Lax for OAuth/payment callback compatibility + CSRF token for state-changing routes
     path: '/', // Allow on all paths so logout can work
-    expires: expiresAt
+    expires: expiresAt,
+    priority: 'high'  // Helps browsers prioritize auth cookies under pressure
   };
   
   res.cookie('refreshToken', token, cookieOptions);
@@ -320,8 +395,9 @@ export const clearRefreshTokenCookie = (res) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-    path: '/'
+    sameSite: 'lax',
+    path: '/',
+    priority: 'high'
   };
   
   res.clearCookie('refreshToken', cookieOptions);

@@ -10,7 +10,12 @@ import crypto from 'crypto';
  *    OR
  *    - A valid Authorization header (Bearer token) - assuming API usage
  *    
- * This ensures that cookie-based authentication (like /auth/refresh) is protected against CSRF.
+ * This ensures that cookie-based authentication (access token + refresh token cookies)
+ * is protected against CSRF attacks.
+ * 
+ * NOTE: SameSite=Lax helps but is NOT complete CSRF defense.
+ * SameSite=Lax allows top-level navigation (GET) but blocks cross-site POST.
+ * However, SameSite is not a substitute for CSRF tokens on state-changing routes.
  */
 
 export const csrfProtection = (req, res, next) => {
@@ -72,25 +77,24 @@ export const csrfProtection = (req, res, next) => {
 
   // If no token in cookie yet (first request), or mismatch
   if (!expectedToken || !actualToken || expectedToken !== actualToken) {
-    // Exception: If valid Bearer token is present, we might allow it (stateless API style)
-    // However, if the endpoint relies on cookies (like /refresh), we MUST block it.
-    
-    // Check if the request is for the refresh endpoint which uses cookies
-    const isCookieAuthEndpoint = req.path.includes('/auth/refresh') || req.path.includes('/auth/logout');
-    
-    if (isCookieAuthEndpoint) {
-      return res.status(403).json({
-        success: false,
-        message: 'CSRF token missing or invalid'
-      });
-    }
-
-    // For other endpoints, if they have Bearer token, they are safe
+    // Exception: If valid Bearer token is present, it's CSRF-safe
+    // (browser doesn't send Bearer tokens automatically on cross-site requests)
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
       return next();
     }
+    
+    // CRITICAL: If request uses cookie-based auth (accessToken cookie present),
+    // we MUST enforce CSRF token to prevent CSRF attacks
+    const isUsingCookieAuth = req.cookies['accessToken'] || req.cookies['refreshToken'];
+    
+    if (isUsingCookieAuth) {
+      return res.status(403).json({
+        success: false,
+        message: 'CSRF token missing or invalid. Please refresh the page and try again.'
+      });
+    }
 
-    // Default block
+    // Default block (no auth method detected)
     return res.status(403).json({
       success: false,
       message: 'CSRF token missing or invalid'

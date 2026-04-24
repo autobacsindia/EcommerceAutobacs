@@ -409,6 +409,52 @@ export const failedLoginRateLimit = rateLimit({
   keyGenerator: (req) => `rate_limit:failed_login:${req.ip || req.connection.remoteAddress}:${req.body.email || ''}`
 });
 
+// Refresh token endpoint rate limiting (prevent token abuse)
+export const refreshTokenRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // 30 refresh attempts per minute (should be enough for normal usage)
+  message: 'Too many token refresh attempts. Please wait before trying again.',
+  keyGenerator: (req) => `rate_limit:refresh:${req.ip || req.connection.remoteAddress}`
+});
+
+// Global fallback rate limiter for ALL API routes (safety net)
+export const globalApiRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // 500 requests per 15 minutes per IP (generous but prevents abuse)
+  message: 'Too many requests. Please slow down.',
+  keyGenerator: (req) => `rate_limit:global:${req.ip || req.connection.remoteAddress}`,
+  // Log excessive usage for monitoring
+  handler: (req, res) => {
+    console.warn(
+      `[RateLimit] Global API limit exceeded | IP: ${req.ip} | Path: ${req.path} | ` +
+      `UA: ${req.get('user-agent') || 'unknown'}`
+    );
+    res.status(429).json({
+      success: false,
+      message: 'Too many requests. Please slow down.'
+    });
+  }
+});
+
+// Stricter rate limiter for admin routes (higher value targets)
+export const adminRouteRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // 200 requests per 15 minutes (stricter than global 500)
+  message: 'Too many admin requests. Please slow down.',
+  keyGenerator: (req) => `rate_limit:admin:${req.user?.id || req.ip || req.connection.remoteAddress}`,
+  // Log excessive admin usage for security monitoring
+  handler: (req, res) => {
+    console.warn(
+      `[RateLimit] Admin route limit exceeded | User: ${req.user?.id || 'unknown'} | IP: ${req.ip} | ` +
+      `Path: ${req.path} | UA: ${req.get('user-agent') || 'unknown'}`
+    );
+    res.status(429).json({
+      success: false,
+      message: 'Too many admin requests. Please slow down.'
+    });
+  }
+});
+
 // Deprecated - kept for backward compatibility
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

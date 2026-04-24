@@ -22,7 +22,8 @@ import {
   forgotPasswordRateLimit,
   resetPasswordRateLimit,
   resendVerificationRateLimit,
-  verifyEmailRateLimit
+  verifyEmailRateLimit,
+  refreshTokenRateLimit
 } from "../middleware/rateLimitMiddleware.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { generateTokenPair as generateCryptoTokenPair, hashToken } from "../utils/tokenUtils.js";
@@ -43,7 +44,9 @@ import {
   rotateRefreshToken,
   logLoginAttempt,
   setRefreshTokenCookie,
-  clearRefreshTokenCookie
+  clearRefreshTokenCookie,
+  setAccessTokenCookie,
+  clearAccessTokenCookie
 } from "../utils/sessionManager.js";
 
 const router = express.Router();
@@ -130,7 +133,8 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
     userAgent
   );
   
-  // Set refresh token cookie
+  // Set BOTH tokens as httpOnly cookies (SECURE - XSS protected)
+  setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
   setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
 
   // Log successful registration
@@ -168,9 +172,7 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
   res.status(201).json({ 
     success: true,
     message: "User registered successfully. Please check your email to verify your account",
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
-    expiresIn: tokens.accessTokenExpiry,
+    // NOTE: Tokens are now set as httpOnly cookies, not in response body
     user: { 
       id: newUser._id, 
       name: newUser.name, 
@@ -229,7 +231,8 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     userAgent
   );
   
-  // Set refresh token cookie
+  // Set BOTH tokens as httpOnly cookies (SECURE - XSS protected)
+  setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
   setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
   
   // Log successful login
@@ -238,8 +241,7 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
   res.json({
     success: true,
     message: "Login successful",
-    accessToken: tokens.accessToken,
-    expiresIn: tokens.accessTokenExpiry,
+    // NOTE: accessToken is now set as httpOnly cookie, not in response body
     user: { 
       id: user._id, 
       name: user.name, 
@@ -249,10 +251,27 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
   });
 }));
 
+// @route   GET /auth/me
+// @desc    Get current user info (for server-side verification)
+// @access  Private
+router.get("/me", protect, asyncHandler(async (req, res) => {
+  // req.user is set by protect middleware (verified JWT)
+  res.json({
+    success: true,
+    user: {
+      id: req.user._id,
+      email: req.user.email,
+      name: req.user.name,
+      role: req.user.role,
+      isVerified: req.user.isVerified
+    }
+  });
+}));
+
 // @route   POST /auth/refresh
 // @desc    Refresh access token using refresh token
-// @access  Public
-router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res) => {
+// @access  Public (but rate limited to prevent abuse)
+router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
   try {
@@ -286,14 +305,24 @@ router.post("/refresh", validateRefreshTokenInput, asyncHandler(async (req, res)
       console.log(`[Auth] Token refreshed for user: ${user.email}`);
     }
     
+    // Set BOTH tokens as httpOnly cookies (SECURE - XSS protected)
+    setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
+    setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+    
     res.json({
       success: true,
-      message: 'Token refreshed successfully',
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresIn: tokens.accessTokenExpiry
+      message: 'Token refreshed successfully'
+      // NOTE: Tokens are now set as httpOnly cookies, not in response body
     });
   } catch (error) {
+    // SECURITY: Handle refresh token reuse detection
+    if (error.message === 'REFRESH_TOKEN_REUSE_DETECTED') {
+      return res.status(401).json({
+        success: false,
+        message: 'Session revoked due to suspicious activity. Please login again.'
+      });
+    }
+    
     if (process.env.NODE_ENV !== 'test') {
       console.error('[Auth] Token refresh error:', error);
     }
@@ -322,12 +351,13 @@ router.post("/logout", asyncHandler(async (req, res) => {
     }
   }
   
-  // Clear refresh token cookie
-  clearRefreshTokenCookie(res);
-
+  // Clear BOTH token cookies (SECURE - XSS protected)
+  clearAccessTokenCookie(res);  // Clear access token cookie
+  clearRefreshTokenCookie(res);  // Clear refresh token cookie
+  
   res.json({
     success: true,
-    message: "Logged out successfully"
+    message: 'Logged out successfully'
   });
 }));
 
@@ -1078,10 +1108,15 @@ router.post(
 
     console.log(`[Auth] OAuth code exchanged | user: ${parsedCode.userId} | provider: ${parsedCode.provider}`);
 
+    // Set access token as httpOnly cookie (SECURE - XSS protected)
+    // parsedTokens should contain accessToken and expiresIn from social login
+    if (parsedTokens.accessToken && parsedTokens.expiresIn) {
+      setAccessTokenCookie(res, parsedTokens.accessToken, parsedTokens.expiresIn);
+    }
+
     return res.json({
       success: true,
-      accessToken: parsedTokens.accessToken,
-      expiresIn:   parsedTokens.expiresIn
+      // NOTE: accessToken is now set as httpOnly cookie, not in response body
     });
   })
 );

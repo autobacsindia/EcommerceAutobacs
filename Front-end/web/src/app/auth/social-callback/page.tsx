@@ -7,8 +7,8 @@ import apiClient from '@/lib/api-client';
 
 type ExchangeCodeResponse = {
   success: boolean;
-  accessToken?: string;
   message?: string;
+  // NOTE: accessToken is now set as httpOnly cookie by backend, not in response body
 };
 
 export default function SocialCallbackPage() {
@@ -31,10 +31,10 @@ export default function SocialCallbackPage() {
         // ── Secure path: one-time code exchange (PKCE-lite) ─────────────────
         if (code) {
           const res = await apiClient.post('/auth/exchange-code', { code }) as ExchangeCodeResponse;
-          if (!res.success || !res.accessToken) {
+          if (!res.success) {
             throw new Error(res.message || 'Code exchange failed');
           }
-          apiClient.setAuthToken(res.accessToken);
+          // Backend sets access token as httpOnly cookie automatically
           await checkAuth();
           router.replace('/');
           return;
@@ -53,6 +53,8 @@ export default function SocialCallbackPage() {
           return;
         }
 
+        // Legacy path: set token (deprecated - should use cookie exchange)
+        console.warn('[Social Callback] Using legacy hash-based auth (deprecated)');
         apiClient.setAuthToken(accessToken);
         await checkAuth();
         router.replace('/');

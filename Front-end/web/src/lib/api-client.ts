@@ -41,45 +41,47 @@ class APIClient {
   private enableLogging = process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test';
 
   constructor() {
-    // Initialize token from localStorage if available (client-side only)
+    // NOTE: Tokens are now stored in httpOnly cookies set by the backend
+    // Browser automatically sends cookies with requests - no manual token management needed
+    // This protects against XSS attacks (JavaScript cannot read httpOnly cookies)
+    
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem(TOKEN_KEY);
-      this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-      // Initialize or generate session ID for guest cart support
+      // Initialize session ID for guest cart support
       this.getSessionId();
     }
   }
 
   /**
    * Set authentication token
+   * DEPRECATED: Tokens are now managed via httpOnly cookies set by backend
+   * This method is kept for backward compatibility but does nothing
    */
   setAuthToken(token: string): void {
-    this.token = token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(TOKEN_KEY, token);
-    }
+    // NO-OP: Backend sets access token as httpOnly cookie
+    // Frontend should NEVER store tokens in localStorage (XSS vulnerability)
+    console.warn('[API Client] setAuthToken() is deprecated - tokens are now managed via httpOnly cookies');
   }
 
   /**
    * Set refresh token
+   * DEPRECATED: Tokens are now managed via httpOnly cookies set by backend
+   * This method is kept for backward compatibility but does nothing
    */
   setRefreshToken(token: string): void {
-    this.refreshToken = token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(REFRESH_TOKEN_KEY, token);
-    }
+    // NO-OP: Backend sets refresh token as httpOnly cookie
+    // Frontend should NEVER store tokens in localStorage (XSS vulnerability)
+    console.warn('[API Client] setRefreshToken() is deprecated - tokens are now managed via httpOnly cookies');
   }
 
   /**
    * Clear authentication token
+   * NOTE: Backend clears cookies on logout, this just clears local state
    */
   clearAuthToken(): void {
     this.token = null;
     this.refreshToken = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
-    }
+    // NOTE: Backend clears httpOnly cookies on logout endpoint
+    // No localStorage to clear (tokens were never stored here)
   }
 
   /**

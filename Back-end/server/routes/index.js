@@ -21,6 +21,7 @@ import {
   authenticatedUserRateLimit,
   checkoutRateLimit,
   adminRateLimit,
+  adminRouteRateLimit,
   locationRateLimit,
   contactFormRateLimit,
   consultationRateLimit,
@@ -117,15 +118,15 @@ apiRouter.use('/payment-methods', checkoutRateLimit, paymentMethodRoutes);
 // ============================================================================
 // ADMIN DOMAIN
 // Routes: /dashboard/*, /warehouses/*, /delivery-zones/*, /wordpress/*, /media/*, /scheduled-tasks/*
-// Rate Limit: 120 req/min (admin operations)
+// Rate Limit: 200 req/15min (stricter than global 500 - higher value targets)
 // Timeout: 120s for wordpress sync (bulk operations)
 // ============================================================================
-apiRouter.use('/dashboard', adminRateLimit, dashboardRoutes);
-apiRouter.use('/warehouses', adminRateLimit, warehouseRoutes);
-apiRouter.use('/delivery-zones', adminRateLimit, deliveryZoneRoutes);
-apiRouter.use('/wordpress', setRequestTimeout(120000), adminRateLimit, wordpressRoutes);
+apiRouter.use('/dashboard', adminRouteRateLimit, dashboardRoutes);
+apiRouter.use('/warehouses', adminRouteRateLimit, warehouseRoutes);
+apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
+apiRouter.use('/wordpress', setRequestTimeout(120000), adminRouteRateLimit, wordpressRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access
-apiRouter.use('/scheduled-tasks', adminRateLimit, scheduledTasksRoutes);
+apiRouter.use('/scheduled-tasks', adminRouteRateLimit, scheduledTasksRoutes);
 
 // ============================================================================
 // ADMIN MONITORING DOMAIN

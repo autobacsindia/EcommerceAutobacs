@@ -8,8 +8,12 @@ import { verifyTokenWithRotation } from "../utils/jwtSecretManager.js";
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  // Check for token in Authorization header
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  // PRIORITY 1: Check for access token in httpOnly cookie (SECURE - XSS protected)
+  if (req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken;
+  }
+  // PRIORITY 2: Check for token in Authorization header (backward compatibility for mobile/API clients)
+  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
   }
 
@@ -63,8 +67,12 @@ export const admin = (req, res, next) => {
 export const optionalAuth = asyncHandler(async (req, res, next) => {
   let token;
 
-  // Check for token in Authorization header
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  // PRIORITY 1: Check for access token in httpOnly cookie (SECURE - XSS protected)
+  if (req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken;
+  }
+  // PRIORITY 2: Check for token in Authorization header (backward compatibility)
+  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
   }
 
