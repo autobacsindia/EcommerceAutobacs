@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatible)
 
 /**
- * Next.js Middleware - Admin Route Protection
+ * Next.js Middleware - Protected Route Authentication
  * 
  * This middleware runs BEFORE any page rendering occurs,
  * blocking unauthorized access at the edge.
@@ -13,84 +14,114 @@ import type { NextRequest } from 'next/server';
  * 3. Backend API - REAL security (RBAC enforcement)
  * 4. Client redirect - UX fallback (now redundant)
  * 
- * WARNING: This middleware does NOT verify JWT signature.
- * It only checks the token exists and decodes the payload.
- * A forged token could bypass this check.
+ * Protected Routes:
+ * - /admin/* - Admin only (JWT verification + role check)
+ * - /account/* - Authenticated users (JWT verification)
+ * - /orders/* - Authenticated users (JWT verification)
+ * - /checkout/* - Authenticated users (JWT verification)
  * 
- * REAL security is enforced by backend admin middleware.
- * This is an additional guard for UX/performance.
+ * Security:
+ * - JWT signature verification using jose library
+ * - Token expiry validation
+ * - Role-based access control for admin routes
+ * - Automatic token cleanup on expiry/invalid
  */
 
-export function middleware(req: NextRequest) {
+// JWT secret for token verification
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+
+// Define protected routes
+const PROTECTED_ROUTES = [
+  '/account',
+  '/orders',
+  '/checkout',
+];
+
+const ADMIN_ROUTES = [
+  '/admin',
+];
+
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   
-  // Only protect admin routes
-  if (!pathname.startsWith('/admin')) {
+  // UX: Redirect authenticated users away from /login
+  if (pathname === '/login') {
+    const accessToken = req.cookies.get('accessToken');
+    if (accessToken?.value) {
+      try {
+        const secret = new TextEncoder().encode(JWT_SECRET);
+        await jwtVerify(accessToken.value, secret);
+        // User is authenticated → redirect to home or dashboard
+        return NextResponse.redirect(new URL('/', req.url));
+      } catch {
+        // Token invalid → allow access to /login
+      }
+    }
+  }
+  
+  // Check if route is protected
+  const isProtectedRoute = PROTECTED_ROUTES.some(route => pathname.startsWith(route));
+  const isAdminRoute = ADMIN_ROUTES.some(route => pathname.startsWith(route));
+  
+  // Not a protected route → allow
+  if (!isProtectedRoute && !isAdminRoute) {
     return NextResponse.next();
   }
   
   // Get access token from httpOnly cookie
   const accessToken = req.cookies.get('accessToken');
   
-  // No token → block immediately (not logged in)
+  // No token → redirect to login with return URL
   if (!accessToken || !accessToken.value) {
-    // Redirect to login with return URL
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
   
   try {
-    // Decode JWT payload (DOES NOT verify signature)
-    // Format: header.payload.signature
-    const parts = accessToken.value.split('.');
-    if (parts.length !== 3) {
-      throw new Error('Invalid token format');
+    // CRITICAL: Verify JWT signature with issuer/audience checks
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const { payload } = await jwtVerify(accessToken.value, secret, {
+      issuer: process.env.JWT_ISSUER || 'autobacs-ecommerce',
+      audience: process.env.JWT_AUDIENCE || 'autobacs-users',
+    });
+    
+    // Admin routes: Defensive role check (handles missing role)
+    if (isAdminRoute) {
+      if (!payload || payload.role !== 'admin') {
+        console.warn(
+          `[Middleware] Non-admin access attempt to ${pathname} | User: ${payload?.sub || 'unknown'}`
+        );
+        return NextResponse.redirect(new URL('/', req.url));
+      }
     }
     
-    // Decode payload (base64url)
-    const payload = JSON.parse(
-      Buffer.from(parts[1], 'base64').toString()
-    );
-    
-    // Check token expiration (exp is in seconds, Date.now() is in ms)
-    if (payload.exp && payload.exp * 1000 < Date.now()) {
-      console.warn(`[Middleware] Expired token for ${pathname}`);
-      const response = NextResponse.redirect(new URL('/login', req.url));
-      response.cookies.delete('accessToken');
-      response.cookies.delete('refreshToken');
-      return response;
-    }
-    
-    // Check if user has admin role
-    if (payload.role !== 'admin') {
-      // Not an admin → redirect to homepage
-      console.warn(
-        `[Middleware] Non-admin access attempt to ${pathname} | User: ${payload.id}`
-      );
-      return NextResponse.redirect(new URL('/', req.url));
-    }
-    
-    // Admin token → allow request to proceed
+    // Valid token → allow request to proceed
     return NextResponse.next();
     
   } catch (error) {
-    // Invalid token → block access
+    // Invalid/expired token → redirect to login with return URL
     console.error(
-      `[Middleware] Invalid admin token for ${pathname} | Error: ${error instanceof Error ? error.message : 'Unknown'}`
+      `[Middleware] Invalid token for ${pathname} | Error: ${error instanceof Error ? error.message : 'Unknown'}`
     );
     
-    // Clear invalid cookie and redirect to login
-    const response = NextResponse.redirect(new URL('/login', req.url));
+    // Clear invalid cookies and redirect with return URL
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    
+    const response = NextResponse.redirect(loginUrl);
     response.cookies.delete('accessToken');
     response.cookies.delete('refreshToken');
     return response;
   }
 }
 
-// Apply middleware only to admin routes
+// Apply middleware to protected routes
 export const config = {
   matcher: [
-    '/admin/:path*',  // All admin routes
+    '/account/:path*',
+    '/orders/:path*',
+    '/checkout/:path*',
+    '/admin/:path*',
   ],
 };

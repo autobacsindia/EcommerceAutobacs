@@ -13,17 +13,77 @@
 
 import productService from "../services/productService.js";
 import SearchService from "../services/searchService.js";
+import cacheService, { TTL, CACHE_VERSION, getRedisClient } from "../services/cacheService.js";
+
+// Cache stampede protection: Track in-flight requests
+const cacheFetchLocks = new Map(); // cacheKey -> Promise
 
 export const getProducts = async (req, res) => {
-  const searchResults = await SearchService.searchProducts(req.query);
+  // CRITICAL: Add Redis caching for public product API
+  const cacheKey = `${CACHE_VERSION}:products:list:${JSON.stringify(req.query)}`;
   
-  res.json({
-    success: true,
-    count: searchResults.products.length,
-    ...searchResults.pagination,
-    products: searchResults.products,
-    facets: searchResults.facets
-  });
+  try {
+    // Try cache first
+    const cached = await cacheService.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+  } catch (cacheError) {
+    console.warn('[ProductController] Cache read failed:', cacheError.message);
+    // Continue to DB query if cache fails
+  }
+  
+  // CRITICAL: Cache stampede protection - prevent multiple DB queries for same cache key
+  try {
+    const redis = await getRedisClient();
+    const lockKey = `lock:${cacheKey}`;
+    
+    if (redis) {
+      // Try to acquire distributed lock for this cache key
+      const lock = await redis.set(lockKey, 'fetching', 'NX', 'EX', 10); // 10s lock TTL
+      
+      if (!lock) {
+        // Another request is already fetching this data - wait for it
+        console.log('[ProductController] Cache stampede detected, waiting for other request...');
+        
+        // Wait up to 3 seconds for cache to be populated
+        for (let i = 0; i < 30; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const cached = await cacheService.get(cacheKey);
+          if (cached) {
+            console.log('[ProductController] Cache populated by other request, returning cached data');
+            return res.json(cached);
+          }
+        }
+        
+        // Timeout - proceed with DB query anyway
+        console.warn('[ProductController] Cache wait timeout, proceeding with DB query');
+      }
+    }
+    
+    // Cache miss - query database (only one request should reach here per cache key)
+    const searchResults = await SearchService.searchProducts(req.query);
+    
+    const responseData = {
+      success: true,
+      count: searchResults.products.length,
+      ...searchResults.pagination,
+      products: searchResults.products,
+      facets: searchResults.facets
+    };
+    
+    // Cache for 5 minutes (PRODUCT_LIST TTL)
+    try {
+      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
+    } catch (cacheError) {
+      console.warn('[ProductController] Cache write failed:', cacheError.message);
+      // Don't fail request if cache write fails
+    }
+    
+    res.json(responseData);
+  } catch (error) {
+    throw error;
+  }
 };
 
 export const getSearchSuggestions = async (req, res) => {

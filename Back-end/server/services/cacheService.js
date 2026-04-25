@@ -812,3 +812,10 @@ class CacheService {
 }
 
 export default new CacheService();
+
+/**
+ * Export redisClient for direct access (used by WordPress sync)
+ */
+export function getRedisClient() {
+  return redisClient;
+}

@@ -123,7 +123,33 @@ const ProductSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true
-  }
+  },
+  
+  // WordPress/WooCommerce sync fields
+  wpId: {
+    type: Number,
+    unique: true,
+    sparse: true, // Allow null for non-WP products
+    index: true
+  },
+  wpSlug: String,
+  syncedFromWordPress: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  lastSyncedAt: Date,
+  salePrice: {
+    type: Number,
+    min: 0
+  },
+  regularPrice: {
+    type: Number,
+    min: 0
+  },
+  categoryIds: [{
+    type: Number // WordPress category IDs (for sync mapping)
+  }]
 }, { 
   timestamps: true 
 });
@@ -147,5 +173,9 @@ ProductSchema.index({ stock: 1 }); // Stock management
 ProductSchema.index({ compatibleVehicles: 1 }); // Vehicle-specific products
 ProductSchema.index({ isFeatured: 1 }); // Featured products
 ProductSchema.index({ isFastMoving: 1 }); // Fast-moving products
+
+// WordPress sync indexes
+ProductSchema.index({ wpId: 1 }); // Fast lookup by WordPress ID
+ProductSchema.index({ syncedFromWordPress: 1 }); // Filter synced products
 
 export default mongoose.model("Product", ProductSchema);

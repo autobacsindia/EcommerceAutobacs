@@ -56,6 +56,9 @@ import {
 // Import cron service
 import CronService from "./services/cronService.js";
 
+// Import WordPress sync cron job (auto-starts on server boot)
+import './jobs/wordpressSyncJob.js';
+
 // Import adaptive throttling service
 import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
 

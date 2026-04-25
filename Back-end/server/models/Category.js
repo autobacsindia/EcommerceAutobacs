@@ -33,7 +33,21 @@ const CategorySchema = new mongoose.Schema({
   order: {
     type: Number,
     default: 0
-  }
+  },
+  
+  // WordPress/WooCommerce sync fields
+  wpId: {
+    type: Number,
+    unique: true,
+    sparse: true, // Allow null for non-WP categories
+    index: true
+  },
+  syncedFromWordPress: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  lastSyncedAt: Date
 }, { 
   timestamps: true 
 });

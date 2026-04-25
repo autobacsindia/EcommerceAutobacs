@@ -1,8 +1,25 @@
 import express from "express";
 import axios from "axios";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
+import { protect, admin } from "../middleware/authMiddleware.js";
+import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
+
+// SECURITY: All WordPress routes require admin authentication
+router.use(protect, admin);
+
+// Rate limiting for sync endpoints (prevent abuse)
+const syncRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // 50 sync requests per 15 min
+  message: { 
+    success: false, 
+    message: 'Too many sync requests. Please try again later.' 
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // WordPress API configuration from environment variables
 const WORDPRESS_SITE_URL = process.env.WORDPRESS_SITE_URL || '';
@@ -51,8 +68,8 @@ const fetchWithRetry = async (fn, retries = 3, delay = 1000) => {
 
 // @route   GET /wordpress/categories
 // @desc    Get WordPress product categories (proxy endpoint)
-// @access  Public
-router.get("/categories", asyncHandler(async (req, res) => {
+// @access  Private/Admin
+router.get("/categories", syncRateLimit, asyncHandler(async (req, res) => {
   if (!wordpressClient) {
     return res.status(503).json({
       success: false,
@@ -80,11 +97,8 @@ router.get("/categories", asyncHandler(async (req, res) => {
       totalPages: response.headers['x-wp-totalpages'] || 1
     });
   } catch (error) {
-    console.error('Error fetching WordPress categories:', error.message);
-    if (error.response) {
-       console.error('Response status:', error.response.status);
-       console.error('Response data:', error.response.data);
-    }
+    console.error('[WordPress] Error fetching categories:', error.message);
+    // SECURITY: Don't log response data (may contain sensitive info)
     res.status(error.response?.status || 500).json({
       success: false,
       message: error.message || 'Failed to fetch categories from WordPress'
@@ -94,8 +108,8 @@ router.get("/categories", asyncHandler(async (req, res) => {
 
 // @route   GET /wordpress/products
 // @desc    Get WordPress products (proxy endpoint)
-// @access  Public
-router.get("/products", asyncHandler(async (req, res) => {
+// @access  Private/Admin
+router.get("/products", syncRateLimit, asyncHandler(async (req, res) => {
   if (!wordpressClient) {
     return res.status(503).json({
       success: false,
@@ -140,11 +154,8 @@ router.get("/products", asyncHandler(async (req, res) => {
       totalPages: parseInt(response.headers['x-wp-totalpages'] || 1)
     });
   } catch (error) {
-    console.error('Error fetching WordPress products:', error.message);
-    if (error.response) {
-       console.error('Response status:', error.response.status);
-       console.error('Response data:', error.response.data);
-    }
+    console.error('[WordPress] Error fetching products:', error.message);
+    // SECURITY: Don't log response data (may contain sensitive info)
     res.status(error.response?.status || 500).json({
       success: false,
       message: error.message || 'Failed to fetch products from WordPress'
@@ -154,8 +165,8 @@ router.get("/products", asyncHandler(async (req, res) => {
 
 // @route   GET /wordpress/products/:id
 // @desc    Get single WordPress product (proxy endpoint)
-// @access  Public
-router.get("/products/:id", asyncHandler(async (req, res) => {
+// @access  Private/Admin
+router.get("/products/:id", syncRateLimit, asyncHandler(async (req, res) => {
   if (!wordpressClient) {
     return res.status(503).json({
       success: false,
@@ -175,14 +186,34 @@ router.get("/products/:id", asyncHandler(async (req, res) => {
       product: response.data
     });
   } catch (error) {
-    console.error('Error fetching WordPress product:', error.message);
-    if (error.response) {
-       console.error('Response status:', error.response.status);
-       console.error('Response data:', error.response.data);
-    }
+    console.error('[WordPress] Error fetching product:', error.message);
+    // SECURITY: Don't log response data (may contain sensitive info)
     res.status(error.response?.status || 500).json({
       success: false,
       message: error.message || 'Failed to fetch product from WordPress'
+    });
+  }
+}));
+
+// @route   POST /wordpress/sync/products
+// @desc    Manually trigger product sync (admin only)
+// @access  Private/Admin
+router.post("/sync/products", asyncHandler(async (req, res) => {
+  try {
+    const { triggerManualSync } = await import('../services/wordpressSyncService.js');
+    
+    const result = await triggerManualSync();
+    
+    res.json({
+      success: true,
+      message: 'Sync completed successfully',
+      data: result
+    });
+  } catch (error) {
+    console.error('[WordPress] Manual sync failed:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to sync products'
     });
   }
 }));

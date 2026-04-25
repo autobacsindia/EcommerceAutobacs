@@ -1,5 +1,6 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
+import rateLimit from 'express-rate-limit';
 import {
   validateProduct,
   validateProductIdParam,
@@ -69,15 +70,27 @@ import {
 
 const router = express.Router();
 
+// CRITICAL: Rate limiting for public product endpoints (high-traffic)
+const publicProductRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // 200 requests per 15 min (generous for legitimate traffic)
+  message: { 
+    success: false, 
+    message: 'Too many requests. Please try again later.' 
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // @route   GET /products
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
-router.get("/", cacheMiddleware('product-listing'), cacheResponse(300), validateProductSearch, asyncHandler(getProducts));
+router.get("/", publicProductRateLimit, cacheMiddleware('product-listing'), cacheResponse(300), validateProductSearch, asyncHandler(getProducts));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
 // @access  Public
-router.get("/suggestions", cacheResponse(300), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
+router.get("/suggestions", publicProductRateLimit, cacheResponse(300), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
 
 // @route   GET /products/analytics
 // @desc    Get search analytics
@@ -102,7 +115,7 @@ router.delete("/history/:term", validateSearchTermParam, asyncHandler(removeSear
 // @route   GET /products/featured
 // @desc    Get featured products
 // @access  Public
-router.get("/featured", cacheResponse(5 * 60), asyncHandler(getFeaturedProducts));
+router.get("/featured", publicProductRateLimit, cacheResponse(5 * 60), asyncHandler(getFeaturedProducts));
 
 // @route   GET /products/offers
 // @desc    Get products to showcase on Offers page
@@ -117,12 +130,12 @@ router.get('/by-vehicle/:vehicleId', asyncHandler(getProductsByVehicle));
 // @route   GET /products/brands
 // @desc    Get all available brands
 // @access  Public
-router.get('/brands', asyncHandler(getBrands));
+router.get('/brands', publicProductRateLimit, asyncHandler(getBrands));
 
 // @route   GET /products/brands/:brandName
 // @desc    Get products for a specific brand
 // @access  Public
-router.get('/brands/:brandName', asyncHandler(getBrandProducts));
+router.get('/brands/:brandName', publicProductRateLimit, asyncHandler(getBrandProducts));
 
 // @route   GET /products/brands/:brandName/details
 // @desc    Get details for a specific brand

@@ -504,12 +504,17 @@ export const wishlistRateLimit = rateLimit({
   message: 'Too many wishlist requests, please try again later'
 });
 
-// Password reset rate limiters
+// Password reset rate limiters (combined IP + email for forgot, IP-only for reset)
 export const forgotPasswordRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 3, // 3 requests per 15 minutes
   message: 'Too many password reset requests. Please try again later',
-  keyGenerator: (req) => `rate_limit:forgot_password:${req.ip || req.connection.remoteAddress}`
+  // Combined key: IP + email (prevents both IP-based and email-based abuse)
+  keyGenerator: (req) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const email = req.body.email || 'unknown';
+    return `rate_limit:forgot_password:${ip}:${email}`;
+  }
 });
 
 export const resetPasswordRateLimit = rateLimit({

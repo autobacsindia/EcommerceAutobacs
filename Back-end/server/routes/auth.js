@@ -79,10 +79,20 @@ const generateToken = (user) => {
     expiresIn = process.env.JWT_EXPIRE || "30m"; // 30 minutes for regular users
   }
   
+  // JWT standard claims (issuer, audience) go in options only
+  // The library automatically writes them to the token
+  // DO NOT duplicate in payload - causes confusion and mismatches
   return jwt.sign(
-    { id: user._id, role: user.role },
+    { 
+      id: user._id, 
+      role: user.role
+    },
     process.env.JWT_SECRET,
-    { expiresIn }
+    { 
+      expiresIn,
+      issuer: process.env.JWT_ISSUER || 'autobacs-ecommerce',
+      audience: process.env.JWT_AUDIENCE || 'autobacs-users',
+    }
   );
 };
 
@@ -453,12 +463,18 @@ router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword,
     });
   }
 
+  // CRITICAL: Check if user already has an active reset token (prevent multiple active tokens)
+  if (user.resetPasswordToken && user.resetPasswordExpire > Date.now()) {
+    console.log(`[Auth] User ${user.email} already has an active reset token, invalidating old token`);
+    // Old token will be replaced below
+  }
+
   // Generate reset token
   const { token, hashedToken } = generateCryptoTokenPair();
   
-  // Set reset token and expiration (1 hour)
+  // Set reset token and expiration (15 minutes - security best practice)
   user.resetPasswordToken = hashedToken;
-  user.resetPasswordExpire = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  user.resetPasswordExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
   user.resetPasswordUsed = false;
   await user.save();
 
@@ -470,7 +486,7 @@ router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword,
   const emailTemplate = passwordResetEmail({
     name: user.name,
     resetUrl,
-    expiresInMinutes: 60
+    expiresInMinutes: 15
   });
 
   try {
@@ -483,7 +499,8 @@ router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword,
 
     console.log(`[Auth] Password reset email sent to ${user.email}`);
   } catch (error) {
-    console.error('[Auth] Failed to send password reset email:', error);
+    console.error('[Auth] Failed to send password reset email');
+    // SECURITY: Don't log error details (may contain sensitive info)
     // Still return success to prevent email enumeration
   }
 
@@ -568,7 +585,8 @@ router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, as
       html: emailTemplate.html
     });
   } catch (error) {
-    console.error('[Auth] Failed to send password changed email:', error);
+    console.error('[Auth] Failed to send password changed email');
+    // SECURITY: Don't log error details (may contain sensitive info)
     // Continue anyway, password was changed successfully
   }
 

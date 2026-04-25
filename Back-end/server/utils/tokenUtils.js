@@ -15,12 +15,14 @@ export const generateToken = (length = 32) => {
 };
 
 /**
- * Hash a token using SHA-256
+ * Hash a token using SHA-256 with server-side pepper
  * @param {string} token - Plain token to hash
  * @returns {string} - Hashed token
  */
 export const hashToken = (token) => {
-  return crypto.createHash('sha256').update(token).digest('hex');
+  // Add pepper (server-side secret) for additional security
+  const pepper = process.env.RESET_TOKEN_SECRET || 'default-pepper-change-in-production';
+  return crypto.createHash('sha256').update(token + pepper).digest('hex');
 };
 
 /**
