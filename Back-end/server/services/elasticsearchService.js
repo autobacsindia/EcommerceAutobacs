@@ -404,6 +404,10 @@ class ElasticsearchService {
     try {
       // Build the search query
       const searchBody = {
+        // CRITICAL: Timeout prevents long-running queries from killing cluster
+        timeout: '2s',
+        // CRITICAL: terminate_after limits documents evaluated per shard
+        terminate_after: 10000,
         query: {
           function_score: {
             query: {

@@ -217,6 +217,15 @@ OrderSchema.index({ trackingNumber: 1 }); // Tracking lookup
 OrderSchema.index({ 'returnRequest.status': 1 }); // Return request queries
 OrderSchema.index({ 'refundDetails.status': 1 }); // Refund status queries
 
+// CRITICAL: Guest order lookup (order confirmation page, guest order tracking)
+// Partial: Only index documents where sessionId exists AND is not null (guest orders only)
+OrderSchema.index(
+  { sessionId: 1 },
+  {
+    partialFilterExpression: { sessionId: { $exists: true, $ne: null } }
+  }
+);
+
 // Pre-save middleware to add initial status to history
 OrderSchema.pre('save', function(next) {
   // Only add to history if this is a new document or status changed

@@ -116,4 +116,8 @@ const UserSchema = new mongoose.Schema({
   phone: String
 }, { timestamps: true });
 
+// CRITICAL: Explicit index on email (used on every login, forgot password, auth check)
+// unique: true in schema is good, but explicit index ensures it's created
+UserSchema.index({ email: 1 }, { unique: true });
+
 export default mongoose.model("User", UserSchema);

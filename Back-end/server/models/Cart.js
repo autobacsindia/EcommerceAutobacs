@@ -2,17 +2,15 @@ import mongoose from "mongoose";
 
 const CartSchema = new mongoose.Schema({
   // Support both authenticated users and guest sessions
+  // ONE cart per user or session (enforced by unique sparse indexes below)
   user: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "User",
-    required: false, // Make optional for guest checkout
-    unique: true
+    required: false // Optional for guest checkout
   },
   sessionId: {
     type: String,
-    required: false, // Optional for guest sessions
-    unique: true,
-    sparse: true // Allow multiple nulls but ensure unique non-null values
+    required: false // Optional for authenticated users
   },
   isGuest: {
     type: Boolean,
@@ -74,6 +72,36 @@ const CartSchema = new mongoose.Schema({
 
 // Create TTL index for recentChanges
 CartSchema.index({ recentChanges: 1 }, { expireAfterSeconds: 300 });
+
+// CRITICAL: Unique partial indexes for cart retrieval (guest + authenticated)
+// Ensures ONE cart per user or session (data integrity)
+// Partial: Only index documents where field exists AND is not null (more precise than sparse)
+// Unique: Prevents duplicate carts for same user/session
+CartSchema.index(
+  { sessionId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sessionId: { $exists: true, $ne: null } }
+  }
+);
+CartSchema.index(
+  { user: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { user: { $exists: true, $ne: null } }
+  }
+);
+
+// CRITICAL: Enforce mutual exclusivity (user XOR sessionId, not both)
+CartSchema.pre('save', function (next) {
+  if (this.user && this.sessionId) {
+    return next(new Error('Cart cannot have both user and sessionId'));
+  }
+  if (!this.user && !this.sessionId) {
+    return next(new Error('Cart must have either user or sessionId'));
+  }
+  next();
+});
 
 // Calculate totals before saving
 CartSchema.pre('save', function(next) {

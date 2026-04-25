@@ -517,6 +517,46 @@ export const forgotPasswordRateLimit = rateLimit({
   }
 });
 
+// CRITICAL: Search endpoint rate limiting (Elasticsearch protection)
+// Layered approach: Burst control + sustained rate limiting
+export const searchRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 requests per minute (realistic for typing users)
+  message: {
+    success: false,
+    message: 'Too many search requests. Please slow down.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Identity-based limiting: user ID > guest session > IP
+  keyGenerator: (req) => {
+    const userId = req.user?.id || req.user?._id;
+    const guestSession = req.cookies?.guest_session;
+    const ip = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    
+    return `rate_limit:search:${userId || guestSession || ip}`;
+  }
+});
+
+// Burst control: Prevent sudden spikes (20 requests per 10 seconds)
+export const searchBurstLimit = rateLimit({
+  windowMs: 10 * 1000, // 10 seconds
+  max: 20, // 20 requests per 10 seconds
+  message: {
+    success: false,
+    message: 'Search requests too fast. Please slow down.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = req.user?.id || req.user?._id;
+    const guestSession = req.cookies?.guest_session;
+    const ip = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    
+    return `rate_limit:search_burst:${userId || guestSession || ip}`;
+  }
+});
+
 export const resetPasswordRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 requests per 15 minutes

@@ -169,6 +169,49 @@ async function ensureProductionIndexes() {
       }
     }
     
+    // ── Carts Collection Indexes ────────────────────────────────────────────
+    console.log('\nChecking Carts collection indexes...');
+    const cartsCol = db.collection('carts');
+    
+    const cartIndexes = [
+      {
+        name: 'sessionId',
+        spec: { sessionId: 1 },
+        options: { 
+          unique: true, 
+          partialFilterExpression: { sessionId: { $exists: true, $ne: null } },
+          background: true 
+        },
+        description: 'Guest cart lookup (unique per session, partial index)'
+      },
+      {
+        name: 'user',
+        spec: { user: 1 },
+        options: { 
+          unique: true, 
+          partialFilterExpression: { user: { $exists: true, $ne: null } },
+          background: true 
+        },
+        description: 'Authenticated user cart lookup (unique per user, partial index)'
+      }
+    ];
+    
+    for (const idx of cartIndexes) {
+      try {
+        await cartsCol.createIndex(idx.spec, idx.options);
+        results.created.push(`Carts.${idx.name} - ${idx.description}`);
+        console.log(`  ✓ Created: ${idx.name}`);
+      } catch (err) {
+        if (err.code === 85 || err.message.includes('already exists')) {
+          results.existing.push(`Carts.${idx.name}`);
+          console.log(`  ⊘ Already exists: ${idx.name}`);
+        } else {
+          results.errors.push(`Carts.${idx.name}: ${err.message}`);
+          console.error(`  ✗ Error: ${idx.name} - ${err.message}`);
+        }
+      }
+    }
+    
     // ── Orders Collection Indexes ───────────────────────────────────────────
     console.log('\nChecking Orders collection indexes...');
     const ordersCol = db.collection('orders');
@@ -191,6 +234,15 @@ async function ensureProductionIndexes() {
         spec: { 'payment.razorpayOrderId': 1 },
         options: { sparse: true, background: true },
         description: 'Razorpay order lookup'
+      },
+      {
+        name: 'sessionId',
+        spec: { sessionId: 1 },
+        options: { 
+          partialFilterExpression: { sessionId: { $exists: true, $ne: null } },
+          background: true 
+        },
+        description: 'Guest order lookup (order confirmation, tracking, partial index)'
       }
     ];
     

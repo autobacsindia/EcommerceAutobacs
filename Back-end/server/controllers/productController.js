@@ -88,6 +88,17 @@ export const getProducts = async (req, res) => {
 
 export const getSearchSuggestions = async (req, res) => {
   const { q, limit = 10 } = req.query;
+  
+  // Query length guard: Prevent empty/short queries
+  if (!q || q.trim().length < 2) {
+    return res.json({
+      success: true,
+      suggestions: [],
+      corrections: [],
+      history: []
+    });
+  }
+  
   const result = await SearchService.getSearchSuggestions(q, parseInt(limit));
   
   const history = []; // Placeholder
