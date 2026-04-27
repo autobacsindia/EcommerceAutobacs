@@ -271,6 +271,8 @@ class APIClient {
 
   /**
    * Build headers for requests
+   * NOTE: With httpOnly cookies, we don't need Authorization header
+   * Browser automatically sends cookies with credentials: 'include'
    */
   private getHeaders(customHeaders?: HeadersInit): HeadersInit {
     const headers: HeadersInit = {
@@ -278,7 +280,12 @@ class APIClient {
       ...customHeaders
     };
 
-    if (this.token) {
+    // REMOVED: Authorization header - using httpOnly cookies instead
+    // Browser automatically sends cookies when credentials: 'include' is set
+    // This prevents XSS attacks (JavaScript can't read tokens)
+    
+    // DEPRECATED: Only add if manually set (backward compatibility)
+    if (this.token && this.token !== 'httpOnly-cookie') {
       (headers as any)['Authorization'] = `Bearer ${this.token}`;
     }
 
@@ -655,7 +662,9 @@ class APIClient {
           ...restOptions,
           method: interceptedConfig.method,
           headers: interceptedConfig.headers,
-          signal
+          signal,
+          // CRITICAL: Include cookies (httpOnly) with every request
+          credentials: 'include'
         };
 
         if (interceptedConfig.data !== undefined) {
