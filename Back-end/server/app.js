@@ -29,7 +29,7 @@ import debugRoutes from './routes/debug.js';
 import { setCronService } from './routes/scheduledTasks.js';
 
 // Import middleware
-import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
+import { errorHandler, notFound, requestLogger } from "./middleware/errorMiddleware.js";
 // Sanitization middleware
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
 import { sentryContextMiddleware } from "./middleware/sentryContext.js";
@@ -694,6 +694,11 @@ const corsOptions = {
 app.options('*', cors(corsOptions));
 
 app.use(cors(corsOptions));
+
+// CRITICAL: Request ID middleware (MUST be early for tracing)
+// Adds unique ID to every request for log correlation
+app.use(requestLogger);
+
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 

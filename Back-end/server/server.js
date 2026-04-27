@@ -168,7 +168,38 @@ async function bootstrap() {
       console.warn('⚠ Adaptive throttling skipped:', e.message);
     }
 
-    // 4. Elasticsearch in background (optional, non-fatal)
+    // 4. CRITICAL: Redis health check (required in production)
+    if (process.env.NODE_ENV === 'production' && process.env.REDIS_URL) {
+      try {
+        // Import Redis client from rate limiter
+        const { default: Redis } = await import('ioredis');
+        const testClient = new Redis(process.env.REDIS_URL, {
+          maxRetriesPerRequest: 1,
+          connectTimeout: 5000,
+          commandTimeout: 2000,
+          tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
+        });
+
+        await testClient.ping();
+        await testClient.quit();
+        console.log('✓ Redis connection verified');
+      } catch (err) {
+        console.error('✗ FATAL: Redis is required in production but connection failed');
+        console.error('  Error:', err.message);
+        console.error('');
+        console.error('  FIX: Ensure Redis is running and REDIS_URL is correctly configured');
+        process.exit(1);
+      }
+    } else if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+      console.error('✗ FATAL: REDIS_URL environment variable is required in production');
+      console.error('');
+      console.error('  FIX: Provision Redis (e.g., Upstash) and set REDIS_URL + REDIS_TOKEN');
+      process.exit(1);
+    } else {
+      console.log('✓ Redis check skipped (development mode)');
+    }
+
+    // 5. Elasticsearch in background (optional, non-fatal)
     elasticsearchService.testConnection().catch(() => {});
 
     // 5. Start HTTP server last, after all services are ready

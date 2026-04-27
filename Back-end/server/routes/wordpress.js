@@ -6,8 +6,8 @@ import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
 
-// SECURITY: All WordPress routes require admin authentication
-router.use(protect, admin);
+// SECURITY: Admin-only routes will have protect+admin applied individually
+// Public proxy endpoints (categories, products) don't need auth
 
 // Rate limiting for sync endpoints (prevent abuse)
 const syncRateLimit = rateLimit({
@@ -68,7 +68,7 @@ const fetchWithRetry = async (fn, retries = 3, delay = 1000) => {
 
 // @route   GET /wordpress/categories
 // @desc    Get WordPress product categories (proxy endpoint)
-// @access  Private/Admin
+// @access  Public (read-only proxy)
 router.get("/categories", syncRateLimit, asyncHandler(async (req, res) => {
   if (!wordpressClient) {
     return res.status(503).json({
@@ -108,7 +108,7 @@ router.get("/categories", syncRateLimit, asyncHandler(async (req, res) => {
 
 // @route   GET /wordpress/products
 // @desc    Get WordPress products (proxy endpoint)
-// @access  Private/Admin
+// @access  Public (read-only proxy)
 router.get("/products", syncRateLimit, asyncHandler(async (req, res) => {
   if (!wordpressClient) {
     return res.status(503).json({
@@ -165,7 +165,7 @@ router.get("/products", syncRateLimit, asyncHandler(async (req, res) => {
 
 // @route   GET /wordpress/products/:id
 // @desc    Get single WordPress product (proxy endpoint)
-// @access  Private/Admin
+// @access  Public (read-only proxy)
 router.get("/products/:id", syncRateLimit, asyncHandler(async (req, res) => {
   if (!wordpressClient) {
     return res.status(503).json({
@@ -198,7 +198,7 @@ router.get("/products/:id", syncRateLimit, asyncHandler(async (req, res) => {
 // @route   POST /wordpress/sync/products
 // @desc    Manually trigger product sync (admin only)
 // @access  Private/Admin
-router.post("/sync/products", asyncHandler(async (req, res) => {
+router.post("/sync/products", protect, admin, asyncHandler(async (req, res) => {
   try {
     const { triggerManualSync } = await import('../services/wordpressSyncService.js');
     

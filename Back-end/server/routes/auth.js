@@ -574,7 +574,15 @@ router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, as
 
   await user.save();
 
-  // Send password changed notification
+  // CRITICAL: Atomic increment of session version (prevents race conditions)
+  // This ensures user must login again with new password
+  await User.updateOne(
+    { _id: user._id },
+    { $inc: { sessionVersion: 1 } }
+  );
+
+  // Log security event
+  console.log(`[Auth] Password reset successful for user: ${user.email} | Session invalidated`);
   const emailTemplate = passwordChangedEmail({ name: user.name });
   
   try {

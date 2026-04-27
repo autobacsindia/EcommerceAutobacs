@@ -110,11 +110,22 @@ router.put("/:id", protect, admin, validateUserUpdate, asyncHandler(async (req, 
   
   // Update user fields
   if (name) user.name = name;
-  if (email) user.email = email;
+  if (email) user.email = email.toLowerCase();
   if (role) user.role = role;
-  if (isActive !== undefined) user.isActive = isActive;
-  
+  if (typeof isActive !== 'undefined') user.isActive = isActive;
+
   const updatedUser = await user.save();
+
+  // CRITICAL: Atomic increment of session version on security-sensitive changes
+  // This invalidates all existing sessions when email/role changes
+  if (email || role) {
+    await User.updateOne(
+      { _id: user._id },
+      { $inc: { sessionVersion: 1 } }
+    );
+    
+    console.log(`[Users] Session version incremented for user ${user._id} (email/role changed)`);
+  }
 
   // Log audit event
   auditLogger.logAction(

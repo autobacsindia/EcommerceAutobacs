@@ -11,6 +11,7 @@ import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangl
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
+import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -37,6 +38,14 @@ interface SavedAddress {
 }
 
 export default function CheckoutPage() {
+  return (
+    <CheckoutErrorBoundary feature="checkout">
+      <CheckoutPageContent />
+    </CheckoutErrorBoundary>
+  );
+}
+
+function CheckoutPageContent() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { cart, clearCart, isLoading: cartLoading, refreshCart } = useCart();

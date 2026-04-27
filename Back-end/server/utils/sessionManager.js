@@ -33,9 +33,14 @@ export const generateTokenPair = (user, ipAddress = null, userAgent = null) => {
     accessTokenExpiry = process.env.JWT_EXPIRE || '30m'; // 30 minutes for regular users
   }
   
-  // Use rotation-aware signing (always uses primary secret)
+  // CRITICAL: Include sessionVersion in JWT for instant revocation
+  // When user.sessionVersion increments, all old tokens become invalid
   const accessToken = signToken(
-    { id: user._id, role: user.role },
+    { 
+      id: user._id, 
+      role: user.role,
+      sessionVersion: user.sessionVersion || 0 // ✅ Version embedded in token
+    },
     { expiresIn: accessTokenExpiry }
   );
 

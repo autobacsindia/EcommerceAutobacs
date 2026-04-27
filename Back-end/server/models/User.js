@@ -68,6 +68,10 @@ const UserSchema = new mongoose.Schema({
   // Increment this to invalidate ALL sessions immediately
   sessionVersion: { type: Number, default: 0, index: true },
   
+  // Fine-grained token invalidation (for incident response)
+  // All tokens issued before this timestamp are invalid
+  tokenInvalidBefore: { type: Date, default: null },
+  
   // Security audit fields
   lastLoginAt: Date,
   lastLoginIp: String,

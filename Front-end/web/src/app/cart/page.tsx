@@ -12,8 +12,17 @@ import SkeletonLoader from '@/components/layout/SkeletonLoader';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
+import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 
 export default function CartPage() {
+  return (
+    <CheckoutErrorBoundary feature="cart">
+      <CartPageContent />
+    </CheckoutErrorBoundary>
+  );
+}
+
+function CartPageContent() {
   const { cart, removeFromCart, updateQuantity, clearCart, isLoading, refreshCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { formatPrice } = useCurrency();

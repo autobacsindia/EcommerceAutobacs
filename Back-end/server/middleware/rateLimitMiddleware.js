@@ -1,8 +1,8 @@
 // Rate limiting middleware to prevent API abuse
 // Implements sliding window algorithm with burst capacity support
 //
-// Store: Redis (ioredis / Railway) when REDIS_URL is set, in-memory Map as fallback.
-// Redis ensures rate limit state survives restarts and is shared across instances.
+// Store: Redis (ioredis / Railway) - REQUIRED in production
+// FAIL-CLOSED: No silent fallback to in-memory in production
 
 import rateLimitEventEmitter from '../services/rateLimitEventEmitter.js';
 import adaptiveThrottlingService from '../services/adaptiveThrottlingService.js';
@@ -10,6 +10,12 @@ import Redis from 'ioredis';
 
 // ── Redis client ───────────────────────────────────────────────────────
 let redisClient = null;
+let redisDownSince = null; // Circuit breaker state
+
+// CRITICAL: Active health check (cached, prevents false positives)
+let lastPingTime = 0;
+let redisActiveHealth = true;
+const HEALTH_CHECK_INTERVAL = 2000; // Check every 2 seconds
 
 if (process.env.REDIS_URL) {
   try {
@@ -22,20 +28,242 @@ if (process.env.REDIS_URL) {
       // Add TLS support for Redis (required for most cloud providers)
       tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
     });
+    
     redisClient.on('error', (err) => {
-      console.warn('[RateLimit] Redis error:', err.message);
+      console.error('[RateLimit] Redis error:', err.message);
+      
+      // Circuit breaker: track when Redis went down
+      if (!redisDownSince) {
+        redisDownSince = Date.now();
+        redisActiveHealth = false;
+        
+        // Alert Sentry (if configured)
+        if (global.Sentry) {
+          global.Sentry.captureMessage('Redis unavailable - rate limiting impacted', {
+            level: 'error',
+            tags: { component: 'rateLimitMiddleware' }
+          });
+        }
+      }
     });
+    
+    redisClient.on('ready', () => {
+      console.log('[RateLimit] Redis connection established');
+      redisDownSince = null; // Reset circuit breaker
+      redisActiveHealth = true;
+    });
+    
     console.log('[RateLimit] Redis client initialised (ioredis / Railway)');
   } catch (err) {
-    console.warn('[RateLimit] Redis init failed – falling back to in-memory store:', err.message);
+    console.error('[RateLimit] Redis init failed:', err.message);
+    
+    // In production, this is critical - fail fast
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[RateLimit] ❌ CRITICAL: Redis is required in production but failed to initialize');
+      redisActiveHealth = false;
+      // Don't exit here - let startup health check handle it
+    }
   }
 } else {
-  console.log('[RateLimit] REDIS_URL not set – using in-memory store (single-instance only)');
+  console.log('[RateLimit] REDIS_URL not set');
+  
+  // In production, missing Redis URL is critical
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[RateLimit] ❌ CRITICAL: REDIS_URL environment variable is required in production');
+  }
 }
 
-const rateLimitStore = new Map(); // in-memory fallback
+/**
+ * Active Redis health check (lightweight ping, cached)
+ * More reliable than just checking isReady
+ */
+async function checkRedisHealth() {
+  const now = Date.now();
+  
+  // Use cached result if recent (< 2s)
+  if (now - lastPingTime < HEALTH_CHECK_INTERVAL) {
+    return redisActiveHealth;
+  }
+  
+  lastPingTime = now;
+  
+  try {
+    // Lightweight ping to verify Redis is actually responding
+    await redisClient.ping();
+    redisActiveHealth = true;
+    redisDownSince = null; // Reset circuit breaker on successful ping
+    return true;
+  } catch (err) {
+    console.warn(`[RateLimit] Redis health check failed: ${err.message}`);
+    redisActiveHealth = false;
+    
+    if (!redisDownSince) {
+      redisDownSince = Date.now();
+    }
+    
+    return false;
+  }
+}
 
-// Simple rate limiter with Redis-backed store and in-memory fallback
+/**
+ * Circuit breaker: Check if Redis is healthy
+ * Uses active health check (not just isReady)
+ */
+function isRedisHealthy() {
+  // Fast path: if actively healthy and no recent errors
+  if (redisActiveHealth && !redisDownSince) {
+    return true;
+  }
+  
+  // Check via active health (async, but we use cached result here)
+  // The actual async check happens in the middleware
+  return redisActiveHealth;
+}
+
+/**
+ * Emergency local rate limiter (used during Redis blips)
+ * Prevents unlimited traffic during short Redis outages (< 5s)
+ * NOT a full replacement - just burst protection
+ */
+const emergencyStore = new Map();
+const EMERGENCY_WINDOW_MS = 1000; // 1 second window
+const EMERGENCY_MAX_REQUESTS = 10; // Max 10 req/sec per IP during emergency
+
+function applyLocalEmergencyLimit(req, res, next) {
+  const key = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+
+  const entry = emergencyStore.get(key) || { count: 0, reset: now + EMERGENCY_WINDOW_MS };
+
+  // Reset window if expired
+  if (now > entry.reset) {
+    entry.count = 0;
+    entry.reset = now + EMERGENCY_WINDOW_MS;
+  }
+
+  entry.count++;
+  emergencyStore.set(key, entry);
+
+  // Emergency limit exceeded
+  if (entry.count > EMERGENCY_MAX_REQUESTS) {
+    console.warn(`[RateLimit] Emergency limit exceeded for IP: ${key}`);
+    
+    res.set('Retry-After', '1');
+    
+    return res.status(429).json({
+      success: false,
+      message: 'Too many requests (temporary protection during service recovery)',
+      code: 'EMERGENCY_RATE_LIMIT',
+      retryAfter: 1
+    });
+  }
+
+  // Allow request (with emergency limit tracking)
+  next();
+}
+
+/**
+ * Critical routes that must fail-closed on Redis failure
+ * These handle payments, authentication, sensitive operations
+ */
+const CRITICAL_ROUTES = [
+  '/api/v1/auth/login',
+  '/api/v1/auth/register',
+  '/api/v1/auth/forgot-password',
+  '/api/v1/auth/reset-password',
+  '/api/v1/checkout',
+  '/api/v1/payment',
+  '/api/v1/orders',
+  '/api/v1/users', // Admin operations
+  '/api/v1/admin'
+];
+
+/**
+ * Check if route is critical (must fail-closed)
+ */
+function isCriticalRoute(req) {
+  const path = req.originalUrl || req.url;
+  return CRITICAL_ROUTES.some(route => path.startsWith(route));
+}
+
+/**
+ * Handle Redis unavailability based on environment and route criticality
+ * Production: 
+ *   - Critical routes → 503 (fail-closed)
+ *   - Non-critical routes → Emergency local limiter (burst protection)
+ * Development: Fail-open (allow request)
+ */
+function handleRedisUnavailable(req, res, next) {
+  if (process.env.NODE_ENV === 'production') {
+    // CRITICAL: Differentiate between critical and non-critical routes
+    
+    if (isCriticalRoute(req)) {
+      // Critical routes: Fail-closed (no partial operations)
+      console.error(`[RateLimit] ❌ Redis unavailable - rejecting critical route: ${req.path}`);
+      
+      res.set('Retry-After', '5');
+      
+      return res.status(503).json({
+        success: false,
+        message: 'Service temporarily unavailable. Please try again in a moment.',
+        code: 'RATE_LIMIT_SERVICE_DOWN',
+        retryAfter: 5
+      });
+    } else {
+      // Non-critical routes: Emergency local limiter (prevent burst abuse)
+      console.warn(`[RateLimit] ⚠️ Redis unavailable - applying emergency local limit for: ${req.path}`);
+      return applyLocalEmergencyLimit(req, res, next);
+    }
+  } else {
+    // Development: Allow request (convenience)
+    console.warn('[RateLimit] ⚠️ Redis unavailable - allowing request (development fallback)');
+    return next();
+  }
+}
+
+/**
+ * Validate IP address to prevent key explosion attacks
+ * Rejects obviously fake IPs while allowing legitimate ones
+ */
+function isValidIP(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  
+  // Reject empty, localhost, or obviously fake IPs
+  const invalidPatterns = [
+    /^$/,                    // Empty
+    /^undefined$/,           // Undefined string
+    /^null$/,                // Null string
+    /^0\.0\.0\.0$/,          // All zeros
+    /^random-/i,             // Fake random IPs
+    /^test-/i,               // Test IPs
+    /^fake-/i,               // Fake IPs
+  ];
+  
+  if (invalidPatterns.some(pattern => pattern.test(ip))) {
+    return false;
+  }
+  
+  // Accept IPv4 (basic check)
+  const ipv4Pattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+  if (ipv4Pattern.test(ip)) {
+    return true;
+  }
+  
+  // Accept IPv6 (basic check)
+  const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+  if (ipv6Pattern.test(ip)) {
+    return true;
+  }
+  
+  // Accept Cloudflare/Proxy IPs (may include port)
+  if (ip.includes(':') && ip.split(':').length <= 2) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Simple rate limiter with Redis-backed store
 export const rateLimit = (options = {}) => {
   const {
     windowMs = 15 * 60 * 1000, // 15 minutes
@@ -52,72 +280,62 @@ export const rateLimit = (options = {}) => {
       return next();
     }
 
+    // CRITICAL: Validate IP to prevent key explosion attacks
+    const clientIP = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    if (!isValidIP(clientIP)) {
+      console.warn(`[RateLimit] Invalid IP detected: ${clientIP}`);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid request'
+      });
+    }
+
+    // CRITICAL: Check Redis health before proceeding (use active check)
+    const healthy = await checkRedisHealth();
+    if (!healthy) {
+      return handleRedisUnavailable(req, res, next);
+    }
+
     // Check for adaptive throttling adjustments
     const endpoint = req.originalUrl || req.url;
     const adjustedMax = adaptiveThrottlingService.getAdjustedLimit(endpoint, max);
     const effectiveMax = adjustedMax;
 
-    // Generate key based on IP (prioritize Cloudflare header if available)
+    // Generate key: Prefer authenticated user ID, fallback to validated IP
     const baseKey = keyGenerator
       ? keyGenerator(req)
-      : req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+      : req.user?.id || req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    
     const now = Date.now();
     const windowSec = Math.ceil(windowMs / 1000);
 
     // ── Redis path: atomic INCR + EXPIRE ───────────────────────────────────────
-    if (redisClient) {
-      try {
-        const redisKey = `rl:${baseKey}`;
-        // INCR is atomic. Set TTL on first increment only.
-        // If expire fails, delete the key to avoid a permanent block.
-        const count = await redisClient.incr(redisKey);
-        if (count === 1) {
-          try {
-            await redisClient.expire(redisKey, windowSec);
-          } catch (expireErr) {
-            // expire failed — delete the key so it doesn't become permanent
-            await redisClient.del(redisKey).catch(() => {});
-            console.warn('[RateLimit] expire failed, key deleted to prevent permanent block:', expireErr.message);
-            return next();
-          }
+    try {
+      const redisKey = `rl:${baseKey}`;
+      // INCR is atomic. Set TTL on first increment only.
+      // If expire fails, delete the key to avoid a permanent block.
+      const count = await redisClient.incr(redisKey);
+      if (count === 1) {
+        try {
+          await redisClient.expire(redisKey, windowSec);
+        } catch (expireErr) {
+          // expire failed — delete the key so it doesn't become permanent
+          await redisClient.del(redisKey).catch(() => {});
+          console.warn('[RateLimit] expire failed, key deleted to prevent permanent block:', expireErr.message);
+          return next();
         }
-        // TTL remaining
-        const ttl = count === 1 ? windowSec : await redisClient.ttl(redisKey);
-        const resetTime = now + ttl * 1000;
+      }
+      // TTL remaining
+      const ttl = count === 1 ? windowSec : await redisClient.ttl(redisKey);
+      const resetTime = now + ttl * 1000;
 
-        res.set('X-RateLimit-Limit', effectiveMax.toString());
-        res.set('X-RateLimit-Remaining', Math.max(0, effectiveMax - count).toString());
-        res.set('X-RateLimit-Reset', new Date(resetTime).toISOString());
+      res.set('X-RateLimit-Limit', effectiveMax.toString());
+      res.set('X-RateLimit-Remaining', Math.max(0, effectiveMax - count).toString());
+      res.set('X-RateLimit-Reset', new Date(resetTime).toISOString());
 
-        if (count > effectiveMax) {
-          const retryAfter = ttl > 0 ? ttl : 1;
-          rateLimitEventEmitter.emitBlock({
-            endpoint,
-            method: req.method,
-            ipAddress: req.ip || req.connection.remoteAddress,
-            userId: req.user?.id || req.user?._id,
-            userEmail: req.user?.email,
-            limitType: 'window',
-            currentLimit: effectiveMax,
-            attemptCount: count,
-            retryAfter,
-            userAgent: req.get('user-agent'),
-            deviceInfo: req.get('user-agent'),
-            adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
-          });
-
-          res.set('Retry-After', retryAfter.toString());
-          res.set('X-RateLimit-Remaining', '0');
-
-          if (handler) return handler(req, res);
-          return res.status(429).json({
-            success: false,
-            message,
-            rateLimitInfo: { retryAfter, resetTime, type: 'window' }
-          });
-        }
-
-        rateLimitEventEmitter.emitHit({
+      if (count > effectiveMax) {
+        const retryAfter = ttl > 0 ? ttl : 1;
+        rateLimitEventEmitter.emitBlock({
           endpoint,
           method: req.method,
           ipAddress: req.ip || req.connection.remoteAddress,
@@ -126,178 +344,50 @@ export const rateLimit = (options = {}) => {
           limitType: 'window',
           currentLimit: effectiveMax,
           attemptCount: count,
+          retryAfter,
           userAgent: req.get('user-agent'),
           deviceInfo: req.get('user-agent'),
           adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
         });
 
-        return next();
-      } catch (err) {
-        // Redis error – fail open (allow request) and log
-        console.warn('[RateLimit] Redis error, allowing request:', err.message);
-        return next();
-      }
-    }
+        // CRITICAL: Set Retry-After header (HTTP standard)
+        res.set('Retry-After', retryAfter.toString());
+        res.set('X-RateLimit-Remaining', '0');
 
-    // ── In-memory fallback path (single-instance only) ────────────────────────
-    // Clean up old entries
-    for (const [key, value] of rateLimitStore.entries()) {
-      if (now - value.resetTime > windowMs) {
-        rateLimitStore.delete(key);
+        if (handler) return handler(req, res);
+        return res.status(429).json({
+          success: false,
+          message,
+          rateLimitInfo: { retryAfter, resetTime, type: 'window' }
+        });
       }
-    }
 
-    // Get or create record for this key
-    if (!rateLimitStore.has(baseKey)) {
-      rateLimitStore.set(baseKey, {
-        count: 1,
-        burstCount: burst ? 1 : 0,
-        resetTime: now,
-        burstResetTime: now
-      });
-      
-      // Emit rate limit hit event
       rateLimitEventEmitter.emitHit({
-        endpoint: req.originalUrl || req.url,
+        endpoint,
         method: req.method,
         ipAddress: req.ip || req.connection.remoteAddress,
         userId: req.user?.id || req.user?._id,
         userEmail: req.user?.email,
         limitType: 'window',
         currentLimit: effectiveMax,
-        attemptCount: 1,
+        attemptCount: count,
         userAgent: req.get('user-agent'),
         deviceInfo: req.get('user-agent'),
         adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
       });
-      
-      // Add rate limit headers for successful requests
-      res.set('X-RateLimit-Limit', effectiveMax.toString());
-      res.set('X-RateLimit-Remaining', (effectiveMax - 1).toString());
-      res.set('X-RateLimit-Reset', new Date(now + windowMs).toISOString());
-      if (burst) {
-        res.set('X-RateLimit-Burst-Limit', burst.toString());
-        res.set('X-RateLimit-Burst-Remaining', (burst - 1).toString());
-      }
-      
+
       return next();
-    }
-
-    const record = rateLimitStore.get(baseKey);
-
-    // Reset if window has passed
-    if (now - record.resetTime > windowMs) {
-      record.count = 1;
-      record.resetTime = now;
+    } catch (err) {
+      // Redis error during request - fail-closed in production
+      console.error('[RateLimit] Redis error during rate limit check:', err.message);
       
-      // Add rate limit headers for successful requests
-      res.set('X-RateLimit-Limit', effectiveMax.toString());
-      res.set('X-RateLimit-Remaining', (effectiveMax - 1).toString());
-      res.set('X-RateLimit-Reset', new Date(now + windowMs).toISOString());
-      if (burst) {
-        res.set('X-RateLimit-Burst-Limit', burst.toString());
-        res.set('X-RateLimit-Burst-Remaining', (burst - 1).toString());
+      // Update circuit breaker
+      if (!redisDownSince) {
+        redisDownSince = Date.now();
       }
       
-      return next();
+      return handleRedisUnavailable(req, res, next);
     }
-
-    // Check burst capacity (for sub-second traffic spikes)
-    if (burst) {
-      const burstWindow = 1000; // 1 second burst window
-      if (now - record.burstResetTime > burstWindow) {
-        record.burstCount = 1;
-        record.burstResetTime = now;
-      } else {
-        record.burstCount++;
-        if (record.burstCount > burst) {
-          const retryAfter = Math.ceil((record.burstResetTime + burstWindow - now) / 1000);
-          
-          // Emit rate limit block event
-          rateLimitEventEmitter.emitBlock({
-            endpoint: req.originalUrl || req.url,
-            method: req.method,
-            ipAddress: req.ip || req.connection.remoteAddress,
-            userId: req.user?.id || req.user?._id,
-            userEmail: req.user?.email,
-            limitType: 'burst',
-            currentLimit: burst,
-            attemptCount: record.burstCount,
-            retryAfter,
-            userAgent: req.get('user-agent'),
-            deviceInfo: req.get('user-agent')
-          });
-          
-          res.set('Retry-After', retryAfter.toString());
-          res.set('X-RateLimit-Burst-Limit', burst.toString());
-          res.set('X-RateLimit-Burst-Remaining', '0');
-          
-          return res.status(429).json({
-            success: false,
-            message: 'Burst rate limit exceeded. Please slow down.',
-            rateLimitInfo: {
-              retryAfter,
-              resetTime: record.burstResetTime + burstWindow,
-              type: 'burst'
-            }
-          });
-        }
-      }
-    }
-
-    // Increment request count
-    record.count++;
-
-    // Check if limit exceeded
-    if (record.count > effectiveMax) {
-      // Add retry-after header
-      const retryAfter = Math.ceil((record.resetTime + windowMs - now) / 1000);
-      
-      // Emit rate limit block event
-      rateLimitEventEmitter.emitBlock({
-        endpoint: req.originalUrl || req.url,
-        method: req.method,
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userId: req.user?.id || req.user?._id,
-        userEmail: req.user?.email,
-        limitType: 'window',
-        currentLimit: effectiveMax,
-        attemptCount: record.count,
-        retryAfter,
-        userAgent: req.get('user-agent'),
-        deviceInfo: req.get('user-agent'),
-        adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
-      });
-      
-      res.set('Retry-After', retryAfter.toString());
-      
-      // Add additional rate limit headers
-      res.set('X-RateLimit-Limit', effectiveMax.toString());
-      res.set('X-RateLimit-Remaining', '0');
-      res.set('X-RateLimit-Reset', new Date(record.resetTime + windowMs).toISOString());
-      
-      if (handler) return handler(req, res);
-      return res.status(429).json({
-        success: false,
-        message,
-        rateLimitInfo: {
-          retryAfter,
-          resetTime: record.resetTime + windowMs,
-          type: 'window'
-        }
-      });
-    }
-    
-    // Add rate limit headers for successful requests
-    res.set('X-RateLimit-Limit', effectiveMax.toString());
-    res.set('X-RateLimit-Remaining', (effectiveMax - record.count).toString());
-    res.set('X-RateLimit-Reset', new Date(record.resetTime + windowMs).toISOString());
-    if (burst) {
-      res.set('X-RateLimit-Burst-Limit', burst.toString());
-      res.set('X-RateLimit-Burst-Remaining', Math.max(0, burst - record.burstCount).toString());
-    }
-
-    next();
   };
 };
 

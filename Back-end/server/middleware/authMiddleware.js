@@ -29,14 +29,47 @@ export const protect = asyncHandler(async (req, res, next) => {
     // Verify token with rotation support (tries all active secrets)
     const decoded = verifyTokenWithRotation(token, { algorithms: ['HS256'] });
 
-    // Get user from token (exclude password)
-    req.user = await User.findById(decoded.id).select('-passwordHash');
+    // Get user from token (include sessionVersion for validation)
+    req.user = await User.findById(decoded.id).select('-passwordHash +sessionVersion');
 
     if (!req.user) {
       return res.status(401).json({
         success: false,
         message: 'User not found'
       });
+    }
+
+    // CRITICAL: Validate session version (instant revocation check)
+    // If sessionVersion in DB > sessionVersion in JWT → token is revoked
+    const tokenSessionVersion = decoded.sessionVersion || 0;
+    const dbSessionVersion = req.user.sessionVersion || 0;
+
+    if (tokenSessionVersion !== dbSessionVersion) {
+      // Token is from old session (revoked by logout all / password change)
+      console.warn(`[Auth] Session version mismatch | User: ${req.user._id} | Token: ${tokenSessionVersion}, DB: ${dbSessionVersion}`);
+      
+      return res.status(401).json({
+        success: false,
+        message: 'Session expired. Please login again.',
+        code: 'SESSION_REVOKED'
+      });
+    }
+
+    // CRITICAL: Check token issued time against security events
+    // Prevents token replay if tokenInvalidBefore is set
+    if (req.user.tokenInvalidBefore) {
+      const tokenIssuedAt = decoded.iat * 1000; // Convert to milliseconds
+      const invalidBefore = new Date(req.user.tokenInvalidBefore).getTime();
+      
+      if (tokenIssuedAt < invalidBefore) {
+        console.warn(`[Auth] Token issued before security event | User: ${req.user._id} | Token IAT: ${tokenIssuedAt}, Invalid Before: ${invalidBefore}`);
+        
+        return res.status(401).json({
+          success: false,
+          message: 'Session expired due to security event. Please login again.',
+          code: 'SESSION_INVALIDATED'
+        });
+      }
     }
 
     next();
