@@ -111,12 +111,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       }) as any;
       
-      if (response.success && response.accessToken && response.user) {
-        const { accessToken: authToken, user: userData } = response;
+      // Backend sets accessToken as httpOnly cookie (not in response body)
+      // Check for success and user data (token is automatic via cookie)
+      if (response.success && response.user) {
+        const { user: userData } = response;
         
-        // Store token
-        apiClient.setAuthToken(authToken);
-        setToken(authToken);
+        // Token is stored in httpOnly cookie (automatic, no manual storage needed)
+        // We still track it in state for client-side checks
+        setToken('httpOnly-cookie'); // Placeholder - actual token is in cookie
+        
         setUser({
           _id: userData.id || userData._id,
           name: userData.name,
