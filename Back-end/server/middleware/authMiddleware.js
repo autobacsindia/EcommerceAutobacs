@@ -76,7 +76,12 @@ export const protect = asyncHandler(async (req, res, next) => {
   } catch (error) {
     // Only log in non-test environments to reduce test output noise
     if (process.env.NODE_ENV !== 'test') {
-      console.error('[Auth] Token verification failed:', error.message);
+      console.error('[Auth] Token verification failed:', {
+        message: error.message,
+        hasCookie: !!req.cookies?.accessToken,
+        hasHeader: !!req.headers?.authorization,
+        tokenLength: token?.length || 0
+      });
     }
     return res.status(401).json({
       success: false,

@@ -126,6 +126,7 @@ class APIClient {
 
   /**
    * Refresh the access token
+   * With httpOnly cookies, browser sends refresh token cookie automatically
    */
   public async refreshSession(): Promise<string | null> {
     try {
@@ -135,17 +136,16 @@ class APIClient {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ refreshToken: this.refreshToken })
+        // Browser sends refresh token cookie automatically
+        credentials: 'include'
       });
 
       const data = await response.json();
 
-      if (response.ok && data.success && data.accessToken) {
-        this.setAuthToken(data.accessToken);
-        if (data.refreshToken) {
-          this.setRefreshToken(data.refreshToken);
-        }
-        return data.accessToken;
+      if (response.ok && data.success) {
+        // Backend sets new tokens as httpOnly cookies
+        // No need to store them manually
+        return 'httpOnly-cookie';
       } else {
         throw new Error('Refresh failed');
       }
