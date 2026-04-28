@@ -69,12 +69,12 @@ export function useSSE({
     const connectInternal = async () => {
       if (!isMountedRef.current) return;
 
-      const currentToken = tokenRef.current;
       const currentEnabled = enabledRef.current;
       const currentUrl = urlRef.current;
 
-      if (!currentEnabled || !currentToken) {
-        if (!currentToken) console.log('SSE: No token available, skipping connection');
+      // With httpOnly cookies, we don't have token in JS state
+      // Backend will authenticate via cookies automatically
+      if (!currentEnabled) {
         return;
       }
 
