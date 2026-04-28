@@ -1145,6 +1145,9 @@ router.post(
     console.log('[Auth] Setting access token cookie...');
     console.log('[Auth] Token exists:', !!parsedTokens.accessToken);
     console.log('[Auth] ExpiresIn:', parsedTokens.expiresIn);
+    console.log('[Auth] NODE_ENV:', process.env.NODE_ENV);
+    console.log('[Auth] Will set secure:', process.env.NODE_ENV === 'production');
+    console.log('[Auth] Will set sameSite:', process.env.NODE_ENV === 'production' ? 'none' : 'lax');
 
     // Set access token as httpOnly cookie (SECURE - XSS protected)
     // parsedTokens should contain accessToken and expiresIn from social login
@@ -1152,7 +1155,14 @@ router.post(
       console.log('[Auth] Calling setAccessTokenCookie...');
       setAccessTokenCookie(res, parsedTokens.accessToken, parsedTokens.expiresIn);
       console.log('[Auth] Access token cookie set successfully');
-      console.log('[Auth] Response headers:', res.getHeaders());
+      
+      // Manually check what headers are set
+      const headers = res.getHeaders();
+      console.log('[Auth] Response headers set:', Object.keys(headers));
+      console.log('[Auth] Has set-cookie header:', 'set-cookie' in headers || 'Set-Cookie' in headers);
+      if (headers['set-cookie'] || headers['Set-Cookie']) {
+        console.log('[Auth] Set-Cookie value:', headers['set-cookie'] || headers['Set-Cookie']);
+      }
     } else {
       console.error('[Auth] Missing accessToken or expiresIn in tokens data');
     }
