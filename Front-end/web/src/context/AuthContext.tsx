@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Token is stored in httpOnly cookie (automatic, no manual storage needed)
         // We still track it in state for client-side checks
-        setToken('httpOnly-cookie'); // Placeholder - actual token is in cookie
+        setToken(null);// Placeholder - actual token is in cookie
         
         setUser({
           _id: userData.id || userData._id,
@@ -208,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextType = {
     user,
     token,
-    isAuthenticated: !!user && !!token,
+    isAuthenticated: !!user,
     isLoading,
     error,
     login,
