@@ -97,31 +97,19 @@ export function useSSE({
         const response = await fetch(currentUrl, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${currentToken}`,
             'Accept': 'text/event-stream'
           },
+          // Browser sends httpOnly cookies automatically
+          credentials: 'include',
           signal: abortController.signal
         });
 
         if (!response.ok) {
-          if (response.status === 401 && !isRefreshingRef.current) {
-            console.log('SSE: 401 Unauthorized, attempting to refresh token...');
-            isRefreshingRef.current = true;
-            try {
-              const newToken = await apiClient.refreshSession();
-              isRefreshingRef.current = false;
-              if (newToken) {
-                console.log('SSE: Token refreshed successfully, reconnecting...');
-                tokenRef.current = newToken;
-                return connectFnRef.current();
-              } else {
-                throw new Error('SSE: Token refresh returned null');
-              }
-            } catch (refreshError) {
-              isRefreshingRef.current = false;
-              console.error('SSE: Token refresh failed:', refreshError);
-              throw new Error('SSE connection failed: 401 Unauthorized and refresh failed');
-            }
+          // With httpOnly cookies, 401 means session expired
+          // Don't try to refresh - just report error and let user re-login
+          if (response.status === 401) {
+            console.warn('SSE: 401 Unauthorized - session expired');
+            throw new Error('SSE connection failed: 401 Unauthorized');
           }
           throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
         }
