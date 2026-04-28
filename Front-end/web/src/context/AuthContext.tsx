@@ -45,17 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     try {
       setIsLoading(true);
-      const savedToken = apiClient.getAuthToken();
       
-      // If no token, ensure consistent state
-      if (!savedToken) {
-        setUser(null);
-        setToken(null);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Verify token with backend
+      // With httpOnly cookies, we can't check token from JavaScript
+      // Always verify with backend by calling GET /auth/me
       const response = await apiClient.get(API_ENDPOINTS.GET_ME) as any;
       
       if (response.success && response.user) {
@@ -68,7 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         
         setUser(userData);
-        setToken(savedToken);
+        // Don't set token - it's in httpOnly cookie
+        setToken(null);
       } else {
         // Invalid token - ensure consistent cleanup
         apiClient.clearAuthToken();
