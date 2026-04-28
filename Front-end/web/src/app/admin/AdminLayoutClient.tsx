@@ -225,9 +225,18 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
       >
         {/* Top Bar */}
         <header className="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {navSections.flatMap(s => s.items).find((link) => link.href === pathname)?.label || 'Admin'}
-          </h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-bold text-gray-800">
+              {navSections.flatMap(s => s.items).find((link) => link.href === pathname)?.label || 'Admin'}
+            </h2>
+            <Link
+              href="/"
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+            >
+              <span>🌐</span>
+              <span>View Site</span>
+            </Link>
+          </div>
 
           {/* Stats Overview */}
           <div className="flex items-center space-x-6">
