@@ -1143,16 +1143,21 @@ router.post(
 
     console.log(`[Auth] OAuth code exchanged | user: ${parsedCode.userId} | provider: ${parsedCode.provider}`);
     console.log('[Auth] Setting access token cookie...');
+    console.log('[Auth] Token exists:', !!parsedTokens.accessToken);
+    console.log('[Auth] ExpiresIn:', parsedTokens.expiresIn);
 
     // Set access token as httpOnly cookie (SECURE - XSS protected)
     // parsedTokens should contain accessToken and expiresIn from social login
     if (parsedTokens.accessToken && parsedTokens.expiresIn) {
+      console.log('[Auth] Calling setAccessTokenCookie...');
       setAccessTokenCookie(res, parsedTokens.accessToken, parsedTokens.expiresIn);
       console.log('[Auth] Access token cookie set successfully');
+      console.log('[Auth] Response headers:', res.getHeaders());
     } else {
       console.error('[Auth] Missing accessToken or expiresIn in tokens data');
     }
 
+    console.log('[Auth] Sending success response');
     return res.json({
       success: true,
       // NOTE: accessToken is now set as httpOnly cookie, not in response body
