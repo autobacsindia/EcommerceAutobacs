@@ -29,8 +29,8 @@ export const protect = asyncHandler(async (req, res, next) => {
     // Verify token with rotation support (tries all active secrets)
     const decoded = verifyTokenWithRotation(token, { algorithms: ['HS256'] });
 
-    // Get user from token (include sessionVersion for validation)
-    req.user = await User.findById(decoded.id).select('-passwordHash +sessionVersion');
+    // Get user from token (exclude passwordHash, sessionVersion included by default)
+   req.user = await User.findById(decoded.id).select('-passwordHash');
 
     if (!req.user) {
       return res.status(401).json({
