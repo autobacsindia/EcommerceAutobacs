@@ -350,7 +350,7 @@ export const setAccessTokenCookie = (res, token, expiresIn) => {
   const cookieOptions = {
     httpOnly: true,              // JavaScript cannot read
     secure: process.env.NODE_ENV === 'production',  // HTTPS only in prod
-    sameSite: 'lax',             // Lax for OAuth/payment callback compatibility + CSRF token for state-changing routes
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 'none' for cross-origin proxy in prod
     path: '/',
     maxAge: maxAge,
     priority: 'high'             // Helps browsers prioritize auth cookies under pressure
@@ -367,7 +367,7 @@ export const clearAccessTokenCookie = (res) => {
   res.clearCookie('accessToken', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
     priority: 'high'
   });
@@ -383,7 +383,7 @@ export const setRefreshTokenCookie = (res, token, expiresAt) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',  // Lax for OAuth/payment callback compatibility + CSRF token for state-changing routes
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 'none' for cross-origin proxy in prod
     path: '/', // Allow on all paths so logout can work
     expires: expiresAt,
     priority: 'high'  // Helps browsers prioritize auth cookies under pressure
@@ -400,7 +400,7 @@ export const clearRefreshTokenCookie = (res) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
     priority: 'high'
   };
