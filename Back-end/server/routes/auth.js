@@ -1094,11 +1094,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const { code } = req.body;
 
+    console.log('[Auth] Exchange-code request received');
+    console.log('[Auth] Code format valid:', !!code && typeof code === 'string' && /^[a-f0-9]{64}$/.test(code));
+
     if (!code || typeof code !== 'string' || !/^[a-f0-9]{64}$/.test(code)) {
       return res.status(400).json({ success: false, message: 'Invalid code format' });
     }
 
     if (!oauthRedis) {
+      console.error('[Auth] Redis not available for code exchange');
       return res.status(503).json({
         success: false,
         message: 'Code exchange unavailable — Redis not configured'
@@ -1108,13 +1112,18 @@ router.post(
     const codeKey   = `oauth:code:${code}`;
     const tokensKey = `oauth:tokens:${code}`;
 
+    console.log('[Auth] Fetching code and tokens from Redis...');
     // Fetch both keys atomically before deleting
     const [codeData, tokensData] = await Promise.all([
       oauthRedis.get(codeKey),
       oauthRedis.get(tokensKey)
     ]);
 
+    console.log('[Auth] Code data found:', !!codeData);
+    console.log('[Auth] Tokens data found:', !!tokensData);
+
     if (!codeData || !tokensData) {
+      console.error('[Auth] Invalid or expired code - data not found in Redis');
       return res.status(400).json({ success: false, message: 'Invalid or expired code' });
     }
 
@@ -1133,11 +1142,15 @@ router.post(
     }
 
     console.log(`[Auth] OAuth code exchanged | user: ${parsedCode.userId} | provider: ${parsedCode.provider}`);
+    console.log('[Auth] Setting access token cookie...');
 
     // Set access token as httpOnly cookie (SECURE - XSS protected)
     // parsedTokens should contain accessToken and expiresIn from social login
     if (parsedTokens.accessToken && parsedTokens.expiresIn) {
       setAccessTokenCookie(res, parsedTokens.accessToken, parsedTokens.expiresIn);
+      console.log('[Auth] Access token cookie set successfully');
+    } else {
+      console.error('[Auth] Missing accessToken or expiresIn in tokens data');
     }
 
     return res.json({

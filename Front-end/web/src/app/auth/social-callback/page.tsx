@@ -25,22 +25,33 @@ export default function SocialCallbackPage() {
 
     const handleCallback = async () => {
       try {
+        console.log('[Social Callback] Starting callback handler');
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
 
+        console.log('[Social Callback] Code from URL:', code ? `${code.substring(0, 10)}...` : 'NOT FOUND');
+
         // ── Secure path: one-time code exchange (PKCE-lite) ─────────────────
         if (code) {
+          console.log('[Social Callback] Attempting code exchange...');
           const res = await apiClient.post('/auth/exchange-code', { code }) as ExchangeCodeResponse;
+          console.log('[Social Callback] Exchange response:', res);
+          
           if (!res.success) {
+            console.error('[Social Callback] Code exchange failed:', res.message);
             throw new Error(res.message || 'Code exchange failed');
           }
+          
+          console.log('[Social Callback] Code exchange successful, calling checkAuth...');
           // Backend sets access token as httpOnly cookie automatically
           await checkAuth();
+          console.log('[Social Callback] checkAuth completed, redirecting to home');
           router.replace('/');
           return;
         }
 
         // ── Legacy fallback: hash-fragment (no Redis / local dev) ────────────
+        console.log('[Social Callback] No code found, checking hash fragment...');
         const hash = window.location.hash.startsWith('#')
           ? window.location.hash.substring(1)
           : window.location.hash;
@@ -48,6 +59,7 @@ export default function SocialCallbackPage() {
         const accessToken = hashParams.get('accessToken');
 
         if (!accessToken) {
+          console.error('[Social Callback] No authentication data received');
           setErrorMsg('No authentication data received.');
           setStatus('error');
           return;
@@ -59,7 +71,7 @@ export default function SocialCallbackPage() {
         await checkAuth();
         router.replace('/');
       } catch (error) {
-        console.error('Social login callback failed:', error);
+        console.error('[Social Callback] Callback failed:', error);
         setErrorMsg(
           error instanceof Error ? error.message : 'An unexpected error occurred.'
         );
