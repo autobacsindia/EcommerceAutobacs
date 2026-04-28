@@ -66,6 +66,7 @@ import rateLimitDashboardRoutes from './rateLimitDashboard.js';
 import adaptiveThrottlingRoutes from './adaptiveThrottling.js';
 import redisMonitorRoutes from './redisMonitor.js';
 import securityRoutes from './security.js';
+import adminStatsRoutes from './adminStats.js';
 
 const apiRouter = express.Router();
 
@@ -130,12 +131,13 @@ apiRouter.use('/scheduled-tasks', adminRouteRateLimit, scheduledTasksRoutes);
 
 // ============================================================================
 // ADMIN MONITORING DOMAIN
-// Routes: /admin/rate-limits/dashboard, /admin/adaptive-throttling, /admin/redis
+// Routes: /admin/rate-limits/dashboard, /admin/adaptive-throttling, /admin/redis, /admin/stats
 // Rate Limit: Admin-only (no rate limit applied here, protected by auth middleware in routes)
 // ============================================================================
 apiRouter.use('/admin/rate-limits/dashboard', rateLimitDashboardRoutes);
 apiRouter.use('/admin/adaptive-throttling', adaptiveThrottlingRoutes);
 apiRouter.use('/admin/redis', redisMonitorRoutes);
+apiRouter.use('/admin', adminStatsRoutes);
 
 // ============================================================================
 // LOCATION DOMAIN

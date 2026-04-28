@@ -9,36 +9,93 @@ interface AdminLayoutClientProps {
   userId: string;
 }
 
+interface NavItem {
+  href?: string;
+  label: string;
+  icon: string;
+  children?: NavItem[];
+}
+
 export default function AdminLayoutClient({ children, userId }: AdminLayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    'Catalog': true,
+    'Orders': false,
+    'Customers': false,
+    'Content': false,
+    'Finance': false,
+    'System': false,
+  });
   const [stats, setStats] = useState({
     totalOrders: 0,
     pendingOrders: 0,
     totalRevenue: 0,
   });
 
-  // Admin navigation links
-  const navLinks = [
-    { href: '/admin', label: 'Dashboard', icon: '📊' },
-    { href: '/admin/orders', label: 'Orders', icon: '📦' },
-    { href: '/admin/products', label: 'Products', icon: '🛍️' },
-    { href: '/admin/brands', label: 'Brands', icon: '🏷️' },
-    { href: '/admin/categories', label: 'Categories', icon: '📂' },
-    { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
-    { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
-    { href: '/admin/users', label: 'Users', icon: '👥' },
-    { href: '/admin/messages', label: 'Messages', icon: '💬' },
-    { href: '/admin/media', label: 'Media', icon: '🖼️' },
-    { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },
-    { href: '/admin/questions', label: 'Q&A', icon: '❓' },
-    { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
-    { href: '/admin/returns', label: 'Returns', icon: '↩️' },
-    { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
-    { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
-    { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
+  // Admin navigation links with sub-menus
+  const navSections: { title: string; items: NavItem[] }[] = [
+    {
+      title: 'Main',
+      items: [
+        { href: '/admin', label: 'Dashboard', icon: '📊' },
+        { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
+      ]
+    },
+    {
+      title: 'Catalog',
+      items: [
+        { href: '/admin/products', label: 'Products', icon: '🛍️' },
+        { href: '/admin/brands', label: 'Brands', icon: '🏷️' },
+        { href: '/admin/categories', label: 'Categories', icon: '📂' },
+        { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
+      ]
+    },
+    {
+      title: 'Orders',
+      items: [
+        { href: '/admin/orders', label: 'Orders', icon: '📦' },
+        { href: '/admin/returns', label: 'Returns', icon: '↩️' },
+        { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
+      ]
+    },
+    {
+      title: 'Customers',
+      items: [
+        { href: '/admin/users', label: 'Users', icon: '👥' },
+        { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
+        { href: '/admin/questions', label: 'Q&A', icon: '❓' },
+      ]
+    },
+    {
+      title: 'Content',
+      items: [
+        { href: '/admin/media', label: 'Media', icon: '🖼️' },
+        { href: '/admin/messages', label: 'Messages', icon: '💬' },
+        { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },
+      ]
+    },
+    {
+      title: 'System',
+      items: [
+        { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
+        { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
+      ]
+    },
   ];
+
+  const toggleSection = (title: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [title]: !prev[title]
+    }));
+  };
+
+  const isLinkActive = (href?: string) => {
+    if (!href) return false;
+    return pathname === href || pathname.startsWith(href + '/');
+  };
 
   // Fetch admin stats (polling every 30 seconds)
   useEffect(() => {
@@ -97,21 +154,50 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`flex items-center p-3 rounded-lg transition-colors ${
-                pathname === link.href
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800'
-              }`}
-            >
-              <span className="text-xl">{link.icon}</span>
-              {sidebarOpen && <span className="ml-3">{link.label}</span>}
-            </Link>
-          ))}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-200px)]">
+          {navSections.map((section) => {
+            const isSectionActive = section.items.some(item => isLinkActive(item.href));
+            const isExpanded = expandedSections[section.title];
+
+            return (
+              <div key={section.title} className="mb-2">
+                {/* Section Header */}
+                {sidebarOpen && (
+                  <button
+                    onClick={() => toggleSection(section.title)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-300 transition-colors"
+                  >
+                    <span>{section.title}</span>
+                    <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                      ▶
+                    </span>
+                  </button>
+                )}
+
+                {/* Section Items */}
+                {(isExpanded || !sidebarOpen) && (
+                  <div className="space-y-1 mt-1">
+                    {section.items.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href!}
+                        className={`flex items-center p-3 rounded-lg transition-all ${
+                          isLinkActive(item.href)
+                            ? 'bg-blue-600 text-white shadow-lg'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        } ${!sidebarOpen ? 'justify-center' : ''}`}
+                      >
+                        <span className="text-xl flex-shrink-0">{item.icon}</span>
+                        {sidebarOpen && (
+                          <span className="ml-3 text-sm font-medium">{item.label}</span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         {/* User Info */}
@@ -140,7 +226,7 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
         {/* Top Bar */}
         <header className="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
           <h2 className="text-2xl font-bold text-gray-800">
-            {navLinks.find((link) => link.href === pathname)?.label || 'Admin'}
+            {navSections.flatMap(s => s.items).find((link) => link.href === pathname)?.label || 'Admin'}
           </h2>
 
           {/* Stats Overview */}
