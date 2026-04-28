@@ -121,12 +121,12 @@ export default function AdminDashboardPage() {
   // Fetch initial data immediately on mount so the dashboard is populated
   // before the first SSE health/analytics ticks arrive (2-3 s delay).
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'admin' || !token) return;
+    if (!isAuthenticated || user?.role !== 'admin') return;
 
     const fetchInitialStats = async () => {
       try {
         const response = await fetch('/api/v1/dashboard/stats', {
-          headers: { Authorization: `Bearer ${token}` }
+          credentials: 'include', // Send httpOnly cookies
         });
         if (!response.ok) return;
         const json = await response.json();
@@ -143,7 +143,7 @@ export default function AdminDashboardPage() {
 
     fetchInitialStats().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, user?.role, token]);
+  }, [isAuthenticated, user?.role]);
 
   // SSE must go through the Next.js rewrite proxy (/api/v1/* → backend)
   // so it inherits the correct host and avoids CORS issues.
