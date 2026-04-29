@@ -11,11 +11,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
     
+    // Get CSRF token from request cookies
+    const xsrfToken = request.cookies.get('XSRF-TOKEN')?.value;
+    
     // Forward the request to the backend
     const response = await fetch(`${backendUrl}/api/v1/auth/exchange-code`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Forward the CSRF token
+        ...(xsrfToken && { 'X-XSRF-TOKEN': xsrfToken }),
         // Forward the session cookie if present
         Cookie: request.headers.get('cookie') || '',
       },
