@@ -812,6 +812,8 @@ const completeSocialLogin = async (req, res, user, provider) => {
   console.log(`[Auth] FRONTEND_URL from env: ${process.env.FRONTEND_URL}`);
   console.log(`[Auth] Using frontendUrl: ${frontendUrl}`);
   console.log(`[Auth] Will redirect to: ${frontendUrl}/auth/social-callback?code=...`);
+  
+  // Force redeploy 2026-04-29
 
   // ── Secure: one-time code exchange (PKCE-lite) ──────────────────────────
   // Never send tokens in the URL — they would leak into browser history,
