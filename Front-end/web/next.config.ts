@@ -39,12 +39,18 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   async rewrites() {
-    // Use runtime config - read NEXT_PUBLIC_API_URL at runtime, not build time
-    // Railway provides env vars at runtime, not during build
+    // CRITICAL: Railway provides env vars at build time for NEXT_PUBLIC_ variables
+    // We must use the correct production URL here
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
     
     const sanitizedUrl = apiUrl.trim().replace(/\/+$/, '');
     console.log(`[next.config.ts] ✓ API rewrite target: ${sanitizedUrl}`);
+    console.log(`[next.config.ts] NODE_ENV: ${process.env.NODE_ENV}`);
+    
+    // If we're in production and still seeing localhost, something is wrong
+    if (process.env.NODE_ENV === 'production' && sanitizedUrl.includes('localhost')) {
+      console.error('[next.config.ts] ⚠️  WARNING: Using localhost in production! Set NEXT_PUBLIC_API_URL in Railway!');
+    }
     
     return [
       {
