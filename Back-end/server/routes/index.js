@@ -101,9 +101,9 @@ apiRouter.use('/product-questions', publicBrowsingRateLimit, productQuestionRout
 // ============================================================================
 apiRouter.use('/users', authenticatedUserRateLimit, userRoutes);
 apiRouter.use('/profile', authenticatedUserRateLimit, profileRoutes);
-apiRouter.use('/cart', authenticatedUserRateLimit, cartRoutes);
+apiRouter.use('/cart', publicBrowsingRateLimit, cartRoutes);  // Cart supports guest users
 apiRouter.use('/wishlist', authenticatedUserRateLimit, wishlistRoutes);
-apiRouter.use('/reviews', authenticatedUserRateLimit, reviewRoutes);
+apiRouter.use('/reviews', publicBrowsingRateLimit, reviewRoutes);  // Reviews can be browsed publicly
 
 // ============================================================================
 // ORDER DOMAIN
