@@ -58,6 +58,7 @@ export const csrfProtection = (req, res, next) => {
     '/auth/facebook',
     '/auth/google/callback',
     '/auth/facebook/callback',
+    '/auth/exchange-code',  // OAuth code exchange - uses one-time code, CSRF-safe
     '/api/delivery-zones/check-serviceability',
     '/api/delivery-zones/estimate',
     '/api/delivery-zones/shipping-cost',
