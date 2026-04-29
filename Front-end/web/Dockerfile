@@ -37,6 +37,7 @@ WORKDIR /app
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV HOSTNAME "::"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Create a non-root user
 RUN addgroup --system --gid 1001 nodejs
