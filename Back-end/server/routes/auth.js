@@ -809,6 +809,9 @@ const completeSocialLogin = async (req, res, user, provider) => {
   await logLoginAttempt(user, true, ipAddress, userAgent);
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+  console.log(`[Auth] FRONTEND_URL from env: ${process.env.FRONTEND_URL}`);
+  console.log(`[Auth] Using frontendUrl: ${frontendUrl}`);
+  console.log(`[Auth] Will redirect to: ${frontendUrl}/auth/social-callback?code=...`);
 
   // ── Secure: one-time code exchange (PKCE-lite) ──────────────────────────
   // Never send tokens in the URL — they would leak into browser history,
