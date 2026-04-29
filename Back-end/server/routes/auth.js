@@ -1152,6 +1152,7 @@ router.post(
     }
 
     console.log(`[Auth] OAuth code exchanged | user: ${parsedCode.userId} | provider: ${parsedCode.provider}`);
+    console.log(`[Auth] DEPLOY CHECK: Cookie domain will be set to ${process.env.NODE_ENV === 'production' ? '.up.railway.app' : 'undefined'}`);
     console.log('[Auth] Setting access token cookie...');
     console.log('[Auth] Token exists:', !!parsedTokens.accessToken);
     console.log('[Auth] ExpiresIn:', parsedTokens.expiresIn);
