@@ -39,42 +39,19 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   async rewrites() {
-    // Production: Must have NEXT_PUBLIC_API_URL set in Railway Dashboard
-    // Development: Falls back to localhost if not set
-    let apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    // Use runtime config - read NEXT_PUBLIC_API_URL at runtime, not build time
+    // Railway provides env vars at runtime, not during build
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
     
-    if (apiUrl) {
-      // Sanitize the URL: remove whitespace and trailing slashes
-      apiUrl = apiUrl.trim().replace(/\/+$/, '');
-    }
-
-    if (!apiUrl && process.env.NODE_ENV === 'production') {
-      // No silent hardcoded fallback — force the env var to be set explicitly.
-      // A missing NEXT_PUBLIC_API_URL in production must be caught at deploy time.
-      throw new Error(
-        '[next.config.ts] NEXT_PUBLIC_API_URL is required in production. Set it in Railway Dashboard.'
-      );
-    }
-
-    if (!apiUrl) {
-      console.warn('[next.config.ts] NEXT_PUBLIC_API_URL not set — using http://localhost:8080 for development.');
-      apiUrl = 'http://localhost:8080';
-    } else {
-      console.log('[next.config.ts] ✓ API rewrite target:', apiUrl);
-    }
+    const sanitizedUrl = apiUrl.trim().replace(/\/+$/, '');
+    console.log(`[next.config.ts] ✓ API rewrite target: ${sanitizedUrl}`);
     
-    const targetUrl = apiUrl;
-    
-    // Log the final target URL for debugging
-    console.log(`[NextConfig] Environment: ${process.env.NODE_ENV}`);
-    console.log(`[NextConfig] API Rewrite Target: ${targetUrl}`);
-
     return [
       {
         // Proxy /api/v1/* calls through to the backend's /api/v1/* routes.
         // All backend routes are versioned under /api/v1/.
         source: '/api/v1/:path*',
-        destination: `${targetUrl}/api/v1/:path*`,
+        destination: `${sanitizedUrl}/api/v1/:path*`,
       },
     ];
   },
