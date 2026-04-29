@@ -885,6 +885,11 @@ router.get("/google", (req, res) => {
 router.get(
   "/google/callback",
   asyncHandler(async (req, res) => {
+    console.log('========================================');
+    console.log('[Google Callback] HIT! Route executed');
+    console.log('[Google Callback] FRONTEND_URL:', process.env.FRONTEND_URL);
+    console.log('========================================');
+    
     const code = req.query.code;
 
     if (!code) {
