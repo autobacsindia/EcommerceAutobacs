@@ -3,6 +3,8 @@
  * 
  * This endpoint properly forwards Set-Cookie headers from the backend
  * which Next.js rewrites sometimes strip.
+ * 
+ * Updated: 2026-04-29 - Adding cache-busting timestamp
  */
 import { NextRequest, NextResponse } from 'next/server';
 
