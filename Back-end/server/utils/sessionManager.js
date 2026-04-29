@@ -353,7 +353,8 @@ export const setAccessTokenCookie = (res, token, expiresIn) => {
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 'none' for cross-origin proxy in prod
     path: '/',
     maxAge: maxAge,
-    priority: 'high'             // Helps browsers prioritize auth cookies under pressure
+    priority: 'high',            // Helps browsers prioritize auth cookies under pressure
+    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined  // Share across subdomains in prod
   };
   
   res.cookie('accessToken', token, cookieOptions);
@@ -386,7 +387,8 @@ export const setRefreshTokenCookie = (res, token, expiresAt) => {
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 'none' for cross-origin proxy in prod
     path: '/', // Allow on all paths so logout can work
     expires: expiresAt,
-    priority: 'high'  // Helps browsers prioritize auth cookies under pressure
+    priority: 'high',  // Helps browsers prioritize auth cookies under pressure
+    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined  // Share across subdomains in prod
   };
   
   res.cookie('refreshToken', token, cookieOptions);
