@@ -34,12 +34,22 @@ export default function SocialCallbackPage() {
         // ── Secure path: one-time code exchange (PKCE-lite) ─────────────────
         if (code) {
           console.log('[Social Callback] Attempting code exchange...');
-          const res = await apiClient.post('/auth/exchange-code', { code }) as ExchangeCodeResponse;
-          console.log('[Social Callback] Exchange response:', res);
+          // Use our custom API route that properly forwards Set-Cookie headers
+          const res = await fetch('/api/v1/auth/exchange-code', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code }),
+            credentials: 'include', // Important: include cookies
+          });
           
-          if (!res.success) {
-            console.error('[Social Callback] Code exchange failed:', res.message);
-            throw new Error(res.message || 'Code exchange failed');
+          const data = await res.json();
+          console.log('[Social Callback] Exchange response:', data);
+          
+          if (!data.success) {
+            console.error('[Social Callback] Code exchange failed:', data.message);
+            throw new Error(data.message || 'Code exchange failed');
           }
           
           console.log('[Social Callback] Code exchange successful, calling checkAuth...');
