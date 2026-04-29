@@ -34,14 +34,13 @@ export default function SocialCallbackPage() {
         // ── Secure path: one-time code exchange (PKCE-lite) ─────────────────
         if (code) {
           console.log('[Social Callback] Attempting code exchange...');
-          // Use our custom API route that properly forwards Set-Cookie headers
+          // Use the API client which goes through Next.js rewrites
           const res = await fetch('/api/v1/auth/exchange-code', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ code }),
-            credentials: 'include', // Important: include cookies
           });
           
           const data = await res.json();
