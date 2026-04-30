@@ -42,6 +42,7 @@
     "test-validate-categories": "node test-validate-product-categories.js",
     "backfill-cloudinary-ids": "node scripts/backfill-cloudinary-public-ids.js",
     "check-cloudinary-health": "node scripts/check-cloudinary-health.js",
+    "fix-cart-indexes": "node scripts/fix-cart-indexes.js",
     
     "load-test:quick": "artillery run ../../artillery-quick-test.yml --output ../../quick-report.json",
     "load-test:full": "artillery run ../../artillery-config.yml --output ../../report.json",
