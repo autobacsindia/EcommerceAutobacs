@@ -151,6 +151,9 @@ export default function EditProductPage() {
       }
       
       console.log('Product loaded:', productData.name);
+      console.log('Product price:', productData.price);
+      console.log('Product categories:', productData.categories);
+      console.log('Product full data:', productData);
       setProduct(productData);
       // Normalise to CloudinaryImage shape (old images may have no public_id)
       const imgs: CloudinaryImage[] = (productData.images || []).map((img: any) => ({
