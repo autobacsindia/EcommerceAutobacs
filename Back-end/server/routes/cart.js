@@ -137,6 +137,13 @@ router.get("/", asyncHandler(async (req, res) => {
     stockMessages: stockMessages.length > 0 ? stockMessages : undefined,
     recentChanges: cart.recentChanges.filter(c => c.createdAt > Date.now() - 300000) // Last 5 min
   });
+  } catch (error) {
+    console.error('[Cart] Error in GET /cart:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while retrieving cart'
+    });
+  }
 }));
 
 // @route   POST /cart/add
