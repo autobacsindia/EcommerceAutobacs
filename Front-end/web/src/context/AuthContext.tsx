@@ -186,11 +186,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
   
-  const logout = useCallback(() => {
-    apiClient.clearAuthToken();
-    setUser(null);
-    setToken(null);
-    setError(null);
+  const logout = useCallback(async () => {
+    try {
+      // Call backend logout to clear httpOnly cookies
+      await apiClient.post('/auth/logout', {});
+    } catch (err) {
+      console.error('Logout error:', err);
+      // Continue with local cleanup even if backend call fails
+    } finally {
+      // Clear client-side state
+      apiClient.clearAuthToken();
+      setUser(null);
+      setToken(null);
+      setError(null);
+    }
   }, []);
   
   const clearError = useCallback(() => {
