@@ -127,27 +127,25 @@ export default function EditProductPage() {
     try {
       console.log('Product ID:', productId);
       
-      // Use raw fetch with redirect: 'follow' to handle the 301 redirect properly
-      const response = await fetch(`/api/v1/products/${productId}`, {
+      // First, get all products and find the one we need (avoids redirect issue)
+      const listResponse = await fetch('/api/v1/products?limit=1000', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        redirect: 'follow' // Follow the 301 redirect to slug URL
       });
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', response.status, errorText);
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!listResponse.ok) {
+        throw new Error(`Failed to fetch products list: ${listResponse.status}`);
       }
       
-      const data = await response.json();
-      const productData = data?.product || data;
+      const listData = await listResponse.json();
+      const products = listData?.products || listData?.data || [];
+      const productData = products.find((p: any) => p._id === productId);
       
       if (!productData) {
-        console.error('Product not found. Response:', data);
+        console.error('Product not found in list');
         alert('Product not found or may have been deleted');
         return;
       }
