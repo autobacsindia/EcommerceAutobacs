@@ -370,7 +370,8 @@ export const clearAccessTokenCookie = (res) => {
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
-    priority: 'high'
+    priority: 'high',
+    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined
   });
 };
 
@@ -404,7 +405,8 @@ export const clearRefreshTokenCookie = (res) => {
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
-    priority: 'high'
+    priority: 'high',
+    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined
   };
   
   res.clearCookie('refreshToken', cookieOptions);
