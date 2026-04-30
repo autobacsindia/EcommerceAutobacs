@@ -128,14 +128,14 @@ export default function EditProductPage() {
       console.log('Product ID:', productId);
       
       // Step 1: Fetch product by ID using apiClient (handles routing automatically)
-      const response = await apiClient.get(`/products/${productId}`);
+      const response: any = await apiClient.get(`/products/${productId}`);
       
       console.log('API Response for product:', response);
       
-      const productData = response?.product || response?.data;
+      const productData = response?.product || response?.data || response;
       
       if (!productData) {
-        console.error('Product not found. Response:', data);
+        console.error('Product not found. Response:', response);
         alert('Product not found or may have been deleted');
         return;
       }
