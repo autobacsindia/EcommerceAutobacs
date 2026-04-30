@@ -128,7 +128,7 @@ export default function EditProductPage() {
       console.log('Product ID:', productId);
       
       // First, get all products and find the one we need (avoids redirect issue)
-      const listResponse = await fetch('/api/v1/products?limit=1000', {
+      const listResponse = await fetch('/api/v1/products?limit=100', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
