@@ -107,7 +107,7 @@ export const cacheResponse = (ttlSeconds = 300) => async (req, res, next) => {
 export const invalidateCache = (...patterns) => {
   // Run all pattern clears in parallel, fire-and-forget.
   // We intentionally do NOT await so the HTTP response is never delayed.
-  Promise.all(patterns.map((pattern) => cacheService.clearPattern(pattern)))
+  Promise.all(patterns.map((pattern) => cacheService.invalidatePattern(pattern)))
     .then((counts) => {
       const total = counts.reduce((sum, n) => sum + (n || 0), 0);
       console.log(`[Cache] Invalidated ${total} key(s) for patterns:`, patterns);
