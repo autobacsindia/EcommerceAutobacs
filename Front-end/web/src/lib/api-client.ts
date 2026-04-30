@@ -291,6 +291,7 @@ class APIClient {
 
     // Add session ID for guest cart support (always include, even for authenticated users)
     const sessionId = this.getSessionId();
+    console.log('[API Client] Sending x-session-id:', sessionId);
     if (sessionId) {
       (headers as any)['x-session-id'] = sessionId;
     }

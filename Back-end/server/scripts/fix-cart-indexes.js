@@ -47,7 +47,7 @@ async function fixCartIndexes() {
         { user: 1 },
         {
           unique: true,
-          partialFilterExpression: { user: { $exists: true, $ne: null } }
+          partialFilterExpression: { user: { $exists: true } }
         }
       );
       console.log('✓ Created new partial index on user field');
