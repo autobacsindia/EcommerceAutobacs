@@ -127,21 +127,26 @@ export default function EditProductPage() {
     try {
       console.log('Product ID:', productId);
       
-      // Step 1: Fetch minimal product data by ID to get the slug
-      const idResponse: any = await apiClient.get(`/products/${productId}`);
-      const productData = idResponse?.product || idResponse?.data || idResponse;
+      // Fetch product - the backend will redirect to slug URL automatically
+      // apiClient handles redirects, so we'll get the final product data
+      let response: any;
+      try {
+        response = await apiClient.get(`/products/${productId}`);
+      } catch (redirectError: any) {
+        // If redirect fails, try to extract the redirect URL and fetch it directly
+        console.log('Redirect error, trying to follow manually:', redirectError);
+        throw redirectError;
+      }
+      
+      const productData = response?.product || response?.data || response;
       
       if (!productData) {
-        console.error('Product not found. Response:', idResponse);
+        console.error('Product not found. Response:', response);
         alert('Product not found or may have been deleted');
         return;
       }
       
-      // If we got redirected and received product data, use it
-      if (productData && productData.slug) {
-        console.log('Product found with slug:', productData.slug);
-      }
-      
+      console.log('Product loaded:', productData.name);
       setProduct(productData);
       // Normalise to CloudinaryImage shape (old images may have no public_id)
       const imgs: CloudinaryImage[] = (productData.images || []).map((img: any) => ({
