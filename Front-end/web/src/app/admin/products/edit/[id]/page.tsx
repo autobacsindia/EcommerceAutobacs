@@ -127,17 +127,19 @@ export default function EditProductPage() {
     try {
       console.log('Product ID:', productId);
       
-      // Step 1: Fetch product by ID using apiClient (handles routing automatically)
-      const response: any = await apiClient.get(`/products/${productId}`);
-      
-      console.log('API Response for product:', response);
-      
-      const productData = response?.product || response?.data || response;
+      // Step 1: Fetch minimal product data by ID to get the slug
+      const idResponse: any = await apiClient.get(`/products/${productId}`);
+      const productData = idResponse?.product || idResponse?.data || idResponse;
       
       if (!productData) {
-        console.error('Product not found. Response:', response);
+        console.error('Product not found. Response:', idResponse);
         alert('Product not found or may have been deleted');
         return;
+      }
+      
+      // If we got redirected and received product data, use it
+      if (productData && productData.slug) {
+        console.log('Product found with slug:', productData.slug);
       }
       
       setProduct(productData);
