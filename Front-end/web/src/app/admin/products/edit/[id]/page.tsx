@@ -359,7 +359,12 @@ export default function EditProductPage() {
       );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to update product');
+      console.log('Update response:', res.status, data);
+      
+      if (!res.ok) {
+        console.error('Update failed:', data);
+        throw new Error(data.message || `Failed to update product (${res.status})`);
+      }
 
       alert('Product updated successfully');
       router.push('/admin/products');
