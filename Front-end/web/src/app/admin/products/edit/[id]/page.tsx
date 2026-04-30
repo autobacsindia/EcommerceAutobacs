@@ -125,59 +125,14 @@ export default function EditProductPage() {
 
   const fetchProduct = async () => {
     try {
-      // First, get the product by ID to find its slug
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      
-      console.log('Using API base URL:', baseUrl);
       console.log('Product ID:', productId);
       
-      // Step 1: Fetch product by ID (will return redirect info or product data)
-      // Note: Backend route is /api/v1/products/:id which redirects to /api/v1/products/slug/:slug
-      const checkUrl = `${baseUrl}/api/v1/products/${productId}?t=${Date.now()}`;
+      // Step 1: Fetch product by ID using apiClient (handles routing automatically)
+      const response = await apiClient.get(`/products/${productId}`);
       
-      console.log('Step 1: Fetching product by ID from:', checkUrl);
+      console.log('API Response for product:', response);
       
-      // Don't use redirect: 'manual' - let it follow naturally but catch the response
-      const response = await fetch(checkUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Allow redirect but we'll check the final URL
-        redirect: 'follow'
-      });
-      
-      console.log('Response status:', response.status);
-      console.log('Response URL:', response.url);
-      
-      let data: any;
-      
-      // Check if we ended up at a different URL (redirect happened)
-      const finalUrl = new URL(response.url);
-      const pathSegments = finalUrl.pathname.split('/');
-      const lastSegment = pathSegments[pathSegments.length - 1];
-      
-      console.log('Final URL:', finalUrl.href);
-      console.log('Last URL segment:', lastSegment);
-      
-      // If redirected to a slug URL and lastSegment doesn't look like an ObjectId
-      const isObjectIdRegex = /^[0-9a-f]{24}$/i;
-      if (!isObjectIdRegex.test(lastSegment) && lastSegment !== productId) {
-        console.log('Detected redirect to slug-based URL');
-        // We're already at the right URL, just parse the response
-      }
-      
-      // Handle response
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', response.status, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      data = await response.json();
-      console.log('API Response for product:', data);
-      
-      const productData = data?.product || data?.data;
+      const productData = response?.product || response?.data;
       
       if (!productData) {
         console.error('Product not found. Response:', data);
