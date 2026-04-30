@@ -44,6 +44,12 @@ export function ProductDetailPageClient({ product }: { product: any }) {
   const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number; image?: string; images?: string[] } | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
 
+  // Helper function to strip HTML tags
+  const stripHtml = (html: string) => {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, '');
+  };
+
   // Show loading state if product is null
   if (!product) {
     return (
@@ -558,7 +564,7 @@ export function ProductDetailPageClient({ product }: { product: any }) {
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Product Description</h2>
               <div className="prose prose-blue max-w-none text-gray-600 leading-relaxed whitespace-pre-line">
-                {product.description}
+                {stripHtml(product.description)}
               </div>
             </section>
 
