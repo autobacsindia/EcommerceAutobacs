@@ -11,35 +11,38 @@ const router = express.Router();
 // @desc    Get user's cart (supports both authenticated and guest users)
 // @access  Public (optional auth)
 router.get("/", asyncHandler(async (req, res) => {
-  // Determine if user is authenticated or guest
-  const isAuthenticated = req.user && req.user.id;
-  const sessionId = req.headers['x-session-id'] || req.sessionID;
+  try {
+    // Determine if user is authenticated or guest
+    const isAuthenticated = req.user && req.user.id;
+    const sessionId = req.headers['x-session-id'] || req.sessionID;
 
-  let cart;
-  if (isAuthenticated) {
-    // Authenticated user - find by user ID
-    cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price images stock isActive');
-    
-    if (!cart) {
-      cart = await Cart.create({ user: req.user.id, items: [], isGuest: false });
+    let cart;
+    if (isAuthenticated) {
+      // Authenticated user - find by user ID
+      cart = await Cart.findOne({ user: req.user.id })
+        .populate('items.product', 'name price images stock isActive');
+      
+      if (!cart) {
+        cart = await Cart.create({ user: req.user.id, items: [], isGuest: false });
+      }
+    } else {
+      // Guest user - find by session ID
+      if (!sessionId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Session ID required for guest cart operations'
+        });
+      }
+      
+      cart = await Cart.findOne({ sessionId })
+        .populate('items.product', 'name price images stock isActive');
+      
+      if (!cart) {
+        cart = await Cart.create({ sessionId, items: [], isGuest: true });
+      }
     }
-  } else {
-    // Guest user - find by session ID
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Session ID required for guest cart operations'
-      });
-    }
-    
-    cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price images stock isActive');
-    
-    if (!cart) {
-      cart = await Cart.create({ sessionId, items: [], isGuest: true });
-    }
-  }
+
+    console.log('[Cart] Retrieved cart for', isAuthenticated ? `user ${req.user.id}` : `session ${sessionId}`, 'with', cart.items.length, 'items');
 
   // 🟡 LAYER 1: Cart-Level Stock Validation
   // Filter out inactive AND out-of-stock products
