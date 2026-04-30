@@ -127,21 +127,27 @@ export default function EditProductPage() {
     try {
       console.log('Product ID:', productId);
       
-      // Fetch product - the backend will redirect to slug URL automatically
-      // apiClient handles redirects, so we'll get the final product data
-      let response: any;
-      try {
-        response = await apiClient.get(`/products/${productId}`);
-      } catch (redirectError: any) {
-        // If redirect fails, try to extract the redirect URL and fetch it directly
-        console.log('Redirect error, trying to follow manually:', redirectError);
-        throw redirectError;
+      // Use raw fetch with redirect: 'follow' to handle the 301 redirect properly
+      const response = await fetch(`/api/v1/products/${productId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        redirect: 'follow' // Follow the 301 redirect to slug URL
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', response.status, errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const productData = response?.product || response?.data || response;
+      const data = await response.json();
+      const productData = data?.product || data;
       
       if (!productData) {
-        console.error('Product not found. Response:', response);
+        console.error('Product not found. Response:', data);
         alert('Product not found or may have been deleted');
         return;
       }
