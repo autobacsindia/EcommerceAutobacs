@@ -151,6 +151,27 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         priceValidUntil: new Date(product.saleEndDate).toISOString().split('T')[0],
       }),
     },
+    
+    // Additional SEO-rich properties for Indian market
+    ...(product.shortDescription && {
+      'additionalProperty': [
+        {
+          '@type': 'PropertyValue',
+          'name': 'Best For',
+          'value': 'Indian roads and climate conditions'
+        },
+        {
+          '@type': 'PropertyValue',
+          'name': 'Installation',
+          'value': 'Professional installation available at Autobacs service centers across India'
+        },
+        {
+          '@type': 'PropertyValue',
+          'name': 'Warranty',
+          'value': '2-year warranty for all automotive accessories'
+        }
+      ]
+    })
   } : null;
 
   // Build breadcrumb schema for enhanced search navigation

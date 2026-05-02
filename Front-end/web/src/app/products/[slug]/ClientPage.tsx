@@ -1,5 +1,52 @@
 'use client';
 
+interface Product {
+  _id: string;
+  name: string;
+  description: string;
+  shortDescription?: string;
+  price: number;
+  originalPrice?: number;
+  category?: { 
+    _id: string;
+    name: string;
+    slug: string;
+  } | string;
+  brand?: string;
+  images?: Array<{ url: string; alt?: string }>
+  stock: number;
+  sku?: string;
+  specifications?: Array<{ key: string; value: string }>;
+  features?: string[];
+  whyChoose?: string[];
+  variableSpecs?: Array<{
+    key: string;
+    options: Array<{
+      label: string;
+      price: number;
+      image?: string;
+      images?: string[];
+    }>;
+  }>;
+  compatibleVehicles?: Array<{
+    make: string;
+    model: string;
+    year: string;
+    variant: string;
+  }>;
+  packageContents?: string[];
+  qna?: any;
+  isActive: boolean;
+  isFeatured: boolean;
+  averageRating: number;
+  totalReviews: number;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+  __v?: number;
+  slug?: string;
+}
+
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -31,7 +78,66 @@ async function getProduct(slugOrId: string): Promise<any> {
   return null;
 }
 
-export function ProductDetailPageClient({ product }: { product: any }) {
+interface Product {
+  _id: string;
+  name: string;
+  description: string;
+  shortDescription?: string;
+  price: number;
+  originalPrice?: number;
+  category?: { 
+    _id: string;
+    name: string;
+    slug: string;
+  } | string;
+  brand?: string;
+  images?: Array<{ url: string; alt?: string }>
+  stock: number;
+  sku?: string;
+  specifications?: Array<{ key: string; value: string }>;
+  features?: string[];
+  whyChoose?: string[];
+  variableSpecs?: Array<{
+    key: string;
+    options: Array<{
+      label: string;
+      price: number;
+      image?: string;
+      images?: string[];
+    }>;
+  }>;
+  compatibleVehicles?: Array<{
+    make: string;
+    model: string;
+    year: string;
+    variant: string;
+  }>;
+  packageContents?: string[];
+  qna?: any;
+  isActive: boolean;
+  isFeatured: boolean;
+  averageRating: number;
+  totalReviews: number;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+  __v?: number;
+  slug?: string;
+}
+
+export function ProductDetailPageClient({ product }: { product: Product | null }) {
+  // Defensive null safety check
+  if (!product) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading product...</p>
+        </div>
+      </div>
+    );
+  }
+  
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuth();
@@ -87,7 +193,7 @@ export function ProductDetailPageClient({ product }: { product: any }) {
           price: product.price,
           originalPrice: product.originalPrice,
           image: product.images?.[0]?.url,
-          slug: product.slug
+          slug: product.slug || ''
         }, ...filtered].slice(0, 10); // Keep last 10
         
         localStorage.setItem(storageKey, JSON.stringify(newRecent));
@@ -345,10 +451,10 @@ export function ProductDetailPageClient({ product }: { product: any }) {
                 <li><span className="mx-2">/</span></li>
                 <li>
                   <Link 
-                    href={`/categories/${typeof product.category === 'string' ? product.category : product.category.slug}`} 
+                    href={`/categories/${typeof product.category === 'string' ? product.category : product.category.slug || ''}`} 
                     className="hover:text-blue-600 transition-colors"
                   >
-                    {typeof product.category === 'string' ? product.category : product.category.name}
+                    {typeof product.category === 'string' ? product.category : product.category.name || 'Category'}
                   </Link>
                 </li>
               </>
@@ -538,7 +644,7 @@ export function ProductDetailPageClient({ product }: { product: any }) {
               {product.category && (
                 <div className="flex gap-2">
                   <span className="font-medium text-gray-900 w-24">Category:</span>
-                  <span className="uppercase">{product.category.name}</span>
+                  <span className="uppercase">{typeof product.category === 'string' ? product.category : product.category.name || 'Category'}</span>
                 </div>
               )}
               {product.brand && (
@@ -598,6 +704,49 @@ export function ProductDetailPageClient({ product }: { product: any }) {
               </section>
             )}
 
+            {/* Indian Use Cases Section */}
+            <section>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Perfect for Indian Roads & Climate</h2>
+              <div className="prose prose-blue max-w-none text-gray-600 leading-relaxed">
+                <p>This {product.name} is specifically designed to handle the unique challenges of Indian roads and climate conditions:</p>
+                <ul className="list-disc space-y-2 pl-5 text-gray-700 marker:text-blue-600">
+                  <li><strong>Monsoon Ready:</strong> Water-resistant construction ensures reliable performance during heavy rains and flooding</li>
+                  <li><strong>Summer Heat Resistant:</strong> High-temperature materials withstand India's intense summer heat up to 45°C</li>
+                  <li><strong>Road Condition Optimized:</strong> Engineered for Indian road surfaces including potholes, speed breakers, and uneven terrain</li>
+                  <li><strong>Fuel Efficiency Focused:</strong> Designed to minimize drag and maximize fuel economy on Indian highways</li>
+                  <li><strong>Local Installation Support:</strong> Professional installation available at all Autobacs service centers across India</li>
+                </ul>
+                <p>Whether you're driving in Mumbai's monsoons, Delhi's smog, or Bangalore's traffic, this {product.name} delivers superior performance and reliability.</p>
+              </div>
+            </section>
+
+            {/* Product-Specific FAQs Section */}
+            <section>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Frequently Asked Questions</h2>
+              <div className="space-y-4">
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Is this {product.name} compatible with my vehicle?</h3>
+                  <p className="text-gray-600">Yes! This {product.name} is compatible with {product.compatibleVehicles?.length ? product.compatibleVehicles.map(v => `${v.make} ${v.model}`).join(', ') : 'most Indian vehicles'}. Check our vehicle compatibility tool above for exact fitment.</p>
+                </div>
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">What warranty does this {product.name} come with?</h3>
+                  <p className="text-gray-600">All Autobacs automotive accessories come with a comprehensive 2-year warranty covering manufacturing defects and workmanship.</p>
+                </div>
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Do you offer professional installation services?</h3>
+                  <p className="text-gray-600">Yes! We offer professional installation services at all our authorized service centers across India. Book your installation online or visit your nearest Autobacs store.</p>
+                </div>
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">How long does shipping take to my location?</h3>
+                  <p className="text-gray-600">We offer free shipping across India. Delivery typically takes 3-7 business days depending on your location. Express shipping options are available at checkout.</p>
+                </div>
+                <div className="border-b border-gray-200 pb-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Can I return this {product.name} if it doesn't meet my expectations?</h3>
+                  <p className="text-gray-600">Yes! We offer a 30-day no-questions-asked return policy for unused and uninstalled accessories. Items must be in original packaging with all components included.</p>
+                </div>
+              </div>
+            </section>
+
             {product.features && product.features.length > 0 && (
               <section>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Key Features</h2>
@@ -633,7 +782,7 @@ export function ProductDetailPageClient({ product }: { product: any }) {
           <div className="lg:col-span-1">
             <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 sticky top-8">
               <h3 className="text-xl font-bold text-gray-900 mb-6">Vehicle Compatibility</h3>
-              {product.compatibleVehicles && product.compatibleVehicles.length > 0 ? (
+              {product.compatibleVehicles?.length ? (
                 <div className="space-y-4">
                   <p className="text-sm text-gray-500 mb-4">
                     This part is compatible with the following vehicles:
@@ -708,13 +857,73 @@ export function ProductDetailPageClient({ product }: { product: any }) {
               </section>
             </div>
 
-            {/* Right Column: Reviews */}
+            {/* Right Column: Reviews & Related Products */}
             <div className="lg:col-span-8" id="reviews">
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Customer Reviews</h2>
               <Reviews 
                 productId={product._id} 
                 isAuthenticated={isAuthenticated} 
               />
+              
+              {/* Related Products Section */}
+              <section className="mt-16">
+                <h2 className="text-2xl font-bold text-gray-900 mb-8">Related Products</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Placeholder for related products - will be implemented via API call */}
+                  <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div className="h-48 bg-gray-200"></div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2">Similar Product</h3>
+                      <p className="text-gray-600 text-sm mb-3">Premium automotive accessory for Indian vehicles</p>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-900">₹2,499</span>
+                        <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors">
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div className="h-48 bg-gray-200"></div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2">Complementary Product</h3>
+                      <p className="text-gray-600 text-sm mb-3">Perfect match for your vehicle</p>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-900">₹1,899</span>
+                        <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors">
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div className="h-48 bg-gray-200"></div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2">Best Seller</h3>
+                      <p className="text-gray-600 text-sm mb-3">Top-rated by Indian customers</p>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-900">₹3,299</span>
+                        <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors">
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 text-center">
+                  {product.category && (
+                    <Link 
+                      href={`/categories/${typeof product.category === 'string' ? product.category : product.category.slug || ''}`} 
+                      className="inline-flex items-center text-blue-600 font-medium hover:text-blue-700"
+                    >
+                      View All {typeof product.category === 'string' ? product.category : product.category.name || 'Category'} Products
+                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+                      </svg>
+                    </Link>
+                  )}
+                </div>
+              </section>
             </div>
           </div>
         </div>
