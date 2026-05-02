@@ -54,6 +54,14 @@ export default function ProfilePage() {
   const loadProfileData = async () => {
     try {
       setLoading(true);
+      
+      // Ensure we have a valid auth state before making API calls
+      if (!isAuthenticated || !user) {
+        console.warn('Profile page: User not authenticated, redirecting to login');
+        router.push('/login');
+        return;
+      }
+      
       const [profileData, verificationData] = await Promise.all([
         profileService.getProfile(),
         apiClient.get<{
@@ -81,6 +89,12 @@ export default function ProfilePage() {
       });
     } catch (error) {
       console.error('Error loading profile data:', error);
+      
+      // Handle specific auth errors
+      if (error instanceof Error && error.message.includes('Not authorized')) {
+        console.warn('Authentication failed, redirecting to login');
+        router.push('/login?reason=auth_failed');
+      }
     } finally {
       setLoading(false);
     }
