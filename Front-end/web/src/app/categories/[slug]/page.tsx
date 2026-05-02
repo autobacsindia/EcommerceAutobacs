@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const title = `${category.name} | Autobacs India`;
   const description = category.description 
     ? category.description.substring(0, 160).replace(/\n/g, ' ') 
-    : `Shop ${category.name} at Autobacs India. Best prices on premium automotive accessories.`;
+    : `Shop ${category.name} at Autobacs India - Premium automotive accessories, body kits, and performance parts for Indian vehicles. Free shipping across India.`;
 
   const images = [];
   if (category.image) {
@@ -44,6 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title,
     description,
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/categories/${slug}` },
     openGraph: {
        title,
        description,

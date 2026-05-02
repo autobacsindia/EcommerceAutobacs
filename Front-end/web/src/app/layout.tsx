@@ -43,6 +43,10 @@ export const metadata: Metadata = {
   // Canonical URL
   alternates: {
     canonical: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    languages: {
+      'en-IN': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'en': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    },
   },
   
   // Open Graph metadata for social sharing
@@ -90,6 +94,56 @@ export const metadata: Metadata = {
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
   },
+  
+  // FAQ Schema for common automotive questions
+  other: {
+    'application/ld+json': JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      'mainEntity': [
+        {
+          '@type': 'Question',
+          'name': 'What types of automotive accessories do you sell?',
+          'acceptedAnswer': {
+            '@type': 'Answer',
+            'text': 'We sell premium automotive accessories including body kits, performance parts, lighting solutions, interior accessories, and vehicle-specific modifications for Indian vehicles.'
+          }
+        },
+        {
+          '@type': 'Question',
+          'name': 'Do you offer installation services for automotive accessories?',
+          'acceptedAnswer': {
+            '@type': 'Answer',
+            'text': 'Yes, we offer professional installation services for most automotive accessories at our authorized service centers across India.'
+          }
+        },
+        {
+          '@type': 'Question',
+          'name': 'What is your return policy for automotive accessories?',
+          'acceptedAnswer': {
+            '@type': 'Answer',
+            'text': 'We offer a 30-day return policy for unused and uninstalled automotive accessories. Items must be in original packaging with all components included.'
+          }
+        },
+        {
+          '@type': 'Question',
+          'name': 'Do you ship automotive accessories across India?',
+          'acceptedAnswer': {
+            '@type': 'Answer',
+            'text': 'Yes, we provide nationwide shipping for automotive accessories with free shipping on orders over ₹2,500.'
+          }
+        },
+        {
+          '@type': 'Question',
+          'name': 'How do I choose the right automotive accessories for my vehicle?',
+          'acceptedAnswer': {
+            '@type': 'Answer',
+            'text': 'Our vehicle-specific product mapping ensures compatibility. You can filter products by your vehicle make, model, and year to find perfectly compatible accessories.'
+          }
+        }
+      ]
+    })
+  }
 };
 
 export default function RootLayout({
@@ -99,6 +153,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

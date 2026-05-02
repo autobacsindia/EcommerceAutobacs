@@ -893,10 +893,9 @@ router.get(
     const code = req.query.code;
 
     if (!code) {
-      return res.status(400).json({
-        success: false,
-        message: "Authorization code not provided"
-      });
+      // Redirect back to login page with error message instead of JSON response
+      const frontendUrl = process.env.FRONTEND_URL || 'https://ecommerceautobacs-production-8c1b.up.railway.app';
+      return res.redirect(`${frontendUrl}/login?error=google_cancelled&message=Google%20Sign-In%20was%20cancelled`);
     }
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -1011,10 +1010,9 @@ router.get(
     const code = req.query.code;
 
     if (!code) {
-      return res.status(400).json({
-        success: false,
-        message: "Authorization code not provided"
-      });
+      // Redirect back to login page with error message instead of JSON response
+      const frontendUrl = process.env.FRONTEND_URL || 'https://ecommerceautobacs-production-8c1b.up.railway.app';
+      return res.redirect(`${frontendUrl}/login?error=google_cancelled&message=Google%20Sign-In%20was%20cancelled`);
     }
 
     const clientId = process.env.FACEBOOK_CLIENT_ID;
