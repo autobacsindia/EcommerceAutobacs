@@ -6,6 +6,7 @@ import apiClient from '@/lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
+import { generateSlug } from '@/lib/utils';
 
 interface Category {
   _id: string;
@@ -126,30 +127,48 @@ export default function EditProductPage() {
   const fetchProduct = async () => {
     try {
       console.log('Product ID:', productId);
-      
-      // First, get all products and find the one we need (avoids redirect issue)
-      const listResponse = await fetch('/api/v1/products?limit=100', {
+        
+      // Fetch product directly by ID (returns full product data)
+      const response = await fetch(`/api/v1/products/${productId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
+        // redirect: 'follow' // Don't follow redirects - get raw response
       });
-      
-      if (!listResponse.ok) {
-        throw new Error(`Failed to fetch products list: ${listResponse.status}`);
+        
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', response.status, errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      const listData = await listResponse.json();
-      const products = listData?.products || listData?.data || [];
-      const productData = products.find((p: any) => p._id === productId);
-      
+            
+      const data = await response.json();
+      console.log('Raw API response:', data);
+            
+      // Try multiple ways to extract product data
+      let productData;
+      if (data?.product) {
+        productData = data.product;
+        console.log('Using data.product');
+      } else if (data?.data) {
+        productData = data.data;
+        console.log('Using data.data');
+      } else if (data && typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length > 0) {
+        productData = data;
+        console.log('Using raw data object');
+      } else {
+        console.error('Unexpected API response format:', data);
+        throw new Error('API returned unexpected response format');
+      }
+            
       if (!productData) {
-        console.error('Product not found in list');
+        console.error('Product not found. Response:', data);
         alert('Product not found or may have been deleted');
         return;
       }
-      
+        
       console.log('Product loaded:', productData.name);
       console.log('Product price:', productData.price);
       console.log('Product categories:', productData.categories);
@@ -167,7 +186,7 @@ export default function EditProductPage() {
       setFeatures(productData.features || []);
       setPackageContents(productData.packageContents || []);
       setQna(productData.qna || []);
-      
+        
       if (productData.compatibleVehicles && Array.isArray(productData.compatibleVehicles)) {
         // Handle both populated (objects) and unpopulated (strings) arrays
         const vehicleIds = productData.compatibleVehicles.map((v: any) => 
@@ -175,7 +194,7 @@ export default function EditProductPage() {
         );
         setSelectedVehicles(vehicleIds);
       }
-        
+          
       // Populate form with product data
       setFormData({
         name: productData.name || '',
@@ -193,7 +212,7 @@ export default function EditProductPage() {
         offerEndDate: productData.offerEndDate ? new Date(productData.offerEndDate).toISOString().slice(0, 16) : '',
         isActive: productData.isActive !== undefined ? productData.isActive : true,
       });
-
+  
       // Handle categories
       if (productData.categories && Array.isArray(productData.categories)) {
         const categoryIds = productData.categories.map((c: any) => 
@@ -204,8 +223,10 @@ export default function EditProductPage() {
         // Fallback for single category
         const catId = typeof productData.category === 'object' ? productData.category._id : productData.category;
         setSelectedCategories([catId]);
+      } else {
+        setSelectedCategories([]);
       }
-
+  
       // Handle tags
       if (productData.tags && Array.isArray(productData.tags)) {
         setTagsInput(productData.tags.join(', '));
@@ -213,7 +234,7 @@ export default function EditProductPage() {
     } catch (err: any) {
       console.error('Failed to fetch product:', err);
       if (err.message.includes('Failed to fetch')) {
-        alert('Failed to connect to backend server. Please ensure it\'s running and accessible.');
+        alert("Failed to connect to backend server. Please ensure it's running and accessible.");
       } else {
         alert(`Failed to load product: ${err.message}`);
       }
@@ -307,6 +328,15 @@ export default function EditProductPage() {
       fd.append('isOfferFeatured', String(formData.isOfferFeatured));
       if (formData.offerStartDate) fd.append('offerStartDate', formData.offerStartDate);
       if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
+
+      // Generate and append slug from product name
+      const slug = formData.name
+        .toLowerCase()
+        .trim()
+        .replace(/[^[a-z0-9\s-]/g, '')
+        .replace(/[^\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      fd.append('slug', slug);
 
       // ── JSON-encoded arrays ────────────────────────────────────────────────
       fd.append('categories',      JSON.stringify(selectedCategories));
