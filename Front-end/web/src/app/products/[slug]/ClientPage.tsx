@@ -65,6 +65,7 @@ import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
+import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
 
 async function getProduct(slugOrId: string): Promise<any> {
   // Resolve exclusively via slug endpoint (canonical SEO URL)
@@ -869,6 +870,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               {/* Similar Products Section */}
               <section className="mt-16">
                 <SimilarProductsSection productId={product._id} />
+              </section>
+              
+              {/* Complementary Products Section */}
+              <section className="mt-16">
+                <ComplementaryProductsSection productId={product._id} />
               </section>
             </div>
           </div>

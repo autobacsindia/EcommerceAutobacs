@@ -27,12 +27,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     }
   }
 
-  const title = `${product.name} | Autobacs India`;
+  const title = product.name;
   const description = product.shortDescription
     ? product.shortDescription.substring(0, 160).replace(/\n/g, ' ')
     : product.description
       ? product.description.substring(0, 160).replace(/\n/g, ' ')
-      : 'Shop premium automotive accessories, body kits, and performance parts at Autobacs India.';
+      : 'Shop premium automotive accessories, body kits, and performance parts.';
 
   // Build canonical URL — slug is the only identifier; no _id fallback
   const url = product.slug ? `${SITE_URL}/products/${product.slug}` : null;

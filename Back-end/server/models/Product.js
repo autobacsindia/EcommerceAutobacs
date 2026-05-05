@@ -66,6 +66,11 @@ const ProductSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Vehicle"
   }],
+  // Complementary products - manually curated items that go well together
+  complementaryProducts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Product"
+  }],
   specifications: [{
     key: { type: String },
     value: { type: String }

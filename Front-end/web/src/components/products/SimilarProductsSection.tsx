@@ -1,7 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Product } from '@/types/product';
+import apiClient from '@/lib/api';
+
+interface Product {
+  _id: string;
+  name: string;
+  slug: string;
+  price: number;
+  originalPrice?: number;
+  images?: Array<{ url: string; alt?: string }> | string[];
+  averageRating?: number;
+  totalReviews?: number;
+  brand?: string;
+  categories?: Array<{ name: string; slug: string }>;
+}
 
 interface SimilarProductsSectionProps {
   productId: string;
@@ -19,16 +32,10 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
         setLoading(true);
         setError(null);
         
-        const res = await fetch(`/api/v1/products/${productId}/similar?limit=4`);
+        const response: any = await apiClient.get(`/products/${productId}/similar?limit=4`);
         
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-        
-        const data = await res.json();
-        
-        if (data.success && Array.isArray(data.products)) {
-          setProducts(data.products);
+        if (response.success && Array.isArray(response.products)) {
+          setProducts(response.products);
         } else {
           setError('No similar products found');
         }

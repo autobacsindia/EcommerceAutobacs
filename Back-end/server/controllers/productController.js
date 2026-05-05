@@ -251,22 +251,30 @@ export const getSimilarProducts = async (req, res, next) => {
     const similarProducts = await SearchService.getSimilarProducts(id, Number(limit));
     
     // Ensure products have all required fields for frontend display
-    const formattedProducts = similarProducts.map(product => ({
-      _id: product._id,
-      name: product.name || 'Product Name',
-      slug: product.slug || product._id.toString(),
-      price: product.price || 0,
-      originalPrice: product.originalPrice || null,
-      images: product.images || [],
-      averageRating: product.averageRating || 0,
-      totalReviews: product.totalReviews || 0,
-      brand: product.brand || 'Autobacs',
-      categories: product.categories || [],
-      shortDescription: product.shortDescription || '',
-      description: product.description || '',
-      stock: product.stock || 0,
-      isActive: product.isActive !== false
-    }));
+    const formattedProducts = similarProducts.map(product => {
+      // Normalize brand name - remove "India" suffix to avoid duplication
+      let brandName = product.brand || 'Autobacs';
+      if (brandName && brandName.includes('India')) {
+        brandName = brandName.replace(/\s*India\s*$/i, '').trim();
+      }
+      
+      return {
+        _id: product._id,
+        name: product.name || 'Product Name',
+        slug: product.slug || product._id.toString(),
+        price: product.price || 0,
+        originalPrice: product.originalPrice || null,
+        images: product.images || [],
+        averageRating: product.averageRating || 0,
+        totalReviews: product.totalReviews || 0,
+        brand: brandName,
+        categories: product.categories || [],
+        shortDescription: product.shortDescription || '',
+        description: product.description || '',
+        stock: product.stock || 0,
+        isActive: product.isActive !== false
+      };
+    });
     
     const responseData = {
       success: true,
@@ -285,6 +293,79 @@ export const getSimilarProducts = async (req, res, next) => {
     res.json(responseData);
   } catch (error) {
     console.error('[ProductController] Error in getSimilarProducts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const getComplementaryProducts = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { limit = 4 } = req.query;
+    
+    // Generate cache key
+    const cacheKey = `${CACHE_VERSION}:products:complementary:${id}:${limit}`;
+    
+    try {
+      // Try cache first
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+    } catch (cacheError) {
+      console.warn('[ProductController] Complementary products cache read failed:', cacheError.message);
+      // Continue to DB query if cache fails
+    }
+    
+    // Get complementary products from service
+    const complementaryProducts = await SearchService.getComplementaryProducts(id, Number(limit));
+    
+    // Ensure products have all required fields for frontend display
+    const formattedProducts = complementaryProducts.map(product => {
+      // Normalize brand name - remove "India" suffix to avoid duplication
+      let brandName = product.brand || 'Autobacs';
+      if (brandName && brandName.includes('India')) {
+        brandName = brandName.replace(/\s*India\s*$/i, '').trim();
+      }
+      
+      return {
+        _id: product._id,
+        name: product.name || 'Product Name',
+        slug: product.slug || product._id.toString(),
+        price: product.price || 0,
+        originalPrice: product.originalPrice || null,
+        images: product.images || [],
+        averageRating: product.averageRating || 0,
+        totalReviews: product.totalReviews || 0,
+        brand: brandName,
+        categories: product.categories || [],
+        shortDescription: product.shortDescription || '',
+        description: product.description || '',
+        stock: product.stock || 0,
+        isActive: product.isActive !== false
+      };
+    });
+    
+    const responseData = {
+      success: true,
+      count: formattedProducts.length,
+      products: formattedProducts
+    };
+    
+    // Cache for 5 minutes
+    try {
+      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
+    } catch (cacheError) {
+      console.warn('[ProductController] Complementary products cache write failed:', cacheError.message);
+      // Don't fail request if cache write fails
+    }
+    
+    res.json(responseData);
+  } catch (error) {
+    console.error('[ProductController] Error in getComplementaryProducts:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',

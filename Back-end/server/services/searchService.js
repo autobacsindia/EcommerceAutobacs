@@ -341,11 +341,18 @@ class SearchService {
    */
   static async getSimilarProducts(productId, limit = 4) {
     try {
-      const product = await Product.findById(productId).select('categories brand tags').lean();
+      const product = await Product.findById(productId).select('categories brand tags name').lean();
       
       if (!product) {
+        console.warn('[SearchService] Product not found:', productId);
         return [];
       }
+      
+      console.log('[SearchService] Finding similar products for:', product.name, {
+        categories: product.categories?.length || 0,
+        brand: product.brand || 'none',
+        tags: product.tags?.length || 0
+      });
       
       // Build query for similar products
       const query = {
@@ -363,20 +370,217 @@ class SearchService {
         query.tags = { $in: product.tags.slice(0, 3) };
       }
       
-      // Fallback: if no category/brand/tags match, use same-category products
-      if (Object.keys(query).length === 3) {
-        // Only has _id, isActive, stock — add category fallback
-        query.categories = { $in: product.categories || [] };
-      }
-      
-      return await Product.find(query)
+      // Try to find similar products
+      let similarProducts = await Product.find(query)
         .limit(limit)
         .populate('categories', 'name slug')
         .lean();
+      
+      console.log('[SearchService] Primary query found:', similarProducts.length, 'products');
+      
+      // Fallback: If no similar products found, return popular products from same category or all products
+      if (similarProducts.length === 0) {
+        console.log('[SearchService] Using fallback query for:', product.name);
+        const fallbackQuery = {
+          _id: { $ne: productId },
+          isActive: true,
+          stock: { $gt: 0 }
+        };
+        
+        // Try to get products from same category if available
+        if (product.categories && product.categories.length > 0) {
+          fallbackQuery.categories = { $in: product.categories };
+        }
+        
+        similarProducts = await Product.find(fallbackQuery)
+          .sort({ averageRating: -1, totalReviews: -1 }) // Sort by popularity
+          .limit(limit)
+          .populate('categories', 'name slug')
+          .lean();
+        
+        console.log('[SearchService] Fallback query found:', similarProducts.length, 'products');
+      }
+      
+      return similarProducts;
     } catch (error) {
       console.error('[SearchService] getSimilarProducts failed:', error);
       return [];
     }
+  }
+
+  /**
+   * Get complementary products for a product
+   * Uses manual curation first, then falls back to category-based matching
+   */
+  static async getComplementaryProducts(productId, limit = 4) {
+    try {
+      const product = await Product.findById(productId)
+        .select('complementaryProducts categories name')
+        .populate('complementaryProducts')
+        .lean();
+      
+      if (!product) {
+        console.warn('[SearchService] Product not found for complementary:', productId);
+        return [];
+      }
+      
+      console.log('[SearchService] Finding complementary products for:', product.name);
+      
+      // First, get similar products to exclude them from complementary
+      const similarProducts = await this.getSimilarProducts(productId, 20);
+      const similarIds = new Set(similarProducts.map(p => p._id.toString()));
+      console.log('[SearchService] Excluding', similarIds.size, 'similar products from complementary results');
+      
+      // Priority 1: Use manually curated complementary products (exclude similar ones)
+      if (product.complementaryProducts && product.complementaryProducts.length > 0) {
+        const complementary = product.complementaryProducts
+          .filter(p => p && p.isActive && p.stock > 0 && !similarIds.has(p._id.toString()))
+          .slice(0, limit);
+        
+        console.log('[SearchService] Found', complementary.length, 'manual complementary products (excluding similar)');
+        
+        if (complementary.length > 0) {
+          return complementary;
+        }
+      }
+      
+      // Priority 2: Fallback to related categories (different from main categories AND similar products)
+      if (product.categories && product.categories.length > 0) {
+        console.log('[SearchService] Using category-based complementary matching');
+        
+        // Find products in related but different categories
+        const relatedCategories = await this.getRelatedCategories(product.categories);
+        
+        if (relatedCategories.length > 0) {
+          const complementary = await Product.find({
+            _id: { $ne: productId, $nin: Array.from(similarIds) },
+            categories: { $in: relatedCategories },
+            isActive: true,
+            stock: { $gt: 0 }
+          })
+            .limit(limit)
+            .sort({ averageRating: -1, totalReviews: -1 })
+            .populate('categories', 'name slug')
+            .lean();
+          
+          console.log('[SearchService] Category fallback found:', complementary.length, 'products');
+          
+          if (complementary.length > 0) {
+            return complementary;
+          }
+        }
+      }
+      
+      // Priority 3: Return popular products from different categories (excluding similar)
+      console.log('[SearchService] Using popular products fallback (excluding similar)');
+      let popularProducts = await Product.find({
+        _id: { $ne: productId, $nin: Array.from(similarIds) },
+        isActive: true,
+        stock: { $gt: 0 },
+        categories: { $nin: product.categories || [] }
+      })
+        .limit(limit)
+        .sort({ averageRating: -1, totalReviews: -1 })
+        .populate('categories', 'name slug')
+        .lean();
+      
+      console.log('[SearchService] Popular fallback found:', popularProducts.length, 'products');
+      
+      // If still no results, relax category constraint but still exclude similar
+      if (popularProducts.length === 0) {
+        console.log('[SearchService] Relaxing category constraint for complementary');
+        popularProducts = await Product.find({
+          _id: { $ne: productId, $nin: Array.from(similarIds) },
+          isActive: true,
+          stock: { $gt: 0 }
+        })
+          .limit(limit)
+          .sort({ averageRating: -1, totalReviews: -1 })
+          .populate('categories', 'name slug')
+          .lean();
+        
+        console.log('[SearchService] Relaxed fallback found:', popularProducts.length, 'products');
+      }
+      
+      // If STILL no results, allow showing similar products (better than empty)
+      if (popularProducts.length === 0) {
+        console.log('[SearchService] No exclusive complementary found, showing any available products');
+        popularProducts = await Product.find({
+          _id: { $ne: productId },
+          isActive: true,
+          stock: { $gt: 0 }
+        })
+          .limit(limit)
+          .sort({ averageRating: -1, totalReviews: -1 })
+          .populate('categories', 'name slug')
+          .lean();
+        
+        console.log('[SearchService] Final fallback found:', popularProducts.length, 'products');
+      }
+      
+      return popularProducts;
+    } catch (error) {
+      console.error('[SearchService] getComplementaryProducts failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get related categories for complementary matching
+   * Returns categories that are commonly purchased together
+   */
+  static async getRelatedCategories(categoryIds) {
+    // Common complementary category mappings
+    const categoryMap = {
+      'exterior': ['cleaning', 'maintenance', 'tools'],
+      'interior': ['cleaning', 'accessories', 'electronics'],
+      'suspension': ['tools', 'maintenance', 'performance'],
+      'performance': ['maintenance', 'tools', 'lubricants'],
+      'body-kit': ['paint', 'tools', 'maintenance'],
+      'lighting': ['electrical', 'tools'],
+      'wheels': ['maintenance', 'tools', 'accessories'],
+    };
+    
+    const related = new Set();
+    
+    for (const catId of categoryIds) {
+      // Try to match category slug or name
+      try {
+        const Category = mongoose.model('Category');
+        const category = await Category.findById(catId).select('slug name').lean();
+        
+        if (category) {
+          const slug = (category.slug || category.name || '').toLowerCase();
+          
+          for (const [key, values] of Object.entries(categoryMap)) {
+            if (slug.includes(key)) {
+              values.forEach(v => related.add(v));
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore errors for individual categories
+      }
+    }
+    
+    // Convert category names/slugs to IDs
+    if (related.size > 0) {
+      try {
+        const Category = mongoose.model('Category');
+        const relatedCategories = await Category.find({
+          $or: [
+            { slug: { $in: Array.from(related) } },
+            { name: { $regex: Array.from(related).join('|'), $options: 'i' } }
+          ]
+        }).select('_id').lean();
+        
+        return relatedCategories.map(c => c._id);
+      } catch (err) {
+        console.warn('[SearchService] Failed to resolve related category IDs:', err.message);
+      }
+    }
+    
+    return [];
   }
 }
 export default SearchService;

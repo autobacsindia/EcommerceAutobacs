@@ -37,7 +37,8 @@ import {
   getOfferProducts,
   getProductsByVehicle,
   getBrands,
-  getSimilarProducts
+  getSimilarProducts,
+  getComplementaryProducts
 } from "../controllers/productController.js";
 import {
   createProductWithImages,
@@ -242,6 +243,11 @@ router.get("/:id", validateProductIdParam, publicCacheResponse('PRODUCT_DETAIL')
 // @desc    Get products similar to the specified product (same category/brand/tags)
 // @access  Public
 router.get('/:id/similar', validateProductIdParam, publicProductRateLimit, publicCacheResponse('PRODUCT_SIMILAR'), asyncHandler(getSimilarProducts));
+
+// @route   GET /products/:id/complementary
+// @desc    Get complementary products (commonly bought together)
+// @access  Public
+router.get('/:id/complementary', validateProductIdParam, publicProductRateLimit, publicCacheResponse('PRODUCT_COMPLEMENTARY'), asyncHandler(getComplementaryProducts));
 
 // @route   POST /products
 // @desc    Create a new product (supports multipart/form-data with images)
