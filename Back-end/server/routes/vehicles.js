@@ -13,6 +13,7 @@ import {
   validateSlugParam,
   validateVehicleQuery,
 } from "../middleware/validationMiddleware.js";
+import { publicCacheResponse } from "../middleware/publicCacheMiddleware.js";
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // @route   GET /vehicles/makes
 // @desc    Get all vehicle makes
 // @access  Public
-router.get("/makes", asyncHandler(async (req, res) => {
+router.get("/makes", publicCacheResponse('VEHICLE_MAKES'), asyncHandler(async (req, res) => {
   try {
     const Vehicle = (await import('../models/Vehicle.js')).default;
     const makes = await Vehicle.distinct("make", { isActive: true }).sort();

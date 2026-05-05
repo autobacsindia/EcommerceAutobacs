@@ -43,6 +43,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   // Enhanced checkAuth with better error handling and consistency
   const checkAuth = useCallback(async () => {
+    // Try to get from localStorage first
+    const cachedAuth = localStorage.getItem('auth_check');
+    if (cachedAuth) {
+      try {
+        const parsedAuth = JSON.parse(cachedAuth);
+        // Check if cache is still valid (5 minute expiration)
+        const now = Date.now();
+        if (parsedAuth.timestamp && (now - parsedAuth.timestamp) < 5 * 60 * 1000) {
+          if (parsedAuth.user) {
+            setUser(parsedAuth.user);
+            setToken(null);
+          } else {
+            apiClient.clearAuthToken();
+            setUser(null);
+            setToken(null);
+          }
+          setIsLoading(false);
+          return;
+        }
+      } catch (e) {
+        console.warn('Failed to parse cached auth data:', e);
+      }
+    }
+    
     try {
       setIsLoading(true);
       
@@ -62,11 +86,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
         // Don't set token - it's in httpOnly cookie
         setToken(null);
+        
+        // Cache the result for 5 minutes
+        try {
+          localStorage.setItem('auth_check', JSON.stringify({
+            user: userData,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.warn('Failed to cache auth check in localStorage:', e);
+        }
       } else {
         // Invalid token - ensure consistent cleanup
         apiClient.clearAuthToken();
         setUser(null);
         setToken(null);
+        
+        // Cache the null result for 5 minutes
+        try {
+          localStorage.setItem('auth_check', JSON.stringify({
+            user: null,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.warn('Failed to cache auth check in localStorage:', e);
+        }
       }
     } catch (err: any) {
       // Only log actual errors, not on expected auth failures
@@ -82,6 +126,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       apiClient.clearAuthToken();
       setUser(null);
       setToken(null);
+      
+      // Cache the error state for 5 minutes
+      try {
+        localStorage.setItem('auth_check', JSON.stringify({
+          user: null,
+          timestamp: Date.now()
+        }));
+      } catch (e) {
+        console.warn('Failed to cache auth check in localStorage:', e);
+      }
     } finally {
       setIsLoading(false);
     }

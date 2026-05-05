@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '@/lib/api';
 import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
+import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
 
 interface VehicleMake {
   _id: string;
@@ -21,12 +22,9 @@ export default function VehicleSelector({
 }: {
   onVehicleSelect: (make: string, model: string) => void
 }) {
-  const [makes, setMakes] = useState<VehicleMake[]>([]);
   const [models, setModels] = useState<VehicleModel[]>([]);
   const [selectedMake, setSelectedMake] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Keep a stable ref to the callback so the effect below never re-fires
   // due to a parent re-render creating a new function identity.
@@ -35,27 +33,21 @@ export default function VehicleSelector({
     onVehicleSelectRef.current = onVehicleSelect;
   });
 
-  // Fetch vehicle makes on component mount
-  useEffect(() => {
-    const fetchMakes = async () => {
-      try {
-        setLoading(true);
-        const response: any = await apiClient.get('/vehicles/makes');
-        setMakes(response.makes.map((make: string) => ({
-          _id: make,
-          name: make,
-          slug: make.toLowerCase().replace(/\s+/g, '-')
-        })));
-      } catch (err) {
-        console.error('Failed to fetch vehicle makes:', err);
-        setError('Failed to load vehicle makes');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Fetch vehicle makes — shared with HeaderVehicleSelector via in-memory cache + in-flight dedup
+  const { data: makes, loading, error: makesError } = useCachedData<VehicleMake[]>(
+    CACHE_KEYS.VEHICLE_MAKES,
+    async () => {
+      const response: any = await apiClient.get('/vehicles/makes');
+      return response.makes.map((make: string) => ({
+        _id: make,
+        name: make,
+        slug: make.toLowerCase().replace(/\s+/g, '-')
+      }));
+    },
+    24 * 60 * 60 * 1000 // 24 hours
+  );
 
-    fetchMakes();
-  }, []);
+  const error = makesError ? 'Failed to load vehicle makes' : null;
 
   // Fetch models when make is selected
   useEffect(() => {
@@ -75,7 +67,6 @@ export default function VehicleSelector({
         })));
       } catch (err) {
         console.error('Failed to fetch vehicle models:', err);
-        setError('Failed to load vehicle models');
       }
     };
 
@@ -126,7 +117,7 @@ export default function VehicleSelector({
           className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
           <option value="">Select Make</option>
-          {makes.map((make) => (
+          {(makes ?? []).map((make) => (
             <option key={make._id} value={make.name}>
               {make.name}
             </option>

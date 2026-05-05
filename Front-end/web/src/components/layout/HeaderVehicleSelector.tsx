@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { Car } from 'lucide-react';
+import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
 
 interface VehicleMake {
   _id: string;
@@ -27,23 +28,25 @@ export default function HeaderVehicleSelector() {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch vehicle makes on component mount
-  useEffect(() => {
-    const fetchMakes = async () => {
-      try {
-        const response: any = await apiClient.get('/vehicles/makes');
-        setMakes(response.makes.map((make: string) => ({
-          _id: make,
-          name: make,
-          slug: make.toLowerCase().replace(/\s+/g, '-')
-        })));
-      } catch (err) {
-        console.error('Failed to fetch vehicle makes:', err);
-      }
-    };
+  // Fetch vehicle makes with global cache service
+  const { data: makesData, loading: makesLoading, error: makesError, refetch: refetchMakes } = useCachedData<VehicleMake[]>(
+    CACHE_KEYS.VEHICLE_MAKES,
+    async () => {
+      const response: any = await apiClient.get('/vehicles/makes');
+      return response.makes.map((make: string) => ({
+        _id: make,
+        name: make,
+        slug: make.toLowerCase().replace(/\s+/g, '-')
+      }));
+    },
+    24 * 60 * 60 * 1000 // 24 hours
+  );
 
-    fetchMakes();
-  }, []);
+  useEffect(() => {
+    if (makesData) {
+      setMakes(makesData);
+    }
+  }, [makesData]);
 
   // Fetch models when make is selected
   useEffect(() => {

@@ -59,6 +59,22 @@ export default function ModernFastMovingSection({
   const router = useRouter();
 
   useEffect(() => {
+    // Generate cache key based on isFastMoving and limit
+    const cacheKey = `fastMoving_${limit}`;
+    
+    // Try to get from localStorage first
+    const cachedProducts = localStorage.getItem(cacheKey);
+    if (cachedProducts) {
+      try {
+        const parsedProducts = JSON.parse(cachedProducts);
+        setProducts(parsedProducts);
+        setLoading(false);
+        return;
+      } catch (e) {
+        console.warn('Failed to parse cached fast-moving products:', e);
+      }
+    }
+    
     const fetchFastMovingProducts = async () => {
       try {
         setLoading(true);
@@ -66,7 +82,15 @@ export default function ModernFastMovingSection({
         
         // Fetch fast moving products
         const response: any = await apiClient.get(`/products?isFastMoving=true&limit=${limit}`);
-        setProducts(response.products || []);
+        const productsData = response.products || [];
+        setProducts(productsData);
+        
+        // Cache in localStorage for 5 minutes
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(productsData));
+        } catch (e) {
+          console.warn('Failed to cache fast-moving products in localStorage:', e);
+        }
       } catch (err: any) {
         console.error('Failed to fetch fast-moving products:', err);
         setError('Failed to load fast-moving products.');
@@ -158,7 +182,7 @@ export default function ModernFastMovingSection({
               style={{ animationDelay: `${index * 100}ms` }}
             >
               {/* Product Image */}
-              <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+              <div className="relative aspect-4/3 overflow-hidden bg-gray-100">
                 <Link href={url}>
                     {product.images && Array.isArray(product.images) && product.images.length > 0 ? (
                       <ProductImage 
@@ -212,7 +236,7 @@ export default function ModernFastMovingSection({
               </div>
 
               {/* Product Info */}
-              <div className="p-6 flex-grow flex flex-col">
+              <div className="p-6 grow flex flex-col">
                 <div className="text-xs text-blue-600 font-semibold mb-2 uppercase tracking-wide">
                   {typeof product.category === 'string' ? 'Auto Parts' : product.category?.name}
                 </div>
@@ -246,7 +270,7 @@ export default function ModernFastMovingSection({
           {/* "See More" Card as the last item if we have products */}
            <Link 
             href="/products?isFastMoving=true"
-            className="group bg-blue-600 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 overflow-hidden flex flex-col items-center justify-center p-8 text-center text-white h-full min-h-[400px]"
+            className="group bg-blue-600 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 overflow-hidden flex flex-col items-center justify-center p-8 text-center text-white h-full min-h-100"
           >
             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
               <ArrowRight className="w-8 h-8 text-white" />

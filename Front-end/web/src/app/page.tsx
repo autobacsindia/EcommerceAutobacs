@@ -72,7 +72,7 @@ export default function Home() {
                   className="group"
                 >
                   <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">
-                    <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                    <div className="aspect-square bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
                       {vehicle.image && (
                         <Image
                           src={vehicle.image}
@@ -94,7 +94,7 @@ export default function Home() {
 
               {/* See More Card */}
               <Link href="/vehicles" className="group">
-                <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center p-6">
+                <div className="bg-linear-to-br from-blue-600 to-blue-700 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center p-6">
                   <div className="text-white text-center">
                     <svg
                       className="w-12 h-12 mx-auto mb-3 group-hover:scale-110 transition-transform"
@@ -118,7 +118,7 @@ export default function Home() {
           </div>
 
           {/* Brand Logos Slider */}
-          <div className="mt-16 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-12 bg-gradient-to-br from-gray-50 to-gray-100">
+          <div className="mt-16 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-12 bg-linear-to-br from-gray-50 to-gray-100">
             <div className="text-center mb-8">
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Trusted Brands</h3>
               <p className="text-gray-600">Premium automotive parts from world-class manufacturers</p>
@@ -126,7 +126,7 @@ export default function Home() {
             <div className="relative overflow-hidden py-8">
               <div className="flex animate-scroll space-x-12 items-center">
                 {/* First set of logos */}
-                <Link href="/brands/profender" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
                     alt="Profender"
@@ -135,7 +135,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/bushranger" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
                     alt="Bushranger"
@@ -144,7 +144,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/ironman-4x4" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -153,7 +153,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/dr-nano" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
@@ -162,7 +162,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/lightforce" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
                     alt="Lightforce"
@@ -171,7 +171,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/option4wd" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -181,7 +181,7 @@ export default function Home() {
                   />
                 </Link>
                 {/* Duplicate set for seamless loop */}
-                <Link href="/brands/profender" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
                     alt="Profender"
@@ -190,7 +190,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/bushranger" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
                     alt="Bushranger"
@@ -199,7 +199,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/ironman-4x4" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -208,7 +208,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/dr-nano" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
@@ -217,7 +217,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/lightforce" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
                     alt="Lightforce"
@@ -226,7 +226,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/option4wd" className="flex-shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -257,16 +257,19 @@ export default function Home() {
             <KeepShoppingWidget
               title="Keep shopping for"
               searchKeyword="suspension performance"
+              categorySlug="suspension,performance"
               viewAllLink="/products?search=suspension performance"
             />
             <KeepShoppingWidget
               title="Revamp your ride in style"
               searchKeyword="exterior"
+              categorySlug="exterior"
               viewAllLink="/products?search=exterior"
             />
             <KeepShoppingWidget
               title="Transform your vehicle"
               searchKeyword="accessories"
+              categorySlug="interior"
               viewAllLink="/products?search=accessories"
             />
           </div>
@@ -319,7 +322,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Link href="/categories/bodykit" className="group">
               <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                <div className="h-48 bg-linear-to-br from-blue-400 to-blue-600 flex items-center justify-center">
                   <span className="text-white text-2xl font-bold">Body Kits</span>
                 </div>
                 <div className="p-6">
@@ -331,7 +334,7 @@ export default function Home() {
 
             <Link href="/categories/performance" className="group">
               <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center">
+                <div className="h-48 bg-linear-to-br from-red-400 to-red-600 flex items-center justify-center">
                   <span className="text-white text-2xl font-bold">Performance</span>
                 </div>
                 <div className="p-6">
@@ -343,7 +346,7 @@ export default function Home() {
 
             <Link href="/categories/suspension" className="group">
               <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                <div className="h-48 bg-linear-to-br from-green-400 to-green-600 flex items-center justify-center">
                   <span className="text-white text-2xl font-bold">Suspension</span>
                 </div>
                 <div className="p-6">

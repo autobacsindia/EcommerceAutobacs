@@ -64,6 +64,7 @@ import ShareButton from '@/components/products/ShareButton';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 
 async function getProduct(slugOrId: string): Promise<any> {
   // Resolve exclusively via slug endpoint (canonical SEO URL)
@@ -865,64 +866,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
                 isAuthenticated={isAuthenticated} 
               />
               
-              {/* Related Products Section */}
+              {/* Similar Products Section */}
               <section className="mt-16">
-                <h2 className="text-2xl font-bold text-gray-900 mb-8">Related Products</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Placeholder for related products - will be implemented via API call */}
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                    <div className="h-48 bg-gray-200"></div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2">Similar Product</h3>
-                      <p className="text-gray-600 text-sm mb-3">Premium automotive accessory for Indian vehicles</p>
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-gray-900">₹2,499</span>
-                        <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors">
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                    <div className="h-48 bg-gray-200"></div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2">Complementary Product</h3>
-                      <p className="text-gray-600 text-sm mb-3">Perfect match for your vehicle</p>
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-gray-900">₹1,899</span>
-                        <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors">
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                    <div className="h-48 bg-gray-200"></div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2">Best Seller</h3>
-                      <p className="text-gray-600 text-sm mb-3">Top-rated by Indian customers</p>
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-gray-900">₹3,299</span>
-                        <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition-colors">
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-6 text-center">
-                  {product.category && (
-                    <Link 
-                      href={`/categories/${typeof product.category === 'string' ? product.category : product.category.slug || ''}`} 
-                      className="inline-flex items-center text-blue-600 font-medium hover:text-blue-700"
-                    >
-                      View All {typeof product.category === 'string' ? product.category : product.category.name || 'Category'} Products
-                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-                      </svg>
-                    </Link>
-                  )}
-                </div>
+                <SimilarProductsSection productId={product._id} />
               </section>
             </div>
           </div>

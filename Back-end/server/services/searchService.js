@@ -116,43 +116,48 @@ class SearchService {
     }
     
     if (search) {
-      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapeRegex(search), 'i');
-      query.$or = [
-        { name: regex },
-        { description: regex },
-        { brand: regex },
-        { tags: { $elemMatch: { $regex: regex } } }
-      ];
+      query.$text = { $search: search };
     }
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    const sortOptions = {};
-    sortOptions[sortBy] = order === 'asc' ? 1 : -1;
+    let sortOptions = {};
+    if (search && sortBy === 'createdAt') {
+      sortOptions = { score: { $meta: 'textScore' } };
+    } else {
+      sortOptions[sortBy] = order === 'asc' ? 1 : -1;
+    }
 
-    let productQuery = Product.find(query)
-      .populate('categories', 'name slug')
-      .populate('compatibleVehicles', 'make model year');
-    productQuery = productQuery.sort(sortOptions);
-    
-    const products = await productQuery
-      .skip(skip)
-      .limit(Number(limit));
+    try {
+      let productQuery = search
+        ? Product.find(query, { score: { $meta: 'textScore' } })
+        : Product.find(query);
+      productQuery = productQuery
+        .populate('categories', 'name slug')
+        .populate('compatibleVehicles', 'make model year')
+        .sort(sortOptions);
+      
+      const products = await productQuery
+        .skip(skip)
+        .limit(Number(limit));
 
-    const total = await Product.countDocuments(query);
+      const total = await Product.countDocuments(query);
 
-    return {
-      products,
-      pagination: {
-        total,
-        pages: Math.ceil(total / Number(limit)),
-        currentPage: Number(page),
-        hasNext: Number(page) < Math.ceil(total / Number(limit)),
-        hasPrev: Number(page) > 1
-      }
-    };
+      return {
+        products,
+        pagination: {
+          total,
+          pages: Math.ceil(total / Number(limit)),
+          currentPage: Number(page),
+          hasNext: Number(page) < Math.ceil(total / Number(limit)),
+          hasPrev: Number(page) > 1
+        }
+      };
+    } catch (error) {
+      console.error('[SearchService] Database query failed:', error);
+      throw new Error(`Database query failed: ${error.message}`);
+    }
   }
 
   /**
@@ -327,6 +332,51 @@ class SearchService {
     // In a more advanced implementation, we would delete entries from a search_history collection
     return { success: true };
   }
-}
 
+  /**
+   * Get products similar to the specified product (same category/brand/tags)
+   * @param {string} productId - The ID of the reference product
+   * @param {number} limit - Maximum number of similar products to return
+   * @returns {Array} Array of similar products
+   */
+  static async getSimilarProducts(productId, limit = 4) {
+    try {
+      const product = await Product.findById(productId).select('categories brand tags').lean();
+      
+      if (!product) {
+        return [];
+      }
+      
+      // Build query for similar products
+      const query = {
+        _id: { $ne: productId },
+        isActive: true,
+        stock: { $gt: 0 }
+      };
+      
+      // Prioritize by category > brand > tags
+      if (product.categories && product.categories.length > 0) {
+        query.categories = { $in: product.categories };
+      } else if (product.brand) {
+        query.brand = product.brand;
+      } else if (product.tags && product.tags.length > 0) {
+        query.tags = { $in: product.tags.slice(0, 3) };
+      }
+      
+      // Fallback: if no category/brand/tags match, use same-category products
+      if (Object.keys(query).length === 3) {
+        // Only has _id, isActive, stock — add category fallback
+        query.categories = { $in: product.categories || [] };
+      }
+      
+      return await Product.find(query)
+        .limit(limit)
+        .populate('categories', 'name slug')
+        .lean();
+    } catch (error) {
+      console.error('[SearchService] getSimilarProducts failed:', error);
+      return [];
+    }
+  }
+}
 export default SearchService;

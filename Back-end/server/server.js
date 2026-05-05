@@ -45,9 +45,11 @@ if (isProductionPlatform && process.env.NODE_ENV !== 'production') {
 }
 
 // Positive assertion for debugging
+console.log('[Startup] Environment check: NODE_ENV=', process.env.NODE_ENV || 'undefined', ' | RAILWAY_ENVIRONMENT=', process.env.RAILWAY_ENVIRONMENT || 'undefined', ' | VERCEL_ENV=', process.env.VERCEL_ENV || 'undefined');
+  
 if (process.env.NODE_ENV === 'production') {
   console.log('[Startup] ✓ Production mode verified - security hardening enabled');
-  
+    
   // Advanced: Warn if .env file is detected in production (should use platform variables)
   const fs = await import('fs');
   const path = await import('path');

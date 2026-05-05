@@ -56,6 +56,25 @@ export default function FastMovingProducts({
   const router = useRouter();
 
   useEffect(() => {
+    // Generate cache key based on limit
+    const cacheKey = `featured_products_${limit}`;
+    
+    // Try to get from localStorage first
+    const cachedProducts = localStorage.getItem(cacheKey);
+    if (cachedProducts) {
+      try {
+        const parsedProducts = JSON.parse(cachedProducts);
+        // Validate cache data structure
+        if (Array.isArray(parsedProducts)) {
+          setProducts(parsedProducts);
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        console.warn('Failed to parse cached featured products:', e);
+      }
+    }
+    
     const fetchFastMovingProducts = async () => {
       try {
         setLoading(true);
@@ -64,7 +83,15 @@ export default function FastMovingProducts({
         // Fetch featured products (actual products marked as featured in the database)
         // This ensures we show real, curated popular products
         const response: any = await apiClient.get(`/products/featured?limit=${limit}`);
-        setProducts(response.products || []);
+        const productsData = response.products || [];
+        setProducts(productsData);
+        
+        // Cache in localStorage for 5 minutes
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(productsData));
+        } catch (e) {
+          console.warn('Failed to cache featured products in localStorage:', e);
+        }
       } catch (err: any) {
         console.error('Failed to fetch fast-moving products:', err);
         
@@ -142,7 +169,7 @@ export default function FastMovingProducts({
               <ProductCardSkeleton key={index} />
             ))}
             {/* View All Card Skeleton */}
-            <div className="bg-gray-200 rounded-lg animate-pulse min-h-[400px]"></div>
+            <div className="bg-gray-200 rounded-lg animate-pulse min-h-100"></div>
           </div>
         </div>
       </section>

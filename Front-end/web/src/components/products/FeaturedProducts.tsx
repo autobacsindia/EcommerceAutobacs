@@ -39,6 +39,22 @@ export default function FeaturedProducts() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Generate cache key for featured products
+    const cacheKey = 'featured_products_6';
+    
+    // Try to get from localStorage first
+    const cachedProducts = localStorage.getItem(cacheKey);
+    if (cachedProducts) {
+      try {
+        const parsedProducts = JSON.parse(cachedProducts);
+        setProducts(parsedProducts);
+        setLoading(false);
+        return;
+      } catch (e) {
+        console.warn('Failed to parse cached featured products:', e);
+      }
+    }
+    
     const controller = new AbortController();
 
     const fetchFeaturedProducts = async () => {
@@ -46,7 +62,15 @@ export default function FeaturedProducts() {
         setLoading(true);
         // Use the dedicated endpoint for featured products
         const response: any = await apiClient.get('/products/featured?limit=6', { signal: controller.signal });
-        setProducts(response.products);
+        const productsData = response.products || [];
+        setProducts(productsData);
+        
+        // Cache in localStorage for 5 minutes
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(productsData));
+        } catch (e) {
+          console.warn('Failed to cache featured products in localStorage:', e);
+        }
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         console.error('Failed to fetch featured products:', err);

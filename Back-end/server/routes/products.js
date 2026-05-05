@@ -17,6 +17,7 @@ import {
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 import { cacheMiddleware } from "../middleware/cacheControl.js";
+import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
 import {
   uploadMultiple,
@@ -35,7 +36,8 @@ import {
   getFeaturedProducts,
   getOfferProducts,
   getProductsByVehicle,
-  getBrands
+  getBrands,
+  getSimilarProducts
 } from "../controllers/productController.js";
 import {
   createProductWithImages,
@@ -87,13 +89,13 @@ const publicProductRateLimit = rateLimit({
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
 // CRITICAL: Layered rate limiting for search (burst + sustained)
-router.get("/", searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), cacheResponse(300), validateProductSearch, asyncHandler(getProducts));
+router.get("/", searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), publicCacheResponse('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
 // @access  Public
 // CRITICAL: Rate limit search suggestions (autocomplete fires on every keystroke)
-router.get("/suggestions", searchBurstLimit, searchRateLimit, cacheResponse(300), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
+router.get("/suggestions", searchBurstLimit, searchRateLimit, publicCacheResponse('PRODUCT_SEARCH'), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
 
 // @route   GET /products/analytics
 // @desc    Get search analytics
@@ -103,7 +105,7 @@ router.get("/analytics", protect, admin, validateSearchAnalytics, asyncHandler(g
 // @route   GET /products/history
 // @desc    Get search history
 // @access  Public
-router.get("/history", validateSearchHistory, asyncHandler(getSearchHistory));
+router.get("/history", validateSearchHistory, publicCacheResponse('PRODUCT_HISTORY'), asyncHandler(getSearchHistory));
 
 // @route   DELETE /products/history
 // @desc    Clear search history
@@ -118,12 +120,12 @@ router.delete("/history/:term", validateSearchTermParam, asyncHandler(removeSear
 // @route   GET /products/featured
 // @desc    Get featured products
 // @access  Public
-router.get("/featured", publicProductRateLimit, cacheResponse(5 * 60), asyncHandler(getFeaturedProducts));
+router.get("/featured", publicProductRateLimit, publicCacheResponse('PRODUCT_FEATURED'), asyncHandler(getFeaturedProducts));
 
 // @route   GET /products/offers
 // @desc    Get products to showcase on Offers page
 // @access  Public
-router.get("/offers", cacheResponse(5 * 60), asyncHandler(getOfferProducts));
+router.get("/offers", publicCacheResponse('PRODUCT_OFFERS'), asyncHandler(getOfferProducts));
 
 // @route   GET /products/by-vehicle/:vehicleId
 // @desc    Get products compatible with a specific vehicle
@@ -133,12 +135,12 @@ router.get('/by-vehicle/:vehicleId', asyncHandler(getProductsByVehicle));
 // @route   GET /products/brands
 // @desc    Get all available brands
 // @access  Public
-router.get('/brands', publicProductRateLimit, asyncHandler(getBrands));
+router.get('/brands', publicProductRateLimit, publicCacheResponse('PRODUCT_BRANDS'), asyncHandler(getBrands));
 
 // @route   GET /products/brands/:brandName
 // @desc    Get products for a specific brand
 // @access  Public
-router.get('/brands/:brandName', publicProductRateLimit, asyncHandler(getBrandProducts));
+router.get('/brands/:brandName', publicProductRateLimit, publicCacheResponse('PRODUCT_BRANDS'), asyncHandler(getBrandProducts));
 
 // @route   GET /products/brands/:brandName/details
 // @desc    Get details for a specific brand
@@ -214,12 +216,12 @@ router.get("/cleanup/status", protect, admin, asyncHandler(getCleanupStatus));
 // @route   GET /products/slug/:slug
 // @desc    Get product by slug (SEO-friendly canonical URL)
 // @access  Public
-router.get("/slug/:slug", cacheMiddleware('product-detail'), asyncHandler(getProductBySlug));
+router.get("/slug/:slug", cacheMiddleware('product-detail'), publicCacheResponse('PRODUCT_DETAIL'), asyncHandler(getProductBySlug));
 
 // @route   GET /products/:id
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing
 // @access  Public
-router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
+router.get("/:id", validateProductIdParam, publicCacheResponse('PRODUCT_DETAIL'), asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id).select('slug').lean();
 
   if (!product) {
@@ -235,6 +237,11 @@ router.get("/:id", validateProductIdParam, asyncHandler(async (req, res) => {
   // Product exists but has no slug yet (pre-migration doc) — serve directly
   return (await import('../controllers/productAdminController.js')).getProduct(req, res);
 }));
+
+// @route   GET /products/:id/similar
+// @desc    Get products similar to the specified product (same category/brand/tags)
+// @access  Public
+router.get('/:id/similar', validateProductIdParam, publicProductRateLimit, publicCacheResponse('PRODUCT_SIMILAR'), asyncHandler(getSimilarProducts));
 
 // @route   POST /products
 // @desc    Create a new product (supports multipart/form-data with images)

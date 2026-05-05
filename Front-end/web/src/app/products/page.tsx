@@ -82,6 +82,21 @@ interface ProductsData {
 
 // Function to fetch products with proper sorting parameters and enhanced retry logic
 async function getProducts(searchParams: any, retries = 3): Promise<ProductsData> {
+  // searchParams is already a plain object (caller converts URLSearchParams before passing in)
+  const searchParamsObj = searchParams;
+  const cacheKey = `products_${JSON.stringify(searchParamsObj)}`;
+  
+  // Try to get from localStorage first
+  const cachedData = localStorage.getItem(cacheKey);
+  if (cachedData) {
+    try {
+      const parsedData = JSON.parse(cachedData);
+      return parsedData;
+    } catch (e) {
+      console.warn('Failed to parse cached products data:', e);
+    }
+  }
+  
   let lastError: any;
   
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -155,7 +170,7 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       if (data && data.products) {
         // Extract pagination properties from the response
         const { total, pages, currentPage, hasNext, hasPrev, count } = data;
-        return {
+        const result = {
           products: data.products,
           pagination: {
             total,
@@ -166,6 +181,15 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
             count
           }
         };
+        
+        // Cache in localStorage for 5 minutes
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(result));
+        } catch (e) {
+          console.warn('Failed to cache products in localStorage:', e);
+        }
+        
+        return result;
       }
       return { products: [], pagination: {} };
     } catch (error: any) {
@@ -355,7 +379,7 @@ function ProductsPageInner() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12">
+      <div className="bg-linear-to-r from-blue-600 to-blue-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold mb-2">
             {searchParams.get('isFeatured') === 'true' 
@@ -459,7 +483,7 @@ function ProductsPageInner() {
         {/* ── Sidebar + grid ── */}
         <div className="flex gap-8">
           {/* Desktop sidebar */}
-          <aside className="hidden lg:block w-64 flex-shrink-0">
+          <aside className="hidden lg:block w-64 shrink-0">
             <div className="sticky top-24">
               <ProductFilters />
             </div>

@@ -508,9 +508,11 @@ export const refreshTokenRateLimit = rateLimit({
 });
 
 // Global fallback rate limiter for ALL API routes (safety net)
+// In development all requests share one localhost IP, so use a much higher ceiling
+// to avoid saturating the window during normal hot-reload / testing activity.
 export const globalApiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // 500 requests per 15 minutes per IP (generous but prevents abuse)
+  max: process.env.NODE_ENV === 'production' ? 500 : 5000, // 500 prod / 5000 dev per 15 min per IP
   message: 'Too many requests. Please slow down.',
   keyGenerator: (req) => `rate_limit:global:${req.ip || req.connection.remoteAddress}`,
   // Log excessive usage for monitoring
@@ -611,7 +613,7 @@ export const forgotPasswordRateLimit = rateLimit({
 // Layered approach: Burst control + sustained rate limiting
 export const searchRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 60, // 60 requests per minute (realistic for typing users)
+  max: 120, // Increased to 120 requests per minute (doubled for search)
   message: {
     success: false,
     message: 'Too many search requests. Please slow down.'
@@ -628,10 +630,10 @@ export const searchRateLimit = rateLimit({
   }
 });
 
-// Burst control: Prevent sudden spikes (20 requests per 10 seconds)
+// Burst control: Prevent sudden spikes (40 requests per 10 seconds)
 export const searchBurstLimit = rateLimit({
   windowMs: 10 * 1000, // 10 seconds
-  max: 20, // 20 requests per 10 seconds
+  max: 40, // Increased to 40 requests per 10 seconds (doubled for search)
   message: {
     success: false,
     message: 'Search requests too fast. Please slow down.'

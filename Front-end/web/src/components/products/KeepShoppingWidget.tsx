@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { productUrl } from '@/lib/types';
+import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
 
 interface ProductImageType {
   url: string;
@@ -31,6 +31,7 @@ interface Product {
 interface KeepShoppingWidgetProps {
   title: string;
   searchKeyword: string;
+  categorySlug?: string;
   viewAllLink?: string;
   className?: string;
 }
@@ -38,33 +39,35 @@ interface KeepShoppingWidgetProps {
 export default function KeepShoppingWidget({
   title,
   searchKeyword,
+  categorySlug,
   viewAllLink,
   className = ''
 }: KeepShoppingWidgetProps) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   const { formatPrice } = useCurrency();
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        const params = new URLSearchParams();
-        params.append('search', searchKeyword);
-        params.append('limit', '4'); // Only 4 products
-        params.append('page', '1');
-        
-        const response: any = await apiClient.get(`/products?${params.toString()}`);
-        setProducts(response.products?.slice(0, 4) || []);
-      } catch (error) {
-        console.error(`Failed to fetch products for ${title}:`, error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const cacheKey = categorySlug
+    ? `products_category_widget_${encodeURIComponent(categorySlug)}`
+    : CACHE_KEYS.PRODUCTS_SEARCH(searchKeyword);
 
-    fetchProducts();
-  }, [searchKeyword, title]);
+  // Fetch products with global cache service
+  const { data: products, loading, error: productsError } = useCachedData<Product[]>(
+    cacheKey,
+    async () => {
+      const params = new URLSearchParams();
+      if (categorySlug) {
+        params.append('category', categorySlug);
+        params.append('sortBy', 'averageRating');
+        params.append('order', 'desc');
+      } else {
+        params.append('search', searchKeyword);
+      }
+      params.append('limit', '4');
+      params.append('page', '1');
+      const response: any = await apiClient.get(`/products?${params.toString()}`);
+      return response.products?.slice(0, 4) || [];
+    },
+    60 * 60 * 1000 // 1 hour
+  );
 
   // Loading skeleton
   if (loading) {
@@ -92,7 +95,7 @@ export default function KeepShoppingWidget({
     );
   }
 
-  if (products.length === 0) {
+  if (!products || products.length === 0) {
     return null;
   }
 
