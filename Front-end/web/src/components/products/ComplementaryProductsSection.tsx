@@ -34,8 +34,16 @@ export default function ComplementaryProductsSection({ productId }: Complementar
         
         const response: any = await apiClient.get(`/products/${productId}/complementary?limit=4`);
         
+        console.log('[ComplementaryProductsSection] API Response:', response);
+        console.log('[ComplementaryProductsSection] Response.success:', response.success);
+        console.log('[ComplementaryProductsSection] Response.products:', response.products);
+        console.log('[ComplementaryProductsSection] Response.products.length:', response.products?.length);
+        
         if (response.success && Array.isArray(response.products)) {
+          console.log('[ComplementaryProductsSection] Setting products:', response.products.length);
           setProducts(response.products);
+        } else {
+          console.log('[ComplementaryProductsSection] Invalid response format');
         }
       } catch (err) {
         console.error('[ComplementaryProductsSection] Fetch error:', err);
