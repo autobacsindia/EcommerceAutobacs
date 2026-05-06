@@ -333,14 +333,189 @@ class SearchService {
     return { success: true };
   }
 
+  // ── Shared reference data ────────────────────────────────────────────────────
+
+  // Longer/more-specific entries must come before shorter ones that are substrings.
+  static VEHICLE_KEYWORDS = [
+    'thar roxx', 'scorpio n', 'innova crysta', 'land cruiser', 'grand vitara',
+    'xuv700', 'xuv 700', 'xuv400', 'xuv 400',
+    'thar', 'scorpio', 'bolero', 'marazzo',
+    'fortuner', 'hilux', 'innova', 'prado', 'rav4', 'rush', 'crysta',
+    'endeavour', 'ecosport', 'ranger', 'bronco',
+    'nexon', 'harrier', 'safari', 'altroz', 'punch', 'tiago',
+    'creta', 'venue', 'alcazar', 'tucson',
+    'brezza', 'jimny',
+    'wrangler', 'gladiator',
+    'pajero', 'outlander', 'montero', 'triton',
+    'duster', 'kwid', 'triber', 'kiger',
+  ];
+
+  // Maps product-type keywords found in names to a canonical slug and regex for searching.
+  // Ordered most-specific first.
+  static PRODUCT_TYPES = [
+    { slug: 'light-mount',      patterns: ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'light bar bracket', 'bar bracket', 'bracket'] },
+    { slug: 'wiring-harness',   patterns: ['wiring harness', 'wire harness', 'harness', 'wire loom', 'wiring kit'] },
+    { slug: 'led-bar',          patterns: ['led bar', 'light bar', 'led light bar', 'led strip'] },
+    { slug: 'auxiliary-light',  patterns: ['auxiliary light', 'driving light', 'pod light', 'led pod', 'spot light', 'work light', 'off road light', 'offroad light', 'led light', 'auxiliary'] },
+    { slug: 'fog-light',        patterns: ['fog light', 'fog lamp'] },
+    { slug: 'tail-light',       patterns: ['tail light', 'tail lamp', 'brake light', 'rear light', 'tail lamps'] },
+    { slug: 'headlight',        patterns: ['headlight', 'head light', 'drl', 'projector light'] },
+    { slug: 'switch',           patterns: ['switch panel', 'switch box', 'switch', 'relay'] },
+    { slug: 'bonnet',           patterns: ['bonnet scoop', 'bonnet cover', 'bonnet vent', 'bonnet', 'hood'] },
+    { slug: 'spoiler',          patterns: ['spoiler', 'trunk lip', 'boot lip', 'rear wing'] },
+    { slug: 'bumper',           patterns: ['front bumper', 'rear bumper', 'bumper guard', 'bumper'] },
+    { slug: 'grille',           patterns: ['grille', 'grill', 'front mesh', 'front grille'] },
+    { slug: 'bull-bar',         patterns: ['bull bar', 'nudge bar', 'push bar', 'front bar'] },
+    { slug: 'roll-bar',         patterns: ['roll bar', 'roll cage', 'sports bar', 'grab bar'] },
+    { slug: 'roof-rack',        patterns: ['roof rack', 'roof rail', 'luggage carrier', 'crossbar', 'cross bar'] },
+    { slug: 'canopy',           patterns: ['canopy', 'hardtop', 'truck cap', 'tonneau'] },
+    { slug: 'fender',           patterns: ['fender flare', 'fender', 'wheel arch', 'overfender'] },
+    { slug: 'diffuser',         patterns: ['diffuser', 'rear diffuser', 'lip diffuser'] },
+    { slug: 'skirt',            patterns: ['side skirt', 'skirt', 'rocker panel'] },
+    { slug: 'seat-cover',       patterns: ['seat cover', 'seat back', 'seat cushion', 'lumbar'] },
+    { slug: 'floor-mat',        patterns: ['floor mat', 'carpet liner', 'boot mat', 'floor liner', 'mat'] },
+    { slug: 'suspension',       patterns: ['suspension', 'shock absorber', 'lift kit', 'coilover', 'lowering spring', 'coil spring'] },
+    { slug: 'exhaust',          patterns: ['exhaust', 'muffler', 'catback', 'cat back', 'downpipe'] },
+    { slug: 'intake',           patterns: ['air intake', 'cold air intake', 'air filter', 'intake system'] },
+    { slug: 'steering',         patterns: ['steering wheel', 'steering cover', 'steering knob'] },
+    { slug: 'tailgate',         patterns: ['tailgate', 'tail gate', 'tailgate handle', 'tailgate step'] },
+    { slug: 'cladding',         patterns: ['cladding', 'door cladding', 'side cladding', 'body cladding'] },
+    { slug: 'camera',           patterns: ['dashcam', 'dash cam', 'dvr', 'recorder'] },
+    { slug: 'android-screen',   patterns: ['android screen', 'head unit', 'multimedia', 'car stereo', 'android car'] },
+    { slug: 'winch',            patterns: ['winch', 'recovery winch'] },
+    { slug: 'bed-rack',         patterns: ['bed rack', 'tub rack', 'cargo rack', 'bed liner'] },
+  ];
+
+  // Trigger-keyword → complement-keyword mapping.
+  // Determines what "Frequently Bought Together" shows: find products whose names
+  // contain ANY of the complement terms.
+  static INSTALLATION_ECOSYSTEM = [
+    {
+      trigger:    ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'bracket', 'holder', 'clamp', 'bar mount'],
+      complement: ['led', 'auxiliary', 'driving light', 'pod light', 'spot light', 'light bar', 'wiring harness', 'harness', 'switch', 'relay', 'fog light']
+    },
+    {
+      trigger:    ['led bar', 'light bar', 'auxiliary light', 'driving light', 'pod light', 'spot light', 'work light', 'offroad light'],
+      complement: ['wiring harness', 'harness', 'switch', 'relay', 'bracket', 'mount', 'bar mount', 'mount bracket']
+    },
+    {
+      trigger:    ['wiring harness', 'wire harness', 'harness', 'wire loom'],
+      complement: ['switch', 'relay', 'led', 'auxiliary', 'driving light', 'bracket', 'mount']
+    },
+    {
+      trigger:    ['switch panel', 'switch box', 'switch', 'relay'],
+      complement: ['wiring harness', 'harness', 'led', 'auxiliary', 'driving light', 'bracket']
+    },
+    {
+      trigger:    ['bull bar', 'nudge bar', 'push bar', 'front bar'],
+      complement: ['led', 'driving light', 'fog light', 'auxiliary', 'wiring harness', 'winch', 'recovery']
+    },
+    {
+      trigger:    ['roof rack', 'roof rail', 'luggage carrier', 'crossbar', 'cross bar'],
+      complement: ['led', 'light', 'bracket', 'mount', 'canopy', 'storage', 'portable', 'bag']
+    },
+    {
+      trigger:    ['roll bar', 'roll cage', 'sports bar', 'grab bar'],
+      complement: ['led', 'light', 'spotlight', 'storage', 'bag', 'mount', 'bracket']
+    },
+    {
+      trigger:    ['canopy', 'hardtop', 'truck cap'],
+      complement: ['rack', 'light', 'led', 'storage', 'bed liner', 'organizer', 'lock']
+    },
+    {
+      trigger:    ['seat cover', 'seat back'],
+      complement: ['floor mat', 'carpet', 'armrest', 'steering', 'organizer', 'storage']
+    },
+    {
+      trigger:    ['floor mat', 'carpet liner', 'boot mat'],
+      complement: ['seat cover', 'armrest', 'organizer', 'storage', 'cleaning']
+    },
+    {
+      trigger:    ['spoiler', 'trunk lip', 'boot lip', 'rear wing'],
+      complement: ['diffuser', 'skirt', 'fender', 'grille', 'bumper']
+    },
+    {
+      trigger:    ['front bumper', 'bumper', 'front guard'],
+      complement: ['fog light', 'led', 'driving light', 'grille', 'camera', 'winch', 'recovery']
+    },
+    {
+      trigger:    ['winch', 'recovery winch'],
+      complement: ['recovery board', 'snatch', 'rope', 'tow', 'bull bar', 'bumper']
+    },
+    {
+      trigger:    ['suspension', 'lift kit', 'shock absorber', 'coilover'],
+      complement: ['wheel', 'tyre', 'brake', 'spacer', 'fender flare']
+    },
+    {
+      trigger:    ['android screen', 'head unit', 'multimedia', 'car stereo'],
+      complement: ['camera', 'speaker', 'amplifier', 'subwoofer', 'cable', 'usb']
+    },
+    {
+      trigger:    ['dashcam', 'dash cam', 'dvr'],
+      complement: ['mount', 'bracket', 'cable', 'power', 'gps']
+    },
+    {
+      trigger:    ['exhaust', 'muffler', 'catback'],
+      complement: ['intake', 'air filter', 'performance', 'turbo', 'intercooler']
+    },
+    {
+      trigger:    ['air intake', 'cold air intake', 'air filter'],
+      complement: ['exhaust', 'turbo', 'intercooler', 'performance']
+    },
+  ];
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  static extractVehicleKeyword(name) {
+    const lower = name.toLowerCase();
+    return SearchService.VEHICLE_KEYWORDS.find(v => lower.includes(v)) || null;
+  }
+
+  static extractProductTypeSlug(name) {
+    const lower = name.toLowerCase();
+    for (const { slug, patterns } of SearchService.PRODUCT_TYPES) {
+      if (patterns.some(p => lower.includes(p))) return slug;
+    }
+    return null;
+  }
+
+  static getProductTypeRegex(typeSlug) {
+    const entry = SearchService.PRODUCT_TYPES.find(t => t.slug === typeSlug);
+    if (!entry) return null;
+    // Escape special regex chars in each pattern
+    const escaped = entry.patterns.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return escaped.join('|');
+  }
+
+  // Returns a MongoDB $regex string that matches products which complement the given product name.
+  // Returns null if no ecosystem mapping applies.
+  static getComplementaryNameRegex(productName) {
+    const lower = productName.toLowerCase();
+    for (const { trigger, complement } of SearchService.INSTALLATION_ECOSYSTEM) {
+      if (trigger.some(t => lower.includes(t))) {
+        const escaped = complement.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        return escaped.join('|');
+      }
+    }
+    return null;
+  }
+
+  // ── Core recommendation functions ────────────────────────────────────────────
+
   /**
    * Get products similar to the specified product.
-   * Matching priority: same category + same vehicle + price range → category + price → category → brand → popular
+   * Strategy (name-based, since most products share a generic "Autobacs India" category):
+   *   1. Same vehicle + same product type
+   *   2. Same vehicle + price range ±40%
+   *   3. Same vehicle (all)
+   *   4. Same product type + price range ±40%
+   *   5. Same product type (all)
+   *   6. Price range ±30% (last resort)
    */
   static async getSimilarProducts(productId, limit = 4) {
     try {
       const product = await Product.findById(productId)
-        .select('categories brand tags name price compatibleVehicles')
+        .select('name price')
         .lean();
 
       if (!product) {
@@ -348,110 +523,54 @@ class SearchService {
         return [];
       }
 
-      console.log('[SearchService] Finding similar products for:', product.name, {
-        categories: product.categories?.length || 0,
-        brand: product.brand || 'none',
-        compatibleVehicles: product.compatibleVehicles?.length || 0,
-        price: product.price
-      });
+      const vehicle   = SearchService.extractVehicleKeyword(product.name);
+      const typeSlug  = SearchService.extractProductTypeSlug(product.name);
+      const typeRegex = typeSlug ? SearchService.getProductTypeRegex(typeSlug) : null;
+      const priceMin  = product.price * 0.6;
+      const priceMax  = product.price * 1.4;
 
-      // stock filter intentionally omitted — many products are catalog/made-to-order with stock=0
-      const baseQuery = { _id: { $ne: productId }, isActive: true };
-      const hasCategories = product.categories?.length > 0;
-      const hasVehicles = product.compatibleVehicles?.length > 0;
-      const priceMin = product.price * 0.7;
-      const priceMax = product.price * 1.3;
-      const priceFilter = { price: { $gte: priceMin, $lte: priceMax } };
+      console.log('[SearchService] Similar for:', product.name, '| vehicle:', vehicle, '| type:', typeSlug);
 
       const collected = [];
-      const seenIds = new Set();
+      const seenIds   = new Set();
+      const seen      = () => Array.from(seenIds);
+      const add       = (docs) => { for (const d of docs) { const k = d._id.toString(); if (!seenIds.has(k)) { seenIds.add(k); collected.push(d); } } };
+      const need      = () => limit - collected.length;
+      const base      = { _id: { $ne: productId }, isActive: true };
+      const excl      = (extra) => ({ ...base, _id: { $ne: productId, $nin: seen() }, ...extra });
+      const find      = (filter, n) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(n).populate('categories', 'name slug').lean();
 
-      const addResults = (docs) => {
-        for (const doc of docs) {
-          const id = doc._id.toString();
-          if (!seenIds.has(id)) {
-            seenIds.add(id);
-            collected.push(doc);
-          }
-        }
-      };
-
-      const remaining = () => limit - collected.length;
-      const excludeIds = () => Array.from(seenIds);
-
-      // Attempt 1: same category + same vehicle + price range
-      if (hasCategories && hasVehicles && remaining() > 0) {
-        const docs = await Product.find({
-          ...baseQuery,
-          categories: { $in: product.categories },
-          compatibleVehicles: { $in: product.compatibleVehicles },
-          ...priceFilter
-        })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(remaining())
-          .populate('categories', 'name slug')
-          .lean();
-        addResults(docs);
-        console.log('[SearchService] Category+Vehicle+Price found:', docs.length);
+      // 1. Same vehicle + same product type
+      if (vehicle && typeRegex && need() > 0) {
+        add(await find(excl({ name: { $regex: vehicle, $options: 'i' } }), need()).then(r => r.filter(p => new RegExp(typeRegex, 'i').test(p.name))));
       }
 
-      // Attempt 2: same category + price range (drop vehicle requirement)
-      if (hasCategories && remaining() > 0) {
-        const docs = await Product.find({
-          ...baseQuery,
-          _id: { $ne: productId, $nin: excludeIds() },
-          categories: { $in: product.categories },
-          ...priceFilter
-        })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(remaining())
-          .populate('categories', 'name slug')
-          .lean();
-        addResults(docs);
-        console.log('[SearchService] Category+Price found:', docs.length, '| total:', collected.length);
+      // 2. Same vehicle + price range
+      if (vehicle && need() > 0) {
+        add(await find(excl({ name: { $regex: vehicle, $options: 'i' }, price: { $gte: priceMin, $lte: priceMax } }), need()));
       }
 
-      // Attempt 3: same category only (drop price range)
-      if (hasCategories && remaining() > 0) {
-        const docs = await Product.find({
-          ...baseQuery,
-          _id: { $ne: productId, $nin: excludeIds() },
-          categories: { $in: product.categories }
-        })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(remaining())
-          .populate('categories', 'name slug')
-          .lean();
-        addResults(docs);
-        console.log('[SearchService] Category-only found:', docs.length, '| total:', collected.length);
+      // 3. Same vehicle (all prices)
+      if (vehicle && need() > 0) {
+        add(await find(excl({ name: { $regex: vehicle, $options: 'i' } }), need()));
       }
 
-      // Attempt 4: same brand
-      if (product.brand && remaining() > 0) {
-        const docs = await Product.find({
-          ...baseQuery,
-          _id: { $ne: productId, $nin: excludeIds() },
-          brand: product.brand
-        })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(remaining())
-          .populate('categories', 'name slug')
-          .lean();
-        addResults(docs);
-        console.log('[SearchService] Brand fallback found:', docs.length, '| total:', collected.length);
+      // 4. Same product type + price range
+      if (typeRegex && need() > 0) {
+        add(await find(excl({ name: { $regex: typeRegex, $options: 'i' }, price: { $gte: priceMin, $lte: priceMax } }), need()));
       }
 
-      // Final fallback: popular products
+      // 5. Same product type (all prices)
+      if (typeRegex && need() > 0) {
+        add(await find(excl({ name: { $regex: typeRegex, $options: 'i' } }), need()));
+      }
+
+      // 6. Price range fallback
       if (collected.length === 0) {
-        const docs = await Product.find({ ...baseQuery })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(limit)
-          .populate('categories', 'name slug')
-          .lean();
-        addResults(docs);
-        console.log('[SearchService] Popular fallback found:', docs.length);
+        add(await find(excl({ price: { $gte: priceMin, $lte: priceMax } }), limit));
       }
 
+      console.log('[SearchService] Similar products found:', collected.length);
       return collected.slice(0, limit);
     } catch (error) {
       console.error('[SearchService] getSimilarProducts failed:', error);
@@ -460,14 +579,14 @@ class SearchService {
   }
 
   /**
-   * Get complementary products for a product.
-   * Uses manual curation first, then falls back to ecosystem keyword matching
-   * (e.g. bonnet bracket → LED lights, wiring harness, switch).
+   * Get complementary products (Frequently Bought Together).
+   * Uses product name ecosystem mapping to find products installed alongside
+   * the current one (e.g. bonnet bracket → LED lights, wiring harness, switch).
    */
   static async getComplementaryProducts(productId, limit = 4) {
     try {
       const product = await Product.findById(productId)
-        .select('complementaryProducts categories name tags')
+        .select('complementaryProducts name')
         .populate('complementaryProducts')
         .lean();
 
@@ -476,223 +595,46 @@ class SearchService {
         return [];
       }
 
-      console.log('[SearchService] Finding complementary products for:', product.name);
+      console.log('[SearchService] Complementary for:', product.name);
 
-      // Exclude similar products so both sections never show the same items
       const similarProducts = await this.getSimilarProducts(productId, 20);
-      const similarIds = new Set(similarProducts.map(p => p._id.toString()));
-      const excludeIds = () => [productId, ...Array.from(similarIds)];
+      const similarIds      = new Set(similarProducts.map(p => p._id.toString()));
+      const excluded        = () => [productId, ...Array.from(similarIds)];
+      const find            = (filter) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(limit).populate('categories', 'name slug').lean();
 
-      console.log('[SearchService] Excluding', similarIds.size, 'similar products from complementary results');
-
-      // Priority 1: manually curated complementary products
+      // Priority 1: seeded complementary products (from seedComplementaryProducts.js)
       if (product.complementaryProducts?.length > 0) {
-        const complementary = product.complementaryProducts
+        const curated = product.complementaryProducts
           .filter(p => p && p.isActive && !similarIds.has(p._id.toString()))
           .slice(0, limit);
-
-        if (complementary.length > 0) {
-          console.log('[SearchService] Returning', complementary.length, 'manual complementary products');
-          return complementary;
+        if (curated.length >= limit) {
+          console.log('[SearchService] Returning', curated.length, 'curated complementary products');
+          return curated;
         }
       }
 
-      // Priority 2: ecosystem keyword matching (product name + tags → complementary categories)
-      const ecosystemCategoryIds = await this.getProductEcosystemCategories(product);
-
-      if (ecosystemCategoryIds.length > 0) {
-        const complementary = await Product.find({
-          _id: { $nin: excludeIds() },
-          categories: { $in: ecosystemCategoryIds },
-          isActive: true
-        })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(limit)
-          .populate('categories', 'name slug')
-          .lean();
-
-        console.log('[SearchService] Ecosystem keyword matching found:', complementary.length, 'products');
-
-        if (complementary.length > 0) {
-          return complementary;
-        }
+      // Priority 2: name-based ecosystem matching (direct product-name regex)
+      const complementRegex = SearchService.getComplementaryNameRegex(product.name);
+      if (complementRegex) {
+        const docs = await find({ _id: { $nin: excluded() }, isActive: true, name: { $regex: complementRegex, $options: 'i' } });
+        console.log('[SearchService] Ecosystem name matching found:', docs.length);
+        if (docs.length > 0) return docs;
       }
 
-      // Priority 3: related category mapping (fallback)
-      if (product.categories?.length > 0) {
-        const relatedCategories = await this.getRelatedCategories(product.categories);
-
-        if (relatedCategories.length > 0) {
-          const complementary = await Product.find({
-            _id: { $nin: excludeIds() },
-            categories: { $in: relatedCategories },
-            isActive: true
-          })
-            .sort({ averageRating: -1, totalReviews: -1 })
-            .limit(limit)
-            .populate('categories', 'name slug')
-            .lean();
-
-          console.log('[SearchService] Related-category fallback found:', complementary.length, 'products');
-
-          if (complementary.length > 0) {
-            return complementary;
-          }
-        }
+      // Priority 3: different-vehicle products (contextual discovery)
+      const vehicle = SearchService.extractVehicleKeyword(product.name);
+      if (vehicle) {
+        const docs = await find({ _id: { $nin: excluded() }, isActive: true, name: { $not: new RegExp(vehicle, 'i') } });
+        console.log('[SearchService] Different-vehicle fallback found:', docs.length);
+        if (docs.length > 0) return docs;
       }
 
-      // Priority 4: popular products from different categories (excluding similar)
-      let popularProducts = await Product.find({
-        _id: { $nin: excludeIds() },
-        isActive: true,
-        categories: { $nin: product.categories || [] }
-      })
-        .sort({ averageRating: -1, totalReviews: -1 })
-        .limit(limit)
-        .populate('categories', 'name slug')
-        .lean();
-
-      if (popularProducts.length === 0) {
-        popularProducts = await Product.find({
-          _id: { $nin: excludeIds() },
-          isActive: true
-        })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(limit)
-          .populate('categories', 'name slug')
-          .lean();
-      }
-
-      // Absolute last resort: show any available products rather than an empty section
-      if (popularProducts.length === 0) {
-        popularProducts = await Product.find({ _id: { $ne: productId }, isActive: true })
-          .sort({ averageRating: -1, totalReviews: -1 })
-          .limit(limit)
-          .populate('categories', 'name slug')
-          .lean();
-      }
-
-      console.log('[SearchService] Popular fallback found:', popularProducts.length, 'products');
-      return popularProducts;
+      // Last resort
+      return find({ _id: { $nin: excluded() }, isActive: true });
     } catch (error) {
       console.error('[SearchService] getComplementaryProducts failed:', error);
       return [];
     }
-  }
-
-  /**
-   * Derive complementary category slugs from a product's name and tags.
-   * E.g. a "bonnet bracket" maps to lighting, wiring-harness, and switch categories.
-   * Returns resolved MongoDB Category ObjectIds.
-   */
-  static async getProductEcosystemCategories(product) {
-    // Keyword → complementary category slug mappings
-    // Order matters — more specific entries should come first
-    const ecosystemMap = [
-      { keywords: ['bonnet', 'bracket', 'mount', 'mounting', 'holder', 'clamp', 'bar'], categories: ['lighting', 'electrical', 'wiring', 'switch'] },
-      { keywords: ['led', 'headlight', 'fog', 'spotlight', 'driving light', 'work light', 'offroad light'], categories: ['wiring', 'switch', 'relay', 'electrical'] },
-      { keywords: ['light', 'lamp', 'bulb', 'beam'], categories: ['wiring', 'switch', 'electrical'] },
-      { keywords: ['wiring', 'harness', 'wire', 'cable', 'loom'], categories: ['switch', 'relay', 'lighting', 'electrical'] },
-      { keywords: ['switch', 'relay', 'controller', 'dimmer'], categories: ['wiring', 'lighting', 'electrical'] },
-      { keywords: ['horn', 'siren', 'alarm', 'buzzer'], categories: ['electrical', 'wiring', 'switch'] },
-      { keywords: ['camera', 'dashcam', 'dash cam', 'dvr', 'recorder', 'cctv'], categories: ['electronics', 'accessories', 'mounting'] },
-      { keywords: ['seat', 'seat cover', 'cushion', 'lumbar'], categories: ['interior', 'accessories', 'cleaning'] },
-      { keywords: ['floor mat', 'mat', 'carpet', 'liner'], categories: ['interior', 'cleaning', 'accessories'] },
-      { keywords: ['bumper', 'spoiler', 'body kit', 'skirt', 'diffuser', 'splitter'], categories: ['paint', 'tools', 'maintenance', 'exterior'] },
-      { keywords: ['wheel', 'tyre', 'tire', 'rim', 'alloy'], categories: ['maintenance', 'cleaning', 'tools', 'accessories'] },
-      { keywords: ['suspension', 'shock', 'absorber', 'spring', 'strut', 'coilover'], categories: ['tools', 'maintenance', 'performance'] },
-      { keywords: ['exhaust', 'muffler', 'silencer', 'pipe', 'header'], categories: ['performance', 'tools', 'maintenance'] },
-      { keywords: ['roof rack', 'rack', 'cargo', 'luggage carrier', 'crossbar'], categories: ['accessories', 'mounting', 'tools'] },
-      { keywords: ['dash', 'dashboard', 'console', 'panel', 'cluster'], categories: ['electronics', 'accessories', 'interior'] },
-      { keywords: ['air filter', 'intake', 'cold air'], categories: ['performance', 'maintenance', 'tools'] },
-      { keywords: ['oil', 'lubricant', 'grease', 'fluid'], categories: ['maintenance', 'tools', 'performance'] },
-      { keywords: ['cleaner', 'polish', 'wax', 'detailing', 'shampoo'], categories: ['maintenance', 'exterior', 'tools'] },
-      { keywords: ['tool', 'socket', 'spanner', 'wrench', 'jack'], categories: ['maintenance', 'performance', 'accessories'] },
-    ];
-
-    const text = [product.name || '', ...(product.tags || [])].join(' ').toLowerCase();
-    const matchedSlugs = new Set();
-
-    for (const { keywords, categories } of ecosystemMap) {
-      if (keywords.some(k => text.includes(k))) {
-        categories.forEach(s => matchedSlugs.add(s));
-      }
-    }
-
-    if (matchedSlugs.size === 0) return [];
-
-    try {
-      const Category = mongoose.model('Category');
-      const resolved = await Category.find({
-        $or: [
-          { slug: { $in: Array.from(matchedSlugs) } },
-          { name: { $regex: Array.from(matchedSlugs).join('|'), $options: 'i' } }
-        ],
-        // Exclude the product's own categories so results are truly complementary
-        _id: { $nin: product.categories || [] }
-      }).select('_id').lean();
-
-      console.log('[SearchService] Ecosystem resolved', resolved.length, 'categories from', matchedSlugs.size, 'slugs');
-      return resolved.map(c => c._id);
-    } catch (err) {
-      console.warn('[SearchService] Failed to resolve ecosystem category IDs:', err.message);
-      return [];
-    }
-  }
-
-  /**
-   * Get related categories for complementary matching based on the product's own categories.
-   */
-  static async getRelatedCategories(categoryIds) {
-    const categoryMap = {
-      'exterior': ['cleaning', 'maintenance', 'tools'],
-      'interior': ['cleaning', 'accessories', 'electronics'],
-      'suspension': ['tools', 'maintenance', 'performance'],
-      'performance': ['maintenance', 'tools', 'lubricants'],
-      'body-kit': ['paint', 'tools', 'maintenance'],
-      'lighting': ['electrical', 'wiring', 'switch', 'tools'],
-      'wheels': ['maintenance', 'tools', 'accessories'],
-      'electrical': ['wiring', 'switch', 'lighting', 'relay'],
-    };
-
-    const related = new Set();
-
-    for (const catId of categoryIds) {
-      try {
-        const Category = mongoose.model('Category');
-        const category = await Category.findById(catId).select('slug name').lean();
-
-        if (category) {
-          const slug = (category.slug || category.name || '').toLowerCase();
-
-          for (const [key, values] of Object.entries(categoryMap)) {
-            if (slug.includes(key)) {
-              values.forEach(v => related.add(v));
-            }
-          }
-        }
-      } catch (err) {
-        // Ignore errors for individual categories
-      }
-    }
-
-    if (related.size > 0) {
-      try {
-        const Category = mongoose.model('Category');
-        const relatedCategories = await Category.find({
-          $or: [
-            { slug: { $in: Array.from(related) } },
-            { name: { $regex: Array.from(related).join('|'), $options: 'i' } }
-          ]
-        }).select('_id').lean();
-
-        return relatedCategories.map(c => c._id);
-      } catch (err) {
-        console.warn('[SearchService] Failed to resolve related category IDs:', err.message);
-      }
-    }
-
-    return [];
   }
 }
 export default SearchService;
