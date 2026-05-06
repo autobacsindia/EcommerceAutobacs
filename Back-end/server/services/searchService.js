@@ -355,7 +355,8 @@ class SearchService {
         price: product.price
       });
 
-      const baseQuery = { _id: { $ne: productId }, isActive: true, stock: { $gt: 0 } };
+      // stock filter intentionally omitted — many products are catalog/made-to-order with stock=0
+      const baseQuery = { _id: { $ne: productId }, isActive: true };
       const hasCategories = product.categories?.length > 0;
       const hasVehicles = product.compatibleVehicles?.length > 0;
       const priceMin = product.price * 0.7;
@@ -487,7 +488,7 @@ class SearchService {
       // Priority 1: manually curated complementary products
       if (product.complementaryProducts?.length > 0) {
         const complementary = product.complementaryProducts
-          .filter(p => p && p.isActive && p.stock > 0 && !similarIds.has(p._id.toString()))
+          .filter(p => p && p.isActive && !similarIds.has(p._id.toString()))
           .slice(0, limit);
 
         if (complementary.length > 0) {
@@ -503,8 +504,7 @@ class SearchService {
         const complementary = await Product.find({
           _id: { $nin: excludeIds() },
           categories: { $in: ecosystemCategoryIds },
-          isActive: true,
-          stock: { $gt: 0 }
+          isActive: true
         })
           .sort({ averageRating: -1, totalReviews: -1 })
           .limit(limit)
@@ -526,8 +526,7 @@ class SearchService {
           const complementary = await Product.find({
             _id: { $nin: excludeIds() },
             categories: { $in: relatedCategories },
-            isActive: true,
-            stock: { $gt: 0 }
+            isActive: true
           })
             .sort({ averageRating: -1, totalReviews: -1 })
             .limit(limit)
@@ -546,7 +545,6 @@ class SearchService {
       let popularProducts = await Product.find({
         _id: { $nin: excludeIds() },
         isActive: true,
-        stock: { $gt: 0 },
         categories: { $nin: product.categories || [] }
       })
         .sort({ averageRating: -1, totalReviews: -1 })
@@ -557,8 +555,7 @@ class SearchService {
       if (popularProducts.length === 0) {
         popularProducts = await Product.find({
           _id: { $nin: excludeIds() },
-          isActive: true,
-          stock: { $gt: 0 }
+          isActive: true
         })
           .sort({ averageRating: -1, totalReviews: -1 })
           .limit(limit)
@@ -568,7 +565,7 @@ class SearchService {
 
       // Absolute last resort: show any available products rather than an empty section
       if (popularProducts.length === 0) {
-        popularProducts = await Product.find({ _id: { $ne: productId }, isActive: true, stock: { $gt: 0 } })
+        popularProducts = await Product.find({ _id: { $ne: productId }, isActive: true })
           .sort({ averageRating: -1, totalReviews: -1 })
           .limit(limit)
           .populate('categories', 'name slug')
