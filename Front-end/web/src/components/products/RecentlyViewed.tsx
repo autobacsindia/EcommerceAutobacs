@@ -81,7 +81,7 @@ const RecentlyViewed = () => {
                 />
               </div>
               <div className="p-4">
-                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem] mb-2 group-hover:text-blue-600">
+                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 min-h-10 mb-2 group-hover:text-blue-600">
                   {product.name}
                 </h3>
                 <div className="flex items-baseline gap-2">
