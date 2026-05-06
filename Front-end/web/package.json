@@ -1,6 +1,7 @@
 {
   "name": "web",
   "version": "0.1.5-complementary-products",
+  "description": "Autobacs India Frontend - Rebuild forced 2026-05-06T14:25:00Z for complementary products feature",
   "private": true,
   "scripts": {
     "dev": "next dev",
