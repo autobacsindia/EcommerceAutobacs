@@ -5,6 +5,34 @@
   --foreground: #111111;
 }
 
+/* Light theme (default for product page) */
+.light {
+  --product-bg: #ffffff;
+  --product-bg-secondary: #f9fafb;
+  --product-bg-tertiary: #f3f4f6;
+  --product-text: #111827;
+  --product-text-secondary: #4b5563;
+  --product-text-muted: #6b7280;
+  --product-border: #e5e7eb;
+  --product-card-bg: #ffffff;
+  --product-accent: #f97316;
+  --product-accent-hover: #ea580c;
+}
+
+/* Dark theme (default for product page) */
+.dark {
+  --product-bg: #09090b;
+  --product-bg-secondary: #18181b;
+  --product-bg-tertiary: #27272a;
+  --product-text: #ffffff;
+  --product-text-secondary: #d4d4d8;
+  --product-text-muted: #a1a1aa;
+  --product-border: #3f3f46;
+  --product-card-bg: #27272a;
+  --product-accent: #f97316;
+  --product-accent-hover: #ea580c;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

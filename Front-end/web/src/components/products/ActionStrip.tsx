@@ -9,6 +9,7 @@ interface ActionStripProps {
     text: string;
     subtext: string;
   }>;
+  isDark?: boolean;
 }
 
 const defaultFeatures = [
@@ -27,11 +28,11 @@ const iconMap: Record<string, React.ReactNode> = {
   'package': <Package className="w-8 h-8" />,
 };
 
-export default function ActionStrip({ features }: ActionStripProps) {
+export default function ActionStrip({ features, isDark = true }: ActionStripProps) {
   const displayFeatures = features && features.length > 0 ? features : defaultFeatures;
 
   return (
-    <section className="bg-zinc-900 border-y border-zinc-800 py-12">
+    <section className={`${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'} border-y py-12`}>
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
           {displayFeatures.map((feature, index) => (
@@ -47,8 +48,8 @@ export default function ActionStrip({ features }: ActionStripProps) {
               <div className="text-orange-500 mb-4">
                 {iconMap[feature.icon || 'shield']}
               </div>
-              <p className="text-white font-bold mb-2">{feature.text}</p>
-              <p className="text-zinc-400 text-sm">{feature.subtext}</p>
+              <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-bold mb-2`}>{feature.text}</p>
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-600'} text-sm`}>{feature.subtext}</p>
             </motion.div>
           ))}
         </div>

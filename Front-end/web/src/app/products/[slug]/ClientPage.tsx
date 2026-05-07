@@ -82,6 +82,7 @@ import FeatureAlternating from '@/components/products/FeatureAlternating';
 import VehicleCards from '@/components/products/VehicleCards';
 import ProductStory from '@/components/products/ProductStory';
 import InstallationSteps from '@/components/products/InstallationSteps';
+import ThemeToggle from '@/components/products/ThemeToggle';
 
 async function getProduct(slugOrId: string): Promise<any> {
   // Resolve exclusively via slug endpoint (canonical SEO URL)
@@ -144,6 +145,15 @@ interface Product {
 }
 
 export function ProductDetailPageClient({ product }: { product: Product | null }) {
+  // Theme state
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('product-page-theme');
+      return saved !== 'light'; // Default to dark
+    }
+    return true;
+  });
+  
   // Defensive null safety check
   if (!product) {
     return (
@@ -167,6 +177,15 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   const [cartLoading, setCartLoading] = useState(false);
   const [selectedSpecOption, setSelectedSpecOption] = useState<{ key: string; label: string; price: number; image?: string; images?: string[] } | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
+
+  // Save theme preference
+  useEffect(() => {
+    localStorage.setItem('product-page-theme', isDark ? 'dark' : 'light');
+    document.documentElement.classList.toggle('dark', isDark);
+    document.documentElement.classList.toggle('light', !isDark);
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(!isDark);
 
   // Helper function to strip HTML tags
   const stripHtml = (html: string) => {
@@ -419,12 +438,15 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     product.images[0].url && product.images[0].url.includes('example.com');
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
+      {/* Theme Toggle */}
+      <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+      
       {/* Hero Section */}
       <HeroSection product={product} />
 
       {/* Action Strip */}
-      <ActionStrip />
+      <ActionStrip isDark={isDark} />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         {/* Premium Gallery */}
