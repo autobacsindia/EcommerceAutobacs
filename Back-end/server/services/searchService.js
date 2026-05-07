@@ -353,7 +353,7 @@ class SearchService {
   // Maps product-type keywords found in names to a canonical slug and regex for searching.
   // Ordered most-specific first.
   static PRODUCT_TYPES = [
-    { slug: 'light-mount',      patterns: ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'light bar bracket', 'bar bracket', 'bracket'] },
+    { slug: 'light-mount',      patterns: ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'light bar bracket', 'bar bracket'] },
     { slug: 'wiring-harness',   patterns: ['wiring harness', 'wire harness', 'harness', 'wire loom', 'wiring kit'] },
     { slug: 'led-bar',          patterns: ['led bar', 'light bar', 'led light bar', 'led strip'] },
     { slug: 'auxiliary-light',  patterns: ['auxiliary light', 'driving light', 'pod light', 'led pod', 'spot light', 'work light', 'off road light', 'offroad light', 'led light', 'auxiliary'] },
@@ -391,7 +391,7 @@ class SearchService {
   // contain ANY of the complement terms.
   static INSTALLATION_ECOSYSTEM = [
     {
-      trigger:    ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'bracket', 'holder', 'clamp', 'bar mount'],
+      trigger:    ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'bar mount', 'holder', 'clamp'],
       complement: ['led', 'auxiliary', 'driving light', 'pod light', 'spot light', 'light bar', 'wiring harness', 'harness', 'switch', 'relay', 'fog light']
     },
     {

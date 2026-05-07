@@ -23,7 +23,7 @@ const Product  = (await import('../models/Product.js')).default;
 // trigger: keywords checked against product.name (lowercase)
 // complement: keywords used to find complementary products by name regex
 const INSTALLATION_ECOSYSTEM = [
-  { trigger: ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'bracket', 'holder', 'clamp', 'bar mount'], complement: ['led', 'auxiliary', 'driving light', 'pod light', 'spot light', 'light bar', 'wiring harness', 'harness', 'switch', 'relay', 'fog light'] },
+  { trigger: ['light mount', 'mount bracket', 'bonnet mount', 'pod mount', 'bar mount', 'holder', 'clamp'], complement: ['led', 'auxiliary', 'driving light', 'pod light', 'spot light', 'light bar', 'wiring harness', 'harness', 'switch', 'relay', 'fog light'] },
   { trigger: ['led bar', 'light bar', 'auxiliary light', 'driving light', 'pod light', 'spot light', 'work light', 'offroad light'], complement: ['wiring harness', 'harness', 'switch', 'relay', 'bracket', 'mount', 'bar mount', 'mount bracket'] },
   { trigger: ['wiring harness', 'wire harness', 'harness', 'wire loom'], complement: ['switch', 'relay', 'led', 'auxiliary', 'driving light', 'bracket', 'mount'] },
   { trigger: ['switch panel', 'switch box', 'switch', 'relay'], complement: ['wiring harness', 'harness', 'led', 'auxiliary', 'driving light', 'bracket'] },
