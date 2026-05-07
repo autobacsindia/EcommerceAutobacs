@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 
 interface FAQ {
@@ -49,39 +50,55 @@ export default function ProductFAQ({ faqs }: ProductFAQProps) {
   };
 
   return (
-    <section className="bg-white rounded-2xl p-6 shadow-sm">
-      <div className="flex items-center gap-2 mb-4">
-        <HelpCircle className="w-6 h-6 text-blue-600" />
-        <h2 className="text-xl font-bold text-gray-900">Frequently Asked Questions</h2>
+    <section className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-8">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 bg-orange-500/20 rounded-lg">
+          <HelpCircle className="w-6 h-6 text-orange-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Frequently Asked Questions</h2>
       </div>
       
       <div className="space-y-3">
         {faqList.map((faq, index) => (
-          <div
+          <motion.div
             key={index}
-            className="border border-gray-200 rounded-xl overflow-hidden hover:border-blue-300 transition-colors"
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.05 }}
+            className="border border-zinc-700 rounded-xl overflow-hidden hover:border-orange-500/50 transition-colors"
           >
             <button
               onClick={() => toggleFAQ(index)}
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between p-5 text-left hover:bg-zinc-700/50 transition-colors"
               aria-expanded={openIndex === index}
             >
-              <span className="font-medium text-gray-900 pr-4">
+              <span className="font-semibold text-white pr-4 text-lg">
                 {faq.question}
               </span>
               {openIndex === index ? (
-                <ChevronUp className="w-5 h-5 text-gray-600 flex-shrink-0" />
+                <ChevronUp className="w-5 h-5 text-orange-500 flex-shrink-0" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-600 flex-shrink-0" />
+                <ChevronDown className="w-5 h-5 text-zinc-400 flex-shrink-0" />
               )}
             </button>
             
-            {openIndex === index && (
-              <div className="px-4 pb-4 text-gray-700 leading-relaxed border-t border-gray-100 pt-3">
-                {faq.answer}
-              </div>
-            )}
-          </div>
+            <AnimatePresence>
+              {openIndex === index && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-5 pb-5 text-zinc-300 leading-relaxed border-t border-zinc-700 pt-4">
+                    {faq.answer}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         ))}
       </div>
     </section>

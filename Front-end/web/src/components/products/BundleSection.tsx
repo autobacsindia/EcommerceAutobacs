@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ShoppingCart, Plus } from 'lucide-react';
+import { ShoppingCart, Plus, ArrowRight, Check } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
@@ -99,11 +100,11 @@ export default function BundleSection({ productId, mainProductName, mainProductP
 
   if (loading) {
     return (
-      <section className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-6 animate-pulse">
-        <div className="h-6 bg-gray-200 rounded w-1/3 mb-4" />
+      <section className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-6 animate-pulse">
+        <div className="h-6 bg-zinc-700 rounded w-1/3 mb-4" />
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 bg-gray-200 rounded" />
+            <div key={i} className="h-16 bg-zinc-700 rounded" />
           ))}
         </div>
       </section>
@@ -115,54 +116,58 @@ export default function BundleSection({ productId, mainProductName, mainProductP
   }
 
   return (
-    <section className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-6">
-      <div className="flex items-center justify-between mb-4">
+    <section className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">
-            Frequently Bought Together
+          <h2 className="text-2xl font-bold text-white">
+            Complete Off-Road Lighting Setup
           </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Complete your setup with these essentials
+          <p className="text-zinc-400 mt-2">
+            Frequently bought together by Indian off-road enthusiasts
           </p>
         </div>
         <button
           onClick={selectAll}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          className="text-sm text-orange-500 hover:text-orange-400 font-semibold"
         >
           {selectedItems.size === products.length ? 'Deselect All' : 'Select All'}
         </button>
       </div>
 
       {/* Main Product */}
-      <div className="flex items-center gap-3 pb-4 mb-4 border-b border-orange-200">
-        <input
-          type="checkbox"
-          checked={true}
-          disabled
-          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <span className="flex-1 text-sm font-medium text-gray-900 line-clamp-1">
+      <div className="flex items-center gap-4 pb-6 mb-6 border-b border-zinc-700">
+        <div className="w-5 h-5 rounded border-orange-500 bg-orange-500 flex items-center justify-center">
+          <Check className="w-3 h-3 text-white" />
+        </div>
+        <span className="flex-1 text-base font-semibold text-white line-clamp-1">
           {mainProductName}
         </span>
-        <span className="font-bold text-gray-900">
+        <span className="font-bold text-white text-lg">
           ₹{mainProductPrice.toLocaleString('en-IN')}
         </span>
       </div>
 
+      {/* Arrow connector */}
+      <div className="flex justify-center mb-6">
+        <ArrowRight className="w-6 h-6 text-orange-500 rotate-90" />
+      </div>
+
       {/* Bundle Items */}
-      <div className="space-y-3 mb-4">
-        {products.map((product) => (
-          <div
+      <div className="space-y-4 mb-6">
+        {products.map((product, index) => (
+          <motion.div
             key={product._id}
-            className="flex items-center gap-3 bg-white rounded-lg p-3 cursor-pointer hover:bg-orange-50 transition-colors"
+            whileHover={{ scale: 1.01 }}
+            className="flex items-center gap-4 bg-zinc-700/50 border border-zinc-600 rounded-xl p-4 cursor-pointer hover:border-orange-500/50 transition-all"
             onClick={() => toggleItem(product._id)}
           >
-            <input
-              type="checkbox"
-              checked={selectedItems.has(product._id)}
-              onChange={() => toggleItem(product._id)}
-              className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+              selectedItems.has(product._id)
+                ? 'border-orange-500 bg-orange-500'
+                : 'border-zinc-500'
+            }`}>
+              {selectedItems.has(product._id) && <Check className="w-3 h-3 text-white" />}
+            </div>
             <div className="relative w-16 h-16 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden">
               <Image
                 src={product.images?.[0]?.url || '/placeholder-product.jpg'}
@@ -175,45 +180,48 @@ export default function BundleSection({ productId, mainProductName, mainProductP
             <div className="flex-1 min-w-0">
               <Link
                 href={`/products/${product.slug}`}
-                className="text-sm font-medium text-gray-900 hover:text-blue-600 line-clamp-2"
+                className="text-base font-semibold text-white hover:text-orange-500 line-clamp-2 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
                 {product.name}
               </Link>
-              <p className="text-sm font-bold text-gray-900 mt-1">
+              <p className="text-base font-bold text-orange-500 mt-1">
                 ₹{product.price.toLocaleString('en-IN')}
               </p>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
       {/* Total Price & CTA */}
       {selectedItems.size > 0 && (
-        <div className="space-y-3 pt-4 border-t border-orange-200">
+        <div className="space-y-4 pt-6 border-t border-zinc-700">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-700">
-              Selected Items ({selectedProducts.length})
+            <span className="text-zinc-300 font-semibold">
+              Bundle Items ({selectedProducts.length})
             </span>
-            <span className="text-lg font-bold text-gray-900">
+            <span className="text-xl font-bold text-orange-500">
               + ₹{bundlePrice.toLocaleString('en-IN')}
             </span>
           </div>
-          <div className="flex items-center justify-between bg-white rounded-lg p-3">
-            <div>
-              <p className="text-xs text-gray-600">Total Price</p>
-              <p className="text-2xl font-bold text-gray-900">
-                ₹{totalPrice.toLocaleString('en-IN')}
-              </p>
+          <div className="bg-zinc-900/80 border border-orange-500/30 rounded-xl p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-zinc-400 text-sm mb-1">Complete Setup Total</p>
+                <p className="text-4xl font-black text-white">
+                  ₹{totalPrice.toLocaleString('en-IN')}
+                </p>
+              </div>
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={handleAddBundleToCart}
+                disabled={addingToCart}
+                className="bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 text-white font-bold py-4 px-8 rounded-xl transition-all duration-200 flex items-center gap-3 text-lg shadow-lg shadow-orange-500/30"
+              >
+                <ShoppingCart className="w-6 h-6" />
+                {addingToCart ? 'Adding...' : `Add ${selectedProducts.length + 1} to Cart`}
+              </motion.button>
             </div>
-            <button
-              onClick={handleAddBundleToCart}
-              disabled={addingToCart}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 flex items-center gap-2 disabled:opacity-50 active:scale-95"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              {addingToCart ? 'Adding...' : `Add ${selectedProducts.length + 1} to Cart`}
-            </button>
           </div>
         </div>
       )}

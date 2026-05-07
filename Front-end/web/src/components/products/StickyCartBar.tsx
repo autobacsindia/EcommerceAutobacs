@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
 
@@ -46,23 +47,43 @@ export default function StickyCartBar({ product }: StickyCartBarProps) {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 md:hidden">
-      <div className="flex items-center justify-between p-4 max-w-7xl mx-auto">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-600 truncate">{product.name}</p>
-          <p className="text-xl font-bold text-gray-900">
-            ₹{product.price.toLocaleString('en-IN')}
-          </p>
+    <AnimatePresence>
+      <motion.div
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 100, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className="fixed bottom-0 left-0 right-0 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700 shadow-2xl z-50 md:hidden"
+      >
+        <div className="flex items-center justify-between p-4 max-w-7xl mx-auto gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-zinc-400 truncate">{product.name}</p>
+            <p className="text-2xl font-black text-orange-500">
+              ₹{product.price.toLocaleString('en-IN')}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleAddToCart}
+              disabled={loading}
+              className="bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 text-white font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg shadow-orange-500/30"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              <span className="hidden sm:inline">{loading ? 'Adding...' : 'Add'}</span>
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleAddToCart}
+              disabled={loading}
+              className="bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 text-white font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2"
+            >
+              <Zap className="w-5 h-5" />
+              <span className="hidden sm:inline">{loading ? '...' : 'Buy'}</span>
+            </motion.button>
+          </div>
         </div>
-        <button
-          onClick={handleAddToCart}
-          disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 flex items-center gap-2 disabled:opacity-50 active:scale-95"
-        >
-          <ShoppingCart className="w-5 h-5" />
-          {loading ? 'Adding...' : 'Add to Cart'}
-        </button>
-      </div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
