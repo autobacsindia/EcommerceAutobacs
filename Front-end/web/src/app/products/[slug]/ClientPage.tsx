@@ -483,47 +483,52 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Installation Steps */}
         <InstallationSteps />
 
-        {/* Product Description & Details */}
+        {/* Product Description */}
+        <section className="py-16 border-t border-zinc-800">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-white mb-6">Product Description</h2>
+            <div className="prose prose-invert prose-lg max-w-none text-zinc-300 leading-relaxed whitespace-pre-line">
+              {stripHtml(product.description)}
+            </div>
+          </div>
+        </section>
+
+        {/* Why Choose Section */}
+        {product.whyChoose && product.whyChoose.length > 0 && (
+          <section className="py-16 border-t border-zinc-800">
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-3xl font-bold text-white mb-8">Why Choose {product.name}?</h2>
+              <div className="space-y-4">
+                {product.whyChoose.map((item: string, index: number) => {
+                  const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
+                  
+                  if (separator) {
+                    const [title, ...rest] = item.split(separator);
+                    const description = rest.join(separator);
+                    return (
+                      <div key={index} className="leading-relaxed text-zinc-300">
+                        <span className="font-bold text-white">{title}</span>
+                        <span>{separator}{description}</span>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <p key={index} className="text-zinc-300 leading-relaxed">
+                      {item}
+                    </p>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Product Details - Indian Use Cases, Features, Specs */}
         <section className="py-16 border-t border-zinc-800">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-12">
-              {/* Product Description */}
-              <section>
-                <h2 className="text-3xl font-bold text-white mb-6">Product Description</h2>
-                <div className="prose prose-invert prose-lg max-w-none text-zinc-300 leading-relaxed whitespace-pre-line">
-                  {stripHtml(product.description)}
-                </div>
-              </section>
-
-              {/* Why Choose Section */}
-              {product.whyChoose && product.whyChoose.length > 0 && (
-                <section>
-                  <h2 className="text-3xl font-bold text-white mb-6">Why Choose {product.name}?</h2>
-                  <div className="space-y-4">
-                    {product.whyChoose.map((item: string, index: number) => {
-                      const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
-                      
-                      if (separator) {
-                        const [title, ...rest] = item.split(separator);
-                        const description = rest.join(separator);
-                        return (
-                          <div key={index} className="leading-relaxed text-zinc-300">
-                            <span className="font-bold text-white">{title}</span>
-                            <span>{separator}{description}</span>
-                          </div>
-                        );
-                      }
-                      
-                      return (
-                        <p key={index} className="text-zinc-300 leading-relaxed">
-                          {item}
-                        </p>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
 
               {/* Indian Use Cases Section */}
               <section>
