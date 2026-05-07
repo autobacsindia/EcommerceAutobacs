@@ -461,6 +461,146 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Installation Steps */}
         <InstallationSteps />
 
+        {/* Product Description & Details */}
+        <section className="py-16 border-t border-zinc-800">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            {/* Main Content */}
+            <div className="lg:col-span-2 space-y-12">
+              {/* Product Description */}
+              <section>
+                <h2 className="text-3xl font-bold text-white mb-6">Product Description</h2>
+                <div className="prose prose-invert prose-lg max-w-none text-zinc-300 leading-relaxed whitespace-pre-line">
+                  {stripHtml(product.description)}
+                </div>
+              </section>
+
+              {/* Why Choose Section */}
+              {product.whyChoose && product.whyChoose.length > 0 && (
+                <section>
+                  <h2 className="text-3xl font-bold text-white mb-6">Why Choose {product.name}?</h2>
+                  <div className="space-y-4">
+                    {product.whyChoose.map((item: string, index: number) => {
+                      const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
+                      
+                      if (separator) {
+                        const [title, ...rest] = item.split(separator);
+                        const description = rest.join(separator);
+                        return (
+                          <div key={index} className="leading-relaxed text-zinc-300">
+                            <span className="font-bold text-white">{title}</span>
+                            <span>{separator}{description}</span>
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <p key={index} className="text-zinc-300 leading-relaxed">
+                          {item}
+                        </p>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* Indian Use Cases Section */}
+              <section>
+                <h2 className="text-3xl font-bold text-white mb-6">Perfect for Indian Roads & Climate</h2>
+                <div className="prose prose-invert prose-lg max-w-none text-zinc-300 leading-relaxed">
+                  <p>This {product.name} is specifically designed to handle the unique challenges of Indian roads and climate conditions:</p>
+                  <ul className="list-disc space-y-2 pl-5 text-zinc-300 marker:text-orange-500">
+                    <li><strong className="text-white">Monsoon Ready:</strong> Water-resistant construction ensures reliable performance during heavy rains and flooding</li>
+                    <li><strong className="text-white">Summer Heat Resistant:</strong> High-temperature materials withstand India's intense summer heat up to 45°C</li>
+                    <li><strong className="text-white">Road Condition Optimized:</strong> Engineered for Indian road surfaces including potholes, speed breakers, and uneven terrain</li>
+                    <li><strong className="text-white">Fuel Efficiency Focused:</strong> Designed to minimize drag and maximize fuel economy on Indian highways</li>
+                    <li><strong className="text-white">Local Installation Support:</strong> Professional installation available at all Autobacs service centers across India</li>
+                  </ul>
+                  <p>Whether you're driving in Mumbai's monsoons, Delhi's smog, or Bangalore's traffic, this {product.name} delivers superior performance and reliability.</p>
+                </div>
+              </section>
+
+              {/* Key Features */}
+              {product.features && product.features.length > 0 && (
+                <section>
+                  <h2 className="text-3xl font-bold text-white mb-6">Key Features</h2>
+                  <ul className="list-disc space-y-2 pl-5 text-zinc-300 marker:text-orange-500">
+                    {product.features.map((feature: string, index: number) => (
+                      <li key={index} className="leading-relaxed pl-1">
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              
+              {/* Technical Specifications */}
+              {product.specifications && product.specifications.length > 0 && (
+                <section>
+                  <h2 className="text-3xl font-bold text-white mb-6">Technical Specifications</h2>
+                  <div className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-6 sm:p-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
+                      {product.specifications.map((spec: any, index: number) => (
+                        <div key={index} className="flex justify-between border-b border-zinc-700 py-3 last:border-0">
+                          <span className="text-zinc-400">{spec.key}</span>
+                          <span className="font-medium text-white">{spec.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* Sidebar - What's in the Box & Q&A */}
+            <div className="lg:col-span-1 space-y-8">
+              {/* What's in the Box */}
+              {product.packageContents && product.packageContents.length > 0 && (
+                <section>
+                  <h2 className="text-2xl font-bold text-white mb-6">What's in the Box</h2>
+                  <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-6">
+                    <ul className="space-y-3">
+                      {product.packageContents.map((item: string, index: number) => (
+                        <li key={index} className="flex items-center gap-3 text-zinc-300">
+                          <span className="h-5 w-5 rounded-full border border-orange-500 flex items-center justify-center text-orange-500 text-xs">✓</span>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              )}
+
+              {/* Questions & Answers */}
+              <section id="qa">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-white">Questions & Answers</h2>
+                  {!showQuestionForm && (
+                    <button 
+                      onClick={() => setShowQuestionForm(true)}
+                      className="text-orange-500 font-medium hover:text-orange-400"
+                    >
+                      Ask a Question
+                    </button>
+                  )}
+                </div>
+
+                {showQuestionForm && (
+                  <div className="mb-8">
+                    <QuestionForm 
+                      productId={product._id} 
+                      onSuccess={() => {
+                        // Keep the success message visible
+                      }} 
+                    />
+                  </div>
+                )}
+
+                <QuestionList productId={product._id} legacyQna={product.qna} />
+              </section>
+            </div>
+          </div>
+        </section>
+
         {/* Customer Reviews */}
         <section className="py-16" id="reviews">
           <h2 className="text-4xl lg:text-5xl font-black text-white mb-8 text-center">
