@@ -66,6 +66,14 @@ import apiClient from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
+import ProductGallery from '@/components/products/ProductGallery';
+import ProductInfo from '@/components/products/ProductInfo';
+import BundleSection from '@/components/products/BundleSection';
+import FeatureGrid from '@/components/products/FeatureGrid';
+import CompatibilityList from '@/components/products/CompatibilityList';
+import ProductFAQ from '@/components/products/ProductFAQ';
+import StickyCartBar from '@/components/products/StickyCartBar';
+import WhyChooseSection from '@/components/products/WhyChooseSection';
 
 async function getProduct(slugOrId: string): Promise<any> {
   // Resolve exclusively via slug endpoint (canonical SEO URL)
@@ -861,6 +869,36 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
             {/* Right Column: Reviews & Related Products */}
             <div className="lg:col-span-8" id="reviews">
+              {/* Bundle Section - Frequently Bought Together */}
+              <section className="mb-16">
+                <BundleSection 
+                  productId={product._id}
+                  mainProductName={product.name}
+                  mainProductPrice={product.price}
+                />
+              </section>
+
+              {/* Features Grid */}
+              <section className="mb-16">
+                <FeatureGrid features={product.features} />
+              </section>
+
+              {/* Vehicle Compatibility */}
+              <section className="mb-16">
+                <CompatibilityList vehicles={product.compatibleVehicles} />
+              </section>
+
+              {/* Why Choose This Product - Indian Conditions */}
+              <section className="mb-16">
+                <WhyChooseSection whyChoose={product.whyChoose} />
+              </section>
+
+              {/* FAQ Section */}
+              <section className="mb-16">
+                <ProductFAQ />
+              </section>
+
+              {/* Customer Reviews */}
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Customer Reviews</h2>
               <Reviews 
                 productId={product._id} 
@@ -880,6 +918,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
           </div>
         </div>
       </div>
+
+      {/* Sticky Cart Bar for Mobile */}
+      <StickyCartBar product={product} />
     </div>
   );
 }
