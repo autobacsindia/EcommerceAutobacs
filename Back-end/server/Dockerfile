@@ -1,9 +1,11 @@
 # Dockerfile for Autobacs Backend (Express.js)
 # Multi-stage build for optimal production deployment
-# BUILD_HASH: FORCE-REBUILD-20260508-130000-SIMILAR-COMPLEMENTARY-FIX
 
 # Build stage
 FROM node:20-alpine AS builder
+
+# Force cache bust - Railway will set this as build arg
+ARG BUILD_ID=20260508-130500-SIMILAR-COMPLEMENTARY-FIX
 
 # Set working directory
 WORKDIR /app
@@ -12,10 +14,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies including dev dependencies for build
-RUN npm ci
+RUN echo "BUILD_ID=${BUILD_ID}" && npm ci
 
 # Copy application source
 COPY . .
+
+# Print build ID for verification
+RUN echo "Building backend with BUILD_ID: ${BUILD_ID}"
 
 # Create production build (if needed for any build steps)
 # RUN npm run build
