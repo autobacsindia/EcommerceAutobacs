@@ -6,9 +6,11 @@ import { CloudRain, Sun, Mountain, Gauge } from 'lucide-react';
 
 interface ProductStoryProps {
   productName?: string;
+  isDark?: boolean;
 }
 
-export default function ProductStory({ productName }: ProductStoryProps) {
+export default function ProductStory({ productName, isDark = true }: ProductStoryProps) {
+
   const indianConditions = [
     {
       icon: <CloudRain className="w-10 h-10" />,

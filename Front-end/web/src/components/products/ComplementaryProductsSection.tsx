@@ -18,9 +18,10 @@ interface Product {
 
 interface ComplementaryProductsSectionProps {
   productId: string;
+  isDark?: boolean;
 }
 
-export default function ComplementaryProductsSection({ productId }: ComplementaryProductsSectionProps) {
+export default function ComplementaryProductsSection({ productId, isDark = true }: ComplementaryProductsSectionProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

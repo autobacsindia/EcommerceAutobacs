@@ -13,13 +13,14 @@ interface Vehicle {
 
 interface VehicleCardsProps {
   vehicles?: Vehicle[];
+  isDark?: boolean;
 }
 
-export default function VehicleCards({ vehicles }: VehicleCardsProps) {
+export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsProps) {
   if (!vehicles || vehicles.length === 0) {
     return (
       <section className="py-16">
-        <div className="text-center text-zinc-400">
+        <div className={`text-center ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
           <p>Universal fitment or specific compatibility data not available.</p>
         </div>
       </section>

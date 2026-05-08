@@ -11,6 +11,7 @@ interface Feature {
 
 interface FeatureAlternatingProps {
   features?: Feature[];
+  isDark?: boolean;
 }
 
 const defaultFeatures: Feature[] = [
@@ -31,7 +32,7 @@ const defaultFeatures: Feature[] = [
   }
 ];
 
-export default function FeatureAlternating({ features }: FeatureAlternatingProps) {
+export default function FeatureAlternating({ features, isDark = true }: FeatureAlternatingProps) {
   const displayFeatures = features && features.length > 0 ? features : defaultFeatures;
 
   return (
@@ -63,10 +64,10 @@ export default function FeatureAlternating({ features }: FeatureAlternatingProps
 
           {/* Text Side */}
           <div className={`space-y-6 ${index % 2 === 1 ? 'lg:order-1' : ''}`}>
-            <h3 className="text-4xl lg:text-5xl font-black text-white leading-tight">
+            <h3 className={`text-4xl lg:text-5xl font-black leading-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
               {feature.title}
             </h3>
-            <p className="text-zinc-400 text-lg lg:text-xl leading-relaxed">
+            <p className={`text-lg lg:text-xl leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
               {feature.description}
             </p>
             <div className="w-24 h-1 bg-orange-500 rounded-full" />

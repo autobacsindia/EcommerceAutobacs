@@ -8,6 +8,7 @@ interface InstallationStepsProps {
     title: string;
     description: string;
   }>;
+  isDark?: boolean;
 }
 
 const defaultSteps = [
@@ -41,16 +42,16 @@ const stepIcons = [
   <CheckCircle className="w-6 h-6" />
 ];
 
-export default function InstallationSteps({ steps }: InstallationStepsProps) {
+export default function InstallationSteps({ steps, isDark = true }: InstallationStepsProps) {
   const displaySteps = steps && steps.length > 0 ? steps : defaultSteps;
 
   return (
     <section className="py-16">
       <div className="text-center mb-12">
-        <h2 className="text-4xl lg:text-5xl font-black text-white mb-4">
+        <h2 className={`text-4xl lg:text-5xl font-black mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
           Easy DIY Installation
         </h2>
-        <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+        <p className={`text-lg max-w-2xl mx-auto ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
           Install in under 30 minutes with basic tools. No professional help required.
         </p>
       </div>
@@ -71,16 +72,16 @@ export default function InstallationSteps({ steps }: InstallationStepsProps) {
                 {stepIcons[index] || (index + 1)}
               </div>
               {index < displaySteps.length - 1 && (
-                <div className="w-0.5 h-full bg-zinc-700 mx-auto mt-4" />
+                <div className={`w-0.5 h-full mx-auto mt-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
               )}
             </div>
 
             {/* Step Content */}
             <div className="flex-1 pb-8">
-              <h3 className="text-2xl font-bold text-white mb-3">
+              <h3 className={`text-2xl font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 Step {index + 1}: {step.title}
               </h3>
-              <p className="text-zinc-400 text-lg leading-relaxed">
+              <p className={`text-lg leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                 {step.description}
               </p>
             </div>
@@ -89,14 +90,14 @@ export default function InstallationSteps({ steps }: InstallationStepsProps) {
       </div>
 
       {/* Installation Note */}
-      <div className="mt-12 bg-zinc-800/50 border border-zinc-700 rounded-xl p-6 max-w-4xl mx-auto">
+      <div className={`mt-12 rounded-xl p-6 max-w-4xl mx-auto ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
         <div className="flex items-start gap-4">
           <div className="text-orange-500 flex-shrink-0 mt-1">
             <Wrench className="w-6 h-6" />
           </div>
           <div>
-            <h4 className="text-white font-bold mb-2">Need Professional Installation?</h4>
-            <p className="text-zinc-400">
+            <h4 className={`font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Need Professional Installation?</h4>
+            <p className={isDark ? 'text-zinc-400' : 'text-gray-600'}>
               Visit any authorized Autobacs service center across India. Professional installation available at ₹500-₹1000 depending on complexity.
             </p>
           </div>

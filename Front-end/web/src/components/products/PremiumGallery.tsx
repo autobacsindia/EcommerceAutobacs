@@ -16,9 +16,10 @@ interface ProductImage {
 interface PremiumGalleryProps {
   images: ProductImage[];
   productName: string;
+  isDark?: boolean;
 }
 
-export default function PremiumGallery({ images, productName }: PremiumGalleryProps) {
+export default function PremiumGallery({ images, productName, isDark = true }: PremiumGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const touchStartX = useRef(0);

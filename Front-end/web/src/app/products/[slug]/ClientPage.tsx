@@ -193,6 +193,45 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     return html.replace(/<[^>]*>/g, '');
   };
 
+  // Helper function to parse description and extract "Why Choose" section
+  const parseDescription = (description: string) => {
+    if (!description) return { description: '', whyChoose: [] };
+    
+    const cleanDesc = stripHtml(description);
+    
+    // Check if "Why Choose" section exists in the description
+    const whyChooseMatch = cleanDesc.match(/Why Choose[\s\S]*?$/i);
+    
+    if (whyChooseMatch) {
+      const whyChooseSection = whyChooseMatch[0];
+      const mainDescription = cleanDesc.substring(0, cleanDesc.indexOf(whyChooseSection)).trim();
+      
+      // Parse the why choose items (lines starting with bullet points or dashes)
+      const whyChooseLines = whyChooseSection
+        .split('\n')
+        .filter(line => line.trim() && !line.trim().startsWith('Why Choose'))
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+      
+      return {
+        description: mainDescription,
+        whyChoose: whyChooseLines
+      };
+    }
+    
+    return {
+      description: cleanDesc,
+      whyChoose: []
+    };
+  };
+
+  const { description: parsedDescription, whyChoose: extractedWhyChoose } = parseDescription(product.description);
+  
+  // Use extracted whyChoose if product.whyChoose doesn't exist
+  const displayWhyChoose = product.whyChoose && product.whyChoose.length > 0 
+    ? product.whyChoose 
+    : extractedWhyChoose;
+
   // Show loading state if product is null
   if (!product) {
     return (
@@ -454,21 +493,19 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
           <PremiumGallery
             images={displayImages}
             productName={product.name}
+            isDark={isDark}
           />
         </section>
 
         {/* Product Story Section */}
-        <ProductStory productName={product.name} />
-
-        {/* Features - Alternating Layout */}
-        <FeatureAlternating />
+        <ProductStory productName={product.name} isDark={isDark} />
 
         {/* Vehicle Compatibility */}
         <section className="py-16">
-          <h2 className="text-4xl lg:text-5xl font-black text-white mb-8 text-center">
+          <h2 className={`text-4xl lg:text-5xl font-black mb-8 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
             Vehicle Compatibility
           </h2>
-          <VehicleCards vehicles={product.compatibleVehicles} />
+          <VehicleCards vehicles={product.compatibleVehicles} isDark={isDark} />
         </section>
 
         {/* Bundle Section */}
@@ -477,44 +514,45 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             productId={product._id}
             mainProductName={product.name}
             mainProductPrice={product.price}
+            isDark={isDark}
           />
         </section>
 
         {/* Installation Steps */}
-        <InstallationSteps />
+        <InstallationSteps isDark={isDark} />
 
         {/* Product Description */}
-        <section className="py-16 border-t border-zinc-800">
+        <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold text-white mb-6">Product Description</h2>
-            <div className="prose prose-invert prose-lg max-w-none text-zinc-300 leading-relaxed whitespace-pre-line">
-              {stripHtml(product.description)}
+            <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Product Description</h2>
+            <div className={`prose prose-lg max-w-none leading-relaxed whitespace-pre-line ${isDark ? 'prose-invert text-zinc-300' : 'text-gray-700'}`}>
+              {parsedDescription}
             </div>
           </div>
         </section>
 
         {/* Why Choose Section */}
-        {product.whyChoose && product.whyChoose.length > 0 && (
-          <section className="py-16 border-t border-zinc-800">
+        {displayWhyChoose && displayWhyChoose.length > 0 && (
+          <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="max-w-4xl mx-auto">
-              <h2 className="text-3xl font-bold text-white mb-8">Why Choose {product.name}?</h2>
+              <h2 className={`text-3xl font-bold mb-8 ${isDark ? 'text-white' : 'text-gray-900'}`}>Why Choose {product.name}?</h2>
               <div className="space-y-4">
-                {product.whyChoose.map((item: string, index: number) => {
+                {displayWhyChoose.map((item: string, index: number) => {
                   const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
                   
                   if (separator) {
                     const [title, ...rest] = item.split(separator);
                     const description = rest.join(separator);
                     return (
-                      <div key={index} className="leading-relaxed text-zinc-300">
-                        <span className="font-bold text-white">{title}</span>
+                      <div key={index} className={`leading-relaxed ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                        <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</span>
                         <span>{separator}{description}</span>
                       </div>
                     );
                   }
                   
                   return (
-                    <p key={index} className="text-zinc-300 leading-relaxed">
+                    <p key={index} className={`leading-relaxed ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                       {item}
                     </p>
                   );
@@ -525,22 +563,22 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         )}
 
         {/* Product Details - Indian Use Cases, Features, Specs */}
-        <section className="py-16 border-t border-zinc-800">
+        <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-12">
 
               {/* Indian Use Cases Section */}
               <section>
-                <h2 className="text-3xl font-bold text-white mb-6">Perfect for Indian Roads & Climate</h2>
-                <div className="prose prose-invert prose-lg max-w-none text-zinc-300 leading-relaxed">
+                <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Perfect for Indian Roads & Climate</h2>
+                <div className={`prose prose-lg max-w-none leading-relaxed ${isDark ? 'prose-invert text-zinc-300' : 'text-gray-700'}`}>
                   <p>This {product.name} is specifically designed to handle the unique challenges of Indian roads and climate conditions:</p>
-                  <ul className="list-disc space-y-2 pl-5 text-zinc-300 marker:text-orange-500">
-                    <li><strong className="text-white">Monsoon Ready:</strong> Water-resistant construction ensures reliable performance during heavy rains and flooding</li>
-                    <li><strong className="text-white">Summer Heat Resistant:</strong> High-temperature materials withstand India's intense summer heat up to 45°C</li>
-                    <li><strong className="text-white">Road Condition Optimized:</strong> Engineered for Indian road surfaces including potholes, speed breakers, and uneven terrain</li>
-                    <li><strong className="text-white">Fuel Efficiency Focused:</strong> Designed to minimize drag and maximize fuel economy on Indian highways</li>
-                    <li><strong className="text-white">Local Installation Support:</strong> Professional installation available at all Autobacs service centers across India</li>
+                  <ul className={`list-disc space-y-2 pl-5 marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Monsoon Ready:</strong> Water-resistant construction ensures reliable performance during heavy rains and flooding</li>
+                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Summer Heat Resistant:</strong> High-temperature materials withstand India's intense summer heat up to 45°C</li>
+                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Road Condition Optimized:</strong> Engineered for Indian road surfaces including potholes, speed breakers, and uneven terrain</li>
+                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Fuel Efficiency Focused:</strong> Designed to minimize drag and maximize fuel economy on Indian highways</li>
+                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Local Installation Support:</strong> Professional installation available at all Autobacs service centers across India</li>
                   </ul>
                   <p>Whether you're driving in Mumbai's monsoons, Delhi's smog, or Bangalore's traffic, this {product.name} delivers superior performance and reliability.</p>
                 </div>
@@ -549,8 +587,8 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               {/* Key Features */}
               {product.features && product.features.length > 0 && (
                 <section>
-                  <h2 className="text-3xl font-bold text-white mb-6">Key Features</h2>
-                  <ul className="list-disc space-y-2 pl-5 text-zinc-300 marker:text-orange-500">
+                  <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Key Features</h2>
+                  <ul className={`list-disc space-y-2 pl-5 marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                     {product.features.map((feature: string, index: number) => (
                       <li key={index} className="leading-relaxed pl-1">
                         {feature}
@@ -563,13 +601,13 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               {/* Technical Specifications */}
               {product.specifications && product.specifications.length > 0 && (
                 <section>
-                  <h2 className="text-3xl font-bold text-white mb-6">Technical Specifications</h2>
-                  <div className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-6 sm:p-8">
+                  <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Technical Specifications</h2>
+                  <div className={`rounded-2xl p-6 sm:p-8 ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-gray-50 border border-gray-200'}`}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
                       {product.specifications.map((spec: any, index: number) => (
-                        <div key={index} className="flex justify-between border-b border-zinc-700 py-3 last:border-0">
-                          <span className="text-zinc-400">{spec.key}</span>
-                          <span className="font-medium text-white">{spec.value}</span>
+                        <div key={index} className={`flex justify-between border-b py-3 last:border-0 ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+                          <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}>{spec.key}</span>
+                          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{spec.value}</span>
                         </div>
                       ))}
                     </div>
@@ -583,11 +621,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               {/* What's in the Box */}
               {product.packageContents && product.packageContents.length > 0 && (
                 <section>
-                  <h2 className="text-2xl font-bold text-white mb-6">What's in the Box</h2>
-                  <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-6">
+                  <h2 className={`text-2xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>What's in the Box</h2>
+                  <div className={`rounded-xl p-6 ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-white border border-gray-200'}`}>
                     <ul className="space-y-3">
                       {product.packageContents.map((item: string, index: number) => (
-                        <li key={index} className="flex items-center gap-3 text-zinc-300">
+                        <li key={index} className={`flex items-center gap-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                           <span className="h-5 w-5 rounded-full border border-orange-500 flex items-center justify-center text-orange-500 text-xs">✓</span>
                           {item}
                         </li>
@@ -600,7 +638,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               {/* Questions & Answers */}
               <section id="qa">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-white">Questions & Answers</h2>
+                  <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Questions & Answers</h2>
                   {!showQuestionForm && (
                     <button 
                       onClick={() => setShowQuestionForm(true)}
@@ -630,7 +668,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
         {/* Customer Reviews */}
         <section className="py-16" id="reviews">
-          <h2 className="text-4xl lg:text-5xl font-black text-white mb-8 text-center">
+          <h2 className={`text-4xl lg:text-5xl font-black mb-8 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
             Customer Reviews
           </h2>
           <Reviews 
@@ -641,17 +679,17 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         
         {/* Similar Products Section */}
         <section className="py-16">
-          <SimilarProductsSection productId={product._id} />
+          <SimilarProductsSection productId={product._id} isDark={isDark} />
         </section>
         
         {/* Complementary Products Section */}
         <section className="py-16">
-          <ComplementaryProductsSection productId={product._id} />
+          <ComplementaryProductsSection productId={product._id} isDark={isDark} />
         </section>
 
         {/* FAQ Section */}
         <section className="py-16">
-          <ProductFAQ />
+          <ProductFAQ isDark={isDark} />
         </section>
       </div>
 

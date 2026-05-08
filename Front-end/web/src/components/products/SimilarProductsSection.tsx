@@ -18,9 +18,10 @@ interface Product {
 
 interface SimilarProductsSectionProps {
   productId: string;
+  isDark?: boolean;
 }
 
-export default function SimilarProductsSection({ productId }: SimilarProductsSectionProps) {
+export default function SimilarProductsSection({ productId, isDark = true }: SimilarProductsSectionProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

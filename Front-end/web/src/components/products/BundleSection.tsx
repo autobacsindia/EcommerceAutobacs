@@ -22,9 +22,10 @@ interface BundleSectionProps {
   productId: string;
   mainProductName: string;
   mainProductPrice: number;
+  isDark?: boolean;
 }
 
-export default function BundleSection({ productId, mainProductName, mainProductPrice }: BundleSectionProps) {
+export default function BundleSection({ productId, mainProductName, mainProductPrice, isDark = true }: BundleSectionProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());

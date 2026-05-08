@@ -11,6 +11,7 @@ interface FAQ {
 
 interface ProductFAQProps {
   faqs?: FAQ[];
+  isDark?: boolean;
 }
 
 const defaultFAQs: FAQ[] = [
@@ -40,7 +41,7 @@ const defaultFAQs: FAQ[] = [
   }
 ];
 
-export default function ProductFAQ({ faqs }: ProductFAQProps) {
+export default function ProductFAQ({ faqs, isDark = true }: ProductFAQProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   
   const faqList = faqs && faqs.length > 0 ? faqs : defaultFAQs;
@@ -50,12 +51,12 @@ export default function ProductFAQ({ faqs }: ProductFAQProps) {
   };
 
   return (
-    <section className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-8">
+    <section className={`${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl p-8`}>
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2 bg-orange-500/20 rounded-lg">
           <HelpCircle className="w-6 h-6 text-orange-500" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Frequently Asked Questions</h2>
+        <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Frequently Asked Questions</h2>
       </div>
       
       <div className="space-y-3">
