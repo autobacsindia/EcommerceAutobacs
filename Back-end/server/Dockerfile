@@ -13,8 +13,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies including dev dependencies for build
-RUN echo "BUILD_ID=${BUILD_ID}" && npm ci
+# Install production dependencies only (skip devDependencies like mongodb-memory-server)
+RUN echo "BUILD_ID=${BUILD_ID}" && npm ci --omit=dev
 
 # Copy application source
 COPY . .
