@@ -597,6 +597,7 @@ class SearchService {
 
       console.log('[SearchService] Complementary for:', product.name);
 
+      // Get similar products to exclude them from complementary results
       const similarProducts = await this.getSimilarProducts(productId, 20);
       const similarIds      = new Set(similarProducts.map(p => p._id.toString()));
       const excluded        = () => [productId, ...Array.from(similarIds)];
@@ -607,30 +608,52 @@ class SearchService {
         const curated = product.complementaryProducts
           .filter(p => p && p.isActive && !similarIds.has(p._id.toString()))
           .slice(0, limit);
-        if (curated.length >= limit) {
+        if (curated.length > 0) {
           console.log('[SearchService] Returning', curated.length, 'curated complementary products');
           return curated;
         }
       }
 
       // Priority 2: name-based ecosystem matching (direct product-name regex)
+      // This ensures we get products from DIFFERENT categories that work together
       const complementRegex = SearchService.getComplementaryNameRegex(product.name);
       if (complementRegex) {
         const docs = await find({ _id: { $nin: excluded() }, isActive: true, name: { $regex: complementRegex, $options: 'i' } });
-        console.log('[SearchService] Ecosystem name matching found:', docs.length);
-        if (docs.length > 0) return docs;
+        console.log('[SearchService] Ecosystem name matching found:', docs.length, 'products');
+        if (docs.length > 0) {
+          // Double-check: exclude any products that share the same product type as the current product
+          const currentType = SearchService.extractProductTypeSlug(product.name);
+          if (currentType) {
+            const filtered = docs.filter(p => {
+              const productType = SearchService.extractProductTypeSlug(p.name);
+              return productType !== currentType; // Must be different product type
+            });
+            if (filtered.length > 0) {
+              console.log('[SearchService] Filtered complementary (different type):', filtered.length);
+              return filtered;
+            }
+          }
+          return docs;
+        }
       }
 
       // Priority 3: different-vehicle products (contextual discovery)
+      // Ensure we get products for OTHER vehicles, not the same vehicle
       const vehicle = SearchService.extractVehicleKeyword(product.name);
       if (vehicle) {
-        const docs = await find({ _id: { $nin: excluded() }, isActive: true, name: { $not: new RegExp(vehicle, 'i') } });
+        const docs = await find({ 
+          _id: { $nin: excluded() }, 
+          isActive: true, 
+          name: { $not: new RegExp(vehicle, 'i') } // Exclude current vehicle
+        });
         console.log('[SearchService] Different-vehicle fallback found:', docs.length);
         if (docs.length > 0) return docs;
       }
 
-      // Last resort
-      return find({ _id: { $nin: excluded() }, isActive: true });
+      // Last resort: any active products except similar ones
+      const lastResort = await find({ _id: { $nin: excluded() }, isActive: true });
+      console.log('[SearchService] Last resort fallback:', lastResort.length);
+      return lastResort;
     } catch (error) {
       console.error('[SearchService] getComplementaryProducts failed:', error);
       return [];

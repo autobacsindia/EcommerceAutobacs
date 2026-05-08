@@ -67,20 +67,20 @@ export default function ProductFAQ({ faqs, isDark = true }: ProductFAQProps) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: index * 0.05 }}
-            className="border border-zinc-700 rounded-xl overflow-hidden hover:border-orange-500/50 transition-colors"
+            className={`${isDark ? 'border-zinc-700 hover:border-orange-500/50' : 'border-gray-200 hover:border-orange-500'} border rounded-xl overflow-hidden transition-colors`}
           >
             <button
               onClick={() => toggleFAQ(index)}
-              className="w-full flex items-center justify-between p-5 text-left hover:bg-zinc-700/50 transition-colors"
+              className={`w-full flex items-center justify-between p-5 text-left transition-colors ${isDark ? 'hover:bg-zinc-700/50' : 'hover:bg-gray-50'}`}
               aria-expanded={openIndex === index}
             >
-              <span className="font-semibold text-white pr-4 text-lg">
+              <span className={`font-semibold pr-4 text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 {faq.question}
               </span>
               {openIndex === index ? (
                 <ChevronUp className="w-5 h-5 text-orange-500 flex-shrink-0" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                <ChevronDown className={`w-5 h-5 flex-shrink-0 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
               )}
             </button>
             
@@ -93,7 +93,7 @@ export default function ProductFAQ({ faqs, isDark = true }: ProductFAQProps) {
                   transition={{ duration: 0.3 }}
                   className="overflow-hidden"
                 >
-                  <div className="px-5 pb-5 text-zinc-300 leading-relaxed border-t border-zinc-700 pt-4">
+                  <div className={`px-5 pb-5 leading-relaxed border-t pt-4 ${isDark ? 'text-zinc-300 border-zinc-700' : 'text-gray-700 border-gray-200'}`}>
                     {faq.answer}
                   </div>
                 </motion.div>
