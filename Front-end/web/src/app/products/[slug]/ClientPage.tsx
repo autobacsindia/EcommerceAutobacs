@@ -481,6 +481,15 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       {/* Theme Toggle */}
       <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
       
+      {/* Premium Gallery - Moved to Top */}
+      <section className="pt-24 pb-16">
+        <PremiumGallery
+          images={displayImages}
+          productName={product.name}
+          isDark={isDark}
+        />
+      </section>
+
       {/* Hero Section */}
       <HeroSection product={product} />
 
@@ -488,15 +497,6 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       <ActionStrip isDark={isDark} />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        {/* Premium Gallery */}
-        <section className="py-16">
-          <PremiumGallery
-            images={displayImages}
-            productName={product.name}
-            isDark={isDark}
-          />
-        </section>
-
         {/* Product Story Section */}
         <ProductStory productName={product.name} isDark={isDark} />
 

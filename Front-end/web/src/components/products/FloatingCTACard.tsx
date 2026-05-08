@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ShoppingCart, Zap, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
+import { ShoppingCart, Zap, Shield, Truck, RotateCcw, CreditCard, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
@@ -20,6 +20,8 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
   const { addToCart } = useCart();
   const [cartLoading, setCartLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [isWishlisted, setIsWishlisted] = useState(false);
 
   const discount = product.originalPrice
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
@@ -34,6 +36,19 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
       toast.error(error.message || 'Failed to add to cart');
     } finally {
       setCartLoading(false);
+    }
+  };
+
+  const handleToggleWishlist = async () => {
+    setWishlistLoading(true);
+    try {
+      // TODO: Implement wishlist API call
+      setIsWishlisted(!isWishlisted);
+      toast.success(isWishlisted ? 'Removed from wishlist' : 'Added to wishlist!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update wishlist');
+    } finally {
+      setWishlistLoading(false);
     }
   };
 
@@ -105,13 +120,27 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           <Zap className="w-6 h-6" />
           Buy Now
         </motion.button>
+
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={handleToggleWishlist}
+          disabled={wishlistLoading}
+          className={`w-full border font-bold py-3 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg ${
+            isWishlisted
+              ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
+              : 'bg-white/5 border-white/20 text-zinc-300 hover:bg-white/10 hover:border-white/30'
+          }`}
+        >
+          <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-current' : ''}`} />
+          {wishlistLoading ? 'Updating...' : isWishlisted ? 'Saved to Wishlist' : 'Add to Wishlist'}
+        </motion.button>
       </div>
 
       {/* Trust Badges */}
       <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/20">
         <div className="flex flex-col items-center text-center gap-2">
           <Truck className="w-6 h-6 text-orange-400" />
-          <span className="text-xs text-zinc-300 font-medium">Free Shipping</span>
+          <span className="text-xs text-zinc-300 font-medium">Shipping Extra & Exchanges</span>
         </div>
         <div className="flex flex-col items-center text-center gap-2">
           <RotateCcw className="w-6 h-6 text-orange-400" />
@@ -119,7 +148,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         </div>
         <div className="flex flex-col items-center text-center gap-2">
           <Shield className="w-6 h-6 text-orange-400" />
-          <span className="text-xs text-zinc-300 font-medium">COD Available</span>
+          <span className="text-xs text-zinc-300 font-medium">2-Year Warranty</span>
         </div>
       </div>
 
@@ -131,7 +160,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         </div>
         <div className="flex items-center gap-2 text-zinc-300 text-sm">
           <Shield className="w-4 h-4 text-green-400" />
-          <span>2-Year Warranty</span>
+          <span>Genuine Products</span>
         </div>
       </div>
     </motion.div>
