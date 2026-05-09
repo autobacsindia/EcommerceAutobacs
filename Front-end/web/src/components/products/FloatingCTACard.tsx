@@ -83,20 +83,37 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         <div className="flex items-center bg-white/10 border border-white/20 rounded-lg">
           <button
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            className="px-4 py-3 text-white hover:bg-white/10 transition-colors font-bold"
+            disabled={quantity <= 1}
+            className="px-4 py-3 text-white font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10"
           >
             −
           </button>
-          <span className="px-6 py-3 text-white font-bold min-w-[4rem] text-center border-x border-white/20">
-            {quantity}
-          </span>
+          <input
+            type="number"
+            min="1"
+            max={product.stock}
+            value={quantity}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              if (!isNaN(val) && val >= 1 && val <= product.stock) {
+                setQuantity(val);
+              }
+            }}
+            className="px-6 py-3 text-white font-bold min-w-[4rem] text-center border-x border-white/20 bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
           <button
             onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-            className="px-4 py-3 text-white hover:bg-white/10 transition-colors font-bold"
+            disabled={quantity >= product.stock}
+            className="px-4 py-3 text-white font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10"
           >
             +
           </button>
         </div>
+        {product.stock < 10 && (
+          <span className="text-orange-400 text-sm font-semibold">
+            Only {product.stock} left!
+          </span>
+        )}
       </div>
 
       {/* CTA Buttons */}

@@ -151,22 +151,39 @@ export default function ProductInfo({ product }: ProductInfoProps) {
         <div className="flex items-center border border-gray-300 rounded-lg">
           <button
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            className="px-3 py-2 hover:bg-gray-100 transition-colors"
+            disabled={quantity <= 1}
+            className="px-3 py-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100"
             aria-label="Decrease quantity"
           >
             -
           </button>
-          <span className="px-4 py-2 font-semibold min-w-[3rem] text-center">
-            {quantity}
-          </span>
+          <input
+            type="number"
+            min="1"
+            max={product.stock}
+            value={quantity}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              if (!isNaN(val) && val >= 1 && val <= product.stock) {
+                setQuantity(val);
+              }
+            }}
+            className="px-4 py-2 font-semibold min-w-[3rem] text-center border-x border-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
           <button
             onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-            className="px-3 py-2 hover:bg-gray-100 transition-colors"
+            disabled={quantity >= product.stock}
+            className="px-3 py-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100"
             aria-label="Increase quantity"
           >
             +
           </button>
         </div>
+        {product.stock < 10 && (
+          <span className="text-orange-600 text-sm font-semibold">
+            Only {product.stock} left!
+          </span>
+        )}
       </div>
 
       {/* CTA Buttons */}
