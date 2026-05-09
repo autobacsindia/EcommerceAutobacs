@@ -389,16 +389,27 @@ export default function EditProductPage() {
         .find((c) => c.startsWith('XSRF-TOKEN='))
         ?.split('=')[1] || '';
 
-      const authHeader = `Bearer ${apiClient.getAuthToken() ?? localStorage.getItem('authToken') ?? ''}`;
+      // Build headers - only add Authorization if token exists
+      // With httpOnly cookies, the browser automatically sends cookies
+      // when credentials: 'include' is set
+      const headers: Record<string, string> = {
+        'X-XSRF-TOKEN': csrfToken,
+      };
+
+      // Try to get token from apiClient or localStorage (fallback for older sessions)
+      const authToken = apiClient.getAuthToken() || localStorage.getItem('authToken');
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+        console.log('Adding Authorization header');
+      } else {
+        console.log('Using httpOnly cookies for authentication');
+      }
 
       const res = await fetch(
         `/api/v1/products/${productId}`,
         {
           method: 'PUT',
-          headers: {
-            Authorization:  authHeader,
-            'X-XSRF-TOKEN': csrfToken,
-          },
+          headers,
           credentials: 'include',
           body: fd,
         }
