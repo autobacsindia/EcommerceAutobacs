@@ -277,7 +277,18 @@ router.put(
   handleMulterError,
   validateUploadedFiles,
   asyncHandler(updateProductWithImages),
-  ElasticsearchSyncMiddleware.syncProduct
+  ElasticsearchSyncMiddleware.syncProduct,
+  // Invalidate product detail and list cache after update
+  asyncHandler(async (req, res, next) => {
+    try {
+      await invalidatePublicCache(`PRODUCT_DETAIL:*${req.params.id}*`);
+      await invalidatePublicCache('PRODUCT_LIST*');
+      console.log(`[Cache] Invalidated product caches for ${req.params.id}`);
+    } catch (error) {
+      console.warn('[Cache] Failed to invalidate product cache:', error.message);
+    }
+    next();
+  })
 );
 
 // @route   DELETE /products/:id
