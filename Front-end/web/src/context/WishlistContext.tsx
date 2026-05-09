@@ -77,6 +77,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       return;
     }
     
+    // Skip if not authenticated or still loading
     if (!isAuthenticated) {
       setWishlistItems([]);
       setWishlists([]);
@@ -105,6 +106,16 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
       isRateLimited.current = false;
       rateLimitResetTime.current = null;
     } catch (error: any) {
+      // Silently handle 401 errors (user not authenticated)
+      if (error.status === 401 || error.message?.includes('Not authorized')) {
+        console.warn('Wishlist: User not authenticated, clearing wishlist data');
+        setWishlistItems([]);
+        setWishlists([]);
+        setActiveWishlistState(null);
+        setLoading(false);
+        return;
+      }
+      
       console.error('Failed to fetch wishlist:', error);
       
       // Handle rate limit errors specifically
