@@ -82,7 +82,7 @@ export const publicCacheResponse = (cacheType) => async (req, res, next) => {
             ttl = 3600; // 1 hour for featured products
             break;
           case 'PRODUCT_DETAIL':
-            ttl = 600; // 10 minutes for product details
+            ttl = 120; // 2 minutes for product details (stock changes frequently)
             break;
           case 'PRODUCT_SIMILAR':
             ttl = 120; // 2 minutes for similar products (frequently changes based on stock)

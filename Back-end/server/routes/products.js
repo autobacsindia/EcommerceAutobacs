@@ -325,7 +325,17 @@ router.post(
   admin,
   validateStockUpdate,
   asyncHandler(updateStock),
-  ElasticsearchSyncMiddleware.syncProduct
+  ElasticsearchSyncMiddleware.syncProduct,
+  // Invalidate product detail cache after stock update
+  asyncHandler(async (req, res, next) => {
+    try {
+      await invalidatePublicCache(`PRODUCT_DETAIL:*${req.params.id}*`);
+      console.log(`[Cache] Invalidated product detail cache for ${req.params.id}`);
+    } catch (error) {
+      console.warn('[Cache] Failed to invalidate product cache:', error.message);
+    }
+    next();
+  })
 );
 
 export default router;
