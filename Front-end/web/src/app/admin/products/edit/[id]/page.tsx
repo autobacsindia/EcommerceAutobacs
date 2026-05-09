@@ -24,6 +24,7 @@ interface Vehicle {
 interface Product {
   _id: string;
   name: string;
+  slug?: string;
   description: string;
   shortDescription: string;
   price: number;
