@@ -391,12 +391,25 @@ export default function EditProductPage() {
         }
       );
 
-      const data = await res.json();
+      console.log('Response status:', res.status);
+      console.log('Response headers:', Object.fromEntries(res.headers.entries()));
+      
+      let data;
+      try {
+        const text = await res.text();
+        console.log('Raw response:', text);
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error(`Server returned invalid response (${res.status})`);
+      }
+      
       console.log('Update response:', res.status, data);
       
       if (!res.ok) {
         console.error('Update failed:', data);
-        throw new Error(data.message || `Failed to update product (${res.status})`);
+        console.error('Error details:', JSON.stringify(data, null, 2));
+        throw new Error(data.message || data.error || `Failed to update product (${res.status})`);
       }
 
       alert('Product updated successfully');
