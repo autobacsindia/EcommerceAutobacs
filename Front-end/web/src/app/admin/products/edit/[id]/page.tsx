@@ -330,13 +330,26 @@ export default function EditProductPage() {
       if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
 
       // Generate and append slug from product name
-      const slug = formData.name
-        .toLowerCase()
-        .trim()
-        .replace(/[^[a-z0-9\s-]/g, '')
-        .replace(/[^\s_-]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      fd.append('slug', slug);
+      // Only generate new slug if:
+      // 1. This is a NEW product (no existing product data), OR
+      // 2. The product name has CHANGED from the original
+      const isNewProduct = !product; // product is undefined for new products
+      const nameChanged = product && formData.name !== product.name;
+      
+      if (isNewProduct || nameChanged) {
+        const slug = formData.name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9\s-]/g, '')  // Fixed: removed extra [ bracket
+          .replace(/\s+/g, '-')           // Fixed: replace spaces with hyphens
+          .replace(/-+/g, '-')            // Fixed: collapse multiple hyphens
+          .replace(/^-+|-+$/g, '');       // Fixed: trim leading/trailing hyphens
+        fd.append('slug', slug);
+        console.log('Generated new slug:', slug);
+      } else {
+        // Keep existing slug for unchanged product name
+        console.log('Keeping existing slug:', product?.slug);
+      }
 
       // ── JSON-encoded arrays ────────────────────────────────────────────────
       fd.append('categories',      JSON.stringify(selectedCategories));
