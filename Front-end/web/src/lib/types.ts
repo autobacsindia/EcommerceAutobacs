@@ -308,6 +308,19 @@ export function productUrl(
   product: { slug?: string | null; _id?: string; id?: string | number },
   fallback?: string
 ): string | null {
-  if (product.slug) return `/products/${product.slug}`;
+  if (product.slug) {
+    // Only reject clearly corrupted slugs (starting with - or containing %20)
+    const isCorrupted = product.slug.startsWith('-') || 
+                        product.slug.includes('%20') || 
+                        product.slug.trim() === '';
+    
+    if (!isCorrupted) {
+      return `/products/${product.slug}`;
+    }
+    
+    // Log warning for corrupted slugs
+    console.warn(`[productUrl] Corrupted slug detected: "${product.slug}" for product ${product._id || product.id}`);
+  }
+  
   return fallback ?? null;
 }

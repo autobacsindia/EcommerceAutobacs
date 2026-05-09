@@ -86,12 +86,29 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
   const searchParamsObj = searchParams;
   const cacheKey = `products_${JSON.stringify(searchParamsObj)}`;
   
-  // Try to get from localStorage first
+  // Try to get from localStorage first (with 2-minute expiry to prevent stale slugs)
   const cachedData = localStorage.getItem(cacheKey);
-  if (cachedData) {
+  const cacheTimestamp = localStorage.getItem(`${cacheKey}_timestamp`);
+  
+  if (cachedData && cacheTimestamp) {
     try {
       const parsedData = JSON.parse(cachedData);
-      return parsedData;
+      const age = Date.now() - parseInt(cacheTimestamp);
+      const maxAge = 2 * 60 * 1000; // 2 minutes
+      
+      if (age < maxAge) {
+        // Validate all slugs in cached data
+        const hasInvalidSlugs = parsedData.products?.some((p: any) => 
+          p.slug && (p.slug.startsWith('-') || p.slug.includes('%20'))
+        );
+        
+        if (!hasInvalidSlugs) {
+          return parsedData;
+        }
+        console.log('Cache has invalid slugs, refreshing...');
+      } else {
+        console.log('Cache expired, refreshing...');
+      }
     } catch (e) {
       console.warn('Failed to parse cached products data:', e);
     }
@@ -182,9 +199,10 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
           }
         };
         
-        // Cache in localStorage for 5 minutes
+        // Cache in localStorage with timestamp (2-minute expiry)
         try {
           localStorage.setItem(cacheKey, JSON.stringify(result));
+          localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
         } catch (e) {
           console.warn('Failed to cache products in localStorage:', e);
         }
