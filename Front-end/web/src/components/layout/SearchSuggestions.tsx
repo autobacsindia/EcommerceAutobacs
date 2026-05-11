@@ -184,29 +184,53 @@ export default function SearchSuggestions() {
       // SMART SEARCH: Check if query matches a product name from suggestions
       const trimmedQuery = searchQuery.trim().toLowerCase();
       console.log('[SearchSuggestions] handleSearch called with:', searchQuery);
-      console.log('[SearchSuggestions] Available suggestions:', suggestions.length, suggestions.map(s => ({ text: s.text, type: s.type })));
+      console.log('[SearchSuggestions] Available suggestions:', suggestions.length, suggestions.map(s => ({ text: s.text, type: s.type, slug: s.slug })));
+      
+      // If no suggestions loaded, fetch them synchronously
+      let currentSuggestions = suggestions;
+      if (currentSuggestions.length === 0 && trimmedQuery.length >= 2) {
+        console.log('[SearchSuggestions] No suggestions loaded, fetching now...');
+        try {
+          const data: any = await apiClient.get(`/products/suggestions?q=${encodeURIComponent(searchQuery.trim())}&limit=8`);
+          if (data.success) {
+            currentSuggestions = data.suggestions || [];
+            console.log('[SearchSuggestions] Fetched suggestions:', currentSuggestions.length, currentSuggestions.map(s => s.text));
+          }
+        } catch (error) {
+          console.error('[SearchSuggestions] Error fetching suggestions:', error);
+        }
+      }
       
       // Look for exact match first
-      const exactProductMatch = suggestions.find(s => 
+      let exactProductMatch = currentSuggestions.find(s => 
         s.type === 'product' && 
         s.text.toLowerCase() === trimmedQuery &&
         s.slug
       );
       
-      // If no exact match, look for product suggestions where query contains the product name
-      const partialProductMatch = !exactProductMatch ? suggestions.find(s => 
-        s.type === 'product' && 
-        s.text.toLowerCase().includes(trimmedQuery) &&
-        s.slug
-      ) : null;
+      // If no exact match, try more flexible matching
+      if (!exactProductMatch && currentSuggestions.length > 0) {
+        // Try: suggestion text is contained in query
+        exactProductMatch = currentSuggestions.find(s => 
+          s.type === 'product' && 
+          trimmedQuery.includes(s.text.toLowerCase()) &&
+          s.slug
+        );
+      }
       
-      const bestMatch = exactProductMatch || partialProductMatch;
+      // If still no match, try: query is contained in suggestion text
+      if (!exactProductMatch && currentSuggestions.length > 0) {
+        exactProductMatch = currentSuggestions.find(s => 
+          s.type === 'product' && 
+          s.text.toLowerCase().includes(trimmedQuery) &&
+          s.slug
+        );
+      }
       
-      if (bestMatch) {
+      if (exactProductMatch) {
         // Product match found - navigate directly to product page
-        console.log('[SearchSuggestions] ✅ Product match found:', bestMatch.text, '-> slug:', bestMatch.slug);
-        console.log('[SearchSuggestions] Match type:', exactProductMatch ? 'EXACT' : 'PARTIAL');
-        router.push(`/products/${bestMatch.slug}`);
+        console.log('[SearchSuggestions] ✅ Product match found:', exactProductMatch.text, '-> slug:', exactProductMatch.slug);
+        router.push(`/products/${exactProductMatch.slug}`);
       } else {
         // No match - go to search results page
         console.log('[SearchSuggestions] ❌ No product match, navigating to search results');
