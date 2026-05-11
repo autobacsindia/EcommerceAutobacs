@@ -167,7 +167,7 @@ export default function SearchSuggestions() {
     };
   }, [query, isMounted, history.length]);
 
-  const handleSearch = (searchQuery: string = query) => {
+  const handleSearch = async (searchQuery: string = query) => {
     if (searchQuery.trim()) {
       // Add to search history
       const newHistoryItem: HistoryItem = {
@@ -181,7 +181,24 @@ export default function SearchSuggestions() {
         return [newHistoryItem, ...filteredHistory].slice(0, 10);
       });
       
-      router.push(`/products/search?search=${encodeURIComponent(searchQuery.trim())}`);
+      // SMART SEARCH: Check if query exactly matches a product name from suggestions
+      const trimmedQuery = searchQuery.trim().toLowerCase();
+      const exactProductMatch = suggestions.find(s => 
+        s.type === 'product' && 
+        s.text.toLowerCase() === trimmedQuery &&
+        s.slug
+      );
+      
+      if (exactProductMatch) {
+        // Exact match found - navigate directly to product page
+        console.log('[SearchSuggestions] Exact product match found, navigating directly to:', exactProductMatch.slug);
+        router.push(`/products/${exactProductMatch.slug}`);
+      } else {
+        // No exact match - go to search results page
+        console.log('[SearchSuggestions] No exact match, navigating to search results');
+        router.push(`/products/search?search=${encodeURIComponent(searchQuery.trim())}`);
+      }
+      
       setIsOpen(false);
       setQuery('');
       setActiveIndex(-1);
