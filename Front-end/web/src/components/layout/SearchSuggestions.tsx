@@ -181,21 +181,35 @@ export default function SearchSuggestions() {
         return [newHistoryItem, ...filteredHistory].slice(0, 10);
       });
       
-      // SMART SEARCH: Check if query exactly matches a product name from suggestions
+      // SMART SEARCH: Check if query matches a product name from suggestions
       const trimmedQuery = searchQuery.trim().toLowerCase();
+      console.log('[SearchSuggestions] handleSearch called with:', searchQuery);
+      console.log('[SearchSuggestions] Available suggestions:', suggestions.length, suggestions.map(s => ({ text: s.text, type: s.type })));
+      
+      // Look for exact match first
       const exactProductMatch = suggestions.find(s => 
         s.type === 'product' && 
         s.text.toLowerCase() === trimmedQuery &&
         s.slug
       );
       
-      if (exactProductMatch) {
-        // Exact match found - navigate directly to product page
-        console.log('[SearchSuggestions] Exact product match found, navigating directly to:', exactProductMatch.slug);
-        router.push(`/products/${exactProductMatch.slug}`);
+      // If no exact match, look for product suggestions where query contains the product name
+      const partialProductMatch = !exactProductMatch ? suggestions.find(s => 
+        s.type === 'product' && 
+        s.text.toLowerCase().includes(trimmedQuery) &&
+        s.slug
+      ) : null;
+      
+      const bestMatch = exactProductMatch || partialProductMatch;
+      
+      if (bestMatch) {
+        // Product match found - navigate directly to product page
+        console.log('[SearchSuggestions] ✅ Product match found:', bestMatch.text, '-> slug:', bestMatch.slug);
+        console.log('[SearchSuggestions] Match type:', exactProductMatch ? 'EXACT' : 'PARTIAL');
+        router.push(`/products/${bestMatch.slug}`);
       } else {
-        // No exact match - go to search results page
-        console.log('[SearchSuggestions] No exact match, navigating to search results');
+        // No match - go to search results page
+        console.log('[SearchSuggestions] ❌ No product match, navigating to search results');
         router.push(`/products/search?search=${encodeURIComponent(searchQuery.trim())}`);
       }
       
