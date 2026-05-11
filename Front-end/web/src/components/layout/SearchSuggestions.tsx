@@ -199,14 +199,21 @@ export default function SearchSuggestions() {
     console.log('[SearchSuggestions] Suggestion type:', suggestion.type);
     console.log('[SearchSuggestions] Suggestion slug:', suggestion.slug);
     console.log('[SearchSuggestions] Suggestion value:', suggestion.value);
+    console.log('[SearchSuggestions] Suggestion text:', suggestion.text);
+    console.log('[SearchSuggestions] Has slug?', !!suggestion.slug);
+    console.log('[SearchSuggestions] Has value?', !!suggestion.value);
     
     // Handle product suggestions - navigate directly to product page
-    if (suggestion.type === 'product' || (suggestion.slug && !suggestion.type)) {
-      // Use slug if available, fallback to id for backwards compatibility
-      const productPath = suggestion.slug 
-        ? `/products/${suggestion.slug}` 
-        : `/products/${suggestion.id}`;
-      console.log('[SearchSuggestions] Navigating to product page:', productPath);
+    // Check multiple conditions to ensure we navigate to product page
+    const isProduct = suggestion.type === 'product' || 
+                      suggestion.slug || 
+                      (suggestion.value && !suggestion.value.includes(' ')); // slug has no spaces
+    
+    if (isProduct) {
+      // Use slug if available, fallback to value, then id
+      const productSlug = suggestion.slug || suggestion.value || suggestion.id;
+      const productPath = `/products/${productSlug}`;
+      console.log('[SearchSuggestions] ✅ Navigating to product page:', productPath);
       router.push(productPath);
     } else if (suggestion.type === 'brand') {
       console.log('[SearchSuggestions] Navigating to brand page');
@@ -216,7 +223,7 @@ export default function SearchSuggestions() {
       router.push(`/products/search?category=${encodeURIComponent(suggestion.text)}`);
     } else {
       // Fallback: perform text search
-      console.log('[SearchSuggestions] Performing text search with:', suggestion.text);
+      console.log('[SearchSuggestions] ❌ Performing text search with:', suggestion.text);
       setQuery(suggestion.text);
       handleSearch(suggestion.text);
     }
@@ -369,17 +376,21 @@ export default function SearchSuggestions() {
               {suggestions.length > 0 && (
                 <div>
                   <div className="px-4 py-2 text-xs font-semibold text-gray-500">
-                    Suggestions
+                    Suggestions ({suggestions.length})
                   </div>
                   <ul>
                     {suggestions.map((suggestion, index) => {
                       const actualIndex = index + (query.length === 0 && history.length > 0 ? history.length : 0);
+                      console.log(`[SearchSuggestions] Rendering suggestion ${index}:`, suggestion);
                       return (
                         <li key={suggestion.id}>
                           <button
                             type="button"
                             ref={(el) => { if (el) suggestionRefs.current[actualIndex] = el; }}
-                            onClick={(e) => handleSuggestionClick(suggestion, e)}
+                            onClick={(e) => {
+                              console.log('[SearchSuggestions] Button clicked for:', suggestion.text);
+                              handleSuggestionClick(suggestion, e);
+                            }}
                             className={`w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center gap-3 ${
                               activeIndex === actualIndex ? 'bg-gray-100' : ''
                             }`}
