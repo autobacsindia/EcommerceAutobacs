@@ -58,14 +58,20 @@ export default function FastMovingProducts({
   useEffect(() => {
     // Generate cache key based on limit
     const cacheKey = `featured_products_${limit}`;
+    const cacheTimestampKey = `${cacheKey}_timestamp`;
     
-    // Try to get from localStorage first
+    // Try to get from localStorage first (with 5-minute expiry)
     const cachedProducts = localStorage.getItem(cacheKey);
-    if (cachedProducts) {
+    const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
+    
+    if (cachedProducts && cacheTimestamp) {
       try {
         const parsedProducts = JSON.parse(cachedProducts);
-        // Validate cache data structure
-        if (Array.isArray(parsedProducts)) {
+        const age = Date.now() - parseInt(cacheTimestamp);
+        const maxAge = 5 * 60 * 1000; // 5 minutes
+        
+        // Validate cache data structure and check if not expired
+        if (Array.isArray(parsedProducts) && age < maxAge) {
           setProducts(parsedProducts);
           setLoading(false);
           return;
@@ -86,18 +92,20 @@ export default function FastMovingProducts({
         const productsData = response.products || [];
         setProducts(productsData);
         
-        // Cache in localStorage for 5 minutes
+        // Cache in localStorage with timestamp (5-minute expiry)
         try {
           localStorage.setItem(cacheKey, JSON.stringify(productsData));
+          localStorage.setItem(cacheTimestampKey, Date.now().toString());
         } catch (e) {
           console.warn('Failed to cache featured products in localStorage:', e);
         }
       } catch (err: any) {
         console.error('Failed to fetch fast-moving products:', err);
         
-        // Provide more specific error messages based on error type
+        // Silently fail on 429 (rate limit) - don't show error for non-critical widget
         if (err.status === 429) {
-          setError('Too many requests. Please try again in a moment.');
+          console.warn('[FastMovingProducts] Rate limited, using cached data if available');
+          // Don't set error state, just stop loading
         } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
           setError('Unable to connect to the server. Please check your internet connection and try again later.');
         } else {

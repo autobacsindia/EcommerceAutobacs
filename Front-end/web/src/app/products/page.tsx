@@ -86,7 +86,9 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
   const searchParamsObj = searchParams;
   const cacheKey = `products_${JSON.stringify(searchParamsObj)}`;
   
-  // Try to get from localStorage first (with 2-minute expiry to prevent stale slugs)
+  // DISABLED: localStorage caching to prevent stale/corrupted slug data
+  // Always fetch fresh data from API
+  /*
   const cachedData = localStorage.getItem(cacheKey);
   const cacheTimestamp = localStorage.getItem(`${cacheKey}_timestamp`);
   
@@ -94,25 +96,16 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
     try {
       const parsedData = JSON.parse(cachedData);
       const age = Date.now() - parseInt(cacheTimestamp);
-      const maxAge = 2 * 60 * 1000; // 2 minutes
+      const maxAge = 30 * 1000; // 30 seconds
       
       if (age < maxAge) {
-        // Validate all slugs in cached data
-        const hasInvalidSlugs = parsedData.products?.some((p: any) => 
-          p.slug && (p.slug.startsWith('-') || p.slug.includes('%20'))
-        );
-        
-        if (!hasInvalidSlugs) {
-          return parsedData;
-        }
-        console.log('Cache has invalid slugs, refreshing...');
-      } else {
-        console.log('Cache expired, refreshing...');
+        return parsedData;
       }
     } catch (e) {
       console.warn('Failed to parse cached products data:', e);
     }
   }
+  */
   
   let lastError: any;
   
@@ -185,6 +178,15 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
       
       // Fix: Backend returns pagination properties directly in response object
       if (data && data.products) {
+        // DEBUG: Log first product to check if slug exists
+        if (data.products.length > 0) {
+          console.log('[ProductsPage] First product:', {
+            name: data.products[0].name,
+            slug: data.products[0].slug,
+            _id: data.products[0]._id
+          });
+        }
+        
         // Extract pagination properties from the response
         const { total, pages, currentPage, hasNext, hasPrev, count } = data;
         const result = {
@@ -199,13 +201,15 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
           }
         };
         
-        // Cache in localStorage with timestamp (2-minute expiry)
+        // DISABLED: localStorage caching to prevent stale/corrupted slug data
+        /*
         try {
           localStorage.setItem(cacheKey, JSON.stringify(result));
           localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
         } catch (e) {
           console.warn('Failed to cache products in localStorage:', e);
         }
+        */
         
         return result;
       }

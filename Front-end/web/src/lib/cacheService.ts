@@ -16,17 +16,36 @@ const inflightRequests = new Map<string, Promise<any>>();
  * Get cached data if available and not expired
  */
 export function getCache<T>(key: string): T | null {
-  const entry = cacheMap.get(key);
-  if (!entry) return null;
-  
-  const now = Date.now();
-  if (now - entry.timestamp > entry.ttl) {
-    // Cache expired
-    cacheMap.delete(key);
-    return null;
+  try {
+    // Try in-memory cache first
+    const entry = cacheMap.get(key);
+    if (entry) {
+      const now = Date.now();
+      if (now - entry.timestamp <= entry.ttl) {
+        return entry.data as T;
+      }
+      // Cache expired, delete it
+      cacheMap.delete(key);
+    }
+    
+    // Fallback to localStorage for persistence across page reloads
+    const cached = localStorage.getItem(`cache_${key}`);
+    if (cached) {
+      const parsed: CacheEntry = JSON.parse(cached);
+      const now = Date.now();
+      if (now - parsed.timestamp <= parsed.ttl) {
+        // Restore to in-memory cache for faster access
+        cacheMap.set(key, parsed);
+        return parsed.data as T;
+      }
+      // Cache expired, delete it
+      localStorage.removeItem(`cache_${key}`);
+    }
+  } catch (e) {
+    console.warn('Failed to get cache:', e);
   }
   
-  return entry.data as T;
+  return null;
 }
 
 /**
@@ -34,11 +53,22 @@ export function getCache<T>(key: string): T | null {
  */
 export function setCache<T>(key: string, data: T, ttl: number = 5 * 60 * 1000): void {
   try {
-    cacheMap.set(key, {
+    const entry: CacheEntry = {
       data,
       timestamp: Date.now(),
       ttl
-    });
+    };
+    
+    // Save to in-memory cache
+    cacheMap.set(key, entry);
+    
+    // Also save to localStorage for persistence across page reloads
+    try {
+      localStorage.setItem(`cache_${key}`, JSON.stringify(entry));
+    } catch (e) {
+      // localStorage might be full, ignore error
+      console.warn('Failed to save to localStorage:', e);
+    }
   } catch (e) {
     console.warn('Failed to set cache:', e);
   }
@@ -85,9 +115,15 @@ export function useCachedData<T>(
       const result = await promise;
       setData(result);
       setCache(key, result, ttl);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-      console.error(`Cache fetch error for ${key}:`, err);
+    } catch (err: any) {
+      // Don't refetch on 429 (rate limit) errors - just show cached data or error
+      if (err?.status === 429 || err?.message?.includes('Too many requests')) {
+        console.warn(`[Cache] Rate limited for ${key}, using cached data if available`);
+        setError(new Error('Data temporarily unavailable. Please wait a moment.'));
+      } else {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        console.error(`Cache fetch error for ${key}:`, err);
+      }
     } finally {
       setLoading(false);
     }
@@ -101,7 +137,13 @@ export function useCachedData<T>(
       return;
     }
 
-    refetch();
+    // Only refetch if we don't have cached data
+    // Add a small delay to prevent burst requests on page load
+    const timer = setTimeout(() => {
+      refetch();
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [key]);
 
   return { data, loading, error, refetch };

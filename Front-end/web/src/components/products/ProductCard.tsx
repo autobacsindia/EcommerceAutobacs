@@ -84,6 +84,15 @@ export default function ProductCard({
   };
 
   const url = productUrl(product);  // null = product has no slug yet (rare post-migration)
+  
+  // DEBUG: Log ALL products without URLs
+  if (!url) {
+    console.log(`[ProductCard NO URL] ${product.name}:`, {
+      slug: product.slug,
+      url,
+      productId: product._id
+    });
+  }
 
   return (
     <div className={cn("bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group", className)}>

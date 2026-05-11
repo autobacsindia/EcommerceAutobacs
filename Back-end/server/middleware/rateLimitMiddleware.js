@@ -417,8 +417,8 @@ export const metricsRateLimit = rateLimit({
 // Public browsing endpoints (catalog, product pages)
 export const publicBrowsingRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 300, // 300 requests per minute
-  burst: 100, // burst up to 100 requests/second
+  max: process.env.NODE_ENV === 'development' ? 1000 : 300, // 1000 req/min in dev, 300 in prod
+  burst: process.env.NODE_ENV === 'development' ? 200 : 100, // burst capacity
   message: 'Too many requests. Please slow down.',
   keyGenerator: (req) => `rate_limit:public:${req.ip || req.connection.remoteAddress}`
 });
@@ -512,7 +512,7 @@ export const refreshTokenRateLimit = rateLimit({
 // to avoid saturating the window during normal hot-reload / testing activity.
 export const globalApiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 500 : 5000, // 500 prod / 5000 dev per 15 min per IP
+  max: process.env.NODE_ENV === 'production' ? 500 : 10000, // 500 prod / 10000 dev per 15 min per IP
   message: 'Too many requests. Please slow down.',
   keyGenerator: (req) => `rate_limit:global:${req.ip || req.connection.remoteAddress}`,
   // Log excessive usage for monitoring

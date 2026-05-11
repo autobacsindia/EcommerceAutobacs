@@ -101,11 +101,11 @@ export default function BundleSection({ productId, mainProductName, mainProductP
 
   if (loading) {
     return (
-      <section className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-6 animate-pulse">
-        <div className="h-6 bg-zinc-700 rounded w-1/3 mb-4" />
+      <section className={`${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-gray-100 border-gray-300'} border rounded-2xl p-6 animate-pulse`}>
+        <div className={`h-6 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} rounded w-1/3 mb-4`} />
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-16 bg-zinc-700 rounded" />
+            <div key={i} className={`h-16 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} rounded`} />
           ))}
         </div>
       </section>
@@ -117,13 +117,13 @@ export default function BundleSection({ productId, mainProductName, mainProductP
   }
 
   return (
-    <section className="bg-zinc-800/50 border border-zinc-700 rounded-2xl p-8">
+    <section className={`${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-gray-100 border-gray-300'} border rounded-2xl p-8`}>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">
+          <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             Complete Off-Road Lighting Setup
           </h2>
-          <p className="text-zinc-400 mt-2">
+          <p className={`mt-2 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
             Frequently bought together by Indian off-road enthusiasts
           </p>
         </div>
@@ -136,14 +136,14 @@ export default function BundleSection({ productId, mainProductName, mainProductP
       </div>
 
       {/* Main Product */}
-      <div className="flex items-center gap-4 pb-6 mb-6 border-b border-zinc-700">
+      <div className={`flex items-center gap-4 pb-6 mb-6 border-b ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
         <div className="w-5 h-5 rounded border-orange-500 bg-orange-500 flex items-center justify-center">
           <Check className="w-3 h-3 text-white" />
         </div>
-        <span className="flex-1 text-base font-semibold text-white line-clamp-1">
+        <span className={`flex-1 text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'} line-clamp-1`}>
           {mainProductName}
         </span>
-        <span className="font-bold text-white text-lg">
+        <span className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
           ₹{mainProductPrice.toLocaleString('en-IN')}
         </span>
       </div>
@@ -159,17 +159,17 @@ export default function BundleSection({ productId, mainProductName, mainProductP
           <motion.div
             key={product._id}
             whileHover={{ scale: 1.01 }}
-            className="flex items-center gap-4 bg-zinc-700/50 border border-zinc-600 rounded-xl p-4 cursor-pointer hover:border-orange-500/50 transition-all"
+            className={`flex items-center gap-4 ${isDark ? 'bg-zinc-700/50 border-zinc-600 hover:border-orange-500/50' : 'bg-white border-gray-300 hover:border-orange-500'} border rounded-xl p-4 cursor-pointer transition-all`}
             onClick={() => toggleItem(product._id)}
           >
             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
               selectedItems.has(product._id)
                 ? 'border-orange-500 bg-orange-500'
-                : 'border-zinc-500'
+                : isDark ? 'border-zinc-500' : 'border-gray-400'
             }`}>
               {selectedItems.has(product._id) && <Check className="w-3 h-3 text-white" />}
             </div>
-            <div className="relative w-16 h-16 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden">
+            <div className={`relative w-16 h-16 flex-shrink-0 ${isDark ? 'bg-gray-50' : 'bg-gray-100'} rounded-lg overflow-hidden`}>
               <Image
                 src={product.images?.[0]?.url || '/placeholder-product.jpg'}
                 alt={product.images?.[0]?.alt || product.name}
@@ -181,7 +181,7 @@ export default function BundleSection({ productId, mainProductName, mainProductP
             <div className="flex-1 min-w-0">
               <Link
                 href={`/products/${product.slug}`}
-                className="text-base font-semibold text-white hover:text-orange-500 line-clamp-2 transition-colors"
+                className={`text-base font-semibold ${isDark ? 'text-white hover:text-orange-500' : 'text-gray-900 hover:text-orange-500'} line-clamp-2 transition-colors`}
                 onClick={(e) => e.stopPropagation()}
               >
                 {product.name}
@@ -196,20 +196,20 @@ export default function BundleSection({ productId, mainProductName, mainProductP
 
       {/* Total Price & CTA */}
       {selectedItems.size > 0 && (
-        <div className="space-y-4 pt-6 border-t border-zinc-700">
+        <div className={`space-y-4 pt-6 border-t ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
           <div className="flex items-center justify-between">
-            <span className="text-zinc-300 font-semibold">
+            <span className={`font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
               Bundle Items ({selectedProducts.length})
             </span>
             <span className="text-xl font-bold text-orange-500">
               + ₹{bundlePrice.toLocaleString('en-IN')}
             </span>
           </div>
-          <div className="bg-zinc-900/80 border border-orange-500/30 rounded-xl p-6">
+          <div className={`${isDark ? 'bg-zinc-900/80 border-orange-500/30' : 'bg-white border-orange-500/50'} border rounded-xl p-6`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-zinc-400 text-sm mb-1">Complete Setup Total</p>
-                <p className="text-4xl font-black text-white">
+                <p className={`text-sm mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Complete Setup Total</p>
+                <p className={`text-4xl font-black ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   ₹{totalPrice.toLocaleString('en-IN')}
                 </p>
               </div>

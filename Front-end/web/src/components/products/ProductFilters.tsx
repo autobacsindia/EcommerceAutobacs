@@ -157,14 +157,46 @@ export default function ProductFilters() {
   // Fetch categories
   useEffect(() => {
     const controller = new AbortController();
+    const cacheKey = 'product_categories';
+    const cacheTimestampKey = `${cacheKey}_timestamp`;
 
     const fetchCategories = async () => {
+      // Try cache first (10-minute expiry)
+      const cached = localStorage.getItem(cacheKey);
+      const timestamp = localStorage.getItem(cacheTimestampKey);
+      
+      if (cached && timestamp) {
+        const age = Date.now() - parseInt(timestamp);
+        if (age < 10 * 60 * 1000) { // 10 minutes
+          try {
+            const categories = JSON.parse(cached);
+            // Set categories state here (assuming you have a setter)
+            setLoadingCategories(false);
+            return;
+          } catch (e) {
+            console.warn('Failed to parse cached categories:', e);
+          }
+        }
+      }
+      
       try {
         setLoadingCategories(true);
         const response: any = await apiClient.get('/categories', { signal: controller.signal });
+        // Cache the response
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(response.categories || []));
+          localStorage.setItem(cacheTimestampKey, Date.now().toString());
+        } catch (e) {
+          console.warn('Failed to cache categories:', e);
+        }
       } catch (err: any) {
         if (err.name === 'AbortError') return;
-        console.error('Failed to fetch categories:', err);
+        // Silently fail on 429
+        if (err.status === 429) {
+          console.warn('[ProductFilters] Rate limited on categories');
+        } else {
+          console.error('Failed to fetch categories:', err);
+        }
       } finally {
         if (!controller.signal.aborted) setLoadingCategories(false);
       }

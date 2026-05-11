@@ -113,6 +113,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (err: any) {
+      // Handle 429 rate limit errors specially
+      const isRateLimitError = err.status === 429 || 
+                               (err.message && err.message.includes('Too many requests'));
+      
+      if (isRateLimitError) {
+        console.warn('[AuthContext] Rate limited on auth check, using cached data if available');
+        // If we have cached user data, use it even if expired
+        if (cachedAuth) {
+          try {
+            const parsedAuth = JSON.parse(cachedAuth);
+            if (parsedAuth.user) {
+              setUser(parsedAuth.user);
+              setToken(null);
+              setIsLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.warn('Failed to parse cached auth data:', e);
+          }
+        }
+        // No cached data available, set not authenticated
+        apiClient.clearAuthToken();
+        setUser(null);
+        setToken(null);
+        setIsLoading(false);
+        return;
+      }
+      
       // Only log actual errors, not on expected auth failures
       const isAuthError = err.message === 'Unauthorized' || 
                           err.message === 'Not authorized, token failed' || 

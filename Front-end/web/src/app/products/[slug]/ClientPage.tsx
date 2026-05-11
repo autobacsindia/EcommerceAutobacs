@@ -602,12 +602,12 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               {product.specifications && product.specifications.length > 0 && (
                 <section>
                   <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Technical Specifications</h2>
-                  <div className={`rounded-2xl p-6 sm:p-8 ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-gray-50 border border-gray-200'}`}>
+                  <div className={`rounded-2xl p-6 sm:p-8 ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-gray-100 border border-gray-300'}`}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
                       {product.specifications.map((spec: any, index: number) => (
-                        <div key={index} className={`flex justify-between border-b py-3 last:border-0 ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
-                          <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}>{spec.key}</span>
-                          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{spec.value}</span>
+                        <div key={index} className={`flex justify-between border-b py-3 last:border-0 ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
+                          <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{spec.key}</span>
+                          <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{spec.value}</span>
                         </div>
                       ))}
                     </div>

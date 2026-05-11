@@ -1,78 +1,66 @@
-// Check for specific Profender products
-import dotenv from 'dotenv';
+/**
+ * Directly query the 3 problematic products by their IDs
+ */
+
 import mongoose from 'mongoose';
 import Product from './models/Product.js';
 
-// Load environment variables
-dotenv.config();
-
 async function checkSpecificProducts() {
+  const mongoUrl = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/autobacs';
+  
+  console.log('[MongoDB] Connecting...');
+  await mongoose.connect(mongoUrl);
+  console.log('[MongoDB] Connected successfully\n');
+
   try {
-    console.log('🔍 Connecting to MongoDB...');
-    
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('✅ Connected to MongoDB');
-    
-    // Check for the specific products mentioned by the user
-    console.log('\n🔍 Checking for specific Profender products...');
-    
-    const specificProducts = [
-      "Profender 2 Inch Lift Kit For Hilux",
-      "Profender Suspension Set for Mahindra Thar CRDe (Set of 4)"
+    const ids = [
+      '69ec61c5a6df9853ce9ba987',
+      '69e08a69256efd9c2ca8ca5b',
+      '69e08a68256efd9c2ca8ca55'
     ];
-    
-    for (const productName of specificProducts) {
-      const product = await Product.findOne({ 
-        brand: 'Profender', 
-        name: { $regex: productName, $options: 'i' } 
-      });
+
+    console.log('=== Checking Specific Product IDs ===\n');
+
+    for (const id of ids) {
+      console.log(`Looking for ID: ${id}`);
+      
+      // Try to find by ID
+      const product = await Product.findById(id);
       
       if (product) {
-        console.log(`✅ Found: ${product.name}`);
+        console.log(`✓ FOUND`);
+        console.log(`  Name: ${product.name}`);
+        console.log(`  Slug: "${product.slug}"`);
+        console.log(`  Stock: ${product.stock}`);
+        
+        // Check if slug is corrupted
+        if (!product.slug || product.slug.startsWith('-') || /^[-\s]+$/.test(product.slug)) {
+          console.log(`  ❌ CORRUPTED SLUG!`);
+          
+          // Fix it
+          const newSlug = product.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          
+          console.log(`  → Fixing to: "${newSlug}"`);
+          product.slug = newSlug;
+          await product.save();
+          console.log(`  ✓ Fixed!\n`);
+        } else {
+          console.log(`  ✓ Slug is valid\n`);
+        }
       } else {
-        console.log(`❌ Not found: ${productName}`);
+        console.log(`❌ NOT FOUND\n`);
       }
     }
-    
-    // Also check for products with "Lift Kit" or "Suspension Set" in the name
-    console.log('\n🔍 Checking for products with "Lift Kit" or "Suspension Set"...');
-    const patternProducts = await Product.find({ 
-      brand: 'Profender', 
-      $or: [
-        { name: { $regex: 'Lift Kit', $options: 'i' } },
-        { name: { $regex: 'Suspension Set', $options: 'i' } }
-      ]
-    });
-    
-    if (patternProducts.length > 0) {
-      console.log(`✅ Found ${patternProducts.length} matching products:`);
-      patternProducts.forEach(p => console.log(`   • ${p.name}`));
-    } else {
-      console.log('❌ No products found matching the patterns');
-    }
-    
-    // Check for lift kit products in our database
-    console.log('\n🔍 Checking for lift kit related products...');
-    const liftKitProducts = await Product.find({ 
-      brand: 'Profender', 
-      name: { $regex: 'lift.*kit|kit.*lift', $options: 'i' } 
-    });
-    
-    if (liftKitProducts.length > 0) {
-      console.log(`✅ Found ${liftKitProducts.length} lift kit products:`);
-      liftKitProducts.forEach(p => console.log(`   • ${p.name}`));
-    } else {
-      console.log('❌ No lift kit products found');
-    }
-    
-    await mongoose.connection.close();
-    console.log('\n🔌 Disconnected from MongoDB');
+
   } catch (error) {
-    console.error('💥 Error checking specific products:', error.message);
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.close();
-    }
+    console.error('[Error]', error);
+  } finally {
+    await mongoose.disconnect();
+    console.log('\n[MongoDB] Disconnected');
+    process.exit(0);
   }
 }
 
