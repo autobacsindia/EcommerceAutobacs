@@ -38,10 +38,10 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
             viewport={{ once: true }}
             transition={{ delay: index * 0.05 }}
             whileHover={{ scale: 1.02, y: -4 }}
-            className="bg-zinc-800/50 border border-zinc-700 rounded-xl overflow-hidden hover:border-orange-500/50 transition-colors group"
+            className={`${isDark ? 'bg-zinc-800/50 border-zinc-700 hover:border-orange-500/50' : 'bg-white border-gray-300 hover:border-orange-500'} border rounded-xl overflow-hidden transition-colors group`}
           >
             {/* Vehicle Image */}
-            <div className="relative h-48 bg-zinc-700 overflow-hidden">
+            <div className={`relative h-48 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} overflow-hidden`}>
               <Image
                 src="/placeholder-product.jpg"
                 alt={`${vehicle.make} ${vehicle.model}`}
@@ -49,7 +49,7 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
                 className="object-cover transition-transform duration-500 group-hover:scale-110"
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 to-transparent" />
+              <div className={`absolute inset-0 ${isDark ? 'bg-gradient-to-t from-zinc-900' : 'bg-gradient-to-t from-gray-300'} to-transparent`} />
               
               {/* Compatibility Badge */}
               <div className="absolute top-4 right-4 bg-green-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
@@ -60,16 +60,16 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
 
             {/* Vehicle Info */}
             <div className="p-5 space-y-3">
-              <h4 className="text-white font-bold text-lg">
+              <h4 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 {vehicle.make} {vehicle.model}
               </h4>
-              <div className="flex items-center gap-3 text-zinc-400 text-sm">
+              <div className={`flex items-center gap-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                 <span>{vehicle.year}</span>
                 <span>•</span>
                 <span>{vehicle.variant}</span>
               </div>
               
-              <button className="w-full mt-4 bg-zinc-700 hover:bg-orange-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm">
+              <button className={`w-full mt-4 ${isDark ? 'bg-zinc-700 hover:bg-orange-500' : 'bg-gray-200 hover:bg-orange-500 hover:text-white'} text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm`}>
                 Shop Parts for This Vehicle
               </button>
             </div>

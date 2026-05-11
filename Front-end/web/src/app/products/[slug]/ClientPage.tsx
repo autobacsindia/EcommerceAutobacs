@@ -694,7 +694,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       </div>
 
       {/* Sticky Cart Bar for Mobile */}
-      <StickyCartBar product={product} />
+      <StickyCartBar product={product} isDark={isDark} />
     </div>
   );
 }
