@@ -137,6 +137,7 @@ export default function SearchSuggestions() {
           signal: controller.signal
         });
         if (data.success) {
+          console.log('[SearchSuggestions] API response suggestions:', data.suggestions);
           setSuggestions(data.suggestions || []);
           setIsOpen((data.suggestions || []).length > 0 || history.length > 0);
         }
@@ -187,17 +188,28 @@ export default function SearchSuggestions() {
   };
 
   const handleSuggestionClick = (suggestion: Suggestion) => {
-    if (suggestion.type === 'brand') {
-      router.push(`/products/search?brand=${encodeURIComponent(suggestion.text)}`);
-    } else if (suggestion.type === 'category') {
-      router.push(`/products/search?category=${encodeURIComponent(suggestion.text)}`);
-    } else if (suggestion.type === 'product') {
+    console.log('[SearchSuggestions] Clicked suggestion:', suggestion);
+    console.log('[SearchSuggestions] Suggestion type:', suggestion.type);
+    console.log('[SearchSuggestions] Suggestion slug:', suggestion.slug);
+    console.log('[SearchSuggestions] Suggestion value:', suggestion.value);
+    
+    // Handle product suggestions - navigate directly to product page
+    if (suggestion.type === 'product' || (suggestion.slug && !suggestion.type)) {
       // Use slug if available, fallback to id for backwards compatibility
       const productPath = suggestion.slug 
         ? `/products/${suggestion.slug}` 
         : `/products/${suggestion.id}`;
+      console.log('[SearchSuggestions] Navigating to product page:', productPath);
       router.push(productPath);
+    } else if (suggestion.type === 'brand') {
+      console.log('[SearchSuggestions] Navigating to brand page');
+      router.push(`/products/search?brand=${encodeURIComponent(suggestion.text)}`);
+    } else if (suggestion.type === 'category') {
+      console.log('[SearchSuggestions] Navigating to category page');
+      router.push(`/products/search?category=${encodeURIComponent(suggestion.text)}`);
     } else {
+      // Fallback: perform text search
+      console.log('[SearchSuggestions] Performing text search with:', suggestion.text);
       setQuery(suggestion.text);
       handleSearch(suggestion.text);
     }

@@ -106,6 +106,8 @@ export const getSearchSuggestions = async (req, res) => {
   
   const result = await SearchService.getSearchSuggestions(q, parseInt(limit));
   
+  console.log('[ProductController] Search suggestions result:', JSON.stringify(result.suggestions?.slice(0, 2), null, 2));
+  
   const history = []; // Placeholder
   
   res.json({
