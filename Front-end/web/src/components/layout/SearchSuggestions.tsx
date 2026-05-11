@@ -15,7 +15,8 @@ interface Suggestion {
   id: string;
   slug?: string;
   text: string;
-  type: 'product' | 'brand' | 'category';
+  value?: string;
+  type?: 'product' | 'brand' | 'category';
   category?: string;
   imageUrl?: string;
 }
@@ -187,7 +188,13 @@ export default function SearchSuggestions() {
     }
   };
 
-  const handleSuggestionClick = (suggestion: Suggestion) => {
+  const handleSuggestionClick = (suggestion: Suggestion, e?: React.MouseEvent) => {
+    // Prevent any form submission or event bubbling
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     console.log('[SearchSuggestions] Clicked suggestion:', suggestion);
     console.log('[SearchSuggestions] Suggestion type:', suggestion.type);
     console.log('[SearchSuggestions] Suggestion slug:', suggestion.slug);
@@ -292,6 +299,7 @@ export default function SearchSuggestions() {
           className="w-full px-4 py-2 bg-white text-gray-900 placeholder-gray-500 border-0 focus:outline-none focus:ring-2 focus:ring-white"
         />
         <button 
+          type="button"
           onClick={() => handleSearch()}
           aria-label="Search"
           className="bg-white text-green-800 px-4 py-2 hover:bg-gray-50 transition-colors border-l border-gray-200"
@@ -369,8 +377,9 @@ export default function SearchSuggestions() {
                       return (
                         <li key={suggestion.id}>
                           <button
+                            type="button"
                             ref={(el) => { if (el) suggestionRefs.current[actualIndex] = el; }}
-                            onClick={() => handleSuggestionClick(suggestion)}
+                            onClick={(e) => handleSuggestionClick(suggestion, e)}
                             className={`w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center gap-3 ${
                               activeIndex === actualIndex ? 'bg-gray-100' : ''
                             }`}
