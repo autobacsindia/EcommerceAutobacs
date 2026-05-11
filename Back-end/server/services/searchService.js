@@ -116,6 +116,7 @@ class SearchService {
     }
     
     if (search) {
+      // Use MongoDB text search first
       query.$text = { $search: search };
     }
 
@@ -144,6 +145,54 @@ class SearchService {
 
       const total = await Product.countDocuments(query);
 
+      // If text search returns no results, fallback to regex-based search
+      if (search && products.length === 0) {
+        console.log(`[SearchService] Text search returned 0 results for "${search}", trying regex fallback...`);
+        
+        // Remove text search query
+        delete query.$text;
+        
+        // Build regex-based search across multiple fields
+        const searchRegex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        query.$or = [
+          { name: searchRegex },
+          { brand: searchRegex },
+          { shortDescription: searchRegex },
+          { description: searchRegex },
+          { sku: searchRegex },
+          { tags: searchRegex },
+          { features: searchRegex },
+          { 'specifications.key': searchRegex },
+          { 'specifications.value': searchRegex }
+        ];
+        
+        // Retry with regex search
+        productQuery = Product.find(query)
+          .populate('categories', 'name slug')
+          .populate('compatibleVehicles', 'make model year')
+          .sort({ name: 1 }); // Sort alphabetically for regex results
+        
+        const regexProducts = await productQuery
+          .skip(skip)
+          .limit(Number(limit));
+        
+        const regexTotal = await Product.countDocuments(query);
+        
+        console.log(`[SearchService] Regex fallback found ${regexTotal} results for "${search}"`);
+        
+        return {
+          products: regexProducts,
+          pagination: {
+            total: regexTotal,
+            pages: Math.ceil(regexTotal / Number(limit)),
+            currentPage: Number(page),
+            hasNext: Number(page) < Math.ceil(regexTotal / Number(limit)),
+            hasPrev: Number(page) > 1
+          },
+          searchMethod: 'regex' // Indicate this was a regex search
+        };
+      }
+
       return {
         products,
         pagination: {
@@ -152,7 +201,8 @@ class SearchService {
           currentPage: Number(page),
           hasNext: Number(page) < Math.ceil(total / Number(limit)),
           hasPrev: Number(page) > 1
-        }
+        },
+        searchMethod: 'text' // Indicate this was a text search
       };
     } catch (error) {
       console.error('[SearchService] Database query failed:', error);
