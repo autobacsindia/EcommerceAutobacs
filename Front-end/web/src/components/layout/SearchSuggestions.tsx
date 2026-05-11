@@ -13,6 +13,7 @@ import EnhancedImage from '@/components/layout/EnhancedImage';
 // Define a suggestion type with more information
 interface Suggestion {
   id: string;
+  slug?: string;
   text: string;
   type: 'product' | 'brand' | 'category';
   category?: string;
@@ -191,7 +192,11 @@ export default function SearchSuggestions() {
     } else if (suggestion.type === 'category') {
       router.push(`/products/search?category=${encodeURIComponent(suggestion.text)}`);
     } else if (suggestion.type === 'product') {
-      router.push(`/products/${suggestion.id}`);
+      // Use slug if available, fallback to id for backwards compatibility
+      const productPath = suggestion.slug 
+        ? `/products/${suggestion.slug}` 
+        : `/products/${suggestion.id}`;
+      router.push(productPath);
     } else {
       setQuery(suggestion.text);
       handleSearch(suggestion.text);

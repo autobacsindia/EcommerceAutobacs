@@ -242,7 +242,7 @@ class SearchService {
       ],
       isActive: true
     })
-    .select('name brand categories images')
+    .select('name slug brand categories images')
     .populate('categories', 'name')
     .limit(limit * 2); // Get more results to allow for deduplication
 
@@ -274,12 +274,13 @@ class SearchService {
         }
         
         suggestions.push({
-          id: `product-${product._id}`,
+          id: product._id.toString(),
+          slug: product.slug,
           text: product.name,
           type: 'product',
           category: product.categories && product.categories.length > 0 ? product.categories[0].name : null,
           imageUrl: imageUrl,
-          value: product._id
+          value: product.slug // Use slug for navigation
         });
       }
 
