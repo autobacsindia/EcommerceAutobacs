@@ -29,7 +29,7 @@ const UserLocationSchema = new mongoose.Schema({
     },
     postalCode: {
       type: String,
-      required: [true, "Postal code is required"],
+      default: '',
       index: true
     },
     country: {

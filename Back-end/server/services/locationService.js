@@ -152,12 +152,17 @@ class LocationService {
         throw new Error("Invalid location data provided");
       }
 
-      // Find nearest warehouse
-      const nearestWarehouses = await Warehouse.findNearest(
-        coordinates.longitude,
-        coordinates.latitude
-      );
-      
+      // Find nearest warehouse (non-fatal — fails gracefully if no warehouses or missing index)
+      let nearestWarehouses = [];
+      try {
+        nearestWarehouses = await Warehouse.findNearest(
+          coordinates.longitude,
+          coordinates.latitude
+        );
+      } catch (warehouseErr) {
+        console.warn("Warehouse lookup failed, continuing without warehouse:", warehouseErr.message);
+      }
+
       const nearestWarehouse = nearestWarehouses.length > 0 ? nearestWarehouses[0]._id : null;
 
       // Always proceed without delivery zone logic (India-wide service)

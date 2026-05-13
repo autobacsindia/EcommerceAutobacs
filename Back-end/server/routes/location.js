@@ -2,6 +2,7 @@ import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import locationService from "../services/locationService.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
+import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
   validateLocationSelect, 
   validatePostalCode, 
@@ -16,27 +17,18 @@ const router = express.Router();
  * @desc    Select and save user location
  * @access  Public
  */
-router.post("/select", optionalAuth, async (req, res) => {
+router.post("/select", optionalAuth, asyncHandler(async (req, res) => {
+  const { placeId, address, coordinates, street } = req.body;
+
+  const identifier = req.user
+    ? { userId: req.user._id }
+    : { sessionId: req.sessionID || req.headers['x-session-id'] || uuidv4() };
+
+  const locationData = { placeId, address, coordinates, street };
+
   try {
-    // DEBUG: Log the incoming request
-    console.log('\n=== Location Route Debug ===');
-    console.log('req.body:', JSON.stringify(req.body, null, 2));
-    console.log('req.user:', req.user ? `Authenticated: ${req.user._id}` : 'Guest');
-    console.log('req.headers[x-session-id]:', req.headers['x-session-id']);
-    console.log('============================\n');
-
-    const { placeId, address, coordinates, street } = req.body;
-    
-    // Get identifier (userId if authenticated, sessionId if guest)
-    const identifier = req.user 
-      ? { userId: req.user._id }
-      : { sessionId: req.sessionID || req.headers['x-session-id'] || uuidv4() };
-
-    const locationData = { placeId, address, coordinates, street };
-    
     const result = await locationService.selectLocation(identifier, locationData);
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       location: result.location,
       deliveryZone: result.deliveryZone,
@@ -45,31 +37,34 @@ router.post("/select", optionalAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("Select location error:", error);
-    // Fallback: construct a minimal successful response
-    const { address, coordinates, postalCode, street } = req.body || {};
-    const city = address?.city || 'Unknown';
-    const state = address?.state || 'India';
-    const country = address?.country || 'India';
-    const pin = postalCode || address?.postalCode || '';
-    let lat, lon;
-    if (Array.isArray(coordinates)) {
-      [lon, lat] = coordinates;
-    } else if (coordinates && typeof coordinates === 'object') {
-      lat = coordinates.latitude;
-      lon = coordinates.longitude;
-    } else {
-      lat = 20.5937;
-      lon = 78.9629;
+
+    // Build a minimal fallback response without calling any potentially-failing service methods
+    const { address: addr, coordinates: coords, postalCode, street: st } = req.body || {};
+    const city = addr?.city || 'Unknown';
+    const state = addr?.state || 'India';
+    const country = addr?.country || 'India';
+    const pin = postalCode || addr?.postalCode || '';
+    let lat = 20.5937;
+    let lon = 78.9629;
+    if (Array.isArray(coords)) {
+      [lon, lat] = coords;
+    } else if (coords && typeof coords === 'object') {
+      lat = coords.latitude ?? lat;
+      lon = coords.longitude ?? lon;
     }
     const formatted = city && state
       ? `${city}, ${state}${pin ? ' ' + pin : ''}, ${country}`
-      : `${lat?.toFixed?.(5)}, ${lon?.toFixed?.(5)} (${country})`;
-    res.status(200).json({
+      : `${lat.toFixed(5)}, ${lon.toFixed(5)} (${country})`;
+
+    let deliveryEstimate = { formattedRange: 'in 3-7 business days' };
+    try { deliveryEstimate = locationService.computeGenericEstimate(); } catch (_) { /* use default */ }
+
+    return res.status(200).json({
       success: true,
       location: {
         selectedAddress: {
           formatted,
-          street: street || address?.street || '',
+          street: st || addr?.street || '',
           city,
           state,
           postalCode: pin,
@@ -79,10 +74,10 @@ router.post("/select", optionalAuth, async (req, res) => {
       },
       deliveryZone: null,
       nearestWarehouse: null,
-      deliveryEstimate: locationService.computeGenericEstimate()
+      deliveryEstimate
     });
   }
-});
+}));
 
 /**
  * @route   GET /api/location/current
