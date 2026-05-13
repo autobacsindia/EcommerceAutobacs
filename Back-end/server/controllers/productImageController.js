@@ -70,7 +70,7 @@ const parseProductFields = (body) => {
 // ────────────────────────────────────────────────────────────────────────────
 // POST /products  — create with images
 // ────────────────────────────────────────────────────────────────────────────
-export const createProductWithImages = async (req, res) => {
+export const createProductWithImages = async (req, res, next) => {
   const fields = parseProductFields(req.body);
   const files  = req.files || (req.file ? [req.file] : []);
 
@@ -112,11 +112,14 @@ export const createProductWithImages = async (req, res) => {
 
   invalidateCache('products');
 
+  res.locals.product = savedProduct;
   res.status(201).json({
     success: true,
     message: 'Product created successfully',
     product: savedProduct,
   });
+
+  next();
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -129,7 +132,7 @@ export const createProductWithImages = async (req, res) => {
 //
 // This prevents data loss if Cloudinary upload or DB save fails.
 // ────────────────────────────────────────────────────────────────────────────
-export const updateProductWithImages = async (req, res) => {
+export const updateProductWithImages = async (req, res, next) => {
   const product = await Product.findById(req.params.id);
   if (!product) throw new AppError('Product not found', 404);
 
@@ -241,17 +244,20 @@ export const updateProductWithImages = async (req, res) => {
 
   invalidateCache('products');
 
+  res.locals.product = updatedProduct;
   res.json({
     success: true,
     message: 'Product updated successfully',
     product: updatedProduct,
   });
+
+  next();
 };
 
 // ────────────────────────────────────────────────────────────────────────────
 // DELETE /products/:id  — soft-delete + clean Cloudinary
 // ────────────────────────────────────────────────────────────────────────────
-export const deleteProductWithImages = async (req, res) => {
+export const deleteProductWithImages = async (req, res, next) => {
   const product = await Product.findById(req.params.id);
   if (!product) throw new AppError('Product not found', 404);
 
@@ -279,10 +285,13 @@ export const deleteProductWithImages = async (req, res) => {
 
   invalidateCache('products');
 
+  res.locals.product = product;
   res.json({
     success: true,
     message: 'Product deleted and images cleaned up successfully',
   });
+
+  next();
 };
 
 // ────────────────────────────────────────────────────────────────────────────

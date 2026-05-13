@@ -9,23 +9,21 @@ class ElasticsearchSyncMiddleware {
    */
   static async syncProduct(req, res, next) {
     // Fire and forget - don't await the sync
+    const product = res.locals.product || req.body;
+
     (async () => {
       try {
-        // Skip if Elasticsearch is not connected
         if (!(await elasticsearchService.isConnected())) {
           return;
         }
-
-        // Get the product from the response locals or request body
-        const product = res.locals.product || req.body;
-        
         if (product && product._id) {
-          // Index the product in Elasticsearch
           await elasticsearchService.indexProduct(product);
         }
       } catch (error) {
-        console.error('Error syncing product to Elasticsearch:', error);
-        // Don't fail the request if Elasticsearch sync fails
+        console.error('[ES] Failed to sync product to Elasticsearch:', {
+          productId: product?._id,
+          error: error.message,
+        });
       }
     })();
     
@@ -39,23 +37,25 @@ class ElasticsearchSyncMiddleware {
   /**
    * Delete a product from Elasticsearch after it's deleted
    */
-  static async deleteProduct(req, res, next) {
-    // Skip if Elasticsearch is not connected
-    if (!(await elasticsearchService.isConnected())) {
-      return next();
-    }
+  static deleteProduct(req, res, next) {
+    const productId = req.params.id;
 
-    try {
-      const productId = req.params.id;
-      if (productId) {
-        // Delete the product from Elasticsearch
-        await elasticsearchService.deleteProduct(productId);
+    (async () => {
+      try {
+        if (!(await elasticsearchService.isConnected())) {
+          return;
+        }
+        if (productId) {
+          await elasticsearchService.deleteProduct(productId);
+        }
+      } catch (error) {
+        console.error('[ES] Failed to delete product from Elasticsearch:', {
+          productId,
+          error: error.message,
+        });
       }
-    } catch (error) {
-      console.error('Error deleting product from Elasticsearch:', error);
-      // Don't fail the request if Elasticsearch sync fails
-    }
-    
+    })();
+
     next();
   }
 }

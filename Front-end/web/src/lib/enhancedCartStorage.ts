@@ -291,7 +291,7 @@ export const processSyncQueue = async (
  * Get cart metadata
  */
 export const getMetadata = async (): Promise<CartMetadata | null> => {
-  return await cartDB.metadata.get('cart');
+  return (await cartDB.metadata.get('cart')) ?? null;
 };
 
 /**

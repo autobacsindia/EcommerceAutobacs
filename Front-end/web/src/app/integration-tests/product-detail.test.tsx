@@ -94,6 +94,10 @@ describe('Product Detail Page Integration', () => {
     averageRating: 4.5,
     totalReviews: 10,
     stock: 5,
+    isActive: true,
+    isFeatured: false,
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
   };
 
   beforeEach(() => {

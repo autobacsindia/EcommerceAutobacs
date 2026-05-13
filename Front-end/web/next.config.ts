@@ -9,9 +9,8 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   devIndicators: false,
-  // BUILD OPTIMIZATION: Skip type checking during build (run separately)
   typescript: {
-    ignoreBuildErrors: true, // Type checking done in CI/CD pipeline
+    ignoreBuildErrors: false,
   },
   eslint: {
     ignoreDuringBuilds: true, // Linting done in CI/CD pipeline
