@@ -40,6 +40,20 @@ const KeepShoppingWidget = dynamic(() => import('@/components/products/KeepShopp
   loading: () => <Skeleton className="h-64 rounded-lg w-full" />
 });
 
+const FeaturedProducts = dynamic(() => import('@/components/products/FeaturedProducts'), {
+  loading: () => (
+    <div className="py-16 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <Skeleton className="h-8 w-64 mx-auto mb-4" />
+          <Skeleton className="h-4 w-48 mx-auto" />
+        </div>
+        <ProductGridSkeleton count={6} />
+      </div>
+    </div>
+  )
+});
+
 const SuperCarsBanner = dynamic(() => import('@/components/layout/SuperCarsBanner'), {
   loading: () => <Skeleton className="h-80 w-full" />
 });
@@ -244,8 +258,11 @@ export default function Home() {
       {/* Fast Moving Products Section - Modern Design */}
       <ModernFastMovingSection />
 
-      {/* Featured Products Section */}
+      {/* Fast Moving Products - compact featured grid */}
       <FastMovingProducts limit={4} />
+
+      {/* Featured Products Section */}
+      <FeaturedProducts />
 
       {/* Super Cars Premium Banner */}
       <SuperCarsBanner />

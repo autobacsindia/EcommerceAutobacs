@@ -263,9 +263,9 @@ export default function LocationSelector({
               </button>
               
               <div className="relative flex items-center justify-center">
-                <div className="border-t border-gray-300 flex-grow"></div>
+                <div className="border-t border-gray-300 grow"></div>
                 <span className="mx-4 text-gray-500 text-sm">OR</span>
-                <div className="border-t border-gray-300 flex-grow"></div>
+                <div className="border-t border-gray-300 grow"></div>
               </div>
               
               <button
