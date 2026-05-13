@@ -18,27 +18,35 @@ const router = express.Router();
  * @access  Public
  */
 router.post("/select", optionalAuth, asyncHandler(async (req, res) => {
-  const { placeId, address, coordinates, street } = req.body || {};
-
-  const identifier = req.user
-    ? { userId: req.user._id }
-    : { sessionId: req.sessionID || req.headers['x-session-id'] || uuidv4() };
-
-  const locationData = { placeId, address, coordinates, street };
-
   try {
+    const { placeId, address, coordinates, street } = req.body || {};
+
+    const identifier = req.user
+      ? { userId: req.user._id }
+      : { sessionId: req.sessionID || req.headers['x-session-id'] || uuidv4() };
+
+    const locationData = { placeId, address, coordinates, street };
+
     const result = await locationService.selectLocation(identifier, locationData);
-    return res.status(200).json({
+
+    // Serialize manually so a Mongoose circular-ref or toJSON failure
+    // is caught here rather than propagated to errorHandler
+    const payload = JSON.stringify({
       success: true,
       location: result.location,
       deliveryZone: result.deliveryZone,
       nearestWarehouse: result.nearestWarehouse,
       deliveryEstimate: result.deliveryEstimate
     });
-  } catch (error) {
-    console.error("Select location error:", error);
 
-    // Build a minimal fallback response without calling any potentially-failing service methods
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.status(200).end(payload);
+  } catch (error) {
+    console.error("Select location [catch]:", error?.name, "-", error?.message);
+
+    if (res.headersSent) return;
+
+    // Build a minimal fallback response using only plain JS values
     const { address: addr, coordinates: coords, postalCode, street: st } = req.body || {};
     const city = addr?.city || 'Unknown';
     const state = addr?.state || 'India';
