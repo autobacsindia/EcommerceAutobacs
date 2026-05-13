@@ -18,7 +18,7 @@ const router = express.Router();
  * @access  Public
  */
 router.post("/select", optionalAuth, asyncHandler(async (req, res) => {
-  const { placeId, address, coordinates, street } = req.body;
+  const { placeId, address, coordinates, street } = req.body || {};
 
   const identifier = req.user
     ? { userId: req.user._id }
