@@ -2,6 +2,7 @@
 // SECURITY: Never expose stack traces to clients (secure by default)
 import AppError from '../utils/AppError.js';
 import crypto from 'crypto';
+import { sendP1Alert } from '../utils/alerting.js';
 
 /**
  * Safe error messages whitelist (prevent accidental data leakage)
@@ -206,6 +207,18 @@ export const errorHandler = (err, req, res, next) => {
           extra: { body: safeBodyForLog, params: req.params, query: req.query }
         });
       } catch (_) { /* never let Sentry crash error handling */ }
+    }
+
+    // P1 alert: fire for every 5xx in production (deduplicated by error name in alerting.js)
+    if (isServerError) {
+      sendP1Alert({
+        title: err.name || 'ServerError',
+        errorId,
+        url: req.originalUrl,
+        method: req.method,
+        statusCode,
+        message: errMsg,
+      }).catch(() => {}); // non-blocking, never throws
     }
 
     const safeMessage = getSafeMessage(err, isOperational);
