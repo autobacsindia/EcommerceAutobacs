@@ -348,13 +348,12 @@ export const setAccessTokenCookie = (res, token, expiresIn) => {
   }
   
   const cookieOptions = {
-    httpOnly: true,              // JavaScript cannot read
-    secure: process.env.NODE_ENV === 'production',  // HTTPS only in prod
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 'none' for cross-origin proxy in prod
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
     maxAge: maxAge,
-    priority: 'high',            // Helps browsers prioritize auth cookies under pressure
-    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined  // Share across subdomains in prod
+    priority: 'high',
   };
   
   res.cookie('accessToken', token, cookieOptions);
@@ -371,7 +370,6 @@ export const clearAccessTokenCookie = (res) => {
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
     priority: 'high',
-    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined
   });
 };
 
@@ -385,11 +383,10 @@ export const setRefreshTokenCookie = (res, token, expiresAt) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 'none' for cross-origin proxy in prod
-    path: '/', // Allow on all paths so logout can work
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
     expires: expiresAt,
-    priority: 'high',  // Helps browsers prioritize auth cookies under pressure
-    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined  // Share across subdomains in prod
+    priority: 'high',
   };
   
   res.cookie('refreshToken', token, cookieOptions);
@@ -406,8 +403,7 @@ export const clearRefreshTokenCookie = (res) => {
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     path: '/',
     priority: 'high',
-    domain: process.env.NODE_ENV === 'production' ? '.up.railway.app' : undefined
   };
-  
+
   res.clearCookie('refreshToken', cookieOptions);
 };
