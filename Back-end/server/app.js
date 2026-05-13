@@ -673,11 +673,8 @@ const corsOptions = {
     // Block unauthorized origins (even in development)
     // SECURITY: This goes to logging aggregation in production
     if (isProd) {
-      // In production, use structured logging for security events
-      console.error(`[CORS BLOCKED] Unauthorized origin: ${origin} | Path: ${req?.url || 'unknown'} | IP: ${req?.ip || 'unknown'}`);
-      
-      // TODO: Integrate with Sentry/Datadog for security alerting
-      // Example: sentry.captureMessage(`CORS blocked: ${origin}`, { level: 'warning' });
+      // req is NOT in scope here (cors origin callback only receives origin, callback)
+      console.error(`[CORS BLOCKED] Unauthorized origin: ${origin}`);
     } else {
       console.warn('[CORS BLOCKED] Unauthorized origin:', origin);
     }
