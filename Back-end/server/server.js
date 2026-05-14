@@ -6,6 +6,9 @@ import elasticsearchService from "./services/elasticsearchService.js";
 import { app, cronService, adaptiveThrottlingService, setCronService } from "./app.js";
 import { initSentry } from "./config/sentry.js";
 import { validateEnvironment, logEnvironmentInfo } from "./config/validateEnv.js";
+import { startNotificationWorker } from "./queue/workers/notificationWorker.js";
+import { startOrderWorker } from "./queue/workers/orderWorker.js";
+import { closeQueues } from "./queue/queues.js";
 import mongoose from "mongoose";
 
 // ── Centralized Environment Validation ─────────────────────────────────────
@@ -201,7 +204,16 @@ async function bootstrap() {
       console.log('✓ Redis check skipped (development mode)');
     }
 
-    // 5. Elasticsearch in background (optional, non-fatal)
+    // 5. Start queue workers (non-fatal — disabled when REDIS_URL is absent)
+    try {
+      startNotificationWorker();
+      startOrderWorker();
+      console.log('✓ Queue workers started');
+    } catch (e) {
+      console.warn('⚠ Queue workers skipped:', e.message);
+    }
+
+    // 6. Elasticsearch in background (optional, non-fatal)
     elasticsearchService.testConnection().catch(() => {});
 
     // 5. Start HTTP server last, after all services are ready
@@ -228,6 +240,10 @@ async function bootstrap() {
     const shutdown = async (signal) => {
       console.log(`⏹ ${signal} received, shutting down gracefully...`);
       server.close(async () => {
+        try {
+          await closeQueues();
+          console.log('✓ Queues closed');
+        } catch (_) {}
         try {
           await mongoose.connection.close();
           console.log('✓ DB connection closed');

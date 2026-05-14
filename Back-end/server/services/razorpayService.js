@@ -4,8 +4,9 @@
  */
 
 import crypto from 'crypto';
-import Order from '../models/Order.js';
-import Payment from '../models/Payment.js';
+import mongoose from 'mongoose';
+import orderRepository from '../repositories/orderRepository.js';
+import paymentRepository from '../repositories/paymentRepository.js';
 import orderStatusService from './orderStatusService.js';
 import * as Sentry from '@sentry/node';
 
@@ -143,90 +144,75 @@ class RazorpayService {
    * @returns {Promise<Object>} Processing result
    */
   async processPaymentSuccess(orderId, paymentData, userId) {
+    // ── Atomic transaction: create payment → link to order → confirm status ───
+    // If any step fails the transaction aborts, rolling back all writes.
+    // The old manual "mark payment as failed" compensation code is no longer
+    // needed — the abort handles cleanup automatically.
+    const session = await mongoose.startSession();
+
     try {
-      // Find the order
-      const order = await Order.findById(orderId);
-      if (!order) {
-        throw new Error('Order not found');
-      }
-      
-      // Create payment record
-      const paymentRecord = new Payment({
-        order: orderId,
-        user: userId,
-        amount: order.totalAmount,
-        currency: 'INR',
-        paymentMethod: this.getPaymentMethodFromRazorpay(paymentData.method),
-        paymentGateway: 'razorpay',
-        gatewayOrderId: paymentData.order_id,
-        gatewayPaymentId: paymentData.id,
-        gatewaySignature: paymentData.signature,
-        status: 'completed',
-        paymentDetails: {
-          razorpay: paymentData
+      let paymentId;
+
+      await session.withTransaction(async () => {
+        const order = await orderRepository.findById(orderId, [], session);
+        if (!order) {
+          throw new Error('Order not found');
         }
-      });
-      
-      await paymentRecord.save();
-      
-      // Link payment to order
-      order.payment = paymentRecord._id;
-      await order.save();
-      
-      // Update order status to confirmed
-      const result = await orderStatusService.updateOrderStatus(orderId, 'confirmed', {
-        userId: null, // System update
-        isAdmin: true,
-        reason: 'payment_verified',
-        notes: `Payment received via Razorpay. Payment ID: ${paymentData.id}`,
-        metadata: {
-          gatewayId: paymentData.id,
-          transactionId: paymentData.id
+
+        const paymentRecord = await paymentRepository.createPayment(
+          {
+            order: orderId,
+            user: userId,
+            amount: order.totalAmount,
+            currency: 'INR',
+            paymentMethod: this.getPaymentMethodFromRazorpay(paymentData.method),
+            paymentGateway: 'razorpay',
+            gatewayOrderId: paymentData.order_id,
+            gatewayPaymentId: paymentData.id,
+            gatewaySignature: paymentData.signature,
+            status: 'completed',
+            paymentDetails: { razorpay: paymentData }
+          },
+          session
+        );
+
+        order.payment = paymentRecord._id;
+        await orderRepository.save(order, session);
+
+        const result = await orderStatusService.updateOrderStatus(orderId, 'confirmed', {
+          userId: null,
+          isAdmin: true,
+          reason: 'payment_verified',
+          notes: `Payment received via Razorpay. Payment ID: ${paymentData.id}`,
+          metadata: { gatewayId: paymentData.id, transactionId: paymentData.id },
+          session
+        });
+
+        if (!result.success) {
+          throw new Error(`Failed to update order status: ${result.message}`);
         }
+
+        paymentId = paymentRecord._id;
       });
-      
-      if (!result.success) {
-        throw new Error(`Failed to update order status: ${result.message}`);
-      }
-      
+
       return {
         success: true,
         message: 'Payment processed successfully',
-        orderId: orderId,
-        paymentId: paymentRecord._id
+        orderId,
+        paymentId
       };
     } catch (error) {
-      // Capture critical payment processing errors in Sentry
       if (process.env.SENTRY_DSN) {
         Sentry.withScope((scope) => {
-          scope.setContext('payment_processing', { 
-            orderId, 
-            paymentId: paymentData.id,
-            userId 
-          });
+          scope.setContext('payment_processing', { orderId, paymentId: paymentData.id, userId });
           scope.setTag('payment_action', 'process_payment_success');
           scope.setTag('severity', 'critical');
           Sentry.captureException(error);
         });
       }
-      
-      // If we created a payment record, mark it as failed
-      try {
-        const paymentRecord = await Payment.findOne({ order: orderId, gatewayPaymentId: paymentData.id });
-        if (paymentRecord) {
-          paymentRecord.status = 'failed';
-          paymentRecord.failureReason = error.message;
-          await paymentRecord.save();
-        }
-      } catch (updateError) {
-        // Log but don't throw to avoid masking original error
-        console.error('Failed to update payment record status:', updateError);
-        if (process.env.SENTRY_DSN) {
-          Sentry.captureException(updateError);
-        }
-      }
-      
       throw new Error(`Failed to process payment: ${error.message}`);
+    } finally {
+      await session.endSession();
     }
   }
 
@@ -313,7 +299,7 @@ class RazorpayService {
     }
     
     // SECURITY: Find order in DB
-    const order = await Order.findById(orderId);
+    const order = await orderRepository.findById(orderId);
     if (!order) {
       console.error(`[SECURITY] Webhook payment for non-existent order: ${orderId}`);
       throw new Error('Order not found');
@@ -358,20 +344,17 @@ class RazorpayService {
    */
   async handlePaymentFailure(paymentEntity) {
     try {
-      // 1. Try to find and update payment record if it exists
-      const paymentRecord = await Payment.findOne({ gatewayPaymentId: paymentEntity.id });
+      const paymentRecord = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
       if (paymentRecord) {
         paymentRecord.status = 'failed';
         paymentRecord.failureReason = paymentEntity.error_description || paymentEntity.error_reason;
-        await paymentRecord.save();
+        await paymentRepository.save(paymentRecord);
       }
 
-      // 2. Update Order status to 'failed'
-      // Extract orderId from notes if available
       const orderId = paymentEntity.notes ? paymentEntity.notes.orderId : null;
-      
+
       if (orderId) {
-        const order = await Order.findById(orderId);
+        const order = await orderRepository.findById(orderId);
         if (order) {
           // Only update if status is pending (don't overwrite other terminal states)
           if (order.status === 'pending') {

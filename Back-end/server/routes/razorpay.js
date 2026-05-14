@@ -3,7 +3,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { validateRazorpayOrder, validateRazorpayVerification } from "../middleware/validationMiddleware.js";
 import razorpayService from "../services/razorpayService.js";
-import Order from "../models/Order.js";
+import orderRepository from "../repositories/orderRepository.js";
 import { paymentSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
 import crypto from 'crypto';
 import Redis from 'ioredis';
@@ -164,7 +164,7 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
     // Verify the order exists and belongs to user/session
     let order;
     if (isAuthenticated) {
-      order = await Order.findOne({ _id: orderId, user: req.user.id });
+      order = await orderRepository.findOne({ _id: orderId, user: req.user.id });
     } else {
       if (!clientSessionId) {
         return res.status(400).json({
@@ -172,7 +172,7 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
           message: 'Session ID required for guest operations'
         });
       }
-      order = await Order.findOne({ _id: orderId, sessionId: clientSessionId });
+      order = await orderRepository.findOne({ _id: orderId, sessionId: clientSessionId });
     }
     
     if (!order) {
@@ -233,8 +233,8 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
         order.guestIPHash = crypto.createHash('sha256').update(clientIP).digest('hex');
         order.guestUAHash = crypto.createHash('sha256').update(clientUA).digest('hex');
         
-        await order.save();
-        
+        await orderRepository.save(order);
+
         // Send session token as httpOnly cookie (scoped to payment routes)
         res.cookie('guest_session', serverSessionToken, {
           httpOnly: true,
@@ -300,10 +300,10 @@ router.post("/verify-payment",
     // Find order
     let order;
     if (orderId) {
-      order = await Order.findById(orderId);
+      order = await orderRepository.findById(orderId);
     } else {
       // Fallback: try to find by gatewayOrderId (will likely fail if Payment record doesn't exist yet)
-      order = await Order.findOne({ 'payment.gatewayOrderId': razorpay_order_id });
+      order = await orderRepository.findOne({ 'payment.gatewayOrderId': razorpay_order_id });
     }
 
     if (!order) {
@@ -410,7 +410,7 @@ router.post("/verify-payment",
               // Mark with security flag but allow (don't reject legitimate delayed payments)
               if (!order.securityFlags) order.securityFlags = [];
               order.securityFlags.push('SESSION_EXPIRED_DURING_PAYMENT');
-              await order.save();
+              await orderRepository.save(order);
             }
           }
           
@@ -454,7 +454,7 @@ router.post("/verify-payment",
           console.error('[SECURITY] No session binding available (Redis + DB)');
           order.securityFlags = order.securityFlags || [];
           order.securityFlags.push('REDIS_UNAVAILABLE');
-          await order.save();
+          await orderRepository.save(order);
           
           // FAIL-CLOSED: Don't allow without any binding
           return res.status(503).json({

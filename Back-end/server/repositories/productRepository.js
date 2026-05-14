@@ -222,6 +222,40 @@ class ProductRepository {
   }
 
   /**
+   * Find active product by ID (requires isActive: true)
+   */
+  async findActiveById(productId, session = null) {
+    let q = Product.findOne({ _id: productId, isActive: true });
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  /**
+   * Atomically deduct stock with availability guard.
+   * Returns the old document if successful, null if stock was insufficient.
+   * Inside a transaction the caller's session handles rollback automatically —
+   * do NOT call restoreStock manually when a session is provided.
+   */
+  async atomicDeductStock(productId, quantity, session = null) {
+    return Product.findOneAndUpdate(
+      { _id: productId, stock: { $gte: quantity } },
+      { $inc: { stock: -quantity } },
+      { new: false, ...(session && { session }) }
+    );
+  }
+
+  /**
+   * Restore stock (cancellation / non-transactional rollback).
+   */
+  async restoreStock(productId, quantity, session = null) {
+    return Product.findByIdAndUpdate(
+      productId,
+      { $inc: { stock: quantity } },
+      session ? { session } : {}
+    );
+  }
+
+  /**
    * Get text search suggestions
    */
   async getSuggestions(query, limit = 10) {

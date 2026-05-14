@@ -3,7 +3,7 @@
  * Handles order status transitions with validation and tracking
  */
 
-import Order from '../models/Order.js';
+import orderRepository from '../repositories/orderRepository.js';
 
 /**
  * Define valid status transition rules
@@ -132,12 +132,12 @@ class OrderStatusService {
       isAdmin = false,
       reason,
       notes,
-      metadata = {}
+      metadata = {},
+      session = null
     } = options;
 
     try {
-      // Find the order
-      const order = await Order.findById(orderId);
+      const order = await orderRepository.findById(orderId, [], session);
       if (!order) {
         throw new Error('Order not found');
       }
@@ -201,8 +201,7 @@ class OrderStatusService {
           break;
       }
 
-      // Save order
-      await order.save();
+      await orderRepository.save(order, session);
 
       return {
         success: true,
@@ -269,9 +268,9 @@ class OrderStatusService {
    * @param {Object} historyEntry - History entry data
    * @returns {Promise<Object>} - Updated order
    */
-  async addStatusHistory(orderId, historyEntry) {
+  async addStatusHistory(orderId, historyEntry, session = null) {
     try {
-      const order = await Order.findById(orderId);
+      const order = await orderRepository.findById(orderId, [], session);
       if (!order) {
         throw new Error('Order not found');
       }
@@ -285,7 +284,7 @@ class OrderStatusService {
         timestamp: historyEntry.timestamp || new Date()
       });
 
-      await order.save();
+      await orderRepository.save(order, session);
 
       return {
         success: true,
@@ -306,9 +305,7 @@ class OrderStatusService {
    */
   async getStatusHistory(orderId) {
     try {
-      const order = await Order.findById(orderId)
-        .populate('statusHistory.updatedBy', 'name email role')
-        .select('statusHistory status');
+      const order = await orderRepository.findForStatusHistory(orderId);
 
       if (!order) {
         throw new Error('Order not found');
@@ -355,7 +352,7 @@ class OrderStatusService {
    */
   async getStatusStatistics(filter = {}) {
     try {
-      const stats = await Order.aggregate([
+      const stats = await orderRepository.aggregate([
         { $match: filter },
         {
           $group: {
@@ -393,7 +390,7 @@ class OrderStatusService {
    */
   async getFulfillmentMetrics(filter = {}) {
     try {
-      const metrics = await Order.aggregate([
+      const metrics = await orderRepository.aggregate([
         { $match: { ...filter, status: { $in: ['delivered', 'shipped'] } } },
         {
           $group: {
