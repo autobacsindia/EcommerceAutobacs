@@ -53,7 +53,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
 
   return (
     <>
-      <div className="grid grid-cols-12 gap-4 h-[600px] lg:h-[700px]">
+      <div className="grid grid-cols-12 gap-4 h-150 lg:h-175">
         {/* Vertical Thumbnail Rail */}
         <div className="col-span-2 lg:col-span-1 flex flex-col gap-3 overflow-y-auto py-2 scrollbar-thin">
           {displayImages.map((image, index) => (
@@ -61,7 +61,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
               key={image.id}
               whileHover={{ scale: 1.05 }}
               onClick={() => setActiveIndex(index)}
-              className={`relative w-full aspect-square rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
+              className={`relative w-full aspect-square rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
                 activeIndex === index
                   ? 'border-orange-500 shadow-lg shadow-orange-500/30'
                   : isDark ? 'border-zinc-700 hover:border-zinc-500' : 'border-gray-300 hover:border-gray-400'
