@@ -64,7 +64,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
               className={`relative w-full aspect-square rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
                 activeIndex === index
                   ? 'border-orange-500 shadow-lg shadow-orange-500/30'
-                  : 'border-zinc-700 hover:border-zinc-500'
+                  : isDark ? 'border-zinc-700 hover:border-zinc-500' : 'border-gray-300 hover:border-gray-400'
               }`}
             >
               <Image
@@ -79,7 +79,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
         </div>
 
         {/* Main Cinematic Image */}
-        <div className="col-span-10 lg:col-span-8 relative bg-zinc-900 rounded-xl overflow-hidden group">
+        <div className={`col-span-10 lg:col-span-8 relative rounded-xl overflow-hidden group ${isDark ? 'bg-zinc-900' : 'bg-gray-100'}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={activeIndex}
@@ -110,29 +110,29 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={goToPrevious}
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                className={`absolute left-4 top-1/2 -translate-y-1/2 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 border ${isDark ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-700' : 'bg-white/90 hover:bg-white border-gray-300'}`}
               >
-                <ChevronLeft className="w-6 h-6 text-white" />
+                <ChevronLeft className={`w-6 h-6 ${isDark ? 'text-white' : 'text-gray-700'}`} />
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={goToNext}
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                className={`absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 border ${isDark ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-700' : 'bg-white/90 hover:bg-white border-gray-300'}`}
               >
-                <ChevronRight className="w-6 h-6 text-white" />
+                <ChevronRight className={`w-6 h-6 ${isDark ? 'text-white' : 'text-gray-700'}`} />
               </motion.button>
             </>
           )}
 
           {/* Zoom Indicator */}
-          <div className="absolute top-4 right-4 bg-zinc-900/80 border border-zinc-700 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <ZoomIn className="w-5 h-5 text-zinc-300" />
+          <div className={`absolute top-4 right-4 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity border ${isDark ? 'bg-zinc-900/80 border-zinc-700' : 'bg-white/90 border-gray-300'}`}>
+            <ZoomIn className={`w-5 h-5 ${isDark ? 'text-zinc-300' : 'text-gray-600'}`} />
           </div>
 
           {/* Image Counter */}
           {displayImages.length > 1 && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-zinc-900/90 border border-zinc-700 text-zinc-300 px-4 py-2 rounded-full text-sm font-medium">
+            <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-medium border ${isDark ? 'bg-zinc-900/90 border-zinc-700 text-zinc-300' : 'bg-white/90 border-gray-300 text-gray-700'}`}>
               {activeIndex + 1} / {displayImages.length}
             </div>
           )}
@@ -140,27 +140,27 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
 
         {/* Image Info Panel */}
         <div className="hidden lg:flex col-span-3 flex-col gap-4">
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4">
-            <h3 className="text-white font-bold mb-3">Product Views</h3>
+          <div className={`rounded-xl p-4 border ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
+            <h3 className={`font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Product Views</h3>
             <div className="space-y-2">
-              <button className="w-full text-left p-3 bg-zinc-700/50 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-300 text-sm">
+              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
                 📸 Vehicle-Mounted
               </button>
-              <button className="w-full text-left p-3 bg-zinc-700/50 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-300 text-sm">
+              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
                 🌙 Night Performance
               </button>
-              <button className="w-full text-left p-3 bg-zinc-700/50 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-300 text-sm">
+              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
                 🔧 Installation
               </button>
-              <button className="w-full text-left p-3 bg-zinc-700/50 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-300 text-sm">
+              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
                 🔍 Material Close-up
               </button>
             </div>
           </div>
 
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 flex-1">
-            <h4 className="text-white font-semibold text-sm mb-2">Product Details</h4>
-            <p className="text-zinc-400 text-xs leading-relaxed">
+          <div className={`rounded-xl p-4 flex-1 border ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
+            <h4 className={`font-semibold text-sm mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Product Details</h4>
+            <p className={`text-xs leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
               Click on the main image to view in fullscreen. Use arrow keys or swipe to navigate between images.
             </p>
           </div>
