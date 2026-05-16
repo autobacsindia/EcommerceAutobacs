@@ -110,20 +110,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   
   const addToCart = async (productId: string, quantity: number = 1) => {
-    // For guest checkout, we allow adding to cart without authentication
-    // The cart will be stored in memory until checkout or login
-    
+    const previousCart = cart;
+
+    // Optimistic update: immediately increment quantity if item already in cart
+    if (cart) {
+      const existingItem = cart.items.find(item => item.product._id === productId);
+      if (existingItem) {
+        setCart({
+          ...cart,
+          items: cart.items.map(item =>
+            item.product._id === productId
+              ? { ...item, quantity: item.quantity + quantity }
+              : item
+          ),
+        });
+      }
+    }
+
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const response: any = await apiClient.post(API_ENDPOINTS.CART_ADD, {
         productId,
         quantity,
       });
-      
+
       if (response.success && response.cart) {
-        // Ensure consistent cart data structure
         const cartData: Cart = {
           _id: response.cart._id,
           items: response.cart.items.map((item: any) => ({
@@ -138,24 +151,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
           })),
           total: response.cart.totalPrice || response.cart.total || 0
         };
-        
+
         setCart(cartData);
       } else {
+        setCart(previousCart);
         throw new Error(response.message || 'Failed to add to cart');
       }
     } catch (err: any) {
+      setCart(previousCart);
+
       // Handle "Not authorized" or "Route not found" errors for guest users gracefully
       // Backend has a middleware quirk where protect sends 401 but Express continues to 404 handler
-      if ((err.status === 401 || err.status === 404) && 
-          (err.message?.includes('Not authorized') || 
+      if ((err.status === 401 || err.status === 404) &&
+          (err.message?.includes('Not authorized') ||
            err.message?.includes('Route not found') ||
            err.message?.includes('no token'))) {
         console.debug('Guest user attempted cart add - this is expected (backend middleware quirk)');
-        // Don't throw error - guest checkout is valid!
         return;
       }
-      
-      // For other errors, show them normally
+
       const errorMessage = err.message || 'Failed to add item to cart';
       setError(errorMessage);
       throw err;

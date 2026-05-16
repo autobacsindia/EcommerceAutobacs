@@ -201,8 +201,9 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   }
 
   // Check if product already in cart
+  // After populate(), item.product is a document — use _id; before populate it's an ObjectId
   const existingItemIndex = cart.items.findIndex(
-    item => item.product.toString() === productId
+    item => (item.product._id || item.product).toString() === productId
   );
 
   if (existingItemIndex > -1) {
