@@ -341,7 +341,7 @@ function CheckoutPageContent() {
           
           {/* Guest Claim Account Section */}
           {isGuestOrder && (
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 mb-8 border border-purple-200">
+            <div className="bg-linear-to-r from-purple-50 to-blue-50 rounded-lg p-6 mb-8 border border-purple-200">
               <h3 className="font-bold text-xl mb-3 text-purple-900">
                 🎉 Claim Your Account!
               </h3>
@@ -492,20 +492,20 @@ function CheckoutPageContent() {
             <div className="space-y-3 mb-4 border-b pb-4">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal:</span>
-                <span>₹{cart?.total?.toFixed(2)}</span>
+                <span>₹{((cart?.total || 0) / 1.18).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Shipping:</span>
-                <span className="text-green-600">FREE</span>
+                <span className="text-sm text-gray-500">Extra charges apply</span>
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Tax (18% GST):</span>
-                <span>₹{((cart?.total || 0) * 0.18).toFixed(2)}</span>
+                <span>₹{((cart?.total || 0) - (cart?.total || 0) / 1.18).toFixed(2)}</span>
               </div>
             </div>
             <div className="flex justify-between text-xl font-bold">
               <span>Total:</span>
-              <span>₹{((cart?.total || 0) * 1.18).toFixed(2)}</span>
+              <span>₹{(cart?.total || 0).toFixed(2)}</span>
             </div>
           </div>
           <button
@@ -792,15 +792,15 @@ function CheckoutPageContent() {
               <h3 className="font-bold mb-2">Order Summary</h3>
               <div className="flex justify-between text-sm mb-1">
                 <span>Subtotal:</span>
-                <span>₹{cart?.total?.toFixed(2)}</span>
+                <span>₹{((cart?.total || 0) / 1.18).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm mb-1">
                 <span>Tax (18% GST):</span>
-                <span>₹{((cart?.total || 0) * 0.18).toFixed(2)}</span>
+                <span>₹{((cart?.total || 0) - (cart?.total || 0) / 1.18).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xl font-bold text-blue-600 border-t pt-2 mt-2">
                 <span>Total:</span>
-                <span>₹{((cart?.total || 0) * 1.18).toFixed(2)}</span>
+                <span>₹{(cart?.total || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>

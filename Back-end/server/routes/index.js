@@ -28,6 +28,7 @@ import {
   returnsRateLimit
 } from '../middleware/rateLimitMiddleware.js';
 import { setRequestTimeout } from '../app.js';
+import { optionalAuth } from '../middleware/authMiddleware.js';
 
 // Import domain route modules
 import authRoutes from './auth.js';
@@ -101,7 +102,7 @@ apiRouter.use('/product-questions', publicBrowsingRateLimit, productQuestionRout
 // ============================================================================
 apiRouter.use('/users', authenticatedUserRateLimit, userRoutes);
 apiRouter.use('/profile', authenticatedUserRateLimit, profileRoutes);
-apiRouter.use('/cart', publicBrowsingRateLimit, cartRoutes);  // Cart supports guest users
+apiRouter.use('/cart', publicBrowsingRateLimit, optionalAuth, cartRoutes);  // Cart supports guest and authenticated users
 apiRouter.use('/wishlist', authenticatedUserRateLimit, wishlistRoutes);
 apiRouter.use('/reviews', publicBrowsingRateLimit, reviewRoutes);  // Reviews can be browsed publicly
 

@@ -206,9 +206,9 @@ function CartPageContent() {
 
         {/* 🟡 Recent Changes Notification Banner */}
         {recentChanges.length > 0 && (
-          <div className="mb-6 bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-400 rounded-lg p-4 shadow-sm">
+          <div className="mb-6 bg-linear-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-400 rounded-lg p-4 shadow-sm">
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <AlertTriangle className="h-6 w-6 text-orange-600" />
               </div>
               <div className="flex-1">
@@ -269,7 +269,7 @@ function CartPageContent() {
                       {/* Product Image */}
                       <Link
                         href={productUrl(item.product, '/products') || '/products'}
-                        className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded-md overflow-hidden"
+                        className="shrink-0 w-24 h-24 bg-gray-100 rounded-md overflow-hidden"
                       >
                         <EnhancedImage
                           src={getFirstImageUrl(item.product.images)}
@@ -316,7 +316,7 @@ function CartPageContent() {
                             >
                               <Minus className="h-4 w-4" />
                             </button>
-                            <span className="px-4 py-2 min-w-[3rem] text-center">
+                            <span className="px-4 py-2 min-w-12 text-center">
                               {item.quantity}
                             </span>
                             <button
@@ -386,7 +386,7 @@ function CartPageContent() {
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
-                  <span className="text-green-600">FREE</span>
+                  <span className="text-sm text-gray-500 text-right">Calculated at checkout</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Tax (18% GST)</span>

@@ -5,7 +5,6 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
 import { ProductImage } from '@/lib/types';
-import toast from 'react-hot-toast';
 
 interface CartItem {
   product: {
@@ -40,33 +39,30 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<Cart | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [isMounted, setIsMounted] = useState(false); // Track if component is mounted
-  
-  // Set mounted state after initial render
+  const [isMounted, setIsMounted] = useState(false);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  
-  // Load cart when user is authenticated and component is mounted
+
+  // Load cart once mounted and auth has settled
   useEffect(() => {
-    if (isMounted && isAuthenticated) {
+    if (!isMounted || authLoading) return;
+    if (isAuthenticated) {
       refreshCart();
-    } else if (isMounted && !isAuthenticated) {
+    } else {
       setCart(null);
+      setIsLoading(false);
     }
-  }, [isAuthenticated, isMounted]);
+  }, [isAuthenticated, isMounted, authLoading]);
   
   // Enhanced refreshCart with better error handling and consistency
   const refreshCart = async () => {
-    // Don't fetch cart if still loading auth or not authenticated
-    if (authLoading || !isAuthenticated) {
-      console.log('Skipping cart refresh - not authenticated or still loading auth');
-      return;
-    }
-    
+    if (!isAuthenticated) return;
+
     try {
       setIsLoading(true);
       setError(null);
@@ -144,7 +140,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         };
         
         setCart(cartData);
-        toast.success('Added to cart!');
       } else {
         throw new Error(response.message || 'Failed to add to cart');
       }
@@ -157,7 +152,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
            err.message?.includes('no token'))) {
         console.debug('Guest user attempted cart add - this is expected (backend middleware quirk)');
         // Don't throw error - guest checkout is valid!
-        toast.success('Added to cart! (Session-based)');
         return;
       }
       
