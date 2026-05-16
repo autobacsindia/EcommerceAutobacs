@@ -190,17 +190,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check for success and user data (token is automatic via cookie)
       if (response.success && response.user) {
         const { user: userData } = response;
-        
-        // Token is stored in httpOnly cookie (automatic, no manual storage needed)
-        // We still track it in state for client-side checks
-        setToken(null);// Placeholder - actual token is in cookie
-        
-        setUser({
+
+        const normalizedUser: User = {
           _id: userData.id || userData._id,
           name: userData.name,
           email: userData.email,
           role: userData.role
-        });
+        };
+
+        // Token is stored in httpOnly cookie (automatic, no manual storage needed)
+        setToken(null);
+        setUser(normalizedUser);
+
+        // Update auth cache so checkAuth doesn't restore the pre-login null state on refresh
+        try {
+          localStorage.setItem('auth_check', JSON.stringify({
+            user: normalizedUser,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.warn('Failed to cache auth check after login:', e);
+        }
       } else {
         throw new Error(response.message || 'Login failed');
       }

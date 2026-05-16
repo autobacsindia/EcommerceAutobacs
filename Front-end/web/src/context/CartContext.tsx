@@ -48,21 +48,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setIsMounted(true);
   }, []);
 
-  // Load cart once mounted and auth has settled
+  // Load cart once mounted and auth has settled.
+  // Always fetch — backend resolves auth vs guest via cookie/x-session-id header.
   useEffect(() => {
     if (!isMounted || authLoading) return;
-    if (isAuthenticated) {
-      refreshCart();
-    } else {
-      setCart(null);
-      setIsLoading(false);
-    }
+    refreshCart();
   }, [isAuthenticated, isMounted, authLoading]);
   
   // Enhanced refreshCart with better error handling and consistency
   const refreshCart = async () => {
-    if (!isAuthenticated) return;
-
     try {
       setIsLoading(true);
       setError(null);
