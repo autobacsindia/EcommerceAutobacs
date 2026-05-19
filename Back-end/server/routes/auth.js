@@ -282,7 +282,11 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
       email: req.user.email,
       name: req.user.name,
       role: req.user.role,
-      isVerified: req.user.isVerified
+      isVerified: req.user.isVerified,
+      // Used by the frontend cache invalidation logic — if this value changes
+      // (ban, role change, force-logout), the client detects it on next background
+      // revalidation and immediately updates state without waiting for TTL expiry.
+      sessionVersion: req.user.sessionVersion ?? 0
     }
   });
 }));
