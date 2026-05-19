@@ -60,13 +60,12 @@ const nextConfig: NextConfig = {
   },
 
   async rewrites() {
-    // NEXT_PUBLIC_API_URL must be set in Railway's frontend service environment variables.
-    // No fallback — a missing value would silently route all API calls to the wrong host.
-    if (!process.env.NEXT_PUBLIC_API_URL) {
-      throw new Error('[next.config] NEXT_PUBLIC_API_URL environment variable is not set');
-    }
+    // NEXT_PUBLIC_API_URL is validated at the Dockerfile level (build arg check).
+    // It will always be set here in a properly configured Railway build.
+    // For local development, set it in .env.local.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
 
-    const sanitizedUrl = process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
+    const sanitizedUrl = apiUrl.trim().replace(/\/+$/, '');
     console.log(`[next.config.ts] ✓ API rewrite target: ${sanitizedUrl}`);
     console.log(`[next.config.ts] NODE_ENV: ${process.env.NODE_ENV}`);
     
