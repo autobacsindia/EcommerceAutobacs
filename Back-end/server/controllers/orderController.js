@@ -182,6 +182,13 @@ export const createGuestOrder = async (req, res) => {
       paymentMethod
     );
 
+    // Persist guest email on the order so admins and notification workers
+    // can reach the customer without having to join through the User document
+    if (email) {
+      order.guestEmail = email.toLowerCase();
+      await order.save();
+    }
+
     // Generate magic link token for account claiming
     user.magicLinkToken   = crypto.randomBytes(32).toString('hex');
     user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);

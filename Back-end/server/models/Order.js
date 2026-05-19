@@ -74,6 +74,18 @@ const OrderSchema = new mongoose.Schema({
     default: "pending" 
   },
   
+  // Contact email for guest orders — allows confirmation emails, support, and admin visibility
+  // Not required for authenticated orders (user.email is the source of truth)
+  guestEmail: {
+    type: String,
+    lowercase: true,
+    trim: true,
+    validate: {
+      validator: v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+      message: 'Invalid guest email address'
+    }
+  },
+
   // Guest checkout session binding (prevents order hijacking)
   sessionId: String,  // Client-provided session ID (for initial order lookup)
   guestSessionHash: String,  // SHA256 hash of server-generated session token (defense-in-depth)
