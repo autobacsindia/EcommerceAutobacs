@@ -19,6 +19,7 @@ import {
   validateAdminOrderQuery
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { checkoutRateLimit } from "../middleware/rateLimitMiddleware.js";
 import { validateCancellation } from "../middleware/orderStatusMiddleware.js";
 import { checkoutSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
 import {
@@ -79,7 +80,7 @@ router.post("/", protect, validateOrder, asyncHandler(createOrder));
 // @route   POST /orders/guest
 // @desc    Create guest order (no authentication required)
 // @access  Public
-router.post("/guest", validateOrder, asyncHandler(createGuestOrder));
+router.post("/guest", checkoutRateLimit, validateOrder, asyncHandler(createGuestOrder));
 
 // @route   PUT /orders/:id/cancel
 // @desc    Cancel an order with validation and refund initiation
