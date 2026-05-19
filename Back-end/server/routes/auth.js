@@ -219,13 +219,22 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
   if (!isMatch) {
     // Log failed login attempt
     await logLoginAttempt(user, false, ipAddress, userAgent);
-    
+
     // Apply failed login rate limiting
     return failedLoginRateLimit(req, res, async () => {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: "Invalid email or password" 
+        message: "Invalid email or password"
       });
+    });
+  }
+
+  // Block unverified accounts before issuing any tokens
+  if (!user.isVerified) {
+    return res.status(403).json({
+      success: false,
+      message: "Please verify your email before logging in. Check your inbox or request a new verification link.",
+      code: "EMAIL_NOT_VERIFIED"
     });
   }
 

@@ -37,6 +37,28 @@ const nextConfig: NextConfig = {
     // Images are already optimized via Cloudinary, so Next.js optimization is redundant
     unoptimized: true,
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          // Prevent clickjacking — no iframing of any page
+          { key: 'X-Frame-Options', value: 'DENY' },
+          // Prevent MIME-type sniffing attacks
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          // Limit referrer info sent to third parties
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Force HTTPS for 2 years, include subdomains
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          // Disable browser features not needed by this app
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+          // Basic XSS protection for older browsers (modern browsers use CSP)
+          { key: 'X-XSS-Protection', value: '1; mode=block' },
+        ],
+      },
+    ];
+  },
+
   async rewrites() {
     // CRITICAL: Railway provides env vars at build time for NEXT_PUBLIC_ variables
     // We must use the correct production URL here

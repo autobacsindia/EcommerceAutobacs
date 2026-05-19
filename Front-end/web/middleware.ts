@@ -28,7 +28,12 @@ import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatib
  */
 
 // JWT secret for token verification
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+// No fallback — a missing secret means all protected routes silently use a known string,
+// allowing anyone to forge admin tokens. Fail hard at startup instead.
+if (!process.env.JWT_SECRET) {
+  throw new Error('[middleware] JWT_SECRET environment variable is not set');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Define protected routes
 const PROTECTED_ROUTES = [
