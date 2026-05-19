@@ -60,12 +60,13 @@ const nextConfig: NextConfig = {
   },
 
   async rewrites() {
-    // CRITICAL: Railway provides env vars at build time for NEXT_PUBLIC_ variables
-    // We must use the correct production URL here
-    // Fallback to production URL if not set (Railway doesn't pass env vars during build)
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ecommerceautobacs-production.up.railway.app';
-    
-    const sanitizedUrl = apiUrl.trim().replace(/\/+$/, '');
+    // NEXT_PUBLIC_API_URL must be set in Railway's frontend service environment variables.
+    // No fallback — a missing value would silently route all API calls to the wrong host.
+    if (!process.env.NEXT_PUBLIC_API_URL) {
+      throw new Error('[next.config] NEXT_PUBLIC_API_URL environment variable is not set');
+    }
+
+    const sanitizedUrl = process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
     console.log(`[next.config.ts] ✓ API rewrite target: ${sanitizedUrl}`);
     console.log(`[next.config.ts] NODE_ENV: ${process.env.NODE_ENV}`);
     
@@ -79,10 +80,9 @@ const nextConfig: NextConfig = {
     ];
   },
   env: {
-    // This makes process.env.API_BASE_URL available in the browser/server code
-    // It will be baked in at build time if not careful, but NEXT_PUBLIC_ variables are generally safer.
-    // Ideally, use publicRuntimeConfig or just NEXT_PUBLIC_ prefixes.
-    API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5000'),
+    // Baked in at build time. In production NEXT_PUBLIC_API_URL is already validated
+    // above, so this is always defined when NODE_ENV === 'production'.
+    API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000',
   },
 };
 
