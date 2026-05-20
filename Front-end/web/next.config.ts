@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/dhwxtl6l8/**' },
       // Legacy WordPress assets — remove after logo migration complete
       { protocol: 'https', hostname: 'autobacsindia.com', pathname: '/wp-content/uploads/**' },
+      // Cloudflare Images / Polish CDN cache (same domain, different path)
+      { protocol: 'https', hostname: 'autobacsindia.com', pathname: '/cdn-cgi/image/**' },
       // Dev placeholders
       { protocol: 'https', hostname: 'via.placeholder.com', pathname: '/**' },
     ],

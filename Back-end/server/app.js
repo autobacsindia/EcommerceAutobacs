@@ -70,10 +70,20 @@ const app = express();
 const isProd = process.env.NODE_ENV === 'production';
 app.set('env', isProd ? 'production' : 'development');
 
-// Trust the first proxy (required for Cloudflare/Railway/Heroku)
-// This ensures req.ip correctly identifies the client IP via X-Forwarded-For
-// In production, this is critical for rate limiting, security, and logging
-app.set('trust proxy', 1);
+// Trust 2 proxy hops: Cloudflare (hop 1) + Railway LB (hop 2)
+// Without this, req.ip resolves to Cloudflare's IP instead of the real user IP.
+// CF-Connecting-IP is the authoritative real-IP source when Cloudflare is active.
+app.set('trust proxy', 2);
+
+// Normalize req.ip to the real user IP from Cloudflare's header.
+// This ensures logging, Sentry context, and any middleware using req.ip
+// (other than the rate limiter, which already reads CF-Connecting-IP directly)
+// all see the real client IP rather than Cloudflare's edge IP.
+app.use((req, _res, next) => {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) req.ip = cfIp;
+  next();
+});
 
 // ULTRA-SIMPLE TEST ENDPOINT - NO MIDDLEWARE, NO DATABASE
 // Use this to verify Express is responding at all
