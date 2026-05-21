@@ -154,9 +154,18 @@ const ProductSchema = new mongoose.Schema({
   },
   categoryIds: [{
     type: Number // WordPress category IDs (for sync mapping)
-  }]
-}, { 
-  timestamps: true 
+  }],
+
+  // Soft-delete timestamp. null = live product; Date = permanently removed.
+  // Distinct from isActive (which means "temporarily disabled / out of stock").
+  // Soft-deleting preserves the document so Order.items[].product references
+  // remain resolvable and order history stays intact.
+  deletedAt: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: true
 });
 
 // Indexes for better query performance
@@ -183,5 +192,16 @@ ProductSchema.index({ isFastMoving: 1 }); // Fast-moving products
 // WordPress sync indexes
 ProductSchema.index({ wpId: 1 }); // Fast lookup by WordPress ID
 ProductSchema.index({ syncedFromWordPress: 1 }); // Filter synced products
+
+// Sparse index for admin "show deleted products" queries
+ProductSchema.index({ deletedAt: 1 }, { sparse: true });
+
+// Automatically exclude soft-deleted products from all find queries.
+// Pass { includeDeleted: true } via .setOptions() to bypass (admin use only).
+ProductSchema.pre(/^find/, function () {
+  if (!this.getOptions().includeDeleted) {
+    this.where({ deletedAt: null });
+  }
+});
 
 export default mongoose.model("Product", ProductSchema);

@@ -275,6 +275,7 @@ export const deleteProductWithImages = async (req, res, next) => {
 
   // Soft delete first — data is safe even if Cloudinary cleanup partially fails
   product.isActive = false;
+  product.deletedAt = new Date();
   await product.save();
   console.log(`[ProductController] Soft-deleted product: ${product._id}`);
 
