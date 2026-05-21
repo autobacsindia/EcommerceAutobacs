@@ -56,8 +56,14 @@ import {
 // Import cron service
 import CronService from "./services/cronService.js";
 
-// Import WordPress sync cron job (auto-starts on server boot)
-import './jobs/wordpressSyncJob.js';
+// WordPress sync cron job — only loaded when explicitly enabled.
+// Keeps local dev, CI, and non-WooCommerce deployments free of outbound
+// WordPress connections and noisy "sync failed" log spam on boot.
+if (process.env.WORDPRESS_SYNC_ENABLED === 'true') {
+  import('./jobs/wordpressSyncJob.js').catch(err =>
+    console.error('[App] Failed to load WordPress sync job:', err.message)
+  );
+}
 
 // Import adaptive throttling service
 import adaptiveThrottlingService from "./services/adaptiveThrottlingService.js";
