@@ -18,8 +18,10 @@ ENV NODE_ENV=${NODE_ENV}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Install dependencies (cached layer — only busted when package files change)
+# NODE_ENV overridden to development so devDependencies (e.g. @next/bundle-analyzer)
+# are installed — they're needed at build time but won't be in the final runner image.
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN NODE_ENV=development npm ci --legacy-peer-deps
 
 # Copy source (cache busted by arg changes above, or when source files change)
 COPY . .
