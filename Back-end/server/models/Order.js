@@ -222,6 +222,7 @@ const OrderSchema = new mongoose.Schema({
 // Indexes for order queries
 // COMPOUND indexes for common query patterns
 OrderSchema.index({ user: 1, createdAt: -1 }); // User order history (sorted by date)
+OrderSchema.index({ user: 1, status: 1 });      // User orders filtered by status (order tracking page)
 OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by status, sort by date)
 
 // SINGLE-FIELD indexes for specific lookups

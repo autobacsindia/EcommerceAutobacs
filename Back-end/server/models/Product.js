@@ -170,13 +170,14 @@ ProductSchema.index({ slug: 1 }, { unique: true }); // Product URLs
 // COMPOUND indexes for common query patterns
 ProductSchema.index({ brand: 1, isActive: 1, createdAt: -1 }); // Brand filtering + sorting (NEW ARRIVALS by brand)
 ProductSchema.index({ categories: 1, price: 1, isActive: 1 }); // Category + price range filtering
-ProductSchema.index({ isActive: 1, createdAt: -1 }); // New arrivals / homepage (filters + sorts)
+ProductSchema.index({ isActive: 1, createdAt: -1 });            // New arrivals / homepage (filters + sorts)
+ProductSchema.index({ isActive: 1, isFeatured: 1 });            // Homepage featured section — replaces single-field isFeatured index
+ProductSchema.index({ isActive: 1, categories: 1 });            // Category page listing (active-first prefix avoids scanning inactive products)
 
 // SINGLE-FIELD indexes for specific queries
 ProductSchema.index({ averageRating: -1 }); // Top rated products
 ProductSchema.index({ stock: 1 }); // Stock management
 ProductSchema.index({ compatibleVehicles: 1 }); // Vehicle-specific products
-ProductSchema.index({ isFeatured: 1 }); // Featured products
 ProductSchema.index({ isFastMoving: 1 }); // Fast-moving products
 
 // WordPress sync indexes

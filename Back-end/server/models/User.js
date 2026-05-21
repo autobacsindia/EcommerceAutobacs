@@ -124,4 +124,9 @@ const UserSchema = new mongoose.Schema({
 // unique: true in schema is good, but explicit index ensures it's created
 UserSchema.index({ email: 1 }, { unique: true });
 
+// Refresh token lookup — called on every authenticated request that needs token rotation.
+// Without this, findUserByRefreshToken() does a full collection scan across all users'
+// refreshTokens subdocuments.
+UserSchema.index({ 'refreshTokens.token': 1 });
+
 export default mongoose.model("User", UserSchema);
