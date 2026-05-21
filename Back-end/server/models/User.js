@@ -120,6 +120,19 @@ const UserSchema = new mongoose.Schema({
   phone: String
 }, { timestamps: true });
 
+// Always strip sensitive fields from any JSON serialization of a User document.
+// This is a defence-in-depth backstop — any route that accidentally calls
+// res.json(user) without an explicit .select() will still never expose these values.
+UserSchema.set('toJSON', {
+  transform: (_doc, ret) => {
+    delete ret.passwordHash;
+    delete ret.verificationToken;
+    delete ret.resetPasswordToken;
+    delete ret.refreshTokens;
+    return ret;
+  }
+});
+
 // CRITICAL: Explicit index on email (used on every login, forgot password, auth check)
 // unique: true in schema is good, but explicit index ensures it's created
 UserSchema.index({ email: 1 }, { unique: true });
