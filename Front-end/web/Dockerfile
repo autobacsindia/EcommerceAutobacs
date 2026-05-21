@@ -5,15 +5,10 @@ WORKDIR /app
 
 # Declare build args BEFORE COPY so a changed arg value busts the Docker layer
 # cache and forces a fresh build — avoids stale env vars in cached layers.
-ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_URL=https://ecommerceautobacs-production.up.railway.app
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_APP_URL
 ARG NODE_ENV=production
-
-# Fail the build immediately if the required arg is missing rather than
-# building successfully and silently routing all API calls to nowhere.
-RUN test -n "$NEXT_PUBLIC_API_URL" || \
-    (echo "ERROR: NEXT_PUBLIC_API_URL build arg is required. Set it in Railway Dashboard → Service → Settings → Build → Build Arguments." && exit 1)
 
 # Expose args as env vars for next build
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
