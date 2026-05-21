@@ -62,16 +62,21 @@ const CartSchema = new mongoose.Schema({
     message: String,
     createdAt: {
       type: Date,
-      default: Date.now,
-      expires: 300 // Auto-expire after 5 minutes (TTL index)
+      default: Date.now
     }
   }]
 }, { 
   timestamps: true 
 });
 
-// Create TTL index for recentChanges
-CartSchema.index({ recentChanges: 1 }, { expireAfterSeconds: 300 });
+// Prune stale recentChanges entries on every save.
+// MongoDB TTL indexes only work on top-level Date fields, not subdocument arrays,
+// so a pre-save hook is the correct mechanism here.
+CartSchema.pre('save', function(next) {
+  const cutoff = new Date(Date.now() - 5 * 60 * 1000);
+  this.recentChanges = this.recentChanges.filter(c => c.createdAt > cutoff);
+  next();
+});
 
 // CRITICAL: Unique partial indexes for cart retrieval (guest + authenticated)
 // Ensures ONE cart per user or session (data integrity)
