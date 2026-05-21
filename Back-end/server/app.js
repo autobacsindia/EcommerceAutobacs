@@ -151,27 +151,46 @@ export function setRequestTimeout(ms) {
 }
 
 // ── Performance Metrics (Sliding Window + Percentiles) ──────────────────────
-/**
- * Production-Grade Performance Metrics
- * 
- * Features:
- * - Sliding window (doesn't reset on request)
- * - P50, P95, P99 percentile tracking
- * - Auto-alert thresholds
- * - Top N slowest endpoints
- * - Rate limiting recommendations
- */
+
+// Fixed-capacity circular buffer — O(1) push, bounded memory, zero GC pressure.
+// Oldest entry is overwritten when the buffer is full.
+class RingBuffer {
+  constructor(capacity) {
+    this._cap = capacity;
+    this._buf = new Array(capacity);
+    this._head = 0;
+    this._size = 0;
+  }
+  push(item) {
+    this._buf[this._head] = item;
+    this._head = (this._head + 1) % this._cap;
+    if (this._size < this._cap) this._size++;
+  }
+  // Returns all stored items in insertion order (oldest first).
+  toArray() {
+    if (this._size < this._cap) return this._buf.slice(0, this._size);
+    return [...this._buf.slice(this._head), ...this._buf.slice(0, this._head)];
+  }
+  filter(fn) { return this.toArray().filter(fn); }
+  get length() { return this._size; }
+}
+
+// 5 000 global samples ≈ 250 KB; 200 per-endpoint samples ≈ 10 KB each.
+// Both are hard ceilings — traffic spikes cannot grow them beyond these limits.
+const MAX_GLOBAL_SAMPLES   = 5_000;
+const MAX_ENDPOINT_SAMPLES =   200;
+
 class PerformanceMetrics {
   constructor() {
     // Sliding window: last 10 minutes
     this.windowMs = 10 * 60 * 1000;
-    
-    // All request durations (for percentile calculation)
-    this.durations = [];
-    
+
+    // All request durations — ring buffer prevents unbounded growth
+    this.durations = new RingBuffer(MAX_GLOBAL_SAMPLES);
+
     // Per-endpoint metrics
     this.endpoints = {};
-    
+
     // Alert thresholds
     this.alerts = {
       slowRequestRate: 0.05,    // Alert if > 5% requests are slow
@@ -179,12 +198,12 @@ class PerformanceMetrics {
       p95Threshold: 3000,       // Alert if P95 > 3s
       p99Threshold: 5000        // Alert if P99 > 5s
     };
-    
+
     // Last alert times (prevent alert spam)
     this.lastAlertTime = {};
     this.alertCooldown = 5 * 60 * 1000; // 5 minutes between alerts
-    
-    // Start cleanup interval
+
+    // Periodically evict endpoint keys with no recent activity
     this._startCleanup();
   }
   
@@ -199,7 +218,7 @@ class PerformanceMetrics {
     if (!this.endpoints[endpoint]) {
       this.endpoints[endpoint] = {
         count: 0,
-        durations: [],
+        durations: new RingBuffer(MAX_ENDPOINT_SAMPLES),
         errors: 0,
         timeouts: 0,
         methods: {}
@@ -404,20 +423,16 @@ class PerformanceMetrics {
     }
   }
   
-  // Cleanup old data (prevent memory leak)
+  // Drop endpoint keys that have had no traffic in the last window.
+  // Memory for durations is already bounded by the ring buffers — no array filtering needed.
   _startCleanup() {
     setInterval(() => {
       const cutoff = Date.now() - this.windowMs;
-      
-      // Clean global durations
-      this.durations = this.durations.filter(d => d.time >= cutoff);
-      
-      // Clean endpoint durations
       for (const endpoint of Object.keys(this.endpoints)) {
-        this.endpoints[endpoint].durations = 
-          this.endpoints[endpoint].durations.filter(d => d.time >= cutoff);
+        const hasRecent = this.endpoints[endpoint].durations.toArray().some(d => d.time >= cutoff);
+        if (!hasRecent) delete this.endpoints[endpoint];
       }
-    }, 60000); // Cleanup every minute
+    }, 60_000);
   }
 }
 
