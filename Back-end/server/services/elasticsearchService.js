@@ -383,6 +383,26 @@ class ElasticsearchService {
   }
 
   /**
+   * Sanitize a user-supplied search string before passing to Elasticsearch.
+   *
+   * multi_match treats input as literal text (not Query DSL), so full special-
+   * character escaping is not required. However, two vectors still need closing:
+   *
+   * 1. Length — fuzziness: AUTO computes Levenshtein distances per token per shard.
+   *    A 10 000-char input causes O(n²) work across every shard simultaneously.
+   *    Cap at 200 chars, which comfortably covers real product search intent.
+   *
+   * 2. Control characters — null bytes and ASCII control chars (0x00-0x1F) can
+   *    cause JSON parse errors inside the ES cluster and produce unpredictable
+   *    query behaviour.
+   */
+  sanitizeQuery(input, maxLength = 200) {
+    if (typeof input !== 'string') return '';
+    // eslint-disable-next-line no-control-regex
+    return input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').slice(0, maxLength).trim();
+  }
+
+  /**
    * Search products with faceted filtering
    */
   async searchProducts(params) {
@@ -487,10 +507,11 @@ class ElasticsearchService {
       };
 
       // Add text search if query provided
-      if (q) {
+      const safeQ = q ? this.sanitizeQuery(q) : null;
+      if (safeQ) {
         searchBody.query.function_score.query.bool.must.push({
           multi_match: {
-            query: q,
+            query: safeQ,
             fields: ['name^3', 'description', 'brand', 'tags', 'vehicle_makes', 'vehicle_models'],
             fuzziness: 'AUTO'
           }
@@ -624,6 +645,9 @@ class ElasticsearchService {
    * Get search suggestions
    */
   async getSearchSuggestions(query, limit = 10) {
+    const safeQuery = this.sanitizeQuery(query);
+    if (!safeQuery) return { suggestions: [], corrections: [] };
+
     try {
       // First, get product and brand suggestions
       const productBrandResult = await this.client.search({
@@ -631,7 +655,7 @@ class ElasticsearchService {
         body: {
           query: {
             multi_match: {
-              query: query,
+              query: safeQuery,
               fields: ['name^2', 'brand'],
               fuzziness: 'AUTO',
               operator: 'and'
@@ -648,7 +672,7 @@ class ElasticsearchService {
         body: {
           query: {
             multi_match: {
-              query: query,
+              query: safeQuery,
               fields: ['categories.name^3'], // Higher boost for categories
               fuzziness: 'AUTO',
               operator: 'and'
@@ -665,14 +689,14 @@ class ElasticsearchService {
         body: {
           query: {
             multi_match: {
-              query: query,
+              query: safeQuery,
               fields: ['name', 'brand', 'categories.name'],
               fuzziness: 'AUTO:4,7', // More aggressive fuzziness for corrections
               operator: 'or'
             }
           },
           suggest: {
-            text: query,
+            text: safeQuery,
             name_suggest: {
               phrase: {
                 field: "name",
@@ -755,7 +779,7 @@ class ElasticsearchService {
         
         if (source.categories && Array.isArray(source.categories)) {
           source.categories.forEach(cat => {
-            if (cat.name && !seenCategories.has(cat.name.toLowerCase()) && cat.name.toLowerCase().includes(query.toLowerCase())) {
+            if (cat.name && !seenCategories.has(cat.name.toLowerCase()) && cat.name.toLowerCase().includes(safeQuery.toLowerCase())) {
               seenCategories.add(cat.name.toLowerCase());
               suggestions.push({
                 id: `category-${cat.name.toLowerCase().replace(/\s+/g, '-')}`,
@@ -774,7 +798,7 @@ class ElasticsearchService {
         // Process name suggestions
         if (correctionResult.suggest.name_suggest && correctionResult.suggest.name_suggest.length > 0) {
           correctionResult.suggest.name_suggest[0].options.forEach(option => {
-            if (option.text && option.text.toLowerCase() !== query.toLowerCase()) {
+            if (option.text && option.text.toLowerCase() !== safeQuery.toLowerCase()) {
               corrections.push({
                 original: query,
                 suggested: option.text,
@@ -787,7 +811,7 @@ class ElasticsearchService {
         // Process brand suggestions
         if (correctionResult.suggest.brand_suggest && correctionResult.suggest.brand_suggest.length > 0) {
           correctionResult.suggest.brand_suggest[0].options.forEach(option => {
-            if (option.text && option.text.toLowerCase() !== query.toLowerCase()) {
+            if (option.text && option.text.toLowerCase() !== safeQuery.toLowerCase()) {
               corrections.push({
                 original: query,
                 suggested: option.text,
