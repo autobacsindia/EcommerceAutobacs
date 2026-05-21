@@ -53,7 +53,7 @@ const nextConfig: NextConfig = {
           // Force HTTPS for 2 years, include subdomains
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           // Disable browser features not needed by this app
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), payment=()' },
           // Basic XSS protection for older browsers (modern browsers use CSP)
           { key: 'X-XSS-Protection', value: '1; mode=block' },
         ],

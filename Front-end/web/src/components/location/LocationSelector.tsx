@@ -6,7 +6,6 @@ import { useLocation } from '@/contexts/LocationContext';
 import { LocationSelectRequest } from '@/types/location';
 import toast from 'react-hot-toast';
 import ManualLocationForm from './ManualLocationForm';
-import locationService from '@/services/locationService';
 
 interface LocationSelectorProps {
   isOpen: boolean;
@@ -46,34 +45,6 @@ export default function LocationSelector({
 
   const handleUseCurrentLocation = async (retryAttempt = 0) => {
     try {
-      // Check if permission is explicitly denied
-      const isDenied = await locationService.isLocationDenied();
-      if (isDenied) {
-        toast((t) => (
-          <div className="flex flex-col space-y-2">
-            <span>Location access is blocked. Please enable it in your browser settings or enter manually.</span>
-            <div className="flex space-x-2 pt-1">
-              <button 
-                onClick={() => {
-                  toast.dismiss(t.id);
-                  setShowManualForm(true);
-                }}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs font-medium transition-colors"
-              >
-                Enter Manually
-              </button>
-              <button 
-                onClick={() => toast.dismiss(t.id)} 
-                className="text-gray-500 hover:text-gray-700 text-xs px-2 py-1"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        ), { duration: 6000, position: 'top-center' });
-        return;
-      }
-
       setUseCurrentLocation(true);
       
       // Get current coordinates
@@ -182,7 +153,7 @@ export default function LocationSelector({
         toast((t) => (
           <div className="flex flex-col space-y-2">
             <span>
-              We could not access your location because permission is blocked. You can enable it in your browser settings or enter your location manually.
+              Location access is blocked. Check your browser site settings AND your device/OS location privacy settings, then refresh — or enter your location manually.
             </span>
             <div className="flex space-x-2 pt-1">
               <button
