@@ -30,6 +30,7 @@ import { setCronService } from './routes/scheduledTasks.js';
 
 // Import middleware
 import { errorHandler, notFound, requestLogger } from "./middleware/errorMiddleware.js";
+import razorpayWebhook from './middleware/razorpayWebhook.js';
 // Sanitization middleware
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
 import { sentryContextMiddleware } from "./middleware/sentryContext.js";
@@ -727,14 +728,14 @@ app.use(cors(corsOptions));
 // Adds unique ID to every request for log correlation
 app.use(requestLogger);
 
+// ── CRITICAL: Razorpay Webhook Route (MUST be before body parsers) ──────────
+// express.raw() captures the raw Buffer needed for HMAC-SHA256 signature
+// verification. Mounting after express.json() would silently replace the Buffer
+// with a parsed object, breaking every signature check.
+app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
+
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
-
-// ── CRITICAL: Razorpay Webhook Route (MUST be before other parsers) ─────────
-// Webhook requires raw body for signature verification (express.raw)
-// This MUST be mounted BEFORE the global JSON parser above
-import razorpayWebhook from './middleware/razorpayWebhook.js';
-app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
 
 // Sentry context middleware - adds user/request context to error tracking
 // Must be AFTER body parsing but BEFORE routes

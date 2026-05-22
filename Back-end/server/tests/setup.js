@@ -1,6 +1,8 @@
+import { jest } from '@jest/globals';
+
 /**
  * Jest Test Setup - Production Configuration
- * 
+ *
  * This file runs before each test file.
  * Sets up:
  * - In-memory MongoDB
