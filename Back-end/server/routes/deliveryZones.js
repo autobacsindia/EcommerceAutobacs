@@ -1,5 +1,6 @@
 import express from "express";
 import deliveryZoneService from "../services/deliveryZoneService.js";
+import cacheService from "../services/cacheService.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { 
   validateIdParam,
@@ -141,21 +142,29 @@ router.post("/shipping-cost", validateShippingCost, async (req, res) => {
  * @desc    Get all delivery zones
  * @access  Private/Admin
  */
+const DELIVERY_ZONES_TTL = 5 * 60; // 5 min — zone config changes rarely
+
 router.get("/", protect, admin, async (req, res) => {
   try {
     const { type, serviceable } = req.query;
-    const filters = { 
-      type, 
-      serviceable: serviceable ? serviceable === 'true' : undefined 
+    const filters = {
+      type,
+      serviceable: serviceable ? serviceable === 'true' : undefined
     };
-    
-    const zones = await deliveryZoneService.getAllZones(filters);
 
-    res.status(200).json({
-      success: true,
-      count: zones.length,
-      zones
-    });
+    const cacheKey = `delivery-zones:list:${type || 'all'}:${serviceable ?? 'all'}`;
+    const cached = await cacheService.get(cacheKey).catch(() => null);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      return res.status(200).json(cached);
+    }
+
+    const zones = await deliveryZoneService.getAllZones(filters);
+    const body = { success: true, count: zones.length, zones };
+
+    cacheService.set(cacheKey, body, DELIVERY_ZONES_TTL * 1000).catch(() => {});
+    res.setHeader('X-Cache', 'MISS');
+    res.status(200).json(body);
   } catch (error) {
     console.error("Get zones error:", error);
     res.status(500).json({
@@ -173,6 +182,8 @@ router.get("/", protect, admin, async (req, res) => {
 router.post("/", protect, admin, async (req, res) => {
   try {
     const zone = await deliveryZoneService.createZone(req.body);
+
+    cacheService.invalidatePattern('delivery-zones:list').catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -218,6 +229,8 @@ router.put("/:id", protect, admin, async (req, res) => {
   try {
     const zone = await deliveryZoneService.updateZone(req.params.id, req.body);
 
+    cacheService.invalidatePattern('delivery-zones:list').catch(() => {});
+
     res.status(200).json({
       success: true,
       zone
@@ -239,6 +252,8 @@ router.put("/:id", protect, admin, async (req, res) => {
 router.delete("/:id", protect, admin, async (req, res) => {
   try {
     await deliveryZoneService.deleteZone(req.params.id);
+
+    cacheService.invalidatePattern('delivery-zones:list').catch(() => {});
 
     res.status(200).json({
       success: true,

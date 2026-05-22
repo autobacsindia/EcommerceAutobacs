@@ -4,6 +4,10 @@ import { promisify } from 'util';
 
 const execPromise = promisify(exec);
 
+// Kill any query that runs longer than this. Prevents a single unindexed scan
+// from exhausting the connection pool. Override via env for specific deployments.
+mongoose.set('maxTimeMS', parseInt(process.env.MONGO_QUERY_TIMEOUT_MS) || 5000);
+
 // Mongoose connection options with enhanced SSL/TLS support
 const mongooseOptions = {
   serverSelectionTimeoutMS: 5000,  // 5s — fail fast if Atlas nodes are unreachable; connectWithRetry handles startup retries

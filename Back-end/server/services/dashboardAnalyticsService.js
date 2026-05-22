@@ -82,7 +82,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]);
+      ]).option({ maxTimeMS: 8000 });
 
       // Get week-to-date revenue
       const weekRevenue = await Order.aggregate([
@@ -99,7 +99,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]);
+      ]).option({ maxTimeMS: 8000 });
 
       // Get month-to-date revenue
       const monthRevenue = await Order.aggregate([
@@ -116,7 +116,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]);
+      ]).option({ maxTimeMS: 8000 });
 
       const todayData = todayRevenue[0] || { total: 0, count: 0 };
       const weekData = weekRevenue[0] || { total: 0, count: 0 };
@@ -169,7 +169,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]);
+      ]).option({ maxTimeMS: 8000 });
 
       const breakdown = {};
       statusBreakdown.forEach(item => {
@@ -310,7 +310,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]);
+      ]).option({ maxTimeMS: 8000 });
 
       const breakdown = {
         new: 0,

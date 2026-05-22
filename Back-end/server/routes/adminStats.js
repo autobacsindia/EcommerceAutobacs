@@ -43,7 +43,7 @@ router.get('/stats', async (req, res) => {
       Order.aggregate([
         { $match: { orderStatus: 'delivered' } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-      ]),
+      ]).option({ maxTimeMS: 8000 }),
       
       // Total active products
       Product.countDocuments({ isActive: true }),

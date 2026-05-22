@@ -141,9 +141,10 @@ class SearchService {
       
       const products = await productQuery
         .skip(skip)
-        .limit(Number(limit));
+        .limit(Number(limit))
+        .maxTimeMS(3000);
 
-      const total = await Product.countDocuments(query);
+      const total = await Product.countDocuments(query).maxTimeMS(3000);
 
       // If text search returns no results, fallback to regex-based search
       if (search && products.length === 0) {
@@ -174,9 +175,10 @@ class SearchService {
         
         const regexProducts = await productQuery
           .skip(skip)
-          .limit(Number(limit));
-        
-        const regexTotal = await Product.countDocuments(query);
+          .limit(Number(limit))
+          .maxTimeMS(2000);
+
+        const regexTotal = await Product.countDocuments(query).maxTimeMS(2000);
         
         console.log(`[SearchService] Regex fallback found ${regexTotal} results for "${search}"`);
         
@@ -244,13 +246,14 @@ class SearchService {
     })
     .select('name slug brand categories images')
     .populate('categories', 'name')
-    .limit(limit * 2); // Get more results to allow for deduplication
+    .limit(limit * 2)
+    .maxTimeMS(2000);
 
     // Find categories matching the query
     const categories = await Category.find({
       name: { $regex: query, $options: 'i' },
       isActive: true
-    }).limit(limit);
+    }).limit(limit).maxTimeMS(2000);
 
     // Extract unique suggestions
     const suggestions = [];
@@ -589,7 +592,7 @@ class SearchService {
       const need      = () => limit - collected.length;
       const base      = { _id: { $ne: productId }, isActive: true };
       const excl      = (extra) => ({ ...base, _id: { $ne: productId, $nin: seen() }, ...extra });
-      const find      = (filter, n) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(n).populate('categories', 'name slug').lean();
+      const find      = (filter, n) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(n).maxTimeMS(2000).populate('categories', 'name slug').lean();
 
       // 1. Same vehicle + same product type
       if (vehicle && typeRegex && need() > 0) {
@@ -652,7 +655,7 @@ class SearchService {
       const similarProducts = await this.getSimilarProducts(productId, 20);
       const similarIds      = new Set(similarProducts.map(p => p._id.toString()));
       const excluded        = () => [productId, ...Array.from(similarIds)];
-      const find            = (filter) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(limit).populate('categories', 'name slug').lean();
+      const find            = (filter) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(limit).maxTimeMS(2000).populate('categories', 'name slug').lean();
 
       // Priority 1: seeded complementary products (from seedComplementaryProducts.js)
       if (product.complementaryProducts?.length > 0) {

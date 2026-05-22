@@ -72,6 +72,9 @@ export const publicCacheResponse = (cacheType) => async (req, res, next) => {
         
         // Map cache types to TTL values
         switch(cacheType) {
+          case 'VEHICLE_LIST':
+            ttl = 300; // 5 minutes for full vehicle list
+            break;
           case 'VEHICLE_MAKES':
             ttl = 7200; // 2 hours for vehicle makes (rarely changes)
             break;

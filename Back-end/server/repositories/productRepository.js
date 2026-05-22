@@ -157,7 +157,7 @@ class ProductRepository {
           count: { $sum: 1 }
         }
       }
-    ]);
+    ]).option({ maxTimeMS: 5000 });
   }
 
   /**

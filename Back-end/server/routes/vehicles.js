@@ -13,14 +13,14 @@ import {
   validateSlugParam,
   validateVehicleQuery,
 } from "../middleware/validationMiddleware.js";
-import { publicCacheResponse } from "../middleware/publicCacheMiddleware.js";
+import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 
 const router = express.Router();
 
 // @route   GET /vehicles
 // @desc    Get all active vehicles
 // @access  Public
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", publicCacheResponse('VEHICLE_LIST'), asyncHandler(async (req, res) => {
   const vehicles = await Vehicle.find({ isActive: true })
     .sort({ make: 1, model: 1, year: 1 });
 
@@ -196,6 +196,8 @@ router.post("/", protect, admin, asyncHandler(async (req, res) => {
     image
   });
 
+  invalidatePublicCache('vehicles');
+
   res.status(201).json({
     success: true,
     message: 'Vehicle created successfully',
@@ -220,6 +222,8 @@ router.put("/:id", protect, admin, validateVehicleUpdate, asyncHandler(async (re
     });
   }
 
+  invalidatePublicCache('vehicles');
+
   res.json({
     success: true,
     message: 'Vehicle updated successfully',
@@ -242,6 +246,8 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
 
   vehicle.isActive = false;
   await vehicle.save();
+
+  invalidatePublicCache('vehicles');
 
   res.json({
     success: true,
@@ -316,6 +322,8 @@ router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler
 
   vehicle.isActive = !vehicle.isActive;
   await vehicle.save();
+
+  invalidatePublicCache('vehicles');
 
   res.json({
     success: true,
