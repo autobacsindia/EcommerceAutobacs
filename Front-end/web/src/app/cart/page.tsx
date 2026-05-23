@@ -30,94 +30,44 @@ function CartPageContent() {
   const [recentChanges, setRecentChanges] = useState<any[]>([]);
   const [hasShownChanges, setHasShownChanges] = useState(false);
 
-  // 🟡 LAYER 1: Fetch cart on mount to get stock messages and recent changes
   useEffect(() => {
     const fetchCartWithStockCheck = async () => {
       try {
         const response: any = await apiClient.get(API_ENDPOINTS.CART);
-        
-        // Handle recent changes for transparency
-        if (response.recentChanges && response.recentChanges.length > 0) {
+        if (response.recentChanges?.length > 0) {
           setRecentChanges(response.recentChanges);
-          
-          // Show toast notifications for each change (only first time)
           if (!hasShownChanges) {
             response.recentChanges.forEach((change: any) => {
-              if (change.type === 'REMOVED_OUT_OF_STOCK') {
-                toast.error(change.message, {
-                  icon: '❌',
-                  duration: 6000,
-                });
-              } else if (change.type === 'QUANTITY_ADJUSTED') {
-                toast(change.message, {
-                  icon: '⚠️',
-                  style: {
-                    background: '#FFA726',
-                    color: '#FFFFFF',
-                  },
-                  duration: 6000,
-                });
-              }
+              if (change.type === 'REMOVED_OUT_OF_STOCK') toast.error(change.message, { icon: '❌', duration: 6000 });
+              else if (change.type === 'QUANTITY_ADJUSTED') toast(change.message, { icon: '⚠️', style: { background: '#FFA726', color: '#fff' }, duration: 6000 });
             });
             setHasShownChanges(true);
-            
-            // Clear the flag after 5 seconds
             setTimeout(() => setHasShownChanges(false), 5000);
           }
         }
-        
-        // Also handle legacy stockMessages
-        if (response.stockMessages && response.stockMessages.length > 0) {
-          response.stockMessages.forEach((msg: string) => {
-            toast(msg, {
-              icon: '⚠️',
-              style: {
-                background: '#FFA726',
-                color: '#FFFFFF',
-              },
-            });
-          });
+        if (response.stockMessages?.length > 0) {
+          response.stockMessages.forEach((msg: string) => toast(msg, { icon: '⚠️', style: { background: '#FFA726', color: '#fff' } }));
         }
       } catch (error) {
         console.error('Failed to fetch cart:', error);
       }
     };
-
-    if (isAuthenticated && !isLoading) {
-      fetchCartWithStockCheck();
-    }
+    if (isAuthenticated && !isLoading) fetchCartWithStockCheck();
   }, [isAuthenticated, isLoading]);
 
-  // 🟡 LAYER 1: Enhanced quantity update with better error handling
   const handleQuantityChange = async (productId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
-    
     try {
       setUpdatingItem(productId);
       await updateQuantity(productId, newQuantity);
       toast.success('Cart updated');
     } catch (error: any) {
-      console.error('Failed to update quantity:', error);
-      
-      // Handle stock-related errors
       if (error.message?.includes('out of stock')) {
-        toast.error('This item is now out of stock', {
-          icon: '❌',
-        });
-        // Remove from cart after delay
-        setTimeout(() => {
-          removeFromCart(productId);
-        }, 2000);
+        toast.error('This item is now out of stock', { icon: '❌' });
+        setTimeout(() => removeFromCart(productId), 2000);
       } else if (error.message?.includes('Only') && error.message?.includes('available')) {
-        toast.error(error.message, {
-          icon: '⚠️',
-        });
-        // Auto-adjust quantity if maxQuantity is provided
-        if (error.maxQuantity) {
-          setTimeout(async () => {
-            await updateQuantity(productId, error.maxQuantity);
-          }, 1500);
-        }
+        toast.error(error.message, { icon: '⚠️' });
+        if (error.maxQuantity) setTimeout(async () => { await updateQuantity(productId, error.maxQuantity); }, 1500);
       } else {
         toast.error('Failed to update quantity');
       }
@@ -131,8 +81,7 @@ function CartPageContent() {
       try {
         await removeFromCart(productId);
         toast.success('Item removed from cart');
-      } catch (error) {
-        console.error('Failed to remove item:', error);
+      } catch {
         toast.error('Failed to remove item');
       }
     }
@@ -143,29 +92,35 @@ function CartPageContent() {
       try {
         await clearCart();
         toast.success('Cart cleared');
-      } catch (error) {
-        console.error('Failed to clear cart:', error);
+      } catch {
         toast.error('Failed to clear cart');
       }
     }
   };
 
-  // Loading state
-  if (isLoading && !cart) {
-    return <SkeletonLoader type="cart-page" />;
-  }
+  const getFirstImageUrl = (images: ProductImage[] | string | undefined): string | null => {
+    if (!images) return null;
+    if (typeof images === 'string') return images;
+    if (Array.isArray(images) && images.length > 0) {
+      const first = images[0];
+      if (typeof first === 'string') return first;
+      if (first && typeof first === 'object' && 'url' in first) return (first as ProductImage).url;
+    }
+    return null;
+  };
 
-  // Empty cart state
+  if (isLoading && !cart) return <SkeletonLoader type="cart-page" />;
+
   if (!cart || cart.items?.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
         <div className="text-center py-12">
-          <ShoppingBag className="mx-auto h-24 w-24 text-gray-300 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
-          <p className="text-gray-600 mb-6">Add some products to get started!</p>
+          <ShoppingBag className="mx-auto h-24 w-24 text-[#252525] mb-4" />
+          <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Your cart is empty</h2>
+          <p className="text-[#C4C4C4] font-body mb-6">Add some products to get started!</p>
           <Link
             href="/products"
-            className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
           >
             Browse Products
             <ArrowRight className="h-4 w-4" />
@@ -175,72 +130,36 @@ function CartPageContent() {
     );
   }
 
-  // Helper function to get the first image URL
-  const getFirstImageUrl = (images: ProductImage[] | string | undefined): string | null => {
-    if (!images) return null;
-    
-    if (typeof images === 'string') {
-      return images;
-    }
-    
-    if (Array.isArray(images) && images.length > 0) {
-      const firstImage = images[0];
-      if (typeof firstImage === 'string') {
-        return firstImage;
-      } else if (firstImage && typeof firstImage === 'object' && 'url' in firstImage) {
-        return (firstImage as ProductImage).url;
-      }
-    }
-    
-    return null;
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-[#080808] py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Shopping Cart</h1>
-          <p className="text-gray-600 mt-1">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in your cart</p>
+          <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide">Shopping Cart</h1>
+          <p className="text-[#C4C4C4] font-body mt-1">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in your cart</p>
         </div>
 
-        {/* 🟡 Recent Changes Notification Banner */}
+        {/* Stock change banner */}
         {recentChanges.length > 0 && (
-          <div className="mb-6 bg-linear-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-400 rounded-lg p-4 shadow-sm">
+          <div className="mb-6 bg-orange-500/10 border-l-4 border-orange-500 rounded-sm p-4">
             <div className="flex items-start gap-3">
-              <div className="shrink-0">
-                <AlertTriangle className="h-6 w-6 text-orange-600" />
-              </div>
+              <AlertTriangle className="h-6 w-6 text-orange-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-orange-800">
-                  Cart Updates Due to Stock Changes
-                </h3>
+                <h3 className="text-sm font-condensed font-bold text-orange-400 uppercase tracking-wide">Cart Updates Due to Stock Changes</h3>
                 <ul className="mt-2 space-y-1">
                   {recentChanges.map((change, idx) => (
-                    <li key={idx} className="text-sm text-orange-700 flex items-start gap-2">
-                      <span className="text-orange-500 mt-0.5">•</span>
+                    <li key={idx} className="text-sm text-orange-300 font-body flex items-start gap-2">
+                      <span className="text-orange-400 mt-0.5">·</span>
                       <span>
                         {change.type === 'REMOVED_OUT_OF_STOCK' ? (
                           <strong>{change.productName}</strong>
                         ) : change.type === 'QUANTITY_ADJUSTED' ? (
-                          <>
-                            <strong>{change.productName}</strong>: Quantity changed from{' '}
-                            <span className="font-mono">{change.previousQuantity}</span> to{' '}
-                            <span className="font-mono">{change.newQuantity}</span>
-                          </>
-                        ) : null}{' '}
-                        {change.message.includes('because') && (
-                          <span className="text-orange-600 italic">
-                            ({change.message.split('because')[1]})
-                          </span>
-                        )}
+                          <><strong>{change.productName}</strong>: qty {change.previousQuantity} → {change.newQuantity}</>
+                        ) : null}
                       </span>
                     </li>
                   ))}
                 </ul>
-                <p className="text-xs text-orange-600 mt-3">
-                  💡 These changes were made automatically based on current stock availability
-                </p>
               </div>
             </div>
           </div>
@@ -249,27 +168,21 @@ function CartPageContent() {
         <div className="lg:grid lg:grid-cols-12 lg:gap-8">
           {/* Cart Items */}
           <div className="lg:col-span-8">
-            <div className="bg-white rounded-lg shadow-md">
-              {/* Clear Cart Button */}
-              <div className="p-4 border-b flex justify-between items-center">
-                <h2 className="font-semibold text-gray-900">Cart Items</h2>
-                <button
-                  onClick={handleClearCart}
-                  className="text-sm text-red-600 hover:text-red-700 font-medium"
-                >
+            <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg">
+              <div className="p-4 border-b border-[#252525] flex justify-between items-center">
+                <h2 className="font-condensed font-bold text-white uppercase tracking-wide">Cart Items</h2>
+                <button onClick={handleClearCart} className="text-sm text-red-400 hover:text-red-300 font-body transition-colors">
                   Clear Cart
                 </button>
               </div>
 
-              {/* Items List */}
-              <div className="divide-y">
+              <div className="divide-y divide-[#252525]">
                 {cart.items.map((item, index) => (
                   <div key={`${item.product._id}-${index}`} className="p-6">
                     <div className="flex gap-4">
-                      {/* Product Image */}
                       <Link
                         href={productUrl(item.product, '/products') || '/products'}
-                        className="shrink-0 w-24 h-24 bg-gray-100 rounded-md overflow-hidden"
+                        className="shrink-0 w-24 h-24 bg-[#161616] border border-[#252525] rounded-sm overflow-hidden"
                       >
                         <EnhancedImage
                           src={getFirstImageUrl(item.product.images)}
@@ -281,80 +194,63 @@ function CartPageContent() {
                         />
                       </Link>
 
-                      {/* Product Details */}
                       <div className="flex-1">
                         <div className="flex justify-between">
                           <div>
                             <Link
                               href={productUrl(item.product, '/products') || '/products'}
-                              className="font-semibold text-gray-900 hover:text-blue-600"
+                              className="font-condensed font-bold text-white uppercase tracking-wide hover:text-[#3B9EE8] transition-colors"
                             >
                               {item.product.name}
                             </Link>
-                            <p className="text-sm text-gray-500 mt-1">
-                              {formatPrice(item.product.price)} each
-                            </p>
+                            <p className="text-sm text-[#555555] font-body mt-1">{formatPrice(item.product.price)} each</p>
                           </div>
                           <button
                             onClick={() => handleRemoveItem(item.product._id)}
-                            className="text-gray-400 hover:text-red-600"
+                            className="text-[#555555] hover:text-red-400 transition-colors"
                             title="Remove item"
-                            aria-label="Remove item"
                           >
                             <Trash2 className="h-5 w-5" />
                           </button>
                         </div>
 
-                        {/* Quantity Controls */}
                         <div className="mt-4 flex items-center justify-between">
-                          <div className="flex items-center border border-gray-300 rounded-md">
+                          <div className="flex items-center border border-[#252525] rounded-sm">
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity - 1)}
                               disabled={item.quantity <= 1 || updatingItem === item.product._id}
-                              className="p-2 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              aria-label="Decrease quantity"
+                              className="p-2 text-[#C4C4C4] hover:bg-[#161616] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Minus className="h-4 w-4" />
                             </button>
-                            <span className="px-4 py-2 min-w-12 text-center">
+                            <span className="px-4 py-2 min-w-12 text-center text-white font-condensed font-bold">
                               {item.quantity}
                             </span>
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity + 1)}
-                              disabled={
-                                item.quantity >= item.product.stock ||
-                                updatingItem === item.product._id
-                              }
-                              className="p-2 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              aria-label="Increase quantity"
+                              disabled={item.quantity >= item.product.stock || updatingItem === item.product._id}
+                              className="p-2 text-[#C4C4C4] hover:bg-[#161616] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
-
-                          {/* Item Total */}
-                          <p className="text-lg font-bold text-gray-900">
+                          <p className="text-lg font-condensed font-bold text-[#3B9EE8]">
                             {formatPrice(item.product.price * item.quantity)}
                           </p>
                         </div>
 
-                        {/* 🟡 LAYER 1: Enhanced Stock Warnings */}
                         {item.product.stock === 0 ? (
-                          <div className="mt-2 flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                          <div className="mt-2 flex items-center gap-2 text-red-400 bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-sm">
                             <AlertTriangle className="h-4 w-4" />
-                            <span className="text-sm font-medium">This item is now out of stock</span>
+                            <span className="text-sm font-body">This item is now out of stock</span>
                           </div>
                         ) : item.quantity >= item.product.stock ? (
-                          <div className="mt-2 flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-md">
+                          <div className="mt-2 flex items-center gap-2 text-orange-400 bg-orange-500/10 border border-orange-500/30 px-3 py-2 rounded-sm">
                             <AlertTriangle className="h-4 w-4" />
-                            <span className="text-sm font-medium">
-                              Maximum available: {item.product.stock} {item.product.stock === 1 ? 'item' : 'items'}
-                            </span>
+                            <span className="text-sm font-body">Maximum available: {item.product.stock}</span>
                           </div>
                         ) : item.product.stock <= 5 ? (
-                          <p className="text-sm text-orange-600 mt-2">
-                            ⚠️ Only {item.product.stock} left in stock
-                          </p>
+                          <p className="text-sm text-orange-400 font-body mt-2">⚠ Only {item.product.stock} left in stock</p>
                         ) : null}
                       </div>
                     </div>
@@ -363,12 +259,8 @@ function CartPageContent() {
               </div>
             </div>
 
-            {/* Continue Shopping */}
             <div className="mt-6">
-              <Link
-                href="/products"
-                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
-              >
+              <Link href="/products" className="inline-flex items-center gap-2 text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors">
                 ← Continue Shopping
               </Link>
             </div>
@@ -376,55 +268,51 @@ function CartPageContent() {
 
           {/* Order Summary */}
           <div className="lg:col-span-4 mt-8 lg:mt-0">
-            <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
+            <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 sticky top-20">
+              <h2 className="text-lg font-condensed font-bold text-white uppercase tracking-wide mb-4">Order Summary</h2>
 
               <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-[#C4C4C4] font-body text-sm">
                   <span>Subtotal</span>
                   <span>{formatPrice((cart.total || 0) / 1.18)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-[#C4C4C4] font-body text-sm">
                   <span>Shipping</span>
-                  <span className="text-sm text-gray-500 text-right">Calculated at checkout</span>
+                  <span className="text-[#555555]">Calculated at checkout</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-[#C4C4C4] font-body text-sm">
                   <span>Tax (18% GST)</span>
                   <span>{formatPrice((cart.total || 0) - ((cart.total || 0) / 1.18))}</span>
                 </div>
-                <div className="border-t pt-3 flex justify-between text-lg font-bold text-gray-900">
-                  <span>Total</span>
-                  <span>{formatPrice(cart.total || 0)}</span>
+                <div className="border-t border-[#252525] pt-3 flex justify-between">
+                  <span className="font-condensed font-bold text-white uppercase tracking-wide">Total</span>
+                  <span className="text-xl font-condensed font-bold text-[#3B9EE8]">{formatPrice(cart.total || 0)}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">* Final tax calculated at checkout</p>
+                <p className="text-xs text-[#555555] font-body">* Final tax calculated at checkout</p>
               </div>
 
-              {/* Checkout Button */}
               <Link
                 href="/checkout"
-                className="w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm transition-colors flex items-center justify-center gap-2"
               >
                 Proceed to Checkout
                 <ArrowRight className="h-5 w-5" />
               </Link>
 
-              {/* Security Badge */}
-              <div className="mt-6 text-center">
-                <p className="text-xs text-gray-500">
-                  🔒 Secure Checkout · Safe Payment
-                </p>
+              <div className="mt-4 text-center">
+                <p className="text-xs text-[#555555] font-body">🔒 Secure Checkout · Safe Payment</p>
               </div>
 
-              {/* Promo Code (Optional) */}
-              <div className="mt-6 pt-6 border-t">
-                <p className="text-sm font-medium text-gray-900 mb-2">Have a promo code?</p>
+              {/* Promo code */}
+              <div className="mt-6 pt-6 border-t border-[#252525]">
+                <p className="text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest mb-2">Have a promo code?</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Enter code"
-                    className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-[#3B9EE8] font-body"
                   />
-                  <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 text-sm font-medium">
+                  <button className="bg-[#252525] hover:bg-[#3B9EE8] text-[#C4C4C4] hover:text-white px-4 py-2 rounded-sm text-sm font-condensed font-bold uppercase tracking-widest transition-colors">
                     Apply
                   </button>
                 </div>

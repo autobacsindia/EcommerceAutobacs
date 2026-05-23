@@ -17,14 +17,8 @@ interface Order {
   status: string;
   totalAmount: number;
   items: Array<{
-    product?: {
-      _id: string;
-      name: string;
-    };
-    productId?: {
-      _id: string;
-      name: string;
-    };
+    product?: { _id: string; name: string };
+    productId?: { _id: string; name: string };
     quantity: number;
     price: number;
   }>;
@@ -38,28 +32,21 @@ export default function OrdersPage() {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Filters and sorting
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc');
-  const [showFilters, setShowFilters] = useState(false);
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const ordersPerPage = 10;
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login');
-    }
+    if (!authLoading && !isAuthenticated) router.push('/login');
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchOrders();
-    }
+    if (isAuthenticated) fetchOrders();
   }, [isAuthenticated, currentPage]);
 
   useEffect(() => {
@@ -81,13 +68,9 @@ export default function OrdersPage() {
 
   const applyFiltersAndSort = () => {
     let filtered = [...orders];
-
-    // Apply status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(order => order.status.toLowerCase() === statusFilter.toLowerCase());
     }
-
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(order =>
@@ -98,38 +81,30 @@ export default function OrdersPage() {
         })
       );
     }
-
-    // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case 'date-desc':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case 'date-asc':
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case 'amount-desc':
-          return b.totalAmount - a.totalAmount;
-        case 'amount-asc':
-          return a.totalAmount - b.totalAmount;
-        default:
-          return 0;
+        case 'date-desc': return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'date-asc': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'amount-desc': return b.totalAmount - a.totalAmount;
+        case 'amount-asc': return a.totalAmount - b.totalAmount;
+        default: return 0;
       }
     });
-
     setFilteredOrders(filtered);
   };
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
-      processing: 'bg-purple-100 text-purple-800 border-purple-200',
-      shipped: 'bg-orange-100 text-orange-800 border-orange-200',
-      delivered: 'bg-green-100 text-green-800 border-green-200',
-      cancelled: 'bg-red-100 text-red-800 border-red-200',
-      refunded: 'bg-gray-100 text-gray-800 border-gray-200',
-      failed: 'bg-red-100 text-red-800 border-red-200',
+      pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+      confirmed: 'bg-[#3B9EE8]/10 text-[#3B9EE8] border-[#3B9EE8]/30',
+      processing: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+      shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+      delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
+      cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
+      refunded: 'bg-[#252525] text-[#C4C4C4] border-[#252525]',
+      failed: 'bg-red-500/10 text-red-400 border-red-500/30',
     };
-    return colors[status.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return colors[status.toLowerCase()] || 'bg-[#252525] text-[#C4C4C4] border-[#252525]';
   };
 
   const getStatusIcon = (status: string) => {
@@ -146,22 +121,18 @@ export default function OrdersPage() {
     return icons[status.toLowerCase()] || '📋';
   };
 
-  if (authLoading || loading) {
-    return <OrderHistorySkeleton />;
-  }
-
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (authLoading || loading) return <OrderHistorySkeleton />;
+  if (!isAuthenticated) return null;
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <p className="text-red-600">{error}</p>
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
+          <Package className="mx-auto h-12 w-12 text-red-400 mb-4" />
+          <p className="text-[#C4C4C4] font-body mb-4">{error}</p>
           <button
             onClick={fetchOrders}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+            className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm"
           >
             Try Again
           </button>
@@ -172,14 +143,14 @@ export default function OrdersPage() {
 
   if (orders.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center max-w-md mx-auto">
-          <Package className="mx-auto h-20 w-20 text-gray-300 mb-6" />
-          <h2 className="text-3xl font-bold text-gray-700 mb-3">No orders yet</h2>
-          <p className="text-gray-500 mb-8">Start shopping to place your first order and track it here</p>
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto py-16 px-4">
+          <Package className="mx-auto h-20 w-20 text-[#252525] mb-6" />
+          <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-3">No Orders Yet</h2>
+          <p className="text-[#C4C4C4] font-body mb-8">Start shopping to place your first order and track it here</p>
           <button
             onClick={() => router.push('/products')}
-            className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition font-medium"
+            className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
           >
             Browse Products
           </button>
@@ -188,202 +159,190 @@ export default function OrdersPage() {
     );
   }
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">My Orders</h1>
-        <p className="text-gray-600">Track and manage your orders</p>
-      </div>
+  const selectClass = 'bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-[#3B9EE8] font-body';
 
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                placeholder="Search by order ID or product name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+  return (
+    <div className="min-h-screen bg-[#080808] py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8">
+          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Account</p>
+          <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide">My Orders</h1>
+          <p className="text-[#C4C4C4] font-body mt-1">Track and manage your orders</p>
+        </div>
+
+        {/* Filters and Search */}
+        <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555555] h-4 w-4" />
+                <input
+                  type="text"
+                  placeholder="Search by order ID or product name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm focus:outline-none focus:border-[#3B9EE8] font-body text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectClass}>
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="processing">Processing</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="refunded">Refunded</option>
+                <option value="failed">Failed</option>
+              </select>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className={selectClass}>
+                <option value="date-desc">Newest First</option>
+                <option value="date-asc">Oldest First</option>
+                <option value="amount-desc">Highest Amount</option>
+                <option value="amount-asc">Lowest Amount</option>
+              </select>
             </div>
           </div>
 
-          {/* Status Filter */}
-          <div className="flex gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-            >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="processing">Processing</option>
-              <option value="shipped">Shipped</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="refunded">Refunded</option>
-              <option value="failed">Failed</option>
-            </select>
-
-            {/* Sort */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-            >
-              <option value="date-desc">Newest First</option>
-              <option value="date-asc">Oldest First</option>
-              <option value="amount-desc">Highest Amount</option>
-              <option value="amount-asc">Lowest Amount</option>
-            </select>
-          </div>
+          {(statusFilter !== 'all' || searchQuery) && (
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <span className="text-[#555555] font-body">Active filters:</span>
+              {statusFilter !== 'all' && (
+                <span className="bg-[#3B9EE8]/10 text-[#3B9EE8] border border-[#3B9EE8]/30 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-widest">
+                  {statusFilter}
+                </span>
+              )}
+              {searchQuery && (
+                <span className="bg-[#3B9EE8]/10 text-[#3B9EE8] border border-[#3B9EE8]/30 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-widest">
+                  &ldquo;{searchQuery}&rdquo;
+                </span>
+              )}
+              <button
+                onClick={() => { setStatusFilter('all'); setSearchQuery(''); }}
+                className="text-[#3B9EE8] hover:text-white font-body text-xs ml-2 transition-colors"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Active Filters Display */}
-        {(statusFilter !== 'all' || searchQuery) && (
-          <div className="mt-3 flex items-center gap-2 text-sm">
-            <span className="text-gray-600">Active filters:</span>
-            {statusFilter !== 'all' && (
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                Status: {statusFilter}
-              </span>
-            )}
-            {searchQuery && (
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                Search: "{searchQuery}"
-              </span>
-            )}
+        {/* Results count */}
+        <div className="mb-4">
+          <p className="text-[#555555] font-body text-sm">
+            Showing {filteredOrders.length} of {orders.length} order{orders.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+
+        {/* Orders list */}
+        {filteredOrders.length === 0 ? (
+          <div className="text-center py-12 bg-[#0E0E0E] border border-[#252525] rounded-sm">
+            <p className="text-[#555555] font-body">No orders match your filters</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredOrders.map((order) => (
+              <div key={order._id} className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 hover:border-[#3B9EE8]/40 transition-colors">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-xl">{getStatusIcon(order.status)}</span>
+                      <div>
+                        <h3 className="font-condensed font-bold text-white uppercase tracking-wide">
+                          Order #{order._id.slice(-8).toUpperCase()}
+                        </h3>
+                        <p className="text-[#555555] font-body text-sm">
+                          {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    {order.trackingNumber && (
+                      <p className="text-sm text-[#C4C4C4] font-body mt-2">
+                        📍 Tracking: <span className="font-mono text-[#3B9EE8]">{order.trackingNumber}</span>
+                      </p>
+                    )}
+                  </div>
+                  <span className={`px-3 py-1 rounded-sm text-xs font-condensed font-bold uppercase tracking-widest border ${getStatusColor(order.status)}`}>
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
+                </div>
+
+                <div className="border-t border-[#252525] pt-4 mb-4">
+                  <p className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-3">
+                    {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="space-y-2">
+                    {order.items.slice(0, 3).map((item, index) => {
+                      const product = item.product || item.productId;
+                      return (
+                        <div key={index} className="flex justify-between text-sm">
+                          <span className="text-[#C4C4C4] font-body">
+                            {product?.name || 'Unknown Product'} × {item.quantity}
+                          </span>
+                          <span className="text-[#555555] font-body">₹{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                    {order.items.length > 3 && (
+                      <p className="text-sm text-[#3B9EE8] font-body">
+                        +{order.items.length - 3} more item{order.items.length - 3 !== 1 ? 's' : ''}...
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-t border-[#252525] pt-4">
+                  <div>
+                    <span className="text-[#555555] font-body text-sm">Total Amount: </span>
+                    <span className="text-2xl font-condensed font-bold text-[#3B9EE8]">
+                      ₹{order.totalAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  <Link
+                    href={`/orders/${order._id}`}
+                    className="flex items-center justify-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-6 py-2.5 rounded-sm transition-colors text-sm"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View Details
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-8 flex justify-center gap-2">
             <button
-              onClick={() => {
-                setStatusFilter('all');
-                setSearchQuery('');
-              }}
-              className="text-blue-600 hover:text-blue-700 ml-2"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm hover:bg-[#252525] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed font-condensed font-bold uppercase tracking-widest text-sm transition-colors"
             >
-              Clear all
+              Previous
+            </button>
+            <span className="px-4 py-2 bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 text-[#3B9EE8] rounded-sm font-condensed font-bold text-sm">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm hover:bg-[#252525] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed font-condensed font-bold uppercase tracking-widest text-sm transition-colors"
+            >
+              Next
             </button>
           </div>
         )}
       </div>
-
-      {/* Results Count */}
-      <div className="mb-4">
-        <p className="text-gray-600">
-          Showing {filteredOrders.length} of {orders.length} order{orders.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {/* Orders List */}
-      {filteredOrders.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-600">No orders match your filters</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredOrders.map((order) => (
-            <div key={order._id} className="bg-white border rounded-lg p-6 hover:shadow-md transition">
-              <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">{getStatusIcon(order.status)}</span>
-                    <div>
-                      <h3 className="font-semibold text-lg">
-                        Order #{order._id.slice(-8).toUpperCase()}
-                      </h3>
-                      <p className="text-gray-500 text-sm">
-                        {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                  {order.trackingNumber && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      📍 Tracking: <span className="font-mono font-medium">{order.trackingNumber}</span>
-                    </p>
-                  )}
-                </div>
-                <span className={`px-4 py-2 rounded-lg text-sm font-medium border ${getStatusColor(order.status)}`}>
-                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                </span>
-              </div>
-
-              <div className="border-t pt-4 mb-4">
-                <p className="text-sm font-medium text-gray-700 mb-3">
-                  {order.items.length} item{order.items.length !== 1 ? 's' : ''}
-                </p>
-                <div className="space-y-2">
-                  {order.items.slice(0, 3).map((item, index) => {
-                    const product = item.product || item.productId;
-                    return (
-                      <div key={index} className="flex justify-between text-sm">
-                        <span className="text-gray-700">
-                          {product?.name || 'Unknown Product'} × {item.quantity}
-                        </span>
-                        <span className="text-gray-600">₹{(item.price * item.quantity).toFixed(2)}</span>
-                      </div>
-                    );
-                  })}
-                  {order.items.length > 3 && (
-                    <p className="text-sm text-blue-600">
-                      +{order.items.length - 3} more item{order.items.length - 3 !== 1 ? 's' : ''}...
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-t pt-4">
-                <div>
-                  <span className="text-gray-600 text-sm">Total Amount: </span>
-                  <span className="text-2xl font-bold text-blue-600">
-                    ₹{order.totalAmount.toFixed(2)}
-                  </span>
-                </div>
-                <Link
-                  href={`/orders/${order._id}`}
-                  className="flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-medium"
-                >
-                  <Eye className="h-5 w-5" />
-                  View Details
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-8 flex justify-center gap-2">
-          <button
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            className="px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Previous
-          </button>
-          <span className="px-4 py-2 border rounded-lg bg-blue-50 text-blue-600 font-medium">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            className="px-4 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Next
-          </button>
-        </div>
-      )}
     </div>
   );
 }

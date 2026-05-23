@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
@@ -399,20 +399,19 @@ function ProductsPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
-      <div className="bg-linear-to-r from-blue-600 to-blue-800 text-white py-12">
+    <div className="min-h-screen bg-[#080808]">
+      {/* Hero */}
+      <div className="bg-[#0E0E0E] border-b border-[#252525] py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold mb-2">
-            {searchParams.get('isFeatured') === 'true' 
-              ? 'Featured Products' 
-              : searchParams.get('isFastMoving') === 'true'
-                ? 'Fast-Moving Products'
-                : 'Our Products'}
+          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">
+            {searchParams.get('isFeatured') === 'true' ? 'Curated Picks' : searchParams.get('isFastMoving') === 'true' ? 'Top Sellers' : 'Catalogue'}
+          </p>
+          <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide mb-2">
+            {searchParams.get('isFeatured') === 'true' ? 'Featured Products' : searchParams.get('isFastMoving') === 'true' ? 'Fast-Moving Products' : 'Our Products'}
           </h1>
-          <p className="text-blue-100">
-            {searchParams.get('isFeatured') === 'true' 
-              ? 'Explore our fast-moving and most popular automotive accessories'
+          <p className="text-[#C4C4C4] font-body">
+            {searchParams.get('isFeatured') === 'true'
+              ? 'Explore our most popular automotive accessories'
               : 'Explore our premium collection of automotive accessories and performance parts'}
           </p>
         </div>
@@ -421,28 +420,16 @@ function ProductsPageInner() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-        {/* ── Mobile filter drawer backdrop ── */}
+        {/* Mobile filter backdrop */}
         {mobileFiltersOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/40"
-            onClick={() => setMobileFiltersOpen(false)}
-            aria-hidden="true"
-          />
+          <div className="fixed inset-0 z-40 bg-black/70" onClick={() => setMobileFiltersOpen(false)} aria-hidden="true" />
         )}
 
-        {/* ── Mobile filter drawer ── */}
-        <div
-          className={`fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white shadow-xl transform transition-transform duration-300 ease-in-out lg:hidden overflow-y-auto ${
-            mobileFiltersOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900">Filters</h2>
-            <button
-              onClick={() => setMobileFiltersOpen(false)}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-              aria-label="Close filters"
-            >
+        {/* Mobile filter drawer */}
+        <div className={`fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-[#0E0E0E] border-r border-[#252525] shadow-2xl transform transition-transform duration-300 ease-in-out lg:hidden overflow-y-auto ${mobileFiltersOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <div className="flex items-center justify-between p-4 border-b border-[#252525]">
+            <h2 className="text-lg font-condensed font-bold text-white uppercase tracking-widest">Filters</h2>
+            <button onClick={() => setMobileFiltersOpen(false)} className="p-2 rounded-sm text-[#C4C4C4] hover:text-white hover:bg-[#161616] transition-colors" aria-label="Close filters">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -451,44 +438,39 @@ function ProductsPageInner() {
           </div>
         </div>
 
-        {/* ── Toolbar: mobile filter toggle + sort ── */}
+        {/* Toolbar */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          {/* Left: result count */}
-          <p className="text-sm text-gray-600">
-            {loading ? 'Loading…' : data.products.length > 0 ? (
-              showAll
+          <p className="text-sm text-[#555555] font-body">
+            {loading ? 'Loading…' : data.products.length > 0
+              ? showAll
                 ? `Showing all ${data.products.length} product${data.products.length !== 1 ? 's' : ''}`
                 : `Showing ${data.products.length}${getPaginationTotal(data.pagination) ? ` of ${getPaginationTotal(data.pagination)}` : ''} product${data.products.length !== 1 ? 's' : ''}`
-            ) : 'No products found'}
+              : 'No products found'}
           </p>
 
-          {/* Right: controls */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Mobile “Filters” button — only visible below lg */}
             <button
               onClick={() => setMobileFiltersOpen(true)}
-              className="lg:hidden inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50"
+              className="lg:hidden inline-flex items-center gap-2 px-3 py-2 bg-[#161616] border border-[#252525] hover:border-[#3B9EE8] rounded-sm text-sm text-[#C4C4C4] hover:text-white transition-all font-condensed font-bold uppercase tracking-wide"
             >
               <SlidersHorizontal className="h-4 w-4" />
               Filters
             </button>
 
-            {/* Show All toggle */}
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <label className="inline-flex items-center gap-2 text-sm text-[#C4C4C4] cursor-pointer select-none font-body">
               <input
                 type="checkbox"
                 checked={showAll}
                 onChange={handleShowAllToggle}
-                className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-[#252525] bg-[#161616] text-[#3B9EE8] focus:ring-[#3B9EE8]"
               />
-              <span className={showAll ? 'text-blue-600 font-medium' : ''}>
+              <span className={showAll ? 'text-[#3B9EE8] font-condensed font-bold' : ''}>
                 Show all{showAll ? ' (on)' : ''}
               </span>
             </label>
 
-            {/* Sort */}
             <select
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-[#3B9EE8] font-body"
               value={currentSort}
               onChange={handleSortChange}
               disabled={loading}
@@ -502,39 +484,32 @@ function ProductsPageInner() {
           </div>
         </div>
 
-        {/* ── Sidebar + grid ── */}
+        {/* Sidebar + grid */}
         <div className="flex gap-8">
-          {/* Desktop sidebar */}
           <aside className="hidden lg:block w-64 shrink-0">
             <div className="sticky top-24">
               <ProductFilters />
             </div>
           </aside>
 
-          {/* Products area */}
           <div className="flex-1 min-w-0">
-            {/* Error */}
-            {error && !loading && (
-              <ProductFetchError onRetry={handleRetry} error={error} />
-            )}
+            {error && !loading && <ProductFetchError onRetry={handleRetry} error={error} />}
 
-            {/* Loading skeleton */}
             {loading && (
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="bg-white rounded-lg shadow-sm overflow-hidden animate-pulse">
-                    <div className="aspect-square bg-gray-200" />
-                    <div className="p-3">
-                      <div className="h-4 bg-gray-200 rounded mb-2" />
-                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-3" />
-                      <div className="h-8 bg-gray-200 rounded" />
+                  <div key={i} className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-[#161616]" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-4 bg-[#252525] rounded" />
+                      <div className="h-4 bg-[#252525] rounded w-2/3" />
+                      <div className="h-8 bg-[#252525] rounded" />
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Products grid */}
             {!loading && !error && data.products.length > 0 && (
               <>
                 <ProductGrid products={data.products} />
@@ -551,11 +526,10 @@ function ProductsPageInner() {
               </>
             )}
 
-            {/* Empty state */}
             {!loading && !error && data.products.length === 0 && (
               <div className="text-center py-16">
-                <p className="text-gray-500 text-lg mb-4">No products found</p>
-                <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium">
+                <p className="text-[#555555] font-body text-lg mb-4">No products found</p>
+                <Link href="/products" className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors">
                   Clear filters
                 </Link>
               </div>

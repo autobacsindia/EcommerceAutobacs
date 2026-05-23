@@ -27,27 +27,20 @@ export default function RegisterPage() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-
-    if (!formData.name) {
-      errors.name = 'Enter your name';
-    }
-
+    if (!formData.name) errors.name = 'Enter your name';
     if (!formData.email) {
       errors.email = 'Enter your email';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = 'Enter a valid email address';
     }
-
     if (!formData.password) {
       errors.password = 'Enter your password';
     } else if (formData.password.length < 6) {
       errors.password = 'Password must be at least 6 characters';
     }
-
     if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = 'Passwords do not match';
     }
-
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -55,27 +48,15 @@ export default function RegisterPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
     if (validationErrors[name]) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
+      setValidationErrors(prev => { const n = { ...prev }; delete n[name]; return n; });
     }
-    
-    if (error) {
-      clearError();
-    }
+    if (error) clearError();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
     try {
       setIsLoading(true);
       await register(formData.name, formData.email, formData.password);
@@ -91,28 +72,32 @@ export default function RegisterPage() {
   };
 
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
-    const url = `/api/v1/auth/${provider}`;
-    navigateTo(url);
+    navigateTo(`/api/v1/auth/${provider}`);
   };
 
+  const inputClass = (field: string) =>
+    `w-full px-3 py-2 bg-[#161616] text-white border rounded-sm focus:outline-none focus:ring-2 focus:ring-[#3B9EE8]/50 focus:border-[#3B9EE8] transition-colors font-body placeholder:text-[#555555] ${
+      validationErrors[field] ? 'border-red-500' : 'border-[#252525]'
+    }`;
+
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center">
-      {/* Logo Section */}
+    <div className="min-h-screen bg-[#080808] flex flex-col items-center">
+      {/* Logo */}
       <div className="py-8">
-        <BrandLogo className="mx-auto" theme="light" />
+        <BrandLogo className="mx-auto" />
       </div>
 
       {/* Register Card */}
       <div className="w-full max-w-[350px] sm:max-w-[400px]">
-        <div className="border border-gray-300 rounded-lg p-6 sm:p-8">
-          <h1 className="text-3xl font-normal mb-6 text-gray-900">Create account</h1>
+        <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 sm:p-8">
+          <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-6">Create Account</h1>
 
           {(error || (timeUntilRetry !== null && timeUntilRetry > 0)) && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-400 rounded-md flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-red-700">
-                {timeUntilRetry !== null && timeUntilRetry > 0 
-                  ? `Too many attempts. Please try again in ${Math.ceil(timeUntilRetry)}s` 
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-sm flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-400 font-body">
+                {timeUntilRetry !== null && timeUntilRetry > 0
+                  ? `Too many attempts. Please try again in ${Math.ceil(timeUntilRetry)}s`
                   : error}
               </div>
             </div>
@@ -120,7 +105,7 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="name" className="block text-sm font-bold text-gray-900 mb-1">
+              <label htmlFor="name" className="block text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest mb-1">
                 Your name
               </label>
               <input
@@ -130,18 +115,17 @@ export default function RegisterPage() {
                 placeholder="First and last name"
                 value={formData.name}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-600 transition-colors
-                  ${validationErrors.name ? 'border-red-600' : 'border-gray-400'}`}
+                className={inputClass('name')}
               />
               {validationErrors.name && (
-                <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <p className="mt-1 text-xs text-red-400 font-body flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {validationErrors.name}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-bold text-gray-900 mb-1">
+              <label htmlFor="email" className="block text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest mb-1">
                 Email
               </label>
               <input
@@ -150,18 +134,17 @@ export default function RegisterPage() {
                 type="email"
                 value={formData.email}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-600 transition-colors
-                  ${validationErrors.email ? 'border-red-600' : 'border-gray-400'}`}
+                className={inputClass('email')}
               />
               {validationErrors.email && (
-                <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <p className="mt-1 text-xs text-red-400 font-body flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {validationErrors.email}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-bold text-gray-900 mb-1">
+              <label htmlFor="password" className="block text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest mb-1">
                 Password
               </label>
               <input
@@ -171,23 +154,19 @@ export default function RegisterPage() {
                 placeholder="At least 6 characters"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-600 transition-colors
-                  ${validationErrors.password ? 'border-red-600' : 'border-gray-400'}`}
+                className={inputClass('password')}
               />
-              {validationErrors.password && (
-                <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              {validationErrors.password ? (
+                <p className="mt-1 text-xs text-red-400 font-body flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {validationErrors.password}
                 </p>
-              )}
-              {!validationErrors.password && (
-                <p className="mt-1 text-xs text-gray-500">
-                  Passwords must be at least 6 characters.
-                </p>
+              ) : (
+                <p className="mt-1 text-xs text-[#555555] font-body">Passwords must be at least 6 characters.</p>
               )}
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-bold text-gray-900 mb-1">
+              <label htmlFor="confirmPassword" className="block text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest mb-1">
                 Re-enter password
               </label>
               <input
@@ -196,11 +175,10 @@ export default function RegisterPage() {
                 type="password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-600 transition-colors
-                  ${validationErrors.confirmPassword ? 'border-red-600' : 'border-gray-400'}`}
+                className={inputClass('confirmPassword')}
               />
               {validationErrors.confirmPassword && (
-                <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <p className="mt-1 text-xs text-red-400 font-body flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {validationErrors.confirmPassword}
                 </p>
               )}
@@ -209,31 +187,32 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading || (timeUntilRetry !== null && timeUntilRetry > 0)}
-              className="w-full bg-[#FFD814] hover:bg-[#F7CA00] text-black text-sm font-normal py-2 px-4 rounded border border-[#FCD200] shadow-sm active:border-[#F0B800] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-2.5 px-4 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continue'}
             </button>
           </form>
 
-          <div className="mt-6 text-xs text-gray-600">
-            By creating an account, you agree to AutoBacs India's{' '}
-            <Link href="/terms" className="text-blue-700 hover:text-red-700 hover:underline">
+          <div className="mt-6 text-xs text-[#555555] font-body">
+            By creating an account, you agree to AutoBacs India&apos;s{' '}
+            <Link href="/terms" className="text-[#3B9EE8] hover:text-white transition-colors">
               Conditions of Use
             </Link>{' '}
             and{' '}
-            <Link href="/privacy" className="text-blue-700 hover:text-red-700 hover:underline">
+            <Link href="/privacy" className="text-[#3B9EE8] hover:text-white transition-colors">
               Privacy Notice
             </Link>
             .
           </div>
 
+          {/* Social login */}
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200" />
+                <div className="w-full border-t border-[#252525]" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                <span className="px-2 bg-[#0E0E0E] text-[#555555] font-body">Or continue with</span>
               </div>
             </div>
 
@@ -241,7 +220,7 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => handleSocialLogin('google')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#161616] border border-[#252525] rounded-sm hover:border-[#3B9EE8] text-sm font-condensed font-bold text-[#C4C4C4] hover:text-white transition-all"
               >
                 <FcGoogle className="w-5 h-5" />
                 <span>Google</span>
@@ -249,30 +228,30 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => handleSocialLogin('facebook')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#161616] border border-[#252525] rounded-sm hover:border-[#3B9EE8] text-sm font-condensed font-bold text-[#C4C4C4] hover:text-white transition-all"
               >
-                <FaFacebook className="w-5 h-5 text-blue-600" />
+                <FaFacebook className="w-5 h-5 text-blue-500" />
                 <span>Facebook</span>
               </button>
             </div>
           </div>
 
+          {/* Already have an account */}
           <div className="mt-8">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200" />
+                <div className="w-full border-t border-[#252525]" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Already have an account?</span>
+                <span className="px-2 bg-[#0E0E0E] text-[#555555] font-body">Already have an account?</span>
               </div>
             </div>
-
             <div className="mt-4">
               <Link
                 href="/login"
-                className="block w-full bg-white hover:bg-gray-50 text-gray-900 text-sm py-2 px-4 rounded border border-gray-300 shadow-sm transition-colors text-center shadow-inner"
+                className="block w-full bg-[#161616] hover:bg-[#252525] border border-[#252525] hover:border-[#3B9EE8] text-white font-condensed font-bold uppercase tracking-widest text-sm py-2.5 px-4 rounded-sm transition-all text-center"
               >
-                Sign in
+                Sign In
               </Link>
             </div>
           </div>
@@ -280,16 +259,16 @@ export default function RegisterPage() {
       </div>
 
       {/* Footer */}
-      <div className="w-full border-t border-gray-200 mt-auto bg-white/50">
+      <div className="w-full border-t border-[#252525] mt-auto bg-[#0E0E0E]">
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-center space-y-4">
-            <div className="flex space-x-8 text-xs text-blue-700">
-              <Link href="/conditions" className="hover:text-red-700 hover:underline">Conditions of Use</Link>
-              <Link href="/privacy" className="hover:text-red-700 hover:underline">Privacy Notice</Link>
-              <Link href="/help" className="hover:text-red-700 hover:underline">Help</Link>
+            <div className="flex space-x-8 text-xs text-[#3B9EE8]">
+              <Link href="/conditions" className="hover:text-white transition-colors">Conditions of Use</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Notice</Link>
+              <Link href="/help" className="hover:text-white transition-colors">Help</Link>
             </div>
-            <p className="text-xs text-gray-500">
-              Copyright © 2025 AutoBacs India . All rights reserved
+            <p className="text-xs text-[#555555] font-body">
+              Copyright © 2025 AutoBacs India. All rights reserved
             </p>
           </div>
         </div>

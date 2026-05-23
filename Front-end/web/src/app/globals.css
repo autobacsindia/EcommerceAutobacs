@@ -1,11 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #111111;
+  --background: #080808;
+  --foreground: #ffffff;
+
+  /* Brand palette */
+  --brand-void:       #080808;
+  --brand-carbon:     #0E0E0E;
+  --brand-graphite:   #161616;
+  --brand-steel:      #252525;
+  --brand-blue:       #3B9EE8;
+  --brand-blue-deep:  #1A6FB5;
+  --brand-chrome:     #C4C4C4;
+  --brand-gold:       #EF9F27;
+  --brand-white:      #FFFFFF;
 }
 
-/* Light theme (default for product page) */
+/* Product page theme tokens (used by product detail pages) */
 .light {
   --product-bg: #ffffff;
   --product-bg-secondary: #f9fafb;
@@ -15,11 +26,10 @@
   --product-text-muted: #6b7280;
   --product-border: #e5e7eb;
   --product-card-bg: #ffffff;
-  --product-accent: #f97316;
-  --product-accent-hover: #ea580c;
+  --product-accent: #3B9EE8;
+  --product-accent-hover: #1A6FB5;
 }
 
-/* Dark theme (default for product page) */
 .dark {
   --product-bg: #09090b;
   --product-bg-secondary: #18181b;
@@ -29,187 +39,118 @@
   --product-text-muted: #a1a1aa;
   --product-border: #3f3f46;
   --product-card-bg: #27272a;
-  --product-accent: #f97316;
-  --product-accent-hover: #ea580c;
+  --product-accent: #3B9EE8;
+  --product-accent-hover: #1A6FB5;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-dm-sans);
+  --font-condensed: var(--font-barlow-condensed);
+  --font-mono: ui-monospace, monospace;
 }
 
 /*
- * Dark mode intentionally disabled.
- * This is a light-theme e-commerce site. Allowing the OS dark mode preference
- * to flip CSS variables caused white text on white backgrounds on mobile
- * devices with system dark mode enabled.
+ * Global dark theme. Hard-coded values (not prefers-color-scheme) to avoid
+ * the OS dark-mode flip that previously caused white-on-white on mobile.
  */
 
 body {
-  background: #ffffff;
-  color: #111111;
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  -webkit-text-size-adjust: 100%; /* prevent iOS auto font-size inflation */
+  background: #080808;
+  color: #ffffff;
+  font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
+  -webkit-text-size-adjust: 100%;
 }
 
-/* ── Input fields: always readable regardless of browser/OS color scheme ── */
+/* ── Input fields: readable on dark backgrounds ── */
 input,
 textarea,
 select {
-  color: #111111;
-  background-color: #ffffff;
+  color: #ffffff;
+  background-color: #161616;
+  border-color: #252525;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #9ca3af; /* gray-400 — visible but clearly secondary */
-  opacity: 1;    /* Firefox sets opacity < 1 by default */
+  color: #555555;
+  opacity: 1;
 }
 
-/* ── Mobile: reinforce in case UA stylesheets override ── */
+/* ── Mobile reinforcement ── */
 @media (max-width: 768px) {
   body {
-    color: #111111;
-    background-color: #ffffff;
+    color: #ffffff;
+    background-color: #080808;
   }
 
   input,
   textarea,
   select {
-    color: #111111;
-    background-color: #ffffff;
+    color: #ffffff;
+    background-color: #161616;
   }
 }
 
 @keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
 }
 
 .animate-pulse {
   animation: pulse 0.3s ease-in-out;
 }
 
-/* Location change animations */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes fadeOut {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 @keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideUp {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-10px); }
 }
 
 @keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 @keyframes scaleBounce {
-  0% {
-    transform: scale(0);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-  }
+  0%   { transform: scale(0); }
+  50%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
 
-/* Animation classes */
-.animate-fadeIn {
-  animation: fadeIn 250ms ease-in-out;
-}
+.animate-fadeIn    { animation: fadeIn 250ms ease-in-out; }
+.animate-fadeOut   { animation: fadeOut 250ms ease-in-out; }
+.animate-slideDown { animation: slideDown 200ms ease-out; }
+.animate-slideUp   { animation: slideUp 200ms ease-in; }
+.animate-scaleIn   { animation: scaleIn 300ms ease-in-out; }
+.animate-scaleBounce { animation: scaleBounce 400ms cubic-bezier(0.68, -0.55, 0.265, 1.55); }
 
-.animate-fadeOut {
-  animation: fadeOut 250ms ease-in-out;
-}
+.transition-location { transition: all 250ms ease-in-out; }
+.transition-badge    { transition: all 300ms ease-in-out; }
 
-.animate-slideDown {
-  animation: slideDown 200ms ease-out;
-}
-
-.animate-slideUp {
-  animation: slideUp 200ms ease-in;
-}
-
-.animate-scaleIn {
-  animation: scaleIn 300ms ease-in-out;
-}
-
-.animate-scaleBounce {
-  animation: scaleBounce 400ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
-}
-
-/* Transition utilities */
-.transition-location {
-  transition: all 250ms ease-in-out;
-}
-
-.transition-badge {
-  transition: all 300ms ease-in-out;
-}
-
-/* Respect reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  
-  .animate-fadeIn,
-  .animate-fadeOut,
-  .animate-slideDown,
-  .animate-slideUp,
-  .animate-scaleIn,
-  .animate-scaleBounce {
+  .animate-fadeIn, .animate-fadeOut, .animate-slideDown,
+  .animate-slideUp, .animate-scaleIn, .animate-scaleBounce {
     animation: none !important;
   }
 }
@@ -221,37 +162,23 @@ textarea::placeholder {
   overflow: hidden;
 }
 
-/* Brand logos infinite scroll animation */
+/* Brand logos infinite scroll */
 @keyframes scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
-.animate-scroll {
-  animation: scroll 30s linear infinite;
-}
+.animate-scroll { animation: scroll 30s linear infinite; }
+.animate-scroll:hover { animation-play-state: paused; }
 
-.animate-scroll:hover {
-  animation-play-state: paused;
-}
-
-/* Super Cars Page Animations */
+/* Super Cars page animations */
 @keyframes slideUpEnter {
   from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fade-in-slow {
-  animation: fadeIn 1s ease-out forwards;
-}
-
-.animate-slide-up-enter {
-  animation: slideUpEnter 0.8s ease-out forwards;
-}
+.animate-fade-in-slow     { animation: fadeIn 1s ease-out forwards; }
+.animate-slide-up-enter   { animation: slideUpEnter 0.8s ease-out forwards; }
 
 .animation-delay-100 { animation-delay: 100ms; }
 .animation-delay-200 { animation-delay: 200ms; }

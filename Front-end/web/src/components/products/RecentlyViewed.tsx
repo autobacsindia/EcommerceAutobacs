@@ -28,11 +28,7 @@ const RecentlyViewed = () => {
     try {
       const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
       const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        setProducts(JSON.parse(stored));
-      } else {
-        setProducts([]);
-      }
+      setProducts(stored ? JSON.parse(stored) : []);
     } catch (e) {
       console.error('Failed to load recently viewed products', e);
     }
@@ -45,32 +41,34 @@ const RecentlyViewed = () => {
     toast.success('Recently viewed history cleared');
   };
 
-  if (!mounted || products.length === 0) {
-    return null;
-  }
+  if (!mounted || products.length === 0) return null;
 
   return (
-    <div className="bg-white py-8">
+    <div className="bg-[#080808] border-t border-[#252525] py-8">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Recently Viewed</h2>
-          <button 
+          <div>
+            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Your History</p>
+            <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide">Recently Viewed</h2>
+          </div>
+          <button
             onClick={clearHistory}
-            className="text-sm text-red-600 hover:text-red-700 font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+            className="text-sm text-[#C4C4C4] hover:text-red-400 font-body px-3 py-1 rounded-sm hover:bg-[#252525] transition-colors"
           >
             Clear History
           </button>
         </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {products.map((product) => {
             const url = productUrl(product, '/products');
             return (
-            <Link 
-              key={product._id} 
+            <Link
+              key={product._id}
               href={url}
-              className="group block bg-white border border-gray-100 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+              className="group block bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300"
             >
-              <div className="aspect-square relative bg-gray-50">
+              <div className="aspect-square relative bg-[#161616]">
                 <EnhancedImage
                   src={product.image}
                   alt={product.name}
@@ -81,15 +79,15 @@ const RecentlyViewed = () => {
                 />
               </div>
               <div className="p-4">
-                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 min-h-10 mb-2 group-hover:text-blue-600">
+                <h3 className="font-condensed font-bold text-white text-sm uppercase tracking-wide line-clamp-2 min-h-10 mb-2 group-hover:text-[#3B9EE8] transition-colors">
                   {product.name}
                 </h3>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-lg font-condensed font-bold text-[#3B9EE8]">
                     {formatPrice(product.price)}
                   </span>
                   {product.originalPrice && product.originalPrice > product.price && (
-                    <span className="text-xs text-gray-500 line-through">
+                    <span className="text-xs text-[#555555] line-through">
                       {formatPrice(product.originalPrice)}
                     </span>
                   )}

@@ -95,9 +95,9 @@ export default function ProductCard({
   }
 
   return (
-    <div className={cn("bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group", className)}>
+    <div className={cn("bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300 group", className)}>
       {url ? (
-        <Link href={url} className="block relative h-48 bg-gray-200">
+        <Link href={url} className="block relative h-48 bg-[#161616]">
         {product.images && (
           Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
             <ProductImage
@@ -112,8 +112,8 @@ export default function ProductCard({
               className="object-cover w-full h-full"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-100">
-              <span className="text-gray-400">No image available</span>
+            <div className="w-full h-full flex items-center justify-center bg-[#161616]">
+              <span className="text-[#555555] text-sm">No image available</span>
             </div>
           )
         )}
@@ -121,7 +121,7 @@ export default function ProductCard({
         {/* Compare Checkbox */}
         {onToggleCompare && (
             <div className="absolute top-2 left-2" onClick={(e) => e.stopPropagation()}>
-                <label className="flex items-center bg-white rounded-full p-1 shadow-md cursor-pointer">
+                <label className="flex items-center bg-[#252525] rounded-full p-1 shadow-md cursor-pointer">
                 <input
                     type="checkbox"
                     className="sr-only"
@@ -138,7 +138,7 @@ export default function ProductCard({
                     </svg>
                     )}
                 </div>
-                <span className="ml-1 text-xs font-medium text-gray-700 pr-2">Compare</span>
+                <span className="ml-1 text-xs font-medium text-[#C4C4C4] pr-2">Compare</span>
                 </label>
             </div>
         )}
@@ -146,7 +146,7 @@ export default function ProductCard({
         {/* Wishlist Button */}
         <button
           className={cn(
-              "absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors",
+              "absolute top-2 right-2 p-2 bg-[#252525] rounded-full hover:bg-[#3B9EE8]/20 transition-colors",
               animating ? 'animate-pulse' : ''
           )}
           onClick={handleToggleWishlist}
@@ -182,7 +182,7 @@ export default function ProductCard({
         </div>
       </Link>
       ) : (
-        <div className="relative h-48 bg-gray-200">
+        <div className="relative h-48 bg-[#161616]">
           {product.images && (
             Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
               <ProductImage
@@ -197,8 +197,8 @@ export default function ProductCard({
                 className="object-cover w-full h-full"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                <span className="text-gray-400">No image available</span>
+              <div className="w-full h-full flex items-center justify-center bg-[#161616]">
+                <span className="text-[#555555] text-sm">No image available</span>
               </div>
             )
           )}
@@ -207,7 +207,7 @@ export default function ProductCard({
 
       {/* Product Info */}
       <div className="p-4">
-        <p className="text-xs text-gray-500 uppercase mb-1">
+        <p className="text-xs text-[#3B9EE8] uppercase font-condensed font-bold tracking-widest mb-1">
           {product.categories && product.categories.length > 0 ? (
             product.categories[0].name.toUpperCase()
           ) : typeof product.category === 'object' && product.category !== null ? (
@@ -218,12 +218,12 @@ export default function ProductCard({
         {/* Product Name */}
         {url ? (
           <Link href={url}>
-            <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 hover:text-blue-600">
+            <h3 className="font-condensed font-bold text-white mb-2 line-clamp-2 hover:text-[#3B9EE8] text-base uppercase tracking-wide">
               {product.name}
             </h3>
           </Link>
         ) : (
-          <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+          <h3 className="font-condensed font-bold text-white mb-2 line-clamp-2 text-base uppercase tracking-wide">
             {product.name}
           </h3>
         )}
@@ -235,7 +235,7 @@ export default function ProductCard({
               {[1, 2, 3, 4, 5].map((star) => (
                 <svg
                   key={star}
-                  className={cn("h-4 w-4", star <= product.averageRating ? 'text-yellow-400' : 'text-gray-300')}
+                  className={cn("h-4 w-4", star <= product.averageRating ? 'text-[#EF9F27]' : 'text-[#252525]')}
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -243,7 +243,7 @@ export default function ProductCard({
                 </svg>
               ))}
             </div>
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-[#C4C4C4]">
               ({product.averageRating.toFixed(1)})
             </span>
           </div>
@@ -254,15 +254,15 @@ export default function ProductCard({
           <div>
             {product.originalPrice && product.originalPrice > product.price ? (
               <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold text-blue-600">
+                <p className="text-2xl font-condensed font-bold text-[#3B9EE8]">
                   {formatPrice(product.price)}
                 </p>
-                <p className="text-sm text-gray-500 line-through">
+                <p className="text-sm text-[#555555] line-through">
                   {formatPrice(product.originalPrice)}
                 </p>
               </div>
             ) : (
-              <p className="text-2xl font-bold text-blue-600">
+              <p className="text-2xl font-condensed font-bold text-[#3B9EE8]">
                 {formatPrice(product.price)}
               </p>
             )}
@@ -271,7 +271,7 @@ export default function ProductCard({
           <button
             onClick={handleAddToCart}
             disabled={product.stock <= 0}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 bg-[#3B9EE8] text-white px-4 py-2 rounded-sm hover:bg-[#1A6FB5] transition-colors disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed font-condensed font-bold text-sm tracking-wider uppercase"
           >
             <ShoppingCart className="h-4 w-4" />
             <span className="text-sm font-medium">Add</span>

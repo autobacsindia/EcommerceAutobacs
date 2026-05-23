@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, Heart, Star } from 'lucide-react';
+import { ShoppingCart, Heart, Star, ArrowRight } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -10,7 +10,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
-import ViewAllCard from './ViewAllCard';
 import { toast } from 'react-hot-toast';
 import { productUrl } from '@/lib/types';
 import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
@@ -28,7 +27,7 @@ interface Product {
   price: number;
   originalPrice?: number;
   images: ProductImageType[] | string;
-  category: { 
+  category: {
     name: string;
   } | string;
   stock: number;
@@ -55,23 +54,43 @@ export default function FastMovingProducts({
   const { isAuthenticated } = useAuth();
   const router = useRouter();
 
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response: any = await apiClient.get(`/products/featured?limit=${limit}`);
+      const productsData = response.products || [];
+      setProducts(productsData);
+      try {
+        localStorage.setItem(`featured_products_${limit}`, JSON.stringify(productsData));
+        localStorage.setItem(`featured_products_${limit}_timestamp`, Date.now().toString());
+      } catch (e) {
+        console.warn('Failed to cache featured products in localStorage:', e);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch featured products:', err);
+      if (err.status === 429) {
+        console.warn('[FastMovingProducts] Rate limited');
+      } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+        setError('Unable to connect to the server. Please check your internet connection.');
+      } else {
+        setError('Failed to load featured products. Please try again later.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Generate cache key based on limit
     const cacheKey = `featured_products_${limit}`;
-    const cacheTimestampKey = `${cacheKey}_timestamp`;
-    
-    // Try to get from localStorage first (with 5-minute expiry)
     const cachedProducts = localStorage.getItem(cacheKey);
-    const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
-    
+    const cacheTimestamp = localStorage.getItem(`${cacheKey}_timestamp`);
+
     if (cachedProducts && cacheTimestamp) {
       try {
         const parsedProducts = JSON.parse(cachedProducts);
         const age = Date.now() - parseInt(cacheTimestamp);
-        const maxAge = 5 * 60 * 1000; // 5 minutes
-        
-        // Validate cache data structure and check if not expired
-        if (Array.isArray(parsedProducts) && age < maxAge) {
+        if (Array.isArray(parsedProducts) && age < 5 * 60 * 1000) {
           setProducts(parsedProducts);
           setLoading(false);
           return;
@@ -80,49 +99,13 @@ export default function FastMovingProducts({
         console.warn('Failed to parse cached featured products:', e);
       }
     }
-    
-    const fetchFastMovingProducts = async () => {
-      try {
-        setLoading(true);
-        setError(null); // Reset error state
-        
-        // Fetch featured products (actual products marked as featured in the database)
-        // This ensures we show real, curated popular products
-        const response: any = await apiClient.get(`/products/featured?limit=${limit}`);
-        const productsData = response.products || [];
-        setProducts(productsData);
-        
-        // Cache in localStorage with timestamp (5-minute expiry)
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(productsData));
-          localStorage.setItem(cacheTimestampKey, Date.now().toString());
-        } catch (e) {
-          console.warn('Failed to cache featured products in localStorage:', e);
-        }
-      } catch (err: any) {
-        console.error('Failed to fetch fast-moving products:', err);
-        
-        // Silently fail on 429 (rate limit) - don't show error for non-critical widget
-        if (err.status === 429) {
-          console.warn('[FastMovingProducts] Rate limited, using cached data if available');
-          // Don't set error state, just stop loading
-        } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
-          setError('Unable to connect to the server. Please check your internet connection and try again later.');
-        } else {
-          setError('Failed to load fast-moving products. Please try again later.');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    fetchFastMovingProducts();
+    fetchProducts();
   }, [limit]);
 
   const handleAddToCart = async (productId: string, e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // Prevent navigation to product page
-
+    e.stopPropagation();
     try {
       await addToCart(productId, 1);
       toast.success('Added to cart!');
@@ -134,12 +117,10 @@ export default function FastMovingProducts({
 
   const handleToggleWishlist = async (productId: string, e: React.MouseEvent) => {
     e.preventDefault();
-    
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
-
     try {
       if (isInWishlist(productId)) {
         await removeFromWishlist(productId);
@@ -153,7 +134,7 @@ export default function FastMovingProducts({
         try {
           await removeFromWishlist(productId);
           toast.success('Removed from wishlist');
-        } catch (removeError) {
+        } catch {
           toast.error('Failed to update wishlist');
         }
       } else {
@@ -162,67 +143,40 @@ export default function FastMovingProducts({
     }
   };
 
-  // Loading skeleton
   if (loading) {
     return (
-      <section className={`py-16 bg-white ${className}`}>
+      <section className={`py-16 bg-[#0E0E0E] border-y border-[#252525] ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Products</h2>
-            <p className="text-gray-600">Popular products customers love to buy</p>
+            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Curated For You</p>
+            <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Featured Products</h2>
+            <p className="text-[#C4C4C4] font-body">Popular products customers love to buy</p>
           </div>
-          
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {[...Array(limit)].map((_, index) => (
               <ProductCardSkeleton key={index} />
             ))}
-            {/* View All Card Skeleton */}
-            <div className="bg-gray-200 rounded-lg animate-pulse min-h-100"></div>
+            <div className="bg-[#252525] rounded-lg animate-pulse min-h-100" />
           </div>
         </div>
       </section>
     );
   }
 
-  // Show error message if there's an error, but still render the section
   if (error) {
     return (
-      <section className={`py-16 bg-white ${className}`}>
+      <section className={`py-16 bg-[#0E0E0E] border-y border-[#252525] ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Products</h2>
-            <p className="text-gray-600">Popular products customers love to buy</p>
+            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Curated For You</p>
+            <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Featured Products</h2>
+            <p className="text-[#C4C4C4] font-body">Popular products customers love to buy</p>
           </div>
-          
           <div className="text-center py-12">
-            <div className="text-red-500 text-lg font-medium mb-4">{error}</div>
-            <button 
-              onClick={() => {
-                setError(null);
-                // Retry the fetch
-                const fetchFastMovingProducts = async () => {
-                  try {
-                    setLoading(true);
-                    const response: any = await apiClient.get(`/products/featured?limit=${limit}`);
-                    setProducts(response.products || []);
-                  } catch (err: any) {
-                    console.error('Failed to fetch fast-moving products:', err);
-                    
-                    if (err.status === 429) {
-                      setError('Too many requests. Please try again in a moment.');
-                    } else if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
-                      setError('Unable to connect to the server. Please check your internet connection and try again later.');
-                    } else {
-                      setError('Failed to load fast-moving products. Please try again later.');
-                    }
-                  } finally {
-                    setLoading(false);
-                  }
-                };
-                
-                fetchFastMovingProducts();
-              }}
-              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            <div className="text-red-400 font-body mb-4">{error}</div>
+            <button
+              onClick={() => fetchProducts()}
+              className="px-6 py-3 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white rounded-sm font-condensed font-bold uppercase tracking-widest transition-colors"
             >
               Retry
             </button>
@@ -231,37 +185,28 @@ export default function FastMovingProducts({
       </section>
     );
   }
-  
-  // Don't show section if no products
-  if (products.length === 0) {
-    return null;
-  }
+
+  if (products.length === 0) return null;
 
   return (
-    <section className={`py-16 bg-white ${className}`}>
+    <section className={`py-16 bg-[#0E0E0E] border-y border-[#252525] ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Featured Products</h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Popular products customers love to buy
-          </p>
+          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Curated For You</p>
+          <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Featured Products</h2>
+          <p className="text-[#C4C4C4] font-body max-w-2xl mx-auto">Popular products customers love to buy</p>
         </div>
-        
+
         {/* Products Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-          {/* Product Cards */}
           {products.map((product) => {
             const url = productUrl(product, '/products');
             return (
-            <Link
-              key={product._id}
-              href={url}
-              className="group"
-            >
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300">
+            <Link key={product._id} href={url} className="group">
+              <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300 h-full flex flex-col">
                 {/* Product Image */}
-                <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                <div className="relative aspect-square bg-[#161616] overflow-hidden">
                   {product.images && (
                     Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
                       <ProductImage
@@ -276,21 +221,21 @@ export default function FastMovingProducts({
                         className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                        <span className="text-gray-400 text-xs">No image</span>
+                      <div className="w-full h-full flex items-center justify-center bg-[#161616]">
+                        <span className="text-[#555555] text-xs">No image</span>
                       </div>
                     )
                   )}
-                  
+
                   {/* Wishlist Button */}
                   <button
-                    className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+                    className="absolute top-2 right-2 p-1.5 bg-[#252525] rounded-full shadow-md hover:bg-[#3B9EE8]/20 transition-colors opacity-0 group-hover:opacity-100"
                     onClick={(e) => handleToggleWishlist(product._id, e)}
                   >
                     <Heart className={`h-4 w-4 transition-colors duration-200 ${
-                      isInWishlist(product._id) 
-                        ? 'text-red-500 fill-current' 
-                        : 'text-gray-600'
+                      isInWishlist(product._id)
+                        ? 'text-red-500 fill-current'
+                        : 'text-[#C4C4C4]'
                     }`} />
                   </button>
 
@@ -300,17 +245,17 @@ export default function FastMovingProducts({
                       Out of Stock
                     </div>
                   )}
-                  {product.originalPrice && product.originalPrice > product.price && (
-                    <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+                  {product.stock > 0 && product.originalPrice && product.originalPrice > product.price && (
+                    <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
                       Sale
                     </div>
                   )}
                 </div>
 
                 {/* Product Info */}
-                <div className="p-4">
+                <div className="p-4 flex flex-col flex-1">
                   {/* Product Name */}
-                  <h3 className="font-semibold text-sm text-gray-900 mb-2 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                  <h3 className="font-condensed font-bold text-white text-sm mb-2 line-clamp-2 group-hover:text-[#3B9EE8] transition-colors uppercase tracking-wide">
                     {product.name}
                   </h3>
 
@@ -322,32 +267,32 @@ export default function FastMovingProducts({
                           <Star
                             key={i}
                             className={`h-3 w-3 ${
-                              i < Math.floor(product.averageRating) 
-                                ? 'text-yellow-400 fill-current' 
-                                : 'text-gray-300'
+                              i < Math.floor(product.averageRating)
+                                ? 'text-[#EF9F27] fill-current'
+                                : 'text-[#252525]'
                             }`}
                           />
                         ))}
                       </div>
-                      <span className="text-xs text-gray-600">
+                      <span className="text-xs text-[#C4C4C4]">
                         ({product.averageRating.toFixed(1)})
                       </span>
                     </div>
                   )}
 
                   {/* Price */}
-                  <div className="mb-3">
+                  <div className="mb-3 mt-auto">
                     {product.originalPrice && product.originalPrice > product.price ? (
                       <div className="flex flex-col">
-                        <p className="text-lg font-bold text-blue-600">
+                        <p className="text-lg font-condensed font-bold text-[#3B9EE8]">
                           {formatPrice(product.price)}
                         </p>
-                        <p className="text-xs text-gray-500 line-through">
+                        <p className="text-xs text-[#555555] line-through">
                           {formatPrice(product.originalPrice)}
                         </p>
                       </div>
                     ) : (
-                      <p className="text-lg font-bold text-blue-600">
+                      <p className="text-lg font-condensed font-bold text-[#3B9EE8]">
                         {formatPrice(product.price)}
                       </p>
                     )}
@@ -357,7 +302,7 @@ export default function FastMovingProducts({
                   <button
                     onClick={(e) => handleAddToCart(product._id, e)}
                     disabled={product.stock <= 0}
-                    className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+                    className="w-full flex items-center justify-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white px-4 py-2 rounded-sm transition-colors disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed font-condensed font-bold text-sm uppercase tracking-wider"
                   >
                     <ShoppingCart className="h-4 w-4" />
                     <span>{product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'}</span>
@@ -369,12 +314,22 @@ export default function FastMovingProducts({
           })}
 
           {/* View All Card */}
-          <ViewAllCard
+          <Link
             href="/products?isFeatured=true"
-            title="View All"
-            subtitle="Featured Products"
-            gradient="from-orange-500 to-red-600"
-          />
+            className="group block"
+          >
+            <div className="bg-[#3B9EE8] hover:bg-[#1A6FB5] rounded-lg overflow-hidden transition-all duration-300 h-full flex flex-col items-center justify-center p-6 min-h-100">
+              <div className="text-white text-center">
+                <div className="mb-4 flex items-center justify-center">
+                  <div className="bg-white/20 rounded-full p-4 group-hover:bg-white/30 group-hover:scale-110 transition-all duration-300">
+                    <ArrowRight className="h-12 w-12 text-white group-hover:translate-x-1 transition-transform duration-300" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-condensed font-bold uppercase tracking-wide mb-2">View All</h3>
+                <p className="text-sm text-white/90 font-body">Featured Products</p>
+              </div>
+            </div>
+          </Link>
         </div>
       </div>
     </section>

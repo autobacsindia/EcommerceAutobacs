@@ -36,18 +36,15 @@ interface ExtendedProduct extends Omit<WordPressProduct, 'images' | 'slug'> {
 }
 
 export default function ClientPage({ slug }: { slug: string }) {
-  // Navigation hooks
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  // Context hooks
+
   const { addToCart } = useCart();
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
   const { handleError } = useErrorHandler();
-  
-  // State hooks - MUST be called before any conditional returns
+
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
   const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,15 +55,13 @@ export default function ClientPage({ slug }: { slug: string }) {
   const [relatedVehicles, setRelatedVehicles] = useState<any[]>([]);
   const [totalProductsFromAPI, setTotalProductsFromAPI] = useState<number>(0);
   const [currentSort, setCurrentSort] = useState<string>('date');
-  
+
   const vehicleName = slug ? decodeURIComponent(slug) : '';
-  
-  const itemsPerPage = 12; // Number of products per page
-  
-  // Get current page from URL parameters
+
+  const itemsPerPage = 12;
+
   const currentPage = parseInt(searchParams.get('page') || '1') || 1;
 
-  // Helper function to map sort values to API format
   const mapSortBy = (sortValue: string): string => {
     const sortMap: Record<string, string> = {
       'date': 'createdAt',
@@ -84,22 +79,18 @@ export default function ClientPage({ slug }: { slug: string }) {
     return 'desc';
   };
 
-  // Fetch products, categories, and vehicle data when vehicleSlug, selectedCategory, currentSort, or currentPage changes
   useEffect(() => {
-    // Validate slug exists, redirect if not
     if (!slug) {
       router.push('/vehicles');
       return;
     }
-    
+
     const fetchData = async () => {
       setLoading(true);
       setError(null);
-        
+
       try {
-        // Fetch categories, products, and vehicle data in parallel for better performance
-        // Using local API instead of WordPress for better performance and control
-        const timeoutDuration = 45000; // Increased timeout to 45s to allow for backend retries
+        const timeoutDuration = 45000;
         const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
           wordpressService.getProductCategories({ timeout: timeoutDuration }),
           vehicleService.getVehicleProducts(slug, {
@@ -110,7 +101,6 @@ export default function ClientPage({ slug }: { slug: string }) {
             order: getSortOrder(currentSort)
           }, { timeout: timeoutDuration }).catch((err: any) => {
             console.warn('Local API failed, falling back to WordPress:', err);
-            // Fallback to WordPress if local API fails
             return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage, { timeout: timeoutDuration });
           }),
           apiClient.get(`/vehicles/slug/${slug}`, { timeout: timeoutDuration }).catch(err => {
@@ -118,29 +108,26 @@ export default function ClientPage({ slug }: { slug: string }) {
             return { success: false };
           })
         ]);
-        
+
         const vehicleResponse: any = vehicleResponseRaw;
-        
-        // Set categories
+
         setCategories(categoriesData);
-        
-        // Set products - handle both local API and WordPress fallback responses
+
         let productsData = productsResponse.products || [];
-        const totalProductsFromAPI = productsResponse.pagination?.total || productsResponse.total || 0;
+        const totalFromAPI = productsResponse.pagination?.total || productsResponse.total || 0;
         setProducts(productsData);
-        setTotalProductsFromAPI(totalProductsFromAPI);
-        
-        // Set vehicle data and fetch related vehicles if available
+        setTotalProductsFromAPI(totalFromAPI);
+
         if (vehicleResponse.success && vehicleResponse.vehicle) {
           setVehicle(vehicleResponse.vehicle);
-          
+
           if (vehicleResponse.vehicle.make) {
             try {
               const relatedResponse: any = await apiClient.get(`/vehicles/models/${vehicleResponse.vehicle.make}`);
               if (relatedResponse.success && relatedResponse.models) {
                 const relatedVehiclePromises = relatedResponse.models
                   .filter((model: string) => model.toLowerCase() !== vehicleResponse.vehicle.model.toLowerCase())
-                  .map((model: string) => 
+                  .map((model: string) =>
                     apiClient.get(`/vehicles/make-model/${vehicleResponse.vehicle.make}/${model}`)
                       .then((res: any) => res.success && res.vehicle ? res.vehicle : null)
                       .catch(() => null)
@@ -179,22 +166,20 @@ export default function ClientPage({ slug }: { slug: string }) {
             }
           }
         }
-          
-        // Show a warning if no data is found and WordPress API might not be configured
+
         if (categoriesData.length === 0 && productsData.length === 0) {
-          const isWordPressConfigured = process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL && 
-            process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY && 
+          const isWordPressConfigured =
+            process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL &&
+            process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY &&
             process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET;
-            
+
           if (!isWordPressConfigured) {
             console.warn('WordPress API not configured. Please check your environment variables.');
             setError('WordPress API not configured. Please check your environment variables.');
           }
         }
       } catch (err: any) {
-        // Use global error handler for toast and logging
         const message = handleError(err, 'Failed to load products for this vehicle');
-        // Still set local error state for UI fallback
         setError(message);
       } finally {
         setLoading(false);
@@ -206,8 +191,6 @@ export default function ClientPage({ slug }: { slug: string }) {
 
   const handleAddToCart = async (product: ExtendedProduct) => {
     try {
-      // For WordPress products, we would typically add to cart via WooCommerce API
-      // For now, we'll just show a toast
       toast.success(`${product.name} added to cart`);
     } catch (error) {
       handleError(error, 'Failed to add to cart');
@@ -216,25 +199,21 @@ export default function ClientPage({ slug }: { slug: string }) {
 
   const handleToggleWishlist = async (product: ExtendedProduct, e: React.MouseEvent) => {
     e.preventDefault();
-    
+
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
 
     const productId = (product._id || product.id)?.toString();
-    if (!productId) {
-      console.error('Product has no valid ID');
-      return;
-    }
+    if (!productId) return;
 
-    // Trigger animation
     const productKey = product._id || product.id;
     const animationKey = productKey?.toString() || String(productKey || '');
     if (animationKey) {
       setAnimatingItems(prev => ({ ...prev, [animationKey]: true }));
     }
-    
+
     try {
       if (isInWishlist(productId)) {
         await removeFromWishlist(productId);
@@ -246,7 +225,6 @@ export default function ClientPage({ slug }: { slug: string }) {
     } catch (error: any) {
       handleError(error, 'Failed to update wishlist');
     } finally {
-      // Remove animation after delay
       setTimeout(() => {
         const productKey = product._id || product.id;
         const animationKey = productKey?.toString() || String(productKey || '');
@@ -262,70 +240,72 @@ export default function ClientPage({ slug }: { slug: string }) {
   };
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const sortValue = e.target.value;
-    setCurrentSort(sortValue);
-    
-    // For path-based pagination, we'll just update the state
-    // In a full implementation, you might want to update the URL with sort parameters
+    setCurrentSort(e.target.value);
   };
 
   const handleCategoryChange = (categorySlug: string) => {
     setSelectedCategory(categorySlug);
   };
 
-  // Filter products based on selected category
-  const filteredProducts = selectedCategory 
-    ? products.filter(product => 
-        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === selectedCategory)
+  const filteredProducts = selectedCategory
+    ? products.filter(product =>
+        product.categories && Array.isArray(product.categories) &&
+        product.categories.some(cat => cat && cat.slug === selectedCategory)
       )
     : products;
-  
-  // Calculate pagination based on API total, not filtered products
+
   const safeTotal = totalProductsFromAPI || 0;
   const totalPages = Math.max(0, Math.ceil(safeTotal / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = Math.min(startIndex + itemsPerPage, safeTotal);
-  
-  // Use the products from API which are already paginated
-  const paginatedProducts = filteredProducts;
-  
 
+  const paginatedProducts = filteredProducts;
+
+  const formatVehicleName = (raw: string) =>
+    raw.replace(/-/g, ' ').split(' ').filter(Boolean)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+  const displayName = vehicleName ? formatVehicleName(vehicleName) : 'Vehicle';
+
+  const paginationBtnBase = 'px-4 py-2 rounded-sm border font-condensed font-bold text-sm uppercase tracking-widest transition-colors';
+  const paginationBtnActive = `${paginationBtnBase} bg-[#3B9EE8] text-white border-[#3B9EE8]`;
+  const paginationBtnEnabled = `${paginationBtnBase} bg-[#161616] text-[#C4C4C4] border-[#252525] hover:border-[#3B9EE8] hover:text-white`;
+  const paginationBtnDisabled = `${paginationBtnBase} bg-[#161616] text-[#555555] border-[#252525] cursor-not-allowed`;
 
   return (
-    <div className="min-h-screen bg-white">
-      
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
+    <div className="min-h-screen bg-[#080808]">
+
+      {/* Hero */}
+      <div className="bg-[#0E0E0E] border-b border-[#252525] py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-5xl font-bold mb-6">{vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
-              .filter(word => word)
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'} Parts & Accessories</h1>
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Find the perfect parts and accessories for your {vehicleName ? vehicleName.replace(/-/g, ' ')
-              .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
+          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Vehicles</p>
+          <h1 className="text-5xl font-condensed font-bold text-white uppercase tracking-wide mb-4">
+            {displayName} Parts & Accessories
+          </h1>
+          <p className="text-[#C4C4C4] font-body max-w-3xl mx-auto">
+            Find the perfect parts and accessories for your {displayName}
           </p>
-          
-          {/* Vehicle Details */}
+
           {vehicle && (
-            <div className="mt-6 flex flex-wrap justify-center gap-4 text-sm text-gray-200">
-              <div className="flex items-center">
-                <span className="font-medium">Make:</span>
-                <span className="ml-2">{vehicle.make}</span>
+            <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-[#C4C4C4] font-body">
+              <div className="flex items-center gap-2">
+                <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Make</span>
+                <span>{vehicle.make}</span>
               </div>
-              <div className="flex items-center">
-                <span className="font-medium">Model:</span>
-                <span className="ml-2">{vehicle.model}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Model</span>
+                <span>{vehicle.model}</span>
               </div>
               {vehicle.year && (
-                <div className="flex items-center">
-                  <span className="font-medium">Year:</span>
-                  <span className="ml-2">{vehicle.year}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Year</span>
+                  <span>{vehicle.year}</span>
                 </div>
               )}
               {vehicle.variant && (
-                <div className="flex items-center">
-                  <span className="font-medium">Variant:</span>
-                  <span className="ml-2">{vehicle.variant}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Variant</span>
+                  <span>{vehicle.variant}</span>
                 </div>
               )}
             </div>
@@ -334,72 +314,66 @@ export default function ClientPage({ slug }: { slug: string }) {
       </div>
 
       {/* Breadcrumb */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <nav className="text-sm text-gray-600">
-          <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
-          <span className="mx-2">/</span>
-          <Link href="/vehicles" className="hover:text-blue-600 transition-colors">Vehicles</Link>
-          <span className="mx-2">/</span>
-          <span className="text-gray-900 font-medium">{vehicleName ? vehicleName.replace(/-/g, ' ')
-            .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'}</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <nav className="text-sm font-body">
+          <Link href="/" className="text-[#555555] hover:text-[#3B9EE8] transition-colors">Home</Link>
+          <span className="mx-2 text-[#252525]">/</span>
+          <Link href="/vehicles" className="text-[#555555] hover:text-[#3B9EE8] transition-colors">Vehicles</Link>
+          <span className="mx-2 text-[#252525]">/</span>
+          <span className="text-[#C4C4C4]">{displayName}</span>
         </nav>
       </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
-          {/* Vehicle and Category Filters Sidebar */}
+
+          {/* Sidebar */}
           <aside className="hidden lg:block">
-            <div className="space-y-6">
-              {/* Category Filters */}
-              <div className="bg-white rounded-xl shadow-md p-6 sticky top-24 border border-gray-100">
-                <h2 className="text-lg font-bold mb-5 flex items-center text-gray-900">
-                  <Filter className="h-5 w-5 mr-2" />
-                  Category Filters
-                </h2>
-                
-                <div className="mb-6">
-                  <h3 className="font-semibold text-gray-800 mb-4 text-base">Categories</h3>
-                  <ul className="space-y-2">
-                    <li>
+            <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 sticky top-24">
+              <h2 className="font-condensed font-bold text-white uppercase tracking-wide mb-5 flex items-center gap-2">
+                <Filter className="h-4 w-4 text-[#3B9EE8] shrink-0" />
+                Category Filters
+              </h2>
+
+              <p className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-3">Categories</p>
+              <ul className="space-y-1">
+                <li>
+                  <button
+                    onClick={() => handleCategoryChange('')}
+                    className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${
+                      selectedCategory === ''
+                        ? 'bg-[#3B9EE8]/10 text-[#3B9EE8] font-condensed font-bold border border-[#3B9EE8]/30'
+                        : 'text-[#C4C4C4] font-body hover:bg-[#161616]'
+                    }`}
+                  >
+                    All Categories
+                  </button>
+                </li>
+                {categories.filter(cat => cat && cat.id).map((category) => {
+                  const categoryProductCount = products.filter(product =>
+                    product.categories && Array.isArray(product.categories) &&
+                    product.categories.some(cat => cat && cat.slug === category.slug)
+                  ).length;
+
+                  if (categoryProductCount === 0) return null;
+
+                  return (
+                    <li key={category.id}>
                       <button
-                        onClick={() => handleCategoryChange('')}
-                        className={`text-left w-full px-4 py-2.5 rounded-lg text-sm transition-colors ${
-                          selectedCategory === '' 
-                            ? 'bg-blue-50 text-blue-700 font-medium border border-blue-200' 
-                            : 'text-gray-700 hover:bg-gray-50'
+                        onClick={() => handleCategoryChange(category.slug)}
+                        className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${
+                          selectedCategory === category.slug
+                            ? 'bg-[#3B9EE8]/10 text-[#3B9EE8] font-condensed font-bold border border-[#3B9EE8]/30'
+                            : 'text-[#C4C4C4] font-body hover:bg-[#161616]'
                         }`}
                       >
-                        All Categories
+                        {category.name} ({categoryProductCount})
                       </button>
                     </li>
-                    {categories.filter(cat => cat && cat.id).map((category) => {
-                      // Calculate count of products in this category
-                      const categoryProductCount = products.filter(product => 
-                        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === category.slug)
-                      ).length;
-                      
-                      // Only show categories that have products
-                      if (categoryProductCount === 0) return null;
-                      
-                      return (
-                        <li key={category.id}>
-                          <button
-                            onClick={() => handleCategoryChange(category.slug)}
-                            className={`text-left w-full px-4 py-2.5 rounded-lg text-sm transition-colors ${
-                              selectedCategory === category.slug
-                                ? 'bg-blue-50 text-blue-700 font-medium border border-blue-200'
-                                : 'text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            {category.name} ({categoryProductCount})
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              </div>
+                  );
+                })}
+              </ul>
             </div>
           </aside>
 
@@ -407,37 +381,35 @@ export default function ClientPage({ slug }: { slug: string }) {
           <div className="lg:col-span-3">
             {/* Results Header */}
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-gray-600 text-lg">
+              <p className="text-[#C4C4C4] font-body">
                 {loading ? (
                   'Loading products...'
                 ) : filteredProducts.length > 0 ? (
                   <>
-                    Showing {(startIndex + 1)}-{Math.min(endIndex, safeTotal)} of {safeTotal} product{filteredProducts.length !== 1 ? 's' : ''}
+                    Showing {startIndex + 1}–{Math.min(endIndex, safeTotal)} of {safeTotal} product{filteredProducts.length !== 1 ? 's' : ''}
                     {selectedCategory && ` in ${categories.find(c => c.slug === selectedCategory)?.name || selectedCategory}`}
-                    {' '}for {vehicleName ? vehicleName.replace(/-/g, ' ')
-                      .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
+                    {' '}for {displayName}
                   </>
                 ) : (
                   'No products found'
                 )}
               </p>
 
-              {/* Controls */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 {/* Mobile Filter Button */}
-                <button className="lg:hidden flex items-center gap-2 text-sm text-gray-700 bg-white px-4 py-2 rounded-md shadow-sm border border-gray-200 hover:border-gray-300 transition-colors">
+                <button className="lg:hidden flex items-center gap-2 text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest bg-[#161616] px-4 py-2 rounded-sm border border-[#252525] hover:border-[#3B9EE8] transition-colors">
                   <Filter className="h-4 w-4" />
                   Filters
                 </button>
-                
+
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-gray-700 font-medium">
-                    Sort by:
+                  <label htmlFor="sort" className="text-sm text-[#555555] font-body">
+                    Sort:
                   </label>
                   <select
                     id="sort"
-                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-[#3B9EE8] font-body transition-colors"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
@@ -452,189 +424,173 @@ export default function ClientPage({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {/* Loading state */}
+            {/* Loading */}
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-gray-100 rounded-xl overflow-hidden shadow-sm animate-pulse border border-gray-200">
-                    <div className="h-48 bg-gray-200"></div>
-                    <div className="p-5">
-                      <div className="h-5 bg-gray-200 rounded mb-3"></div>
-                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-4"></div>
-                      <div className="h-6 bg-gray-200 rounded w-1/2 mb-5"></div>
-                      <div className="flex justify-between gap-3">
-                        <div className="h-10 bg-gray-200 rounded w-full"></div>
-                        <div className="h-10 bg-gray-200 rounded w-12"></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden animate-pulse">
+                    <div className="h-48 bg-[#161616]" />
+                    <div className="p-5 space-y-3">
+                      <div className="h-4 bg-[#252525] rounded-sm" />
+                      <div className="h-4 bg-[#252525] rounded-sm w-2/3" />
+                      <div className="h-5 bg-[#252525] rounded-sm w-1/2" />
+                      <div className="flex gap-3 pt-2">
+                        <div className="h-9 bg-[#252525] rounded-sm flex-1" />
+                        <div className="h-9 w-10 bg-[#252525] rounded-sm" />
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : error ? (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center max-w-2xl mx-auto">
-                <h3 className="text-xl font-medium text-red-800 mb-3">Error Loading Products</h3>
-                <p className="text-red-600 mb-5">{error}</p>
+              <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 text-center max-w-2xl mx-auto">
+                <h3 className="text-lg font-condensed font-bold text-red-400 uppercase tracking-wide mb-3">Error Loading Products</h3>
+                <p className="text-[#C4C4C4] font-body mb-5">{error}</p>
                 <button
                   onClick={() => window.location.reload()}
-                  className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors"
+                  className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
                 >
                   Retry
                 </button>
               </div>
             ) : paginatedProducts.length > 0 ? (
               <div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {paginatedProducts.filter(p => p && (p._id || p.id)).map((product) => {
-                    // Safe value calculation to prevent "0" rendering issues
                     const averageRatingValue = product.averageRating || (product.average_rating ? parseFloat(product.average_rating) : 0);
-                    
-                    const priceValue = typeof product.price === 'number' 
-                      ? product.price 
+
+                    const priceValue = typeof product.price === 'number'
+                      ? product.price
                       : parseFloat(product.price ?? '0');
-                    
+
                     const hasValidPrice = !Number.isNaN(priceValue) && priceValue > 0;
 
                     const originalPriceSource = product.regular_price || (product.originalPrice != null ? product.originalPrice.toString() : '');
                     const originalPriceNumber = originalPriceSource ? parseFloat(originalPriceSource) : NaN;
-                    
+
                     const hasOriginalPrice = hasValidPrice && !Number.isNaN(originalPriceNumber) && originalPriceNumber > priceValue;
 
                     return (
-                    <div
-                      key={product._id || product.id || `product-${product.sku}`}
-                      className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
-                    >
-                      {/* Product Image */}
-                      <Link href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined }, '/products') || '/products'} className="block relative h-52 bg-gray-100">
-                        {(Array.isArray(product.images) && product.images.length > 0) ? (
-                          <ProductImage
-                            src={typeof product.images[0] === 'object' ? product.images[0].src || product.images[0].url : product.images[0]}
-                            alt={(typeof product.images[0] === 'object' ? product.images[0].alt : null) || product.name}
-                            className="object-cover w-full h-full"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                            <span className="text-gray-400">No image available</span>
-                          </div>
-                        )}
-                        
-                        {/* Wishlist Button */}
-                        <button
-                          className={`absolute top-3 right-3 p-2 bg-white rounded-full shadow-md hover:bg-gray-50 transition-all duration-200 ${
-                            animatingItems[String((product._id || product.id) || '')] ? 'animate-pulse' : ''
-                          }`}
-                          onClick={(e) => handleToggleWishlist(product, e)}
+                      <div
+                        key={product._id || product.id || `product-${product.sku}`}
+                        className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden hover:border-[#3B9EE8] transition-colors group"
+                      >
+                        {/* Product Image */}
+                        <Link
+                          href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined }, '/products') || '/products'}
+                          className="relative block h-52 bg-[#161616]"
                         >
-                          <Heart className={`h-5 w-5 transition-colors duration-200 ${
-                            isInWishlist((product._id || product.id)?.toString() || '') 
-                              ? 'text-red-500 fill-current' 
-                              : 'text-gray-500'
-                          }`} />
-                        </button>
-
-                        {/* Badges */}
-                        <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
-                          {(product.stock_status === 'outofstock' || (product.stock !== undefined && product.stock <= 0)) && (
-                            <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
-                              Out of Stock
+                          {Array.isArray(product.images) && product.images.length > 0 ? (
+                            <ProductImage
+                              src={typeof product.images[0] === 'object' ? product.images[0].src || product.images[0].url : product.images[0]}
+                              alt={(typeof product.images[0] === 'object' ? product.images[0].alt : null) || product.name}
+                              className="object-cover w-full h-full"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <span className="text-[#555555] font-body text-xs">No image available</span>
                             </div>
                           )}
-                          {(product.featured || product.isFeatured) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
-                            <div className="bg-blue-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
-                              Popular
-                            </div>
-                          )}
-                          {(product.on_sale || (product.originalPrice && product.originalPrice > 0)) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
-                            <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
-                              Sale
-                            </div>
-                          )}
-                          {/* Vehicle Compatibility Badge */}
-                          <div className="bg-green-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
-                            Fits {vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
-                              .filter(word => word)
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'}
-                          </div>
-                        </div>
-                      </Link>
 
-                      {/* Product Info */}
-                      <div className="p-5">
-                        {/* Categories */}
-                        <p className="text-xs text-gray-500 uppercase mb-2">
-                          {Array.isArray(product.categories) && product.categories.length > 0
-                            ? product.categories.filter(cat => cat).map(cat => typeof cat === 'object' ? cat.name : cat).filter(Boolean).join(', ')
-                            : 'Uncategorized'}
-                        </p>
+                          {/* Wishlist Button */}
+                          <button
+                            className={`absolute top-3 right-3 p-2 bg-[#161616] border border-[#252525] rounded-full hover:border-[#3B9EE8] transition-all duration-200 ${
+                              animatingItems[String((product._id || product.id) || '')] ? 'animate-pulse' : ''
+                            }`}
+                            onClick={(e) => handleToggleWishlist(product, e)}
+                          >
+                            <Heart className={`h-4 w-4 transition-colors duration-200 ${
+                              isInWishlist((product._id || product.id)?.toString() || '')
+                                ? 'text-red-500 fill-current'
+                                : 'text-[#555555]'
+                            }`} />
+                          </button>
 
-                        {/* Product Name */}
-                        <Link href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined }, '/products') || '/products'}>
-                          <h3 className="font-bold text-gray-900 mb-3 line-clamp-2 hover:text-blue-600 transition-colors">
-                            {product.name}
-                          </h3>
-                        </Link>
-
-                        {/* Rating */}
-                        {averageRatingValue > 0 && (
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="flex">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <svg
-                                  key={star}
-                                  className={`h-4 w-4 ${
-                                    star <= averageRatingValue
-                                      ? 'text-yellow-400' 
-                                      : 'text-gray-300'
-                                  }`}
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                              ))}
-                            </div>
-                            <span className="text-sm text-gray-600">
-                              ({averageRatingValue.toFixed(1)})
+                          {/* Badges */}
+                          <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
+                            {(product.stock_status === 'outofstock' || (product.stock !== undefined && product.stock <= 0)) && (
+                              <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                                Out of Stock
+                              </span>
+                            )}
+                            {(product.featured || product.isFeatured) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
+                              <span className="bg-[#3B9EE8]/20 border border-[#3B9EE8]/40 text-[#3B9EE8] px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                                Popular
+                              </span>
+                            )}
+                            {(product.on_sale || (product.originalPrice && product.originalPrice > 0)) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
+                              <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                                Sale
+                              </span>
+                            )}
+                            <span className="bg-green-500/20 border border-green-500/40 text-green-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                              Fits {displayName}
                             </span>
                           </div>
-                        )}
+                        </Link>
 
-                        {hasValidPrice && (
-                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                            <div>
-                              {hasOriginalPrice ? (
-                                <div className="flex items-baseline gap-2">
-                                  <p className="text-xl font-bold text-blue-600">
-                                    {formatPrice(priceValue)}
-                                  </p>
-                                  <p className="text-sm text-gray-500 line-through">
-                                    {formatPrice(originalPriceNumber)}
-                                  </p>
-                                </div>
-                              ) : (
-                                <p className="text-xl font-bold text-blue-600">
-                                  {formatPrice(priceValue)}
-                                </p>
-                              )}
+                        {/* Product Info */}
+                        <div className="p-4">
+                          <p className="text-xs text-[#555555] font-body uppercase tracking-wide mb-1.5">
+                            {Array.isArray(product.categories) && product.categories.length > 0
+                              ? product.categories.filter(cat => cat).map(cat => typeof cat === 'object' ? cat.name : cat).filter(Boolean).join(', ')
+                              : 'Uncategorized'}
+                          </p>
+
+                          <Link href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined }, '/products') || '/products'}>
+                            <h3 className="font-condensed font-bold text-[#C4C4C4] group-hover:text-[#3B9EE8] mb-3 line-clamp-2 uppercase tracking-wide transition-colors">
+                              {product.name}
+                            </h3>
+                          </Link>
+
+                          {averageRatingValue > 0 && (
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <div className="flex">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <svg
+                                    key={star}
+                                    className={`h-3.5 w-3.5 ${star <= averageRatingValue ? 'text-[#EF9F27]' : 'text-[#252525]'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                ))}
+                              </div>
+                              <span className="text-xs text-[#555555] font-body">({averageRatingValue.toFixed(1)})</span>
                             </div>
+                          )}
 
-                            <button
-                              onClick={() => handleAddToCart(product)}
-                              disabled={product.stock_status === 'outofstock' || product.stock === 0}
-                              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                            >
-                              <ShoppingCart className="h-4 w-4" />
-                              <span className="text-sm font-medium">Add</span>
-                            </button>
-                          </div>
-                        )}
+                          {hasValidPrice && (
+                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#252525]">
+                              <div>
+                                {hasOriginalPrice ? (
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-lg font-condensed font-bold text-[#3B9EE8]">{formatPrice(priceValue)}</span>
+                                    <span className="text-xs text-[#555555] font-body line-through">{formatPrice(originalPriceNumber)}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-lg font-condensed font-bold text-[#3B9EE8]">{formatPrice(priceValue)}</span>
+                                )}
+                              </div>
+
+                              <button
+                                onClick={() => handleAddToCart(product)}
+                                disabled={product.stock_status === 'outofstock' || product.stock === 0}
+                                className="flex items-center gap-1.5 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-3 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <ShoppingCart className="h-3.5 w-3.5" />
+                                Add
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
                     );
                   })}
                 </div>
-                
-                {/* Pagination Controls - only show if there are multiple pages */}
+
+                {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="mt-12 flex items-center justify-center">
                     <nav className="flex items-center gap-2">
@@ -642,62 +598,53 @@ export default function ClientPage({ slug }: { slug: string }) {
                         onClick={() => {
                           if (currentPage > 1 && slug) {
                             const newPage = currentPage - 1;
-                            const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
-                            router.push(baseUrl);
+                            router.push(newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`);
                           }
                         }}
                         disabled={currentPage === 1}
-                        className={`px-4 py-2 rounded-md border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                        className={currentPage === 1 ? paginationBtnDisabled : paginationBtnEnabled}
                       >
                         Previous
                       </button>
-                      
-                      {/* Page numbers */}
+
                       {slug && totalPages > 0 && Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum;
+                        let pageNum: number;
                         if (totalPages <= 5) {
-                          // Show all pages
                           pageNum = i + 1;
                         } else if (currentPage <= 3) {
-                          // Show first 5 pages
                           pageNum = i + 1;
                         } else if (currentPage >= totalPages - 2) {
-                          // Show last 5 pages
                           pageNum = totalPages - 4 + i;
                         } else {
-                          // Show pages around current page
                           pageNum = currentPage - 2 + i;
                         }
-                        
-                        // Ensure pageNum is valid before rendering
+
                         if (!pageNum || pageNum < 1) return null;
-                        
+
                         return (
                           <button
                             key={i}
                             onClick={() => {
                               if (slug && pageNum) {
-                                const baseUrl = pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`;
-                                router.push(baseUrl);
+                                router.push(pageNum === 1 ? `/model/${slug}` : `/model/${slug}/page/${pageNum}`);
                               }
                             }}
-                            className={`px-4 py-2 rounded-md border ${currentPage === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                            className={currentPage === pageNum ? paginationBtnActive : paginationBtnEnabled}
                           >
                             {pageNum}
                           </button>
                         );
                       })}
-                      
+
                       <button
                         onClick={() => {
                           if (currentPage < totalPages && slug) {
                             const newPage = currentPage + 1;
-                            const baseUrl = newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`;
-                            router.push(baseUrl);
+                            router.push(newPage === 1 ? `/model/${slug}` : `/model/${slug}/page/${newPage}`);
                           }
                         }}
                         disabled={currentPage === totalPages}
-                        className={`px-4 py-2 rounded-md border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                        className={currentPage === totalPages ? paginationBtnDisabled : paginationBtnEnabled}
                       >
                         Next
                       </button>
@@ -706,12 +653,13 @@ export default function ClientPage({ slug }: { slug: string }) {
                 )}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName ? vehicleName.replace(/-/g, ' ')
-                  .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'this vehicle'}</p>
+              <div className="text-center py-16">
+                <p className="text-[#555555] font-body text-lg mb-4">
+                  No products found for {displayName}
+                </p>
                 <button
                   onClick={() => handleCategoryChange('')}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
+                  className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors"
                 >
                   View all products
                 </button>
@@ -719,109 +667,85 @@ export default function ClientPage({ slug }: { slug: string }) {
             )}
           </div>
         </div>
-        
-        {/* Related Vehicles Section */}
+
+        {/* Related Vehicles */}
         {Array.isArray(relatedVehicles) && relatedVehicles.length > 0 && (
           <section className="mt-16">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-8">Related {vehicle?.make || 'Vehicles'}</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                {relatedVehicles.filter(v => v && v._id && v.slug).slice(0, 5).map((relatedVehicle) => (
-                  <Link 
-                    key={relatedVehicle._id}
-                    href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}
-                    className="block group"
-                  >
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                      <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
-                        {(() => {
-                          const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
-                          const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`
-                            .toLowerCase()
-                            .replace(/\s+/g, '-')
-                            .replace(/[^a-z0-9-]/g, '');
+            <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-8">
+              Related {vehicle?.make || 'Vehicles'}
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              {relatedVehicles.filter(v => v && v._id && v.slug).slice(0, 5).map((relatedVehicle) => (
+                <Link
+                  key={relatedVehicle._id}
+                  href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}
+                  className="group block"
+                >
+                  <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden hover:border-[#3B9EE8] transition-colors">
+                    <div className="aspect-square bg-[#161616] flex items-center justify-center overflow-hidden">
+                      {(() => {
+                        const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
+                        const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`
+                          .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-                          let imageUrl: string | undefined;
+                        let imageUrl: string | undefined;
 
-                          // Check for specific vehicle models with hardcoded mappings
-                          if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['fortuner'];
-                          } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['hilux'];
-                          } else if (slugKey.includes('thar') || nameKey.includes('thar')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['thar'];
-                          } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['jimny'];
-                          } else if (slugKey.includes('wrangler') || nameKey.includes('wrangler')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['wrangler'];
-                          } else if (slugKey.includes('endeavour') || nameKey.includes('endeavour')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['endeavour'];
-                          } else if (slugKey.includes('ranger') || nameKey.includes('ranger')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['ranger'];
-                          } else if (slugKey.includes('defender') || nameKey.includes('defender')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['defender'];
-                          } else if (slugKey.includes('isuzu') || nameKey.includes('isuzu') || slugKey.includes('dmax') || nameKey.includes('dmax')) {
-                            imageUrl = VEHICLE_IMAGE_MAP['isuzu-dmax'];
-                          }
+                        if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) imageUrl = VEHICLE_IMAGE_MAP['fortuner'];
+                        else if (slugKey.includes('hilux') || nameKey.includes('hilux')) imageUrl = VEHICLE_IMAGE_MAP['hilux'];
+                        else if (slugKey.includes('thar') || nameKey.includes('thar')) imageUrl = VEHICLE_IMAGE_MAP['thar'];
+                        else if (slugKey.includes('jimny') || nameKey.includes('jimny')) imageUrl = VEHICLE_IMAGE_MAP['jimny'];
+                        else if (slugKey.includes('wrangler') || nameKey.includes('wrangler')) imageUrl = VEHICLE_IMAGE_MAP['wrangler'];
+                        else if (slugKey.includes('endeavour') || nameKey.includes('endeavour')) imageUrl = VEHICLE_IMAGE_MAP['endeavour'];
+                        else if (slugKey.includes('ranger') || nameKey.includes('ranger')) imageUrl = VEHICLE_IMAGE_MAP['ranger'];
+                        else if (slugKey.includes('defender') || nameKey.includes('defender')) imageUrl = VEHICLE_IMAGE_MAP['defender'];
+                        else if (slugKey.includes('isuzu') || nameKey.includes('isuzu') || slugKey.includes('dmax') || nameKey.includes('dmax')) imageUrl = VEHICLE_IMAGE_MAP['isuzu-dmax'];
 
-                          if (!imageUrl) {
-                            imageUrl =
-                              (relatedVehicle.image && relatedVehicle.image.url) ||
-                              VEHICLE_IMAGE_MAP[slugKey] ||
-                              VEHICLE_IMAGE_MAP[nameKey];
-                          }
-                          
-                          if (!imageUrl) {
-                            return (
-                              <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                <span className="text-sm">No image</span>
-                              </div>
-                            );
-                          }
+                        if (!imageUrl) {
+                          imageUrl =
+                            (relatedVehicle.image && relatedVehicle.image.url) ||
+                            VEHICLE_IMAGE_MAP[slugKey] ||
+                            VEHICLE_IMAGE_MAP[nameKey];
+                        }
 
+                        if (!imageUrl) {
                           return (
-                            <img 
-                              src={imageUrl} 
-                              alt={relatedVehicle.name || relatedVehicle.make + ' ' + relatedVehicle.model}
-                              className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) {
-                                  target.src = VEHICLE_IMAGE_MAP['fortuner'];
-                                } else if (slugKey.includes('hilux') || nameKey.includes('hilux')) {
-                                  target.src = VEHICLE_IMAGE_MAP['hilux'];
-                                } else if (slugKey.includes('thar') || nameKey.includes('thar')) {
-                                  target.src = VEHICLE_IMAGE_MAP['thar'];
-                                } else if (slugKey.includes('jimny') || nameKey.includes('jimny')) {
-                                  target.src = VEHICLE_IMAGE_MAP['jimny'];
-                                } else if (slugKey.includes('wrangler') || nameKey.includes('wrangler')) {
-                                  target.src = VEHICLE_IMAGE_MAP['wrangler'];
-                                } else if (slugKey.includes('endeavour') || nameKey.includes('endeavour')) {
-                                  target.src = VEHICLE_IMAGE_MAP['endeavour'];
-                                } else if (slugKey.includes('ranger') || nameKey.includes('ranger')) {
-                                  target.src = VEHICLE_IMAGE_MAP['ranger'];
-                                } else if (slugKey.includes('defender') || nameKey.includes('defender')) {
-                                  target.src = VEHICLE_IMAGE_MAP['defender'];
-                                } else if (slugKey.includes('isuzu') || nameKey.includes('isuzu') || slugKey.includes('dmax') || nameKey.includes('dmax')) {
-                                  target.src = VEHICLE_IMAGE_MAP['isuzu-dmax'];
-                                } else {
-                                  target.src = '/images/fallback-product.png';
-                                }
-                              }}
-                              loading="lazy"
-                            />
+                            <div className="w-full h-full flex items-center justify-center">
+                              <span className="text-[#555555] font-body text-xs">No image</span>
+                            </div>
                           );
-                        })()}
-                      </div>
-                      <div className="p-3 text-center bg-gray-50">
-                        <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                          {relatedVehicle.model}
-                        </h3>
-                      </div>
+                        }
+
+                        return (
+                          <img
+                            src={imageUrl}
+                            alt={relatedVehicle.name || `${relatedVehicle.make} ${relatedVehicle.model}`}
+                            className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              if (slugKey.includes('fortuner') || nameKey.includes('fortuner')) target.src = VEHICLE_IMAGE_MAP['fortuner'];
+                              else if (slugKey.includes('hilux') || nameKey.includes('hilux')) target.src = VEHICLE_IMAGE_MAP['hilux'];
+                              else if (slugKey.includes('thar') || nameKey.includes('thar')) target.src = VEHICLE_IMAGE_MAP['thar'];
+                              else if (slugKey.includes('jimny') || nameKey.includes('jimny')) target.src = VEHICLE_IMAGE_MAP['jimny'];
+                              else if (slugKey.includes('wrangler') || nameKey.includes('wrangler')) target.src = VEHICLE_IMAGE_MAP['wrangler'];
+                              else if (slugKey.includes('endeavour') || nameKey.includes('endeavour')) target.src = VEHICLE_IMAGE_MAP['endeavour'];
+                              else if (slugKey.includes('ranger') || nameKey.includes('ranger')) target.src = VEHICLE_IMAGE_MAP['ranger'];
+                              else if (slugKey.includes('defender') || nameKey.includes('defender')) target.src = VEHICLE_IMAGE_MAP['defender'];
+                              else if (slugKey.includes('isuzu') || nameKey.includes('isuzu') || slugKey.includes('dmax') || nameKey.includes('dmax')) target.src = VEHICLE_IMAGE_MAP['isuzu-dmax'];
+                              else target.src = '/images/fallback-product.png';
+                            }}
+                            loading="lazy"
+                          />
+                        );
+                      })()}
                     </div>
-                  </Link>
-                ))}
-              </div>
+                    <div className="p-3 text-center bg-[#161616] border-t border-[#252525]">
+                      <h3 className="text-sm font-condensed font-bold text-[#C4C4C4] group-hover:text-[#3B9EE8] uppercase tracking-wide transition-colors">
+                        {relatedVehicle.model}
+                      </h3>
+                    </div>
+                  </div>
+                </Link>
+              ))}
             </div>
           </section>
         )}

@@ -61,7 +61,7 @@ export default function Header() {
             {/* Mobile Search Icon */}
             <button 
               onClick={() => setShowMobileSearch(!showMobileSearch)}
-              className="md:hidden p-2 text-white hover:text-green-200 transition-colors"
+              className="md:hidden p-2 text-white hover:text-[#3B9EE8] transition-colors"
               aria-label="Toggle search"
             >
               <Search className="h-5 w-5" />
@@ -82,14 +82,14 @@ export default function Header() {
                   <>
                     <Link
                       href="/profile"
-                      className="flex items-center space-x-1 text-white hover:text-green-200 transition-colors"
+                      className="flex items-center space-x-1 text-white hover:text-[#3B9EE8] transition-colors"
                     >
                       <User className="h-5 w-5" />
                       <span className="hidden lg:inline text-sm">{user?.name}</span>
                     </Link>
                     <button
                       onClick={logout}
-                      className="text-sm text-white hover:text-green-200 transition-colors"
+                      className="text-sm text-white hover:text-[#3B9EE8] transition-colors"
                     >
                       Logout
                     </button>
@@ -98,13 +98,13 @@ export default function Header() {
                   <>
                     <Link
                       href="/login"
-                      className="text-sm text-white hover:text-green-200 transition-colors"
+                      className="text-sm text-white hover:text-[#3B9EE8] transition-colors"
                     >
                       Login
                     </Link>
                     <Link
                       href="/register"
-                      className="text-sm bg-white text-green-700 px-4 py-2 rounded-md hover:bg-green-50 transition-colors font-medium"
+                      className="text-sm bg-[#3B9EE8] text-white px-4 py-2 rounded-md hover:bg-[#1A6FB5] transition-colors font-medium font-condensed tracking-wider uppercase"
                     >
                       Sign Up
                     </Link>
@@ -114,7 +114,7 @@ export default function Header() {
             </EnvironmentAwareComponent>
 
             {/* Wishlist */}
-            <Link href="/wishlist" className="relative p-2 text-white hover:text-green-200 transition-colors">
+            <Link href="/wishlist" className="relative p-2 text-white hover:text-[#3B9EE8] transition-colors">
               <Heart className="h-5 w-5" />
               {wishlistCount > 0 && (
                 <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -124,7 +124,7 @@ export default function Header() {
             </Link>
 
             {/* Cart */}
-            <Link href="/cart" className="relative p-2 text-white hover:text-green-200 transition-colors" aria-label="Cart">
+            <Link href="/cart" className="relative p-2 text-white hover:text-[#3B9EE8] transition-colors" aria-label="Cart">
               <ShoppingCart className="h-5 w-5" />
               {itemCount > 0 && (
                 <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -136,7 +136,7 @@ export default function Header() {
             {/* Mobile Menu Button */}
             <button 
               onClick={() => setShowMobileMenu(true)}
-              className="md:hidden p-2 text-white hover:text-green-200 transition-colors"
+              className="md:hidden p-2 text-white hover:text-[#3B9EE8] transition-colors"
               aria-label="Open menu"
             >
               <Menu className="h-6 w-6" />
@@ -153,12 +153,12 @@ export default function Header() {
             className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
               pathname === '/shop'
                 ? 'text-white'
-                : 'text-white hover:text-green-200'
+                : 'text-white hover:text-[#3B9EE8]'
             }`}
           >
             Shop
             {pathname === '/shop' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3B9EE8]" />
             )}
           </Link>
 
@@ -169,12 +169,12 @@ export default function Header() {
             className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
               pathname === '/brands' || pathname.startsWith('/brands')
                 ? 'text-white'
-                : 'text-white hover:text-green-200'
+                : 'text-white hover:text-[#3B9EE8]'
             }`}
           >
             Brand
             {(pathname === '/brands' || pathname.startsWith('/brands')) && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3B9EE8]" />
             )}
           </Link>
 
@@ -195,12 +195,12 @@ export default function Header() {
                 className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
                   isActive
                     ? 'text-white'
-                    : 'text-white hover:text-green-200'
+                    : 'text-white hover:text-[#3B9EE8]'
                 }`}
               >
                 {link.label}
                 {isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3B9EE8]" />
                 )}
               </Link>
             );

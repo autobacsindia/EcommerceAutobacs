@@ -31,19 +31,19 @@ export default function HeroBanner({ className = '' }: BannerProps) {
       </Link>
 
       {/* Consultation CTA strip */}
-      <div className="bg-gradient-to-r from-gray-900 via-gray-900 to-red-950 border-t border-gray-800">
+      <div className="bg-[#0E0E0E] border-t border-[#252525]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-center sm:text-left">
-            <p className="text-white font-bold text-sm sm:text-base">
-              🔥 Want a personalised performance upgrade plan?
+            <p className="text-white font-condensed font-bold text-sm sm:text-base uppercase tracking-wide">
+              Want a personalised performance upgrade plan?
             </p>
-            <p className="text-gray-400 text-xs sm:text-sm">
+            <p className="text-[#C4C4C4] text-xs sm:text-sm font-body">
               Our experts will build a spec sheet for your exact car — free consultation.
             </p>
           </div>
           <Link
             href="/consultation"
-            className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/25 group"
+            className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold rounded-sm text-sm transition-all uppercase tracking-widest group"
           >
             <Zap className="h-4 w-4" />
             Get Free Consultation

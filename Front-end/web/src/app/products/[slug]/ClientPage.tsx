@@ -157,10 +157,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   // Defensive null safety check
   if (!product) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading product...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
+          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
         </div>
       </div>
     );
@@ -235,10 +235,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   // Show loading state if product is null
   if (!product) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading product...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
+          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
         </div>
       </div>
     );
@@ -461,10 +461,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Product Not Found</h1>
-          <Link href="/products" className="text-blue-600 hover:text-blue-700">
+          <h1 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Product Not Found</h1>
+          <Link href="/products" className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors">
             Back to Products
           </Link>
         </div>
@@ -728,10 +728,10 @@ export default function ClientPage({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading product...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
+          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
         </div>
       </div>
     );
@@ -740,23 +740,23 @@ export default function ClientPage({
   // Product not found
   if (!product) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md">
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+        <div className="text-center max-w-md px-4">
           <div className="text-6xl mb-4">🔍</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h2>
-          <p className="text-gray-600 mb-6">
-            The product you're looking for doesn't exist or has been removed.
+          <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Product Not Found</h2>
+          <p className="text-[#C4C4C4] font-body mb-6">
+            The product you&apos;re looking for doesn&apos;t exist or has been removed.
           </p>
-          <div className="space-x-4">
-            <Link 
-              href="/products" 
-              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          <div className="flex gap-4 justify-center">
+            <Link
+              href="/products"
+              className="inline-flex items-center px-6 py-3 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               Browse Products
             </Link>
-            <Link 
-              href="/" 
-              className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            <Link
+              href="/"
+              className="inline-flex items-center px-6 py-3 bg-[#161616] border border-[#252525] text-[#C4C4C4] hover:text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               Go Home
             </Link>

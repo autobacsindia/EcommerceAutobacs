@@ -17,11 +17,7 @@ interface Product {
   price: number;
   originalPrice?: number;
   images: ProductImage[] | string;
-  categories?: Array<{ 
-    _id: string;
-    name: string;
-    slug: string;
-  }>;
+  categories?: Array<{ _id: string; name: string; slug: string }>;
   stock: number;
   averageRating: number;
   isFeatured?: boolean;
@@ -40,7 +36,6 @@ export default function OffersPage() {
         const response: any = await apiClient.get('/products/offers?limit=24');
         setProducts(response.products || []);
       } catch (err: any) {
-        console.error('Failed to fetch offers:', err);
         setError('Failed to load offers');
       } finally {
         setLoading(false);
@@ -50,22 +45,25 @@ export default function OffersPage() {
   }, []);
 
   return (
-    <div className="py-12 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">Offers</h1>
-          <p className="text-gray-600">Your Dream Upgrades, Now More Affordable!</p>
+    <div className="min-h-screen bg-[#080808]">
+      <div className="bg-[#0E0E0E] border-b border-[#252525] py-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Limited Time</p>
+          <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide mb-3">Offers</h1>
+          <p className="text-[#C4C4C4] font-body">Your Dream Upgrades, Now More Affordable!</p>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-lg shadow overflow-hidden animate-pulse">
-                <div className="h-48 bg-gray-200" />
+              <div key={i} className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden animate-pulse">
+                <div className="h-48 bg-[#161616]" />
                 <div className="p-4">
-                  <div className="h-4 bg-gray-200 rounded mb-2" />
-                  <div className="h-4 bg-gray-200 rounded w-2/3 mb-4" />
-                  <div className="h-6 bg-gray-200 rounded w-1/3" />
+                  <div className="h-4 bg-[#252525] rounded-sm mb-2" />
+                  <div className="h-4 bg-[#252525] rounded-sm w-2/3 mb-4" />
+                  <div className="h-6 bg-[#252525] rounded-sm w-1/3" />
                 </div>
               </div>
             ))}
@@ -73,8 +71,8 @@ export default function OffersPage() {
         )}
 
         {!loading && error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <p className="text-red-800">{error}</p>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center">
+            <p className="text-red-400 font-body">{error}</p>
           </div>
         )}
 
@@ -84,11 +82,10 @@ export default function OffersPage() {
 
         {!loading && !error && products.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-600">No offers available right now. Please check back later.</p>
+            <p className="text-[#555555] font-body">No offers available right now. Please check back later.</p>
           </div>
         )}
       </div>
     </div>
   );
 }
-

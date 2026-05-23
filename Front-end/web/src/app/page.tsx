@@ -51,11 +51,12 @@ export default function Home() {
       <HeroBanner />
 
       {/* Vehicle Selector Section */}
-      <section className="py-12 bg-white">
+      <section className="py-12 bg-[#080808]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Find Parts for Your Vehicle</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
+            <p className="text-xs font-condensed font-bold tracking-[0.2em] uppercase text-[#3B9EE8] mb-2">Find Your Fit</p>
+            <h2 className="text-3xl font-condensed font-bold text-white mb-3 uppercase">Find Parts for Your Vehicle</h2>
+            <p className="text-[#C4C4C4] max-w-2xl mx-auto font-body">
               Select your vehicle to see compatible parts and accessories
             </p>
           </div>
@@ -71,8 +72,8 @@ export default function Home() {
                   href={`/model/${vehicle.slug}`}
                   className="group"
                 >
-                  <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300">
-                    <div className="aspect-square bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                  <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
+                    <div className="aspect-square bg-[#161616] flex items-center justify-center overflow-hidden">
                       {vehicle.image && (
                         <Image
                           src={vehicle.image}
@@ -83,8 +84,8 @@ export default function Home() {
                         />
                       )}
                     </div>
-                    <div className="p-3 text-center bg-gray-50">
-                      <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                    <div className="p-3 text-center bg-[#0E0E0E] border-t border-[#252525]">
+                      <h3 className="text-sm font-condensed font-bold text-white group-hover:text-[#3B9EE8] transition-colors uppercase tracking-wide">
                         {vehicle.name}
                       </h3>
                     </div>
@@ -94,7 +95,7 @@ export default function Home() {
 
               {/* See More Card */}
               <Link href="/vehicles" className="group">
-                <div className="bg-linear-to-br from-blue-600 to-blue-700 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center justify-center p-6">
+                <div className="bg-[#3B9EE8] rounded-lg overflow-hidden hover:bg-[#1A6FB5] transition-all duration-300 h-full flex flex-col items-center justify-center p-6">
                   <div className="text-white text-center">
                     <svg
                       className="w-12 h-12 mx-auto mb-3 group-hover:scale-110 transition-transform"
@@ -109,8 +110,8 @@ export default function Home() {
                         d="M9 5l7 7-7 7"
                       />
                     </svg>
-                    <h3 className="text-lg font-bold mb-1">See More</h3>
-                    <p className="text-sm text-blue-100">View all vehicles</p>
+                    <h3 className="text-lg font-condensed font-bold mb-1 uppercase tracking-wider">See More</h3>
+                    <p className="text-sm text-white/80 font-body">View all vehicles</p>
                   </div>
                 </div>
               </Link>
@@ -118,15 +119,16 @@ export default function Home() {
           </div>
 
           {/* Brand Logos Slider */}
-          <div className="mt-16 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-12 bg-linear-to-br from-gray-50 to-gray-100">
+          <div className="mt-16 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-12 bg-[#0E0E0E] border-y border-[#252525]">
             <div className="text-center mb-8">
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Trusted Brands</h3>
-              <p className="text-gray-600">Premium automotive parts from world-class manufacturers</p>
+              <p className="text-xs font-condensed font-bold tracking-[0.2em] uppercase text-[#3B9EE8] mb-2">Our Partners</p>
+              <h3 className="text-2xl font-condensed font-bold text-white mb-2 uppercase">Trusted Brands</h3>
+              <p className="text-[#C4C4C4] font-body">Premium automotive parts from world-class manufacturers</p>
             </div>
             <div className="relative overflow-hidden py-8">
               <div className="flex animate-scroll space-x-12 items-center">
                 {/* First set of logos */}
-                <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
                     alt="Profender"
@@ -135,7 +137,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
                     alt="Bushranger"
@@ -144,7 +146,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -153,7 +155,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
@@ -162,7 +164,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
                     alt="Lightforce"
@@ -171,7 +173,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -181,7 +183,7 @@ export default function Home() {
                   />
                 </Link>
                 {/* Duplicate set for seamless loop */}
-                <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
                     alt="Profender"
@@ -190,7 +192,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
                     alt="Bushranger"
@@ -199,7 +201,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
                     alt="Ironman"
@@ -208,7 +210,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
@@ -217,7 +219,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
                     alt="Lightforce"
@@ -226,7 +228,7 @@ export default function Home() {
                     className="object-contain w-full h-full grayscale hover:grayscale-0 transition-all"
                   />
                 </Link>
-                <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer">
+                <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-[#161616] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all p-4 cursor-pointer">
                   <Image
                     src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
                     alt="Option"
@@ -251,7 +253,7 @@ export default function Home() {
       <SuperCarsBanner />
 
       {/* Curated Collections - Three "Keep Shopping For" Widgets */}
-      <div className="bg-gray-50 py-6">
+      <div className="bg-[#080808] py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
             <KeepShoppingWidget
@@ -277,81 +279,84 @@ export default function Home() {
       </div>
 
       {/* Features Section */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16 bg-[#0E0E0E] border-y border-[#252525]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ShoppingBag className="h-8 w-8 text-blue-600" />
+              <div className="bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ShoppingBag className="h-8 w-8 text-[#3B9EE8]" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Wide Selection</h3>
-              <p className="text-gray-600">Thousands of products for all makes and models</p>
+              <h3 className="text-base font-condensed font-bold text-white mb-2 uppercase tracking-wide">Wide Selection</h3>
+              <p className="text-[#C4C4C4] font-body text-sm">Thousands of products for all makes and models</p>
             </div>
 
             <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Truck className="h-8 w-8 text-blue-600" />
+              <div className="bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Truck className="h-8 w-8 text-[#3B9EE8]" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Fast Shipping</h3>
-              <p className="text-gray-600">Quick delivery across India</p>
+              <h3 className="text-base font-condensed font-bold text-white mb-2 uppercase tracking-wide">Fast Shipping</h3>
+              <p className="text-[#C4C4C4] font-body text-sm">Quick delivery across India — 28+ states served</p>
             </div>
 
             <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Shield className="h-8 w-8 text-blue-600" />
+              <div className="bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Shield className="h-8 w-8 text-[#3B9EE8]" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Quality Assured</h3>
-              <p className="text-gray-600">Genuine products with warranty</p>
+              <h3 className="text-base font-condensed font-bold text-white mb-2 uppercase tracking-wide">Quality Assured</h3>
+              <p className="text-[#C4C4C4] font-body text-sm">Genuine products with manufacturer warranty</p>
             </div>
 
             <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Headphones className="h-8 w-8 text-blue-600" />
+              <div className="bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Headphones className="h-8 w-8 text-[#3B9EE8]" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Expert Support</h3>
-              <p className="text-gray-600">Dedicated customer service team</p>
+              <h3 className="text-base font-condensed font-bold text-white mb-2 uppercase tracking-wide">Expert Support</h3>
+              <p className="text-[#C4C4C4] font-body text-sm">Dedicated customer service team</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* Popular Categories */}
-      <section className="py-16">
+      <section className="py-16 bg-[#080808]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center mb-12">Popular Categories</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="text-center mb-12">
+            <p className="text-xs font-condensed font-bold tracking-[0.2em] uppercase text-[#3B9EE8] mb-2">Shop By Category</p>
+            <h2 className="text-3xl font-condensed font-bold text-white uppercase">Popular Categories</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Link href="/categories/bodykit" className="group">
-              <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-linear-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-                  <span className="text-white text-2xl font-bold">Body Kits</span>
+              <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
+                <div className="h-48 bg-gradient-to-br from-[#0E0E0E] to-[#1A6FB5]/30 flex items-center justify-center">
+                  <span className="text-white text-2xl font-condensed font-bold uppercase tracking-wider">Body Kits</span>
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Body Kits</h3>
-                  <p className="text-gray-600">Enhance your car's appearance</p>
+                <div className="p-5 border-t border-[#252525]">
+                  <h3 className="text-base font-condensed font-bold text-white mb-1 uppercase group-hover:text-[#3B9EE8] transition-colors">Body Kits</h3>
+                  <p className="text-[#C4C4C4] text-sm font-body">Enhance your car&apos;s appearance</p>
                 </div>
               </div>
             </Link>
 
             <Link href="/categories/performance" className="group">
-              <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-linear-to-br from-red-400 to-red-600 flex items-center justify-center">
-                  <span className="text-white text-2xl font-bold">Performance</span>
+              <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
+                <div className="h-48 bg-gradient-to-br from-[#0E0E0E] to-[#EF9F27]/20 flex items-center justify-center">
+                  <span className="text-white text-2xl font-condensed font-bold uppercase tracking-wider">Performance</span>
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Performance Parts</h3>
-                  <p className="text-gray-600">Boost your engine's power</p>
+                <div className="p-5 border-t border-[#252525]">
+                  <h3 className="text-base font-condensed font-bold text-white mb-1 uppercase group-hover:text-[#3B9EE8] transition-colors">Performance Parts</h3>
+                  <p className="text-[#C4C4C4] text-sm font-body">Boost your engine&apos;s power</p>
                 </div>
               </div>
             </Link>
 
             <Link href="/categories/suspension" className="group">
-              <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-linear-to-br from-green-400 to-green-600 flex items-center justify-center">
-                  <span className="text-white text-2xl font-bold">Suspension</span>
+              <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
+                <div className="h-48 bg-gradient-to-br from-[#0E0E0E] to-[#3B9EE8]/20 flex items-center justify-center">
+                  <span className="text-white text-2xl font-condensed font-bold uppercase tracking-wider">Suspension</span>
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold mb-2 group-hover:text-blue-600">Suspension Systems</h3>
-                  <p className="text-gray-600">Improve ride quality and handling</p>
+                <div className="p-5 border-t border-[#252525]">
+                  <h3 className="text-base font-condensed font-bold text-white mb-1 uppercase group-hover:text-[#3B9EE8] transition-colors">Suspension Systems</h3>
+                  <p className="text-[#C4C4C4] text-sm font-body">Improve ride quality and handling</p>
                 </div>
               </div>
             </Link>
@@ -363,17 +368,18 @@ export default function Home() {
       <RecentlyViewedSection />
 
       {/* CTA Section */}
-      <section className="bg-blue-600 text-white py-16">
+      <section className="bg-[#0E0E0E] border-y border-[#252525] text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Upgrade Your Vehicle?</h2>
-          <p className="text-xl mb-8 text-blue-100">
-            Browse our extensive catalog and find the perfect parts for your ride
+          <p className="text-xs font-condensed font-bold tracking-[0.2em] uppercase text-[#3B9EE8] mb-3">India&apos;s No.1 Aftermarket Destination</p>
+          <h2 className="text-4xl font-condensed font-bold mb-2 uppercase">Where Machines Meet Mastery.</h2>
+          <p className="text-lg mb-6 text-[#C4C4C4] font-body max-w-xl mx-auto">
+            500+ premium brands · 10,000+ happy builds · 28+ states served
           </p>
           <Link
             href="/products"
-            className="inline-block bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
+            className="inline-block bg-[#3B9EE8] text-white px-8 py-3 rounded-sm font-condensed font-bold hover:bg-[#1A6FB5] transition-colors uppercase tracking-widest text-sm"
           >
-            Explore Products
+            Build Your Car →
           </Link>
         </div>
       </section>
