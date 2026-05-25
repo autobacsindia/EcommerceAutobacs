@@ -184,18 +184,18 @@ export default function AboutUsPage() {
       </section>
 
       {/* Brands */}
-      <section className="py-16 bg-[#080808]">
+      <section className="py-16 bg-gray-50 border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Partners</p>
-            <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Premium Brands</h2>
+            <h2 className="text-3xl font-condensed font-bold text-gray-900 uppercase tracking-wide mb-4">Premium Brands</h2>
             <div className="w-16 h-0.5 bg-[#3B9EE8] mx-auto" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
             {brands.map((brand, index) => (
-              <div key={index} className="flex items-center justify-center p-4 bg-[#0E0E0E] border border-[#252525] rounded-sm hover:border-[#3B9EE8] transition-colors">
+              <div key={index} className="flex items-center justify-center p-4 bg-white border border-gray-200 rounded-sm hover:border-[#3B9EE8] hover:shadow-md transition-all">
                 <div className="relative h-14 w-full flex items-center justify-center">
-                  <Image src={brand.logo} alt={brand.name} fill className="object-contain grayscale hover:grayscale-0 transition-all brightness-200" />
+                  <Image src={brand.logo} alt={brand.name} fill className="object-contain grayscale hover:grayscale-0 transition-all" />
                 </div>
               </div>
             ))}

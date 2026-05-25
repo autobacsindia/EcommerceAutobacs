@@ -43,8 +43,8 @@ function ContactPageInner() {
   const contactInfo = [
     {
       icon: <MapPin className="h-5 w-5 text-[#3B9EE8]" />,
-      title: 'Our Office',
-      details: ['AutoBacs India Private Limited', 'Mumbai, Maharashtra', 'India']
+      title: 'Headquarters',
+      details: ['9th Floor, Jomer Symphony', 'Chalikkavattom, Ponnurunni North', 'Vyttila']
     },
     {
       icon: <Phone className="h-5 w-5 text-[#3B9EE8]" />,

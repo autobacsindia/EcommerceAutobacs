@@ -69,7 +69,7 @@ export default function Footer() {
         <div className="border-t border-[#252525] mt-12 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-[#555555] font-body">
-              &copy; {CURRENT_YEAR} {APP_NAME}. All rights reserved.
+              &copy; {CURRENT_YEAR} Roavion Private LTD. All rights reserved.
             </p>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2 text-sm text-[#555555]">
