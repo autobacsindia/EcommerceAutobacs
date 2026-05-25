@@ -1,6 +1,7 @@
 import express from "express";
 import Review from "../models/Review.js";
 import Product from "../models/Product.js";
+import Order from "../models/Order.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { 
@@ -243,8 +244,11 @@ router.post("/products/:productId", protect, reviewSubmitRateLimit, validateRevi
     });
   }
 
-  // TODO: Check if user purchased this product (requires order integration)
-  const isVerifiedPurchase = false;
+  const isVerifiedPurchase = !!(await Order.exists({
+    user: userId,
+    "items.product": productId,
+    status: "delivered"
+  }));
 
   // Create review
   const review = new Review({
