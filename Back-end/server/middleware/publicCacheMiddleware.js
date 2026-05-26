@@ -100,8 +100,7 @@ export const publicCacheResponse = (cacheType) => async (req, res, next) => {
             ttl = 300; // default 5 minutes
         }
         
-        // cacheService.set() expects milliseconds — convert from seconds
-        cacheService.set(key, body, ttl * 1000).catch(err => {
+        cacheService.set(key, body, ttl).catch(err => {
           console.warn('[PublicCacheMiddleware] SET error:', err.message);
         });
       } catch (err) {

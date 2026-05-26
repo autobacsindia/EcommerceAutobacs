@@ -283,13 +283,13 @@ class CacheService {
 
   async revalidateWithLock(key, fn, ttl, tags) {
     const lockKey = `${key}:lock`;
-    const acquired = await this.acquireLock(lockKey, 5000);
-    if (!acquired) return;
+    const lockValue = await this.acquireLock(lockKey, 5000);
+    if (!lockValue) return;
     try {
       const result = await fn();
       await this.set(key, result, ttl, tags);
     } finally {
-      await this.releaseLock(lockKey);
+      await this.releaseLock(lockKey, lockValue);
     }
   }
 
@@ -298,9 +298,9 @@ class CacheService {
     if (cached) return cached;
 
     const lockKey = `${key}:lock`;
-    const acquired = await this.acquireLock(lockKey, lockTimeout);
+    const lockValue = await this.acquireLock(lockKey, lockTimeout);
 
-    if (!acquired) {
+    if (!lockValue) {
       this.metrics.stampedePrevented++;
       const rateLimitResult = await this.checkMissRateLimitWithFallback(key, fn, ttl, tags);
       if (rateLimitResult.serveStale) return rateLimitResult.data;
@@ -309,7 +309,6 @@ class CacheService {
       return this.getWithLock(key, fn, ttl, tags, lockTimeout);
     }
 
-    const lockValue = `${this.regionId}:${Date.now()}`;
     this.startLockHeartbeat(lockKey, lockValue, lockTimeout);
     try {
       const result = await fn();
@@ -317,27 +316,27 @@ class CacheService {
       return result;
     } finally {
       this.stopLockHeartbeat(lockKey);
-      await this.releaseLock(lockKey);
+      await this.releaseLock(lockKey, lockValue);
     }
   }
 
+  // Returns the lock value string if acquired, null if not.
   async acquireLock(lockKey, timeout) {
     const lockValue = `${this.regionId}:${Date.now()}`;
     if (redisClient) {
       const acquired = await redisClient.set(lockKey, lockValue, 'PX', timeout, 'NX');
-      return acquired === 'OK';
+      return acquired === 'OK' ? lockValue : null;
     }
     const now = Date.now();
     const existingLock = this.activeLocks.get(lockKey);
     if (!existingLock || now > existingLock.expiresAt) {
       this.activeLocks.set(lockKey, { acquiredBy: lockValue, expiresAt: now + timeout });
-      return true;
+      return lockValue;
     }
-    return false;
+    return null;
   }
 
-  async releaseLock(lockKey) {
-    const lockValue = `${this.regionId}:*`;
+  async releaseLock(lockKey, lockValue) {
     if (redisClient) {
       const script = `
         if redis.call("get", KEYS[1]) == ARGV[1] then

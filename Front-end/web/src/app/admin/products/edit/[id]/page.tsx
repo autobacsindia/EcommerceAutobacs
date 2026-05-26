@@ -617,7 +617,7 @@ export default function EditProductPage() {
                 Categories
               </label>
               <div 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-10.5 flex items-center flex-wrap gap-1"
                 onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
               >
                 {selectedCategories.length > 0 
@@ -647,7 +647,7 @@ export default function EditProductPage() {
               </div>
               
               {isCategoryDropdownOpen && (
-                <div className="absolute z-[100] w-full mt-1 bg-white border border-gray-300 rounded-md shadow-2xl max-h-60 overflow-y-auto p-2">
+                <div className="absolute z-100 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-2xl max-h-60 overflow-y-auto p-2">
                   <input
                     type="text"
                     placeholder="Search categories..."

@@ -187,7 +187,7 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         } ${!sidebarOpen ? 'justify-center' : ''}`}
                       >
-                        <span className="text-xl flex-shrink-0">{item.icon}</span>
+                        <span className="text-xl shrink-0">{item.icon}</span>
                         {sidebarOpen && (
                           <span className="ml-3 text-sm font-medium">{item.label}</span>
                         )}
