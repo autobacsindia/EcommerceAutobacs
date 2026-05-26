@@ -78,7 +78,11 @@ textarea::placeholder {
   opacity: 1;
 }
 
-/* ── Admin panel: reset inputs to light theme ── */
+/* ── Admin panel: reset to light theme ── */
+.admin-panel {
+  color: #111827;
+}
+
 .admin-panel input,
 .admin-panel textarea,
 .admin-panel select {
