@@ -1,0 +1,111 @@
+# CI — Frontend (Next.js)
+#
+# Runs on every push and pull-request that touches Front-end/web/** or
+# this workflow file itself.
+#
+# Jobs (run in order — build is gated on lint + test passing):
+#   lint   — next lint (ESLint is skipped during next build, so runs here)
+#   test   — jest unit tests
+#   build  — next build (TypeScript errors fail the build; ignoreBuildErrors: false)
+
+name: Frontend CI
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "Front-end/web/**"
+      - ".github/workflows/ci-frontend.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "Front-end/web/**"
+      - ".github/workflows/ci-frontend.yml"
+
+defaults:
+  run:
+    working-directory: Front-end/web
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Front-end/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Front-end/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+        run: npm test -- --forceExit --passWithNoTests
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: Front-end/web/coverage/
+          retention-days: 14
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Front-end/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+          NEXT_TELEMETRY_DISABLED: 1
+          # Sentry source-map upload is skipped when SENTRY_AUTH_TOKEN is absent —
+          # this is intentional in CI; uploads happen only from Railway on deploy.
+        run: npm run build
