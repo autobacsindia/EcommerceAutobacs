@@ -256,7 +256,7 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
         </header>
 
         {/* Page Content */}
-        <div className="p-6">{children}</div>
+        <div className="p-6 admin-panel">{children}</div>
       </main>
     </div>
   );
