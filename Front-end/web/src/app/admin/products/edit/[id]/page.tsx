@@ -105,8 +105,10 @@ export default function EditProductPage() {
   const [qna, setQna] = useState<{ question: string; answer: string }[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
   const [productStoryText, setProductStoryText] = useState('');
+  const [productStoryCards, setProductStoryCards] = useState<{ title: string; description: string }[]>([]);
   const [installationSteps, setInstallationSteps] = useState<{ title: string; description: string }[]>([]);
-  const [indianUseCases, setIndianUseCases] = useState<string[]>([]);
+  const [indianRoadsText, setIndianRoadsText] = useState('');
+  const [indianRoadsCards, setIndianRoadsCards] = useState<{ title: string; description: string }[]>([]);
 
   useEffect(() => {
     fetchCategories();
@@ -200,8 +202,10 @@ export default function EditProductPage() {
       setPackageContents(productData.packageContents || []);
       setQna(productData.qna || []);
       setProductStoryText(productData.productStoryText || '');
+      setProductStoryCards(productData.productStoryCards || []);
       setInstallationSteps(productData.installationSteps || []);
-      setIndianUseCases(productData.indianUseCases || []);
+      setIndianRoadsText(productData.indianRoadsText || '');
+      setIndianRoadsCards(productData.indianRoadsCards || []);
         
       if (productData.compatibleVehicles && Array.isArray(productData.compatibleVehicles)) {
         // Handle both populated (objects) and unpopulated (strings) arrays
@@ -364,10 +368,13 @@ export default function EditProductPage() {
       if (variableSpecs.length)  fd.append('variableSpecs',  JSON.stringify(variableSpecs));
       if (validQna.length)       fd.append('qna',            JSON.stringify(validQna));
       if (productStoryText)      fd.append('productStoryText', productStoryText);
+      const validStoryCards = productStoryCards.filter(c => c.title.trim() && c.description.trim());
+      if (validStoryCards.length) fd.append('productStoryCards', JSON.stringify(validStoryCards));
       const validSteps = installationSteps.filter(s => s.title.trim() && s.description.trim());
       if (validSteps.length)     fd.append('installationSteps', JSON.stringify(validSteps));
-      const validUseCases = indianUseCases.filter(Boolean);
-      if (validUseCases.length)  fd.append('indianUseCases', JSON.stringify(validUseCases));
+      if (indianRoadsText)       fd.append('indianRoadsText', indianRoadsText);
+      const validRoadsCards = indianRoadsCards.filter(c => c.title.trim() && c.description.trim());
+      if (validRoadsCards.length) fd.append('indianRoadsCards', JSON.stringify(validRoadsCards));
 
       // ── Existing images (keep them as-is, append mode) ────────────────────
       // replaceMode=true → controller deletes old gallery and uses only new uploads
@@ -1276,17 +1283,70 @@ export default function EditProductPage() {
             </div>
           </div>
 
-          {/* ── Engineered for Indian Trails ─────────────────────────────────── */}
+          {/* ── Engineered for Indian Trails — Subtitle ──────────────────────── */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails</h2>
-            <p className="text-sm text-gray-500 mb-4">Custom paragraph shown under the &quot;Engineered for Indian Trails&quot; section heading on the product page. Leave blank to hide.</p>
+            <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails — Subtitle</h2>
+            <p className="text-sm text-gray-500 mb-4">Paragraph shown under the section heading. Leave blank to use the default text.</p>
             <textarea
-              rows={4}
+              rows={3}
               placeholder="e.g. Built specifically for the demands of Indian terrain — from potholed city roads to rugged mountain passes..."
               value={productStoryText}
               onChange={(e) => setProductStoryText(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             />
+          </div>
+
+          {/* ── Engineered for Indian Trails — Condition Cards ───────────────── */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails — Condition Cards</h2>
+            <p className="text-sm text-gray-500 mb-4">Up to 4 cards shown in the section. Leave empty to use the default cards (Monsoon Durability, Heat Resistant, Off-Road Toughness, Highway Performance).</p>
+            <div className="space-y-3">
+              {productStoryCards.map((card, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-600">Card {index + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => setProductStoryCards(productStoryCards.filter((_, i) => i !== index))}
+                      className="px-2 py-1 text-xs border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Card title, e.g. Monsoon Durability"
+                    value={card.title}
+                    onChange={(e) => {
+                      const updated = [...productStoryCards];
+                      updated[index] = { ...updated[index], title: e.target.value };
+                      setProductStoryCards(updated);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <textarea
+                    rows={2}
+                    placeholder="Card description..."
+                    value={card.description}
+                    onChange={(e) => {
+                      const updated = [...productStoryCards];
+                      updated[index] = { ...updated[index], description: e.target.value };
+                      setProductStoryCards(updated);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              ))}
+              {productStoryCards.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => setProductStoryCards([...productStoryCards, { title: '', description: '' }])}
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+                >
+                  Add Card
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ── Easy DIY Installation ────────────────────────────────────────── */}
@@ -1343,40 +1403,69 @@ export default function EditProductPage() {
             </div>
           </div>
 
-          {/* ── Perfect for Indian Roads & Climate ───────────────────────────── */}
+          {/* ── Perfect for Indian Roads & Climate — Description ──────────────── */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Perfect for Indian Roads &amp; Climate</h2>
-            <p className="text-sm text-gray-500 mb-4">Bullet points for the Indian use-cases section. Format: <span className="font-mono bg-gray-100 px-1 rounded">Bold Title – Supporting description</span>. Leave empty to show generic defaults.</p>
+            <h2 className="text-xl font-semibold mb-1">Perfect for Indian Roads &amp; Climate — Description</h2>
+            <p className="text-sm text-gray-500 mb-4">Paragraph shown under the section heading. Leave blank to use the default text.</p>
+            <textarea
+              rows={3}
+              placeholder="e.g. Engineered to handle the unique challenges of Indian roads and climate year-round..."
+              value={indianRoadsText}
+              onChange={(e) => setIndianRoadsText(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            />
+          </div>
+
+          {/* ── Perfect for Indian Roads & Climate — Cards ───────────────────── */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-1">Perfect for Indian Roads &amp; Climate — Condition Cards</h2>
+            <p className="text-sm text-gray-500 mb-4">Up to 4 cards shown in the section. Leave empty to use the default cards.</p>
             <div className="space-y-3">
-              {indianUseCases.map((item, index) => (
-                <div key={index} className="flex gap-2">
+              {indianRoadsCards.map((card, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-600">Card {index + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => setIndianRoadsCards(indianRoadsCards.filter((_, i) => i !== index))}
+                      className="px-2 py-1 text-xs border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
                   <input
                     type="text"
-                    placeholder="e.g. Monsoon Ready – Water-resistant construction ensures reliable performance during heavy rains"
-                    value={item}
+                    placeholder="Card title, e.g. Monsoon Ready"
+                    value={card.title}
                     onChange={(e) => {
-                      const updated = [...indianUseCases];
-                      updated[index] = e.target.value;
-                      setIndianUseCases(updated);
+                      const updated = [...indianRoadsCards];
+                      updated[index] = { ...updated[index], title: e.target.value };
+                      setIndianRoadsCards(updated);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setIndianUseCases(indianUseCases.filter((_, i) => i !== index))}
-                    className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50 text-sm"
-                  >
-                    Remove
-                  </button>
+                  <textarea
+                    rows={2}
+                    placeholder="Card description..."
+                    value={card.description}
+                    onChange={(e) => {
+                      const updated = [...indianRoadsCards];
+                      updated[index] = { ...updated[index], description: e.target.value };
+                      setIndianRoadsCards(updated);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={() => setIndianUseCases([...indianUseCases, ''])}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-              >
-                Add Use Case
-              </button>
+              {indianRoadsCards.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => setIndianRoadsCards([...indianRoadsCards, { title: '', description: '' }])}
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+                >
+                  Add Card
+                </button>
+              )}
             </div>
           </div>
 

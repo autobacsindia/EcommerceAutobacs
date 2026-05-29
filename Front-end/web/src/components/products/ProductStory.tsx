@@ -4,36 +4,34 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { CloudRain, Sun, Mountain, Gauge } from 'lucide-react';
 
+interface StoryCard {
+  title: string;
+  description: string;
+}
+
 interface ProductStoryProps {
   productName?: string;
   storyText?: string;
+  storyCards?: StoryCard[];
   isDark?: boolean;
 }
 
-export default function ProductStory({ productName, storyText, isDark = true }: ProductStoryProps) {
+const defaultIcons = [
+  <CloudRain className="w-10 h-10" />,
+  <Sun className="w-10 h-10" />,
+  <Mountain className="w-10 h-10" />,
+  <Gauge className="w-10 h-10" />,
+];
 
-  const indianConditions = [
-    {
-      icon: <CloudRain className="w-10 h-10" />,
-      title: 'Monsoon Durability',
-      description: 'Engineered to withstand heavy rains and high humidity during Indian monsoon season'
-    },
-    {
-      icon: <Sun className="w-10 h-10" />,
-      title: 'Heat Resistant',
-      description: 'Tested for extreme temperatures (45°C+) across Indian highways'
-    },
-    {
-      icon: <Mountain className="w-10 h-10" />,
-      title: 'Off-Road Toughness',
-      description: 'Built for Ladakh passes, desert trails, and rugged mountain terrain'
-    },
-    {
-      icon: <Gauge className="w-10 h-10" />,
-      title: 'Highway Performance',
-      description: 'Superior visibility and reliability on long-distance Indian highway drives'
-    }
-  ];
+const defaultCards: StoryCard[] = [
+  { title: 'Monsoon Durability',  description: 'Engineered to withstand heavy rains and high humidity during Indian monsoon season' },
+  { title: 'Heat Resistant',      description: 'Tested for extreme temperatures (45°C+) across Indian highways' },
+  { title: 'Off-Road Toughness',  description: 'Built for Ladakh passes, desert trails, and rugged mountain terrain' },
+  { title: 'Highway Performance', description: 'Superior visibility and reliability on long-distance Indian highway drives' },
+];
+
+export default function ProductStory({ productName, storyText, storyCards, isDark = true }: ProductStoryProps) {
+  const displayCards = storyCards && storyCards.length > 0 ? storyCards : defaultCards;
 
   return (
     <section className="relative h-[600px] rounded-2xl overflow-hidden my-24">
@@ -69,7 +67,7 @@ export default function ProductStory({ productName, storyText, isDark = true }: 
 
           {/* Condition Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12">
-            {indianConditions.map((condition, index) => (
+            {displayCards.map((card, index) => (
               <motion.div
                 key={index}
                 initial={{ opacity: 0, y: 20 }}
@@ -79,12 +77,10 @@ export default function ProductStory({ productName, storyText, isDark = true }: 
                 className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6 hover:bg-white/15 transition-colors"
               >
                 <div className="text-orange-500 mb-4 flex justify-center">
-                  {condition.icon}
+                  {defaultIcons[index] ?? defaultIcons[0]}
                 </div>
-                <h3 className="text-white font-bold mb-2">{condition.title}</h3>
-                <p className="text-zinc-400 text-sm leading-relaxed">
-                  {condition.description}
-                </p>
+                <h3 className="text-white font-bold mb-2">{card.title}</h3>
+                <p className="text-zinc-400 text-sm leading-relaxed">{card.description}</p>
               </motion.div>
             ))}
           </div>
