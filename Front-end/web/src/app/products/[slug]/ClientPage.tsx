@@ -133,6 +133,9 @@ interface Product {
   }>;
   packageContents?: string[];
   qna?: any;
+  productStoryText?: string;
+  installationSteps?: Array<{ title: string; description: string }>;
+  indianUseCases?: string[];
   isActive: boolean;
   isFeatured: boolean;
   averageRating: number;
