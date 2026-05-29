@@ -124,6 +124,13 @@ const ProductSchema = new mongoose.Schema({
       images: [String] // Array of image URLs
     }]
   }],
+  // Editable product-page marketing sections
+  productStoryText: { type: String, trim: true },        // Paragraph under "Engineered for Indian Trails"
+  installationSteps: [{                                  // Steps for "Easy DIY Installation"
+    title: { type: String, required: true },
+    description: { type: String, required: true }
+  }],
+  indianUseCases: [String],                              // Bullet points for "Perfect for Indian Roads & Climate"
   externalId: {
     type: String,
     unique: true,

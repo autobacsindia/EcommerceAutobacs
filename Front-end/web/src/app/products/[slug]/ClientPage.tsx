@@ -498,7 +498,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
       <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         {/* Product Story Section */}
-        <ProductStory productName={product.name} isDark={isDark} />
+        <ProductStory productName={product.name} storyText={product.productStoryText} isDark={isDark} />
 
         {/* Vehicle Compatibility */}
         <section className="py-16">
@@ -519,7 +519,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         </section>
 
         {/* Installation Steps */}
-        <InstallationSteps isDark={isDark} />
+        <InstallationSteps steps={product.installationSteps} isDark={isDark} />
 
         {/* Product Description */}
         <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
@@ -570,17 +570,33 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
               {/* Indian Use Cases Section */}
               <section>
-                <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Perfect for Indian Roads & Climate</h2>
+                <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Perfect for Indian Roads &amp; Climate</h2>
                 <div className={`prose prose-lg max-w-none leading-relaxed ${isDark ? 'prose-invert text-zinc-300' : 'text-gray-700'}`}>
                   <p>This {product.name} is specifically designed to handle the unique challenges of Indian roads and climate conditions:</p>
                   <ul className={`list-disc space-y-2 pl-5 marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Monsoon Ready:</strong> Water-resistant construction ensures reliable performance during heavy rains and flooding</li>
-                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Summer Heat Resistant:</strong> High-temperature materials withstand India's intense summer heat up to 45°C</li>
-                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Road Condition Optimized:</strong> Engineered for Indian road surfaces including potholes, speed breakers, and uneven terrain</li>
-                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Fuel Efficiency Focused:</strong> Designed to minimize drag and maximize fuel economy on Indian highways</li>
-                    <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Local Installation Support:</strong> Professional installation available at all Autobacs service centers across India</li>
+                    {product.indianUseCases && product.indianUseCases.length > 0
+                      ? product.indianUseCases.map((item: string, i: number) => {
+                          const sep = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
+                          if (sep) {
+                            const [title, ...rest] = item.split(sep);
+                            return (
+                              <li key={i}>
+                                <strong className={isDark ? 'text-white' : 'text-gray-900'}>{title}:</strong> {rest.join(sep)}
+                              </li>
+                            );
+                          }
+                          return <li key={i}>{item}</li>;
+                        })
+                      : <>
+                          <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Monsoon Ready:</strong> Water-resistant construction ensures reliable performance during heavy rains and flooding</li>
+                          <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Summer Heat Resistant:</strong> High-temperature materials withstand India&apos;s intense summer heat up to 45°C</li>
+                          <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Road Condition Optimized:</strong> Engineered for Indian road surfaces including potholes, speed breakers, and uneven terrain</li>
+                          <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Fuel Efficiency Focused:</strong> Designed to minimize drag and maximize fuel economy on Indian highways</li>
+                          <li><strong className={isDark ? 'text-white' : 'text-gray-900'}>Local Installation Support:</strong> Professional installation available at all Autobacs service centers across India</li>
+                        </>
+                    }
                   </ul>
-                  <p>Whether you're driving in Mumbai's monsoons, Delhi's smog, or Bangalore's traffic, this {product.name} delivers superior performance and reliability.</p>
+                  <p>Whether you&apos;re driving in Mumbai&apos;s monsoons, Delhi&apos;s smog, or Bangalore&apos;s traffic, this {product.name} delivers superior performance and reliability.</p>
                 </div>
               </section>
 

@@ -6,10 +6,11 @@ import { CloudRain, Sun, Mountain, Gauge } from 'lucide-react';
 
 interface ProductStoryProps {
   productName?: string;
+  storyText?: string;
   isDark?: boolean;
 }
 
-export default function ProductStory({ productName, isDark = true }: ProductStoryProps) {
+export default function ProductStory({ productName, storyText, isDark = true }: ProductStoryProps) {
 
   const indianConditions = [
     {
@@ -62,8 +63,7 @@ export default function ProductStory({ productName, isDark = true }: ProductStor
               Engineered for Indian Trails
             </h2>
             <p className="text-xl text-zinc-300 leading-relaxed max-w-2xl mx-auto">
-              From highway glare to monsoon downpours, from Ladakh passes to desert trails. 
-              Built to perform when Indian roads demand the most.
+              {storyText || 'From highway glare to monsoon downpours, from Ladakh passes to desert trails. Built to perform when Indian roads demand the most.'}
             </p>
           </div>
 

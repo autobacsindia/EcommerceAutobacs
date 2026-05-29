@@ -104,6 +104,9 @@ export default function EditProductPage() {
   const [packageContents, setPackageContents] = useState<string[]>([]);
   const [qna, setQna] = useState<{ question: string; answer: string }[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
+  const [productStoryText, setProductStoryText] = useState('');
+  const [installationSteps, setInstallationSteps] = useState<{ title: string; description: string }[]>([]);
+  const [indianUseCases, setIndianUseCases] = useState<string[]>([]);
 
   useEffect(() => {
     fetchCategories();
@@ -196,6 +199,9 @@ export default function EditProductPage() {
       setFeatures(productData.features || []);
       setPackageContents(productData.packageContents || []);
       setQna(productData.qna || []);
+      setProductStoryText(productData.productStoryText || '');
+      setInstallationSteps(productData.installationSteps || []);
+      setIndianUseCases(productData.indianUseCases || []);
         
       if (productData.compatibleVehicles && Array.isArray(productData.compatibleVehicles)) {
         // Handle both populated (objects) and unpopulated (strings) arrays
@@ -357,6 +363,11 @@ export default function EditProductPage() {
       if (packageContents.length) fd.append('packageContents', JSON.stringify(packageContents));
       if (variableSpecs.length)  fd.append('variableSpecs',  JSON.stringify(variableSpecs));
       if (validQna.length)       fd.append('qna',            JSON.stringify(validQna));
+      if (productStoryText)      fd.append('productStoryText', productStoryText);
+      const validSteps = installationSteps.filter(s => s.title.trim() && s.description.trim());
+      if (validSteps.length)     fd.append('installationSteps', JSON.stringify(validSteps));
+      const validUseCases = indianUseCases.filter(Boolean);
+      if (validUseCases.length)  fd.append('indianUseCases', JSON.stringify(validUseCases));
 
       // ── Existing images (keep them as-is, append mode) ────────────────────
       // replaceMode=true → controller deletes old gallery and uses only new uploads
@@ -1265,7 +1276,110 @@ export default function EditProductPage() {
             </div>
           </div>
 
-          
+          {/* ── Engineered for Indian Trails ─────────────────────────────────── */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails</h2>
+            <p className="text-sm text-gray-500 mb-4">Custom paragraph shown under the &quot;Engineered for Indian Trails&quot; section heading on the product page. Leave blank to hide.</p>
+            <textarea
+              rows={4}
+              placeholder="e.g. Built specifically for the demands of Indian terrain — from potholed city roads to rugged mountain passes..."
+              value={productStoryText}
+              onChange={(e) => setProductStoryText(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            />
+          </div>
+
+          {/* ── Easy DIY Installation ────────────────────────────────────────── */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-1">Easy DIY Installation Steps</h2>
+            <p className="text-sm text-gray-500 mb-4">Step-by-step instructions shown in the installation section. Leave empty to show generic default steps.</p>
+            <div className="space-y-4">
+              {installationSteps.map((step, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{index + 1}</span>
+                    <span className="text-sm font-medium text-gray-600">Step {index + 1}</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Step title, e.g. Unpack & Inspect"
+                    value={step.title}
+                    onChange={(e) => {
+                      const updated = [...installationSteps];
+                      updated[index] = { ...updated[index], title: e.target.value };
+                      setInstallationSteps(updated);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <textarea
+                    rows={2}
+                    placeholder="Step description..."
+                    value={step.description}
+                    onChange={(e) => {
+                      const updated = [...installationSteps];
+                      updated[index] = { ...updated[index], description: e.target.value };
+                      setInstallationSteps(updated);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setInstallationSteps(installationSteps.filter((_, i) => i !== index))}
+                      className="px-3 py-1.5 text-sm border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                    >
+                      Remove Step
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setInstallationSteps([...installationSteps, { title: '', description: '' }])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+              >
+                Add Step
+              </button>
+            </div>
+          </div>
+
+          {/* ── Perfect for Indian Roads & Climate ───────────────────────────── */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-1">Perfect for Indian Roads &amp; Climate</h2>
+            <p className="text-sm text-gray-500 mb-4">Bullet points for the Indian use-cases section. Format: <span className="font-mono bg-gray-100 px-1 rounded">Bold Title – Supporting description</span>. Leave empty to show generic defaults.</p>
+            <div className="space-y-3">
+              {indianUseCases.map((item, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. Monsoon Ready – Water-resistant construction ensures reliable performance during heavy rains"
+                    value={item}
+                    onChange={(e) => {
+                      const updated = [...indianUseCases];
+                      updated[index] = e.target.value;
+                      setIndianUseCases(updated);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIndianUseCases(indianUseCases.filter((_, i) => i !== index))}
+                    className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50 text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setIndianUseCases([...indianUseCases, ''])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+              >
+                Add Use Case
+              </button>
+            </div>
+          </div>
+
           {/* Images */}
           <div className="md:col-span-2">
             <h2 className="text-xl font-semibold mb-4">Product Images</h2>

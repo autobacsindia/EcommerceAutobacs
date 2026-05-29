@@ -46,7 +46,8 @@ const parseProductFields = (body) => {
   const fields = { ...body };
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
-   'specifications', 'qna', 'variableSpecs', 'compatibleVehicles'].forEach((key) => {
+   'specifications', 'qna', 'variableSpecs', 'compatibleVehicles',
+   'installationSteps', 'indianUseCases'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
