@@ -4,11 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 
-interface AdminLayoutClientProps {
-  children: React.ReactNode;
-  userId: string;
-}
-
 interface NavItem {
   href?: string;
   label: string;
@@ -16,12 +11,67 @@ interface NavItem {
   children?: NavItem[];
 }
 
+const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: 'Main',
+    items: [
+      { href: '/admin', label: 'Dashboard', icon: '📊' },
+      { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
+    ],
+  },
+  {
+    title: 'Catalog',
+    items: [
+      { href: '/admin/products', label: 'Products', icon: '🛍️' },
+      { href: '/admin/brands', label: 'Brands', icon: '🏷️' },
+      { href: '/admin/categories', label: 'Categories', icon: '📂' },
+      { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
+    ],
+  },
+  {
+    title: 'Orders',
+    items: [
+      { href: '/admin/orders', label: 'Orders', icon: '📦' },
+      { href: '/admin/returns', label: 'Returns', icon: '↩️' },
+      { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
+    ],
+  },
+  {
+    title: 'Customers',
+    items: [
+      { href: '/admin/users', label: 'Users', icon: '👥' },
+      { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
+      { href: '/admin/questions', label: 'Q&A', icon: '❓' },
+    ],
+  },
+  {
+    title: 'Content',
+    items: [
+      { href: '/admin/media', label: 'Media', icon: '🖼️' },
+      { href: '/admin/messages', label: 'Messages', icon: '💬' },
+      { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },
+    ],
+  },
+  {
+    title: 'System',
+    items: [
+      { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
+      { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
+    ],
+  },
+];
+
+interface AdminLayoutClientProps {
+  children: React.ReactNode;
+  userId: string;
+}
+
 export default function AdminLayoutClient({ children, userId }: AdminLayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    'Catalog': true,
+    'Catalog': false,
     'Orders': false,
     'Customers': false,
     'Content': false,
@@ -34,56 +84,22 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
     totalRevenue: 0,
   });
 
-  // Admin navigation links with sub-menus
-  const navSections: { title: string; items: NavItem[] }[] = [
-    {
-      title: 'Main',
-      items: [
-        { href: '/admin', label: 'Dashboard', icon: '📊' },
-        { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
-      ]
-    },
-    {
-      title: 'Catalog',
-      items: [
-        { href: '/admin/products', label: 'Products', icon: '🛍️' },
-        { href: '/admin/brands', label: 'Brands', icon: '🏷️' },
-        { href: '/admin/categories', label: 'Categories', icon: '📂' },
-        { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
-      ]
-    },
-    {
-      title: 'Orders',
-      items: [
-        { href: '/admin/orders', label: 'Orders', icon: '📦' },
-        { href: '/admin/returns', label: 'Returns', icon: '↩️' },
-        { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
-      ]
-    },
-    {
-      title: 'Customers',
-      items: [
-        { href: '/admin/users', label: 'Users', icon: '👥' },
-        { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
-        { href: '/admin/questions', label: 'Q&A', icon: '❓' },
-      ]
-    },
-    {
-      title: 'Content',
-      items: [
-        { href: '/admin/media', label: 'Media', icon: '🖼️' },
-        { href: '/admin/messages', label: 'Messages', icon: '💬' },
-        { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },
-      ]
-    },
-    {
-      title: 'System',
-      items: [
-        { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
-        { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
-      ]
-    },
-  ];
+  const navSections = NAV_SECTIONS;
+
+  // Auto-expand the section that contains the current page; collapse everything else
+  useEffect(() => {
+    const updates: Record<string, boolean> = {};
+    NAV_SECTIONS.forEach(section => {
+      const hasActive = section.items.some(
+        item => item.href && (pathname === item.href || pathname.startsWith(item.href + '/'))
+      );
+      // Only flip sections that are collapsible (not 'Main')
+      if (section.title !== 'Main') {
+        updates[section.title] = hasActive;
+      }
+    });
+    setExpandedSections(updates);
+  }, [pathname]);
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev => ({

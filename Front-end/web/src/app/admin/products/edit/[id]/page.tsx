@@ -6,6 +6,8 @@ import apiClient from '@/lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
+import RichTextEditor from '@/components/ui/RichTextEditor';
+import SeoScorePanel from '@/components/ui/SeoScorePanel';
 import { generateSlug } from '@/lib/utils';
 
 interface Category {
@@ -66,6 +68,12 @@ export default function EditProductPage() {
 
   // Tags state
   const [tagsInput, setTagsInput] = useState('');
+
+  // Permalink / slug state
+  const [slug, setSlug] = useState('');
+  const [isEditingSlug, setIsEditingSlug] = useState(false);
+  const [editingSlugValue, setEditingSlugValue] = useState('');
+  const [slugCustomized, setSlugCustomized] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -175,6 +183,7 @@ export default function EditProductPage() {
       console.log('Product categories:', productData.categories);
       console.log('Product full data:', productData);
       setProduct(productData);
+      setSlug(productData.slug || generateSlug(productData.name || ''));
       // Normalise to CloudinaryImage shape (old images may have no public_id)
       const imgs: CloudinaryImage[] = (productData.images || []).map((img: any) => ({
         url:       img?.url || '',
@@ -248,11 +257,15 @@ export default function EditProductPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+
+    if (name === 'name' && !slugCustomized) {
+      setSlug(generateSlug(value));
+    }
   };
 
   /**
@@ -330,26 +343,10 @@ export default function EditProductPage() {
       if (formData.offerStartDate) fd.append('offerStartDate', formData.offerStartDate);
       if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
 
-      // Generate and append slug from product name
-      // Only generate new slug if:
-      // 1. This is a NEW product (no existing product data), OR
-      // 2. The product name has CHANGED from the original
-      const isNewProduct = !product; // product is undefined for new products
-      const nameChanged = product && formData.name !== product.name;
-      
-      if (isNewProduct || nameChanged) {
-        const slug = formData.name
-          .toLowerCase()
-          .trim()
-          .replace(/[^a-z0-9\s-]/g, '')  // Fixed: removed extra [ bracket
-          .replace(/\s+/g, '-')           // Fixed: replace spaces with hyphens
-          .replace(/-+/g, '-')            // Fixed: collapse multiple hyphens
-          .replace(/^-+|-+$/g, '');       // Fixed: trim leading/trailing hyphens
+      // Use slug from state (auto-generated from name or manually customized)
+      if (slug) {
         fd.append('slug', slug);
-        console.log('Generated new slug:', slug);
-      } else {
-        // Keep existing slug for unchanged product name
-        console.log('Keeping existing slug:', product?.slug);
+        console.log('Using slug:', slug);
       }
 
       // ── JSON-encoded arrays ────────────────────────────────────────────────
@@ -488,7 +485,8 @@ export default function EditProductPage() {
         <h1 className="text-3xl font-bold">Edit Product <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded ml-2">New</span></h1>
       </div>
       
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
+      <div className="flex gap-6 items-start">
+      <form onSubmit={handleSubmit} className="flex-1 min-w-0 bg-white rounded-lg shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Product Information */}
           <div className="md:col-span-2">
@@ -507,6 +505,67 @@ export default function EditProductPage() {
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+
+              {/* Permalink bar */}
+              <div className="mt-2 flex items-center flex-wrap gap-1 text-sm text-gray-600">
+                <span className="font-medium text-gray-500">Permalink:</span>
+                {isEditingSlug ? (
+                  <>
+                    <span className="text-gray-400">
+                      {typeof window !== 'undefined' ? window.location.origin : ''}/products/
+                    </span>
+                    <input
+                      type="text"
+                      value={editingSlugValue}
+                      onChange={(e) => setEditingSlugValue(e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))}
+                      className="px-2 py-0.5 border border-blue-400 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 min-w-50"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSlug(editingSlugValue);
+                        setSlugCustomized(true);
+                        setIsEditingSlug(false);
+                      }}
+                      className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                    >
+                      OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingSlug(false)}
+                      className="px-2 py-0.5 border border-gray-300 text-gray-600 rounded text-xs hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <a
+                      href={`/products/${slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline break-all"
+                    >
+                      {typeof window !== 'undefined' ? window.location.origin : ''}/products/{slug}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSlugValue(slug);
+                        setIsEditingSlug(true);
+                      }}
+                      className="px-2 py-0.5 border border-gray-300 text-gray-600 rounded text-xs hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    {slugCustomized && (
+                      <span className="text-xs text-amber-600">(customized)</span>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
             
             <div className="mb-4">
@@ -527,17 +586,14 @@ export default function EditProductPage() {
             </div>
             
             <div className="mb-4">
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Description *
               </label>
-              <textarea
-                id="description"
-                name="description"
+              <RichTextEditor
                 value={formData.description}
-                onChange={handleInputChange}
-                required
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(html) => setFormData((prev) => ({ ...prev, description: html }))}
+                placeholder="Enter product description…"
+                minHeight="220px"
               />
             </div>
           </div>
@@ -1263,6 +1319,26 @@ export default function EditProductPage() {
           </button>
         </div>
       </form>
+
+      {/* Sticky SEO Score sidebar */}
+      <aside className="w-72 shrink-0 sticky top-6 self-start">
+        <SeoScorePanel
+          data={{
+            name: formData.name,
+            description: formData.description,
+            shortDescription: formData.shortDescription,
+            brand: formData.brand,
+            slug,
+            existingImages,
+            newImageCount: newImageFiles.length,
+            selectedCategories,
+            tagsInput,
+            features,
+            qna,
+          }}
+        />
+      </aside>
+      </div>
     </div>
   );
 }
