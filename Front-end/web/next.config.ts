@@ -47,7 +47,9 @@ const nextConfig: NextConfig = {
     // code can do — exfiltration via connect-src, foreign iframes via frame-src, etc.
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://maps.googleapis.com",
+      // 'unsafe-eval' is required in development for React Fast Refresh (HMR).
+      // Production Next.js builds do not use eval — it is intentionally excluded there.
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ""} https://checkout.razorpay.com https://maps.googleapis.com`,
       "style-src 'self' 'unsafe-inline'",
       // data: for CSS-inlined base64 fonts; blob: for ImageUploader object-URL previews
       "img-src 'self' data: blob: https://res.cloudinary.com https://autobacsindia.com https://*.gstatic.com https://*.googleapis.com",
