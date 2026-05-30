@@ -4,6 +4,16 @@ import { getServerApiBase } from '@/lib/server-api';
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsIndia.com';
 
+// JSON.stringify does not escape < > & so a product field containing </script>
+// would break out of the script tag. Unicode-escape these three characters so
+// the HTML parser never sees them — JSON parsers decode \uXXXX correctly.
+function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
 async function getProductForMetadata(slug: string) {
   try {
     // Slug-only lookup — ObjectId URLs are permanently redirected by the backend
@@ -211,13 +221,13 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
         />
       )}
       {breadcrumbSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbSchema) }}
         />
       )}
       <ClientPage slug={slug} />

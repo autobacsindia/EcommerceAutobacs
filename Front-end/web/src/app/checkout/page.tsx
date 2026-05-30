@@ -54,7 +54,7 @@ function CheckoutPageContent() {
   const [loading, setLoading] = useState(false);
   const [stockValidationErrors, setStockValidationErrors] = useState<any[]>([]);
 
-  const [isGuest, setIsGuest] = useState(!isAuthenticated);
+  const isGuest = !authLoading && !isAuthenticated;
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
 
@@ -133,10 +133,6 @@ function CheckoutPageContent() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated && !isGuest) router.push('/login');
-  }, [isAuthenticated, authLoading, router, isGuest]);
-
-  useEffect(() => {
     if (!authLoading && !cartLoading) {
       if (!cart || cart.items?.length === 0) router.push('/cart');
     }
@@ -211,8 +207,6 @@ function CheckoutPageContent() {
       </div>
     );
   }
-
-  if (!isAuthenticated && !isGuest) return null;
 
   if (currentStep === 'confirmation' && orderId) {
     const isGuestOrder = localStorage.getItem('pendingClaim');

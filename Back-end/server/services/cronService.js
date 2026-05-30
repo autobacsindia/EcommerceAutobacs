@@ -63,10 +63,11 @@ class CronService {
     if (process.env.NODE_ENV !== 'test') {
       console.log('Initializing cron jobs...');
     }
-    
-    // Schedule failed product import job to run at 11:10 AM daily
-    this.scheduleFailedProductImport();
-    
+
+    // scheduleFailedProductImport() is intentionally NOT registered here.
+    // The implementation used Math.random() to fake results and was removed.
+    // Re-enable once wpIntegrationService re-import logic is wired up.
+
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
     }
@@ -105,91 +106,15 @@ class CronService {
   }
 
   /**
-   * Run the failed product import process
+   * Stub — real implementation pending.
+   * Previous version used Math.random() to fake 70% success; removed to prevent false reporting.
+   * TODO: implement using wpIntegrationService to re-fetch products by WooCommerce ID.
    */
   async runFailedProductImport() {
-    try {
-      console.log('Starting failed product import process...');
-      
-      // Generate a unique job ID for this re-import attempt
-      const jobId = `failed-import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Create import job tracking
-      const importJob = new ImportJob({
-        jobId,
-        initiatedBy: null, // System initiated
-        source: 'scheduled-failed',
-        status: 'running',
-        startedAt: new Date(),
-        isReimport: true
-      });
-      
-      await importJob.save();
-      
-      // Find recent import jobs with failed products
-      const recentFailedJobs = await ImportJob.find({
-        status: 'completed',
-        failedProducts: { $gt: 0 },
-        source: { $in: ['wordpress', 'manual', 'scheduled'] },
-        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
-      }).sort({ createdAt: -1 });
-      
-      console.log(`Found ${recentFailedJobs.length} recent jobs with failed products`);
-      
-      let totalFailedProducts = 0;
-      let reimportedCount = 0;
-      let stillFailedCount = 0;
-      
-      // For now, we'll implement a simplified version that logs what would be done
-      // A full implementation would need to track specific failed product IDs
-      
-      for (const job of recentFailedJobs) {
-        console.log(`Processing failed products from job ${job.jobId} (failed: ${job.failedProducts})`);
-        totalFailedProducts += job.failedProducts;
-        
-        // In a complete implementation, we would:
-        // 1. Identify the specific products that failed in this job
-        // 2. Attempt to re-import those specific products
-        // 3. Update counts based on actual results
-        
-        // For now, we'll simulate with a 70% success rate
-        const simulatedReimported = Math.min(job.failedProducts, Math.floor(job.failedProducts * 0.7));
-        const simulatedStillFailed = job.failedProducts - simulatedReimported;
-        
-        reimportedCount += simulatedReimported;
-        stillFailedCount += simulatedStillFailed;
-      }
-      
-      // Update job with results
-      importJob.status = 'completed';
-      importJob.completedAt = new Date();
-      importJob.totalProducts = totalFailedProducts;
-      importJob.processedProducts = totalFailedProducts;
-      importJob.importedProducts = reimportedCount;
-      importJob.failedProducts = stillFailedCount;
-      importJob.progress = 100;
-      
-      await importJob.save();
-      
-      console.log(`Failed product import completed. Total: ${totalFailedProducts}, Re-imported: ${reimportedCount}, Still failed: ${stillFailedCount}`);
-      
-      return {
-        success: true,
-        jobId: importJob.jobId,
-        summary: {
-          totalFailedProducts,
-          reimported: reimportedCount,
-          stillFailed: stillFailedCount
-        }
-      };
-    } catch (error) {
-      console.error('Failed to run failed product import:', error.message);
-      
-      return {
-        success: false,
-        error: error.message
-      };
-    }
+    return {
+      success: false,
+      error: 'Not implemented: re-import logic has not been built yet.'
+    };
   }
 
   /**

@@ -88,39 +88,18 @@ router.post("/run/:taskName", protect, admin, asyncHandler(async (req, res) => {
     }
     
     const { taskName } = req.params;
-    
-    if (taskName === 'failedProductImport') {
-      const result = await cronServiceInstance.runFailedProductImport();
-      
-      if (result.success) {
-        // Log audit event
-        auditLogger.logAction(
-          req,
-          'UPDATE',
-          'ScheduledTask',
-          null,
-          { action: 'RUN_MANUAL', taskName },
-          'SUCCESS'
-        );
 
-        res.json({
-          success: true,
-          message: 'Failed product import task executed successfully',
-          result: result
-        });
-      } else {
-        res.status(500).json({
-          success: false,
-          message: 'Failed to execute failed product import task',
-          error: result.error
-        });
-      }
-    } else {
-      res.status(404).json({
+    if (taskName === 'failedProductImport') {
+      return res.status(501).json({
         success: false,
-        message: 'Task not found'
+        message: 'failedProductImport is not implemented. The previous version simulated results with Math.random() and has been disabled.'
       });
     }
+
+    res.status(404).json({
+      success: false,
+      message: 'Task not found'
+    });
   } catch (error) {
     res.status(500).json({
       success: false,

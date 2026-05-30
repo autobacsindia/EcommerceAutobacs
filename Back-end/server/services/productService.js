@@ -126,14 +126,20 @@ class ProductService {
         });
 
         return brands
-          .map(brand => ({
-            id: brand._id.toString(),
-            name: brand.name,
-            slug: brand.slug,
-            productCount: countMap[brand.name] || 0,
-            logo: brand.logo || null,
-            description: brand.description || null
-          }))
+          .map(brand => {
+            const raw = brand.logo;
+            const logoUrl = typeof raw === 'string' ? raw || null
+                          : raw && typeof raw === 'object' ? raw.url || null
+                          : null;
+            return {
+              id: brand._id.toString(),
+              name: brand.name,
+              slug: brand.slug,
+              productCount: countMap[brand.name] || 0,
+              logo: logoUrl,
+              description: brand.description || null
+            };
+          })
           .filter(b => b.productCount > 0);
       },
       { 

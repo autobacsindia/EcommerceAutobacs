@@ -326,10 +326,13 @@ class RazorpayService {
       throw new Error('Currency mismatch');
     }
     
-    // SECURITY: Check if already processed (idempotency)
-    if (order.payment && order.payment.status === 'completed') {
+    // SECURITY: Check if already processed (idempotency).
+    // order.payment is an ObjectId reference — it has no .status field.
+    // Query the Payment collection directly using the gateway payment ID instead.
+    const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
+    if (existingPayment && existingPayment.status === 'completed') {
       console.log(`[Webhook] Payment already processed for order: ${orderId}`);
-      return; // Already done, skip
+      return;
     }
     
     // Process payment (same as frontend verification)

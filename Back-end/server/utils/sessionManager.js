@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import sessionStore from '../services/sessionStore.js';
 import { signToken } from './jwtSecretManager.js';
+import User from '../models/User.js';
 
 /**
  * Generate a secure refresh token
@@ -283,24 +284,19 @@ export const rotateRefreshToken = async (user, oldRefreshToken, ipAddress = null
  * @param {string} userAgent - Client user agent
  */
 export const logLoginAttempt = async (user, success, ipAddress = null, userAgent = null) => {
-  // Keep only last 20 login attempts
-  if (user.loginAttempts.length >= 20) {
-    user.loginAttempts = user.loginAttempts.slice(-19);
-  }
-  
-  user.loginAttempts.push({
-    timestamp: new Date(),
-    ipAddress,
-    success,
-    userAgent
-  });
-  
+  const now = new Date();
+  const update = {
+    $push: {
+      loginAttempts: {
+        $each: [{ timestamp: now, ipAddress, success, userAgent }],
+        $slice: -50,
+      },
+    },
+  };
   if (success) {
-    user.lastLoginAt = new Date();
-    user.lastLoginIp = ipAddress;
+    update.$set = { lastLoginAt: now, lastLoginIp: ipAddress };
   }
-  
-  await user.save();
+  await User.updateOne({ _id: user._id }, update);
 };
 
 /**

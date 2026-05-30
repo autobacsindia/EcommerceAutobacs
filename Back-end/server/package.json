@@ -43,6 +43,7 @@
                     "validate-categories-with-mapping":  "node validate-product-categories-with-mapping.js",
                     "assign-header-nav-categories":  "node assign-header-categories.js",
                     "test-validate-categories":  "node test-validate-product-categories.js",
+                    "migrate:login-attempts":  "node scripts/trim-login-attempts.js",
                     "backfill-cloudinary-ids":  "node scripts/backfill-cloudinary-public-ids.js",
                     "check-cloudinary-health":  "node scripts/check-cloudinary-health.js",
                     "fix-cart-indexes":  "node scripts/fix-cart-indexes.js",

@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import Redis from 'ioredis';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import razorpayService from '../services/razorpayService.js';
+import WebhookEvent from '../models/WebhookEvent.js';
 
 const router = express.Router();
 
@@ -59,23 +60,39 @@ router.post("/", asyncHandler(async (req, res) => {
     const createdAt = webhookData.created_at; // Unix timestamp
     
     // SECURITY STEP 2: Replay protection - Check event ID
+    // Primary: Redis (fast). Fallback: MongoDB (durable). Never fall through with no check.
     let redisClient = null;
     try {
       redisClient = new Redis(process.env.REDIS_URL, {
         maxRetriesPerRequest: 1,
         connectTimeout: 2000,
       });
-      
+
       const eventExists = await redisClient.get(`razorpay:event:${eventId}`);
       if (eventExists) {
-        console.log(`[Webhook] Duplicate event ignored: ${eventId}`);
-        return res.status(200).end(); // Already processed
+        console.log(`[Webhook] Duplicate event ignored (Redis): ${eventId}`);
+        return res.status(200).end();
       }
-      
+
       // Mark event as processed (24h TTL)
       await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
     } catch (redisError) {
-      console.warn('[Webhook] Redis unavailable, skipping replay protection:', redisError.message);
+      console.warn('[Webhook] Redis unavailable, falling back to MongoDB replay protection:', redisError.message);
+      usedRedisFallback = true;
+
+      // MongoDB fallback: insertOne is atomic on the unique index — a duplicate
+      // event will throw an E11000 duplicate-key error instead of slipping through.
+      try {
+        await WebhookEvent.create({ eventId, eventType });
+      } catch (mongoError) {
+        if (mongoError.code === 11000) {
+          console.log(`[Webhook] Duplicate event ignored (MongoDB): ${eventId}`);
+          return res.status(200).end();
+        }
+        // MongoDB itself is down — refuse to process rather than risk a duplicate.
+        console.error('[Webhook] MongoDB fallback also unavailable:', mongoError.message);
+        return res.status(503).end();
+      }
     } finally {
       if (redisClient) {
         redisClient.quit().catch(() => {});

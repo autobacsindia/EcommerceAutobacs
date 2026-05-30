@@ -23,11 +23,15 @@ interface BrandsResponse {
 function sanitizeBrand(brand: any): Brand | null {
   if (!brand || !brand.slug || !brand.name) return null;
   if (!/^[a-z0-9-]+$/.test(brand.slug)) return null;
+  const raw = brand.logo;
+  const logo = typeof raw === 'string' && raw ? raw
+             : raw && typeof raw === 'object' && raw.url ? String(raw.url)
+             : undefined;
   return {
     id: brand.id || undefined,
     name: brand.name,
     slug: brand.slug,
-    logo: brand.logo || undefined,
+    logo,
     description: brand.description || undefined,
     productCount: typeof brand.productCount === 'number' && brand.productCount >= 0 ? brand.productCount : 0
   };
