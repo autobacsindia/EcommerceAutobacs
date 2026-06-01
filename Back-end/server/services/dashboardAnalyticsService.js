@@ -2,6 +2,7 @@ import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Contact from '../models/Contact.js';
+import { QUERY_TIMEOUTS } from '../config/db.js';
 
 /**
  * Dashboard Analytics Service
@@ -82,7 +83,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]).option({ maxTimeMS: 8000 });
+      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
       // Get week-to-date revenue
       const weekRevenue = await Order.aggregate([
@@ -99,7 +100,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]).option({ maxTimeMS: 8000 });
+      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
       // Get month-to-date revenue
       const monthRevenue = await Order.aggregate([
@@ -116,7 +117,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]).option({ maxTimeMS: 8000 });
+      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
       const todayData = todayRevenue[0] || { total: 0, count: 0 };
       const weekData = weekRevenue[0] || { total: 0, count: 0 };
@@ -169,7 +170,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]).option({ maxTimeMS: 8000 });
+      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
       const breakdown = {};
       statusBreakdown.forEach(item => {
@@ -310,7 +311,7 @@ class DashboardAnalyticsService {
             count: { $sum: 1 }
           }
         }
-      ]).option({ maxTimeMS: 8000 });
+      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
       const breakdown = {
         new: 0,
@@ -386,7 +387,7 @@ class DashboardAnalyticsService {
             totalRevenue: 1
           }
         }
-      ]);
+      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
       return topProducts;
     } catch (error) {

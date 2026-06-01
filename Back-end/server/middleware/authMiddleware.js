@@ -114,24 +114,16 @@ export const admin = asyncHandler(async (req, res, next) => {
   const storedUAHash = req.user.lastAdminUAHash;
   
   if (storedIPHash && storedUAHash) {
-    // Context mismatch detected (possible token theft)
+    // Context mismatch detected (possible token theft) — require re-authentication
     if (storedIPHash !== currentIPHash || storedUAHash !== currentUAHash) {
       console.error(
         `[SECURITY] Admin session context mismatch! | User: ${req.user.email} | ` +
         `IP changed: ${storedIPHash !== currentIPHash} | UA changed: ${storedUAHash !== currentUAHash} | ` +
         `IP: ${currentIP} | UA: ${currentUA}`
       );
-      
-      // SECURITY: Revoke all sessions for this admin (nuclear option)
-      // In production, you might want to add a grace period or skip for mobile IP changes
-      req.user.lastAdminIPHash = currentIPHash;
-      req.user.lastAdminUAHash = currentUAHash;
-      await req.user.save();
-      
-      // Log security event but allow request (don't block legitimate mobile users)
-      // You can change this to reject if you want stricter security
-      Sentry.captureMessage('Admin session context mismatch', {
-        level: 'warning',
+
+      Sentry.captureMessage('Admin session context mismatch — access denied', {
+        level: 'error',
         extra: {
           userId: req.user._id,
           email: req.user.email,
@@ -139,6 +131,12 @@ export const admin = asyncHandler(async (req, res, next) => {
           uaChanged: storedUAHash !== currentUAHash,
           ip: currentIP
         }
+      });
+
+      return res.status(401).json({
+        success: false,
+        message: 'Session context changed. Please login again.',
+        code: 'context_mismatch'
       });
     }
   } else {

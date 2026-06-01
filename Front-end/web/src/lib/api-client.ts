@@ -710,6 +710,12 @@ class APIClient {
         const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/refresh');
         
         if (error.status === 401 && !isAuthEndpoint) {
+          // Admin session context changed — send to login immediately, no refresh attempt
+          if (error.rawData?.code === 'context_mismatch' && typeof window !== 'undefined') {
+            window.location.href = '/login?reason=context_mismatch';
+            throw error;
+          }
+
           // Only attempt refresh if we have a refresh token (skip for guest users)
           if (this.refreshToken) {
             console.debug('401 detected, attempting token refresh...');

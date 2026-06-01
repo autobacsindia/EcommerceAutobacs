@@ -4,9 +4,15 @@ import { promisify } from 'util';
 
 const execPromise = promisify(exec);
 
-// Kill any query that runs longer than this. Prevents a single unindexed scan
-// from exhausting the connection pool. Override via env for specific deployments.
-mongoose.set('maxTimeMS', parseInt(process.env.MONGO_QUERY_TIMEOUT_MS) || 5000);
+// Per-query-type timeout budgets. Apply these at the call site with
+// .maxTimeMS(QUERY_TIMEOUTS.listing) or .option({ maxTimeMS: QUERY_TIMEOUTS.aggregation }).
+// A global mongoose.set('maxTimeMS') is intentionally NOT used — it kills analytics
+// aggregations and import jobs that legitimately need more than 5 s.
+export const QUERY_TIMEOUTS = {
+  listing:     parseInt(process.env.MONGO_TIMEOUT_LISTING_MS)     || 3000,
+  aggregation: parseInt(process.env.MONGO_TIMEOUT_AGGREGATION_MS) || 15000,
+  import:      parseInt(process.env.MONGO_TIMEOUT_IMPORT_MS)      || 30000,
+};
 
 // Mongoose connection options with enhanced SSL/TLS support
 const mongooseOptions = {

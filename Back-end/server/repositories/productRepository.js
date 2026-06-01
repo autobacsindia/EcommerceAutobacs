@@ -14,6 +14,7 @@ import Category from '../models/Category.js';
 import Vehicle from '../models/Vehicle.js';
 import Brand from '../models/Brand.js';
 import mongoose from 'mongoose';
+import { QUERY_TIMEOUTS } from '../config/db.js';
 
 class ProductRepository {
   /**
@@ -40,7 +41,8 @@ class ProductRepository {
     return queryBuilder
       .sort(sort)
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
   /**
@@ -80,7 +82,8 @@ class ProductRepository {
     return Product.find({ isActive: true, isFeatured: true })
       .populate('categories', 'name slug')
       .limit(Number(limit))
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
   /**
@@ -116,7 +119,8 @@ class ProductRepository {
     })
       .populate('categories', 'name slug')
       .limit(Number(limit))
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
   /**
@@ -157,14 +161,14 @@ class ProductRepository {
           count: { $sum: 1 }
         }
       }
-    ]).option({ maxTimeMS: 5000 });
+    ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
   }
 
   /**
    * Count total products matching query
    */
   async count(query) {
-    return Product.countDocuments(query);
+    return Product.countDocuments(query).maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
   /**
@@ -265,7 +269,8 @@ class ProductRepository {
     )
       .sort({ score: { $meta: 'textScore' } })
       .limit(limit)
-      .select('name slug');
+      .select('name slug')
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 }
 

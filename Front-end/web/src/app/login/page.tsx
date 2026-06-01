@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
@@ -13,7 +13,14 @@ import { FaFacebook } from 'react-icons/fa';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, error, clearError } = useAuth();
+
+  const reasonMessages: Record<string, string> = {
+    context_mismatch: 'Your admin session was terminated because your network or device changed. Please sign in again.',
+    refresh_failed: 'Your session expired. Please sign in again.',
+  };
+  const reasonBanner = searchParams.get('reason') ? reasonMessages[searchParams.get('reason')!] ?? null : null;
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -82,6 +89,13 @@ export default function LoginPage() {
       <div className="w-full max-w-[350px] sm:max-w-[400px]">
         <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 sm:p-8">
           <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-6">Sign In</h1>
+
+          {reasonBanner && (
+            <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/40 rounded-sm flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-400 font-body">{reasonBanner}</div>
+            </div>
+          )}
 
           {(error || (timeUntilRetry !== null && timeUntilRetry > 0)) && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-sm flex items-start gap-2">
