@@ -1,4 +1,5 @@
 import { MetadataRoute } from 'next';
+import * as Sentry from '@sentry/nextjs';
 import { getServerApiBase } from '@/lib/server-api';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -74,7 +75,7 @@ async function fetchProductPage(page: number): Promise<MetadataRoute.Sitemap> {
   
   // Add timeout for individual page fetches
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per page
+  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s — allows for Railway cold-start
   
   try {
     // OPTIMIZATION: Fetch only required fields (slug, updatedAt) from backend
@@ -121,6 +122,7 @@ async function fetchProductPage(page: number): Promise<MetadataRoute.Sitemap> {
       durationMs,
       error: (err as Error).message,
     });
+    Sentry.captureException(err, { extra: { context: 'fetchProductPage', page, shard: page + PRODUCT_SHARD_OFFSET, durationMs } });
     
     // STALE-WHILE-REVALIDATE: Return cached data if available
     const cached = getCachedSitemap(page + PRODUCT_SHARD_OFFSET);
@@ -141,7 +143,7 @@ export async function generateSitemaps(): Promise<{ id: number }[]> {
   
   // Fetch total count with timeout protection
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s — allows for Railway cold-start
   
   try {
     // OPTIMIZATION: Use lightweight count endpoint instead of fetching products
@@ -175,6 +177,7 @@ export async function generateSitemaps(): Promise<{ id: number }[]> {
       durationMs,
       error: (err as Error).message,
     });
+    Sentry.captureException(err, { extra: { context: 'generateSitemaps', durationMs } });
     
     // FALLBACK: Use cached shard count or minimal sitemaps
     // This ensures we always generate SOME sitemap, even if backend is completely down
@@ -206,8 +209,8 @@ export default async function sitemap({
   if (id === 1) {
     const startTime = Date.now();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
-    
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s — allows for Railway cold-start
+
     try {
       // OPTIMIZATION: Fetch only required fields
       const articlesData = await safeFetch<{ data?: Array<{ type: string; slug: string; updatedAt?: string; publishedAt?: string }> }>(
@@ -245,6 +248,7 @@ export default async function sitemap({
         durationMs,
         error: (err as Error).message,
       });
+      Sentry.captureException(err, { extra: { context: 'sitemap shard 1 (articles)', durationMs } });
       
       // STALE-WHILE-REVALIDATE: Return cached data
       const cached = getCachedSitemap(1);
@@ -273,7 +277,7 @@ export default async function sitemap({
   // Fetch categories with timeout
   const startTime = Date.now();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s — allows for Railway cold-start
   
   let categoryRoutes: MetadataRoute.Sitemap = [];
   try {
@@ -309,6 +313,7 @@ export default async function sitemap({
       durationMs,
       error: (err as Error).message,
     });
+    Sentry.captureException(err, { extra: { context: 'sitemap shard 0 (categories)', durationMs } });
     
     // STALE-WHILE-REVALIDATE: Try to return cached data
     const cached = getCachedSitemap(0);
