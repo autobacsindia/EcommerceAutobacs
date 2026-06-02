@@ -29,17 +29,15 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
         setLoading(true);
         const response = await apiClient.get('/categories', { signal: controller.signal });
         const allCategories = (response as any).data || (response as any).categories || [];
-        
-        // Build hierarchical structure
-        const topLevelCategories = allCategories.filter((cat: Category) => !cat.parent);
+
+        const topLevel = allCategories.filter((cat: Category) => !cat.parent);
         const subCategories = allCategories.filter((cat: Category) => cat.parent);
-        
-        // Attach children to parents
-        const categoriesWithChildren = topLevelCategories.map((cat: Category) => ({
+
+        const categoriesWithChildren = topLevel.map((cat: Category) => ({
           ...cat,
-          children: subCategories.filter((subCat: Category) => subCat.parent === cat._id)
+          children: subCategories.filter((sub: Category) => sub.parent === cat._id),
         }));
-        
+
         setCategories(categoriesWithChildren);
       } catch (err: any) {
         if (err.name === 'AbortError') return;
@@ -53,71 +51,78 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
     return () => controller.abort();
   }, []);
 
-  const toggleCategory = (categoryId: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(categoryId)) {
-      newExpanded.delete(categoryId);
-    } else {
-      newExpanded.add(categoryId);
-    }
-    setExpandedCategories(newExpanded);
+  const toggleExpand = (categoryId: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
   };
 
   const handleCategoryToggle = (categoryId: string) => {
     const newSelected = selectedCategories.includes(categoryId)
       ? selectedCategories.filter(id => id !== categoryId)
       : [...selectedCategories, categoryId];
-    
     onCategoryChange(newSelected);
   };
 
   if (loading) {
     return (
       <div className="space-y-2">
-        {[...Array(5)].map((_, index) => (
-          <div key={index} className="flex items-center animate-pulse">
-            <div className="h-4 w-4 bg-gray-200 rounded mr-2"></div>
-            <div className="h-4 w-3/4 bg-gray-200 rounded"></div>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-2 animate-pulse">
+            <div className="h-4 w-4 bg-gray-200 rounded" />
+            <div className="h-4 w-3/4 bg-gray-200 rounded" />
           </div>
         ))}
       </div>
     );
   }
 
-  const renderCategory = (category: Category, level = 0, index?: number) => {
+  if (categories.length === 0) {
+    return <p className="text-sm text-gray-500">No categories available</p>;
+  }
+
+  const renderCategory = (category: Category, level = 0) => {
     const hasChildren = category.children && category.children.length > 0;
     const isExpanded = expandedCategories.has(category._id);
     const isChecked = selectedCategories.includes(category._id);
-    
+
     return (
-      <li key={category._id || index} className={`${level === 0 ? 'woof_list_item' : 'woof_childs_list_item'} woof_list_item_${category._id}`}>
-        <div className="woof_list_item_container">
-          <input 
-            type="checkbox" 
-            className="woof_checkbox_checkbox" 
-            id={`woof_checkbox_${category._id}`} 
-            data-tax="product_cat" 
-            data-name={category.name} 
-            data-value={category._id} 
+      <li key={category._id} className={level > 0 ? 'ml-4' : ''}>
+        <div className="flex items-center gap-2 py-1">
+          <input
+            type="checkbox"
+            id={`cat-${category._id}`}
             checked={isChecked}
             onChange={() => handleCategoryToggle(category._id)}
+            className="h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
           />
-          <label className="woof_checkbox_label" htmlFor={`woof_checkbox_${category._id}`}>
-            {hasChildren && (
-              <span 
-                className="woof_span_tagger woof_span_tagger_close" 
-                onClick={() => toggleCategory(category._id)}
-              >
-                {isExpanded ? '-' : '+'}
-              </span>
-            )}
-            <span className="woof_name_option">{category.name}</span>
+          <label
+            htmlFor={`cat-${category._id}`}
+            className="flex-1 text-sm text-gray-700 cursor-pointer select-none"
+          >
+            {category.name}
           </label>
+          {hasChildren && (
+            <button
+              type="button"
+              onClick={() => toggleExpand(category._id)}
+              className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-800 text-xs font-bold shrink-0"
+              aria-label={isExpanded ? `Collapse ${category.name}` : `Expand ${category.name}`}
+            >
+              {isExpanded ? '−' : '+'}
+            </button>
+          )}
         </div>
-        
+
         {hasChildren && isExpanded && (
-          <ul className={`woof_childs_list woof_childs_list_${category._id}`}>
-            {category.children!.map((child, idx) => renderCategory(child, level + 1, idx))}
+          <ul className="mt-1 space-y-0.5">
+            {category.children!.map(child => renderCategory(child, level + 1))}
           </ul>
         )}
       </li>
@@ -125,9 +130,9 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
   };
 
   return (
-    <div className="woof_container_overlay">
-      <ul className="woof_list woof_list_checkbox">
-        {categories.map((category, idx) => renderCategory(category, 0, idx))}
+    <div className="max-h-60 overflow-y-auto">
+      <ul className="space-y-0.5">
+        {categories.map(cat => renderCategory(cat))}
       </ul>
     </div>
   );
