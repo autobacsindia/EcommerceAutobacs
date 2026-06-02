@@ -55,12 +55,12 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
-      className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-8 space-y-6 shadow-2xl"
+      className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-5 sm:p-8 space-y-6 shadow-2xl"
     >
       {/* Price Section */}
       <div className="space-y-2">
         <div className="flex items-baseline gap-3">
-          <span className="text-5xl font-black text-white">
+          <span className="text-4xl sm:text-5xl font-black text-white">
             ₹{product.price.toLocaleString('en-IN')}
           </span>
         </div>

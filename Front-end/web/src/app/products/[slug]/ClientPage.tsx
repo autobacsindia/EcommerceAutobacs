@@ -77,6 +77,7 @@ import WhyChooseSection from '@/components/products/WhyChooseSection';
 // New premium components
 import HeroSection from '@/components/products/HeroSection';
 import ActionStrip from '@/components/products/ActionStrip';
+import FloatingCTACard from '@/components/products/FloatingCTACard';
 import PremiumGallery from '@/components/products/PremiumGallery';
 import FeatureAlternating from '@/components/products/FeatureAlternating';
 import VehicleCards from '@/components/products/VehicleCards';
@@ -497,6 +498,12 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
       {/* Hero Section */}
       <HeroSection product={product} />
+
+      {/* Mobile purchase panel — FloatingCTACard is desktop-only inside the hero
+          (hidden lg:block), so on mobile we render it here below the hero image. */}
+      <div className="lg:hidden bg-zinc-950 px-4 pt-6 pb-8">
+        <FloatingCTACard product={product} />
+      </div>
 
       {/* Action Strip */}
       <ActionStrip isDark={isDark} />
