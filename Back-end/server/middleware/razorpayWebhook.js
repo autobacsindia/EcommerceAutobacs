@@ -78,7 +78,6 @@ router.post("/", asyncHandler(async (req, res) => {
       await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
     } catch (redisError) {
       console.warn('[Webhook] Redis unavailable, falling back to MongoDB replay protection:', redisError.message);
-      usedRedisFallback = true;
 
       // MongoDB fallback: insertOne is atomic on the unique index — a duplicate
       // event will throw an E11000 duplicate-key error instead of slipping through.

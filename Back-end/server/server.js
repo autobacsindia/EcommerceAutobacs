@@ -8,6 +8,7 @@ import { initSentry } from "./config/sentry.js";
 import { validateEnvironment, logEnvironmentInfo } from "./config/validateEnv.js";
 import { startNotificationWorker } from "./queue/workers/notificationWorker.js";
 import { startOrderWorker } from "./queue/workers/orderWorker.js";
+import { startSearchSyncWorker } from "./queue/workers/searchSyncWorker.js";
 import { closeQueues } from "./queue/queues.js";
 import mongoose from "mongoose";
 
@@ -208,6 +209,7 @@ async function bootstrap() {
     try {
       startNotificationWorker();
       startOrderWorker();
+      startSearchSyncWorker();
       console.log('✓ Queue workers started');
     } catch (e) {
       console.warn('⚠ Queue workers skipped:', e.message);

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Warehouse from "../models/Warehouse.js";
 import WarehouseInventory from "../models/WarehouseInventory.js";
 import Product from "../models/Product.js";
@@ -288,79 +289,90 @@ class WarehouseService {
     try {
       const { coordinates, postalCode } = deliveryAddress;
 
-      // Get all active warehouses
       const warehouses = await Warehouse.find({
         operationalStatus: "active",
         isActive: true
       });
 
-      // Calculate scores for each warehouse
-      const warehouseScores = [];
+      // Pre-filter serviceable warehouses and sort nearest-first so the best
+      // candidate is tried before falling back to farther ones.
+      const candidates = warehouses
+        .filter(w => w.serviceablePinCodes.length === 0 || w.servicesPinCode(postalCode))
+        .map(w => ({
+          warehouse: w,
+          distance: googleMapsService.calculateDistance(
+            coordinates.latitude,
+            coordinates.longitude,
+            w.location.coordinates.coordinates[1],
+            w.location.coordinates.coordinates[0]
+          )
+        }))
+        .sort((a, b) => a.distance - b.distance);
 
-      for (const warehouse of warehouses) {
-        // Check if warehouse services this PIN code
-        if (warehouse.serviceablePinCodes.length > 0 && 
-            !warehouse.servicesPinCode(postalCode)) {
-          continue;
-        }
+      if (candidates.length === 0) {
+        return { available: false, message: "No warehouse services this area" };
+      }
 
-        // Check inventory availability
-        let hasAllProducts = true;
-        const warehouseInventory = [];
+      // Try each warehouse nearest-first. For each candidate, open a transaction
+      // and atomically check+reserve every item with a single findOneAndUpdate per
+      // item. The $expr guard on (quantity - reservedQuantity) ensures no two
+      // concurrent requests can both succeed when only one unit remains — no
+      // separate read-then-update step that could race.
+      for (const { warehouse, distance } of candidates) {
+        const session = await mongoose.startSession();
+        let reservedInventory = null;
 
-        for (const item of orderItems) {
-          const inventory = await WarehouseInventory.findOne({
-            warehouse: warehouse._id,
-            product: item.productId,
-            isActive: true
+        try {
+          await session.withTransaction(async () => {
+            const inventoryDocs = [];
+
+            for (const item of orderItems) {
+              const updated = await WarehouseInventory.findOneAndUpdate(
+                {
+                  warehouse: warehouse._id,
+                  product: item.productId,
+                  isActive: true,
+                  $expr: {
+                    $gte: [{ $subtract: ["$quantity", "$reservedQuantity"] }, item.quantity]
+                  }
+                },
+                { $inc: { reservedQuantity: item.quantity } },
+                { new: true, session }
+              );
+
+              if (!updated) {
+                // This warehouse cannot fulfill all items — abort and try the next.
+                throw Object.assign(
+                  new Error("WAREHOUSE_INSUFFICIENT_STOCK"),
+                  { skipWarehouse: true }
+                );
+              }
+
+              inventoryDocs.push(updated);
+            }
+
+            reservedInventory = inventoryDocs;
           });
-
-          if (!inventory || inventory.availableQuantity < item.quantity) {
-            hasAllProducts = false;
-            break;
-          }
-
-          warehouseInventory.push(inventory);
+        } catch (err) {
+          if (!err.skipWarehouse) throw err;
+        } finally {
+          await session.endSession();
         }
 
-        if (!hasAllProducts) {
-          continue;
+        if (reservedInventory) {
+          return {
+            available: true,
+            warehouse,
+            distance,
+            distanceKm: (distance / 1000).toFixed(2),
+            inventory: reservedInventory
+          };
         }
-
-        // Calculate distance
-        const distance = googleMapsService.calculateDistance(
-          coordinates.latitude,
-          coordinates.longitude,
-          warehouse.location.coordinates.coordinates[1],
-          warehouse.location.coordinates.coordinates[0]
-        );
-
-        warehouseScores.push({
-          warehouse,
-          distance,
-          inventory: warehouseInventory,
-          score: -distance // Negative distance for ascending sort
-        });
       }
-
-      // Sort by score (nearest first)
-      warehouseScores.sort((a, b) => b.score - a.score);
-
-      if (warehouseScores.length === 0) {
-        return {
-          available: false,
-          message: "No warehouse has complete stock for this order"
-        };
-      }
-
-      const selected = warehouseScores[0];
 
       return {
-        available: true,
-        warehouse: selected.warehouse,
-        distance: selected.distance,
-        distanceKm: (selected.distance / 1000).toFixed(2),
-        inventory: selected.inventory
+        available: false,
+        message: "No warehouse has complete stock for this order"
       };
     } catch (error) {
       console.error("Select warehouse for order error:", error);

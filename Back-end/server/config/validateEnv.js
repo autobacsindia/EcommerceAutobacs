@@ -17,6 +17,7 @@ const requiredEnvVars = [
 
 const productionOnlyVars = [
   'FRONTEND_URL',
+  'RAZORPAY_WEBHOOK_SECRET',
 ];
 
 /**
@@ -88,6 +89,7 @@ export function logEnvironmentInfo() {
     MONGO_URI: process.env.MONGO_URI ? '✓ Set' : '✗ Missing',
     REDIS_URL: process.env.REDIS_URL ? '✓ Set' : '✗ Not configured',
     FRONTEND_URL: process.env.FRONTEND_URL || 'Not set',
+    RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET ? '✓ Set' : '✗ Missing',
     SENTRY_DSN: process.env.SENTRY_DSN ? '✓ Set' : '✗ Not configured',
   });
 

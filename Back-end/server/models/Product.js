@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getSearchSyncQueue } from '../queue/queues.js';
 
 const ProductSchema = new mongoose.Schema({
   name: { 
@@ -217,6 +218,45 @@ ProductSchema.pre(/^find/, function () {
   if (!this.getOptions().includeDeleted) {
     this.where({ deletedAt: null });
   }
+});
+
+// ── Elasticsearch sync hooks ──────────────────────────────────────────────────
+// Enqueue an async BullMQ job after every write so ES stays in sync with
+// MongoDB without blocking the request. Using jobId = productId deduplicates
+// pending jobs: if multiple writes hit the same product before the worker
+// drains (e.g. rapid stock decrements during concurrent orders), only one
+// sync job remains in the queue and it fetches the latest committed state.
+//
+// Guards: both REDIS_URL and ELASTICSEARCH_ENABLED must be set, otherwise the
+// enqueue is skipped entirely (development / ES-disabled environments).
+
+function enqueueSync(productId) {
+  if (!process.env.REDIS_URL || process.env.ELASTICSEARCH_ENABLED !== 'true') return;
+  const id = productId.toString();
+  getSearchSyncQueue()
+    .add('es-sync-product', { productId: id }, { jobId: id })
+    .catch(err => console.error('[SearchSync] Failed to enqueue sync for', id, ':', err.message));
+}
+
+// Fires after doc.save() — covers creates and full-document updates.
+ProductSchema.post('save', function (doc) {
+  enqueueSync(doc._id);
+});
+
+// Fires after findOneAndUpdate / findByIdAndUpdate — covers partial updates,
+// price changes, stock changes via atomicDeductStock, soft-deletes, etc.
+// `doc` is the query result (old or new document depending on {new:} option);
+// we only need _id from it to identify which product changed.
+ProductSchema.post('findOneAndUpdate', function (doc) {
+  if (!doc) return;
+  enqueueSync(doc._id);
+});
+
+// Fires after findOneAndDelete / findByIdAndDelete — covers hard deletes.
+// The worker will find no document for this ID and will call deleteProduct.
+ProductSchema.post('findOneAndDelete', function (doc) {
+  if (!doc) return;
+  enqueueSync(doc._id);
 });
 
 export default mongoose.model("Product", ProductSchema);

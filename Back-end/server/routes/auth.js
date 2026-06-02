@@ -254,6 +254,17 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
   setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
   setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
   
+  // Bind session context for admin accounts at login time (not on first API call)
+  if (user.role === 'admin') {
+    await User.updateOne(
+      { _id: user._id },
+      {
+        lastAdminIPHash: crypto.createHash('sha256').update(ipAddress || 'unknown').digest('hex'),
+        lastAdminUAHash: crypto.createHash('sha256').update(userAgent || 'unknown').digest('hex'),
+      }
+    );
+  }
+
   // Log successful login
   await logLoginAttempt(user, true, ipAddress, userAgent);
 
@@ -261,11 +272,11 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     success: true,
     message: "Login successful",
     // NOTE: accessToken is now set as httpOnly cookie, not in response body
-    user: { 
-      id: user._id, 
-      name: user.name, 
-      email: user.email, 
-      role: user.role 
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role
     }
   });
 }));

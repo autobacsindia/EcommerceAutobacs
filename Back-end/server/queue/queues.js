@@ -20,6 +20,7 @@ const DEFAULT_JOB_OPTIONS = {
 
 let notificationsQueue = null;
 let orderQueue         = null;
+let searchSyncQueue    = null;
 
 export function getNotificationsQueue() {
   if (!notificationsQueue) {
@@ -44,9 +45,24 @@ export function getOrderQueue() {
   return orderQueue;
 }
 
+export function getSearchSyncQueue() {
+  if (!searchSyncQueue) {
+    searchSyncQueue = new Queue('search-sync', {
+      connection: createConnection(),
+      defaultJobOptions: {
+        ...DEFAULT_JOB_OPTIONS,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 2000 },
+      },
+    });
+  }
+  return searchSyncQueue;
+}
+
 export async function closeQueues() {
   await Promise.all([
     notificationsQueue?.close(),
     orderQueue?.close(),
+    searchSyncQueue?.close(),
   ]);
 }
