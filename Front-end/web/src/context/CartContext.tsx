@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
@@ -44,29 +44,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  // Tracks the AbortController for the current in-flight cart fetch so that a
+  // new fetch triggered by an auth state change cancels the previous one before
+  // it can resolve out of order and overwrite fresher cart state.
+  const cartAbortRef = useRef<AbortController | null>(null);
 
-  // Load cart once mounted and auth has settled.
-  // Always fetch — backend resolves auth vs guest via cookie/x-session-id header.
-  useEffect(() => {
-    if (!isMounted || authLoading) return;
-    refreshCart();
-  }, [isAuthenticated, isMounted, authLoading]);
-  
-  // Enhanced refreshCart with better error handling and consistency
-  const refreshCart = async () => {
+  const refreshCart = useCallback(async () => {
+    // Cancel any previous in-flight fetch before starting a new one so that
+    // rapid auth state changes (login, session revalidation, logout) never
+    // leave two concurrent requests that could resolve out of order.
+    cartAbortRef.current?.abort();
+    const controller = new AbortController();
+    cartAbortRef.current = controller;
+    const { signal } = controller;
+
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Refreshing cart...');
-      
-      const response: any = await apiClient.get(API_ENDPOINTS.CART);
-      console.log('Cart response:', response);
-      
+
+      const response: any = await apiClient.get(API_ENDPOINTS.CART, { signal });
+
       if (response.success && response.cart) {
-        // Ensure consistent cart data structure
         const cartData: Cart = {
           _id: response.cart._id,
           items: response.cart.items.map((item: any) => ({
@@ -81,28 +79,47 @@ export function CartProvider({ children }: { children: ReactNode }) {
           })),
           total: response.cart.totalPrice || response.cart.total || 0
         };
-        
         setCart(cartData);
       } else {
-        // Clear cart on invalid response
         setCart(null);
       }
     } catch (err: any) {
+      // Request was superseded by a newer fetch — discard silently.
+      if (err.name === 'AbortError') return;
+
       console.error('Failed to load cart:', err);
-      // Handle rate limit errors specifically
       if (err.status === 429) {
         setError('Too many requests. Please wait a moment before trying again.');
-        // Don't clear the cart on rate limit errors
         return;
       }
       setError(err.message);
-      // Ensure consistent state on error
       setCart(null);
     } finally {
-      setIsLoading(false);
+      // Only clear the loading flag if this request was not superseded.
+      // If it was aborted, a newer fetch is already running and will clear
+      // it when it finishes.
+      if (!signal.aborted) {
+        setIsLoading(false);
+      }
     }
-  };
-  
+  }, []);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Cancel any in-flight cart fetch on unmount.
+  useEffect(() => {
+    return () => { cartAbortRef.current?.abort(); };
+  }, []);
+
+  // Load cart once mounted and auth has settled.
+  // Always fetch — backend resolves auth vs guest via cookie/x-session-id header.
+  useEffect(() => {
+    if (!isMounted || authLoading) return;
+    refreshCart();
+  }, [isAuthenticated, isMounted, authLoading, refreshCart]);
+
   const addToCart = async (productId: string, quantity: number = 1) => {
     const previousCart = cart;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 
@@ -92,12 +92,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError]     = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
+  // Tracks the AbortController for the current synchronous auth fetch so it can
+  // be cancelled on unmount or superseded by the isCheckingAuthRef guard.
+  const checkAbortRef      = useRef<AbortController | null>(null);
+  // Tracks the AbortController for the current background revalidation so rapid
+  // navigation doesn't leave multiple concurrent revalidations in flight.
+  const revalidateAbortRef = useRef<AbortController | null>(null);
+  // Prevents re-entrant synchronous auth checks. A second concurrent call to
+  // checkAuth returns early while the first is still awaiting the network.
+  const isCheckingAuthRef  = useRef(false);
+
   useEffect(() => { setIsMounted(true); }, []);
 
+  // Cancel any in-flight requests when the provider unmounts.
+  useEffect(() => {
+    return () => {
+      checkAbortRef.current?.abort();
+      revalidateAbortRef.current?.abort();
+    };
+  }, []);
+
   // Fetch fresh auth state from backend, update React state and cache.
-  const fetchAndUpdateAuth = useCallback(async (): Promise<void> => {
+  const fetchAndUpdateAuth = useCallback(async (signal?: AbortSignal): Promise<void> => {
     try {
-      const response = await apiClient.get(API_ENDPOINTS.GET_ME) as any;
+      const response = await apiClient.get(API_ENDPOINTS.GET_ME, { signal }) as any;
 
       if (response.success && response.user) {
         const userData = normalizeUser(response.user);
@@ -111,6 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         writeCache(null, 0);
       }
     } catch (err: any) {
+      // Request was intentionally cancelled — don't touch state.
+      if (err.name === 'AbortError') return;
+
       const isRateLimitError = err.status === 429 ||
         (err.message && err.message.includes('Too many requests'));
 
@@ -140,9 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Silently revalidate cached auth in the background.
   // If sessionVersion or role changed server-side, update React state immediately
   // without waiting for the cache TTL to expire.
-  const revalidateInBackground = useCallback(async (cached: CachedAuth): Promise<void> => {
+  const revalidateInBackground = useCallback(async (cached: CachedAuth, signal?: AbortSignal): Promise<void> => {
     try {
-      const response = await apiClient.get(API_ENDPOINTS.GET_ME) as any;
+      const response = await apiClient.get(API_ENDPOINTS.GET_ME, { signal }) as any;
 
       if (response.success && response.user) {
         const fresh = normalizeUser(response.user);
@@ -174,18 +195,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setIsLoading(false);
 
-      // Run a background revalidation to detect server-side changes
-      // (ban, role downgrade, session invalidation) before TTL expires.
       if (cached.user) {
-        revalidateInBackground(cached);
+        // Cancel any previous background revalidation before starting a new one
+        // so rapid navigation never leaves multiple revalidations racing.
+        revalidateAbortRef.current?.abort();
+        const controller = new AbortController();
+        revalidateAbortRef.current = controller;
+        revalidateInBackground(cached, controller.signal); // fire-and-forget
       }
       return;
     }
 
     // Cache missing or expired — do a full synchronous check.
+    // Guard: if one is already in flight, skip rather than letting two fetches
+    // race and potentially resolve out of order.
+    if (isCheckingAuthRef.current) return;
+    isCheckingAuthRef.current = true;
+
+    // Cancel any previous sync fetch (e.g. from a prior navigation).
+    checkAbortRef.current?.abort();
+    const controller = new AbortController();
+    checkAbortRef.current = controller;
+
     setIsLoading(true);
-    await fetchAndUpdateAuth();
-    setIsLoading(false);
+    try {
+      await fetchAndUpdateAuth(controller.signal);
+    } finally {
+      isCheckingAuthRef.current = false;
+      setIsLoading(false);
+    }
   }, [fetchAndUpdateAuth, revalidateInBackground]);
 
   useEffect(() => {
