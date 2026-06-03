@@ -113,6 +113,7 @@ export const csrfProtection = async (req, res, next) => {
   const excludedPaths = [
     '/auth/login',
     '/auth/register',
+    '/auth/refresh',   // httpOnly-cookie only — CSRF doesn't apply; attacker can't read the new token
     '/auth/forgot-password',
     '/auth/reset-password',
     '/auth/verify-email',
