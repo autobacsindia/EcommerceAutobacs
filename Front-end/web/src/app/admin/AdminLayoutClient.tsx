@@ -138,9 +138,14 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
 
   const handleLogout = async () => {
     try {
+      const xsrfToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1];
       await fetch('/api/v1/auth/logout', {
         method: 'POST',
         credentials: 'include',
+        headers: xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {},
       });
       router.push('/login');
     } catch (error) {
