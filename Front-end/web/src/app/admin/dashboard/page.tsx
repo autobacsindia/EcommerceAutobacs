@@ -125,9 +125,14 @@ export default function AdminDashboardPage() {
 
     const fetchInitialStats = async () => {
       try {
-        const response = await fetch('/api/v1/dashboard/stats', {
-          credentials: 'include', // Send httpOnly cookies
+        let response = await fetch('/api/v1/dashboard/stats', {
+          credentials: 'include',
         });
+        if (response.status === 401) {
+          const refreshRes = await fetch('/api/v1/auth/refresh', { method: 'POST', credentials: 'include' });
+          if (!refreshRes.ok) return;
+          response = await fetch('/api/v1/dashboard/stats', { credentials: 'include' });
+        }
         if (!response.ok) return;
         const json = await response.json();
         if (json.success && json.data) {

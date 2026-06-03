@@ -105,9 +105,22 @@ export function useSSE({
         });
 
         if (!response.ok) {
-          // With httpOnly cookies, 401 means session expired
-          // Don't try to refresh - just report error and let user re-login
           if (response.status === 401) {
+            // Attempt silent token refresh before giving up
+            try {
+              const refreshRes = await fetch('/api/v1/auth/refresh', {
+                method: 'POST',
+                credentials: 'include',
+              });
+              if (refreshRes.ok) {
+                // Refresh succeeded — retry the SSE connection immediately
+                if (abortController.signal.aborted) return;
+                connectFnRef.current().catch(() => {});
+                return;
+              }
+            } catch {
+              // Refresh failed — fall through to error
+            }
             console.warn('SSE: 401 Unauthorized - session expired');
             throw new Error('SSE connection failed: 401 Unauthorized');
           }
