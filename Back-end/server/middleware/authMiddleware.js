@@ -100,54 +100,70 @@ export const admin = asyncHandler(async (req, res, next) => {
     });
   }
   
-  // ADMIN SECURITY: Validate session context (IP + UA binding)
-  // Helps detect token theft across different environments
-  const currentIP = req.ip || req.connection.remoteAddress || 'unknown';
+  // ADMIN SECURITY: Validate session context (UA binding; IP binding optional via env var)
+  // IP binding is disabled by default because dynamic ISP IPs and cloud proxy chains
+  // cause false positives — the backend may see different IPs for login vs. subsequent
+  // requests depending on Railway/Cloudflare hop ordering.
+  const ipBindingEnabled = process.env.ADMIN_IP_BINDING === 'true';
+
   const currentUA = req.get('user-agent') || 'unknown';
-  
-  // Hash current context
-  const currentIPHash = crypto.createHash('sha256').update(currentIP).digest('hex');
   const currentUAHash = crypto.createHash('sha256').update(currentUA).digest('hex');
-  
-  const storedIPHash = req.user.lastAdminIPHash;
   const storedUAHash = req.user.lastAdminUAHash;
 
-  // Context must have been set at login — reject if missing (no first-use initialization)
-  if (!storedIPHash || !storedUAHash) {
-    console.error(
-      `[SECURITY] Admin session has no context binding | User: ${req.user.email} | ` +
-      `IP: ${currentIP}`
-    );
-    return res.status(401).json({
-      success: false,
-      message: 'Session context not initialized. Please login again.',
-      code: 'context_missing'
-    });
-  }
+  if (ipBindingEnabled) {
+    const currentIP = req.ip || req.connection.remoteAddress || 'unknown';
+    const currentIPHash = crypto.createHash('sha256').update(currentIP).digest('hex');
+    const storedIPHash = req.user.lastAdminIPHash;
 
-  if (storedIPHash !== currentIPHash || storedUAHash !== currentUAHash) {
-    console.error(
-      `[SECURITY] Admin session context mismatch! | User: ${req.user.email} | ` +
-      `IP changed: ${storedIPHash !== currentIPHash} | UA changed: ${storedUAHash !== currentUAHash} | ` +
-      `IP: ${currentIP} | UA: ${currentUA}`
-    );
+    if (!storedIPHash || !storedUAHash) {
+      console.error(
+        `[SECURITY] Admin session has no context binding | User: ${req.user.email} | IP: ${currentIP}`
+      );
+      return res.status(401).json({
+        success: false,
+        message: 'Session context not initialized. Please login again.',
+        code: 'context_missing'
+      });
+    }
 
-    Sentry.captureMessage('Admin session context mismatch — access denied', {
-      level: 'error',
-      extra: {
-        userId: req.user._id,
-        email: req.user.email,
-        ipChanged: storedIPHash !== currentIPHash,
-        uaChanged: storedUAHash !== currentUAHash,
-        ip: currentIP
-      }
-    });
-
-    return res.status(401).json({
-      success: false,
-      message: 'Session context changed. Please login again.',
-      code: 'context_mismatch'
-    });
+    if (storedIPHash !== currentIPHash || storedUAHash !== currentUAHash) {
+      console.error(
+        `[SECURITY] Admin session context mismatch! | User: ${req.user.email} | ` +
+        `IP changed: ${storedIPHash !== currentIPHash} | UA changed: ${storedUAHash !== currentUAHash} | ` +
+        `IP: ${currentIP} | UA: ${currentUA}`
+      );
+      Sentry.captureMessage('Admin session context mismatch — access denied', {
+        level: 'error',
+        extra: {
+          userId: req.user._id,
+          email: req.user.email,
+          ipChanged: storedIPHash !== currentIPHash,
+          uaChanged: storedUAHash !== currentUAHash,
+          ip: currentIP
+        }
+      });
+      return res.status(401).json({
+        success: false,
+        message: 'Session context changed. Please login again.',
+        code: 'context_mismatch'
+      });
+    }
+  } else {
+    // UA-only binding: still catches token theft across different browsers/devices
+    if (storedUAHash && storedUAHash !== currentUAHash) {
+      console.error(
+        `[SECURITY] Admin session UA mismatch! | User: ${req.user.email} | UA: ${currentUA}`
+      );
+      Sentry.captureMessage('Admin session UA mismatch — access denied', {
+        level: 'warn',
+        extra: { userId: req.user._id, email: req.user.email, ua: currentUA }
+      });
+      return res.status(401).json({
+        success: false,
+        message: 'Session context changed. Please login again.',
+        code: 'context_mismatch'
+      });
+    }
   }
 
   next();
