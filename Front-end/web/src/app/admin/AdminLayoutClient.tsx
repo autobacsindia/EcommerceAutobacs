@@ -63,10 +63,10 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 
 interface AdminLayoutClientProps {
   children: React.ReactNode;
-  userId: string;
+  userName: string;
 }
 
-export default function AdminLayoutClient({ children, userId }: AdminLayoutClientProps) {
+export default function AdminLayoutClient({ children, userName }: AdminLayoutClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -226,7 +226,7 @@ export default function AdminLayoutClient({ children, userId }: AdminLayoutClien
           {sidebarOpen && (
             <div className="mb-3">
               <p className="text-sm text-gray-400">Logged in as:</p>
-              <p className="text-sm font-medium truncate">{userId}</p>
+              <p className="text-sm font-medium truncate">{userName}</p>
             </div>
           )}
           <button

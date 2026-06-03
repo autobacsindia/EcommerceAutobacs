@@ -59,7 +59,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     }
     
     // Admin verified by backend → render admin layout
-    return <AdminLayoutClient userId={userData.user.id}>{children}</AdminLayoutClient>;
+    return <AdminLayoutClient userName={userData.user.name || userData.user.email}>{children}</AdminLayoutClient>;
     
   } catch (error) {
     // Backend unreachable or error → deny access (fail closed)
