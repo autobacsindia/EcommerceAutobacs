@@ -18,7 +18,6 @@ import { protect, admin } from "../middleware/authMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
-import ElasticsearchSyncMiddleware from "../middleware/elasticsearchSyncMiddleware.js";
 import {
   uploadMultiple,
   uploadFields,
@@ -260,8 +259,7 @@ router.post(
   uploadMultiple('images', 8),
   handleMulterError,
   validateUploadedFiles,
-  asyncHandler(createProductWithImages),
-  ElasticsearchSyncMiddleware.syncProduct
+  asyncHandler(createProductWithImages)
 );
 
 // @route   PUT /products/:id
@@ -277,7 +275,6 @@ router.put(
   handleMulterError,
   validateUploadedFiles,
   asyncHandler(updateProductWithImages),
-  ElasticsearchSyncMiddleware.syncProduct,
   // Invalidate product detail and list cache after update
   asyncHandler(async (req, res, next) => {
     try {
@@ -299,8 +296,7 @@ router.delete(
   protect,
   admin,
   validateProductIdParam,
-  asyncHandler(deleteProductWithImages),
-  ElasticsearchSyncMiddleware.syncProduct
+  asyncHandler(deleteProductWithImages)
 );
 
 // @route   POST /products/:id/images
@@ -336,7 +332,6 @@ router.post(
   admin,
   validateStockUpdate,
   asyncHandler(updateStock),
-  ElasticsearchSyncMiddleware.syncProduct,
   // Invalidate product detail cache after stock update
   asyncHandler(async (req, res, next) => {
     try {

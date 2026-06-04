@@ -44,16 +44,13 @@ export async function updateStock(req, res, next) {
 
   const product = await Product.findByIdAndUpdate(id, { stock }, { new: true });
 
-  // Expose product to downstream ElasticsearchSyncMiddleware
-  res.locals.product = product;
-
   if (!product) {
     return res.status(404).json({ success: false, message: 'Product not found' });
   }
 
   res.json({ success: true, message: 'Stock updated successfully', product });
 
-  // Proceed to Elasticsearch sync middleware
+  // ES sync is handled by the post('findOneAndUpdate') hook on ProductSchema.
   next();
 }
 

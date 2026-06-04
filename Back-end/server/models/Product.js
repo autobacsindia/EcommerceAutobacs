@@ -238,25 +238,50 @@ function enqueueSync(productId) {
     .catch(err => console.error('[SearchSync] Failed to enqueue sync for', id, ':', err.message));
 }
 
-// Fires after doc.save() — covers creates and full-document updates.
+// Fires after doc.save() — covers creates and full-document updates (including
+// soft-deletes: controller sets deletedAt then calls save()).
 ProductSchema.post('save', function (doc) {
   enqueueSync(doc._id);
 });
 
 // Fires after findOneAndUpdate / findByIdAndUpdate — covers partial updates,
-// price changes, stock changes via atomicDeductStock, soft-deletes, etc.
-// `doc` is the query result (old or new document depending on {new:} option);
-// we only need _id from it to identify which product changed.
+// price changes, admin stock edits, atomicDeductStock, etc.
+// `doc` is the query result; we only need _id to identify which product changed.
 ProductSchema.post('findOneAndUpdate', function (doc) {
   if (!doc) return;
   enqueueSync(doc._id);
 });
 
-// Fires after findOneAndDelete / findByIdAndDelete — covers hard deletes.
+// Fires after findOneAndDelete / findByIdAndDelete — hard-delete path.
 // The worker will find no document for this ID and will call deleteProduct.
 ProductSchema.post('findOneAndDelete', function (doc) {
   if (!doc) return;
   enqueueSync(doc._id);
+});
+
+// Fires after updateOne / findByIdAndUpdate-via-query (e.g. productRepository
+// .updateStock which uses Product.updateOne({ _id }, { $inc: { stock } })).
+// `this` is the Query; _id is always present in the filter for these calls.
+ProductSchema.post('updateOne', function () {
+  const id = this.getFilter()._id;
+  if (id) enqueueSync(id);
+});
+
+// Fires after deleteMany — covers the WordPress sync service which bulk-deletes
+// products that no longer exist in WooCommerce. We capture IDs in a pre-hook
+// (before the documents are gone) and enqueue one sync job per deleted product.
+ProductSchema.pre('deleteMany', async function () {
+  const docs = await this.model
+    .find(this.getFilter(), '_id')
+    .setOptions({ includeDeleted: true })
+    .lean();
+  this._idsToSync = docs.map(d => d._id.toString());
+});
+
+ProductSchema.post('deleteMany', function () {
+  for (const id of (this._idsToSync || [])) {
+    enqueueSync(id);
+  }
 });
 
 export default mongoose.model("Product", ProductSchema);
