@@ -37,7 +37,13 @@ export function middleware(request: NextRequest) {
   const csp = [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    // 'unsafe-inline' is required for style-src: the CSP spec does not support
+    // nonces on style="" attributes, only on <style> elements. React libraries
+    // (react-hot-toast, next/font, Tailwind utilities) all emit inline style
+    // attributes that cannot be nonce'd. CSS injection risk is low (no code
+    // execution, no data exfiltration in modern browsers); the meaningful
+    // security gain is in script-src, which keeps its strict nonce policy.
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://res.cloudinary.com https://autobacsindia.com https://*.gstatic.com https://*.googleapis.com",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK

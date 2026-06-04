@@ -564,10 +564,8 @@ app.use(helmet({
         "https://www.googletagmanager.com",
         "https://www.google-analytics.com"
       ],
-      styleSrc: [
-        "'self'",
-        (req, res) => `'nonce-${res.locals.nonce}'`,
-      ],
+      // 'unsafe-inline' required — nonces don't apply to style="" attributes.
+      styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
       connectSrc: [
         "'self'",
