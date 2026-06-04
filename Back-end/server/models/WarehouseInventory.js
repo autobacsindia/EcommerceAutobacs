@@ -74,13 +74,18 @@ WarehouseInventorySchema.methods.isInStock = function() {
   return this.availableQuantity > 0;
 };
 
-// Method to reserve stock
+// Method to reserve stock — atomic: avoids stale-snapshot race on this.availableQuantity
 WarehouseInventorySchema.methods.reserveStock = async function(quantity) {
-  if (this.availableQuantity < quantity) {
-    throw new Error("Insufficient stock available");
-  }
-  this.reservedQuantity += quantity;
-  await this.save();
+  const updated = await this.constructor.findOneAndUpdate(
+    {
+      _id: this._id,
+      $expr: { $gte: [{ $subtract: ['$quantity', '$reservedQuantity'] }, quantity] }
+    },
+    { $inc: { reservedQuantity: quantity } },
+    { new: true }
+  );
+  if (!updated) throw new Error('Insufficient stock available');
+  Object.assign(this, updated.toObject());
   return this;
 };
 
@@ -91,14 +96,21 @@ WarehouseInventorySchema.methods.releaseStock = async function(quantity) {
   return this;
 };
 
-// Method to decrement stock (on order shipment)
+// Method to decrement stock (on order shipment) — atomic: aggregation pipeline
+// update handles the max(0, reservedQty - qty) clamp in one round-trip.
 WarehouseInventorySchema.methods.decrementStock = async function(quantity) {
-  if (this.quantity < quantity) {
-    throw new Error("Insufficient stock to decrement");
-  }
-  this.quantity -= quantity;
-  this.reservedQuantity = Math.max(0, this.reservedQuantity - quantity);
-  await this.save();
+  const updated = await this.constructor.findOneAndUpdate(
+    { _id: this._id, quantity: { $gte: quantity } },
+    [{
+      $set: {
+        quantity: { $subtract: ['$quantity', quantity] },
+        reservedQuantity: { $max: [0, { $subtract: ['$reservedQuantity', quantity] }] }
+      }
+    }],
+    { new: true }
+  );
+  if (!updated) throw new Error('Insufficient stock to decrement');
+  Object.assign(this, updated.toObject());
   return this;
 };
 

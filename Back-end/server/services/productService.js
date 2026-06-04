@@ -208,21 +208,23 @@ class ProductService {
   }
 
   /**
-   * Reserve stock (for cart/checkout)
+   * Reserve stock (for cart/checkout).
+   * Uses a single atomic findOneAndUpdate with a $gte guard — no separate
+   * read step that could race with a concurrent decrement.
    */
   async reserveStock(productId, quantity) {
-    const stockInfo = await this.checkStock(productId, quantity);
+    const updated = await productRepository.atomicDeductStock(productId, quantity);
 
-    if (!stockInfo.inStock) {
-      throw new Error(`Insufficient stock. Available: ${stockInfo.available}, Requested: ${quantity}`);
+    if (!updated) {
+      const available = await productRepository.getStock(productId);
+      throw new Error(`Insufficient stock. Available: ${available}, Requested: ${quantity}`);
     }
 
-    // Update stock via repository
-    await productRepository.updateStock(productId, quantity);
-
+    // atomicDeductStock returns the pre-update doc (new: false),
+    // so remaining = old stock - quantity.
     return {
       success: true,
-      remaining: stockInfo.available - quantity
+      remaining: updated.stock - quantity
     };
   }
 

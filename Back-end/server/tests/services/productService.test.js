@@ -20,6 +20,7 @@ jest.mock('../repositories/productRepository.js', () => ({
   findBySlug: jest.fn(),
   getStock: jest.fn(),
   updateStock: jest.fn(),
+  atomicDeductStock: jest.fn(),
 }));
 
 jest.mock('../services/cacheService.js', () => ({
@@ -171,17 +172,18 @@ describe('ProductService', () => {
 
   describe('reserveStock', () => {
     it('should reserve stock when available', async () => {
-      productRepository.getStock.mockResolvedValue(10);
-      productRepository.updateStock.mockResolvedValue({ modifiedCount: 1 });
+      // atomicDeductStock returns the pre-update doc (new: false)
+      productRepository.atomicDeductStock.mockResolvedValue({ stock: 10 });
 
       const result = await productService.reserveStock('product123', 3);
 
       expect(result.success).toBe(true);
       expect(result.remaining).toBe(7);
-      expect(productRepository.updateStock).toHaveBeenCalledWith('product123', 3);
+      expect(productRepository.atomicDeductStock).toHaveBeenCalledWith('product123', 3);
     });
 
     it('should throw error when insufficient stock', async () => {
+      productRepository.atomicDeductStock.mockResolvedValue(null);
       productRepository.getStock.mockResolvedValue(2);
 
       await expect(productService.reserveStock('product123', 5))
