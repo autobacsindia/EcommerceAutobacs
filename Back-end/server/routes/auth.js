@@ -331,7 +331,17 @@ router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncH
         message: 'Invalid or expired refresh token'
       });
     }
-    
+
+    // Block unverified accounts — mirrors the login check so a user who never
+    // verified their email cannot keep a live session via token rotation.
+    if (!user.isVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Please verify your email before continuing.',
+        code: 'EMAIL_NOT_VERIFIED'
+      });
+    }
+
     // Rotate refresh token (revoke old, generate new)
     const tokens = await rotateRefreshToken(user, refreshToken, ipAddress, userAgent);
     
