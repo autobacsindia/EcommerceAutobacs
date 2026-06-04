@@ -615,7 +615,7 @@ app.use(cookieParser());
 //   2. This is a server-to-server call; Razorpay sends no cookies and no Bearer token.
 //      Mounting it after app.use(csrfProtection) would cause every webhook to get a
 //      403 "CSRF token missing or invalid" before the signature check ever runs.
-app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
+app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json', limit: '1mb' }), razorpayWebhook);
 
 // Apply CSRF protection globally to all remaining routes.
 // This will set the XSRF-TOKEN cookie and validate headers for state-changing requests.

@@ -1,7 +1,7 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import rateLimit from 'express-rate-limit';
-import { searchRateLimit, searchBurstLimit } from '../middleware/rateLimitMiddleware.js';
+import { searchRateLimit, searchBurstLimit, publicBrowsingRateLimit } from '../middleware/rateLimitMiddleware.js';
 import {
   validateProduct,
   validateProductIdParam,
@@ -89,14 +89,14 @@ const publicProductRateLimit = rateLimit({
 // @route   GET /products
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
-// CRITICAL: Layered rate limiting for search (burst + sustained)
-router.get("/", searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), publicCacheResponse('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
+// CRITICAL: Layered rate limiting for search (broad IP cap → burst → sustained)
+router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), publicCacheResponse('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions
 // @access  Public
 // CRITICAL: Rate limit search suggestions (autocomplete fires on every keystroke)
-router.get("/suggestions", searchBurstLimit, searchRateLimit, publicCacheResponse('PRODUCT_SEARCH'), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
+router.get("/suggestions", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, publicCacheResponse('PRODUCT_SEARCH'), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
 
 // @route   GET /products/analytics
 // @desc    Get search analytics
