@@ -9,7 +9,9 @@ export const validatePaymentMethod = [
 
 export const validateRazorpayOrder = [
   body('orderId').notEmpty().withMessage('Order ID is required'),
-  body('amount').isNumeric().withMessage('Amount must be a number'),
+  // amount is now ignored server-side — the authoritative amount comes from the DB order.
+  // Keep the field optional so old clients don't break, but it has no effect.
+  body('amount').optional().isNumeric().withMessage('Amount must be a number'),
   body('currency').optional().isString().withMessage('Currency must be a string'),
   body('receipt').optional().isString().withMessage('Receipt must be a string'),
   validateRequest

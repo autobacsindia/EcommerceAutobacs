@@ -15,6 +15,13 @@ import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
+interface ServerValidation {
+  subtotal: number;
+  tax: number;
+  total: number;
+  items: Array<{ productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number }>;
+}
+
 interface Address {
   fullName: string;
   street: string;
@@ -53,6 +60,8 @@ function CheckoutPageContent() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [stockValidationErrors, setStockValidationErrors] = useState<any[]>([]);
+  const [serverValidation, setServerValidation] = useState<ServerValidation | null>(null);
+  const [priceConfirmationPending, setPriceConfirmationPending] = useState(false);
 
   const isGuest = !authLoading && !isAuthenticated;
   const [guestEmail, setGuestEmail] = useState('');
@@ -159,32 +168,103 @@ function CheckoutPageContent() {
     setCurrentStep('payment');
   };
 
+  // Step 1: validate prices server-side, then either proceed or pause for confirmation.
   const handlePlaceOrder = async () => {
+    if (isGuest && !guestEmail && !guestPhone) {
+      toast.error('Please enter email or phone number for guest checkout');
+      return;
+    }
+    setLoading(true);
+    setPriceConfirmationPending(false);
     try {
-      setLoading(true);
-      if (isGuest && !guestEmail && !guestPhone) {
-        toast.error('Please enter email or phone number for guest checkout');
-        setLoading(false);
+      const validation = await apiClient.get(API_ENDPOINTS.CART_VALIDATE) as any;
+
+      if (!validation.success) {
+        toast.error('Unable to validate cart. Please try again.');
         return;
       }
-      const subtotal = cart?.total || 0;
-      const tax = subtotal * 0.18;
-      const totalAmount = subtotal + tax;
+
+      if (!validation.isValid) {
+        setStockValidationErrors(validation.stockErrors || []);
+        await refreshCart();
+        setCurrentStep('cart');
+        toast.error('Some items have changed. Please review your cart before proceeding.');
+        return;
+      }
+
+      const validated: ServerValidation = {
+        subtotal: validation.subtotal,
+        tax: validation.tax,
+        total: validation.total,
+        items: validation.items,
+      };
+
+      // Detect price drift: compare server subtotal vs CartContext's pre-tax total.
+      // Tolerance of ₹0.50 absorbs floating-point rounding in older cart documents.
+      const clientSubtotal = cart?.total || 0;
+      const priceDrifted = Math.abs(validated.subtotal - clientSubtotal) > 0.5;
+
+      if (priceDrifted) {
+        setServerValidation(validated);
+        setPriceConfirmationPending(true);
+        return; // Pause — UI will render the confirmation banner
+      }
+
+      setServerValidation(validated);
+      await placeOrderWithValidation(validated);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to validate cart');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2: place the order using server-validated prices.
+  // Called directly when prices are unchanged, or after the user confirms a price change.
+  const placeOrderWithValidation = async (validated: ServerValidation) => {
+    setLoading(true);
+    setPriceConfirmationPending(false);
+    try {
       const orderData = {
         ...(isGuest && { email: guestEmail, phone: guestPhone }),
-        shippingAddress: { fullName: address.fullName, addressLine1: address.street, city: address.city, state: address.state, postalCode: address.postalCode, country: address.country, phone: address.phone },
+        shippingAddress: {
+          fullName: address.fullName, addressLine1: address.street,
+          city: address.city, state: address.state, postalCode: address.postalCode,
+          country: address.country, phone: address.phone
+        },
         paymentMethod,
-        items: (cart?.items || []).map((item: any) => ({ product: item.product._id, quantity: item.quantity, price: item.product.price })),
-        subtotal, tax, shippingCost: 0, discount: 0, totalAmount,
+        items: validated.items.map(item => ({
+          product: item.productId,
+          quantity: item.quantity,
+          price: item.unitPrice,
+        })),
+        subtotal: validated.subtotal,
+        tax: validated.tax,
+        shippingCost: 0,
+        discount: 0,
+        totalAmount: validated.total,
       };
+
       const endpoint = isGuest ? '/orders/guest' : '/orders';
       const response = await apiClient.post(endpoint, orderData) as any;
       const newOrderId = response.order._id;
+
       if (isGuest) {
-        localStorage.setItem('pendingClaim', JSON.stringify({ orderId: newOrderId, email: guestEmail, phone: guestPhone, magicToken: response.magicLinkToken }));
+        localStorage.setItem('pendingClaim', JSON.stringify({
+          orderId: newOrderId, email: guestEmail, phone: guestPhone,
+          magicToken: response.magicLinkToken
+        }));
       }
+
       if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
-        await processPayment(newOrderId, response.order.totalAmount, { name: user?.name || address.fullName, email: user?.email || guestEmail || '', phone: address.phone });
+        // Pass validated.total as a hint for the Razorpay modal display.
+        // The backend /razorpay/create-order ignores this and uses order.totalAmount
+        // from the DB — the browser never controls the charged amount.
+        await processPayment(newOrderId, validated.total, {
+          name: user?.name || address.fullName,
+          email: user?.email || guestEmail || '',
+          phone: address.phone,
+        });
       } else {
         setOrderId(newOrderId);
         await clearCart();
@@ -523,6 +603,61 @@ function CheckoutPageContent() {
         {currentStep === 'review' && (
           <div>
             <h2 className="text-xl font-condensed font-bold text-white uppercase tracking-wide mb-6">Review Your Order</h2>
+
+            {/* Price-change confirmation banner — shown when server prices differ from CartContext */}
+            {priceConfirmationPending && serverValidation && (
+              <div className="mb-6 bg-yellow-500/10 border border-yellow-500/40 rounded-sm p-5">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-condensed font-bold text-yellow-400 uppercase tracking-wide mb-1">Prices Updated</h3>
+                    <p className="text-[#C4C4C4] font-body text-sm mb-4">
+                      One or more item prices changed since you loaded this page. Please confirm the updated total before paying.
+                    </p>
+                    <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-4 mb-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#555555] font-body">Previous total</span>
+                        <span className="text-[#555555] font-body line-through">
+                          ₹{((cart?.total || 0) * 1.18).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#555555] font-body">Subtotal (updated)</span>
+                        <span className="text-[#C4C4C4] font-body">₹{serverValidation.subtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#555555] font-body">Tax (18% GST)</span>
+                        <span className="text-[#C4C4C4] font-body">₹{serverValidation.tax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-[#252525] pt-2">
+                        <span className="font-condensed font-bold text-white uppercase tracking-wide text-sm">New Total</span>
+                        <span className="text-lg font-condensed font-bold text-[#3B9EE8]">₹{serverValidation.total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => placeOrderWithValidation(serverValidation)}
+                        disabled={loading || isRazorpayProcessing}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-condensed font-bold uppercase tracking-widest py-2.5 rounded-sm disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+                      >
+                        {loading || isRazorpayProcessing ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /><span>Processing...</span></>
+                        ) : (
+                          `Confirm & Pay ₹${serverValidation.total.toFixed(2)}`
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setPriceConfirmationPending(false); router.push('/cart'); }}
+                        className="px-4 bg-[#161616] border border-[#252525] text-[#C4C4C4] hover:text-white font-condensed font-bold uppercase tracking-widest py-2.5 rounded-sm transition-colors text-sm"
+                      >
+                        Back to Cart
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 mb-6 space-y-5">
               <div>
                 <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-2">Shipping Address</h3>
@@ -536,31 +671,41 @@ function CheckoutPageContent() {
               </div>
               <div className="border-t border-[#252525] pt-4">
                 <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-3">Order Summary</h3>
+                {/* Use server-validated totals once available; fall back to CartContext */}
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-[#555555] font-body">Subtotal</span>
-                  <span className="text-[#C4C4C4] font-body">₹{((cart?.total || 0) / 1.18).toFixed(2)}</span>
+                  <span className="text-[#C4C4C4] font-body">
+                    ₹{(serverValidation?.subtotal ?? cart?.total ?? 0).toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm mb-3">
                   <span className="text-[#555555] font-body">Tax (18% GST)</span>
-                  <span className="text-[#C4C4C4] font-body">₹{((cart?.total || 0) - (cart?.total || 0) / 1.18).toFixed(2)}</span>
+                  <span className="text-[#C4C4C4] font-body">
+                    ₹{(serverValidation?.tax ?? (cart?.total || 0) * 0.18).toFixed(2)}
+                  </span>
                 </div>
                 <div className="flex justify-between border-t border-[#252525] pt-3">
                   <span className="font-condensed font-bold text-white uppercase tracking-wide">Total</span>
-                  <span className="text-xl font-condensed font-bold text-[#3B9EE8]">₹{(cart?.total || 0).toFixed(2)}</span>
+                  <span className="text-xl font-condensed font-bold text-[#3B9EE8]">
+                    ₹{(serverValidation?.total ?? (cart?.total || 0) * 1.18).toFixed(2)}
+                  </span>
                 </div>
               </div>
             </div>
-            <button
-              onClick={handlePlaceOrder}
-              disabled={loading || isRazorpayProcessing}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
-            >
-              {loading || isRazorpayProcessing ? (
-                <><Loader2 className="h-5 w-5 animate-spin" /><span>Processing...</span></>
-              ) : (
-                'Place Order'
-              )}
-            </button>
+
+            {!priceConfirmationPending && (
+              <button
+                onClick={handlePlaceOrder}
+                disabled={loading || isRazorpayProcessing}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              >
+                {loading || isRazorpayProcessing ? (
+                  <><Loader2 className="h-5 w-5 animate-spin" /><span>Processing...</span></>
+                ) : (
+                  'Place Order'
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>

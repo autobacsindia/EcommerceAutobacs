@@ -393,6 +393,76 @@ router.delete("/clear", asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   GET /cart/validate
+// @desc    Re-price every cart item against current DB prices and return server-calculated totals.
+//          Call this immediately before order creation. The response total is the only
+//          authoritative amount the frontend should display or submit.
+// @access  Public (optional auth)
+router.get("/validate", asyncHandler(async (req, res) => {
+  const isAuthenticated = req.user && req.user.id;
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+
+  let cart;
+  if (isAuthenticated) {
+    cart = await Cart.findOne({ user: req.user.id })
+      .populate('items.product', 'name price stock isActive');
+  } else {
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Session ID required for guest cart operations' });
+    }
+    cart = await Cart.findOne({ sessionId })
+      .populate('items.product', 'name price stock isActive');
+  }
+
+  if (!cart || cart.items.length === 0) {
+    return res.status(400).json({ success: false, message: 'Your cart is empty' });
+  }
+
+  const stockErrors = [];
+  const validatedItems = [];
+
+  for (const item of cart.items) {
+    if (!item.product || !item.product.isActive) {
+      stockErrors.push({ productId: item.product?._id, message: 'Product no longer available', type: 'unavailable' });
+      continue;
+    }
+    if (item.product.stock < item.quantity) {
+      stockErrors.push({
+        productId: item.product._id,
+        name: item.product.name,
+        message: item.product.stock <= 0 ? 'Out of stock' : `Only ${item.product.stock} left`,
+        availableStock: item.product.stock,
+        requestedQuantity: item.quantity,
+        type: item.product.stock <= 0 ? 'out_of_stock' : 'insufficient_stock'
+      });
+      // Still include in repricing so the frontend can show updated prices even for low-stock items
+    }
+    // Always use item.product.price — current DB price, never the stale cart-stored price
+    validatedItems.push({
+      productId: item.product._id,
+      name: item.product.name,
+      quantity: item.quantity,
+      unitPrice: item.product.price,
+      lineTotal: item.product.price * item.quantity
+    });
+  }
+
+  const subtotal = validatedItems.reduce((sum, i) => sum + i.lineTotal, 0);
+  const tax      = Math.round(subtotal * 0.18 * 100) / 100;
+  const total    = Math.round((subtotal + tax) * 100) / 100;
+
+  res.json({
+    success: true,
+    isValid: stockErrors.length === 0,
+    stockErrors,
+    items: validatedItems,
+    subtotal,
+    tax,
+    total,
+    taxRate: 0.18
+  });
+}));
+
 // @route   POST /cart/validate-checkout
 // @desc    🟠 LAYER 2: Pre-checkout stock validation (blocking check)
 // @access  Public (optional auth)

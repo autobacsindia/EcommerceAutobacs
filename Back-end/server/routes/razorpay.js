@@ -182,10 +182,14 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
       });
     }
     
+    // SECURITY: amount is always taken from the DB order, never from the request body.
+    // The browser is user-controlled territory — any client-supplied amount is ignored.
+    const authorativeAmount = Math.round(order.totalAmount * 100); // convert ₹ → paise
+
     // Create Razorpay order
     const razorpayOrder = await razorpayService.createOrder({
       orderId,
-      amount,
+      amount: authorativeAmount,
       currency,
       receipt
     });
