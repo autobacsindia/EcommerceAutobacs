@@ -213,7 +213,7 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
 
   // Compare password
   const isMatch = await bcrypt.compare(password, user.passwordHash);
-  const ipAddress = req.ip || req.connection.remoteAddress;
+  const ipAddress = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
   const userAgent = req.headers['user-agent'];
   
   if (!isMatch) {
@@ -812,7 +812,7 @@ const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
 };
 
 const completeSocialLogin = async (req, res, user, provider) => {
-  const ipAddress = req.ip || req.connection?.remoteAddress;
+  const ipAddress = req.headers['cf-connecting-ip'] || req.ip || req.connection?.remoteAddress;
   const userAgent = req.headers["user-agent"];
 
   const tokens = generateSessionTokenPair(user, ipAddress, userAgent);
@@ -825,9 +825,20 @@ const completeSocialLogin = async (req, res, user, provider) => {
     ipAddress,
     userAgent
   );
-  
+
   // Set refresh token cookie
   setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+
+  // Bind session context for admin accounts (mirrors the password-login flow)
+  if (user.role === 'admin') {
+    await User.updateOne(
+      { _id: user._id },
+      {
+        lastAdminIPHash: crypto.createHash('sha256').update(ipAddress || 'unknown').digest('hex'),
+        lastAdminUAHash: crypto.createHash('sha256').update(userAgent || 'unknown').digest('hex'),
+      }
+    );
+  }
 
   // Log successful login
   await logLoginAttempt(user, true, ipAddress, userAgent);
