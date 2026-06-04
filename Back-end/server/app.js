@@ -596,8 +596,17 @@ app.use(compression({
 
 app.use(cookieParser());
 
-// Apply CSRF protection globally
-// This will set the XSRF-TOKEN cookie and validate headers for state-changing requests
+// ── CRITICAL: Razorpay Webhook Route (MUST be before csrfProtection AND body parsers) ──
+// Two invariants:
+//   1. express.raw() must capture the raw Buffer before express.json() replaces it —
+//      the HMAC-SHA256 signature is verified against the exact bytes Razorpay sent.
+//   2. This is a server-to-server call; Razorpay sends no cookies and no Bearer token.
+//      Mounting it after app.use(csrfProtection) would cause every webhook to get a
+//      403 "CSRF token missing or invalid" before the signature check ever runs.
+app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
+
+// Apply CSRF protection globally to all remaining routes.
+// This will set the XSRF-TOKEN cookie and validate headers for state-changing requests.
 app.use(csrfProtection);
 
 // ── CORS Configuration ──────────────────────────────────────────────────────
@@ -727,12 +736,6 @@ app.use(cors(corsOptions));
 // CRITICAL: Request ID middleware (MUST be early for tracing)
 // Adds unique ID to every request for log correlation
 app.use(requestLogger);
-
-// ── CRITICAL: Razorpay Webhook Route (MUST be before body parsers) ──────────
-// express.raw() captures the raw Buffer needed for HMAC-SHA256 signature
-// verification. Mounting after express.json() would silently replace the Buffer
-// with a parsed object, breaking every signature check.
-app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
 
 app.use(express.json({ limit: '500kb' }));
 app.use(express.urlencoded({ extended: true, limit: '500kb' }));
