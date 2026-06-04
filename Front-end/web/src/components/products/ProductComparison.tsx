@@ -45,16 +45,18 @@ export default function ProductComparison() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const productIds = searchParams.get('ids')?.split(',') || [];
+  const idsParam = searchParams.get('ids') || '';
+  const productIds = idsParam ? idsParam.split(',') : [];
 
   useEffect(() => {
-    if (productIds.length === 0) { setProducts([]); setLoading(false); return; }
+    if (!idsParam) { setProducts([]); setLoading(false); return; }
 
     const fetchProducts = async () => {
       try {
         setLoading(true);
         setError(null);
-        const responses = await Promise.all(productIds.map(id => apiClient.get(`/products/${id}`)));
+        const ids = idsParam.split(',');
+        const responses = await Promise.all(ids.map(id => apiClient.get(`/products/${id}`)));
         setProducts(responses.map(r => (r as any).product).filter(Boolean));
       } catch (err: any) {
         setError('Failed to load products for comparison');
@@ -64,7 +66,7 @@ export default function ProductComparison() {
     };
 
     fetchProducts();
-  }, [productIds]);
+  }, [idsParam]);
 
   const removeProduct = (productId: string) => {
     const newProductIds = productIds.filter(id => id !== productId);
