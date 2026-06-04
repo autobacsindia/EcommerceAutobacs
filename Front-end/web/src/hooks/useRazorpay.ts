@@ -64,16 +64,22 @@ const loadRazorpayScript = (): Promise<boolean> => {
       return;
     }
 
-    // Load new script
+    // Load new script.
+    // Apply the per-request nonce from the <meta name="csp-nonce"> tag so the
+    // dynamically created <script> is trusted by the nonce-based CSP.
+    // 'strict-dynamic' in the CSP also propagates trust from nonce'd scripts to
+    // their children, but an explicit nonce here handles browsers without it.
+    const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    
+    if (nonce) script.nonce = nonce;
+
     script.onload = () => {
       console.log('[Razorpay] Script loaded successfully');
       resolve(true);
     };
-    
+
     script.onerror = () => {
       console.error('[Razorpay] Script failed to load');
       resolve(false);

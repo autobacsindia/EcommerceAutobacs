@@ -38,41 +38,16 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   async headers() {
-    // Each directive on its own line for reviewability.
-    // 'unsafe-inline' in script-src is required for Next.js App Router: the RSC
-    // runtime injects inline hydration scripts that cannot be avoided without
-    // nonce support. Upgrade path: generate a per-request nonce in middleware.ts,
-    // forward it via a custom header, and replace 'unsafe-inline' with 'nonce-{n}'.
-    // Even with 'unsafe-inline', every other directive still limits what injected
-    // code can do — exfiltration via connect-src, foreign iframes via frame-src, etc.
-    const csp = [
-      "default-src 'self'",
-      // 'unsafe-eval' is required in development for React Fast Refresh (HMR).
-      // Production Next.js builds do not use eval — it is intentionally excluded there.
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ""} https://checkout.razorpay.com https://maps.googleapis.com`,
-      "style-src 'self' 'unsafe-inline'",
-      // data: for CSS-inlined base64 fonts; blob: for ImageUploader object-URL previews
-      "img-src 'self' data: blob: https://res.cloudinary.com https://autobacsindia.com https://*.gstatic.com https://*.googleapis.com",
-      "font-src 'self' data:",
-      // blob: for LogRocket session-replay web workers spawned by the npm SDK
-      "worker-src blob: 'self'",
-      "connect-src 'self' https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com",
-      // Razorpay checkout renders its payment UI inside an iframe
-      "frame-src https://api.razorpay.com https://checkout.razorpay.com",
-      // Supersedes X-Frame-Options in CSP-capable browsers (keep both for legacy)
-      "frame-ancestors 'none'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self' https://api.razorpay.com",
-      "upgrade-insecure-requests",
-    ].join('; ');
-
+    // Content-Security-Policy is intentionally absent here.
+    // middleware.ts generates a fresh nonce per request and sets the full
+    // CSP header dynamically, so a static CSP would either conflict or
+    // make 'unsafe-inline' necessary again. All other security headers
+    // are static and are kept here.
     return [
       {
         source: '/(.*)',
         headers: [
-          { key: 'Content-Security-Policy', value: csp },
-          // Prevent clickjacking — kept alongside frame-ancestors for legacy browsers
+          // Prevent clickjacking — kept alongside CSP frame-ancestors for legacy browsers
           { key: 'X-Frame-Options', value: 'DENY' },
           // Prevent MIME-type sniffing attacks
           { key: 'X-Content-Type-Options', value: 'nosniff' },

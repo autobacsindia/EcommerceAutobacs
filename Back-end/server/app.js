@@ -36,6 +36,7 @@ import { mongoSanitization, requestSanitization } from "./middleware/sanitizatio
 import { sentryContextMiddleware } from "./middleware/sentryContext.js";
 import cookieParser from "cookie-parser";
 import csrfProtection from "./middleware/csrfMiddleware.js";
+import { cspNonceMiddleware } from "./middleware/cspNonce.js";
 import { redisHealthCheck } from "./middleware/redisHealthCheck.js";
 import { 
   apiRateLimit, 
@@ -539,23 +540,34 @@ app.use((req, res, next) => {
 const cronService = new CronService();
 
 // Apply middleware before routes
+
+// Nonce must be generated before helmet() so that the per-request nonce value is
+// available inside the scriptSrc / styleSrc directive functions below.
+app.use(cspNonceMiddleware);
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      // NOTE: 'unsafe-inline' required by Razorpay checkout script injection.
-      // Once Razorpay supports nonce/hash, remove 'unsafe-inline' here.
       scriptSrc: [
         "'self'",
-        "'unsafe-inline'",  // Required for Razorpay (temporary until nonce/hash support)
+        // Per-request nonce — the only inline execution mechanism allowed.
+        // 'unsafe-inline' has been removed.
+        (req, res) => `'nonce-${res.locals.nonce}'`,
+        // 'strict-dynamic' propagates trust from nonce'd scripts to any scripts
+        // they load dynamically, so allow-listed domains below act as a fallback
+        // for browsers that predate 'strict-dynamic'.
+        "'strict-dynamic'",
         "https://checkout.razorpay.com",
-        // Third-party scripts (limit to trusted domains only)
-        "https://cdn.logrocket.com",        // LogRocket session replay
-        "https://*.sentry-cdn.com",          // Sentry error tracking
-        "https://www.googletagmanager.com",  // Google Analytics/Tag Manager
-        "https://www.google-analytics.com"   // Google Analytics
+        "https://cdn.logrocket.com",
+        "https://*.sentry-cdn.com",
+        "https://www.googletagmanager.com",
+        "https://www.google-analytics.com"
       ],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: [
+        "'self'",
+        (req, res) => `'nonce-${res.locals.nonce}'`,
+      ],
       imgSrc: ["'self'", "data:", "https:", "http:"],
       connectSrc: [
         "'self'",

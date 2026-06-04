@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, DM_Sans } from "next/font/google";
 import Script from "next/script";
+import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
@@ -147,15 +148,22 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read the nonce that middleware.ts generated for this request and forwarded
+  // via the x-nonce request header. Pass it to <Script> so the Razorpay script
+  // is trusted by the nonce-based CSP, and expose it in a <meta> tag so that
+  // client-side code (useRazorpay) can read it when creating dynamic scripts.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {nonce && <meta name="csp-nonce" content={nonce} />}
       </head>
       <body
         className={`${barlowCondensed.variable} ${dmSans.variable} antialiased`}
@@ -176,6 +184,7 @@ export default function RootLayout({
                         id="razorpay-checkout"
                         src="https://checkout.razorpay.com/v1/checkout.js"
                         strategy="lazyOnload"
+                        nonce={nonce}
                       />
                     </CurrencyProvider>
                   </LocationProvider>
