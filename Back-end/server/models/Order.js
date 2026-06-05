@@ -68,10 +68,15 @@ const OrderSchema = new mongoose.Schema({
     type: Number, 
     required: true 
   },
-  status: { 
-    type: String, 
-    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded", "failed"], 
-    default: "pending" 
+  paymentMethod: {
+    type: String,
+    enum: ['razorpay', 'cod'],
+    default: 'razorpay'
+  },
+  status: {
+    type: String,
+    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded", "failed"],
+    default: "pending"
   },
   
   // Contact email for guest orders — allows confirmation emails, support, and admin visibility
