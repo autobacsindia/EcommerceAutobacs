@@ -1,40 +1,32 @@
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
-import { CreditCard, Truck } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 
 interface PaymentMethodSelectorProps {
   selectedMethod: string;
   onSelect: (method: string) => void;
 }
 
-const METHODS = [
-  {
-    value: PAYMENT_METHODS.RAZORPAY,
-    label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.RAZORPAY],
-    icon: CreditCard,
-    description: 'Pay securely with Credit/Debit Card, UPI, or Netbanking',
-  },
-  {
-    value: PAYMENT_METHODS.COD,
-    label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.COD],
-    icon: Truck,
-    description: 'Pay with cash when your order is delivered',
-  },
-];
-
 export default function PaymentMethodSelector({ selectedMethod, onSelect }: PaymentMethodSelectorProps) {
+  const methods = [
+    {
+      value: PAYMENT_METHODS.RAZORPAY,
+      label: PAYMENT_METHOD_LABELS[PAYMENT_METHODS.RAZORPAY],
+      icon: CreditCard,
+      description: 'Pay securely with Credit/Debit Card, UPI, or Netbanking'
+    }
+  ];
+
   return (
-    <div className="space-y-3">
-      {METHODS.map((method) => {
+    <div className="space-y-4">
+      {methods.map((method) => {
         const Icon = method.icon;
         const isSelected = selectedMethod === method.value;
 
         return (
           <label
             key={method.value}
-            className={`flex items-start gap-4 border rounded-sm p-4 cursor-pointer transition-colors ${
-              isSelected
-                ? 'border-[#3B9EE8] bg-[#3B9EE8]/5'
-                : 'border-[#252525] bg-[#0E0E0E] hover:border-[#3B9EE8]/40'
+            className={`flex items-start gap-4 border rounded-lg p-4 cursor-pointer transition-all ${
+              isSelected ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' : 'border-gray-200 hover:bg-gray-50'
             }`}
           >
             <input
@@ -43,16 +35,16 @@ export default function PaymentMethodSelector({ selectedMethod, onSelect }: Paym
               value={method.value}
               checked={isSelected}
               onChange={() => onSelect(method.value)}
-              className="mt-1 w-4 h-4 accent-[#3B9EE8]"
+              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
             />
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <Icon className={`h-5 w-5 ${isSelected ? 'text-[#3B9EE8]' : 'text-[#555555]'}`} />
-                <span className={`font-condensed font-bold uppercase tracking-wide text-sm ${isSelected ? 'text-white' : 'text-[#C4C4C4]'}`}>
+                <Icon className={`h-5 w-5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className={`font-medium ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
                   {method.label}
                 </span>
               </div>
-              <p className={`text-xs font-body ${isSelected ? 'text-[#C4C4C4]' : 'text-[#555555]'}`}>
+              <p className={`text-sm ${isSelected ? 'text-blue-700' : 'text-gray-500'}`}>
                 {method.description}
               </p>
             </div>

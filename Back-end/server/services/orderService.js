@@ -117,12 +117,6 @@ class OrderService {
     }
 
     // ── Atomic transaction: deduct stock → create order → clear cart ──────────
-    const isCod = paymentMethod === 'cod';
-
-    // COD orders are confirmed immediately — no payment gateway to wait on.
-    // Razorpay orders stay 'pending' until the payment.captured webhook fires.
-    const initialStatus = isCod ? 'confirmed' : 'pending';
-
     const session = await mongoose.startSession();
     let order;
 
@@ -140,8 +134,8 @@ class OrderService {
             tax,
             discount,
             totalAmount,
-            status: initialStatus,
-            paymentMethod: paymentMethod || 'razorpay',
+            status: 'pending',
+            ...(paymentMethod && { paymentMethod })
           },
           session
         );

@@ -106,7 +106,7 @@ export const getOrderById = async (req, res) => {
 // @route   POST /orders
 // @access  Private
 export const createOrder = async (req, res) => {
-  const { items, shippingAddress, paymentMethod } = req.body;
+  const { items, shippingAddress } = req.body;
 
   if (!items || items.length === 0) {
     return res.status(400).json({ success: false, message: 'No order items provided' });
@@ -117,8 +117,7 @@ export const createOrder = async (req, res) => {
       req.user.id,
       items,
       shippingAddress,
-      req.body,
-      paymentMethod
+      req.body
     );
 
     res.status(201).json({
