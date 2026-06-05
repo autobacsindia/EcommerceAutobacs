@@ -173,12 +173,10 @@ export const SORT_OPTIONS = [
 // Payment Methods
 export const PAYMENT_METHODS = {
   RAZORPAY: 'razorpay',
-  COD: 'cod',
 } as const;
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   [PAYMENT_METHODS.RAZORPAY]: 'Razorpay (Card/UPI/Wallet)',
-  [PAYMENT_METHODS.COD]: 'Cash on Delivery',
 };
 
 // Navigation Links - Bottom Row (Main Navigation)
