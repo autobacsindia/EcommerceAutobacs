@@ -330,8 +330,8 @@ function CheckoutPageContent() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-[#555555] font-body">Status</span>
-              <span className={`font-condensed font-bold ${paymentMethod === PAYMENT_METHODS.COD ? 'text-yellow-400' : 'text-green-400'}`}>
-                {paymentMethod === PAYMENT_METHODS.COD ? 'Pending' : 'Success'}
+              <span className="font-condensed font-bold text-green-400">
+                Success
               </span>
             </div>
           </div>
