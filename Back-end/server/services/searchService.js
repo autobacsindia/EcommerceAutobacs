@@ -142,6 +142,7 @@ class SearchService {
       const products = await productQuery
         .skip(skip)
         .limit(Number(limit))
+        .lean()
         .maxTimeMS(3000);
 
       const total = await Product.countDocuments(query).maxTimeMS(3000);
@@ -176,6 +177,7 @@ class SearchService {
         const regexProducts = await productQuery
           .skip(skip)
           .limit(Number(limit))
+          .lean()
           .maxTimeMS(2000);
 
         const regexTotal = await Product.countDocuments(query).maxTimeMS(2000);
@@ -247,13 +249,14 @@ class SearchService {
     .select('name slug brand categories images')
     .populate('categories', 'name')
     .limit(limit * 2)
+    .lean()
     .maxTimeMS(2000);
 
     // Find categories matching the query
     const categories = await Category.find({
       name: { $regex: query, $options: 'i' },
       isActive: true
-    }).limit(limit).maxTimeMS(2000);
+    }).limit(limit).lean().maxTimeMS(2000);
 
     // Extract unique suggestions
     const suggestions = [];

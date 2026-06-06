@@ -42,6 +42,7 @@ class ProductRepository {
       .sort(sort)
       .skip(skip)
       .limit(limit)
+      .lean()
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
@@ -83,6 +84,7 @@ class ProductRepository {
       .populate('categories', 'name slug')
       .limit(Number(limit))
       .sort({ createdAt: -1 })
+      .lean()
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
@@ -120,6 +122,7 @@ class ProductRepository {
       .populate('categories', 'name slug')
       .limit(Number(limit))
       .sort({ createdAt: -1 })
+      .lean()
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
@@ -141,7 +144,7 @@ class ProductRepository {
    */
   async findAllBrands() {
     const { default: Brand } = await import('../models/Brand.js');
-    return Brand.find({ isActive: true }).sort({ name: 1 });
+    return Brand.find({ isActive: true }).sort({ name: 1 }).lean();
   }
 
   /**
@@ -270,6 +273,7 @@ class ProductRepository {
       .sort({ score: { $meta: 'textScore' } })
       .limit(limit)
       .select('name slug')
+      .lean()
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 }
