@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Declare build args BEFORE COPY so a changed arg value busts the Docker layer
 # cache and forces a fresh build — avoids stale env vars in cached layers.
-ARG NEXT_PUBLIC_API_URL=https://ecommerceautobacs-production-8ff6.up.railway.app
+ARG NEXT_PUBLIC_API_URL=https://ecommerceautobacs-production.up.railway.app
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_APP_URL
 ARG NODE_ENV=production
