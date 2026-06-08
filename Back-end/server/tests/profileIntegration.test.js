@@ -1,35 +1,36 @@
 import request from 'supertest';
-import { jest } from '@jest/globals';
-import { app, cronService, adaptiveThrottlingService } from '../app.js';
-import elasticsearchService from '../services/elasticsearchService.js';
+import { app } from '../app.js';
 import User from '../models/User.js';
 import * as dbHandler from './db-handler.js';
 import bcrypt from 'bcryptjs';
 
-// Increase timeout for this test file
-jest.setTimeout(30000);
+// Extract a named cookie's value from a set-cookie header array.
+function getCookieValue(setCookieHeaders, name) {
+  const cookie = (setCookieHeaders || []).find(c => c.startsWith(`${name}=`));
+  return cookie ? cookie.split(';')[0].substring(name.length + 1) : null;
+}
 
 describe('Profile Integration API', () => {
-  let userToken;
+  let accessToken;
   let userId;
-  
+
   const testUser = {
     name: 'Profile Test User',
     email: 'profileuser@example.com',
     password: 'password123',
-    role: 'customer'
+    role: 'customer',
   };
 
   const secondUser = {
     name: 'Second User',
     email: 'second@example.com',
     password: 'password123',
-    role: 'customer'
+    role: 'customer',
   };
 
   beforeAll(async () => {
     await dbHandler.connect();
-  });
+  }, 120000);
 
   afterEach(async () => {
     await dbHandler.clearDatabase();
@@ -37,43 +38,28 @@ describe('Profile Integration API', () => {
 
   afterAll(async () => {
     await dbHandler.closeDatabase();
-    // Shutdown services to prevent open handles
-    if (cronService && typeof cronService.shutdown === 'function') {
-      cronService.shutdown();
-    }
-    if (adaptiveThrottlingService && typeof adaptiveThrottlingService.shutdown === 'function') {
-      adaptiveThrottlingService.shutdown();
-    }
-    if (elasticsearchService && typeof elasticsearchService.shutdown === 'function') {
-      await elasticsearchService.shutdown();
-    }
   });
 
   beforeEach(async () => {
-    // Create customer
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(testUser.password, salt);
-    const user = await User.create({
-      ...testUser,
-      passwordHash: hashedPassword
-    });
+    const user = await User.create({ ...testUser, passwordHash: hashedPassword, isVerified: true });
     userId = user._id;
 
-    // Login customer
     const loginRes = await request(app)
-      .post('/auth/login')
-      .send({
-        email: testUser.email,
-        password: testUser.password
-      });
-    userToken = loginRes.body.accessToken;
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: testUser.password });
+
+    // Tokens are cookies-only; extract accessToken to use as Bearer
+    // (Bearer header bypasses CSRF, avoiding the need to manage XSRF-TOKEN in tests)
+    accessToken = getCookieValue(loginRes.headers['set-cookie'], 'accessToken');
   });
 
   describe('GET /profile', () => {
-    it('should return user profile', async () => {
+    it('should return user profile without passwordHash', async () => {
       const res = await request(app)
-        .get('/profile')
-        .set('Authorization', `Bearer ${userToken}`);
+        .get('/api/v1/profile')
+        .set('Authorization', `Bearer ${accessToken}`);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
@@ -83,7 +69,7 @@ describe('Profile Integration API', () => {
     });
 
     it('should return 401 if not authenticated', async () => {
-      const res = await request(app).get('/profile');
+      const res = await request(app).get('/api/v1/profile');
       expect(res.statusCode).toBe(401);
     });
   });
@@ -92,18 +78,14 @@ describe('Profile Integration API', () => {
     it('should update user name', async () => {
       const newName = 'Updated Name';
       const res = await request(app)
-        .put('/profile')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          name: newName,
-          email: testUser.email
-        });
+        .put('/api/v1/profile')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: newName, email: testUser.email });
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.user.name).toBe(newName);
-      
-      // Verify in DB
+
       const user = await User.findById(userId);
       expect(user.name).toBe(newName);
     });
@@ -111,18 +93,14 @@ describe('Profile Integration API', () => {
     it('should update user email', async () => {
       const newEmail = 'updated@example.com';
       const res = await request(app)
-        .put('/profile')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          name: testUser.name,
-          email: newEmail
-        });
+        .put('/api/v1/profile')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: testUser.name, email: newEmail });
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.user.email).toBe(newEmail);
-      
-      // Verify in DB
+
       const user = await User.findById(userId);
       expect(user.email).toBe(newEmail);
     });
@@ -137,18 +115,14 @@ describe('Profile Integration API', () => {
           state: 'NY',
           postalCode: '10001',
           country: 'USA',
-          isDefault: true
-        }
+          isDefault: true,
+        },
       ];
 
       const res = await request(app)
-        .put('/profile')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          name: testUser.name,
-          email: testUser.email,
-          addresses
-        });
+        .put('/api/v1/profile')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: testUser.name, email: testUser.email, addresses });
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
@@ -157,22 +131,14 @@ describe('Profile Integration API', () => {
     });
 
     it('should fail if email is already taken', async () => {
-      // Create another user
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(secondUser.password, salt);
-      await User.create({
-        ...secondUser,
-        passwordHash: hashedPassword
-      });
+      await User.create({ ...secondUser, passwordHash: hashedPassword });
 
-      // Try to update profile to use second user's email
       const res = await request(app)
-        .put('/profile')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          name: testUser.name,
-          email: secondUser.email
-        });
+        .put('/api/v1/profile')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: testUser.name, email: secondUser.email });
 
       expect(res.statusCode).toBe(400);
       expect(res.body.success).toBe(false);

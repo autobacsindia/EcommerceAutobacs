@@ -86,7 +86,7 @@ export default function LoginPage() {
       </div>
 
       {/* Login Card */}
-      <div className="w-full max-w-[350px] sm:max-w-[400px]">
+      <div className="w-full max-w-87.5 sm:max-w-100">
         <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 sm:p-8">
           <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-6">Sign In</h1>
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
 
           {(error || (timeUntilRetry !== null && timeUntilRetry > 0)) && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-sm flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
               <div className="text-sm text-red-400 font-body">
                 {timeUntilRetry !== null && timeUntilRetry > 0
                   ? `Too many attempts. Please try again in ${Math.ceil(timeUntilRetry / 1000)} seconds.`
