@@ -29,6 +29,7 @@ import debugRoutes from './routes/debug.js';
 import { setCronService } from './routes/scheduledTasks.js';
 
 // Import middleware
+import { protect, admin } from "./middleware/authMiddleware.js";
 import { errorHandler, notFound, requestLogger } from "./middleware/errorMiddleware.js";
 import razorpayWebhook from './middleware/razorpayWebhook.js';
 // Sanitization middleware
@@ -889,8 +890,8 @@ app.get('/ready', healthCheckRateLimit, (req, res) => {
   });
 });
 
-// Performance metrics endpoint (admin only in production)
-app.get('/api/v1/metrics/performance', metricsRateLimit, (req, res) => {
+// Performance metrics endpoint — admin only
+app.get('/api/v1/metrics/performance', metricsRateLimit, protect, admin, (req, res) => {
   const metrics = performanceMetrics.getMetrics();
   
   res.json({
