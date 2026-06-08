@@ -1053,11 +1053,10 @@ router.get(
   "/facebook/callback",
   asyncHandler(async (req, res) => {
     const code = req.query.code;
+    const frontendUrl = process.env.FRONTEND_URL || 'https://ecommerceautobacs-production-8c1b.up.railway.app';
 
     if (!code) {
-      // Redirect back to login page with error message instead of JSON response
-      const frontendUrl = process.env.FRONTEND_URL || 'https://ecommerceautobacs-production-8c1b.up.railway.app';
-      return res.redirect(`${frontendUrl}/login?error=google_cancelled&message=Google%20Sign-In%20was%20cancelled`);
+      return res.redirect(`${frontendUrl}/login?error=facebook_cancelled&message=Facebook%20Sign-In%20was%20cancelled`);
     }
 
     const clientId = process.env.FACEBOOK_CLIENT_ID;
@@ -1120,6 +1119,12 @@ router.get(
 
     const email = userData.email;
     const name = userData.name;
+
+    if (!email) {
+      return res.redirect(
+        `${frontendUrl}/login?error=facebook_no_email&message=Facebook%20did%20not%20provide%20an%20email%20address.%20Please%20use%20a%20different%20sign-in%20method.`
+      );
+    }
 
     try {
       const user = await findOrCreateSocialUser({
