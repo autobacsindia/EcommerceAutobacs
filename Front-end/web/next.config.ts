@@ -89,13 +89,61 @@ const nextConfig: NextConfig = {
     API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000',
   },
   webpack(config) {
-    // On Windows, the case-insensitive filesystem lets the same node_modules
-    // directory be reached via paths that differ only in casing (e.g.
-    // "Front-end/web/node_modules" vs "front-end/web/node_modules").
-    // Webpack registers them as separate modules, producing duplicate React
-    // context objects and breaking Next.js's invariant checks.
-    // Resolving symlinks to their real path first ensures webpack always
-    // arrives at one canonical path regardless of the casing used to reach it.
+    // ─── Windows duplicate-module fix ────────────────────────────────────────
+    // On Windows, the same physical node_modules directory can be reached via
+    // path strings that differ only in casing (e.g. "Front-end/web/…" vs
+    // "front-end/web/…" — depending on how the terminal's CWD was typed).
+    // Webpack uses the full path string as the module-registry key, so the
+    // same file gets registered twice, producing two separate module instances.
+    // When this hits a React.createContext() call (e.g. in layout-router.js),
+    // the provider uses context object A while OuterLayoutRouter's useContext()
+    // looks for context object B → null → "invariant expected layout router to
+    // be mounted".
+    //
+    // Fix: hook into NormalModuleFactory.afterResolve and normalise every
+    // resolved resource path to its real filesystem case via realpathSync.native
+    // before webpack commits it to the registry.  A per-process Map avoids
+    // repeated syscalls for paths seen more than once.
+    if (process.platform === 'win32') {
+      const { realpathSync } = require('fs') as typeof import('fs');
+      const cache = new Map<string, string>();
+      const realPath = (p: string): string => {
+        if (cache.has(p)) return cache.get(p)!;
+        try {
+          const r = realpathSync.native(p);
+          cache.set(p, r);
+          return r;
+        } catch {
+          cache.set(p, p);
+          return p;
+        }
+      };
+
+      config.plugins.push({
+        apply(compiler: any) {
+          compiler.hooks.normalModuleFactory.tap(
+            'NormalizeCasePlugin',
+            (factory: any) => {
+              factory.hooks.afterResolve.tap(
+                'NormalizeCasePlugin',
+                (data: any) => {
+                  if (!data) return;
+                  if (data.resource) {
+                    data.resource = realPath(data.resource);
+                  }
+                  if (data.resourceResolveData?.path) {
+                    data.resourceResolveData.path = realPath(
+                      data.resourceResolveData.path
+                    );
+                  }
+                }
+              );
+            }
+          );
+        },
+      });
+    }
+
     config.resolve.symlinks = true;
     return config;
   },
