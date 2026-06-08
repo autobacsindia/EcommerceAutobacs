@@ -88,6 +88,17 @@ const nextConfig: NextConfig = {
     // above, so this is always defined when NODE_ENV === 'production'.
     API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000',
   },
+  webpack(config) {
+    // On Windows, the case-insensitive filesystem lets the same node_modules
+    // directory be reached via paths that differ only in casing (e.g.
+    // "Front-end/web/node_modules" vs "front-end/web/node_modules").
+    // Webpack registers them as separate modules, producing duplicate React
+    // context objects and breaking Next.js's invariant checks.
+    // Resolving symlinks to their real path first ensures webpack always
+    // arrives at one canonical path regardless of the casing used to reach it.
+    config.resolve.symlinks = true;
+    return config;
+  },
 };
 
 const bundleAnalyzer = withBundleAnalyzer({ enabled: process.env.ANALYZE === "true" });
