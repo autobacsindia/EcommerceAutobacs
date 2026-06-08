@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import warehouseService, { WarehouseFormData } from '@/services/warehouseService';
@@ -10,6 +9,7 @@ interface Props {
   initialData?: Partial<WarehouseFormData>;
   warehouseId?: string;
   mode: 'create' | 'edit';
+  onSuccess: () => void;
 }
 
 const EMPTY_FORM: WarehouseFormData = {
@@ -23,8 +23,7 @@ const EMPTY_FORM: WarehouseFormData = {
   capacity: 10000,
 };
 
-export default function WarehouseForm({ initialData, warehouseId, mode }: Props) {
-  const router = useRouter();
+export default function WarehouseForm({ initialData, warehouseId, mode, onSuccess }: Props) {
   const [form, setForm] = useState<WarehouseFormData>({ ...EMPTY_FORM, ...initialData });
   const [pinInput, setPinInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -65,7 +64,7 @@ export default function WarehouseForm({ initialData, warehouseId, mode }: Props)
       } else {
         await warehouseService.updateWarehouse(warehouseId!, form);
       }
-      router.push('/admin/warehouses');
+      onSuccess();
     } catch (err: any) {
       setError(err.message || 'Failed to save warehouse');
       setSubmitting(false);
