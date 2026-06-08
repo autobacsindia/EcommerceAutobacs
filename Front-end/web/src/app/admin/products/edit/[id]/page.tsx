@@ -1357,7 +1357,7 @@ export default function EditProductPage() {
               {installationSteps.map((step, index) => (
                 <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{index + 1}</span>
+                    <span className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-bold shrink-0">{index + 1}</span>
                     <span className="text-sm font-medium text-gray-600">Step {index + 1}</span>
                   </div>
                   <input

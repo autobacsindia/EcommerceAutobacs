@@ -37,6 +37,12 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: 'Inventory',
+    items: [
+      { href: '/admin/warehouses', label: 'Warehouses', icon: '🏭' },
+    ],
+  },
+  {
     title: 'Customers',
     items: [
       { href: '/admin/users', label: 'Users', icon: '👥' },
@@ -73,6 +79,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'Catalog': false,
     'Orders': false,
+    'Inventory': false,
     'Customers': false,
     'Content': false,
     'Finance': false,

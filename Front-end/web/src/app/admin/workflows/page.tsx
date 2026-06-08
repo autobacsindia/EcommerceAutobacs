@@ -332,7 +332,7 @@ function InventoryManagementFlow() {
       <div className="mb-12">
         <div className="grid grid-cols-3 gap-6">
           {/* Stock Monitoring */}
-          <div className="col-span-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 border-2 border-blue-300">
+          <div className="col-span-3 bg-linear-to-r from-blue-50 to-blue-100 rounded-lg p-6 border-2 border-blue-300">
             <h3 className="text-xl font-bold text-blue-900 mb-4">1. Continuous Stock Monitoring</h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white rounded p-4">
@@ -366,7 +366,7 @@ function InventoryManagementFlow() {
           </div>
 
           {/* Reorder Trigger */}
-          <div className="col-span-3 bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-lg p-6 border-2 border-yellow-300">
+          <div className="col-span-3 bg-linear-to-r from-yellow-50 to-yellow-100 rounded-lg p-6 border-2 border-yellow-300">
             <h3 className="text-xl font-bold text-yellow-900 mb-4">2. Reorder Point Triggered</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white rounded p-4">
@@ -391,7 +391,7 @@ function InventoryManagementFlow() {
           </div>
 
           {/* Purchase Order */}
-          <div className="col-span-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-6 border-2 border-purple-300">
+          <div className="col-span-3 bg-linear-to-r from-purple-50 to-purple-100 rounded-lg p-6 border-2 border-purple-300">
             <h3 className="text-xl font-bold text-purple-900 mb-4">3. Purchase Order Creation</h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white rounded p-4">
@@ -425,7 +425,7 @@ function InventoryManagementFlow() {
           </div>
 
           {/* Stock Receipt */}
-          <div className="col-span-3 bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 border-2 border-green-300">
+          <div className="col-span-3 bg-linear-to-r from-green-50 to-green-100 rounded-lg p-6 border-2 border-green-300">
             <h3 className="text-xl font-bold text-green-900 mb-4">4. Stock Receipt & Update</h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white rounded p-4">

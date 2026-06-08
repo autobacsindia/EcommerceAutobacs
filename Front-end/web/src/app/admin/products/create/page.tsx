@@ -339,7 +339,7 @@ export default function CreateProductPage() {
                 Categories
               </label>
               <div 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-[42px]"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-10.5"
                 onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
               >
                 {selectedCategories.length > 0 ? (
