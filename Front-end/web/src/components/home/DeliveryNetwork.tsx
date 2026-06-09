@@ -20,7 +20,7 @@ async function fetchActiveWarehouses(): Promise<PublicWarehouse[]> {
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || 'http://127.0.0.1:5000';
     const res = await fetch(`${apiUrl}/api/v1/warehouses/public`, {
-      next: { revalidate: 3600 }, // refresh once per hour
+      next: { tags: ['warehouses'], revalidate: 3600 },
     });
     if (!res.ok) return [];
     const data = await res.json();

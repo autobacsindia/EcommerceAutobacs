@@ -185,6 +185,7 @@ export default function WarehouseDetailPage() {
     try {
       const res = await warehouseService.toggleHomepage(id, !warehouse.showOnHomepage);
       setWarehouse(res.warehouse);
+      await fetch('/api/revalidate/warehouses', { method: 'POST' });
     } catch (err: any) {
       setError(err.message || 'Failed to update homepage visibility');
     } finally {
