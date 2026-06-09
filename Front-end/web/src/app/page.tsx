@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HeroBanner from '@/components/layout/HeroBanner';
+import DeliveryNetwork from '@/components/home/DeliveryNetwork';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -316,6 +317,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Delivery Network */}
+      <DeliveryNetwork />
 
       {/* Popular Categories */}
       <section className="py-16 bg-[#080808]">

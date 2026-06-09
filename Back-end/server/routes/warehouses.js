@@ -68,6 +68,31 @@ router.post("/", protect, admin, validateWarehouse, async (req, res) => {
 });
 
 /**
+ * @route   GET /api/warehouses/public
+ * @desc    Return active warehouses for the public storefront (homepage network section)
+ * @access  Public — returns only display-safe fields, no internal metrics
+ */
+router.get("/public", async (req, res) => {
+  try {
+    const warehouses = await warehouseService.getAllWarehouses({ status: 'active' });
+
+    const publicData = warehouses.map(w => ({
+      id:                  w._id,
+      name:                w.name,
+      type:                w.type,
+      city:                w.location?.city,
+      state:               w.location?.state,
+      serviceablePinCount: w.serviceablePinCodes?.length ?? 0,
+      operationalStatus:   w.operationalStatus,
+    }));
+
+    res.json({ success: true, warehouses: publicData });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load locations' });
+  }
+});
+
+/**
  * @route   GET /api/warehouses/:id
  * @desc    Get warehouse by ID
  * @access  Private/Admin
