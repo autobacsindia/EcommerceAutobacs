@@ -38,6 +38,7 @@ export interface WarehouseListItem {
   capacity: number;
   serviceablePinCodes: string[];
   isActive: boolean;
+  showOnHomepage: boolean;
   createdAt: string;
 }
 
@@ -101,6 +102,13 @@ class WarehouseService {
     return apiClient.put<{ success: boolean; warehouse: WarehouseListItem }>(
       `${this.base}/${id}`,
       data
+    );
+  }
+
+  async toggleHomepage(id: string, enabled: boolean) {
+    return apiClient.put<{ success: boolean; warehouse: WarehouseListItem }>(
+      `${this.base}/${id}`,
+      { showOnHomepage: enabled }
     );
   }
 

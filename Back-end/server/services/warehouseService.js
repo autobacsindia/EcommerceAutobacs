@@ -56,6 +56,10 @@ class WarehouseService {
         query["location.city"] = filters.city;
       }
 
+      if (filters.showOnHomepage !== undefined) {
+        query.showOnHomepage = filters.showOnHomepage;
+      }
+
       const warehouses = await Warehouse.find(query).sort({ createdAt: -1 });
       return warehouses;
     } catch (error) {

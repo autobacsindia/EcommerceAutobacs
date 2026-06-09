@@ -74,7 +74,7 @@ router.post("/", protect, admin, validateWarehouse, async (req, res) => {
  */
 router.get("/public", async (req, res) => {
   try {
-    const warehouses = await warehouseService.getAllWarehouses({ status: 'active' });
+    const warehouses = await warehouseService.getAllWarehouses({ status: 'active', showOnHomepage: true });
 
     const publicData = warehouses.map(w => ({
       id:                  w._id,

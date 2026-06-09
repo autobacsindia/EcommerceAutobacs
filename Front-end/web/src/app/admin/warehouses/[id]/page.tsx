@@ -129,6 +129,7 @@ export default function WarehouseDetailPage() {
   const [invTotal, setInvTotal] = useState(0);
   const [invSearch, setInvSearch] = useState('');
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     warehouseService
@@ -176,6 +177,19 @@ export default function WarehouseDetailPage() {
   const handleInvSearch = (value: string) => {
     setInvSearch(value);
     fetchInventory(1, value);
+  };
+
+  const handleToggleHomepage = async () => {
+    if (!warehouse || toggling) return;
+    setToggling(true);
+    try {
+      const res = await warehouseService.toggleHomepage(id, !warehouse.showOnHomepage);
+      setWarehouse(res.warehouse);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update homepage visibility');
+    } finally {
+      setToggling(false);
+    }
   };
 
   const handleStockSaved = (updated: InventoryItem) => {
@@ -263,7 +277,31 @@ export default function WarehouseDetailPage() {
 
       {/* Overview Tab */}
       {tab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <>
+          {/* Homepage visibility toggle */}
+          <div className="mb-6 bg-white rounded-lg border border-gray-200 p-5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-0.5">Show on Homepage</h3>
+              <p className="text-xs text-gray-500">
+                When enabled, this warehouse appears in the Delivery Network section on the storefront homepage.
+              </p>
+            </div>
+            <button
+              onClick={handleToggleHomepage}
+              disabled={toggling}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${
+                warehouse.showOnHomepage ? 'bg-blue-600' : 'bg-gray-200'
+              }`}
+              role="switch"
+              aria-checked={warehouse.showOnHomepage}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform ${
+                warehouse.showOnHomepage ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <InfoCard title="Details">
             <Row label="Type" value={warehouse.type} />
             <Row label="Capacity" value={warehouse.capacity.toLocaleString() + ' units'} />
@@ -292,6 +330,7 @@ export default function WarehouseDetailPage() {
             <Row label="Email" value={warehouse.contactInfo?.email || '—'} />
           </InfoCard>
         </div>
+        </>
       )}
 
       {/* Inventory Tab */}
