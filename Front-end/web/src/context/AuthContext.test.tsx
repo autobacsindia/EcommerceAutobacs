@@ -54,7 +54,10 @@ describe('AuthContext', () => {
     );
 
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenCalledWith(API_ENDPOINTS.GET_ME);
+      expect(apiClient.get).toHaveBeenCalledWith(
+        API_ENDPOINTS.GET_ME,
+        expect.objectContaining({ signal: expect.anything() })
+      );
     });
 
     expect(screen.getByTestId('auth-status')).toHaveTextContent('Authenticated');
@@ -84,7 +87,7 @@ describe('AuthContext', () => {
       password: 'password'
     });
     
-    expect(apiClient.setAuthToken).toHaveBeenCalledWith('new-token');
+    // setAuthToken is deprecated — auth is managed via httpOnly cookies, no JS token is set
     expect(screen.getByTestId('auth-status')).toHaveTextContent('Authenticated');
   });
 

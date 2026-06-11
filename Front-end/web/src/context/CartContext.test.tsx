@@ -87,17 +87,23 @@ describe('CartContext', () => {
     );
 
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenCalledWith(API_ENDPOINTS.CART);
+      expect(apiClient.get).toHaveBeenCalledWith(
+        API_ENDPOINTS.CART,
+        expect.objectContaining({ signal: expect.anything() })
+      );
     });
 
     expect(screen.getByTestId('item-count')).toHaveTextContent('1');
   });
 
-  it('should not fetch cart if not authenticated', async () => {
+  it('should fetch cart even when not authenticated (guest cart support)', async () => {
     mockUseAuth.mockReturnValue({
       isAuthenticated: false,
       isLoading: false
     });
+
+    // Backend returns no cart for unauthenticated guest — frontend stays empty
+    (apiClient.get as jest.Mock).mockResolvedValue({ success: false });
 
     render(
       <CartProvider>
@@ -105,8 +111,12 @@ describe('CartContext', () => {
       </CartProvider>
     );
 
+    // Cart is always fetched — backend resolves auth vs guest via cookie/x-session-id
     await waitFor(() => {
-      expect(apiClient.get).not.toHaveBeenCalled();
+      expect(apiClient.get).toHaveBeenCalledWith(
+        API_ENDPOINTS.CART,
+        expect.objectContaining({ signal: expect.anything() })
+      );
     });
 
     expect(screen.getByTestId('item-count')).toHaveTextContent('0');
