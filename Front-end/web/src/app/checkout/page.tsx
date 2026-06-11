@@ -289,7 +289,7 @@ function CheckoutPageContent() {
   }
 
   if (currentStep === 'confirmation' && orderId) {
-    const isGuestOrder = localStorage.getItem('pendingClaim');
+    const isGuestOrder = typeof window !== 'undefined' ? localStorage.getItem('pendingClaim') : null;
     return (
       <div className="min-h-screen bg-[#080808] py-16">
         <div className="max-w-2xl mx-auto px-4 text-center">

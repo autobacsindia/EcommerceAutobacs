@@ -74,7 +74,7 @@ export default function ClaimOrderPage() {
         password: password || undefined,
       });
       if (apiResponse.success) {
-        localStorage.setItem('auth_token', apiResponse.accessToken);
+        // auth token is set via httpOnly cookie by the backend — no localStorage write needed
         localStorage.removeItem('pendingClaim');
         setClaimed(true);
         toast.success('Account claimed successfully!');

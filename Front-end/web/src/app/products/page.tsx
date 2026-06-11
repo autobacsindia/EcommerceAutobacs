@@ -82,31 +82,6 @@ interface ProductsData {
 
 // Function to fetch products with proper sorting parameters and enhanced retry logic
 async function getProducts(searchParams: any, retries = 3): Promise<ProductsData> {
-  // searchParams is already a plain object (caller converts URLSearchParams before passing in)
-  const searchParamsObj = searchParams;
-  const cacheKey = `products_${JSON.stringify(searchParamsObj)}`;
-  
-  // DISABLED: localStorage caching to prevent stale/corrupted slug data
-  // Always fetch fresh data from API
-  /*
-  const cachedData = localStorage.getItem(cacheKey);
-  const cacheTimestamp = localStorage.getItem(`${cacheKey}_timestamp`);
-  
-  if (cachedData && cacheTimestamp) {
-    try {
-      const parsedData = JSON.parse(cachedData);
-      const age = Date.now() - parseInt(cacheTimestamp);
-      const maxAge = 30 * 1000; // 30 seconds
-      
-      if (age < maxAge) {
-        return parsedData;
-      }
-    } catch (e) {
-      console.warn('Failed to parse cached products data:', e);
-    }
-  }
-  */
-  
   let lastError: any;
   
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -200,16 +175,6 @@ async function getProducts(searchParams: any, retries = 3): Promise<ProductsData
             count
           }
         };
-        
-        // DISABLED: localStorage caching to prevent stale/corrupted slug data
-        /*
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(result));
-          localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
-        } catch (e) {
-          console.warn('Failed to cache products in localStorage:', e);
-        }
-        */
         
         return result;
       }
