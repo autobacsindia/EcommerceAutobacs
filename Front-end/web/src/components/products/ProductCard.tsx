@@ -1,15 +1,8 @@
-'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ShoppingCart, Heart } from 'lucide-react';
-import { useCart } from '@/context/CartContext';
-import { useWishlist } from '@/context/WishlistContext';
-import { useAuth } from '@/context/AuthContext';
-import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
-import { toast } from 'react-hot-toast';
+import ProductCardWishlistButton from './ProductCardWishlistButton';
+import ProductCardPriceActions from './ProductCardPriceActions';
+import ProductCardCompare from './ProductCardCompare';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -20,202 +13,101 @@ interface ProductCardProps {
   className?: string;
 }
 
-export default function ProductCard({ 
-  product, 
-  isCompared = false, 
+export default function ProductCard({
+  product,
+  isCompared = false,
   onToggleCompare,
-  className 
+  className,
 }: ProductCardProps) {
-  const router = useRouter();
-  const { formatPrice } = useCurrency();
-  const { addToCart } = useCart();
-  const { isAuthenticated } = useAuth();
-  const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
-  const [animating, setAnimating] = useState(false);
+  const url = productUrl(product);
 
-  const handleAddToCart = async (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent navigation if clicked inside a Link
-    e.stopPropagation();
-
-    try {
-      await addToCart(product._id, 1);
-      toast.success('Added to cart');
-    } catch (error: any) {
-      console.error('Failed to add to cart:', error);
-      toast.error(error.message || 'Failed to add to cart');
-    }
-  };
-
-  const handleToggleWishlist = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
-
-    setAnimating(true);
-    
-    try {
-      if (isInWishlist(product._id)) {
-        await removeFromWishlist(product._id);
-        toast.success('Removed from wishlist');
-      } else {
-        await addToWishlist(product._id);
-        toast.success('Added to wishlist');
-      }
-    } catch (error: any) {
-       if (error.message && error.message.includes('already in wishlist')) {
-        try {
-          await removeFromWishlist(product._id);
-          toast.success('Removed from wishlist');
-        } catch (removeError) {
-          toast.error('Failed to update wishlist');
-        }
-      } else if (error.message === 'ITEM_REMOVED') {
-        toast.success('Removed from wishlist');
-      } else {
-        toast.error('Failed to update wishlist');
-      }
-    } finally {
-      setTimeout(() => setAnimating(false), 300);
-    }
-  };
-
-  const url = productUrl(product);  // null = product has no slug yet (rare post-migration)
-  
-  // DEBUG: Log ALL products without URLs
   if (!url) {
     console.log(`[ProductCard NO URL] ${product.name}:`, {
       slug: product.slug,
-      url,
-      productId: product._id
+      productId: product._id,
     });
   }
 
+  const imageContents = (
+    <>
+      {product.images && (
+        Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
+          <ProductImage
+            src={product.images[0].url}
+            alt={product.images[0].alt || product.name}
+            className="object-cover w-full h-full"
+          />
+        ) : typeof product.images === 'string' && product.images !== '' ? (
+          <ProductImage
+            src={product.images}
+            alt={product.name}
+            className="object-cover w-full h-full"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-[#161616]">
+            <span className="text-[#555555] text-sm">No image available</span>
+          </div>
+        )
+      )}
+
+      {onToggleCompare && (
+        <ProductCardCompare
+          productId={product._id}
+          isCompared={isCompared}
+          onToggle={onToggleCompare}
+        />
+      )}
+
+      {/* Wishlist toggle — client island, absolutely positioned over the image */}
+      <ProductCardWishlistButton productId={product._id} />
+
+      <div className="absolute top-10 left-2 flex gap-1 flex-wrap">
+        {product.stock <= 0 && (
+          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">Out of Stock</div>
+        )}
+        {product.stock > 0 && (product as any).isNew && (
+          <div className="bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">New</div>
+        )}
+        {product.originalPrice && product.originalPrice > product.price && (
+          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+            {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+          </div>
+        )}
+        {product.isFeatured && product.stock > 0 && product.originalPrice && product.originalPrice <= product.price && (
+          <div className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold">Popular</div>
+        )}
+      </div>
+    </>
+  );
+
   return (
-    <div className={cn("bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300 group", className)}>
+    <div className={cn(
+      'bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300 group',
+      className
+    )}>
       {url ? (
         <Link href={url} className="block relative h-48 bg-[#161616]">
-        {product.images && (
-          Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
-            <ProductImage
-              src={product.images[0].url}
-              alt={product.images[0].alt || product.name}
-              className="object-cover w-full h-full"
-            />
-          ) : typeof product.images === 'string' && product.images !== '' ? (
-            <ProductImage
-              src={product.images}
-              alt={product.name}
-              className="object-cover w-full h-full"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-[#161616]">
-              <span className="text-[#555555] text-sm">No image available</span>
-            </div>
-          )
-        )}
-        
-        {/* Compare Checkbox */}
-        {onToggleCompare && (
-            <div className="absolute top-2 left-2" onClick={(e) => e.stopPropagation()}>
-                <label className="flex items-center bg-[#252525] rounded-full p-1 shadow-md cursor-pointer">
-                <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={isCompared}
-                    onChange={() => onToggleCompare(product._id)}
-                />
-                <div className={cn(
-                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
-                    isCompared ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
-                )}>
-                    {isCompared && (
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    )}
-                </div>
-                <span className="ml-1 text-xs font-medium text-[#C4C4C4] pr-2">Compare</span>
-                </label>
-            </div>
-        )}
-        
-        {/* Wishlist Button */}
-        <button
-          className={cn(
-              "absolute top-2 right-2 p-2 bg-[#252525] rounded-full hover:bg-[#3B9EE8]/20 transition-colors",
-              animating ? 'animate-pulse' : ''
-          )}
-          onClick={handleToggleWishlist}
-        >
-          <Heart className={cn(
-              "h-5 w-5 transition-colors duration-200",
-              isInWishlist(product._id) ? 'text-red-500 fill-current' : 'text-gray-600'
-          )} />
-        </button>
-
-        {/* Badges */}
-        <div className="absolute top-10 left-2 flex gap-1 flex-wrap">
-          {product.stock <= 0 && (
-            <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-              Out of Stock
-            </div>
-          )}
-          {product.stock > 0 && (product as any).isNew && ( 
-            <div className="bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">
-              New
-            </div>
-          )}
-          {product.originalPrice && product.originalPrice > product.price && (
-            <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
-              {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
-            </div>
-          )}
-          {product.isFeatured && product.stock > 0 && product.originalPrice && product.originalPrice <= product.price && (
-            <div className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold">
-              Popular
-            </div>
-          )}
-        </div>
-      </Link>
+          {imageContents}
+        </Link>
       ) : (
         <div className="relative h-48 bg-[#161616]">
-          {product.images && (
-            Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
-              <ProductImage
-                src={product.images[0].url}
-                alt={product.images[0].alt || product.name}
-                className="object-cover w-full h-full"
-              />
-            ) : typeof product.images === 'string' && product.images !== '' ? (
-              <ProductImage
-                src={product.images}
-                alt={product.name}
-                className="object-cover w-full h-full"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[#161616]">
-                <span className="text-[#555555] text-sm">No image available</span>
-              </div>
-            )
-          )}
+          {imageContents}
         </div>
       )}
 
-      {/* Product Info */}
       <div className="p-4">
         <p className="text-xs text-[#3B9EE8] uppercase font-condensed font-bold tracking-widest mb-1">
           {product.categories && product.categories.length > 0 ? (
             product.categories[0].name.toUpperCase()
           ) : typeof product.category === 'object' && product.category !== null ? (
             (product.category as any).name?.toUpperCase() || 'UNCATEGORIZED'
-          ) : typeof product.category === 'string' ? product.category.toUpperCase() : 'UNCATEGORIZED'}
+          ) : typeof product.category === 'string' ? (
+            product.category.toUpperCase()
+          ) : (
+            'UNCATEGORIZED'
+          )}
         </p>
 
-        {/* Product Name */}
         {url ? (
           <Link href={url}>
             <h3 className="font-condensed font-bold text-white mb-2 line-clamp-2 hover:text-[#3B9EE8] text-base uppercase tracking-wide">
@@ -228,14 +120,13 @@ export default function ProductCard({
           </h3>
         )}
 
-        {/* Rating */}
         {product.averageRating > 0 && (
           <div className="flex items-center gap-1 mb-2">
             <div className="flex">
               {[1, 2, 3, 4, 5].map((star) => (
                 <svg
                   key={star}
-                  className={cn("h-4 w-4", star <= product.averageRating ? 'text-[#EF9F27]' : 'text-[#252525]')}
+                  className={cn('h-4 w-4', star <= product.averageRating ? 'text-[#EF9F27]' : 'text-[#252525]')}
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -243,40 +134,17 @@ export default function ProductCard({
                 </svg>
               ))}
             </div>
-            <span className="text-sm text-[#C4C4C4]">
-              ({product.averageRating.toFixed(1)})
-            </span>
+            <span className="text-sm text-[#C4C4C4]">({product.averageRating.toFixed(1)})</span>
           </div>
         )}
 
-        {/* Price and Actions */}
-        <div className="flex items-center justify-between mt-4">
-          <div>
-            {product.originalPrice && product.originalPrice > product.price ? (
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-condensed font-bold text-[#3B9EE8]">
-                  {formatPrice(product.price)}
-                </p>
-                <p className="text-sm text-[#555555] line-through">
-                  {formatPrice(product.originalPrice)}
-                </p>
-              </div>
-            ) : (
-              <p className="text-2xl font-condensed font-bold text-[#3B9EE8]">
-                {formatPrice(product.price)}
-              </p>
-            )}
-          </div>
-
-          <button
-            onClick={handleAddToCart}
-            disabled={product.stock <= 0}
-            className="flex items-center gap-2 bg-[#3B9EE8] text-white px-4 py-2 rounded-sm hover:bg-[#1A6FB5] transition-colors disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed font-condensed font-bold text-sm tracking-wider uppercase"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            <span className="text-sm font-medium">Add</span>
-          </button>
-        </div>
+        {/* Price + add-to-cart — client island */}
+        <ProductCardPriceActions
+          productId={product._id}
+          price={product.price}
+          originalPrice={product.originalPrice}
+          stock={product.stock}
+        />
       </div>
     </div>
   );
