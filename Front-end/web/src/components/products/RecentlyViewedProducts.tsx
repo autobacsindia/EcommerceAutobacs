@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
 import { productUrl } from '@/lib/types';
 

@@ -28,9 +28,9 @@ export const RateLimitProvider: React.FC<{ children: ReactNode }> = ({ children 
     <RateLimitContext.Provider value={{ showRateLimitNotification, hideRateLimitNotification }}>
       {children}
       {showNotification && (
-        <RateLimitNotification 
-          retryAfter={retryAfter} 
-          onDismiss={hideRateLimitNotification} 
+        <RateLimitNotification
+          retryAfter={retryAfter}
+          onDismiss={hideRateLimitNotification}
         />
       )}
     </RateLimitContext.Provider>

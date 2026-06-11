@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import apiClient from '@/lib/api';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { productUrl } from '@/lib/types';
 import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';

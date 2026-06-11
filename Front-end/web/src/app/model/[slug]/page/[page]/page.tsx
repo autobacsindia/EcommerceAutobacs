@@ -7,7 +7,7 @@ import { ShoppingCart, Heart, Filter } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';

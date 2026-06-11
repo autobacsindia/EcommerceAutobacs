@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import CartPage from './page';
 import { useCart } from '@/context/CartContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
 
 // Mock Hooks
@@ -9,7 +9,7 @@ jest.mock('@/context/CartContext', () => ({
   useCart: jest.fn(),
 }));
 
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: jest.fn(),
 }));
 

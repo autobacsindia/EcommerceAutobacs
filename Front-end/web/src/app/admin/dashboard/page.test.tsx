@@ -3,11 +3,11 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import AdminDashboardPage from './page';
 import { useAuth } from '@/context/AuthContext';
 import { useSSE } from '@/hooks/useSSE';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 
 // Mock dependencies
 jest.mock('@/context/AuthContext');
-jest.mock('@/contexts/CurrencyContext');
+jest.mock('@/context/CurrencyContext');
 jest.mock('@/hooks/useSSE');
 jest.mock('next/navigation', () => ({
   useRouter: () => ({

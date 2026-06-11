@@ -6,7 +6,7 @@ import { toast } from 'react-hot-toast';
 import { productUrl } from '@/lib/types';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { useAuth } from '@/context/AuthContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 
 interface RecentProduct {
   _id: string;

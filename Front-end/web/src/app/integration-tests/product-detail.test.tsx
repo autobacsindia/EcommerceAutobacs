@@ -5,7 +5,7 @@ import { ProductDetailPageClient } from '../products/[slug]/ClientPage'; // Adju
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 // Mock dependencies
@@ -26,7 +26,7 @@ jest.mock('@/context/CartContext', () => ({
   useCart: jest.fn(),
 }));
 
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: jest.fn(),
 }));
 

@@ -7,7 +7,7 @@ import { ShoppingCart, Trash2, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';

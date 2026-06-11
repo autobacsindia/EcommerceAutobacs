@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Package, Truck, Clock } from 'lucide-react';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 import { locationService } from '@/services/locationService';
 
 interface DeliveryEstimateProps {

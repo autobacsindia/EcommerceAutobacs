@@ -62,7 +62,7 @@ jest.mock('@/context/WishlistContext', () => ({
 }));
 
 // Mock CurrencyContext (implied usage in ProductCard)
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: () => ({
     formatPrice: (price: number) => `$${price.toFixed(2)}`,
     currency: 'USD',

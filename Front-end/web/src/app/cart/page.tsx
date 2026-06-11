@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { ProductImage, productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';

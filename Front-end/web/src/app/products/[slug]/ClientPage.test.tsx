@@ -5,7 +5,7 @@ import apiClient from '@/lib/api'; // We need to mock the API response
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 
@@ -35,7 +35,7 @@ jest.mock('@/context/CartContext', () => ({
   useCart: jest.fn(),
 }));
 
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: jest.fn(),
 }));
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import productService from '@/lib/services/productService';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import WoofCategoryList from './WoofCategoryList';
 
 // Define the Category interface inline to avoid import issues

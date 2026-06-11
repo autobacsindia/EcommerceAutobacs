@@ -12,7 +12,7 @@ import { useRouter, usePathname, useSearchParams, useParams } from 'next/navigat
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 
 // --- Mocks ---
 
@@ -138,7 +138,7 @@ jest.mock('@/context/WishlistContext', () => ({
 }));
 
 // Mock Currency Context
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: jest.fn(),
 }));
 

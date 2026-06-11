@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Loader2, Navigation2, MapPin } from 'lucide-react';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 import { LocationSelectRequest } from '@/types/location';
 import toast from 'react-hot-toast';
 import ManualLocationForm from './ManualLocationForm';

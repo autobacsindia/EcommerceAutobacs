@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { locationService } from '@/services/locationService';
-import { useRateLimit } from '@/contexts/RateLimitContext'; // Import rate limit context
+import { useRateLimit } from '@/context/RateLimitContext';
 import type {
   UserLocation,
   DeliveryZone,
@@ -17,14 +17,14 @@ import { addToLocationHistory } from '@/utils/locationHistory';
 function throttle(func: (...args: any[]) => any, wait: number) {
   let timeout: NodeJS.Timeout | null = null;
   let lastExecTime = 0;
-  
+
   return function (...args: any[]) {
     const now = Date.now();
-    
+
     if (timeout) {
       clearTimeout(timeout);
     }
-    
+
     if (now - lastExecTime > wait) {
       func(...args);
       lastExecTime = now;
@@ -45,13 +45,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const rateLimitContext = useRateLimit(); // Use rate limit context
+  const rateLimitContext = useRateLimit();
   const showRateLimitNotification = rateLimitContext?.showRateLimitNotification || ((retryAfter: number) => {});
 
   /**
    * Load current location from cache or API
    */
-  const loadLocation = useCallback(throttle(async () => { 
+  const loadLocation = useCallback(throttle(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -68,10 +68,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
 
       // Then fetch fresh data from API
       const location = await locationService.getCurrentLocation();
-      
+
       if (location) {
         setCurrentLocation(location);
-        
+
         // Extract delivery zone
         if (typeof location.deliveryZone !== 'string' && location.deliveryZone) {
           setDeliveryZone(location.deliveryZone);
@@ -126,7 +126,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setError(null);
 
       const response = await locationService.selectLocation(data);
-      
+
       setCurrentLocation(response.location);
       setDeliveryZone(response.deliveryZone);
       setDeliveryEstimate(response.deliveryEstimate);
@@ -155,7 +155,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setError(null);
 
       const response = await locationService.retryReverseGeocode(data, maxRetries);
-      
+
       setCurrentLocation(response.location);
       setDeliveryZone(response.deliveryZone);
       setDeliveryEstimate(response.deliveryEstimate);
@@ -187,7 +187,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setError(null);
 
       await locationService.clearLocation();
-      
+
       setCurrentLocation(null);
       setDeliveryZone(null);
       setDeliveryEstimate(null);

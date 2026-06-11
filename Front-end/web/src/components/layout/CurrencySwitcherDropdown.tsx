@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { DollarSign, IndianRupee, ChevronDown } from 'lucide-react';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 
 const CURRENCIES = [
   { code: 'INR' as const, name: 'Indian Rupee', symbol: '₹', icon: IndianRupee },

@@ -39,7 +39,7 @@ jest.mock('@/context/WishlistContext', () => ({
 }));
 
 // Mock CurrencyContext
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: jest.fn(() => ({
     formatPrice: (price: number) => `AED ${price}`,
     currency: { code: 'AED', symbol: 'AED', rate: 1 }

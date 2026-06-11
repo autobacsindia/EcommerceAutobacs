@@ -8,7 +8,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
 import { productUrl } from '@/lib/types';

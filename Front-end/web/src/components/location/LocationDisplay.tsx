@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { MapPin, ChevronDown, Navigation } from 'lucide-react';
-import { useLocation, useLocationDisplay } from '@/contexts/LocationContext';
+import { useLocation, useLocationDisplay } from '@/context/LocationContext';
 import LocationSelector from './LocationSelector';
 import LocationHistory from './LocationHistory';
 import { LocationHistoryItem } from '@/utils/locationHistory';

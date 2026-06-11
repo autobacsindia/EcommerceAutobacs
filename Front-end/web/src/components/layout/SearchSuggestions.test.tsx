@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SearchSuggestions from './SearchSuggestions';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
@@ -13,7 +13,7 @@ jest.mock('@/context/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock('@/contexts/LocationContext', () => ({
+jest.mock('@/context/LocationContext', () => ({
   useLocation: jest.fn(),
 }));
 

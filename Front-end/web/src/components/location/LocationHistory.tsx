@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, ChevronDown, CheckCircle, Clock, X } from 'lucide-react';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 import { getLocationHistory, markCurrentLocation, removeFromHistory } from '@/utils/locationHistory';
 import { LocationHistoryItem } from '@/utils/locationHistory';
 import locationService from '@/services/locationService';

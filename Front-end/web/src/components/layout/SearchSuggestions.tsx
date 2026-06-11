@@ -6,7 +6,7 @@ import useIsMounted from '@/lib/hooks/useIsMounted';
 import apiClient from '@/lib/api';
 import { Search, Clock, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 
 interface Suggestion {

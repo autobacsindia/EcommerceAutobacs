@@ -1,11 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ManualLocationForm from './ManualLocationForm';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 import toast from 'react-hot-toast';
 
 // Mock LocationContext
-jest.mock('@/contexts/LocationContext', () => ({
+jest.mock('@/context/LocationContext', () => ({
   useLocation: jest.fn(),
 }));
 

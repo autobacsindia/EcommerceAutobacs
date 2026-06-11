@@ -54,7 +54,7 @@ import { ShoppingCart, Heart, Star, GitCompare } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import ImageGallery from '@/components/products/ImageGallery';
 import QuestionForm from '@/components/products/QuestionForm';
 import QuestionList from '@/components/products/QuestionList';

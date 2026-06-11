@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { useLocation } from '@/contexts/LocationContext';
+import { useLocation } from '@/context/LocationContext';
 import toast from 'react-hot-toast';
 
 interface ManualLocationFormProps {

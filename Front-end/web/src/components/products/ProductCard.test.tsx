@@ -32,7 +32,7 @@ jest.mock('@/context/AuthContext', () => ({
   }),
 }));
 
-jest.mock('@/contexts/CurrencyContext', () => ({
+jest.mock('@/context/CurrencyContext', () => ({
   useCurrency: () => ({
     formatPrice: mockFormatPrice,
   }),
