@@ -110,133 +110,67 @@ describe('APIClient Rate Limiting', () => {
 
       // Check call counts
       expect(fetch).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
-      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(2);
+      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(3); // all 3 429s logged, including final throw
     });
   });
 
   describe('POST requests', () => {
-    it('should retry on rate limit error with exponential backoff and jitter', async () => {
-      // Mock a rate limit error followed by a successful response
-      (global.fetch as jest.Mock)
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 429,
-          headers: mockHeaders({ 'retry-after': '3', 'content-type': 'application/json' }),
-          json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test',
-          clone: function() { return this; }
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: mockHeaders({ 'content-type': 'application/json' }),
-          json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test',
-          clone: function() { return this; }
-        });
+    it('should not retry on rate limit error (non-idempotent — duplicate order risk)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: mockHeaders({ 'retry-after': '3', 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ message: 'Too many requests' }),
+        url: 'http://localhost:5000/test',
+        clone: function() { return this; }
+      });
 
-      // Spy on setTimeout to control timing
       jest.useFakeTimers();
-
-      // Make the API call
-      const promise = apiClient.post('/test', { testData: 'value' });
-
-      // Fast-forward through the retries
-      await jest.advanceTimersByTimeAsync(10000);
-      const result = await promise;
-
-      // Restore real timers
+      await expect(apiClient.post('/test', { testData: 'value' })).rejects.toMatchObject({ status: 429 });
       jest.useRealTimers();
 
-      // Assertions
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ data: 'success' });
-      
-      // Check that rate limit logger was called
-      expect(rateLimitLogger.logEvent).toHaveBeenCalledWith('/test', 3);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('PUT requests', () => {
-    it('should retry on rate limit error with exponential backoff and jitter', async () => {
-      // Mock a rate limit error followed by a successful response
-      (global.fetch as jest.Mock)
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 429,
-          headers: mockHeaders({ 'retry-after': '2', 'content-type': 'application/json' }),
-          json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test',
-          clone: function() { return this; }
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: mockHeaders({ 'content-type': 'application/json' }),
-          json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test',
-          clone: function() { return this; }
-        });
+    it('should not retry on rate limit error (non-idempotent)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: mockHeaders({ 'retry-after': '2', 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ message: 'Too many requests' }),
+        url: 'http://localhost:5000/test',
+        clone: function() { return this; }
+      });
 
-      // Spy on setTimeout to control timing
       jest.useFakeTimers();
-
-      // Make the API call
-      const promise = apiClient.put('/test', { testData: 'value' });
-
-      // Fast-forward through the retries
-      await jest.advanceTimersByTimeAsync(10000);
-      const result = await promise;
-
-      // Restore real timers
+      await expect(apiClient.put('/test', { testData: 'value' })).rejects.toMatchObject({ status: 429 });
       jest.useRealTimers();
 
-      // Assertions
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ data: 'success' });
-      
-      // Check that rate limit logger was called
-      expect(rateLimitLogger.logEvent).toHaveBeenCalledWith('/test', 2);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('DELETE requests', () => {
-    it('should retry on rate limit error with exponential backoff and jitter', async () => {
-      // Mock a rate limit error followed by a successful response
-      (global.fetch as jest.Mock)
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 429,
-          headers: mockHeaders({ 'retry-after': '4', 'content-type': 'application/json' }),
-          json: () => Promise.resolve({ message: 'Too many requests' }),
-          url: 'http://localhost:5000/test',
-          clone: function() { return this; }
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: mockHeaders({ 'content-type': 'application/json' }),
-          json: () => Promise.resolve({ data: 'success' }),
-          url: 'http://localhost:5000/test',
-          clone: function() { return this; }
-        });
+    it('should not retry on rate limit error (non-idempotent)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: mockHeaders({ 'retry-after': '4', 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ message: 'Too many requests' }),
+        url: 'http://localhost:5000/test',
+        clone: function() { return this; }
+      });
 
-      // Spy on setTimeout to control timing
       jest.useFakeTimers();
-
-      // Make the API call
-      const promise = apiClient.delete('/test');
-
-      // Fast-forward through the retries
-      await jest.advanceTimersByTimeAsync(10000);
-      const result = await promise;
-
-      // Restore real timers
+      await expect(apiClient.delete('/test')).rejects.toMatchObject({ status: 429 });
       jest.useRealTimers();
 
-      // Assertions
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ data: 'success' });
-      
-      // Check that rate limit logger was called
-      expect(rateLimitLogger.logEvent).toHaveBeenCalledWith('/test', 4);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(rateLimitLogger.logEvent).toHaveBeenCalledTimes(1);
     });
   });
 
