@@ -10,29 +10,44 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
-import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
 import { productUrl } from '@/lib/types';
 
-// Extended product type to handle both local and WordPress products
-interface LocalProductImage {
-  id?: number;
+interface ProductImage {
   src?: string;
   url?: string;
-  name?: string;
   alt?: string;
 }
 
-interface ExtendedProduct extends Omit<WordPressProduct, 'images' | 'slug'> {
+interface Category {
   _id?: string;
+  id?: string | number;
+  name: string;
+  slug: string;
+  count?: number;
+}
+
+interface ExtendedProduct {
+  _id?: string;
+  id?: number;
+  name: string;
   slug?: string;
+  sku?: string;
+  price: string | number;
+  regular_price?: string;
+  sale_price?: string;
+  originalPrice?: number;
+  on_sale?: boolean;
   stock?: number;
+  stock_status?: string;
+  featured?: boolean;
   isFeatured?: boolean;
   averageRating?: number;
-  originalPrice?: number;
-  images: LocalProductImage[];
+  average_rating?: string;
+  images: ProductImage[];
+  categories: any[];
 }
 
 export default function ClientPage({ slug }: { slug: string }) {
@@ -46,7 +61,7 @@ export default function ClientPage({ slug }: { slug: string }) {
   const { handleError } = useErrorHandler();
 
   const [products, setProducts] = useState<ExtendedProduct[]>([]);
-  const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -91,8 +106,8 @@ export default function ClientPage({ slug }: { slug: string }) {
 
       try {
         const timeoutDuration = 45000;
-        const [categoriesData, productsResponse, vehicleResponseRaw] = await Promise.all([
-          wordpressService.getProductCategories({ timeout: timeoutDuration }),
+        const [categoriesResponse, productsResponse, vehicleResponseRaw] = await Promise.all([
+          apiClient.get('/categories', { timeout: timeoutDuration }).catch(() => ({ success: false, categories: [] })),
           vehicleService.getVehicleProducts(slug, {
             page: currentPage,
             limit: itemsPerPage,
@@ -100,8 +115,8 @@ export default function ClientPage({ slug }: { slug: string }) {
             sortBy: mapSortBy(currentSort),
             order: getSortOrder(currentSort)
           }, { timeout: timeoutDuration }).catch((err: any) => {
-            console.warn('Local API failed, falling back to WordPress:', err);
-            return wordpressService.getProductsByVehicle(slug, currentPage, itemsPerPage, { timeout: timeoutDuration });
+            console.warn('Could not fetch vehicle products:', err);
+            return { products: [], total: 0 };
           }),
           apiClient.get(`/vehicles/slug/${slug}`, { timeout: timeoutDuration }).catch(err => {
             console.warn('Could not fetch vehicle data:', err);
@@ -111,10 +126,11 @@ export default function ClientPage({ slug }: { slug: string }) {
 
         const vehicleResponse: any = vehicleResponseRaw;
 
-        setCategories(categoriesData);
+        const cats: any = categoriesResponse;
+        setCategories(cats?.categories || []);
 
-        let productsData = productsResponse.products || [];
-        const totalFromAPI = productsResponse.pagination?.total || productsResponse.total || 0;
+        let productsData = (productsResponse as any).products || [];
+        const totalFromAPI = (productsResponse as any).pagination?.total || (productsResponse as any).total || 0;
         setProducts(productsData);
         setTotalProductsFromAPI(totalFromAPI);
 
@@ -167,17 +183,6 @@ export default function ClientPage({ slug }: { slug: string }) {
           }
         }
 
-        if (categoriesData.length === 0 && productsData.length === 0) {
-          const isWordPressConfigured =
-            process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL &&
-            process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY &&
-            process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET;
-
-          if (!isWordPressConfigured) {
-            console.warn('WordPress API not configured. Please check your environment variables.');
-            setError('WordPress API not configured. Please check your environment variables.');
-          }
-        }
       } catch (err: any) {
         const message = handleError(err, 'Failed to load products for this vehicle');
         setError(message);
@@ -350,7 +355,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                     All Categories
                   </button>
                 </li>
-                {categories.filter(cat => cat && cat.id).map((category) => {
+                {categories.filter(cat => cat && (cat._id || cat.id)).map((category) => {
                   const categoryProductCount = products.filter(product =>
                     product.categories && Array.isArray(product.categories) &&
                     product.categories.some(cat => cat && cat.slug === category.slug)
@@ -359,7 +364,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                   if (categoryProductCount === 0) return null;
 
                   return (
-                    <li key={category.id}>
+                    <li key={String(category._id || category.id)}>
                       <button
                         onClick={() => handleCategoryChange(category.slug)}
                         className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${

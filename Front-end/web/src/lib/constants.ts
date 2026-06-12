@@ -92,11 +92,6 @@ export const API_ENDPOINTS = {
   BRAND_UNMAP_PRODUCT: (brandId: string, productId: string) => `/brands/${brandId}/products/${productId}`,
   BRAND_TOGGLE_STATUS: (id: string) => `/brands/${id}/toggle-status`,
   
-  // WordPress (Proxy)
-  WORDPRESS_CATEGORIES: '/wordpress/categories',
-  WORDPRESS_PRODUCTS: '/wordpress/products',
-  WORDPRESS_PRODUCT_DETAIL: (id: string) => `/wordpress/products/${id}`,
-
   // Contact
   CONTACT: '/contact',
 

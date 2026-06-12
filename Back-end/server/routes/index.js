@@ -55,7 +55,6 @@ import paymentMethodRoutes from './paymentMethods.js';
 import dashboardRoutes from './dashboard.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
-import wordpressRoutes from './wordpress.js';
 import mediaRoutes from './media.js';
 import scheduledTasksRoutes from './scheduledTasks.js';
 
@@ -126,7 +125,6 @@ apiRouter.use('/payment-methods', checkoutRateLimit, paymentMethodRoutes);
 apiRouter.use('/dashboard', adminRouteRateLimit, dashboardRoutes);
 apiRouter.use('/warehouses', adminRouteRateLimit, warehouseRoutes);
 apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
-apiRouter.use('/wordpress', setRequestTimeout(120000), adminRouteRateLimit, wordpressRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access
 apiRouter.use('/scheduled-tasks', adminRouteRateLimit, scheduledTasksRoutes);
 

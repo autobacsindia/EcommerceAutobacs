@@ -1,12 +1,10 @@
 import cron from 'node-cron';
 import Redis from 'ioredis';
-import ProductImportService from './productImportService.js';
 import ImportJob from '../models/ImportJob.js';
 import mongoose from 'mongoose';
 
 class CronService {
   constructor() {
-    this.productImportService = new ProductImportService();
     this.scheduledTasks = [];
 
     // Redis client for distributed locks — prevents duplicate job execution when

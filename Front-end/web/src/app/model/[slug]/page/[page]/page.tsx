@@ -10,7 +10,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { toast } from 'react-hot-toast';
-import { wordpressService, WordPressProduct, WordPressProductCategory } from '@/services/wordpressService';
 import VehicleModelFilterSidebar from '@/components/vehicles/VehicleModelFilterSidebar';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
@@ -34,8 +33,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const pageNumber = Math.max(1, parseInt(page) || 1); // Ensure minimum value of 1
   
   // State hooks
-  const [products, setProducts] = useState<WordPressProduct[]>([]);
-  const [categories, setCategories] = useState<WordPressProductCategory[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -64,7 +63,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
       const timeoutDuration = 15000; // Increased timeout to 15s to prevent premature timeouts in dev
         
       try {
-        const categoriesData = await wordpressService.getProductCategories({ timeout: timeoutDuration });
+        const categoriesRes: any = await apiClient.get('/categories', { timeout: timeoutDuration }).catch(() => ({ categories: [] }));
+        const categoriesData = categoriesRes?.categories || [];
         setCategories(categoriesData);
         
         try {
@@ -141,45 +141,12 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             setTotalProductsFromAPI(productsResponse.total || productsResponse.products.length);
             console.log(`Loaded ${productsResponse.products.length} products for ${slug} from local API`);
           } else {
-            // Fallback to WordPress if local API fails
-            console.warn('Local API returned no products, falling back to WordPress');
-            const wpResponse = await wordpressService.getProductsByVehicle(
-              slug,
-              pageNumber,
-              itemsPerPage,
-              { timeout: timeoutDuration }
-            );
-            setProducts(wpResponse.products || []);
-            setTotalProductsFromAPI(wpResponse.total || 0);
+            setProducts([]);
+            setTotalProductsFromAPI(0);
           }
         } catch (apiError) {
-          console.error('Error fetching from local API, trying WordPress:', apiError);
-          // Fallback to WordPress
-          try {
-            const wpResponse = await wordpressService.getProductsByVehicle(
-              slug,
-              pageNumber,
-              itemsPerPage,
-              { timeout: timeoutDuration }
-            );
-            setProducts(wpResponse.products || []);
-            setTotalProductsFromAPI(wpResponse.total || 0);
-          } catch (wpError) {
-            console.error('WordPress fallback also failed:', wpError);
-            toast.error('Failed to load products');
-          }
-        }
-          
-        // Show a warning if no data is found and WordPress API might not be configured
-        if (categoriesData.length === 0 && products.length === 0) {
-          const isWordPressConfigured = process.env.NEXT_PUBLIC_WORDPRESS_SITE_URL && 
-            process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_KEY && 
-            process.env.NEXT_PUBLIC_WORDPRESS_CONSUMER_SECRET;
-            
-          if (!isWordPressConfigured) {
-            console.warn('WordPress API not configured. Please check your environment variables.');
-            setError('WordPress API not configured. Please check your environment variables.');
-          }
+          console.error('Error fetching vehicle products:', apiError);
+          toast.error('Failed to load products');
         }
       } catch (err: any) {
         // Use global error handler for toast and logging
@@ -193,7 +160,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     fetchData();
   }, [slug, selectedCategory, currentSort, pageNumber]);
 
-  const handleAddToCart = async (product: WordPressProduct | any) => {
+  const handleAddToCart = async (product: any) => {
     try {
       // For WordPress products, we would typically add to cart via WooCommerce API
       // For now, we'll just show a toast
