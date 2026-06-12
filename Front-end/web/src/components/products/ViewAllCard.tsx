@@ -24,7 +24,7 @@ export default function ViewAllCard({
       className={`group block ${className}`}
     >
       <div className={`
-        bg-gradient-to-br ${gradient}
+        bg-linear-to-br ${gradient}
         rounded-lg shadow-md overflow-hidden
         hover:shadow-xl hover:scale-105
         transition-all duration-300

@@ -11,7 +11,7 @@ export default function PageLoader({ type = 'home' }: PageLoaderProps) {
       return (
         <div className="flex min-h-screen flex-col">
           {/* Hero Section Skeleton */}
-          <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-20">
+          <section className="bg-linear-to-r from-blue-600 to-blue-800 text-white py-20">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
               <div className="h-16 bg-blue-500 rounded mb-6 animate-pulse mx-auto max-w-3xl" />
               <div className="h-8 bg-blue-500 rounded mb-8 mx-auto max-w-2xl" />

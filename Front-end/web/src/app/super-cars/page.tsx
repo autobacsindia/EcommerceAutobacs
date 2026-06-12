@@ -75,7 +75,7 @@ export default function SuperCarsPage() {
       <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
         {/* Background with overlay */}
         <div className="absolute inset-0 bg-[url('/images/vehicles/A240553_web_2880-scaled.jpg')] bg-cover bg-center bg-no-repeat">
-           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black"></div>
+           <div className="absolute inset-0 bg-linear-to-b from-black/80 via-black/60 to-black"></div>
         </div>
         
         {/* Animated grid background effect */}
@@ -86,7 +86,7 @@ export default function SuperCarsPage() {
             <span className="inline-block px-4 py-1 mb-6 border border-red-500/50 rounded-full bg-red-500/10 text-red-400 text-sm font-tracking-wider uppercase">
               ROAVION - Powered by AutoBacs India
             </span>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-gradient-to-r from-white via-gray-200 to-gray-500 bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-gray-200 to-gray-500 bg-clip-text text-transparent">
               DISCOVER A NEW IMMERSIVE EXPERIENCE
               <br />
               <span className="text-2xl md:text-4xl lg:text-5xl font-light text-gray-400 mt-2 block">
@@ -105,7 +105,7 @@ export default function SuperCarsPage() {
             <div className="animation-delay-300 animate-slide-up-enter opacity-0">
               <Link 
                 href="/contact" 
-                className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-red-600 to-red-800 rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-red-600 to-red-800 rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
               >
                 Start Your Journey
                 <ArrowRight className="w-5 h-5" />
@@ -160,9 +160,9 @@ export default function SuperCarsPage() {
 
       {/* CTA Section */}
       <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-red-900 to-black opacity-50"></div>
+        <div className="absolute inset-0 bg-linear-to-r from-red-900 to-black opacity-50"></div>
         <div className="container mx-auto px-4 relative z-10 text-center">
-          <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-400 mb-8 tracking-tight animate-fade-in-slow">
+          <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-linear-to-b from-white to-gray-400 mb-8 tracking-tight animate-fade-in-slow">
             SKY IS THE LIMIT
           </h2>
           <div className="hover:scale-105 transition-transform duration-300 inline-block">

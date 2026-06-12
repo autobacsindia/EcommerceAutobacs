@@ -31,7 +31,7 @@ export default function WhyChooseSection({ whyChoose }: WhyChooseSectionProps) {
   ];
 
   return (
-    <section className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 md:p-8">
+    <section className="bg-linear-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 md:p-8">
       <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
         Why Choose This Product?
       </h2>

@@ -81,7 +81,7 @@ function GalleryContent() {
   return (
     <div>
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-700 to-purple-900 text-white py-14 px-4">
+      <div className="bg-linear-to-r from-purple-700 to-purple-900 text-white py-14 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <ImageIcon className="h-8 w-8 opacity-80" />

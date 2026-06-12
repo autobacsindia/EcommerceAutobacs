@@ -331,7 +331,7 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Link href="/categories/bodykit" className="group">
               <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
-                <div className="h-48 bg-gradient-to-br from-[#0E0E0E] to-[#1A6FB5]/30 flex items-center justify-center">
+                <div className="h-48 bg-linear-to-br from-[#0E0E0E] to-[#1A6FB5]/30 flex items-center justify-center">
                   <span className="text-white text-2xl font-condensed font-bold uppercase tracking-wider">Body Kits</span>
                 </div>
                 <div className="p-5 border-t border-[#252525]">
@@ -343,7 +343,7 @@ export default function Home() {
 
             <Link href="/categories/performance" className="group">
               <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
-                <div className="h-48 bg-gradient-to-br from-[#0E0E0E] to-[#EF9F27]/20 flex items-center justify-center">
+                <div className="h-48 bg-linear-to-br from-[#0E0E0E] to-[#EF9F27]/20 flex items-center justify-center">
                   <span className="text-white text-2xl font-condensed font-bold uppercase tracking-wider">Performance</span>
                 </div>
                 <div className="p-5 border-t border-[#252525]">
@@ -355,7 +355,7 @@ export default function Home() {
 
             <Link href="/categories/suspension" className="group">
               <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
-                <div className="h-48 bg-gradient-to-br from-[#0E0E0E] to-[#3B9EE8]/20 flex items-center justify-center">
+                <div className="h-48 bg-linear-to-br from-[#0E0E0E] to-[#3B9EE8]/20 flex items-center justify-center">
                   <span className="text-white text-2xl font-condensed font-bold uppercase tracking-wider">Suspension</span>
                 </div>
                 <div className="p-5 border-t border-[#252525]">

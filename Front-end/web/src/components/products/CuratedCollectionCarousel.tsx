@@ -345,7 +345,7 @@ export default function CuratedCollectionCarousel({
             {/* See All Card at the End */}
             <Link
               href={collection.viewAllLink || `/products?search=${collection.searchKeyword}`}
-              className="flex-shrink-0 w-52 bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 rounded flex items-center justify-center transition-all duration-200"
+              className="flex-shrink-0 w-52 bg-linear-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 rounded flex items-center justify-center transition-all duration-200"
               style={{ minHeight: '380px' }}
             >
               <div className="text-center p-6">

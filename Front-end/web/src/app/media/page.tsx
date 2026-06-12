@@ -67,7 +67,7 @@ export default function MediaCenterPage() {
       {!loading && heroArticle ? (
         <HeroFeatured hero={heroArticle} secondary={secondaryFeatured} />
       ) : (
-        <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-red-900 text-white py-20 px-4">
+        <div className="bg-linear-to-br from-gray-900 via-gray-800 to-red-900 text-white py-20 px-4">
           <div className="max-w-4xl mx-auto text-center">
             <p className="text-red-400 text-sm font-semibold uppercase tracking-widest mb-3">Autobacs Media Center</p>
             <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">News, Insights &amp; Stories</h1>
@@ -153,9 +153,9 @@ function HeroFeatured({ hero, secondary }: { hero: Article; secondary: Article[]
             {hero.coverImage ? (
               <img src={hero.coverImage} alt={hero.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-red-800 to-gray-900" />
+              <div className="absolute inset-0 bg-linear-to-br from-red-800 to-gray-900" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+            <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
             <div className="relative p-6">
               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${hero.type === 'news' ? 'bg-blue-500' : 'bg-green-500'} text-white mb-3 inline-block`}>
                 {hero.type === 'news' ? 'News' : 'Blog'}
@@ -177,7 +177,7 @@ function HeroFeatured({ hero, secondary }: { hero: Article; secondary: Article[]
           <div className="flex flex-col gap-4">
             {secondary.length === 0
               ? (
-                <div className="flex-1 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                <div className="flex-1 rounded-2xl bg-linear-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                   <p className="text-gray-500 text-sm text-center px-4">Mark articles as Featured to show them here</p>
                 </div>
               )
@@ -189,8 +189,8 @@ function HeroFeatured({ hero, secondary }: { hero: Article; secondary: Article[]
                 >
                   {a.coverImage
                     ? <img src={a.coverImage} alt={a.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    : <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-900" />}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                    : <div className="absolute inset-0 bg-linear-to-br from-gray-700 to-gray-900" />}
+                  <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
                   <div className="relative p-3">
                     <p className="text-white text-sm font-semibold line-clamp-2 group-hover:text-red-300 transition-colors">{a.title}</p>
                     <p className="text-gray-400 text-xs mt-0.5">{a.category}</p>

@@ -44,7 +44,7 @@ export default function ProductStory({ productName, storyText, storyCards, isDar
         sizes="100vw"
       />
       <div className="absolute inset-0 bg-black/80" />
-      <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/50 via-transparent to-zinc-950/50" />
+      <div className="absolute inset-0 bg-linear-to-b from-zinc-950/50 via-transparent to-zinc-950/50" />
 
       {/* Content */}
       <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6">

@@ -106,7 +106,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   return (
     <div>
       {/* Header */}
-      <div className={`bg-gradient-to-r ${type === 'news' ? 'from-blue-700 to-blue-900' : 'from-green-700 to-green-900'} text-white py-14 px-4`}>
+      <div className={`bg-linear-to-r ${type === 'news' ? 'from-blue-700 to-blue-900' : 'from-green-700 to-green-900'} text-white py-14 px-4`}>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <Icon className="h-8 w-8 opacity-80" />
@@ -252,7 +252,7 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
         />
       ) : (
-        <div className="w-full h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+        <div className="w-full h-48 bg-linear-to-br from-gray-100 to-gray-200 flex items-center justify-center">
           {article.type === 'news' ? (
             <Newspaper className="h-12 w-12 text-gray-300" />
           ) : (

@@ -49,7 +49,7 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
                 className="object-cover transition-transform duration-500 group-hover:scale-110"
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               />
-              <div className={`absolute inset-0 ${isDark ? 'bg-gradient-to-t from-zinc-900' : 'bg-gradient-to-t from-gray-300'} to-transparent`} />
+              <div className={`absolute inset-0 ${isDark ? 'bg-linear-to-t from-zinc-900' : 'bg-linear-to-t from-gray-300'} to-transparent`} />
               
               {/* Compatibility Badge */}
               <div className="absolute top-4 right-4 bg-green-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">

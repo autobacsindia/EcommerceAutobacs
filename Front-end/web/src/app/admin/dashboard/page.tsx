@@ -305,7 +305,7 @@ export default function AdminDashboardPage() {
           
           {/* Overall Health Score */}
           <div className="mb-6 text-center">
-            <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+            <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-linear-to-br from-blue-500 to-purple-600 text-white">
               <div>
                 <div className="text-4xl font-bold">{health.overall.score}</div>
                 <div className="text-sm">Overall</div>

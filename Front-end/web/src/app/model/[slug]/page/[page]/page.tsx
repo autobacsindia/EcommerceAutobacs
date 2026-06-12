@@ -252,7 +252,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         <>
       
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-900 to-black text-white py-20">
+      <div className="bg-linear-to-r from-blue-900 to-black text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-5xl font-bold mb-6">{vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
               .filter(word => word)
@@ -738,7 +738,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     className="block group"
                   >
                     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
-                      <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                      <div className="aspect-square bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
                         {(() => {
                           const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
                           const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`

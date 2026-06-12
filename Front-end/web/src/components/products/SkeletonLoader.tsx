@@ -13,7 +13,7 @@ export default function SkeletonLoader({ type = 'card', count = 1 }: SkeletonLoa
       case 'hero':
         return (
           <div className="relative h-[80vh] min-h-[600px] bg-zinc-900 animate-pulse">
-            <div className="absolute inset-0 bg-gradient-to-r from-zinc-800 to-zinc-900" />
+            <div className="absolute inset-0 bg-linear-to-r from-zinc-800 to-zinc-900" />
           </div>
         );
 

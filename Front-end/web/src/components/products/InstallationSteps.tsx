@@ -68,7 +68,7 @@ export default function InstallationSteps({ steps, isDark = true }: Installation
           >
             {/* Step Number */}
             <div className="flex-shrink-0">
-              <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
+              <div className="w-14 h-14 bg-linear-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
                 {stepIcons[index] || (index + 1)}
               </div>
               {index < displaySteps.length - 1 && (

@@ -18,7 +18,7 @@ export default function CategoryCard({ category }: CategoryCardProps) {
       className="group block bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
     >
       {/* Category Image */}
-      <div className="h-48 bg-gradient-to-br from-blue-400 to-blue-600 relative overflow-hidden">
+      <div className="h-48 bg-linear-to-br from-blue-400 to-blue-600 relative overflow-hidden">
         {category.image?.url ? (
           <EnhancedImage
             src={category.image.url}

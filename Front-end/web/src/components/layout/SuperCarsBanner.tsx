@@ -26,11 +26,11 @@ export default function SuperCarsBanner() {
             sizes="100vw"
           />
           {/* Gradient Overlay for Better Text Visibility */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-r from-black/80 via-black/50 to-transparent" />
           
           {/* Animated Shine Effect */}
           <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 animate-shine" />
+            <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 animate-shine" />
           </div>
         </div>
 
@@ -51,7 +51,7 @@ export default function SuperCarsBanner() {
 
             {/* Subheading with Gradient Text */}
             <p className="text-2xl md:text-3xl lg:text-5xl font-semibold mb-8 animate-slide-in-left animation-delay-200">
-              <span className="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+              <span className="bg-linear-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
                 Give New Look
               </span>
             </p>
@@ -64,7 +64,7 @@ export default function SuperCarsBanner() {
             <div className="animate-slide-in-left animation-delay-400">
               <Link
                 href="/super-cars"
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-black font-semibold text-lg rounded-full hover:bg-gradient-to-r hover:from-orange-500 hover:to-red-600 hover:text-white transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105"
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-black font-semibold text-lg rounded-full hover:bg-linear-to-r hover:from-orange-500 hover:to-red-600 hover:text-white transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
               >
@@ -84,7 +84,7 @@ export default function SuperCarsBanner() {
         </div>
 
         {/* Animated Border Lines */}
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse" />
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-linear-to-r from-transparent via-white/50 to-transparent animate-pulse" />
       </div>
 
       {/* Custom CSS for Animations */}

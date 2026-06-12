@@ -32,8 +32,8 @@ export default function HeroSection({ product }: HeroSectionProps) {
       />
 
       {/* Dark Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-black/50" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/40" />
+      <div className="absolute inset-0 bg-linear-to-r from-black/95 via-black/80 to-black/50" />
+      <div className="absolute inset-0 bg-linear-to-t from-black/90 via-transparent to-black/40" />
 
       {/* Content */}
       <div className="relative z-10 h-full max-w-7xl mx-auto px-6 flex items-center">

@@ -97,7 +97,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
   return (
     <section 
       aria-labelledby="complementary-products-heading"
-      className={`mt-16 py-12 ${isDark ? 'bg-zinc-900' : 'bg-gradient-to-br from-blue-50 to-indigo-50'}`}
+      className={`mt-16 py-12 ${isDark ? 'bg-zinc-900' : 'bg-linear-to-br from-blue-50 to-indigo-50'}`}
       ref={containerRef}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
