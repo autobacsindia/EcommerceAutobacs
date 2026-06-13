@@ -130,6 +130,14 @@ async function migrateProducts() {
     try {
       const slug = wc.slug || slugify(wc.name);
 
+      // Look up by wpId (re-runs) OR slug (existing docs that predate this migration).
+      // Update by _id to avoid re-triggering the slug unique-index on upsert.
+      const existingDoc = await Product.findOne({ $or: [{ wpId: wc.id }, { slug }] });
+
+      // Preserve Cloudinary images already migrated — only set wp_ placeholders for new/unmigrated images
+      const alreadyMigrated = existingDoc?.images?.length > 0 &&
+        existingDoc.images.every(img => img.public_id && !img.public_id.startsWith('wp_'));
+
       const data = {
         wpId: wc.id,
         wpSlug: wc.slug,
@@ -147,19 +155,17 @@ async function migrateProducts() {
         sku: wc.sku || undefined,
         isActive: wc.status === 'publish',
 
-        images: (wc.images || []).map(img => ({
-          url: img.src,
-          alt: img.alt || wc.name,
-          public_id: `wp_${img.id}`,
-        })),
+        ...(!alreadyMigrated && {
+          images: (wc.images || []).map(img => ({
+            url: img.src,
+            alt: img.alt || wc.name,
+            public_id: `wp_${img.id}`,
+          })),
+        }),
 
         categoryIds: (wc.categories || []).map(c => c.id),
         tags: (wc.tags || []).map(t => t.name),
       };
-
-      // Look up by wpId (re-runs) OR slug (existing docs that predate this migration).
-      // Update by _id to avoid re-triggering the slug unique-index on upsert.
-      const existingDoc = await Product.findOne({ $or: [{ wpId: wc.id }, { slug }] });
       if (existingDoc) {
         await Product.findByIdAndUpdate(existingDoc._id, { $set: data });
         stats.products.updated++;
@@ -253,7 +259,7 @@ const uploadBuffer = (buffer, publicId) =>
         public_id:   publicId,
         overwrite:   true,      // idempotent re-runs: same asset, no duplicates
         invalidate:  true,      // purge CDN cache when overwriting
-        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'],
         transformation: [{ fetch_format: 'auto', quality: 'auto' }],
       },
       (err, result) => err ? reject(err) : resolve({ url: result.secure_url, public_id: result.public_id })
