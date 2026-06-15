@@ -1,0 +1,116 @@
+# deploy.yml — Test-gated Railway deployment
+#
+# Runs only on push to main. Backend and frontend tests run in parallel;
+# each service deploys only after its own tests pass.
+#
+# Required GitHub secrets:
+#   RAILWAY_TOKEN                 — Railway API token (project-scoped)
+#   RAILWAY_BACKEND_SERVICE_NAME  — Railway service name for the backend
+#   RAILWAY_FRONTEND_SERVICE_NAME — Railway service name for the frontend
+
+name: Deploy to Railway
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Backend ────────────────────────────────────────────────────────────────
+  test-backend:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Back-end/server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Back-end/server/package-lock.json
+
+      - run: npm ci
+
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-test-jwt-secret-not-for-production
+          RAZORPAY_KEY_ID: rzp_test_placeholder
+          RAZORPAY_KEY_SECRET: placeholder_secret
+          SENDGRID_API_KEY: SG.placeholder
+          SENDGRID_FROM_EMAIL: ci@example.com
+          EMAIL_FROM: ci@example.com
+          WORDPRESS_SITE_URL: http://localhost
+          WORDPRESS_API_KEY: ck_placeholder
+          WORDPRESS_API_SECRET: cs_placeholder
+        run: npm run test:coverage -- --forceExit --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle"
+
+  deploy-backend:
+    name: Deploy Backend → Railway
+    needs: [test-backend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service=${{ secrets.RAILWAY_BACKEND_SERVICE_NAME }} --detach
+        working-directory: Back-end/server
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  test-frontend:
+    name: Test + Build Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Front-end/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Front-end/web/package-lock.json
+
+      - run: npm ci
+
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+        run: npm test -- --forceExit --passWithNoTests
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
+  deploy-frontend:
+    name: Deploy Frontend → Railway
+    needs: [test-frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service=${{ secrets.RAILWAY_FRONTEND_SERVICE_NAME }} --detach
+        working-directory: Front-end/web

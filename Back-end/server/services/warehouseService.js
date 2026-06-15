@@ -328,34 +328,36 @@ class WarehouseService {
 
         try {
           await session.withTransaction(async () => {
-            const inventoryDocs = [];
+            // Check and reserve all items in parallel — each targets a different
+            // document (different product), so MongoDB document-level locks allow
+            // concurrent findOneAndUpdate within the same transaction.
+            const results = await Promise.all(
+              orderItems.map(item =>
+                WarehouseInventory.findOneAndUpdate(
+                  {
+                    warehouse: warehouse._id,
+                    product: item.productId,
+                    isActive: true,
+                    $expr: {
+                      $gte: [{ $subtract: ["$quantity", "$reservedQuantity"] }, item.quantity]
+                    }
+                  },
+                  { $inc: { reservedQuantity: item.quantity } },
+                  { new: true, session }
+                )
+              )
+            );
 
-            for (const item of orderItems) {
-              const updated = await WarehouseInventory.findOneAndUpdate(
-                {
-                  warehouse: warehouse._id,
-                  product: item.productId,
-                  isActive: true,
-                  $expr: {
-                    $gte: [{ $subtract: ["$quantity", "$reservedQuantity"] }, item.quantity]
-                  }
-                },
-                { $inc: { reservedQuantity: item.quantity } },
-                { new: true, session }
+            if (results.some(r => r === null)) {
+              // At least one item has insufficient stock — abort and try next warehouse.
+              // The transaction rollback undoes any partial reservations automatically.
+              throw Object.assign(
+                new Error("WAREHOUSE_INSUFFICIENT_STOCK"),
+                { skipWarehouse: true }
               );
-
-              if (!updated) {
-                // This warehouse cannot fulfill all items — abort and try the next.
-                throw Object.assign(
-                  new Error("WAREHOUSE_INSUFFICIENT_STOCK"),
-                  { skipWarehouse: true }
-                );
-              }
-
-              inventoryDocs.push(updated);
             }
 
-            reservedInventory = inventoryDocs;
+            reservedInventory = results;
           });
         } catch (err) {
           if (!err.skipWarehouse) throw err;

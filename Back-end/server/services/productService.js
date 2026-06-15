@@ -288,6 +288,7 @@ class ProductService {
         limit: Number(limit),
         skip,
         sort,
+        select: 'name slug price originalPrice images stock sku brand averageRating totalReviews shortDescription isFeatured isFastMoving isOfferFeatured offerStartDate offerEndDate categories isActive tags',
         populate: [
           { path: 'categories', select: 'name slug' }
         ]

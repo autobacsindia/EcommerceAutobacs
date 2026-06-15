@@ -6,7 +6,7 @@ import razorpayService from "../services/razorpayService.js";
 import orderRepository from "../repositories/orderRepository.js";
 import { paymentSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
 import crypto from 'crypto';
-import Redis from 'ioredis';
+import { getRedisClient } from '../services/cache/redisClient.js';
 import csrfProtection from '../middleware/csrfMiddleware.js';
 import rateLimit from 'express-rate-limit';
 
@@ -196,14 +196,11 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
     
     // SECURITY: Bind guest order to server-generated session (prevents hijacking)
     if (!isAuthenticated) {
-      const Redis = await import('ioredis');
-      const crypto = await import('crypto');
-      
       // Generate secure session token (256-bit entropy)
       const serverSessionToken = crypto.randomBytes(32).toString('hex');
-      
+
       // Store in Redis: razorpayOrderId -> serverSessionToken (30 min expiry)
-      let redisClient = null;
+      const redisClient = getRedisClient();
       try {
         // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
         if (!razorpayOrder.orderId || !razorpayOrder.orderId.startsWith('order_')) {
@@ -213,11 +210,6 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
             message: 'Invalid order ID format'
           });
         }
-        
-        redisClient = new Redis.default(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          connectTimeout: 2000,
-        });
         
         await redisClient.set(
           `guest_order:v1:${razorpayOrder.orderId}`,  // Versioned namespace
@@ -340,11 +332,8 @@ router.post("/verify-payment",
       }
       
       // Verify session binding in Redis
-      let redisClient = null;
+      const redisClient = getRedisClient();
       try {
-        const Redis = await import('ioredis');
-        const crypto = await import('crypto');
-        
         // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
         if (!razorpay_order_id || !razorpay_order_id.startsWith('order_')) {
           console.error('[SECURITY] Invalid Razorpay order ID format:', razorpay_order_id);
@@ -353,11 +342,6 @@ router.post("/verify-payment",
             message: 'Invalid order ID format'
           });
         }
-        
-        redisClient = new Redis.default(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          connectTimeout: 2000,
-        });
         
         // Get server-stored session token for this Razorpay order
         const serverSessionToken = await redisClient.get(`guest_order:v1:${razorpay_order_id}`);  // Versioned namespace
@@ -469,7 +453,6 @@ router.post("/verify-payment",
         
         // Verify against DB hash
         console.warn('[SECURITY] Using DB fallback for session validation');
-        const crypto = await import('crypto');
         const cookieSessionToken = req.cookies.guest_session;
         
         if (!cookieSessionToken) {
@@ -481,13 +464,9 @@ router.post("/verify-payment",
           return res.status(403).json({ message: 'Session validation failed' });
         }
         
-      } finally {
-        if (redisClient) {
-          redisClient.quit().catch(() => {});
-        }
       }
     }
-    
+
     // Note: Idempotency check already done at line 159 (handles webhook race + retries)
     
     // PAYMENT AUTHORITY: Webhook is sole authority for payment confirmation
@@ -497,19 +476,13 @@ router.post("/verify-payment",
     // SESSION ROTATION: Invalidate session after successful validation (one-time use)
     if (!isAuthenticated) {
       try {
-        const Redis = await import('ioredis');
-        let redisClient = new Redis.default(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          connectTimeout: 2000,
-        });
-        
+        const redisClient = getRedisClient();
+
         // Delete Redis session (one-time token)
-        await redisClient.del(`guest_order:v1:${razorpay_order_id}`);
-        
+        if (redisClient) await redisClient.del(`guest_order:v1:${razorpay_order_id}`);
+
         // Clear cookie
         res.clearCookie('guest_session', { path: '/api/v1/razorpay' });
-        
-        await redisClient.quit();
       } catch (error) {
         console.warn('[SECURITY] Failed to rotate session token:', error.message);
         // Non-critical - continue
@@ -567,33 +540,25 @@ router.post("/webhook",
     const createdAt = webhookData.created_at; // Unix timestamp
     
     // SECURITY STEP 2: Replay protection - Check event ID
-    let redisClient = null;
     try {
       // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
       if (!eventId || !eventId.startsWith('evt_')) {
         console.error('[SECURITY] Invalid Razorpay event ID format:', eventId);
         return res.status(400).end();
       }
-      
-      redisClient = new Redis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: 1,
-        connectTimeout: 2000,
-      });
-      
-      const eventExists = await redisClient.get(`razorpay:event:${eventId}`);
-      if (eventExists) {
-        console.log(`[Webhook] Duplicate event ignored: ${eventId}`);
-        return res.status(200).end(); // Already processed
+
+      const redisClient = getRedisClient();
+      if (redisClient) {
+        const eventExists = await redisClient.get(`razorpay:event:${eventId}`);
+        if (eventExists) {
+          console.log(`[Webhook] Duplicate event ignored: ${eventId}`);
+          return res.status(200).end(); // Already processed
+        }
+        // Mark event as processed (24h TTL)
+        await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
       }
-      
-      // Mark event as processed (24h TTL)
-      await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
     } catch (redisError) {
       console.warn('[Webhook] Redis unavailable, skipping replay protection:', redisError.message);
-    } finally {
-      if (redisClient) {
-        redisClient.quit().catch(() => {});
-      }
     }
     
     // SECURITY STEP 3: Timestamp validation (10-minute window with clock skew tolerance)

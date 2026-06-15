@@ -30,8 +30,8 @@ const mongooseOptions = {
   ...(process.env.MONGO_TLS_CERTIFICATE_KEY_FILE ? { tlsCertificateKeyFile: process.env.MONGO_TLS_CERTIFICATE_KEY_FILE } : {}),
   
   retryWrites: true,
-  maxPoolSize: 20,      // increased from 10 — handles concurrent admin + storefront traffic
-  minPoolSize: 5,       // keep warm connections ready; avoids cold-start latency spikes
+  maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE) || 10,
+  minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE) || 2,
   heartbeatFrequencyMS: 10000,
   autoIndex: true,      // ensure Mongoose schema indexes (e.g. slug unique) are always synced to DB
 };
@@ -223,22 +223,33 @@ process.on('SIGINT', async () => {
 async function ensureCriticalIndexes() {
   try {
     const db = mongoose.connection.db;
-    const productsCol = db.collection('products');
 
-    // 1. slug unique index — prevents duplicate-content SEO disasters
-    await productsCol.createIndex({ slug: 1 }, { unique: true, background: true });
-
-    // 2. Confirm the index is in place
-    const indexes = await productsCol.indexInformation();
-    const hasSlugUnique = Object.values(indexes).some(
-      (idx) => idx.some(([field]) => field === 'slug')
+    // Product slug — prevents duplicate-content SEO disasters
+    await db.collection('products').createIndex(
+      { slug: 1 },
+      { unique: true, background: true }
     );
+    console.log('✓ Product slug unique index confirmed');
 
-    if (hasSlugUnique) {
-      console.log('✓ Product slug unique index confirmed');
-    } else {
-      console.error('✗ WARNING: Product slug unique index NOT found after creation attempt');
-    }
+    // WarehouseInventory (warehouse, product) unique — the hot path for order fulfillment
+    // selectWarehouseForOrder does a findOneAndUpdate on this pair per item per warehouse
+    await db.collection('warehouseinventories').createIndex(
+      { warehouse: 1, product: 1 },
+      { unique: true, background: true }
+    );
+    // Supporting index for per-warehouse listing queries
+    await db.collection('warehouseinventories').createIndex(
+      { warehouse: 1, isActive: 1 },
+      { background: true }
+    );
+    console.log('✓ WarehouseInventory indexes confirmed');
+
+    // Warehouse operational query index — used by selectWarehouseForOrder
+    await db.collection('warehouses').createIndex(
+      { operationalStatus: 1, isActive: 1 },
+      { background: true }
+    );
+    console.log('✓ Warehouse operational index confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);

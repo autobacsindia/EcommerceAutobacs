@@ -1,60 +1,38 @@
 # Dockerfile for Autobacs Backend (Express.js)
-# Multi-stage build for optimal production deployment
+# Stage 1: Install prod-only dependencies
+FROM node:20-alpine AS deps
 
-# Build stage
-FROM node:20-alpine AS builder
-
-# Force cache bust - Railway will set this as build arg
-ARG BUILD_ID=20260508-130500-SIMILAR-COMPLEMENTARY-FIX
-
-# Set working directory
+ARG BUILD_ID=dev
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
+RUN echo "BUILD_ID=${BUILD_ID}" && npm ci --omit=dev && npm cache clean --force
 
-# Install production dependencies only (skip devDependencies like mongodb-memory-server)
-RUN echo "BUILD_ID=${BUILD_ID}" && npm ci --omit=dev
-
-# Copy application source
-COPY . .
-
-# Print build ID for verification
-RUN echo "Building backend with BUILD_ID: ${BUILD_ID}"
-
-# Create production build (if needed for any build steps)
-# RUN npm run build
-
-# Production stage
+# Stage 2: Production image
 FROM node:20-alpine AS runner
 
-# Create app directory
 WORKDIR /app
 
-# Install curl for health check
 RUN apk add --no-cache curl
 
-# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
+RUN adduser -S nodejs -u 1001
 
-# Copy package files
-COPY package*.json ./
+# Copy prod-only node_modules from deps stage (no dev bloat)
+COPY --from=deps /app/node_modules ./node_modules
 
-# Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
+# Copy app source (node_modules excluded via .dockerignore)
+COPY . .
 
-# Copy built application from builder stage
-COPY --from=builder /app ./
+# Create logs directory and set ownership in one layer
+RUN mkdir -p /app/logs && chown -R nodejs:nodejs /app
 
-# Create logs directory and set proper permissions BEFORE changing ownership
-RUN mkdir -p /app/logs && chown -R nextjs:nodejs /app
+USER nodejs
 
-USER nextjs
-
-# Run on dynamic port specified by Railway (process.env.PORT)
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Start application
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+
 CMD ["node", "server.js"]

@@ -24,7 +24,7 @@ class BaseRepository {
       session = null
     } = options;
 
-    let q = this.model.find(query);
+    let q = this.model.find(query).lean();
 
     if (session) q = q.session(session);
     if (select)  q = q.select(select);
