@@ -131,7 +131,7 @@ export default function Home() {
                 {/* First set of logos */}
                 <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506399/autobacs/brand-logos/profender-logo-1.png.webp"
                     alt="Profender"
                     width={180}
                     height={80}
@@ -140,7 +140,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506401/autobacs/brand-logos/bushranger.png.webp"
                     alt="Bushranger"
                     width={180}
                     height={80}
@@ -149,7 +149,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506403/autobacs/brand-logos/ironman.png.webp"
                     alt="Ironman"
                     width={180}
                     height={80}
@@ -158,7 +158,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506405/autobacs/brand-logos/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
                     width={180}
                     height={80}
@@ -167,7 +167,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506407/autobacs/brand-logos/lightforce-logo-1.png.webp"
                     alt="Lightforce"
                     width={180}
                     height={80}
@@ -176,7 +176,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506408/autobacs/brand-logos/option-logo-1.png.webp"
                     alt="Option"
                     width={180}
                     height={80}
@@ -186,7 +186,7 @@ export default function Home() {
                 {/* Duplicate set for seamless loop */}
                 <Link href="/brands/profender" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506399/autobacs/brand-logos/profender-logo-1.png.webp"
                     alt="Profender"
                     width={180}
                     height={80}
@@ -195,7 +195,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/bushranger" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506401/autobacs/brand-logos/bushranger.png.webp"
                     alt="Bushranger"
                     width={180}
                     height={80}
@@ -204,7 +204,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/ironman-4x4" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506403/autobacs/brand-logos/ironman.png.webp"
                     alt="Ironman"
                     width={180}
                     height={80}
@@ -213,7 +213,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/dr-nano" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506405/autobacs/brand-logos/dr-nano-logo-1.png.webp"
                     alt="Dr. Nano"
                     width={180}
                     height={80}
@@ -222,7 +222,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/lightforce" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506407/autobacs/brand-logos/lightforce-logo-1.png.webp"
                     alt="Lightforce"
                     width={180}
                     height={80}
@@ -231,7 +231,7 @@ export default function Home() {
                 </Link>
                 <Link href="/brands/option4wd" className="shrink-0 w-48 h-24 flex items-center justify-center bg-white border border-gray-200 rounded-lg hover:border-[#3B9EE8] hover:shadow-md transition-all p-4 cursor-pointer">
                   <Image
-                    src="https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp"
+                    src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506408/autobacs/brand-logos/option-logo-1.png.webp"
                     alt="Option"
                     width={180}
                     height={80}

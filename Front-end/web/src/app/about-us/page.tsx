@@ -16,12 +16,12 @@ export default function AboutUsPage() {
   ];
 
   const brands = [
-    { name: 'Profender', logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/profender-logo-1.png.webp' },
-    { name: 'Bushranger', logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/bushranger.png.webp' },
-    { name: 'Ironman', logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/ironman.png.webp' },
-    { name: 'Dr. Nano', logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/dr-nano-logo-1.png.webp' },
-    { name: 'Lightforce', logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/lightforce-logo-1.png.webp' },
-    { name: 'Option', logo: 'https://autobacsindia.com/wp-content/uploads/2024/10/option-logo-1.png.webp' },
+    { name: 'Profender', logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506399/autobacs/brand-logos/profender-logo-1.png.webp' },
+    { name: 'Bushranger', logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506401/autobacs/brand-logos/bushranger.png.webp' },
+    { name: 'Ironman', logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506403/autobacs/brand-logos/ironman.png.webp' },
+    { name: 'Dr. Nano', logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506405/autobacs/brand-logos/dr-nano-logo-1.png.webp' },
+    { name: 'Lightforce', logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506407/autobacs/brand-logos/lightforce-logo-1.png.webp' },
+    { name: 'Option', logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506408/autobacs/brand-logos/option-logo-1.png.webp' },
   ];
 
   return (

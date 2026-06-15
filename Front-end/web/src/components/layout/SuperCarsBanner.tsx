@@ -18,7 +18,7 @@ export default function SuperCarsBanner() {
           }`}
         >
           <Image
-            src="https://autobacsindia.com/wp-content/uploads/2024/12/liberty-walk-nissan-gt-r-r35.jpg"
+            src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506411/autobacs/banners/liberty-walk-nissan-gt-r-r35.jpg"
             alt="Liberty Walk Nissan GT-R R35 - Premium Series"
             fill
             className="object-cover object-center"

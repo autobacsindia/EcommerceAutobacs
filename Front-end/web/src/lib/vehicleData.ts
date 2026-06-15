@@ -5,7 +5,7 @@ export const FEATURED_VEHICLES = [
     name: 'Toyota Hilux',
     make: 'Toyota',
     slug: 'toyota-hilux',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/Nova-Hilux-2021_1-scaled-1.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506414/autobacs/vehicles/Nova-Hilux-2021_1-scaled-1.jpg',
     featured: true,
   },
   {
@@ -13,7 +13,7 @@ export const FEATURED_VEHICLES = [
     name: 'Mahindra Thar',
     make: 'Mahindra',
     slug: 'mahindra-thar',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/mahindra_thar_roxx_2024_5k-3840x2160-1-scaled.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506416/autobacs/vehicles/mahindra_thar_roxx_2024_5k-3840x2160-1-scaled.jpg',
     featured: true,
   },
   {
@@ -21,7 +21,7 @@ export const FEATURED_VEHICLES = [
     name: 'Isuzu D-Max',
     make: 'Isuzu',
     slug: 'isuzu-dmax',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/1778470-1920x1300-desktop-hd-isuzu-wallpaper-photo.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506419/autobacs/vehicles/1778470-1920x1300-desktop-hd-isuzu-wallpaper-photo.jpg',
     featured: true,
   },
   {
@@ -29,7 +29,7 @@ export const FEATURED_VEHICLES = [
     name: 'Maruti Jimny',
     make: 'Maruti',
     slug: 'maruti-jimny',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/suzuki_jimny_2018_08.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506422/autobacs/vehicles/suzuki_jimny_2018_08.jpg',
     featured: true,
   },
   {
@@ -37,7 +37,7 @@ export const FEATURED_VEHICLES = [
     name: 'Jeep Wrangler',
     make: 'Jeep',
     slug: 'jeep-wrangler',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/181709-3000x1688-desktop-hd-jeep-background-photo-scaled.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506425/autobacs/vehicles/181709-3000x1688-desktop-hd-jeep-background-photo-scaled.jpg',
     featured: false,
   },
   {
@@ -45,7 +45,7 @@ export const FEATURED_VEHICLES = [
     name: 'Toyota Fortuner',
     make: 'Toyota',
     slug: 'toyota-fortuner',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/toyota-fortuner-right-front-three-quarter0.jpeg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506427/autobacs/vehicles/toyota-fortuner-right-front-three-quarter0.jpg',
     featured: false,
   },
 ];
@@ -57,7 +57,7 @@ export const ALL_VEHICLES = [
     name: 'Volkswagen Polo',
     make: 'Volkswagen',
     slug: 'volkswagen-polo',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/VW-Polo-7.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506429/autobacs/vehicles/VW-Polo-7.jpg',
     featured: false,
   },
   {
@@ -65,7 +65,7 @@ export const ALL_VEHICLES = [
     name: 'Hyundai',
     make: 'Hyundai',
     slug: 'hyundai',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/Hyundai-i20-2-jpeg.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506432/autobacs/vehicles/Hyundai-i20-2-jpeg.jpg',
     featured: false,
   },
   {
@@ -73,7 +73,7 @@ export const ALL_VEHICLES = [
     name: 'KIA',
     make: 'KIA',
     slug: 'kia',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/Carens_1920x1080_3.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506434/autobacs/vehicles/Carens_1920x1080_3.jpg',
     featured: false,
   },
   {
@@ -81,7 +81,7 @@ export const ALL_VEHICLES = [
     name: 'Ford Endeavour',
     make: 'Ford',
     slug: 'ford-endeavour',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/Untitled-design-2024-01-04T133626.142.png',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506437/autobacs/vehicles/Untitled-design-2024-01-04T133626.142.png',
     featured: false,
   },
   {
@@ -89,7 +89,7 @@ export const ALL_VEHICLES = [
     name: 'Audi',
     make: 'Audi',
     slug: 'audi',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/A240553_web_2880-scaled.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506440/autobacs/vehicles/A240553_web_2880-scaled.jpg',
     featured: false,
   },
   {
@@ -97,7 +97,7 @@ export const ALL_VEHICLES = [
     name: 'BMW',
     make: 'BMW',
     slug: 'bmw',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/bmw-3-series.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506443/autobacs/vehicles/bmw-3-series.jpg',
     featured: false,
   },
   {
@@ -105,7 +105,7 @@ export const ALL_VEHICLES = [
     name: 'Ford Ranger',
     make: 'Ford',
     slug: 'ford-ranger',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/Ford-Ranger.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506445/autobacs/vehicles/Ford-Ranger.jpg',
     featured: false,
   },
   {
@@ -113,7 +113,7 @@ export const ALL_VEHICLES = [
     name: 'Land Rover Defender',
     make: 'Land Rover',
     slug: 'land-rover-defender',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/land-rover-defender-1333693509.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506448/autobacs/vehicles/land-rover-defender-1333693509.jpg',
     featured: false,
   },
   {
@@ -121,7 +121,7 @@ export const ALL_VEHICLES = [
     name: 'Mercedes Benz',
     make: 'Mercedes',
     slug: 'mercedes-benz',
-    image: 'https://autobacsindia.com/wp-content/uploads/2024/11/Mercedes-Benz-E-Class.jpg',
+    image: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1781506451/autobacs/vehicles/Mercedes-Benz-E-Class.jpg',
     featured: false,
   },
 ];

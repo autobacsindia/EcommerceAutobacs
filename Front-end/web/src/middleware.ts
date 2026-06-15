@@ -44,7 +44,7 @@ export function middleware(request: NextRequest) {
     // execution, no data exfiltration in modern browsers); the meaningful
     // security gain is in script-src, which keeps its strict nonce policy.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://res.cloudinary.com https://autobacsindia.com https://*.gstatic.com https://*.googleapis.com",
+    "img-src 'self' data: blob: https://res.cloudinary.com https://*.gstatic.com https://*.googleapis.com",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
