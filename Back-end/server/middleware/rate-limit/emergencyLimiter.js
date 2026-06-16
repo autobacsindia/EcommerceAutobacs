@@ -2,6 +2,14 @@ const emergencyStore = new Map();
 const EMERGENCY_WINDOW_MS = 1000;
 const EMERGENCY_MAX_REQUESTS = 10;
 
+// Evict expired entries every 30s — window is 1s so anything older is dead weight
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of emergencyStore) {
+    if (now > entry.reset) emergencyStore.delete(key);
+  }
+}, 30_000).unref();
+
 const CRITICAL_ROUTES = [
   '/api/v1/auth/login',
   '/api/v1/auth/register',
@@ -20,7 +28,7 @@ export function isCriticalRoute(req) {
 }
 
 export function applyLocalEmergencyLimit(req, res, next) {
-  const key = req.ip || req.connection.remoteAddress;
+  const key = req.headers['cf-connecting-ip'] || req.ip;
   const now = Date.now();
   const entry = emergencyStore.get(key) || { count: 0, reset: now + EMERGENCY_WINDOW_MS };
 

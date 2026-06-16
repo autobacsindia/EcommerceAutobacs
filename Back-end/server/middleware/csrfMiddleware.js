@@ -110,28 +110,29 @@ export const csrfProtection = async (req, res, next) => {
   }
 
   // ── Excluded public paths ────────────────────────────────────────────────────
+  // Use full /api/v1/ prefixed paths and exact/prefix matching — never substring
+  // includes(), which can be bypassed with crafted path segments.
   const excludedPaths = [
-    '/auth/login',
-    '/auth/register',
-    '/auth/refresh',   // httpOnly-cookie only — CSRF doesn't apply; attacker can't read the new token
-    '/auth/forgot-password',
-    '/auth/reset-password',
-    '/auth/verify-email',
-    '/auth/google',
-    '/auth/facebook',
-    '/auth/google/callback',
-    '/auth/facebook/callback',
-    '/auth/exchange-code',
-    '/api/delivery-zones/check-serviceability',
-    '/api/delivery-zones/estimate',
-    '/api/delivery-zones/shipping-cost',
-    '/api/location/select',
-    '/location/select',
-    '/consultation',
-    '/contact',
+    '/api/v1/auth/login',
+    '/api/v1/auth/register',
+    '/api/v1/auth/refresh',
+    '/api/v1/auth/forgot-password',
+    '/api/v1/auth/reset-password',
+    '/api/v1/auth/verify-email',
+    '/api/v1/auth/google',
+    '/api/v1/auth/facebook',
+    '/api/v1/auth/exchange-code',
+    '/api/v1/delivery-zones/check-serviceability',
+    '/api/v1/delivery-zones/estimate',
+    '/api/v1/delivery-zones/shipping-cost',
+    '/api/v1/location/select',
+    '/api/v1/consultation',
+    '/api/v1/contact',
   ];
 
-  if (excludedPaths.some(path => req.path.includes(path))) {
+  // Exact match OR path is a strict prefix (followed by '/' to prevent
+  // /api/v1/auth/login-evil matching /api/v1/auth/login)
+  if (excludedPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     return next();
   }
 

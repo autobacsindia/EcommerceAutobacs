@@ -54,7 +54,7 @@ export const initSentry = () => {
       nodeProfilingIntegration(),
     ],
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-    profilesSampleRate: 1.0,
+    profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     environment: process.env.NODE_ENV || 'development',
     beforeSend(event) {
       // Tag P1 errors so Sentry alert rules can filter on alert_level=p1
