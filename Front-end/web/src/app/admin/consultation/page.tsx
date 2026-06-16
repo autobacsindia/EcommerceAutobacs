@@ -236,7 +236,7 @@ export default function AdminConsultationPage() {
 
         {/* Detail Panel */}
         {selected && (
-          <div className="w-full lg:w-96 flex-shrink-0 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="w-full lg:w-96 shrink-0 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
               <h3 className="font-bold text-gray-900">{selected.name}</h3>
               <button onClick={() => setSelected(null)} className="text-xs text-gray-400 hover:text-gray-700 transition-colors">✕ Close</button>
@@ -326,10 +326,10 @@ export default function AdminConsultationPage() {
 function Row({ icon, label, value }: { icon?: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2">
-      {icon && <span className="mt-0.5 flex-shrink-0">{icon}</span>}
+      {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
       <div className="min-w-0 flex items-baseline gap-2">
-        <span className="text-xs text-gray-400 flex-shrink-0">{label}:</span>
-        <span className="text-sm text-gray-800 break-words">{value}</span>
+        <span className="text-xs text-gray-400 shrink-0">{label}:</span>
+        <span className="text-sm text-gray-800 wrap-break-word">{value}</span>
       </div>
     </div>
   );

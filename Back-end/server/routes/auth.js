@@ -458,25 +458,6 @@ router.get("/sessions", protect, asyncHandler(async (req, res) => {
   });
 }));
 
-// @route   GET /auth/me
-// @desc    Get current user profile
-// @access  Private
-router.get("/me", protect, asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id).select('-passwordHash');
-  
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: 'User not found'
-    });
-  }
-
-  res.json({
-    success: true,
-    user
-  });
-}));
-
 // @route   POST /auth/forgot-password
 // @desc    Request password reset
 // @access  Public
