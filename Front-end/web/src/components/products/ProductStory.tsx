@@ -17,10 +17,10 @@ interface ProductStoryProps {
 }
 
 const defaultIcons = [
-  <CloudRain className="w-10 h-10" />,
-  <Sun className="w-10 h-10" />,
-  <Mountain className="w-10 h-10" />,
-  <Gauge className="w-10 h-10" />,
+  <CloudRain key="cloud-rain" className="w-10 h-10" />,
+  <Sun key="sun" className="w-10 h-10" />,
+  <Mountain key="mountain" className="w-10 h-10" />,
+  <Gauge key="gauge" className="w-10 h-10" />,
 ];
 
 const defaultCards: StoryCard[] = [

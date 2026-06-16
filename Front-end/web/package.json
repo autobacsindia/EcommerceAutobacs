@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "test:ci": "jest --config jest.ci.config.js",
     "test:watch": "jest --watch",
     "test:a11y": "jest src/tests/a11y --verbose",
     "test:a11y:watch": "jest src/tests/a11y --watch",

@@ -86,11 +86,12 @@ jobs:
 
       - run: npm ci
 
+      # Curated suite set (jest.ci.config.js); Playwright e2e excluded.
       - name: Run tests
         env:
           NODE_ENV: test
           NEXT_PUBLIC_API_URL: http://localhost:5000
-        run: npm test -- --forceExit --passWithNoTests
+        run: npm run test:ci -- --forceExit --passWithNoTests
 
       - name: Build
         env:

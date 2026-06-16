@@ -170,7 +170,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
     }
   };
 
-  const handleToggleWishlist = async (product: WordPressProduct | any, e: React.MouseEvent) => {
+  const handleToggleWishlist = async (product: any, e: React.MouseEvent) => {
     e.preventDefault();
     
     if (!isAuthenticated) {
@@ -225,7 +225,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
     ? products.filter(product => 
-        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === selectedCategory)
+        product.categories && Array.isArray(product.categories) && product.categories.some((cat: any) => cat && cat.slug === selectedCategory)
       )
     : products;
 
@@ -339,7 +339,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     {categories.map((category) => {
                       // Calculate count of products in this category
                       const categoryProductCount = products.filter(product => 
-                        product.categories && Array.isArray(product.categories) && product.categories.some(cat => cat && cat.slug === category.slug)
+                        product.categories && Array.isArray(product.categories) && product.categories.some((cat: any) => cat && cat.slug === category.slug)
                       ).length;
                       
                       // Only show categories that have products
@@ -569,7 +569,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         {/* Categories */}
                         <p className="text-xs text-gray-500 uppercase mb-2">
                           {product.categories && Array.isArray(product.categories) && product.categories.length > 0
-                            ? product.categories.filter(cat => cat && cat.name).map(cat => cat.name).join(', ')
+                            ? product.categories.filter((cat: any) => cat && cat.name).map((cat: any) => cat.name).join(', ')
                             : 'Uncategorized'}
                         </p>
 

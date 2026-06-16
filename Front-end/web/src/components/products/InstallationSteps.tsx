@@ -35,11 +35,11 @@ const defaultSteps = [
 ];
 
 const stepIcons = [
-  <Wrench className="w-6 h-6" />,
-  <Settings className="w-6 h-6" />,
-  <Settings className="w-6 h-6" />,
-  <Settings className="w-6 h-6" />,
-  <CheckCircle className="w-6 h-6" />
+  <Wrench key="wrench" className="w-6 h-6" />,
+  <Settings key="settings-1" className="w-6 h-6" />,
+  <Settings key="settings-2" className="w-6 h-6" />,
+  <Settings key="settings-3" className="w-6 h-6" />,
+  <CheckCircle key="check" className="w-6 h-6" />
 ];
 
 export default function InstallationSteps({ steps, isDark = true }: InstallationStepsProps) {

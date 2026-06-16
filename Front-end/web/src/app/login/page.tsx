@@ -73,7 +73,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#080808] flex flex-col items-center">
       {/* Logo */}
       <div className="py-8">
-        <a href="/" className="block mx-auto">
+        <Link href="/" className="block mx-auto">
           <Image
             src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1775543920/Roavion-Logo_xwqbx9.png"
             alt="Roavion"
@@ -82,7 +82,7 @@ export default function LoginPage() {
             priority
             className="object-contain h-28 w-auto mx-auto"
           />
-        </a>
+        </Link>
       </div>
 
       {/* Login Card */}

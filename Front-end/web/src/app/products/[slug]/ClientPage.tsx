@@ -159,19 +159,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     }
     return true;
   });
-  
-  // Defensive null safety check
-  if (!product) {
-    return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
-          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
-        </div>
-      </div>
-    );
-  }
-  
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuth();
@@ -231,24 +219,12 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     };
   };
 
-  const { description: parsedDescription, whyChoose: extractedWhyChoose } = parseDescription(product.description);
+  const { description: parsedDescription, whyChoose: extractedWhyChoose } = parseDescription(product?.description ?? '');
   
   // Use extracted whyChoose if product.whyChoose doesn't exist
-  const displayWhyChoose = product.whyChoose && product.whyChoose.length > 0 
-    ? product.whyChoose 
+  const displayWhyChoose = product?.whyChoose && product.whyChoose.length > 0
+    ? product.whyChoose
     : extractedWhyChoose;
-
-  // Show loading state if product is null
-  if (!product) {
-    return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
-          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Get currently compared products from URL
   const comparedProductIds = searchParams.get('compare')?.split(',') || [];
@@ -302,6 +278,18 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       }
     }
   }, [product?._id]); // Only re-run when product ID changes
+
+  // Null guard — placed after all hooks so hook order stays stable (rules-of-hooks).
+  if (!product) {
+    return (
+      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
+          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
+        </div>
+      </div>
+    );
+  }
 
   const displayImages = (() => {
     // If multiple images are assigned to the variant, use ONLY those (or prioritize them)

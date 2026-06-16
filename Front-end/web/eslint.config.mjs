@@ -10,6 +10,13 @@ const config = [
 
   {
     rules: {
+      // Stylistic rules downgraded to non-blocking. These were declared in the
+      // legacy .eslintrc.json, which ESLint 9 ignores in favour of this flat
+      // config — so they silently became CI-blocking errors again.
+      'react/no-unescaped-entities': 'off',
+      'react/display-name': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
+
       // Enforce src/context/ (singular) — the plural src/contexts/ was removed.
       // Without this rule, someone on a deadline will recreate the directory and
       // the inconsistency silently returns.

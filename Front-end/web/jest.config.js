@@ -14,6 +14,7 @@ module.exports = {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/'],
+  // tests/e2e holds Playwright specs — they run under `playwright test`, not Jest.
+  testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/', '<rootDir>/tests/e2e/'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 };
