@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { getRedisClient } from './redisClient.js';
 import ImportJob from '../models/ImportJob.js';
 import mongoose from 'mongoose';
+import { runWordPressSync } from './wordpressSyncService.js';
 
 class CronService {
   constructor() {
@@ -44,9 +45,7 @@ class CronService {
       console.log('Initializing cron jobs...');
     }
 
-    // scheduleFailedProductImport() is intentionally NOT registered here.
-    // The implementation used Math.random() to fake results and was removed.
-    // Re-enable once wpIntegrationService re-import logic is wired up.
+    this.scheduleWordPressSync();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -54,47 +53,85 @@ class CronService {
   }
 
   /**
-   * Schedule the failed product import job
-   * Runs daily at 11:10 AM
+   * Schedule the WordPress → MongoDB sync.
+   *
+   * TRANSITIONAL: keeps Mongo in step with WordPress while WP is still the place
+   * content is edited. Once WP is decommissioned, delete this job + the service.
+   *
+   * Safety:
+   *   • OFF unless WP_SYNC_ENABLED=true — never auto-writes to prod by surprise.
+   *   • schedule from WP_SYNC_CRON (default every 6h); timezone Asia/Kolkata.
+   *   • runs inside a Redis distributed lock so overlapping replicas don't double-run.
+   *   • the sync itself is idempotent + non-destructive (upsert only).
    */
-  scheduleFailedProductImport() {
+  scheduleWordPressSync() {
+    if (process.env.WP_SYNC_ENABLED !== 'true') {
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('[CronService] WordPress sync cron disabled (set WP_SYNC_ENABLED=true to enable)');
+      }
+      return;
+    }
+    const schedule = process.env.WP_SYNC_CRON || '0 */6 * * *'; // every 6 hours
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid WP_SYNC_CRON "${schedule}" — WordPress sync NOT scheduled`);
+      return;
+    }
     try {
-      // Cron expression for 11:10 AM daily: minute(10) hour(11) day(*) month(*) dayOfWeek(*)
-      const task = cron.schedule('10 11 * * *', async () => {
-        console.log('Running scheduled failed product import job at 11:10 AM');
-        await this.withDistributedLock(
-          'cron:lock:failedProductImport',
-          3600, // 1 hour TTL — job cleared long before next daily run at 11:10 AM
-          () => this.runFailedProductImport()
-        );
-      }, {
-        scheduled: true,
-        timezone: "Asia/Kolkata" // Set appropriate timezone
-      });
-
+      const task = cron.schedule(schedule, () =>
+        this.withDistributedLock('cron:lock:wordpressSync', 3 * 3600, () => this.executeWordPressSync()),
+        { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+      );
       this.scheduledTasks.push({
-        name: 'failedProductImport',
-        task: task,
-        schedule: '10 11 * * *',
-        description: 'Daily import of failed products at 11:10 AM'
+        name: 'wordpressSync',
+        task,
+        schedule,
+        description: 'WordPress → MongoDB sync (transitional)',
       });
-
-      console.log('Scheduled failed product import job for 11:10 AM daily');
+      console.log(`[CronService] WordPress sync scheduled: "${schedule}"`);
     } catch (error) {
-      console.error('Failed to schedule failed product import job:', error.message);
+      console.error('[CronService] Failed to schedule WordPress sync:', error.message);
     }
   }
 
   /**
-   * Stub — real implementation pending.
-   * Previous version used Math.random() to fake 70% success; removed to prevent false reporting.
-   * TODO: implement using wpIntegrationService to re-fetch products by WooCommerce ID.
+   * Run one WordPress → MongoDB sync, tracked as an ImportJob for observability.
+   * Returns { success, stats }. Never throws — failures are recorded, not fatal.
    */
-  async runFailedProductImport() {
-    return {
-      success: false,
-      error: 'Not implemented: re-import logic has not been built yet.'
-    };
+  async executeWordPressSync() {
+    const jobId = `wp-sync-${Date.now()}`;
+    let job = null;
+    try {
+      job = await ImportJob.create({ jobId, source: 'scheduled', status: 'running', startedAt: new Date() });
+    } catch (err) {
+      console.warn('[CronService] Could not create ImportJob record:', err.message);
+    }
+    console.log(`[CronService] WordPress sync started (job ${jobId})`);
+    try {
+      const withImages = process.env.WP_SYNC_IMAGES !== 'false';
+      const { ok, stats, durationMs } = await runWordPressSync({ dryRun: false, withImages, logger: console });
+      if (job) {
+        job.status = 'completed';
+        job.completedAt = new Date();
+        job.totalProducts = stats.products.fetched;
+        job.processedProducts = stats.products.inserted + stats.products.updated;
+        job.importedProducts = stats.products.inserted + stats.products.updated;
+        job.failedProducts = stats.products.failed + stats.categories.failed;
+        job.progress = 100;
+        if (!ok) job.errorMessage = 'Verification incomplete (un-migrated images remain) — re-run will retry';
+        await job.save().catch(() => {});
+      }
+      console.log(`[CronService] WordPress sync ${ok ? 'completed' : 'completed with warnings'} in ${(durationMs / 1000).toFixed(1)}s`);
+      return { success: ok, stats };
+    } catch (err) {
+      console.error('[CronService] WordPress sync failed:', err.message);
+      if (job) {
+        job.status = 'failed';
+        job.failedAt = new Date();
+        job.errorMessage = err.message;
+        await job.save().catch(() => {});
+      }
+      return { success: false, error: err.message };
+    }
   }
 
   /**

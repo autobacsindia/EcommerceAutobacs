@@ -89,10 +89,20 @@ router.post("/run/:taskName", protect, admin, asyncHandler(async (req, res) => {
     
     const { taskName } = req.params;
 
+    if (taskName === 'wordpressSync') {
+      // Manual on-demand trigger of the WP → Mongo sync (does not require the
+      // scheduled cron to be enabled). Runs inside the same distributed lock.
+      const result = await cronServiceInstance.withDistributedLock(
+        'cron:lock:wordpressSync', 3 * 3600,
+        () => cronServiceInstance.executeWordPressSync()
+      );
+      return res.json({ success: true, message: 'WordPress sync triggered', result });
+    }
+
     if (taskName === 'failedProductImport') {
-      return res.status(501).json({
+      return res.status(410).json({
         success: false,
-        message: 'failedProductImport is not implemented. The previous version simulated results with Math.random() and has been disabled.'
+        message: 'failedProductImport was removed. Use taskName "wordpressSync".'
       });
     }
 
