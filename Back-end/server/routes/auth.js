@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import fetch from "node-fetch";
-import Redis from "ioredis";
+import { getRedisClient } from "../services/redisClient.js";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
@@ -51,24 +51,7 @@ import {
 
 const router = express.Router();
 
-// ── Redis client for one-time OAuth code exchange ─────────────────────────
-let oauthRedis = null;
-if (process.env.REDIS_URL) {
-  try {
-    oauthRedis = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: false,
-      lazyConnect: true,
-      connectTimeout: 5000, // 5s timeout for initial connection
-      commandTimeout: 2000, // 2s per command (reasonable for production)
-      // Add TLS support for Redis (required for most cloud providers)
-      tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
-    });
-    oauthRedis.on('error', (err) => console.warn('[Auth/OAuth] Redis error:', err.message));
-  } catch (err) {
-    console.warn('[Auth/OAuth] Redis init failed:', err.message);
-  }
-}
+const oauthRedis = getRedisClient();
 
 const generateToken = (user) => {
   // Different expiration times based on role

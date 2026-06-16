@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import Redis from 'ioredis';
+import { getRedisClient } from './redisClient.js';
 import ImportJob from '../models/ImportJob.js';
 import mongoose from 'mongoose';
 
@@ -7,25 +7,7 @@ class CronService {
   constructor() {
     this.scheduledTasks = [];
 
-    // Redis client for distributed locks — prevents duplicate job execution when
-    // Railway runs multiple replicas or during rolling deploys where two instances
-    // overlap. If Redis is unavailable, jobs run without locking (single-instance safe).
-    this.redis = null;
-    if (process.env.REDIS_URL) {
-      try {
-        this.redis = new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          enableReadyCheck: false,
-          lazyConnect: true,
-          tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
-        });
-        this.redis.on('error', err =>
-          console.warn('[CronService] Redis error:', err.message)
-        );
-      } catch (err) {
-        console.warn('[CronService] Redis init failed — jobs will run without distributed locks:', err.message);
-      }
-    }
+    this.redis = getRedisClient();
   }
 
   /**

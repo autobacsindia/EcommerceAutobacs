@@ -6,7 +6,7 @@
  * Falls back gracefully if Redis is unavailable.
  */
 
-import Redis from 'ioredis';
+import { getRedisClient } from './redisClient.js';
 
 /**
  * Circuit Breaker States
@@ -46,51 +46,11 @@ class SessionStore {
       stampedePrevented: 0,
     };
     
-    if (process.env.REDIS_URL) {
-      try {
-        // BUILD_HASH: 8f3k29d-TLS-FIX-FINAL
-        // Deployed: 2026-04-07T05:30:00Z
-        this.redis = new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1, // Prevent retry storms
-          enableReadyCheck: false,
-          lazyConnect: true,
-          connectTimeout: 5000, // 5s timeout for initial connection
-          commandTimeout: 2000, // FIXED: was 50ms, now 2000ms (prevents constant timeouts)
-          retryStrategy: (times) => {
-            // Exponential backoff with max 3 retries
-            if (times > 3) return null; // Stop retrying
-            return Math.min(times * 100, 3000);
-          },
-          // Add TLS support for Redis (required for most cloud providers)
-          tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
-        });
-        
-        this.redis.on('error', (err) => {
-          console.error('[SessionStore] Redis error:', err.message);
-          this.recordFailure();
-        });
-        
-        this.redis.on('connect', () => {
-          console.log('[SessionStore] Connected to Redis successfully');
-          this.recordSuccess();
-        });
-        
-        this.redis.on('close', () => {
-          console.warn('[SessionStore] Redis connection closed');
-          this.recordFailure();
-        });
-        
-        this.redis.on('ready', () => {
-          console.log('[SessionStore] Redis ready for commands');
-        });
-        
-        console.log('[SessionStore] Redis session store initialized with circuit breaker + metrics');
-      } catch (err) {
-        console.warn('[SessionStore] Redis init failed:', err.message);
-        this.redis = null;
-      }
-    } else {
-      console.log('[SessionStore] REDIS_URL not set – using MongoDB-only sessions');
+    this.redis = getRedisClient();
+    if (this.redis) {
+      this.redis.on('error', () => this.recordFailure());
+      this.redis.on('connect', () => this.recordSuccess());
+      this.redis.on('close', () => this.recordFailure());
     }
   }
 

@@ -185,6 +185,24 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
       return next();
     }
 
+    // Session version check — revoked tokens must not grant user context
+    const tokenSessionVersion = decoded.sessionVersion || 0;
+    const dbSessionVersion = req.user.sessionVersion || 0;
+    if (tokenSessionVersion !== dbSessionVersion) {
+      req.user = null;
+      return next();
+    }
+
+    // tokenInvalidBefore check — tokens issued before a security event are invalid
+    if (req.user.tokenInvalidBefore) {
+      const tokenIssuedAt = decoded.iat * 1000;
+      const invalidBefore = new Date(req.user.tokenInvalidBefore).getTime();
+      if (tokenIssuedAt < invalidBefore) {
+        req.user = null;
+        return next();
+      }
+    }
+
     next();
   } catch (error) {
     // If token is invalid, just continue without req.user

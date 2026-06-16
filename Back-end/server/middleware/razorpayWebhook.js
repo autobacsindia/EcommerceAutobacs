@@ -7,7 +7,7 @@
 
 import express from 'express';
 import crypto from 'crypto';
-import Redis from 'ioredis';
+import { getRedisClient } from '../services/redisClient.js';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import razorpayService from '../services/razorpayService.js';
 import WebhookEvent from '../models/WebhookEvent.js';
@@ -61,21 +61,16 @@ router.post("/", asyncHandler(async (req, res) => {
     
     // SECURITY STEP 2: Replay protection - Check event ID
     // Primary: Redis (fast). Fallback: MongoDB (durable). Never fall through with no check.
-    let redisClient = null;
+    const redisClient = getRedisClient();
     try {
-      redisClient = new Redis(process.env.REDIS_URL, {
-        maxRetriesPerRequest: 1,
-        connectTimeout: 2000,
-      });
-
-      const eventExists = await redisClient.get(`razorpay:event:${eventId}`);
+      const eventExists = redisClient && await redisClient.get(`razorpay:event:${eventId}`);
       if (eventExists) {
         console.log(`[Webhook] Duplicate event ignored (Redis): ${eventId}`);
         return res.status(200).end();
       }
 
       // Mark event as processed (24h TTL)
-      await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
+      if (redisClient) await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
     } catch (redisError) {
       console.warn('[Webhook] Redis unavailable, falling back to MongoDB replay protection:', redisError.message);
 
