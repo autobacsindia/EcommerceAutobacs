@@ -26,7 +26,12 @@ import mongoose from 'mongoose';
 import axios from 'axios';
 import https from 'https';
 import http from 'http';
+import { load as loadHtml } from 'cheerio';
 import { v2 as cloudinary } from 'cloudinary';
+import { resolveBrand } from '../utils/brandResolution.js';
+
+// --dry-run : compute + print what WOULD change, write nothing.
+const DRY_RUN = process.argv.includes('--dry-run');
 
 import Product from '../models/Product.js';
 import Category from '../models/Category.js';
@@ -78,9 +83,10 @@ const wcClient = axios.create({
 
 // ── Stats ────────────────────────────────────────────────────────────────────
 const stats = {
-  products:   { fetched: 0, inserted: 0, updated: 0, failed: 0 },
+  products:   { fetched: 0, inserted: 0, updated: 0, failed: 0, unmappedCats: 0 },
   categories: { fetched: 0, inserted: 0, updated: 0, failed: 0 },
   images:     { total: 0, migrated: 0, skipped: 0, failed: 0 },
+  samples:    [],
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -103,10 +109,51 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+// ── Stock ────────────────────────────────────────────────────────────────────
+// WooCommerce keeps availability in `stock_status`; `stock_quantity` is null for
+// the ~99% of products with product-level stock management OFF. Using
+// `stock_quantity ?? 0` made every untracked product read as out of stock.
+// Map: managed → real quantity; unmanaged → available sentinel unless explicitly
+// out of stock. Frontend treats stock>0 / status!=='outofstock' as available.
+const STOCK_AVAILABLE = 999; // untracked-but-available sentinel
+function stockFromWc(wc) {
+  if (wc.manage_stock && wc.stock_quantity != null) return wc.stock_quantity;
+  return wc.stock_status === 'outofstock' ? 0 : STOCK_AVAILABLE;
+}
+
+// ── HTML cleaning ────────────────────────────────────────────────────────────
+// WooCommerce returns names/descriptions with HTML tags + encoded entities
+// (&amp;, &#8211;, &nbsp;, …). Store clean text exactly as WordPress rendered it:
+// decode entities, strip tags, normalise whitespace. cheerio's .text() decodes
+// entities and drops tags in one pass.
+//   keepNewlines=true → block/break tags become line breaks (descriptions, so
+//   the frontend "Why Choose" parser still sees paragraphs/bullets).
+function htmlToText(input, { keepNewlines = false } = {}) {
+  if (input == null) return '';
+  let s = String(input);
+  if (keepNewlines) {
+    s = s
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/\s*(p|div|li|h[1-6]|tr|ul|ol)\s*>/gi, '\n')
+      .replace(/<\s*li[^>]*>/gi, '\n• ');
+  }
+  let text = loadHtml(`<root>${s}</root>`)('root').text();
+  text = text.replace(/ /g, ' ').replace(/\r\n?/g, '\n');
+  if (keepNewlines) {
+    text = text.replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').replace(/\n{3,}/g, '\n\n');
+  } else {
+    text = text.replace(/\s+/g, ' ');
+  }
+  return text.trim();
+}
+
+// Quick test: does a string still carry HTML tags or undecoded entities?
+const isDirty = (s) => typeof s === 'string' && /<[^>]+>|&[a-z]+;|&#\d+;/i.test(s);
+
 // ── Phase 1: Products ────────────────────────────────────────────────────────
 async function migrateProducts() {
   console.log('\n════════════════════════════════════════');
-  console.log('PHASE 1 — Products');
+  console.log('PHASE 2 — Products');
   console.log('════════════════════════════════════════');
 
   let wcProducts;
@@ -120,6 +167,25 @@ async function migrateProducts() {
     return;
   }
 
+  // Resolve WP category → Mongo Category._id. Categories are upserted first (see run()),
+  // so every WP category id should already map to a stored Category by wpId/slug.
+  const cats = await Category.find({}, { wpId: 1, slug: 1, name: 1 }).lean();
+  const normName = (s) => htmlToText(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const catByWpId = new Map(cats.filter(c => c.wpId != null).map(c => [String(c.wpId), c._id]));
+  const catBySlug = new Map(cats.filter(c => c.slug).map(c => [c.slug, c._id]));
+  // Name fallback: WordPress has duplicate categories sharing one name (e.g. two
+  // "Front Lip": id 5847/front-lip-2 and id 168/front-lip). Mongo's unique-name index
+  // keeps one; products referencing the twin id still resolve to it by name.
+  const catByName = new Map(cats.map(c => [normName(c.name), c._id]));
+  const resolveCategories = (wcCats = []) => {
+    const ids = new Set();
+    for (const c of wcCats) {
+      const id = catByWpId.get(String(c.id)) || catBySlug.get(c.slug) || catByName.get(normName(c.name));
+      if (id) ids.add(String(id)); else stats.products.unmappedCats++;
+    }
+    return [...ids].map(s => new mongoose.Types.ObjectId(s));
+  };
+
   for (const wc of wcProducts) {
     if (!wc.id || !wc.name) {
       console.warn(`  Skipping invalid product (id=${wc.id})`);
@@ -130,42 +196,58 @@ async function migrateProducts() {
     try {
       const slug = wc.slug || slugify(wc.name);
 
-      // Look up by wpId (re-runs) OR slug (existing docs that predate this migration).
-      // Update by _id to avoid re-triggering the slug unique-index on upsert.
-      const existingDoc = await Product.findOne({ $or: [{ wpId: wc.id }, { slug }] });
+      // Match on any historical key: wpId (newer importer) OR externalId (original
+      // importer) OR slug (pre-migration docs). Update by _id to avoid re-triggering
+      // the slug unique-index, and to converge the two id fields onto one WP id.
+      const existingDoc = await Product.findOne({
+        $or: [{ wpId: wc.id }, { externalId: String(wc.id) }, { slug }],
+      });
 
       // Preserve Cloudinary images already migrated — only set wp_ placeholders for new/unmigrated images
       const alreadyMigrated = existingDoc?.images?.length > 0 &&
         existingDoc.images.every(img => img.public_id && !img.public_id.startsWith('wp_'));
 
+      const cleanName = htmlToText(wc.name);
       const data = {
         wpId: wc.id,
+        externalId: String(wc.id),          // converge legacy externalId onto the WP id
         wpSlug: wc.slug,
         syncedFromWordPress: true,
         lastSyncedAt: new Date(),
 
-        name: wc.name,
+        name: cleanName,
         slug,
-        description: wc.description || '',
-        shortDescription: wc.short_description || '',
+        description: htmlToText(wc.description, { keepNewlines: true }),
+        shortDescription: htmlToText(wc.short_description, { keepNewlines: true }),
         price: parseFloat(wc.price) || 0,
         salePrice: wc.sale_price ? parseFloat(wc.sale_price) : undefined,
         regularPrice: wc.regular_price ? parseFloat(wc.regular_price) : undefined,
-        stock: wc.stock_quantity ?? 0,
+        stock: stockFromWc(wc),
         sku: wc.sku || undefined,
+        // Governed brand: WP brands taxonomy → manufacturer/make aliases (brand-config.js)
+        ...(() => { const r = resolveBrand(cleanName, (wc.brands || []).map(b => b.slug)); return { brand: r ? r.entry.name : '', brandSlug: r ? r.entry.slug : '' }; })(),
         isActive: wc.status === 'publish',
 
         ...(!alreadyMigrated && {
           images: (wc.images || []).map(img => ({
             url: img.src,
-            alt: img.alt || wc.name,
+            alt: htmlToText(img.alt) || cleanName,
             public_id: `wp_${img.id}`,
           })),
         }),
 
-        categoryIds: (wc.categories || []).map(c => c.id),
-        tags: (wc.tags || []).map(t => t.name),
+        categories: resolveCategories(wc.categories),       // Mongo ObjectIds → category pages
+        categoryIds: (wc.categories || []).map(c => c.id),  // raw WP ids (backward compat)
+        tags: (wc.tags || []).map(t => htmlToText(t.name)).filter(Boolean),
       };
+
+      if (DRY_RUN) {
+        existingDoc ? stats.products.updated++ : stats.products.inserted++;
+        if (stats.samples.length < 8 && (isDirty(wc.name) || !existingDoc)) {
+          stats.samples.push({ id: wc.id, action: existingDoc ? 'update' : 'INSERT', from: wc.name, to: cleanName, cats: data.categories.length });
+        }
+        continue;
+      }
       if (existingDoc) {
         await Product.findByIdAndUpdate(existingDoc._id, { $set: data });
         stats.products.updated++;
@@ -185,7 +267,7 @@ async function migrateProducts() {
 // ── Phase 2: Categories ──────────────────────────────────────────────────────
 async function migrateCategories() {
   console.log('\n════════════════════════════════════════');
-  console.log('PHASE 2 — Categories');
+  console.log('PHASE 1 — Categories');
   console.log('════════════════════════════════════════');
 
   let wcCategories;
@@ -201,14 +283,26 @@ async function migrateCategories() {
 
   for (const wc of wcCategories) {
     try {
-      // Look up by wpId (re-runs) OR name (existing docs that predate this migration).
-      const existingDoc = await Category.findOne({ $or: [{ wpId: wc.id }, { name: wc.name }] });
+      // Match by wpId (re-runs) OR exact slug only. NOT by name: several Mongo
+      // categories are stale slug-dup artifacts (front-lip-2, roof-carrier-3) whose
+      // name still equals a current WP category — name-matching would churn their
+      // live slug (SEO) and collide. Unmatched WP slugs insert fresh & clean instead.
+      const slug = wc.slug || slugify(wc.name);
+      const existingDoc = await Category.findOne({ $or: [{ wpId: wc.id }, { slug }] });
+
+      // WordPress duplicate categories: a different WP id sharing the same name.
+      // Mongo's unique-name index already holds one — don't insert a clashing twin,
+      // treat this WP id as an alias (products resolve to the existing doc by name).
+      if (!existingDoc) {
+        const sameName = await Category.findOne({ name: htmlToText(wc.name) });
+        if (sameName) { stats.categories.aliased = (stats.categories.aliased || 0) + 1; continue; }
+      }
 
       const data = {
         wpId: wc.id,
-        name: wc.name,
-        slug: wc.slug || slugify(wc.name),
-        description: wc.description || '',
+        name: htmlToText(wc.name),
+        slug,
+        description: htmlToText(wc.description, { keepNewlines: true }),
         syncedFromWordPress: true,
         lastSyncedAt: new Date(),
         isActive: true,
@@ -217,6 +311,10 @@ async function migrateCategories() {
         }),
       };
 
+      if (DRY_RUN) {
+        existingDoc ? stats.categories.updated++ : stats.categories.inserted++;
+        continue;
+      }
       if (existingDoc) {
         await Category.findByIdAndUpdate(existingDoc._id, { $set: data });
         stats.categories.updated++;
@@ -389,11 +487,18 @@ async function verify() {
 
   const totalProducts = await Product.countDocuments({});
   const syncedProducts = await Product.countDocuments({ syncedFromWordPress: true });
+  const dirtyRe = { $regex: '<[^>]+>|&[a-z]+;|&#[0-9]+;', $options: 'i' };
+  const dirtyNames = await Product.countDocuments({ name: dirtyRe });
+  const dirtyCatNames = await Category.countDocuments({ name: dirtyRe });
+  const noCategory = await Product.countDocuments({ isActive: true, $or: [{ categories: { $exists: false } }, { categories: { $size: 0 } }] });
 
   console.log(`Total products in MongoDB : ${totalProducts}`);
   console.log(`Synced from WooCommerce   : ${syncedProducts}`);
   console.log(`Images still on WP domain : ${wpImageCount}  ← should be 0`);
   console.log(`Images with wp_ public_id : ${wpPlaceholderCount}  ← should be 0`);
+  console.log(`Product names w/ HTML/ents: ${dirtyNames}  ← should be 0`);
+  console.log(`Category names w/ HTML/ent: ${dirtyCatNames}  ← should be 0`);
+  console.log(`Active products, 0 categs : ${noCategory}`);
 
   if (wpImageCount > 0 || wpPlaceholderCount > 0) {
     console.error('\nMigration incomplete:');
@@ -411,7 +516,7 @@ async function verify() {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 async function run() {
-  console.log('=== WordPress → MongoDB Migration ===');
+  console.log(`=== WordPress → MongoDB Migration ${DRY_RUN ? '(DRY RUN — no writes)' : ''} ===`);
   console.log(`MongoDB: ${MONGO_URI?.replace(/\/\/.*@/, '//***@')}`);
   console.log(`WooCommerce: ${WC_BASE}`);
   console.log(`Cloudinary: ${hasCloudinary ? 'enabled' : 'disabled (images will not be migrated)'}`);
@@ -421,10 +526,20 @@ async function run() {
 
   const t0 = Date.now();
 
-  await migrateProducts();
+  // Categories first so products can resolve category ObjectIds.
   await migrateCategories();
-  await migrateImages();
-  const verified = await verify();
+  await migrateProducts();
+  if (!DRY_RUN) await migrateImages();
+  const verified = DRY_RUN ? true : await verify();
+
+  if (DRY_RUN && stats.samples.length) {
+    console.log('\n── Sample cleaning / inserts (dry run) ──');
+    for (const s of stats.samples) {
+      console.log(`  [${s.action}] wp#${s.id}  cats=${s.cats}`);
+      if (s.from !== s.to) { console.log(`     from: ${JSON.stringify(s.from)}`); console.log(`     to:   ${JSON.stringify(s.to)}`); }
+    }
+    console.log(`  unmapped WP categories on products: ${stats.products.unmappedCats}`);
+  }
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 

@@ -27,9 +27,23 @@ const BrandSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  // Facet of the brand: a car make (Toyota), a parts manufacturer (Brembo),
+  // or the in-house store brand. Lets the UI split "Shop by Make" vs "Shop by Brand".
+  type: {
+    type: String,
+    enum: ['make', 'manufacturer', 'house'],
+    default: 'manufacturer',
+    index: true
+  },
+  // Title-matching aliases used to resolve a brand for products WordPress left
+  // untagged (e.g. ['benz','amg','g-class'] → Mercedes-Benz).
+  aliases: {
+    type: [String],
+    default: []
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 // Indexes for better query performance

@@ -39,6 +39,13 @@ const ProductSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Canonical Brand.slug this product maps to (stable for URLs/filtering).
+  // `brand` holds the display name; both are governed by the Brand registry.
+  brandSlug: {
+    type: String,
+    trim: true,
+    index: true
+  },
   images: [{
     url:        { type: String, required: true },   // Cloudinary secure_url or external URL
     public_id:  { 
