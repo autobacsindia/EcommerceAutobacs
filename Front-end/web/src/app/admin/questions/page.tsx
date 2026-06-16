@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { 
   MessageSquare, 
   Search, 
@@ -99,22 +100,37 @@ export default function AdminQuestionsPage() {
       fetchQuestions(); // Refresh list
     } catch (error) {
       console.error('Failed to submit answer:', error);
-      alert('Failed to submit answer');
+      toast.error('Failed to submit answer');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this question?')) return;
-    
-    try {
-      await apiClient.delete(`/product-questions/${id}`);
-      fetchQuestions(); // Refresh list
-    } catch (error) {
-      console.error('Failed to delete question:', error);
-      alert('Failed to delete question');
-    }
+  const handleDelete = (id: string) => {
+    toast((t) => (
+      <span className="flex items-center gap-3">
+        Delete this question?
+        <button
+          className="bg-red-600 text-white text-xs px-2 py-1 rounded"
+          onClick={async () => {
+            toast.dismiss(t.id);
+            try {
+              await apiClient.delete(`/product-questions/${id}`);
+              fetchQuestions();
+              toast.success('Question deleted');
+            } catch (error) {
+              console.error('Failed to delete question:', error);
+              toast.error('Failed to delete question');
+            }
+          }}
+        >
+          Delete
+        </button>
+        <button className="text-xs px-2 py-1 rounded border" onClick={() => toast.dismiss(t.id)}>
+          Cancel
+        </button>
+      </span>
+    ));
   };
 
   const getStatusBadge = (status: string) => {
