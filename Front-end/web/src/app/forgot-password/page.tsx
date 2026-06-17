@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
@@ -10,6 +10,15 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  // Migrated WooCommerce customers (ADR-005) are routed here from login to set a first password.
+  const [migrated, setMigrated] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const e = params.get('email');
+    if (e) setEmail(e);
+    setMigrated(params.get('migrated') === '1');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,10 +40,12 @@ export default function ForgotPasswordPage() {
         <div className="text-center">
           <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Account</p>
           <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide">
-            Forgot Password
+            {migrated ? 'Set Your Password' : 'Forgot Password'}
           </h2>
           <p className="mt-2 text-sm text-[#C4C4C4] font-body">
-            Enter your email address and we&apos;ll send you a link to reset your password.
+            {migrated
+              ? 'Welcome back! Your account moved to our new site. Enter your email and we’ll send a link to set a password — your details and orders are safe.'
+              : 'Enter your email address and we’ll send you a link to reset your password.'}
           </p>
         </div>
 

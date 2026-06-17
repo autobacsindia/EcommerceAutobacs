@@ -75,6 +75,7 @@
                          "axios":  "^1.13.2",
                          "bcryptjs":  "^2.4.3",
                          "bson":  "^7.0.0",
+                         "cheerio":  "^1.0.0",
                          "cloudinary":  "^1.41.3",
                          "commander":  "^12.1.0",
                          "compression":  "^1.8.1",

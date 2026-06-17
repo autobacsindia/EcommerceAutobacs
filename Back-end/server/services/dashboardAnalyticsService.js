@@ -4,6 +4,11 @@ import Product from '../models/Product.js';
 import Contact from '../models/Contact.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 
+// Statuses that count as a realised sale (money made). Excludes pending, failed,
+// cancelled and refunded. Shared by revenue and top-products so they stay consistent
+// — important now that historical WooCommerce orders (ADR-005) include many cancelled/failed.
+const SALE_STATUSES = ['confirmed', 'processing', 'shipped', 'delivered'];
+
 /**
  * Dashboard Analytics Service
  * Provides real-time business metrics and analytics
@@ -73,7 +78,7 @@ class DashboardAnalyticsService {
         {
           $match: {
             createdAt: { $gte: startOfToday },
-            status: { $nin: ['cancelled', 'refunded'] }
+            status: { $in: SALE_STATUSES }
           }
         },
         {
@@ -90,7 +95,7 @@ class DashboardAnalyticsService {
         {
           $match: {
             createdAt: { $gte: startOfWeek },
-            status: { $nin: ['cancelled', 'refunded'] }
+            status: { $in: SALE_STATUSES }
           }
         },
         {
@@ -107,7 +112,7 @@ class DashboardAnalyticsService {
         {
           $match: {
             createdAt: { $gte: startOfMonth },
-            status: { $nin: ['cancelled', 'refunded'] }
+            status: { $in: SALE_STATUSES }
           }
         },
         {
@@ -358,6 +363,7 @@ class DashboardAnalyticsService {
   async getTopProducts(limit = 5) {
     try {
       const topProducts = await Order.aggregate([
+        { $match: { status: { $in: SALE_STATUSES } } },
         { $unwind: '$items' },
         {
           $group: {

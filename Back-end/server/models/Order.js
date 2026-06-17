@@ -1,17 +1,26 @@
 import mongoose from "mongoose";
 
 const OrderSchema = new mongoose.Schema({
-  user: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "User", 
-    required: true 
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    // Not required for historical WooCommerce orders (ADR-005); live orders always carry a user.
+    required: function () { return this.source !== "woocommerce"; }
   },
+
+  // WooCommerce migration linkage (ADR-005). Historical orders are flagged so they feed
+  // analytics but stay out of live fulfilment queues.
+  wpId: { type: Number, index: { unique: true, sparse: true } },
+  source: { type: String, enum: ["web", "woocommerce"], default: "web", index: true },
+  legacyStatus: String,
+
   items: [
     {
-      product: { 
-        type: mongoose.Schema.Types.ObjectId, 
+      product: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: "Product",
-        required: true
+        // Historical line items may reference products no longer in catalog; name/price are snapshotted.
+        required: function () { return this.parent()?.source !== "woocommerce"; }
       },
       quantity: { 
         type: Number, 

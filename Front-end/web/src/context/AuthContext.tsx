@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 
 interface User {
   _id: string;
@@ -245,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
         setUser(userData);
         writeCache(userData, userData.sessionVersion);
+        identifyUser({ id: userData._id, email: userData.email, name: userData.name });
       } else {
         throw new Error(response.message || 'Login failed');
       }
@@ -309,6 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       // Clear cache so the next checkAuth doesn't restore the old session.
       clearCache();
+      resetAnalytics();
     }
   }, []);
 

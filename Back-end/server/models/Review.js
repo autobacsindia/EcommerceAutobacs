@@ -6,11 +6,17 @@ const ReviewSchema = new mongoose.Schema({
     ref: "Product",
     required: true
   },
-  user: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true
+    // Customer-submitted reviews carry a user. Imported WooCommerce reviews (wpId) and
+    // admin-authored/manual reviews (guestName) are user-less. (ADR-005)
+    required: function () { return !this.wpId && !this.guestName; }
   },
+  // WooCommerce migration linkage (ADR-005) + guest reviewer identity.
+  wpId: { type: Number, index: { unique: true, sparse: true } },
+  guestName: { type: String, trim: true },
+  guestEmail: { type: String, trim: true, lowercase: true },
   rating: {
     type: Number,
     required: true,
@@ -24,7 +30,8 @@ const ReviewSchema = new mongoose.Schema({
   },
   comment: {
     type: String,
-    required: true,
+    // Migrated reviews may be rating-only; live reviews require a comment.
+    required: function () { return !this.wpId; },
     trim: true,
     maxlength: 1000
   },
@@ -43,13 +50,25 @@ const ReviewSchema = new mongoose.Schema({
   helpfulCount: {
     type: Number,
     default: 0
+  },
+  // Promote a review to the homepage testimonials section (admin-toggled). Any review —
+  // customer, imported, or manual — can be flagged. (ADR-005)
+  isTestimonial: {
+    type: Boolean,
+    default: false
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
-// Prevent duplicate reviews from same user for same product
-ReviewSchema.index({ product: 1, user: 1 }, { unique: true });
+// Prevent duplicate reviews from same user for same product.
+// Partial so guest/migrated reviews (user unset) don't collide on a null user.
+ReviewSchema.index(
+  { product: 1, user: 1 },
+  { unique: true, partialFilterExpression: { user: { $exists: true } } }
+);
 ReviewSchema.index({ product: 1, isApproved: 1 });
+// Homepage testimonials feed (approved + flagged).
+ReviewSchema.index({ isTestimonial: 1, isApproved: 1 });
 
 export default mongoose.model("Review", ReviewSchema);

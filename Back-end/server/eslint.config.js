@@ -12,11 +12,12 @@
  *   queue/**          — workers delegate to services; no model access expected
  *                       but exempt to avoid false positives during migration
  *
- * When you add a new model, no config change is needed — the pattern
- * **/models/** catches it automatically.
+ * When you add a new model, no config change is needed — the models glob
+ * pattern catches it automatically.
  */
 
 import js from '@eslint/js';
+import globals from 'globals';
 
 const NO_DIRECT_MODEL_IMPORTS = {
   'no-restricted-imports': [
@@ -43,6 +44,11 @@ export default [
   {
     ...js.configs.recommended,
     files: ['**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
   },
 
   // ── Enforce repository layer in these paths ────────────────────────────────
@@ -63,6 +69,10 @@ export default [
       '**/*.test.js',
       'scripts/**/*.js',
       'middleware/**/*.js',   // middleware (auth etc.) reads models directly — migrate gradually
+      // Transitional WordPress→Mongo migration services (ADR-003/005). They mirror the
+      // wordpressSyncService reference pattern and are deleted at WP decommission, so they
+      // are exempt from the repository layer rather than churned through repositories.
+      'services/wordpress*Service.js',
     ],
     rules: {
       'no-restricted-imports': 'off',

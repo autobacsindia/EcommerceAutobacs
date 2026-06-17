@@ -10,6 +10,7 @@ import { LocationProvider } from "@/context/LocationContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { RateLimitProvider } from "@/context/RateLimitContext";
 import { LogRocketProvider } from "@/providers/LogRocketProvider";
+import { PostHogProvider } from "@/providers/PostHogProvider";
 import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
@@ -169,6 +170,7 @@ export default async function RootLayout({
         className={`${barlowCondensed.variable} ${dmSans.variable} antialiased`}
       >
         <LogRocketProvider>
+          <PostHogProvider>
           <AuthProvider>
             <CartProvider>
               <WishlistProvider>
@@ -192,6 +194,7 @@ export default async function RootLayout({
               </WishlistProvider>
             </CartProvider>
           </AuthProvider>
+          </PostHogProvider>
         </LogRocketProvider>
       </body>
     </html>

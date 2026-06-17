@@ -194,6 +194,18 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     });
   }
 
+  // Migrated WooCommerce accounts (ADR-005) have no password — phpass hashes were not
+  // carried over. Route them to set a password instead of a dead-end "invalid" error.
+  // (Gate strictly on mustResetPassword: social-login users also have an empty passwordHash
+  // but should not be told to "set a password".)
+  if (user.mustResetPassword) {
+    return res.status(403).json({
+      success: false,
+      message: "Welcome back! Your account moved to our new site — set a password to continue.",
+      code: "PASSWORD_RESET_REQUIRED"
+    });
+  }
+
   // Compare password
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   const ipAddress = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
@@ -569,6 +581,8 @@ router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, as
   user.resetPasswordUsed = true;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
+  // Migrated accounts (ADR-005): now that they have a password, lift the forced-reset gate.
+  user.mustResetPassword = false;
 
   await user.save();
 
@@ -777,9 +791,19 @@ const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
       isVerified: !!isVerified
     });
     await user.save();
-  } else if (isVerified && !user.isVerified) {
-    user.isVerified = true;
-    await user.save();
+  } else {
+    let changed = false;
+    if (isVerified && !user.isVerified) {
+      user.isVerified = true;
+      changed = true;
+    }
+    // Migrated WooCommerce account (ADR-005): signing in via a social provider proves
+    // email ownership, so lift the forced password-reset gate.
+    if (user.mustResetPassword) {
+      user.mustResetPassword = false;
+      changed = true;
+    }
+    if (changed) await user.save();
   }
 
   return user;
