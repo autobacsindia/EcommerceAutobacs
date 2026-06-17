@@ -22,6 +22,7 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  hydrateFromExchange: (rawUser: any) => void;
   clearError: () => void;
 }
 
@@ -313,6 +314,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => { setError(null); }, []);
 
+  // Hydrates auth state directly from data returned by the exchange-code endpoint,
+  // avoiding an extra GET /me round-trip after social login.
+  const hydrateFromExchange = useCallback((rawUser: any) => {
+    const userData = normalizeUser(rawUser);
+    setUser(userData);
+    setToken(null);
+    setIsLoading(false);
+    writeCache(userData, userData.sessionVersion);
+  }, []);
+
   const value: AuthContextType = {
     user,
     token,
@@ -323,6 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     checkAuth,
+    hydrateFromExchange,
     clearError,
   };
 

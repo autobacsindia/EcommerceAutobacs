@@ -8,12 +8,20 @@ import apiClient from '@/lib/api-client';
 type ExchangeCodeResponse = {
   success: boolean;
   message?: string;
-  // NOTE: accessToken is now set as httpOnly cookie by backend, not in response body
+  user?: {
+    id: string;
+    _id: string;
+    name: string;
+    email: string;
+    role: string;
+    isVerified: boolean;
+    sessionVersion: number;
+  };
 };
 
 export default function SocialCallbackPage() {
   const router = useRouter();
-  const { checkAuth } = useAuth();
+  const { checkAuth, hydrateFromExchange } = useAuth();
   const [status, setStatus] = useState<'loading' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState<string>('');
   // Guard against React Strict Mode double-invoke
@@ -44,10 +52,15 @@ export default function SocialCallbackPage() {
             throw new Error(data.message || 'Code exchange failed');
           }
           
-          console.log('[Social Callback] Code exchange successful, calling checkAuth...');
-          // Backend sets access token as httpOnly cookie automatically
-          await checkAuth();
-          console.log('[Social Callback] checkAuth completed, redirecting to home');
+          console.log('[Social Callback] Code exchange successful, hydrating auth state...');
+          if (data.user) {
+            // Backend returned user data — hydrate directly, no extra /me round-trip.
+            hydrateFromExchange(data.user);
+          } else {
+            // Fallback: backend didn't return user data (older deploy), fetch it.
+            await checkAuth();
+          }
+          console.log('[Social Callback] Auth hydrated, redirecting to home');
           router.replace('/');
           return;
         }
@@ -82,7 +95,7 @@ export default function SocialCallbackPage() {
     };
 
     handleCallback();
-  }, [checkAuth, router]);
+  }, [checkAuth, hydrateFromExchange, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
