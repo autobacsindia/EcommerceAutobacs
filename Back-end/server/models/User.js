@@ -40,8 +40,15 @@ const AddressSchema = new mongoose.Schema({
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  passwordHash: { type: String, required: true },
+  // Not required for users migrated from WooCommerce (phpass hashes can't move to bcrypt);
+  // those users are forced through password reset on first login (see mustResetPassword).
+  passwordHash: { type: String, required: function () { return !this.migratedFromWp; } },
   role: { type: String, enum: ["customer", "admin"], default: "customer" },
+
+  // WooCommerce migration linkage (ADR-005)
+  wpId: { type: Number, index: { unique: true, sparse: true } },
+  migratedFromWp: { type: Boolean, default: false },
+  mustResetPassword: { type: Boolean, default: false },
   addresses: [AddressSchema],
   
   // Email verification fields

@@ -77,9 +77,10 @@ router.get("/products/:productId", validateRouteProductId, asyncHandler(async (r
   // Format response
   const formattedReviews = reviews.map(review => ({
     id: review._id,
+    // Imported (WooCommerce) and manual reviews have no linked user — fall back to guestName.
     user: {
-      id: review.user._id,
-      name: review.user.name
+      id: review.user?._id || null,
+      name: review.user?.name || review.guestName || "Anonymous"
     },
     rating: review.rating,
     title: review.title,
@@ -155,6 +156,38 @@ router.get("/products/:productId/summary", validateRouteProductId, asyncHandler(
       ratingDistribution
     }
   });
+}));
+
+// @route   GET /reviews/testimonials
+// @desc    Approved reviews flagged as testimonials, for the homepage (across all products)
+// @access  Public
+router.get("/testimonials", asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 12, 50);
+
+  const reviews = await Review.find({ isTestimonial: true, isApproved: true })
+    .populate("user", "name")
+    .populate("product", "name slug images")
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+
+  const testimonials = reviews.map(r => ({
+    id: r._id,
+    name: r.user?.name || r.guestName || "Anonymous",
+    rating: r.rating,
+    title: r.title,
+    comment: r.comment,
+    isVerifiedPurchase: r.isVerifiedPurchase,
+    createdAt: r.createdAt,
+    product: r.product ? {
+      id: r.product._id,
+      name: r.product.name,
+      slug: r.product.slug,
+      image: r.product.images?.[0]?.url || null
+    } : null
+  }));
+
+  res.json({ success: true, count: testimonials.length, testimonials });
 }));
 
 // @route   GET /reviews/user
@@ -303,8 +336,8 @@ router.put("/:reviewId", protect, validateReviewUpdate, asyncHandler(async (req,
     });
   }
 
-  // Check ownership
-  if (review.user.toString() !== userId.toString()) {
+  // Check ownership (imported/manual reviews have no owner and can't be edited by users)
+  if (!review.user || review.user.toString() !== userId.toString()) {
     return res.status(403).json({
       success: false,
       message: "Not authorized to update this review"
@@ -354,8 +387,8 @@ router.delete("/:reviewId", protect, validateReviewIdParam, asyncHandler(async (
     });
   }
 
-  // Check ownership
-  if (review.user.toString() !== userId.toString()) {
+  // Check ownership (imported/manual reviews have no owner and can't be edited by users)
+  if (!review.user || review.user.toString() !== userId.toString()) {
     return res.status(403).json({
       success: false,
       message: "Not authorized to delete this review"
@@ -453,6 +486,82 @@ router.get("/admin", protect, admin, validateAdminReviewQuery, asyncHandler(asyn
       hasPrev: page > 1
     },
     reviews
+  });
+}));
+
+// @route   POST /reviews/admin
+// @desc    Create a manual review (admin) — custom reviewer name, auto-approved.
+//          Used for seeding reviews and testimonials. Renders identically to a real review.
+// @access  Private/Admin
+router.post("/admin", protect, admin, asyncHandler(async (req, res) => {
+  const { productId, reviewerName, rating, title, comment, isVerifiedPurchase, isTestimonial, date } = req.body;
+
+  const ratingNum = parseInt(rating, 10);
+  if (!productId || !reviewerName?.trim() || !comment?.trim() || !(ratingNum >= 1 && ratingNum <= 5)) {
+    return res.status(400).json({
+      success: false,
+      message: "productId, reviewerName, comment and rating (1-5) are required"
+    });
+  }
+
+  const product = await Product.findById(productId).select("_id");
+  if (!product) {
+    return res.status(404).json({ success: false, message: "Product not found" });
+  }
+
+  const review = new Review({
+    product: productId,
+    guestName: reviewerName.trim(),
+    rating: ratingNum,
+    title: cleanHTML(title || ""),
+    comment: cleanHTML(comment),
+    isVerifiedPurchase: !!isVerifiedPurchase,
+    isTestimonial: !!isTestimonial,
+    isApproved: true // admin-authored → live immediately
+  });
+  await review.save();
+
+  // Optional backdating so seeded reviews can blend into history.
+  if (date && !Number.isNaN(Date.parse(date))) {
+    await Review.collection.updateOne({ _id: review._id }, { $set: { createdAt: new Date(date) } });
+  }
+
+  await updateProductRatingStats(productId);
+
+  res.status(201).json({
+    success: true,
+    message: "Review created",
+    review: {
+      id: review._id,
+      name: review.guestName,
+      rating: review.rating,
+      title: review.title,
+      comment: review.comment,
+      isVerifiedPurchase: review.isVerifiedPurchase,
+      isTestimonial: review.isTestimonial,
+      isApproved: review.isApproved
+    }
+  });
+}));
+
+// @route   PUT /reviews/:reviewId/testimonial
+// @desc    Toggle a review's testimonial flag (admin)
+// @access  Private/Admin
+router.put("/:reviewId/testimonial", protect, admin, validateReviewIdParam, asyncHandler(async (req, res) => {
+  const review = await Review.findByIdAndUpdate(
+    req.params.reviewId,
+    { isTestimonial: !!req.body.isTestimonial },
+    { new: true }
+  );
+
+  if (!review) {
+    return res.status(404).json({ success: false, message: "Review not found" });
+  }
+
+  res.json({
+    success: true,
+    message: review.isTestimonial ? "Marked as testimonial" : "Removed from testimonials",
+    review: { id: review._id, isTestimonial: review.isTestimonial }
   });
 }));
 

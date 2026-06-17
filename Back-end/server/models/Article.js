@@ -15,6 +15,10 @@ const ArticleSchema = new mongoose.Schema(
     featured: { type: Boolean, default: false },
     views: { type: Number, default: 0 },
     publishedAt: { type: Date },
+
+    // WordPress migration linkage (ADR-005). wpUrl = old permalink, used to build 301 redirects.
+    wpId: { type: Number, index: { unique: true, sparse: true } },
+    wpUrl: { type: String, trim: true },
   },
   { timestamps: true }
 );

@@ -63,6 +63,7 @@ import RecentlyViewed from '@/components/products/RecentlyViewed';
 import ShareButton from '@/components/products/ShareButton';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
+import { trackProductView } from '@/lib/analytics';
 import { toast } from 'react-hot-toast';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
@@ -260,6 +261,13 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       }
     }
   }, [product, user]);
+
+  // Analytics: product_view (once per product) — ADR-005
+  useEffect(() => {
+    if (product?._id) {
+      trackProductView({ id: product._id, name: product.name, price: product.price, brand: (product as any).brand });
+    }
+  }, [product?._id]);
 
   // Separate effect for initializing specs to avoid conflicts with other dependencies
   useEffect(() => {

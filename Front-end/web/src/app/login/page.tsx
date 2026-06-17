@@ -56,6 +56,11 @@ export default function LoginPage() {
       await login(formData.email, formData.password);
       router.push('/');
     } catch (err: any) {
+      // Migrated WooCommerce accounts (ADR-005) have no password yet — send them to set one.
+      if (err.rawData?.code === 'PASSWORD_RESET_REQUIRED') {
+        router.push(`/forgot-password?migrated=1&email=${encodeURIComponent(formData.email)}`);
+        return;
+      }
       if (err.status === 429 && err.rateLimitInfo?.resetTime) {
         setRateLimitResetTime(err.rateLimitInfo.resetTime);
       }

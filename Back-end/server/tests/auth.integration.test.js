@@ -22,6 +22,7 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 import { app } from '../app.js';
 import * as dbHandler from './db-handler.js';
+import User from '../models/User.js';
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -200,6 +201,22 @@ describe('POST /auth/login', () => {
       .send({ email: 'ghost@example.com', password: 'Whatever1!' });
 
     expect(res.status).toBe(401);
+  });
+
+  // ADR-005: migrated WooCommerce customer (no password) is routed to set one.
+  test('migrated account (mustResetPassword, no password) → 403 PASSWORD_RESET_REQUIRED', async () => {
+    await User.create({
+      name: 'WP Customer', email: 'migrated@example.com', wpId: 99999,
+      migratedFromWp: true, mustResetPassword: true, isVerified: true, role: 'customer',
+    });
+
+    const res = await request(app)
+      .post(`${BASE}/login`)
+      .send({ email: 'migrated@example.com', password: 'anything' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('PASSWORD_RESET_REQUIRED');
+    expect(JSON.stringify(res.body)).not.toMatch(/passwordHash/);
   });
 
   test('response does NOT contain passwordHash', async () => {

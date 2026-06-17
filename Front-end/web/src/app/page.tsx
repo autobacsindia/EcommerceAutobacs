@@ -4,6 +4,7 @@ import { ShoppingBag, Truck, Shield, Headphones } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HeroBanner from '@/components/layout/HeroBanner';
 import DeliveryNetwork from '@/components/home/DeliveryNetwork';
+import TestimonialsSection from '@/components/home/TestimonialsSection';
 import { FEATURED_VEHICLES } from '@/lib/vehicleData';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -370,6 +371,9 @@ export default function Home() {
 
       {/* Recently Viewed Section */}
       <RecentlyViewedSection />
+
+      {/* Testimonials (hidden until reviews are flagged in admin) */}
+      <TestimonialsSection />
 
       {/* CTA Section */}
       <section className="bg-[#0E0E0E] border-y border-[#252525] text-white py-16">

@@ -56,7 +56,7 @@ const ImportJobSchema = new mongoose.Schema({
   },
   source: {
     type: String,
-    enum: ['wordpress', 'wordpress-categories', 'wordpress-products', 'manual', 'scheduled', 'scheduled-failed'],
+    enum: ['wordpress', 'wordpress-categories', 'wordpress-products', 'wordpress-customers', 'wordpress-orders', 'wordpress-reviews', 'wordpress-posts', 'manual', 'scheduled', 'scheduled-failed'],
     default: 'manual'
   },
   // New field to track if this is a re-import of failed products

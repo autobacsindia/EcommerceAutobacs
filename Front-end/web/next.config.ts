@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   devIndicators: false,
+  // PostHog reverse-proxy (ADR-005) sends events to /ingest/* on our own domain; keep the
+  // trailing slash intact so PostHog's flags/decide endpoints resolve correctly.
+  skipTrailingSlashRedirect: true,
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -64,6 +67,19 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  async redirects() {
+    // SEO 301s for the WordPress → Next migration (ADR-005). Preserves Google rankings,
+    // backlinks and ad landing pages when the domain points at the new site.
+    //   • Blog posts keep their old root path (/<slug>) — served by app/[slug], no redirect.
+    //   • Products & categories had different WooCommerce bases → permanent redirect.
+    //   • The new blog detail path forwards to the canonical root URL (no duplicate content).
+    return [
+      { source: '/product/:slug', destination: '/products/:slug', permanent: true },
+      { source: '/product-category/:slug*', destination: '/categories/:slug*', permanent: true },
+      { source: '/media/blogs/:slug', destination: '/:slug', permanent: true },
+    ];
+  },
+
   async rewrites() {
     // NEXT_PUBLIC_API_URL is validated at the Dockerfile level (build arg check).
     // It will always be set here in a properly configured Railway build.
@@ -80,6 +96,16 @@ const nextConfig: NextConfig = {
         // All backend routes are versioned under /api/v1/.
         source: '/api/v1/:path*',
         destination: `${sanitizedUrl}/api/v1/:path*`,
+      },
+      // PostHog reverse-proxy (Cloud US) — routes analytics through our domain so
+      // adblockers don't drop events. Static assets are on a separate host.
+      {
+        source: '/ingest/static/:path*',
+        destination: 'https://us-assets.i.posthog.com/static/:path*',
+      },
+      {
+        source: '/ingest/:path*',
+        destination: 'https://us.i.posthog.com/:path*',
       },
     ];
   },

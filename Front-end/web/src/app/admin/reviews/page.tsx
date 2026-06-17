@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
-import { CheckCircle, XCircle, Trash2, Eye, Filter, Search } from 'lucide-react';
+import { CheckCircle, XCircle, Trash2, Search, Plus, Star, Quote } from 'lucide-react';
 
 interface Review {
   _id: string;
@@ -13,15 +13,18 @@ interface Review {
     _id: string;
     name: string;
   };
-  user: {
+  user?: {
     _id: string;
     name: string;
     email: string;
-  };
+  } | null;
+  guestName?: string;
   rating: number;
   title?: string;
   comment: string;
   isApproved: boolean;
+  isTestimonial?: boolean;
+  isVerifiedPurchase?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -164,8 +167,72 @@ export default function AdminReviewsPage() {
     }
   };
 
+  const handleToggleTestimonial = async (reviewId: string, value: boolean) => {
+    try {
+      await apiClient.put(`/reviews/${reviewId}/testimonial`, { isTestimonial: value });
+      setReviews(reviews.map(r => r._id === reviewId ? { ...r, isTestimonial: value } : r));
+    } catch (err) {
+      alert('Failed to update testimonial flag');
+      console.error(err);
+    }
+  };
+
   const handlePageChange = (newPage: number) => {
     setPagination({ ...pagination, currentPage: newPage });
+  };
+
+  // ── Add-review modal (manual / seeded reviews) ──────────────────────────────
+  const [showAdd, setShowAdd] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [productQuery, setProductQuery] = useState('');
+  const [productResults, setProductResults] = useState<{ _id: string; name: string }[]>([]);
+  const [form, setForm] = useState({
+    productId: '', productName: '', reviewerName: '', rating: 5,
+    title: '', comment: '', isVerifiedPurchase: false, isTestimonial: false, date: '',
+  });
+
+  const resetForm = () => {
+    setForm({ productId: '', productName: '', reviewerName: '', rating: 5, title: '', comment: '', isVerifiedPurchase: false, isTestimonial: false, date: '' });
+    setProductQuery(''); setProductResults([]);
+  };
+
+  useEffect(() => {
+    if (!productQuery.trim() || form.productId) { setProductResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const data = await apiClient.get(`/products?search=${encodeURIComponent(productQuery)}&limit=8`) as any;
+        setProductResults((data.products || []).map((p: any) => ({ _id: p._id, name: p.name })));
+      } catch { setProductResults([]); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [productQuery, form.productId]);
+
+  const handleAddReview = async () => {
+    if (!form.productId || !form.reviewerName.trim() || !form.comment.trim()) {
+      alert('Pick a product and fill reviewer name + comment');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await apiClient.post('/reviews/admin', {
+        productId: form.productId,
+        reviewerName: form.reviewerName.trim(),
+        rating: form.rating,
+        title: form.title.trim() || undefined,
+        comment: form.comment.trim(),
+        isVerifiedPurchase: form.isVerifiedPurchase,
+        isTestimonial: form.isTestimonial,
+        date: form.date || undefined,
+      });
+      setShowAdd(false);
+      resetForm();
+      fetchReviews();
+    } catch (err) {
+      alert('Failed to create review');
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (isLoading) {
@@ -178,9 +245,17 @@ export default function AdminReviewsPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Review Management</h1>
-        <p className="text-gray-600">Manage and moderate product reviews</p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Review Management</h1>
+          <p className="text-gray-600">Manage, moderate, and feature product reviews</p>
+        </div>
+        <button
+          onClick={() => { resetForm(); setShowAdd(true); }}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          <Plus className="h-4 w-4" /> Add Review
+        </button>
       </div>
 
       {/* Filters */}
@@ -282,6 +357,9 @@ export default function AdminReviewsPage() {
                       Status
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Testimonial
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -296,8 +374,11 @@ export default function AdminReviewsPage() {
                         <div className="text-sm font-medium text-gray-900">{review.product?.name || 'Unknown Product'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{review.user?.name || 'Unknown User'}</div>
-                        <div className="text-sm text-gray-500">{review.user?.email || 'No Email'}</div>
+                        <div className="text-sm text-gray-900">
+                          {review.user?.name || review.guestName || 'Unknown'}
+                          {!review.user && <span className="ml-2 text-xs text-gray-400">(manual)</span>}
+                        </div>
+                        <div className="text-sm text-gray-500">{review.user?.email || ''}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -332,6 +413,17 @@ export default function AdminReviewsPage() {
                             Pending
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={() => handleToggleTestimonial(review._id, !review.isTestimonial)}
+                          title={review.isTestimonial ? 'Remove from testimonials' : 'Mark as testimonial'}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                            review.isTestimonial ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          <Quote className="h-3.5 w-3.5" /> {review.isTestimonial ? 'Featured' : 'Off'}
+                        </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(review.createdAt).toLocaleDateString()}
@@ -441,6 +533,101 @@ export default function AdminReviewsPage() {
           </>
         )}
       </div>
+
+      {/* Add-review modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Add Review</h2>
+
+            {/* Product picker */}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+            {form.productId ? (
+              <div className="flex items-center justify-between rounded-md border border-gray-300 px-3 py-2 mb-3">
+                <span className="text-sm text-gray-900 truncate">{form.productName}</span>
+                <button onClick={() => setForm({ ...form, productId: '', productName: '' })} className="text-xs text-blue-600">change</button>
+              </div>
+            ) : (
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  value={productQuery}
+                  onChange={(e) => setProductQuery(e.target.value)}
+                  placeholder="Search product by name..."
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {productResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                    {productResults.map(p => (
+                      <button
+                        key={p._id}
+                        onClick={() => { setForm({ ...form, productId: p._id, productName: p.name }); setProductResults([]); }}
+                        className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reviewer name</label>
+                <input type="text" value={form.reviewerName} onChange={(e) => setForm({ ...form, reviewerName: e.target.value })}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rating</label>
+                <div className="flex items-center gap-1 py-1.5">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <button key={s} onClick={() => setForm({ ...form, rating: s })} title={`${s} star`}>
+                      <Star className={`h-6 w-6 ${s <= form.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Title (optional)</label>
+              <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
+              <textarea value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} rows={3}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.isVerifiedPurchase} onChange={(e) => setForm({ ...form, isVerifiedPurchase: e.target.checked })} />
+                Verified Purchase badge
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.isTestimonial} onChange={(e) => setForm({ ...form, isTestimonial: e.target.checked })} />
+                Feature as testimonial
+              </label>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date (optional, for backdating)</label>
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => { setShowAdd(false); resetForm(); }} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleAddReview} disabled={submitting} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                {submitting ? 'Saving…' : 'Create Review'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

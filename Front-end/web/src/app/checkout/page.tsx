@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
+import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
@@ -64,6 +65,24 @@ function CheckoutPageContent() {
   const [priceConfirmationPending, setPriceConfirmationPending] = useState(false);
 
   const isGuest = !authLoading && !isAuthenticated;
+
+  // ── Analytics funnel (ADR-005) ──────────────────────────────────────────────
+  const beganCheckoutRef = useRef(false);
+  const lastCartTotalRef = useRef(0);
+  useEffect(() => { if (cart?.total) lastCartTotalRef.current = cart.total; }, [cart?.total]);
+  // begin_checkout — once, when the checkout loads with items.
+  useEffect(() => {
+    if (!beganCheckoutRef.current && cart && cart.items.length > 0) {
+      beganCheckoutRef.current = true;
+      trackBeginCheckout({ value: cart.total, itemCount: cart.items.length });
+    }
+  }, [cart?.items?.length]);
+  // purchase — once, when the order reaches the confirmation step.
+  useEffect(() => {
+    if (currentStep === 'confirmation' && orderId) {
+      trackPurchase({ orderId, value: lastCartTotalRef.current });
+    }
+  }, [currentStep, orderId]);
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
 

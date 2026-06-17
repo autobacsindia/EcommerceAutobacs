@@ -5,6 +5,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
 import { ProductImage } from '@/lib/types';
+import { trackAddToCart } from '@/lib/analytics';
 
 interface CartItem {
   product: {
@@ -164,6 +165,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         };
 
         setCart(cartData);
+
+        // Analytics: add_to_cart (ADR-005)
+        const added = cartData.items.find(i => i.product._id === productId);
+        if (added) {
+          trackAddToCart({ id: productId, name: added.product.name, price: added.product.price, quantity });
+        }
       } else {
         setCart(previousCart);
         throw new Error(response.message || 'Failed to add to cart');
