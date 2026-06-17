@@ -6,10 +6,14 @@
 # Path filtering: a service deploys only when its own files changed. Each deploy
 # is gated on that service's lint + tests (+ build for the frontend).
 #
-# Required GitHub secrets:
-#   RAILWAY_TOKEN                 — Railway API token (project-scoped)
-#   RAILWAY_BACKEND_SERVICE_NAME  — Railway service name for the backend
-#   RAILWAY_FRONTEND_SERVICE_NAME — Railway service name for the frontend
+# Backend and frontend live in SEPARATE Railway projects, so each needs its own
+# project-scoped token (a project token only deploys services in its project):
+#   backend  → project "bountiful-surprise", service "EcommerceAutobacs"
+#   frontend → project "pleasant-analysis",  service "EcommerceAutobacs"
+#
+# Required GitHub repository secrets:
+#   RAILWAY_BACKEND_TOKEN   — project token for the backend project (production env)
+#   RAILWAY_FRONTEND_TOKEN  — project token for the frontend project (production env)
 
 name: Deploy to Railway
 
@@ -88,8 +92,8 @@ jobs:
 
       - name: Deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service=${{ secrets.RAILWAY_BACKEND_SERVICE_NAME }} --detach
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_BACKEND_TOKEN }}
+        run: railway up --service=EcommerceAutobacs --detach
         working-directory: Back-end/server
 
   # ── Frontend ───────────────────────────────────────────────────────────────
@@ -143,6 +147,6 @@ jobs:
 
       - name: Deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service=${{ secrets.RAILWAY_FRONTEND_SERVICE_NAME }} --detach
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_FRONTEND_TOKEN }}
+        run: railway up --service=EcommerceAutobacs --detach
         working-directory: Front-end/web
