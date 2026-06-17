@@ -101,6 +101,25 @@ async function testRazorpayService() {
     }
     console.log('');
     
+    // Test 4: Live API Authentication (actual HTTP call to Razorpay)
+    console.log('Test 4: Live API Authentication');
+    try {
+      const Razorpay = await import('razorpay');
+      const instance = new Razorpay.default({
+        key_id: razorpayService.key_id,
+        key_secret: razorpayService.key_secret
+      });
+      // Minimal order — ₹1 (100 paise) is the lowest Razorpay accepts
+      await instance.orders.create({ amount: 100, currency: 'INR', receipt: 'auth_test' });
+      console.log('✅ Live API call succeeded — credentials are valid\n');
+    } catch (err) {
+      const desc = err?.error?.description || err?.description || err?.message || JSON.stringify(err);
+      console.error(`❌ Live API call failed: ${desc}`);
+      console.error('   key_id  :', razorpayService.key_id?.slice(0, 16) + '...');
+      console.error('   secret  : ' + razorpayService.key_secret?.slice(0, 4) + '...(length ' + razorpayService.key_secret?.length + ')');
+      process.exit(1);
+    }
+
     console.log('🎉 All tests passed! Razorpay service is ready for integration.');
     console.log('\n📝 Next steps:');
     console.log('1. Make sure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are set in .env');

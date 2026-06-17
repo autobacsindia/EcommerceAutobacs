@@ -637,7 +637,7 @@ function CheckoutPageContent() {
                       <div className="flex justify-between text-sm">
                         <span className="text-[#555555] font-body">Previous total</span>
                         <span className="text-[#555555] font-body line-through">
-                          ₹{((cart?.total || 0) * 1.18).toFixed(2)}
+                          ₹{(cart?.total || 0).toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -692,21 +692,21 @@ function CheckoutPageContent() {
                 <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-3">Order Summary</h3>
                 {/* Use server-validated totals once available; fall back to CartContext */}
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-[#555555] font-body">Subtotal</span>
+                  <span className="text-[#555555] font-body">Subtotal (incl. GST)</span>
                   <span className="text-[#C4C4C4] font-body">
                     ₹{(serverValidation?.subtotal ?? cart?.total ?? 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mb-3">
-                  <span className="text-[#555555] font-body">Tax (18% GST)</span>
+                  <span className="text-[#555555] font-body">GST (18% included)</span>
                   <span className="text-[#C4C4C4] font-body">
-                    ₹{(serverValidation?.tax ?? (cart?.total || 0) * 0.18).toFixed(2)}
+                    ₹{(serverValidation?.tax ?? ((cart?.total || 0) - (cart?.total || 0) / 1.18)).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between border-t border-[#252525] pt-3">
                   <span className="font-condensed font-bold text-white uppercase tracking-wide">Total</span>
                   <span className="text-xl font-condensed font-bold text-[#3B9EE8]">
-                    ₹{(serverValidation?.total ?? (cart?.total || 0) * 1.18).toFixed(2)}
+                    ₹{(serverValidation?.total ?? (cart?.total || 0)).toFixed(2)}
                   </span>
                 </div>
               </div>

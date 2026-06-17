@@ -1,6 +1,6 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { validateRazorpayOrder, validateRazorpayVerification } from "../middleware/validationMiddleware.js";
 import razorpayService from "../services/razorpayService.js";
 import orderRepository from "../repositories/orderRepository.js";
@@ -153,7 +153,7 @@ router.use(attachTokenRefreshInfo);
 // @desc    Create a Razorpay order with session binding (SECURED)
 // @access  Private (or guest with session)
 // SECURITY: Rate limited to prevent API quota exhaustion
-router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHandler(async (req, res) => {
+router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayOrder, asyncHandler(async (req, res) => {
   try {
     const { orderId, amount, currency, receipt } = req.body;
     
@@ -161,20 +161,17 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
     const isAuthenticated = req.user && req.user.id;
     const clientSessionId = req.headers['x-session-id'] || req.sessionID;
     
-    // Verify the order exists and belongs to user/session
+    // Verify the order exists and belongs to user/session.
+    // Primary: match by authenticated user ID.
+    // Fallback: match by session ID (guests, or if token expired mid-checkout).
     let order;
     if (isAuthenticated) {
       order = await orderRepository.findOne({ _id: orderId, user: req.user.id });
-    } else {
-      if (!clientSessionId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Session ID required for guest operations'
-        });
-      }
+    }
+    if (!order && clientSessionId) {
       order = await orderRepository.findOne({ _id: orderId, sessionId: clientSessionId });
     }
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -270,11 +267,12 @@ router.post("/create-order", createOrderLimiter, validateRazorpayOrder, asyncHan
 // @desc    Verify Razorpay payment and update order status (supports both authenticated and guest users)
 // @access  Public (optional auth)
 // SECURITY: Rate limiting + CSRF protection required
-router.post("/verify-payment", 
+router.post("/verify-payment",
+  optionalAuth,            // Populate req.user for authenticated users
   verifyIPRateLimit,       // Per-IP rate limit (50 req/15min)
   verifyOrderRateLimit,    // Per-order-ID rate limit (10 req/15min)
   csrfProtection,          // CSRF token validation
-  validateRazorpayVerification, 
+  validateRazorpayVerification,
   asyncHandler(async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;

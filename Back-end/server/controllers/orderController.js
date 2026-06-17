@@ -117,7 +117,7 @@ export const createOrder = async (req, res) => {
       req.user.id,
       items,
       shippingAddress,
-      req.body
+      { ...req.body, sessionId: req.headers['x-session-id'] }
     );
 
     res.status(201).json({
@@ -178,7 +178,7 @@ export const createGuestOrder = async (req, res) => {
       user._id,
       items,
       shippingAddress,
-      req.body,
+      { ...req.body, sessionId: req.headers['x-session-id'] },
       paymentMethod
     );
 

@@ -20,7 +20,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
   const lifestyleImage = product.images?.[0]?.url || '/placeholder-product.jpg';
 
   return (
-    <section className="relative h-[80vh] min-h-[600px] max-h-[900px]">
+    <section className="relative h-[80vh] min-h-150 max-h-225">
       {/* Background — isolated overflow-hidden so the fill image is clipped
           but the CTA card can extend beyond the section without being blocked */}
       <div className="absolute inset-0 overflow-hidden">

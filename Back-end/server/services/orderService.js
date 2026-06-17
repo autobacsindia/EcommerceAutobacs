@@ -103,13 +103,15 @@ class OrderService {
     // ── Price integrity: never trust client prices ────────────────────────────
     // discount is always 0 until a server-side coupon system is added.
     const shippingCost = Math.max(0, Number(orderData.shippingCost) || 0);
-    const tax          = Math.max(0, Number(orderData.tax)          || 0);
     const discount     = 0;
 
     // Validate + price OUTSIDE the transaction (pure reads, no write locks needed)
     const { orderItems, subtotal } = await this.validateAndPriceItems(items);
 
-    const totalAmount = subtotal + shippingCost + tax - discount;
+    // Prices are GST-inclusive ("Inclusive of all taxes").
+    // tax is the GST portion extracted for display — it must NOT be added to subtotal.
+    const tax         = Math.round((subtotal - subtotal / 1.18) * 100) / 100;
+    const totalAmount = subtotal + shippingCost - discount;
     if (totalAmount <= 0) {
       const err = new Error('Order total must be greater than zero');
       err.status = 400;
@@ -135,7 +137,8 @@ class OrderService {
             discount,
             totalAmount,
             status: 'pending',
-            ...(paymentMethod && { paymentMethod })
+            ...(paymentMethod && { paymentMethod }),
+            ...(orderData.sessionId && { sessionId: orderData.sessionId })
           },
           session
         );

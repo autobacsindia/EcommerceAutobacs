@@ -448,8 +448,10 @@ router.get("/validate", asyncHandler(async (req, res) => {
   }
 
   const subtotal = validatedItems.reduce((sum, i) => sum + i.lineTotal, 0);
-  const tax      = Math.round(subtotal * 0.18 * 100) / 100;
-  const total    = Math.round((subtotal + tax) * 100) / 100;
+  // Product prices are GST-inclusive ("Inclusive of all taxes").
+  // Extract the embedded GST for display purposes only — total stays unchanged.
+  const tax   = Math.round((subtotal - subtotal / 1.18) * 100) / 100;
+  const total = Math.round(subtotal * 100) / 100;
 
   res.json({
     success: true,

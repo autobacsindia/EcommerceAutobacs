@@ -113,7 +113,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
                 setQuantity(val);
               }
             }}
-            className="px-6 py-3 text-white font-bold min-w-[4rem] text-center border-x border-white/20 bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="px-6 py-3 text-white font-bold min-w-16 text-center border-x border-white/20 bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <button
             onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}

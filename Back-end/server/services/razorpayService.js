@@ -15,11 +15,17 @@ class RazorpayService {
     // Load configuration from environment variables
     this.key_id = process.env.RAZORPAY_KEY_ID;
     this.key_secret = process.env.RAZORPAY_KEY_SECRET;
-    
+
     // Validate configuration
     if (!this.key_id || !this.key_secret) {
       throw new Error('Razorpay credentials not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.');
     }
+
+    // Log masked credentials at startup to verify the right keys are loaded
+    console.log(
+      `[Razorpay] Loaded key_id: ${this.key_id.slice(0, 12)}... ` +
+      `secret: ${this.key_secret.slice(0, 4)}****`
+    );
   }
 
   /**
@@ -67,15 +73,16 @@ class RazorpayService {
         receipt: razorpayOrder.receipt
       };
     } catch (error) {
-      // Capture payment order creation errors in Sentry
-      if (process.env.SENTRY_DSN) {
-        Sentry.withScope((scope) => {
-          scope.setContext('payment_order', { orderId, amount, currency });
-          scope.setTag('payment_action', 'create_order');
-          Sentry.captureException(error);
-        });
-      }
-      throw new Error(`Failed to create Razorpay order: ${error.message}`);
+      // Razorpay SDK rejects with a plain object (not an Error) on API errors.
+      // Extract the human-readable description from wherever the SDK puts it.
+      const desc =
+        error?.error?.description ||
+        error?.description ||
+        error?.message ||
+        (typeof error === 'object' ? JSON.stringify(error) : String(error));
+
+      console.error('[Razorpay] order creation failed:', desc);
+      throw new Error(`Failed to create Razorpay order: ${desc}`);
     }
   }
 
