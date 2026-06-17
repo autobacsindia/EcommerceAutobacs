@@ -20,20 +20,22 @@ export default function HeroSection({ product }: HeroSectionProps) {
   const lifestyleImage = product.images?.[0]?.url || '/placeholder-product.jpg';
 
   return (
-    <section className="relative h-[80vh] min-h-[600px] max-h-[900px] overflow-hidden">
-      {/* Background Image */}
-      <Image
-        src={lifestyleImage}
-        alt={product.name}
-        fill
-        className="object-cover"
-        priority
-        sizes="100vw"
-      />
-
-      {/* Dark Gradient Overlays */}
-      <div className="absolute inset-0 bg-linear-to-r from-black/95 via-black/80 to-black/50" />
-      <div className="absolute inset-0 bg-linear-to-t from-black/90 via-transparent to-black/40" />
+    <section className="relative h-[80vh] min-h-[600px] max-h-[900px]">
+      {/* Background — isolated overflow-hidden so the fill image is clipped
+          but the CTA card can extend beyond the section without being blocked */}
+      <div className="absolute inset-0 overflow-hidden">
+        <Image
+          src={lifestyleImage}
+          alt={product.name}
+          fill
+          className="object-cover"
+          priority
+          sizes="100vw"
+        />
+        {/* Dark Gradient Overlays */}
+        <div className="absolute inset-0 bg-linear-to-r from-black/95 via-black/80 to-black/50" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/90 via-transparent to-black/40" />
+      </div>
 
       {/* Content */}
       <div className="relative z-10 h-full max-w-7xl mx-auto px-6 flex items-center">
