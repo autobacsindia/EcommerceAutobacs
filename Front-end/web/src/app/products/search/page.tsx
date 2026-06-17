@@ -8,6 +8,7 @@ import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import Pagination from '@/components/layout/Pagination';
 import apiClient from '@/lib/api';
+import { trackViewItemList } from '@/lib/analytics';
 
 // Function to fetch products with proper sorting parameters
 async function getProducts(searchParams: any) {
@@ -134,7 +135,14 @@ function SearchPageInner() {
         const result = await getProducts(resolvedSearchParams);
         if (isMounted) {
           setData(result);
-          
+
+          // Analytics: view_item_list (ADR-005)
+          trackViewItemList({
+            listType: 'search',
+            listName: resolvedSearchParams.search || resolvedSearchParams.brand || resolvedSearchParams.category,
+            itemCount: result.products?.length ?? 0,
+          });
+
           // Fetch corrections if there's a search term and no results
           const searchTerm = searchParams.get('search') || '';
           if (searchTerm && result.products && result.products.length === 0) {

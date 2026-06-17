@@ -11,6 +11,7 @@ import Pagination from '@/components/layout/Pagination';
 import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 import SidebarSkeleton from '@/components/skeletons/SidebarSkeleton';
+import { trackViewItemList } from '@/lib/analytics';
 
 const ProductGrid = dynamic(() => import('@/components/products/ProductGrid'), {
   loading: () => <ProductGridSkeleton count={8} />
@@ -287,6 +288,13 @@ function ProductsPageInner() {
         const result = await getProducts(resolvedSearchParams);
         if (isMounted) {
           setData(result);
+          // Analytics: view_item_list (ADR-005)
+          const listName = resolvedSearchParams.search || resolvedSearchParams.category || resolvedSearchParams.brand;
+          trackViewItemList({
+            listType: resolvedSearchParams.search ? 'search' : (resolvedSearchParams.category || resolvedSearchParams.brand) ? 'category' : 'all',
+            listName,
+            itemCount: result.products.length,
+          });
         }
       } catch (err: any) {
         if (isMounted) {

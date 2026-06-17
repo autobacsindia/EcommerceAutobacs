@@ -4,7 +4,8 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "./Dockerfile",
     "buildArgs": {
-      "NEXT_PUBLIC_API_URL": "https://ecommerceautobacs-production.up.railway.app"
+      "NEXT_PUBLIC_API_URL": "https://ecommerceautobacs-production.up.railway.app",
+      "NEXT_PUBLIC_POSTHOG_KEY": "phc_yahf5rPxMDUgAwMo4uhzNwzPbhhgjvpeeE2eNmWAwt2H"
     }
   },
   "deploy": {

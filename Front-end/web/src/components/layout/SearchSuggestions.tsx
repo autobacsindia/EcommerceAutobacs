@@ -8,6 +8,7 @@ import { Search, Clock, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useLocation } from '@/context/LocationContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
+import { trackSearch } from '@/lib/analytics';
 
 interface Suggestion {
   id: string;
@@ -121,6 +122,8 @@ export default function SearchSuggestions() {
 
   const handleSearch = async (searchQuery: string = query) => {
     if (!searchQuery.trim()) return;
+    // Analytics: search (ADR-005)
+    trackSearch(searchQuery.trim(), suggestions.length);
     setHistory(prev => {
       const filtered = prev.filter(i => i.term.toLowerCase() !== searchQuery.trim().toLowerCase());
       return [{ term: searchQuery.trim(), timestamp: Date.now() }, ...filtered].slice(0, 10);

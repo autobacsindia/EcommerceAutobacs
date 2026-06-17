@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { useAuth } from './AuthContext';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { trackAddToWishlist, trackRemoveFromWishlist } from '@/lib/analytics';
 
 interface WishlistItem {
   product: string;
@@ -237,13 +238,16 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         };
         setActiveWishlistState(updatedWishlist);
         setWishlistItems(response.wishlist.items);
-        
+
         // Update the wishlists array
-        setWishlists(prev => prev.map(w => 
+        setWishlists(prev => prev.map(w =>
           w._id === wishlistToUse._id ? updatedWishlist : w
         ));
+
+        // Analytics: add_to_wishlist (ADR-005)
+        trackAddToWishlist({ id: productId });
       }
-      
+
       // Invalidate cache after successful mutation
       setLastFetched(null);
     } catch (error: any) {
@@ -329,11 +333,14 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         setWishlistItems(response.wishlist.items);
         
         // Update the wishlists array
-        setWishlists(prev => prev.map(w => 
+        setWishlists(prev => prev.map(w =>
           w._id === activeWishlist._id ? updatedWishlist : w
         ));
+
+        // Analytics: remove_from_wishlist (ADR-005)
+        trackRemoveFromWishlist({ id: productId });
       }
-      
+
       // Invalidate cache after successful mutation
       setLastFetched(null);
     } catch (error) {

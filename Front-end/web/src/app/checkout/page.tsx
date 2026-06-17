@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
-import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
+import {
+  trackBeginCheckout, trackPurchase, trackViewCart, trackCheckoutStep,
+  trackAddPaymentInfo, trackCheckoutAbandoned,
+} from '@/lib/analytics';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
@@ -68,21 +71,54 @@ function CheckoutPageContent() {
 
   // ── Analytics funnel (ADR-005) ──────────────────────────────────────────────
   const beganCheckoutRef = useRef(false);
+  const purchasedRef = useRef(false);
   const lastCartTotalRef = useRef(0);
-  useEffect(() => { if (cart?.total) lastCartTotalRef.current = cart.total; }, [cart?.total]);
-  // begin_checkout — once, when the checkout loads with items.
+  const lastItemCountRef = useRef(0);
+  const lastStepRef = useRef<CheckoutStep>('cart');
+  useEffect(() => {
+    if (cart?.total) lastCartTotalRef.current = cart.total;
+    if (cart?.items?.length) lastItemCountRef.current = cart.items.length;
+  }, [cart?.total, cart?.items?.length]);
+  // begin_checkout + view_cart — once, when the checkout loads with items.
   useEffect(() => {
     if (!beganCheckoutRef.current && cart && cart.items.length > 0) {
       beganCheckoutRef.current = true;
+      trackViewCart({ value: cart.total, itemCount: cart.items.length });
       trackBeginCheckout({ value: cart.total, itemCount: cart.items.length });
     }
   }, [cart?.items?.length]);
+  // checkout_step — each step the shopper reaches (step-by-step drop-off).
+  useEffect(() => {
+    lastStepRef.current = currentStep;
+    if (currentStep !== 'confirmation') {
+      trackCheckoutStep({ step: currentStep, value: lastCartTotalRef.current, itemCount: lastItemCountRef.current });
+    }
+  }, [currentStep]);
   // purchase — once, when the order reaches the confirmation step.
   useEffect(() => {
     if (currentStep === 'confirmation' && orderId) {
-      trackPurchase({ orderId, value: lastCartTotalRef.current });
+      purchasedRef.current = true;
+      trackPurchase({ orderId, value: lastCartTotalRef.current, itemCount: lastItemCountRef.current });
     }
   }, [currentStep, orderId]);
+  // checkout_abandoned — left the flow (navigated away or closed tab) without buying.
+  useEffect(() => {
+    const fireAbandon = () => {
+      if (beganCheckoutRef.current && !purchasedRef.current) {
+        purchasedRef.current = true; // guard against double-fire (pagehide + unmount)
+        trackCheckoutAbandoned({
+          lastStep: lastStepRef.current,
+          value: lastCartTotalRef.current,
+          itemCount: lastItemCountRef.current,
+        });
+      }
+    };
+    window.addEventListener('pagehide', fireAbandon);
+    return () => {
+      window.removeEventListener('pagehide', fireAbandon);
+      fireAbandon();
+    };
+  }, []);
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
 
@@ -612,7 +648,7 @@ function CheckoutPageContent() {
             <div className="mb-8">
               <PaymentMethodSelector selectedMethod={paymentMethod} onSelect={setPaymentMethod} />
             </div>
-            <button onClick={() => setCurrentStep('review')} className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm transition-colors">
+            <button onClick={() => { trackAddPaymentInfo({ method: paymentMethod, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm transition-colors">
               Continue to Review
             </button>
           </div>

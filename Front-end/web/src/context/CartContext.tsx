@@ -5,7 +5,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
 import { ProductImage } from '@/lib/types';
-import { trackAddToCart } from '@/lib/analytics';
+import { trackAddToCart, trackRemoveFromCart } from '@/lib/analytics';
 
 interface CartItem {
   product: {
@@ -197,13 +197,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   
   const removeFromCart = async (productId: string) => {
+    // Capture item details before removal for analytics.
+    const removed = cart?.items.find(i => i.product._id === productId);
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const response: any = await apiClient.delete(API_ENDPOINTS.CART_REMOVE(productId));
-      
+
       if (response.success && response.cart) {
+        // Analytics: remove_from_cart (ADR-005)
+        if (removed) {
+          trackRemoveFromCart({ id: productId, name: removed.product.name, price: removed.product.price, quantity: removed.quantity });
+        }
+
         // Ensure consistent cart data structure
         const cartData: Cart = {
           _id: response.cart._id,

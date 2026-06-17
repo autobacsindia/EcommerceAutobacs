@@ -8,6 +8,7 @@ import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
 import Pagination from '@/components/layout/Pagination';
 import Breadcrumb from '@/components/layout/Breadcrumb';
+import { trackViewItemList } from '@/lib/analytics';
 import { getMainCategory } from '@/lib/categoryMapping';
 
 // Define types for our data
@@ -248,6 +249,8 @@ export default function ClientPage({ slug }: { slug: string }) {
         const result = await getProducts(resolvedSearchParams, categoryData._id);
         if (isMounted) {
           setData(result);
+          // Analytics: view_item_list (ADR-005)
+          trackViewItemList({ listType: 'category', listName: categoryData.slug || slug, itemCount: result.products.length });
         }
       } catch (err: any) {
         if (isMounted) {
