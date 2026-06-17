@@ -1190,10 +1190,26 @@ router.post(
       console.error('[Auth] Missing accessToken or expiresIn in tokens data');
     }
 
+    // Fetch and return user data so the frontend can hydrate auth state
+    // immediately without a second GET /me round-trip.
+    const user = await User.findById(parsedCode.userId)
+      .select('_id name email role isVerified sessionVersion')
+      .lean();
+
     console.log('[Auth] Sending success response');
     return res.json({
       success: true,
-      // NOTE: accessToken is now set as httpOnly cookie, not in response body
+      user: user
+        ? {
+            id: user._id,
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            isVerified: user.isVerified,
+            sessionVersion: user.sessionVersion ?? 0,
+          }
+        : undefined,
     });
   })
 );
