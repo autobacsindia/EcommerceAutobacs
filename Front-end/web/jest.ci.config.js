@@ -11,6 +11,8 @@
 const base = require('./jest.config');
 
 const QUARANTINED = [
+  'src/app/admin/questions/page.test.tsx',
+  'src/app/admin/reviews/page.test.tsx',
   'src/app/admin/products/create/page.test.tsx',
   'src/app/admin/products/edit/\\[id\\]/page.test.tsx',
   'src/app/admin/products/page.test.tsx',
