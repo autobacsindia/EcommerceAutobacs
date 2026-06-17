@@ -2,9 +2,19 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AdminQuestionsPage from './page';
 import apiClient from '@/lib/api';
+import toast from 'react-hot-toast';
 
 // Mock apiClient
 jest.mock('@/lib/api');
+
+// Mock react-hot-toast — delete uses a toast-rendered confirm button (not window.confirm).
+jest.mock('react-hot-toast', () => {
+  const fn: any = jest.fn();
+  fn.success = jest.fn();
+  fn.error = jest.fn();
+  fn.dismiss = jest.fn();
+  return { __esModule: true, default: fn };
+});
 
 // Mock icons
 jest.mock('lucide-react', () => ({
@@ -118,7 +128,15 @@ describe('AdminQuestionsPage', () => {
     const deleteButtons = screen.getAllByText('Delete');
     fireEvent.click(deleteButtons[0]);
 
-    expect(window.confirm).toHaveBeenCalled();
+    // handleDelete renders a confirmation toast rather than calling window.confirm.
+    expect(toast).toHaveBeenCalled();
+
+    // Render the toast's confirm UI and click its Delete button to confirm.
+    const renderToast = (toast as unknown as jest.Mock).mock.calls[0][0];
+    render(<>{renderToast({ id: 't1' })}</>);
+    const confirmButtons = screen.getAllByText('Delete');
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+
     await waitFor(() => {
       expect(apiClient.delete).toHaveBeenCalledWith('/product-questions/q1');
     });

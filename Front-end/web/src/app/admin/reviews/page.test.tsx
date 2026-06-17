@@ -23,9 +23,10 @@ jest.mock('lucide-react', () => ({
   CheckCircle: () => <span data-testid="icon-check-circle">CheckCircle</span>,
   XCircle: () => <span data-testid="icon-x-circle">XCircle</span>,
   Trash2: () => <span data-testid="icon-trash">Trash2</span>,
-  Eye: () => <span data-testid="icon-eye">Eye</span>,
-  Filter: () => <span data-testid="icon-filter">Filter</span>,
   Search: () => <span data-testid="icon-search">Search</span>,
+  Plus: () => <span data-testid="icon-plus">Plus</span>,
+  Star: () => <span data-testid="icon-star">Star</span>,
+  Quote: () => <span data-testid="icon-quote">Quote</span>,
 }));
 
 describe('AdminReviewsPage', () => {
