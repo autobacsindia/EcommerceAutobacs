@@ -1,0 +1,148 @@
+# deploy.yml — Test-gated, per-service Railway deployment
+#
+# Replaces Railway's native GitHub auto-deploy (which needs a Pro plan when the
+# repo has multiple collaborators). Runs only on push to main.
+#
+# Path filtering: a service deploys only when its own files changed. Each deploy
+# is gated on that service's lint + tests (+ build for the frontend).
+#
+# Required GitHub secrets:
+#   RAILWAY_TOKEN                 — Railway API token (project-scoped)
+#   RAILWAY_BACKEND_SERVICE_NAME  — Railway service name for the backend
+#   RAILWAY_FRONTEND_SERVICE_NAME — Railway service name for the frontend
+
+name: Deploy to Railway
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Detect which app changed ────────────────────────────────────────────────
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'Back-end/server/**'
+            frontend:
+              - 'Front-end/web/**'
+
+  # ── Backend ────────────────────────────────────────────────────────────────
+  test-backend:
+    name: Lint + Test Backend
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: Back-end/server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Back-end/server/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-test-jwt-secret-not-for-production
+          RAZORPAY_KEY_ID: rzp_test_placeholder
+          RAZORPAY_KEY_SECRET: placeholder_secret
+          SENDGRID_API_KEY: SG.placeholder
+          SENDGRID_FROM_EMAIL: ci@example.com
+          EMAIL_FROM: ci@example.com
+          WORDPRESS_SITE_URL: http://localhost
+          WORDPRESS_API_KEY: ck_placeholder
+          WORDPRESS_API_SECRET: cs_placeholder
+        run: npm run test:coverage -- --forceExit --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle"
+
+  deploy-backend:
+    name: Deploy Backend → Railway
+    needs: [test-backend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service=${{ secrets.RAILWAY_BACKEND_SERVICE_NAME }} --detach
+        working-directory: Back-end/server
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  test-frontend:
+    name: Lint + Test + Build Frontend
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Front-end/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Front-end/web/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Curated suite set (jest.ci.config.js); Playwright e2e excluded.
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+        run: npm run test:ci -- --forceExit --passWithNoTests
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
+  deploy-frontend:
+    name: Deploy Frontend → Railway
+    needs: [test-frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service=${{ secrets.RAILWAY_FRONTEND_SERVICE_NAME }} --detach
+        working-directory: Front-end/web
