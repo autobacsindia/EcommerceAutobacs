@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ShoppingCart, Zap, Shield, Truck, RotateCcw, CreditCard, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
@@ -18,7 +19,9 @@ interface FloatingCTACardProps {
 
 export default function FloatingCTACard({ product }: FloatingCTACardProps) {
   const { addToCart } = useCart();
+  const router = useRouter();
   const [cartLoading, setCartLoading] = useState(false);
+  const [buyNowLoading, setBuyNowLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
@@ -36,6 +39,17 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
       toast.error(error.message || 'Failed to add to cart');
     } finally {
       setCartLoading(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    setBuyNowLoading(true);
+    try {
+      await addToCart(product._id, quantity);
+      router.push('/checkout');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add to cart');
+      setBuyNowLoading(false);
     }
   };
 
@@ -130,12 +144,12 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
 
         <motion.button
           whileTap={{ scale: 0.98 }}
-          onClick={handleAddToCart}
-          disabled={product.stock === 0 || cartLoading}
+          onClick={handleBuyNow}
+          disabled={product.stock === 0 || buyNowLoading}
           className="w-full bg-white/10 hover:bg-white/20 disabled:bg-zinc-800 border border-white/30 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg"
         >
           <Zap className="w-6 h-6" />
-          Buy Now
+          {buyNowLoading ? 'Processing...' : 'Buy Now'}
         </motion.button>
 
         <motion.button

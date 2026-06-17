@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ShoppingCart, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
@@ -18,8 +19,10 @@ interface StickyCartBarProps {
 
 export default function StickyCartBar({ product, isDark = true }: StickyCartBarProps) {
   const { addToCart } = useCart();
+  const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [buyNowLoading, setBuyNowLoading] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -40,6 +43,17 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
       toast.error(error.message || 'Failed to add to cart');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    setBuyNowLoading(true);
+    try {
+      await addToCart(product._id, 1);
+      router.push('/checkout');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add to cart');
+      setBuyNowLoading(false);
     }
   };
 
@@ -75,12 +89,12 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
-              onClick={handleAddToCart}
-              disabled={loading}
+              onClick={handleBuyNow}
+              disabled={buyNowLoading}
               className={`${isDark ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-gray-200 hover:bg-gray-300'} disabled:bg-zinc-800 text-white font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2`}
             >
               <Zap className="w-5 h-5" />
-              <span className="hidden sm:inline">{loading ? '...' : 'Buy'}</span>
+              <span className="hidden sm:inline">{buyNowLoading ? '...' : 'Buy'}</span>
             </motion.button>
           </div>
         </div>
