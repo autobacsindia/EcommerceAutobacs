@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# pre-push — local guard before code hits `main` (which auto-deploys to prod).
+# Runs lint + the CI test suite for whichever app changed in the commits
+# being pushed. Fast pre-filter; CI (Wait-for-CI) is still the real gate.
+#
+# Enable once per laptop:   git config core.hooksPath .githooks
+# Bypass in an emergency:   git push --no-verify   (use sparingly)
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+Z="0000000000000000000000000000000000000000"
+changed=""
+
+# Collect every file changed across the refs being pushed.
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$Z" ] && continue                 # branch deletion — nothing to test
+  if [ "$remote_sha" = "$Z" ]; then
+    base="$(git merge-base "$local_sha" origin/main 2>/dev/null || true)"
+    range="${base:+$base }$local_sha"
+  else
+    range="$remote_sha $local_sha"
+  fi
+  changed+=$'\n'"$(git diff --name-only $range)"
+done
+
+echo "$changed" | grep -q '^Back-end/server/'  && BACKEND=1  || BACKEND=0
+echo "$changed" | grep -q '^Front-end/web/'    && FRONTEND=1 || FRONTEND=0
+
+if [ "$BACKEND" = 0 ] && [ "$FRONTEND" = 0 ]; then
+  echo "pre-push: no app code changed — skipping tests."
+  exit 0
+fi
+
+if [ "$BACKEND" = 1 ]; then
+  echo "── pre-push: backend lint + tests ──────────────────────────────"
+  cd "$ROOT/Back-end/server"
+  npm run lint
+  NODE_ENV=test \
+  JWT_SECRET=ci-test-jwt-secret-not-for-production \
+  RAZORPAY_KEY_ID=rzp_test_placeholder \
+  RAZORPAY_KEY_SECRET=placeholder_secret \
+  SENDGRID_API_KEY=SG.placeholder \
+  SENDGRID_FROM_EMAIL=ci@example.com \
+  EMAIL_FROM=ci@example.com \
+  WORDPRESS_SITE_URL=http://localhost \
+  WORDPRESS_API_KEY=ck_placeholder \
+  WORDPRESS_API_SECRET=cs_placeholder \
+  npm run test:coverage -- --forceExit \
+    --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle"
+fi
+
+if [ "$FRONTEND" = 1 ]; then
+  echo "── pre-push: frontend lint + tests ─────────────────────────────"
+  cd "$ROOT/Front-end/web"
+  npm run lint
+  NODE_ENV=test NEXT_PUBLIC_API_URL=http://localhost:5000 \
+    npm run test:ci -- --forceExit --passWithNoTests
+fi
+
+echo "pre-push: ✓ all checks passed"
