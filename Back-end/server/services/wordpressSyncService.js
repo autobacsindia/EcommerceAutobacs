@@ -179,11 +179,20 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
           brandSlug: r ? r.entry.slug : '',
           isActive: wc.status === 'publish',
           ...(!alreadyMigrated && {
-            images: (wc.images || []).map(img => ({ url: img.src, alt: htmlToText(img.alt) || cleanName, public_id: `wp_${img.id}` })),
+            images: (wc.images || []).map((img, i) => ({ url: img.src, alt: htmlToText(img.alt) || cleanName, public_id: `wp_${img.id}`, isPrimary: i === 0 })),
           }),
           categories: resolveCategories(wc.categories),
           categoryIds: (wc.categories || []).map(c => c.id),
           tags: (wc.tags || []).map(t => htmlToText(t.name)).filter(Boolean),
+          // WC product attributes → spec table (e.g. Size, Material, Fitment).
+          // Mirrors the legacy importers; variation-only attributes are kept too
+          // since their options describe the product. value joins multi-options.
+          specifications: (wc.attributes || [])
+            .map(a => ({
+              key: htmlToText(a.name),
+              value: htmlToText(Array.isArray(a.options) ? a.options.join(', ') : (a.option || a.options || '')),
+            }))
+            .filter(s => s.key && s.value),
         };
         if (dryRun) { existingDoc ? stats.products.updated++ : stats.products.inserted++; continue; }
         if (existingDoc) { await Product.findByIdAndUpdate(existingDoc._id, { $set: data }); stats.products.updated++; }

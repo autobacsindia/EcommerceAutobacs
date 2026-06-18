@@ -46,6 +46,8 @@
                     "migrate:login-attempts":  "node scripts/trim-login-attempts.js",
                     "backfill-cloudinary-ids":  "node scripts/backfill-cloudinary-public-ids.js",
                     "check-cloudinary-health":  "node scripts/check-cloudinary-health.js",
+                    "migrate-images":  "node scripts/migrate-all-images-to-cloudinary.js",
+                    "audit-images":  "node scripts/migrate-all-images-to-cloudinary.js",
                     "fix-cart-indexes":  "node scripts/fix-cart-indexes.js",
                     "clear-recommendation-cache":  "node scripts/clear-recommendation-cache.js",
                     "load-test:quick":  "artillery run ../../artillery-quick-test.yml --output ../../quick-report.json",
