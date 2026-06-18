@@ -1,4 +1,4 @@
-import Category from '../models/Category.js';
+import categoryRepository from "../repositories/categoryRepository.js";
 import { CATEGORY_MAPPING_RULES } from '../import-config.js';
 
 class CategoryMappingService {
@@ -16,7 +16,7 @@ class CategoryMappingService {
     }
 
     try {
-      const categories = await Category.find({});
+      const categories = await categoryRepository.find({});
 
       // Build cache with multiple lookup keys
       categories.forEach(category => {
@@ -145,7 +145,7 @@ class CategoryMappingService {
 
       // Create new category
       const slug = categoryName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      const newCategory = new Category({
+      const newCategory = categoryRepository.build({
         name: categoryName,
         slug: slug,
         parent: parentId,
@@ -251,7 +251,7 @@ class CategoryMappingService {
       if (!category) {
         // If not found, create it
         const slug = overrideSlug || categoryName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-        category = new Category({
+        category = categoryRepository.build({
           name: categoryName,
           slug: slug,
           description: `Auto-created category for ${categoryName}`

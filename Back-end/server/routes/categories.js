@@ -1,5 +1,5 @@
 import express from "express";
-import Category from "../models/Category.js";
+import categoryRepository from "../repositories/categoryRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
@@ -29,13 +29,13 @@ router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL)
   const filter = { isActive: true };
 
   const [categories, total] = await Promise.all([
-    Category.find(filter)
+    categoryRepository.find(filter)
       .populate('parent', 'name slug')
       .sort({ order: 1, name: 1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    Category.countDocuments(filter)
+    categoryRepository.countDocuments(filter)
   ]);
 
   res.json({
@@ -55,7 +55,7 @@ router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL)
 // @desc    Get category by ID
 // @access  Public
 router.get("/:id", validateIdParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandler(async (req, res) => {
-  const category = await Category.findById(req.params.id)
+  const category = await categoryRepository.findById(req.params.id)
     .populate('parent', 'name slug');
 
   if (!category) {
@@ -75,7 +75,7 @@ router.get("/:id", validateIdParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandl
 // @desc    Get category by slug (supports both hyphenated and non-hyphenated versions)
 // @access  Public
 router.get("/slug/:slug", validateSlugParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandler(async (req, res) => {
-  let category = await Category.findOne({ slug: req.params.slug, isActive: true })
+  let category = await categoryRepository.findOne({ slug: req.params.slug, isActive: true })
     .populate('parent', 'name slug');
 
   // If not found, try with hyphenated version for common cases
@@ -93,7 +93,7 @@ router.get("/slug/:slug", validateSlugParam, cacheResponse(CATEGORY_ITEM_TTL), a
     
     // Only search if we actually transformed the slug
     if (hyphenatedSlug !== req.params.slug) {
-      category = await Category.findOne({ slug: hyphenatedSlug, isActive: true })
+      category = await categoryRepository.findOne({ slug: hyphenatedSlug, isActive: true })
         .populate('parent', 'name slug');
     }
   }
@@ -101,7 +101,7 @@ router.get("/slug/:slug", validateSlugParam, cacheResponse(CATEGORY_ITEM_TTL), a
   // If still not found, try with non-hyphenated version (for hyphenated inputs like 'body-kit')
   if (!category) {
     const nonHyphenatedSlug = req.params.slug.replace(/-/g, '');
-    category = await Category.findOne({ slug: nonHyphenatedSlug, isActive: true })
+    category = await categoryRepository.findOne({ slug: nonHyphenatedSlug, isActive: true })
       .populate('parent', 'name slug');
   }
 
@@ -147,7 +147,7 @@ router.post(
       };
     }
 
-    const category = await Category.create({
+    const category = await categoryRepository.create({
       name,
       slug,
       description,
@@ -179,7 +179,7 @@ router.put(
   validateUploadedFiles,
   validateCategoryUpdate,
   asyncHandler(async (req, res) => {
-    const category = await Category.findById(req.params.id);
+    const category = await categoryRepository.findById(req.params.id);
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
@@ -203,7 +203,7 @@ router.put(
       };
     }
 
-    const updated = await Category.findByIdAndUpdate(
+    const updated = await categoryRepository.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
@@ -219,7 +219,7 @@ router.put(
 // @desc    Delete category (soft delete)
 // @access  Private/Admin
 router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
-  const category = await Category.findById(req.params.id);
+  const category = await categoryRepository.findById(req.params.id);
 
   if (!category) {
     return res.status(404).json({

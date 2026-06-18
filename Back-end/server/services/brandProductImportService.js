@@ -1,6 +1,6 @@
 import axios from 'axios';
 import Product from '../models/Product.js';
-import Category from '../models/Category.js';
+import categoryRepository from "../repositories/categoryRepository.js";
 import importJobRepository from '../repositories/importJobRepository.js';
 import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
 
@@ -213,7 +213,7 @@ class BrandProductImportService {
   async findOrCreateCategory(wpCategory) {
     try {
       // Try to find existing category by name or slug
-      let category = await Category.findOne({ 
+      let category = await categoryRepository.findOne({ 
         $or: [
           { name: wpCategory.name },
           { slug: wpCategory.slug }
@@ -225,12 +225,12 @@ class BrandProductImportService {
         // Ensure slug is unique by appending a counter if needed
         let slug = wpCategory.slug;
         let counter = 1;
-        while (await Category.findOne({ slug: slug })) {
+        while (await categoryRepository.findOne({ slug: slug })) {
           slug = `${wpCategory.slug}-${counter}`;
           counter++;
         }
         
-        category = new Category({
+        category = categoryRepository.build({
           name: wpCategory.name,
           slug: slug,
           description: wpCategory.description || `Category for ${wpCategory.name}`

@@ -1,5 +1,5 @@
 import Product from "../models/Product.js";
-import Category from "../models/Category.js";
+import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
 
@@ -253,7 +253,7 @@ class SearchService {
     .maxTimeMS(2000);
 
     // Find categories matching the query
-    const categories = await Category.find({
+    const categories = await categoryRepository.find({
       name: { $regex: query, $options: 'i' },
       isActive: true
     }).limit(limit).lean().maxTimeMS(2000);
