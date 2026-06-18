@@ -200,7 +200,7 @@ class CategoryMappingService {
     const childCategories = [];
 
     // Find direct children
-    for (const [key, category] of this.categoryCache.entries()) {
+    for (const [, category] of this.categoryCache.entries()) {
       // Check if this is a category object and has the matching parent
       if (category && category.parent && category.parent === categoryId) {
         childCategories.push(category);

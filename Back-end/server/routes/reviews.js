@@ -412,7 +412,6 @@ router.delete("/:reviewId", protect, validateReviewIdParam, asyncHandler(async (
 // @access  Private (authenticated users)
 router.post("/:reviewId/helpful", protect, validateReviewIdParam, asyncHandler(async (req, res) => {
   const reviewId = req.params.reviewId;
-  const userId = req.user._id;
 
   // Find review
   const review = await Review.findById(reviewId);

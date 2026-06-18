@@ -2,7 +2,6 @@ import express from "express";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect } from "../middleware/authMiddleware.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();

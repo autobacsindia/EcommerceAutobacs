@@ -1,5 +1,4 @@
 import ProductImportService from './productImportService.js';
-import ImportJob from '../models/ImportJob.js';
 
 class ScheduledImportService {
   constructor() {

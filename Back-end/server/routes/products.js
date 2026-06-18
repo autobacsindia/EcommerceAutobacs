@@ -3,9 +3,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import rateLimit from 'express-rate-limit';
 import { searchRateLimit, searchBurstLimit, publicBrowsingRateLimit } from '../middleware/rateLimitMiddleware.js';
 import {
-  validateProduct,
   validateProductIdParam,
-  validateProductUpdate,
   validateStockUpdate,
   validateBrandParam,
   validateSearchSuggestions,
@@ -15,12 +13,10 @@ import {
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import {
   uploadMultiple,
-  uploadFields,
   handleMulterError,
   validateUploadedFiles,
   concurrentUploadGuard,
@@ -51,7 +47,6 @@ import {
   getBrandDetails,
 } from "../controllers/productBrandController.js";
 import {
-  getProduct,
   getProductBySlug,
   updateStock,
   cleanupWordPress,
@@ -279,7 +274,7 @@ router.put(
   // updateProductWithImages has already sent the response; this runs as a
   // terminal side-effect and must NOT call next() — doing so would fall through
   // to the 404 notFound handler and race the buffered response.
-  asyncHandler(async (req, res, _next) => {
+  asyncHandler(async (req) => {
     try {
       await invalidatePublicCache(`PRODUCT_DETAIL:*${req.params.id}*`);
       await invalidatePublicCache('PRODUCT_LIST*');

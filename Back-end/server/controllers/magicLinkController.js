@@ -176,8 +176,6 @@ export const verifyMagicLink = async (req, res) => {
  */
 export const resendMagicLink = async (req, res) => {
   try {
-    const { email, phone, orderId } = req.body;
-    
     // Reuse requestMagicLink logic
     await requestMagicLink(req, res);
     

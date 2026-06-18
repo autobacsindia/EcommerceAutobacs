@@ -15,9 +15,6 @@ import productService from "../services/productService.js";
 import SearchService from "../services/searchService.js";
 import cacheService, { TTL, CACHE_VERSION, getRedisClient } from "../services/cacheService.js";
 
-// Cache stampede protection: Track in-flight requests
-const cacheFetchLocks = new Map(); // cacheKey -> Promise
-
 export const getProducts = async (req, res) => {
   // CRITICAL: Add Redis caching for public product API
   const cacheKey = `${CACHE_VERSION}:products:list:${JSON.stringify(req.query)}`;
@@ -230,7 +227,7 @@ export const getBrands = async (req, res, next) => {
   }
 };
 
-export const getSimilarProducts = async (req, res, next) => {
+export const getSimilarProducts = async (req, res) => {
   try {
     const { id } = req.params;
     const { limit = 4 } = req.query;
@@ -303,7 +300,7 @@ export const getSimilarProducts = async (req, res, next) => {
   }
 };
 
-export const getComplementaryProducts = async (req, res, next) => {
+export const getComplementaryProducts = async (req, res) => {
   try {
     const { id } = req.params;
     const { limit = 4 } = req.query;

@@ -4,13 +4,11 @@ import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import {
-  validateVehicle,
   validateVehicleUpdate,
   validateVehicleProductMap,
   validateIdParam,
   validateRouteProductId,
   validateMakeModelParam,
-  validateSlugParam,
   validateVehicleQuery,
 } from "../middleware/validationMiddleware.js";
 import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";

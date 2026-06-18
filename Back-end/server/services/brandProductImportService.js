@@ -2,7 +2,6 @@ import axios from 'axios';
 import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import ImportJob from '../models/ImportJob.js';
-import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
 
 class BrandProductImportService {

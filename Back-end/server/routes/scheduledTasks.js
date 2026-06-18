@@ -1,7 +1,6 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import CronService from "../services/cronService.js";
 
 const router = express.Router();
 

@@ -1,7 +1,7 @@
 // Autobacs/Back-end/server/routes/dashboard.js
 import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
-import { validatePagination, validateTopProductsQuery } from '../middleware/validationMiddleware.js';
+import { validateTopProductsQuery } from '../middleware/validationMiddleware.js';
 import healthCalculatorService from '../services/healthCalculatorService.js';
 import dashboardAnalyticsService from '../services/dashboardAnalyticsService.js';
 

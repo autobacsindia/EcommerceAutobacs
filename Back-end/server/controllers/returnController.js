@@ -2,7 +2,6 @@ import asyncHandler from "../middleware/asyncHandler.js";
 import ReturnRequest from "../models/ReturnRequest.js";
 import Order from "../models/Order.js";
 import User from "../models/User.js";
-import Product from "../models/Product.js";
 import emailHandler from "../services/emailHandler.js";
 
 // @desc    Create a return request

@@ -110,7 +110,7 @@ class OrderTrackingService {
    * @param {string} orderId - Order ID
    * @returns {string} - Generated tracking number
    */
-  generateTrackingNumber(carrierCode = 'DELHIVERY', orderId = null) {
+  generateTrackingNumber(carrierCode = 'DELHIVERY', _orderId = null) {
     const carrier = CARRIERS[carrierCode];
     if (!carrier) {
       throw new Error(`Invalid carrier code: ${carrierCode}`);

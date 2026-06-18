@@ -352,7 +352,7 @@ class SearchService {
    * @param {string} userId - User ID (optional)
    * @returns {Object} Success status
    */
-  static async addToSearchHistory(term, resultsCount = 0, userId = null) {
+  static async addToSearchHistory(term, _resultsCount = 0, userId = null) {
     try {
       // For now, we'll just log the search query using Elasticsearch if available
       // In a more advanced implementation, we would store this in a database
@@ -373,7 +373,7 @@ class SearchService {
    * @param {number} limit - Maximum number of history items to return
    * @returns {Array} Array of recent search terms
    */
-  static async getSearchHistory(userId = null, limit = 10) {
+  static async getSearchHistory(_userId = null, _limit = 10) {
     // For now, we'll return an empty array since we're not persisting history on the server
     // In a more advanced implementation, we would query a search_history collection
     return [];
@@ -384,7 +384,7 @@ class SearchService {
    * @param {string} userId - User ID (optional)
    * @returns {Object} Success status
    */
-  static async clearSearchHistory(userId = null) {
+  static async clearSearchHistory(_userId = null) {
     // For now, we'll just return success since we're not persisting history on the server
     // In a more advanced implementation, we would delete entries from a search_history collection
     return { success: true };

@@ -113,7 +113,7 @@ router.post("/", protect, validatePaymentMethod, asyncHandler(async (req, res) =
       message: 'Payment method added',
       paymentMethod: paymentMethodResponse
     });
-  } catch (error) {
+  } catch {
     res.status(500).json({
       success: false,
       message: 'Failed to add payment method'

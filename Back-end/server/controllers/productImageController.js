@@ -16,12 +16,10 @@
  */
 import Product from '../models/Product.js';
 import {
-  uploadToCloudinary,
   uploadManyToCloudinary,
   deleteFromCloudinary,
   deleteManyFromCloudinary,
 } from '../utils/cloudinaryHelpers.js';
-import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { cleanHTML } from '../utils/htmlSanitizer.js';
 
@@ -71,7 +69,7 @@ const parseProductFields = (body) => {
 // ────────────────────────────────────────────────────────────────────────────
 // POST /products  — create with images
 // ────────────────────────────────────────────────────────────────────────────
-export const createProductWithImages = async (req, res, next) => {
+export const createProductWithImages = async (req, res) => {
   const fields = parseProductFields(req.body);
   const files  = req.files || (req.file ? [req.file] : []);
 
@@ -259,7 +257,7 @@ export const updateProductWithImages = async (req, res, next) => {
 // ────────────────────────────────────────────────────────────────────────────
 // DELETE /products/:id  — soft-delete + clean Cloudinary
 // ────────────────────────────────────────────────────────────────────────────
-export const deleteProductWithImages = async (req, res, next) => {
+export const deleteProductWithImages = async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) throw new AppError('Product not found', 404);
 

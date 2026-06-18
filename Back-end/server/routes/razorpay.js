@@ -1,6 +1,6 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, optionalAuth } from "../middleware/authMiddleware.js";
+import { optionalAuth } from "../middleware/authMiddleware.js";
 import { validateRazorpayOrder, validateRazorpayVerification } from "../middleware/validationMiddleware.js";
 import razorpayService from "../services/razorpayService.js";
 import orderRepository from "../repositories/orderRepository.js";
@@ -155,7 +155,7 @@ router.use(attachTokenRefreshInfo);
 // SECURITY: Rate limited to prevent API quota exhaustion
 router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayOrder, asyncHandler(async (req, res) => {
   try {
-    const { orderId, amount, currency, receipt } = req.body;
+    const { orderId, currency, receipt } = req.body;
     
     // Determine if user is authenticated or guest
     const isAuthenticated = req.user && req.user.id;

@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { getRedisClient } from './redisClient.js';
 import ImportJob from '../models/ImportJob.js';
-import mongoose from 'mongoose';
 import { runWordPressSync } from './wordpressSyncService.js';
 
 class CronService {

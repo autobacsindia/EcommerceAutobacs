@@ -272,7 +272,7 @@ class AdvancedCacheService {
   /**
    * Check if cache entry is stale
    */
-  isEntryStale(key, ttlSeconds) {
+  isEntryStale(_key, _ttlSeconds) {
     // This is a simplified check - in production you'd store metadata
     // For now, we assume if it's in cache but close to expiry, it's stale
     return false; // Placeholder - needs cache metadata enhancement

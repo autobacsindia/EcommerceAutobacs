@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import Warehouse from "../models/Warehouse.js";
 import WarehouseInventory from "../models/WarehouseInventory.js";
-import Product from "../models/Product.js";
 import googleMapsService from "./googleMapsService.js";
 
 /**

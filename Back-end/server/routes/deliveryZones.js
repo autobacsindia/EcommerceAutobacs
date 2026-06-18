@@ -2,15 +2,10 @@ import express from "express";
 import deliveryZoneService from "../services/deliveryZoneService.js";
 import cacheService from "../services/cacheService.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { 
-  validateIdParam,
+import {
   validatePinCodeParam,
-  validateServiceabilityCheck,
   validateDeliveryEstimate,
-  validateShippingCost,
-  validateDeliveryZone,
-  validatePinCodesUpdate,
-  validateBulkImportPinCodes
+  validateShippingCost
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();

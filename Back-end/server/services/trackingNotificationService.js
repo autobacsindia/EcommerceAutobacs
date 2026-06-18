@@ -357,7 +357,7 @@ class TrackingNotificationService {
         trackingUpdates: true,
         orderUpdates: true
       };
-    } catch (error) {
+    } catch {
       return {
         email: true,
         sms: true,

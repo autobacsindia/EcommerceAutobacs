@@ -1,5 +1,4 @@
 import { introspectToken, batchIntrospectTokens, getUserSessions, revokeToken } from '../services/tokenIntrospection.js';
-import rateLimitEventEmitter from '../services/rateLimitEventEmitter.js';
 
 /**
  * @route   POST /admin/token/introspect

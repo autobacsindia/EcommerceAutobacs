@@ -20,7 +20,6 @@ import {
   publicBrowsingRateLimit,
   authenticatedUserRateLimit,
   checkoutRateLimit,
-  adminRateLimit,
   adminRouteRateLimit,
   locationRateLimit,
   contactFormRateLimit,
@@ -32,7 +31,6 @@ import { optionalAuth } from '../middleware/authMiddleware.js';
 
 // Import domain route modules
 import authRoutes from './auth.js';
-import socialAuthRoutes from './socialAuth.js';
 import tokenIntrospectionRoutes from './tokenIntrospection.js';
 
 import productRoutes from './products.js';

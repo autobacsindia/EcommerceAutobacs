@@ -275,7 +275,7 @@ class LocationService {
    * @param {string} postalCode - PIN code to validate
    * @returns {Promise<Object>} Validation result
    */
-  async validateAddress(postalCode) {
+  async validateAddress(_postalCode) {
     try {
       const genericEstimate = this.computeGenericEstimate();
       return {
@@ -348,7 +348,7 @@ class LocationService {
    * @param {string} postalCode 
    * @returns {Promise<Object>} Delivery estimate
    */
-  async getDeliveryEstimate(postalCode) {
+  async getDeliveryEstimate(_postalCode) {
     try {
       return {
         zone: null,
@@ -366,7 +366,7 @@ class LocationService {
    * @param {string} state 
    * @returns {Promise<Object|null>} Delivery zone or null
    */
-  async assignZoneByCity(city, state) {
+  async assignZoneByCity(_city, _state) {
     return null;
   }
 }

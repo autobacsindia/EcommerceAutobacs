@@ -87,7 +87,7 @@ router.get("/public", async (req, res) => {
     }));
 
     res.json({ success: true, warehouses: publicData });
-  } catch (error) {
+  } catch {
     res.status(500).json({ success: false, message: 'Failed to load locations' });
   }
 });

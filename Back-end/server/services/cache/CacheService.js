@@ -1,4 +1,4 @@
-import { CACHE_VERSION, CACHE_CONFIG, TTL } from './config.js';
+import { CACHE_VERSION, CACHE_CONFIG } from './config.js';
 import { redisClient } from './redisClient.js';
 
 class CacheService {
@@ -239,11 +239,9 @@ class CacheService {
 
   async writeThrough(key, fn, ttl, tags = [], retries = 3) {
     const result = await fn();
-    let success = false;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         await this.set(key, result, ttl, tags);
-        success = true;
         break;
       } catch (error) {
         console.warn(`[CacheService] Write-through cache update failed (attempt ${attempt}/${retries}):`, error.message);
@@ -269,7 +267,7 @@ class CacheService {
 
   // ── SWR & Locking ─────────────────────────────────────────────────────────
 
-  async getStaleWhileRevalidateWithLock(key, fn, ttl, tags = [], staleWindow = 60) {
+  async getStaleWhileRevalidateWithLock(key, fn, ttl, tags = [], _staleWindow = 60) {
     const cached = await this.get(key);
     if (cached) {
       this.metrics.stalenessServed++;
@@ -353,7 +351,7 @@ class CacheService {
 
   // ── Lock Heartbeat ────────────────────────────────────────────────────────
 
-  startLockHeartbeat(lockKey, lockValue, timeout) {
+  startLockHeartbeat(lockKey, lockValue, _timeout) {
     const heartbeatInterval = setInterval(async () => {
       try {
         const extended = await this.extendLock(lockKey, lockValue, CACHE_CONFIG.LOCK_HEARTBEAT_EXTEND);

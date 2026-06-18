@@ -179,7 +179,7 @@ class ProductService {
     if (elasticsearchService.enabled) {
       try {
         return await elasticsearchService.getSearchSuggestions(query, limit);
-      } catch (error) {
+      } catch {
         console.warn('ES suggestions failed, using MongoDB fallback');
       }
     }
@@ -311,10 +311,7 @@ class ProductService {
   /**
    * Build filter facets
    */
-  async _buildFacets(baseQuery) {
-    // Remove pagination from query
-    const { page, limit, sortBy, order, ...query } = baseQuery;
-
+  async _buildFacets(_baseQuery) {
     // In a full implementation, you'd aggregate facets here
     // For now, return empty facets (Elasticsearch handles this better)
     return {

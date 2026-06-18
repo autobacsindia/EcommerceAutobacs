@@ -40,7 +40,7 @@ setInterval(() => {
  */
 router.post('/sync', protect, async (req, res) => {
   try {
-    const { actionId, action, productId, quantity, timestamp } = req.body;
+    const { actionId, action, productId, quantity } = req.body;
     const userId = req.user._id;
 
     // ── 1. Idempotency Check ──────────────────────────────────────────────
@@ -212,14 +212,6 @@ router.post('/sync/batch', protect, async (req, res) => {
     const results = [];
     
     for (const action of actions) {
-      // Simulate individual sync call
-      const syncReq = { ...req, body: action };
-      const syncRes = {
-        json: (data) => data,
-        status: (code) => ({ json: (data) => ({ ...data, statusCode: code }) })
-      };
-      
-      // Reuse sync logic
       const result = await handleSyncAction(req.user._id, action);
       results.push(result);
     }

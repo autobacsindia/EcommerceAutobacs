@@ -54,10 +54,15 @@ export default [
       globals: { ...globals.node },
     },
     rules: {
-      // Transitional: ~80 pre-existing unused vars across the codebase. Surface
-      // as warnings (non-blocking) rather than failing CI on legacy debt; clean
-      // up incrementally and restore to 'error' afterwards.
-      'no-unused-vars': 'warn',
+      // Intentionally-unused bindings are marked with a leading underscore
+      // (required-but-unused params like an Express error handler's `next`,
+      // placeholder destructures, etc.). Everything else must be removed.
+      'no-unused-vars': ['error', {
+        args: 'after-used',
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
     },
   },
 

@@ -8,8 +8,7 @@ import {
   validateBrandUpdate, 
   validateBrandProductMap, 
   validateIdParam,
-  validateRouteProductId,
-  validateBrandQuery
+  validateRouteProductId
 } from "../middleware/validationMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
@@ -19,7 +18,6 @@ const router = express.Router();
 
 // TTLs
 const BRAND_LIST_TTL    = 10 * 60; // 10 min — brands rarely change
-const BRAND_ITEM_TTL    = 10 * 60; // 10 min
 const BRAND_PRODUCT_TTL =  5 * 60; //  5 min — product associations change more often
 
 // Helper function to generate slug from name

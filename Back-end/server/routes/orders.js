@@ -12,7 +12,6 @@ import {
   validatePaymentFailed,
   validatePagination,
   validateAnalyticsQuery,
-  validateReturnRequest,
   validateOrderReturn,
   validateReturnStatusUpdate,
   validateRefundsQuery,

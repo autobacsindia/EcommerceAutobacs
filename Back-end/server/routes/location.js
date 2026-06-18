@@ -3,9 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import locationService from "../services/locationService.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { 
-  validateLocationSelect, 
-  validatePostalCode, 
+import {
+  validatePostalCode,
   validatePostalCodeQuery,
   validateRecentLocations
 } from "../middleware/validationMiddleware.js";

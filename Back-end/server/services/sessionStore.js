@@ -489,7 +489,7 @@ class SessionStore {
               sessionId,
               ...parsed,
             });
-          } catch (err) {
+          } catch {
             // Skip corrupted entries
             console.warn(`[SessionStore] Corrupted session data for ${sessionId}`);
           }
@@ -532,8 +532,7 @@ class SessionStore {
 
     try {
       const info = await this.redis.info();
-      const keyspace = await this.redis.info('keyspace');
-      
+
       // Parse basic stats
       const stats = {
         connected: true,
