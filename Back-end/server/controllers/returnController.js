@@ -1,5 +1,5 @@
 import asyncHandler from "../middleware/asyncHandler.js";
-import ReturnRequest from "../models/ReturnRequest.js";
+import returnRequestRepository from "../repositories/returnRequestRepository.js";
 import Order from "../models/Order.js";
 import User from "../models/User.js";
 import emailHandler from "../services/emailHandler.js";
@@ -52,7 +52,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     // For now, let's assume if it's "Clearance" or "Electronic" in name/tags/category (simplified)
     
     // Check for previous return requests for this item
-    const existingReturn = await ReturnRequest.findOne({
+    const existingReturn = await returnRequestRepository.findOne({
       order: orderId,
       "items.product": item.productId,
       status: { $ne: "cancelled" }
@@ -78,7 +78,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     throw new Error("No valid items to return");
   }
 
-  const returnRequest = await ReturnRequest.create({
+  const returnRequest = await returnRequestRepository.create({
     order: orderId,
     user: userId,
     items: returnItems,
@@ -131,9 +131,9 @@ export const getMyReturns = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
-  const total = await ReturnRequest.countDocuments({ user: req.user._id });
+  const total = await returnRequestRepository.countDocuments({ user: req.user._id });
 
-  const returns = await ReturnRequest.find({ user: req.user._id })
+  const returns = await returnRequestRepository.find({ user: req.user._id })
     .populate("order", "orderNumber")
     .populate("items.product", "name image price")
     .sort({ createdAt: -1 })
@@ -166,9 +166,9 @@ export const getAllReturns = asyncHandler(async (req, res) => {
     query.status = status;
   }
 
-  const total = await ReturnRequest.countDocuments(query);
+  const total = await returnRequestRepository.countDocuments(query);
 
-  const returns = await ReturnRequest.find(query)
+  const returns = await returnRequestRepository.find(query)
     .populate("user", "name email")
     .populate("order", "orderNumber")
     .populate("items.product", "name image")
@@ -195,7 +195,7 @@ export const getAllReturns = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 export const updateReturnStatus = asyncHandler(async (req, res) => {
   const { status, adminNotes, rejectionReason } = req.body;
-  const returnRequest = await ReturnRequest.findById(req.params.id).populate("user");
+  const returnRequest = await returnRequestRepository.findById(req.params.id).populate("user");
 
   if (!returnRequest) {
     res.status(404);

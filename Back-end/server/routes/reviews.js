@@ -1,5 +1,5 @@
 import express from "express";
-import Review from "../models/Review.js";
+import reviewRepository from "../repositories/reviewRepository.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
@@ -18,7 +18,7 @@ const router = express.Router();
 
 // Helper function to calculate product rating stats
 const updateProductRatingStats = async (productId) => {
-  const reviews = await Review.find({ product: productId, isApproved: true });
+  const reviews = await reviewRepository.find({ product: productId, isApproved: true });
   
   if (reviews.length === 0) {
     await Product.findByIdAndUpdate(productId, {
@@ -64,7 +64,7 @@ router.get("/products/:productId", validateRouteProductId, asyncHandler(async (r
   sort[sortBy] = order === "asc" ? 1 : -1;
 
   // Execute query with pagination
-  const reviews = await Review.find(filter)
+  const reviews = await reviewRepository.find(filter)
     .populate("user", "name")
     .sort(sort)
     .limit(limit * 1)
@@ -72,7 +72,7 @@ router.get("/products/:productId", validateRouteProductId, asyncHandler(async (r
     .lean();
 
   // Get total count for pagination
-  const totalReviews = await Review.countDocuments(filter);
+  const totalReviews = await reviewRepository.countDocuments(filter);
 
   // Format response
   const formattedReviews = reviews.map(review => ({
@@ -112,7 +112,7 @@ router.get("/products/:productId/summary", validateRouteProductId, asyncHandler(
   const productId = req.params.productId;
 
   // Get all approved reviews for this product
-  const reviews = await Review.find({ product: productId, isApproved: true });
+  const reviews = await reviewRepository.find({ product: productId, isApproved: true });
 
   if (reviews.length === 0) {
     return res.json({
@@ -164,7 +164,7 @@ router.get("/products/:productId/summary", validateRouteProductId, asyncHandler(
 router.get("/testimonials", asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 12, 50);
 
-  const reviews = await Review.find({ isTestimonial: true, isApproved: true })
+  const reviews = await reviewRepository.find({ isTestimonial: true, isApproved: true })
     .populate("user", "name")
     .populate("product", "name slug images")
     .sort({ createdAt: -1 })
@@ -205,7 +205,7 @@ router.get("/user", protect, asyncHandler(async (req, res) => {
   sort[sortBy] = order === "asc" ? 1 : -1;
 
   // Execute query with pagination
-  const reviews = await Review.find(filter)
+  const reviews = await reviewRepository.find(filter)
     .populate("product", "name images")
     .sort(sort)
     .limit(limit * 1)
@@ -213,7 +213,7 @@ router.get("/user", protect, asyncHandler(async (req, res) => {
     .lean();
 
   // Get total count for pagination
-  const totalReviews = await Review.countDocuments(filter);
+  const totalReviews = await reviewRepository.countDocuments(filter);
 
   // Format response
   const formattedReviews = reviews.map(review => ({
@@ -269,7 +269,7 @@ router.post("/products/:productId", protect, reviewSubmitRateLimit, validateRevi
   }
 
   // Check if user already submitted a review for this product
-  const existingReview = await Review.findOne({ product: productId, user: userId });
+  const existingReview = await reviewRepository.findOne({ product: productId, user: userId });
   if (existingReview) {
     return res.status(400).json({
       success: false,
@@ -284,7 +284,7 @@ router.post("/products/:productId", protect, reviewSubmitRateLimit, validateRevi
   }));
 
   // Create review
-  const review = new Review({
+  const review = reviewRepository.build({
     product: productId,
     user: userId,
     rating,
@@ -328,7 +328,7 @@ router.put("/:reviewId", protect, validateReviewUpdate, asyncHandler(async (req,
   const safeComment = cleanHTML(comment);
 
   // Find review
-  const review = await Review.findById(reviewId);
+  const review = await reviewRepository.findById(reviewId);
   if (!review) {
     return res.status(404).json({
       success: false,
@@ -379,7 +379,7 @@ router.delete("/:reviewId", protect, validateReviewIdParam, asyncHandler(async (
   const userId = req.user._id;
 
   // Find review
-  const review = await Review.findById(reviewId);
+  const review = await reviewRepository.findById(reviewId);
   if (!review) {
     return res.status(404).json({
       success: false,
@@ -396,7 +396,7 @@ router.delete("/:reviewId", protect, validateReviewIdParam, asyncHandler(async (
   }
 
   // Delete review
-  await Review.findByIdAndDelete(reviewId);
+  await reviewRepository.findByIdAndDelete(reviewId);
 
   // Update product rating stats
   await updateProductRatingStats(review.product);
@@ -414,7 +414,7 @@ router.post("/:reviewId/helpful", protect, validateReviewIdParam, asyncHandler(a
   const reviewId = req.params.reviewId;
 
   // Find review
-  const review = await Review.findById(reviewId);
+  const review = await reviewRepository.findById(reviewId);
   if (!review) {
     return res.status(404).json({
       success: false,
@@ -463,7 +463,7 @@ router.get("/admin", protect, admin, validateAdminReviewQuery, asyncHandler(asyn
   sort[sortBy] = order === "asc" ? 1 : -1;
 
   // Execute query with pagination
-  const reviews = await Review.find(filter)
+  const reviews = await reviewRepository.find(filter)
     .populate("user", "name email")
     .populate("product", "name")
     .sort(sort)
@@ -472,7 +472,7 @@ router.get("/admin", protect, admin, validateAdminReviewQuery, asyncHandler(asyn
     .lean();
 
   // Get total count for pagination
-  const totalReviews = await Review.countDocuments(filter);
+  const totalReviews = await reviewRepository.countDocuments(filter);
 
   res.json({
     success: true,
@@ -508,7 +508,7 @@ router.post("/admin", protect, admin, asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Product not found" });
   }
 
-  const review = new Review({
+  const review = reviewRepository.build({
     product: productId,
     guestName: reviewerName.trim(),
     rating: ratingNum,
@@ -522,7 +522,7 @@ router.post("/admin", protect, admin, asyncHandler(async (req, res) => {
 
   // Optional backdating so seeded reviews can blend into history.
   if (date && !Number.isNaN(Date.parse(date))) {
-    await Review.collection.updateOne({ _id: review._id }, { $set: { createdAt: new Date(date) } });
+    await reviewRepository.collection.updateOne({ _id: review._id }, { $set: { createdAt: new Date(date) } });
   }
 
   await updateProductRatingStats(productId);
@@ -547,7 +547,7 @@ router.post("/admin", protect, admin, asyncHandler(async (req, res) => {
 // @desc    Toggle a review's testimonial flag (admin)
 // @access  Private/Admin
 router.put("/:reviewId/testimonial", protect, admin, validateReviewIdParam, asyncHandler(async (req, res) => {
-  const review = await Review.findByIdAndUpdate(
+  const review = await reviewRepository.findByIdAndUpdate(
     req.params.reviewId,
     { isTestimonial: !!req.body.isTestimonial },
     { new: true }
@@ -571,7 +571,7 @@ router.put("/:reviewId/approve", protect, admin, validateReviewIdParam, asyncHan
   const reviewId = req.params.reviewId;
 
   // Find and update review
-  const review = await Review.findByIdAndUpdate(
+  const review = await reviewRepository.findByIdAndUpdate(
     reviewId,
     { isApproved: true },
     { new: true }
@@ -605,7 +605,7 @@ router.put("/:reviewId/reject", protect, admin, validateReviewIdParam, asyncHand
   const reviewId = req.params.reviewId;
 
   // Find and update review
-  const review = await Review.findByIdAndUpdate(
+  const review = await reviewRepository.findByIdAndUpdate(
     reviewId,
     { isApproved: false },
     { new: true }
@@ -639,7 +639,7 @@ router.delete("/:reviewId/admin", protect, admin, validateReviewIdParam, asyncHa
   const reviewId = req.params.reviewId;
 
   // Find review
-  const review = await Review.findById(reviewId);
+  const review = await reviewRepository.findById(reviewId);
   if (!review) {
     return res.status(404).json({
       success: false,
@@ -651,7 +651,7 @@ router.delete("/:reviewId/admin", protect, admin, validateReviewIdParam, asyncHa
   const productId = review.product;
 
   // Delete review
-  await Review.findByIdAndDelete(reviewId);
+  await reviewRepository.findByIdAndDelete(reviewId);
 
   // Update product rating stats
   await updateProductRatingStats(productId);

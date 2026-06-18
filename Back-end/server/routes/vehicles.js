@@ -1,5 +1,5 @@
 import express from "express";
-import Vehicle from "../models/Vehicle.js";
+import vehicleRepository from "../repositories/vehicleRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -19,7 +19,7 @@ const router = express.Router();
 // @desc    Get all active vehicles
 // @access  Public
 router.get("/", publicCacheResponse('VEHICLE_LIST'), asyncHandler(async (req, res) => {
-  const vehicles = await Vehicle.find({ isActive: true })
+  const vehicles = await vehicleRepository.find({ isActive: true })
     .sort({ make: 1, model: 1, year: 1 });
 
   res.json({
@@ -34,8 +34,7 @@ router.get("/", publicCacheResponse('VEHICLE_LIST'), asyncHandler(async (req, re
 // @access  Public
 router.get("/makes", publicCacheResponse('VEHICLE_MAKES'), asyncHandler(async (req, res) => {
   try {
-    const Vehicle = (await import('../models/Vehicle.js')).default;
-    const makes = await Vehicle.distinct("make", { isActive: true }).sort();
+    const makes = await vehicleRepository.distinct("make", { isActive: true }).sort();
     
     console.log(`vehicles/makes: Found ${makes.length} makes`);
 
@@ -61,7 +60,7 @@ router.get("/makes", publicCacheResponse('VEHICLE_MAKES'), asyncHandler(async (r
 // @desc    Get all models for a specific make
 // @access  Public
 router.get("/models/:make", asyncHandler(async (req, res) => {
-  const models = await Vehicle.distinct("model", { 
+  const models = await vehicleRepository.distinct("model", { 
     make: req.params.make, 
     isActive: true 
   }).sort();
@@ -77,7 +76,7 @@ router.get("/models/:make", asyncHandler(async (req, res) => {
 // @desc    Get vehicle by slug
 // @access  Public
 router.get('/slug/:slug', asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findOne({ slug: req.params.slug, isActive: true });
+  const vehicle = await vehicleRepository.findOne({ slug: req.params.slug, isActive: true });
 
   if (!vehicle) {
     return res.status(404).json({
@@ -97,7 +96,7 @@ router.get('/slug/:slug', asyncHandler(async (req, res) => {
 // @access  Public
 router.get('/make-model/:make/:model', validateMakeModelParam, asyncHandler(async (req, res) => {
   // Case-insensitive search for vehicle by make and model
-  const vehicle = await Vehicle.findOne({ 
+  const vehicle = await vehicleRepository.findOne({ 
     make: { $regex: new RegExp(`^${req.params.make}$`, 'i') },
     model: { $regex: new RegExp(`^${req.params.model}$`, 'i') },
     isActive: true 
@@ -121,7 +120,7 @@ router.get('/make-model/:make/:model', validateMakeModelParam, asyncHandler(asyn
 // @access  Public
 router.get('/make-model/:make/:model/products', validateMakeModelParam, asyncHandler(async (req, res) => {
   // Case-insensitive search for vehicle by make and model
-  const vehicle = await Vehicle.findOne({ 
+  const vehicle = await vehicleRepository.findOne({ 
     make: { $regex: new RegExp(`^${req.params.make}$`, 'i') },
     model: { $regex: new RegExp(`^${req.params.model}$`, 'i') },
     isActive: true 
@@ -185,7 +184,7 @@ router.post("/", protect, admin, asyncHandler(async (req, res) => {
     });
   }
 
-  const vehicle = await Vehicle.create({
+  const vehicle = await vehicleRepository.create({
     make,
     model,
     year,
@@ -207,7 +206,7 @@ router.post("/", protect, admin, asyncHandler(async (req, res) => {
 // @desc    Update vehicle
 // @access  Private/Admin
 router.put("/:id", protect, admin, validateVehicleUpdate, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findByIdAndUpdate(
+  const vehicle = await vehicleRepository.findByIdAndUpdate(
     req.params.id,
     req.body,
     { new: true, runValidators: true }
@@ -233,7 +232,7 @@ router.put("/:id", protect, admin, validateVehicleUpdate, asyncHandler(async (re
 // @desc    Delete vehicle (soft delete)
 // @access  Private/Admin
 router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findById(req.params.id);
+  const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
     return res.status(404).json({
@@ -271,8 +270,8 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
       }
     : {};
 
-  const total = await Vehicle.countDocuments(query);
-  const vehicles = await Vehicle.find(query)
+  const total = await vehicleRepository.countDocuments(query);
+  const vehicles = await vehicleRepository.find(query)
     .sort({ make: 1, model: 1, year: 1 })
     .skip((page - 1) * limit)
     .limit(limit);
@@ -309,7 +308,7 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
 // @desc    Toggle vehicle active status
 // @access  Private/Admin
 router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findById(req.params.id);
+  const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
     return res.status(404).json({
@@ -334,7 +333,7 @@ router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler
 // @desc    Get products mapped to a vehicle
 // @access  Private/Admin
 router.get("/:id/products", protect, admin, validateIdParam, validateVehicleQuery, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findById(req.params.id);
+  const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
     return res.status(404).json({
@@ -385,7 +384,7 @@ router.get("/:id/products", protect, admin, validateIdParam, validateVehicleQuer
 // @desc    Map products to a vehicle
 // @access  Private/Admin
 router.post("/:id/products/map", protect, admin, validateVehicleProductMap, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findById(req.params.id);
+  const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
     return res.status(404).json({
@@ -418,7 +417,7 @@ router.post("/:id/products/map", protect, admin, validateVehicleProductMap, asyn
 // @desc    Unmap a product from a vehicle
 // @access  Private/Admin
 router.delete("/:id/products/:productId", protect, admin, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findById(req.params.id);
+  const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
     return res.status(404).json({
@@ -453,7 +452,7 @@ router.delete("/:id/products/:productId", protect, admin, validateIdParam, valid
 // @access  Public
 // NOTE: This route MUST be at the end to avoid catching specific routes like /make-model, /slug, etc.
 router.get('/:id', validateIdParam, asyncHandler(async (req, res) => {
-  const vehicle = await Vehicle.findById(req.params.id);
+  const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
     return res.status(404).json({

@@ -1,5 +1,5 @@
 import express from "express";
-import Wishlist from "../models/Wishlist.js";
+import wishlistRepository from "../repositories/wishlistRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
@@ -12,7 +12,7 @@ const router = express.Router();
 // @desc    Get all user's wishlists
 // @access  Private
 router.get("/", protect, asyncHandler(async (req, res) => {
-  const wishlists = await Wishlist.find({ user: req.user.id })
+  const wishlists = await wishlistRepository.find({ user: req.user.id })
     .populate('items.product', 'name price images stock isActive averageRating')
     .select('-shareToken');
 
@@ -41,7 +41,7 @@ router.get("/:id", function(req, res, next) {
   
   if (token) {
     // Access via share token
-    wishlist = await Wishlist.findOne({ _id: id, shareToken: token })
+    wishlist = await wishlistRepository.findOne({ _id: id, shareToken: token })
       .populate('items.product', 'name price images stock isActive averageRating')
       .populate('user', 'name');
   } else {
@@ -54,7 +54,7 @@ router.get("/:id", function(req, res, next) {
       });
     }
     
-    wishlist = await Wishlist.findOne({ _id: id, user: req.user.id })
+    wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id })
       .populate('items.product', 'name price images stock isActive averageRating')
       .populate('user', 'name');
   }
@@ -82,7 +82,7 @@ router.post("/", protect, validateWishlist, asyncHandler(async (req, res) => {
   const { name, description, privacy } = req.body;
 
   // Check if wishlist with this name already exists for user
-  const existingWishlist = await Wishlist.findOne({ user: req.user.id, name });
+  const existingWishlist = await wishlistRepository.findOne({ user: req.user.id, name });
   if (existingWishlist) {
     return res.status(409).json({
       success: false,
@@ -103,7 +103,7 @@ router.post("/", protect, validateWishlist, asyncHandler(async (req, res) => {
     wishlistData.shareToken = crypto.randomBytes(32).toString('hex');
   }
 
-  const wishlist = await Wishlist.create(wishlistData);
+  const wishlist = await wishlistRepository.create(wishlistData);
 
   res.status(201).json({
     success: true,
@@ -119,7 +119,7 @@ router.put("/:id", protect, validateIdParam, validateWishlist, asyncHandler(asyn
   const { name, description, privacy } = req.body;
 
   // Find wishlist
-  let wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
+  let wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id });
   if (!wishlist) {
     return res.status(404).json({
       success: false,
@@ -129,7 +129,7 @@ router.put("/:id", protect, validateIdParam, validateWishlist, asyncHandler(asyn
 
   // Check if another wishlist with this name already exists
   if (name && name !== wishlist.name) {
-    const existingWishlist = await Wishlist.findOne({ 
+    const existingWishlist = await wishlistRepository.findOne({ 
       user: req.user.id, 
       name,
       _id: { $ne: id }
@@ -175,7 +175,7 @@ router.put("/:id", protect, validateIdParam, validateWishlist, asyncHandler(asyn
 router.delete("/:id", protect, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const wishlist = await Wishlist.findOneAndDelete({ _id: id, user: req.user.id });
+  const wishlist = await wishlistRepository.findOneAndDelete({ _id: id, user: req.user.id });
 
   if (!wishlist) {
     return res.status(404).json({
@@ -208,7 +208,7 @@ router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncH
   }
 
   // Find wishlist
-  const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
+  const wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id });
   
   if (!wishlist) {
     return res.status(404).json({
@@ -251,7 +251,7 @@ router.post("/:id/items", protect, validateIdParam, validateWishlistItem, asyncH
 router.delete("/:id/items/:productId", protect, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
   const { id, productId } = req.params;
 
-  const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
+  const wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id });
 
   if (!wishlist) {
     return res.status(404).json({
@@ -280,7 +280,7 @@ router.delete("/:id/items/:productId", protect, validateIdParam, validateRoutePr
 router.delete("/:id/clear", protect, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
+  const wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id });
 
   if (!wishlist) {
     return res.status(404).json({
@@ -306,7 +306,7 @@ router.post("/:id/share", protect, validateIdParam, validateSharing, asyncHandle
   const { id } = req.params;
   const { userIds, role, isPublic } = req.body;
 
-  const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
+  const wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id });
 
   if (!wishlist) {
     return res.status(404).json({
@@ -357,7 +357,7 @@ router.post("/:id/share", protect, validateIdParam, validateSharing, asyncHandle
 router.delete("/:id/share/:userId", protect, validateIdParam, validateUserIdParam, asyncHandler(async (req, res) => {
   const { id, userId } = req.params;
 
-  const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id });
+  const wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id });
 
   if (!wishlist) {
     return res.status(404).json({
@@ -386,7 +386,7 @@ router.delete("/:id/share/:userId", protect, validateIdParam, validateUserIdPara
 router.get("/:id/export", protect, validateIdParam, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const wishlist = await Wishlist.findOne({ _id: id, user: req.user.id })
+  const wishlist = await wishlistRepository.findOne({ _id: id, user: req.user.id })
     .populate('items.product', 'name price images stock isActive averageRating');
 
   if (!wishlist) {
@@ -433,7 +433,7 @@ router.post("/import", protect, validateWishlistImport, asyncHandler(async (req,
   }
 
   // Check if wishlist with this name already exists
-  const existingWishlist = await Wishlist.findOne({ 
+  const existingWishlist = await wishlistRepository.findOne({ 
     user: req.user.id, 
     name: wishlistData.name 
   });
@@ -462,7 +462,7 @@ router.post("/import", protect, validateWishlistImport, asyncHandler(async (req,
   }
 
   // Create new wishlist
-  const wishlist = await Wishlist.create({
+  const wishlist = await wishlistRepository.create({
     user: req.user.id,
     name: wishlistData.name,
     description: wishlistData.description,

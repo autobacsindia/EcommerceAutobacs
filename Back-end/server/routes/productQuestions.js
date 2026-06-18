@@ -1,5 +1,5 @@
 import express from "express";
-import ProductQuestion from "../models/ProductQuestion.js";
+import productQuestionRepository from "../repositories/productQuestionRepository.js";
 import Product from "../models/Product.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
@@ -27,7 +27,7 @@ router.post("/", questionSubmitRateLimit, validateProductQuestion, asyncHandler(
     throw new Error("Product not found");
   }
 
-  const productQuestion = await ProductQuestion.create({
+  const productQuestion = await productQuestionRepository.create({
     product: productId,
     user: req.user ? req.user._id : undefined,
     userName: req.user ? req.user.name : userName,
@@ -46,7 +46,7 @@ router.post("/", questionSubmitRateLimit, validateProductQuestion, asyncHandler(
 // @route   GET /api/product-questions/product/:id
 // @access  Public
 router.get("/product/:id", validateProductIdParam, asyncHandler(async (req, res) => {
-  const questions = await ProductQuestion.find({
+  const questions = await productQuestionRepository.find({
     product: req.params.id,
     isPublic: true,
     status: "answered"
@@ -70,8 +70,8 @@ router.get("/admin", protect, admin, validateProductQuestionQuery, asyncHandler(
   const filter = {};
   if (status) filter.status = status;
 
-  const count = await ProductQuestion.countDocuments(filter);
-  const questions = await ProductQuestion.find(filter)
+  const count = await productQuestionRepository.countDocuments(filter);
+  const questions = await productQuestionRepository.find(filter)
     .populate("product", "name")
     .sort("-createdAt")
     .limit(pageSize)
@@ -91,7 +91,7 @@ router.get("/admin", protect, admin, validateProductQuestionQuery, asyncHandler(
 router.put("/:id/answer", protect, admin, questionAnswerRateLimit, validateIdParam, validateProductQuestionAnswer, asyncHandler(async (req, res) => {
   const { answer, isPublic } = req.body;
   
-  const question = await ProductQuestion.findById(req.params.id);
+  const question = await productQuestionRepository.findById(req.params.id);
 
   if (!question) {
     res.status(404);
@@ -121,14 +121,14 @@ router.put("/:id/answer", protect, admin, questionAnswerRateLimit, validateIdPar
 // @route   DELETE /api/product-questions/:id
 // @access  Private/Admin
 router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
-  const question = await ProductQuestion.findById(req.params.id);
+  const question = await productQuestionRepository.findById(req.params.id);
 
   if (!question) {
     res.status(404);
     throw new Error("Question not found");
   }
 
-  await ProductQuestion.deleteOne({ _id: question._id });
+  await productQuestionRepository.deleteOne({ _id: question._id });
 
   res.json({
     success: true,

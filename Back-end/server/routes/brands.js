@@ -1,5 +1,5 @@
 import express from "express";
-import Brand from "../models/Brand.js";
+import brandRepository from "../repositories/brandRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -41,10 +41,10 @@ router.get("/", cacheResponse(BRAND_LIST_TTL), asyncHandler(async (req, res) => 
   }
 
   // Get total count for pagination
-  const total = await Brand.countDocuments(query);
+  const total = await brandRepository.countDocuments(query);
 
   // Get brands with product count
-  const brands = await Brand.find(query)
+  const brands = await brandRepository.find(query)
     .sort({ name: 1 })
     .skip(skip)
     .limit(limit);
@@ -81,7 +81,7 @@ router.get("/", cacheResponse(BRAND_LIST_TTL), asyncHandler(async (req, res) => 
 // @desc    Get brand by ID
 // @access  Public
 router.get("/:id", asyncHandler(async (req, res) => {
-  const brand = await Brand.findById(req.params.id);
+  const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
     return res.status(404).json({
@@ -121,7 +121,7 @@ router.post(
     const { name, description } = req.body;
     const slug = generateSlug(name);
 
-    const existingBrand = await Brand.findOne({
+    const existingBrand = await brandRepository.findOne({
       $or: [{ name: { $regex: new RegExp(`^${name}$`, 'i') } }, { slug }]
     });
     if (existingBrand) {
@@ -137,7 +137,7 @@ router.post(
       logoData = { url: uploaded.secure_url, public_id: uploaded.public_id };
     }
 
-    const brand = await Brand.create({ name, slug, logo: logoData, description, isActive: true });
+    const brand = await brandRepository.create({ name, slug, logo: logoData, description, isActive: true });
 
     invalidateCache('brands');
 
@@ -160,13 +160,13 @@ router.put(
   asyncHandler(async (req, res) => {
     const { name, description, isActive } = req.body;
 
-    const brand = await Brand.findById(req.params.id);
+    const brand = await brandRepository.findById(req.params.id);
     if (!brand) {
       return res.status(404).json({ success: false, message: 'Brand not found' });
     }
 
     if (name && name !== brand.name) {
-      const existingBrand = await Brand.findOne({
+      const existingBrand = await brandRepository.findOne({
         name: { $regex: new RegExp(`^${name}$`, 'i') },
         _id: { $ne: req.params.id }
       });
@@ -211,7 +211,7 @@ router.put(
 // @desc    Delete brand (also removes Cloudinary logo)
 // @access  Private/Admin
 router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
-  const brand = await Brand.findById(req.params.id);
+  const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
     return res.status(404).json({
@@ -231,7 +231,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
   }
 
   // Hard delete
-  await Brand.findByIdAndDelete(req.params.id);
+  await brandRepository.findByIdAndDelete(req.params.id);
 
   invalidateCache('brands', 'products');
 
@@ -246,7 +246,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 // @desc    Get products for a specific brand
 // @access  Public
 router.get("/:id/products", cacheResponse(BRAND_PRODUCT_TTL), asyncHandler(async (req, res) => {
-  const brand = await Brand.findById(req.params.id);
+  const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
     return res.status(404).json({
@@ -290,7 +290,7 @@ router.get("/:id/products", cacheResponse(BRAND_PRODUCT_TTL), asyncHandler(async
 router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandler(async (req, res) => {
   const { productIds } = req.body;
 
-  const brand = await Brand.findById(req.params.id);
+  const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
     return res.status(404).json({
@@ -318,7 +318,7 @@ router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandl
 // @desc    Unmap a product from a brand
 // @access  Private/Admin
 router.delete("/:id/products/:productId", protect, admin, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
-  const brand = await Brand.findById(req.params.id);
+  const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
     return res.status(404).json({
@@ -352,7 +352,7 @@ router.delete("/:id/products/:productId", protect, admin, validateIdParam, valid
 // @desc    Toggle brand active status
 // @access  Private/Admin
 router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
-  const brand = await Brand.findById(req.params.id);
+  const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
     return res.status(404).json({

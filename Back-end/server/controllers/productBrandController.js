@@ -1,5 +1,5 @@
 import Product from '../models/Product.js';
-import Brand from '../models/Brand.js';
+import brandRepository from "../repositories/brandRepository.js";
 import SearchService from '../services/searchService.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ export async function getBrandProducts(req, res) {
   // Resolve slug to official brand name if a Brand document exists
   const normalizedSlug = normaliseSlug(brandName);
 
-  const brandDoc = await Brand.findOne({
+  const brandDoc = await brandRepository.findOne({
     $or: [
       { slug: brandName },
       { slug: normalizedSlug },
@@ -56,7 +56,7 @@ export async function getBrandDetails(req, res) {
 
   const normalizedSlug = normaliseSlug(brandName);
 
-  let brandDoc = await Brand.findOne({
+  let brandDoc = await brandRepository.findOne({
     $or: [
       { name: { $regex: new RegExp(`^${brandName.replace(/-/g, '[.\\s-]')}$`, 'i') } },
       { slug: brandName },
