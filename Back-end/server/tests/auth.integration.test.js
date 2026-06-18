@@ -110,14 +110,16 @@ async function registerAndLogin(userData = TEST_USER) {
 // ── Registration ──────────────────────────────────────────────────────────────
 
 describe('POST /auth/register', () => {
-  test('valid payload → 201 with accessToken and user object', async () => {
+  test('valid payload → 201 with accessToken cookie and user object', async () => {
     const res = await request(app)
       .post(`${BASE}/register`)
       .send(TEST_USER);
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.accessToken).toBeDefined();
+    // accessToken is set as httpOnly cookie, not in response body
+    const cookies = res.headers['set-cookie'] || [];
+    expect(cookies.some(c => c.startsWith('accessToken='))).toBe(true);
     expect(res.body.user.email).toBe(TEST_USER.email.toLowerCase());
     expect(res.body.user.role).toBe('customer');
   });
@@ -165,14 +167,16 @@ describe('POST /auth/login', () => {
     await request(app).post(`${BASE}/register`).send(TEST_USER);
   });
 
-  test('correct credentials → 200 with accessToken', async () => {
+  test('correct credentials → 200 with accessToken cookie', async () => {
     const res = await request(app)
       .post(`${BASE}/login`)
       .send({ email: TEST_USER.email, password: TEST_USER.password });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.accessToken).toBeDefined();
+    // accessToken is set as httpOnly cookie, not in response body
+    const cookies = res.headers['set-cookie'] || [];
+    expect(cookies.some(c => c.startsWith('accessToken='))).toBe(true);
     expect(res.body.user.email).toBe(TEST_USER.email.toLowerCase());
   });
 
@@ -231,12 +235,11 @@ describe('POST /auth/login', () => {
 // ── GET /auth/me ──────────────────────────────────────────────────────────────
 
 describe('GET /auth/me', () => {
-  test('valid Bearer token → 200 with user, no passwordHash', async () => {
-    const { accessToken } = await registerAndLogin();
+  test('valid session cookie → 200 with user, no passwordHash', async () => {
+    const { agent } = await registerAndLogin();
 
-    const res = await request(app)
-      .get(`${BASE}/me`)
-      .set('Authorization', `Bearer ${accessToken}`);
+    // protect middleware reads accessToken from httpOnly cookie; agent carries it
+    const res = await agent.get(`${BASE}/me`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -260,16 +263,18 @@ describe('GET /auth/me', () => {
 // ── Token refresh ─────────────────────────────────────────────────────────────
 
 describe('POST /auth/refresh', () => {
-  test('valid refresh token in body → 200 with new accessToken', async () => {
-    const { agent, refreshToken, csrfToken } = await registerAndLogin();
+  test('valid refresh token cookie → 200 with new accessToken cookie', async () => {
+    const { agent, csrfToken } = await registerAndLogin();
 
+    // agent carries the refreshToken httpOnly cookie automatically
     const res = await agent
       .post(`${BASE}/refresh`)
-      .set('X-XSRF-TOKEN', csrfToken)
-      .send({ refreshToken });
+      .set('X-XSRF-TOKEN', csrfToken);
 
     expect(res.status).toBe(200);
-    expect(res.body.accessToken).toBeDefined();
+    // accessToken is now rotated as httpOnly cookie, not in response body
+    const cookies = res.headers['set-cookie'] || [];
+    expect(cookies.some(c => c.startsWith('accessToken='))).toBe(true);
   });
 
   test('tampered refresh token in body (no cookie) → 401', async () => {
@@ -288,15 +293,14 @@ describe('POST /auth/refresh', () => {
     expect(res.status).toBe(401);
   });
 
-  test('missing CSRF token → 403', async () => {
-    const { refreshToken } = await registerAndLogin();
-
-    // Use a fresh agent (no XSRF cookie set) to simulate missing CSRF
+  test('missing refresh token (no cookie, no body) → 400', async () => {
+    // /auth/refresh is excluded from CSRF; validate that the route correctly
+    // rejects requests that have neither a refreshToken cookie nor a body token.
     const res = await request(app)
       .post(`${BASE}/refresh`)
-      .send({ refreshToken });
+      .send({});
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
   });
 });
 
@@ -323,12 +327,14 @@ describe('POST /auth/logout-all', () => {
     expect(refreshRes.status).toBe(401);
   });
 
-  test('no Authorization → 401', async () => {
-    const { agent, csrfToken } = await registerAndLogin();
-
-    const res = await agent
+  test('no auth (no cookie, no Bearer) → 401', async () => {
+    // protect middleware checks accessToken cookie first, then Authorization header.
+    // A fresh request with neither must be rejected.
+    const fakeCsrf = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const res = await request(app)
       .post(`${BASE}/logout-all`)
-      .set('X-XSRF-TOKEN', csrfToken);
+      .set('Cookie', `XSRF-TOKEN=${fakeCsrf}`)
+      .set('X-XSRF-TOKEN', fakeCsrf);
 
     expect(res.status).toBe(401);
   });
