@@ -1,6 +1,6 @@
 import express from "express";
-import Article from "../models/Article.js";
-import MediaItem from "../models/MediaItem.js";
+import articleRepository from "../repositories/articleRepository.js";
+import mediaItemRepository from "../repositories/mediaItemRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 
@@ -85,12 +85,12 @@ router.get("/articles", asyncHandler(async (req, res) => {
   }
 
   const [articles, total] = await Promise.all([
-    Article.find(query)
+    articleRepository.find(query)
       .select("title slug type coverImage excerpt category tags author featured views publishedAt createdAt")
       .sort(sortOrder)
       .skip(skip)
       .limit(parseInt(limit)),
-    Article.countDocuments(query),
+    articleRepository.countDocuments(query),
   ]);
 
   const payload = {
@@ -115,11 +115,11 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
 
   // Cache hit: still increment views in background
   if (cached) {
-    Article.updateOne({ slug: req.params.slug }, { $inc: { views: 1 } }).catch(() => {});
+    articleRepository.updateOne({ slug: req.params.slug }, { $inc: { views: 1 } }).catch(() => {});
     return res.json(cached);
   }
 
-  const article = await Article.findOne({ slug: req.params.slug, status: "published" });
+  const article = await articleRepository.findOne({ slug: req.params.slug, status: "published" });
   if (!article) {
     return res.status(404).json({ success: false, message: "Article not found" });
   }
@@ -129,7 +129,7 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
   await article.save();
 
   // Related articles (same type + category, excluding current)
-  const related = await Article.find({
+  const related = await articleRepository.find({
     status: "published",
     type: article.type,
     category: article.category,
@@ -150,7 +150,7 @@ router.get("/articles-categories", asyncHandler(async (req, res) => {
   const match = { status: "published" };
   if (type) match.type = type;
 
-  const categories = await Article.distinct("category", match);
+  const categories = await articleRepository.distinct("category", match);
   res.json({ success: true, data: categories.filter(Boolean).sort() });
 }));
 
@@ -164,7 +164,7 @@ router.get("/trending", asyncHandler(async (req, res) => {
   const query = { status: "published" };
   if (type && ["news", "blog"].includes(type)) query.type = type;
 
-  const articles = await Article.find(query)
+  const articles = await articleRepository.find(query)
     .select("title slug type coverImage category views publishedAt")
     .sort({ views: -1 })
     .limit(parseInt(limit));
@@ -177,16 +177,16 @@ router.get("/trending", asyncHandler(async (req, res) => {
 // GET /media/stats  — admin analytics summary
 router.get("/stats", protect, admin, asyncHandler(async (req, res) => {
   const [totalArticles, publishedArticles, totalNews, totalBlogs, topArticles, totalImages, totalVideos] = await Promise.all([
-    Article.countDocuments(),
-    Article.countDocuments({ status: "published" }),
-    Article.countDocuments({ type: "news", status: "published" }),
-    Article.countDocuments({ type: "blog", status: "published" }),
-    Article.find({ status: "published" })
+    articleRepository.countDocuments(),
+    articleRepository.countDocuments({ status: "published" }),
+    articleRepository.countDocuments({ type: "news", status: "published" }),
+    articleRepository.countDocuments({ type: "blog", status: "published" }),
+    articleRepository.find({ status: "published" })
       .select("title slug type views publishedAt")
       .sort({ views: -1 })
       .limit(10),
-    MediaItem.countDocuments({ type: "image" }),
-    MediaItem.countDocuments({ type: "video" }),
+    mediaItemRepository.countDocuments({ type: "image" }),
+    mediaItemRepository.countDocuments({ type: "video" }),
   ]);
 
   res.json({
@@ -210,9 +210,9 @@ router.get("/gallery", asyncHandler(async (req, res) => {
   if (album && album !== "all") query.album = { $regex: album, $options: "i" };
 
   const [items, total, albums] = await Promise.all([
-    MediaItem.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
-    MediaItem.countDocuments(query),
-    MediaItem.distinct("album", { type: "image", status: "published" }),
+    mediaItemRepository.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+    mediaItemRepository.countDocuments(query),
+    mediaItemRepository.distinct("album", { type: "image", status: "published" }),
   ]);
 
   res.json({
@@ -232,9 +232,9 @@ router.get("/videos", asyncHandler(async (req, res) => {
   if (category && category !== "all") query.category = { $regex: category, $options: "i" };
 
   const [items, total, categories] = await Promise.all([
-    MediaItem.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
-    MediaItem.countDocuments(query),
-    MediaItem.distinct("category", { type: "video", status: "published" }),
+    mediaItemRepository.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+    mediaItemRepository.countDocuments(query),
+    mediaItemRepository.distinct("category", { type: "video", status: "published" }),
   ]);
 
   res.json({
@@ -257,12 +257,12 @@ router.get("/admin/articles", protect, admin, asyncHandler(async (req, res) => {
   if (status) query.status = status;
 
   const [articles, total] = await Promise.all([
-    Article.find(query)
+    articleRepository.find(query)
       .select("title slug type category status featured views publishedAt createdAt author")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit)),
-    Article.countDocuments(query),
+    articleRepository.countDocuments(query),
   ]);
 
   res.json({
@@ -274,7 +274,7 @@ router.get("/admin/articles", protect, admin, asyncHandler(async (req, res) => {
 
 // GET /media/admin/articles/:id
 router.get("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) => {
-  const article = await Article.findById(req.params.id);
+  const article = await articleRepository.findById(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
   res.json({ success: true, data: article });
 }));
@@ -291,11 +291,11 @@ router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => 
   let baseSlug = generateSlug(title);
   let slug = baseSlug;
   let counter = 1;
-  while (await Article.findOne({ slug })) {
+  while (await articleRepository.findOne({ slug })) {
     slug = `${baseSlug}-${counter++}`;
   }
 
-  const article = await Article.create({
+  const article = await articleRepository.create({
     title, slug, type: type || "news", coverImage, excerpt, content,
     category: category || "General",
     tags: tags || [],
@@ -311,7 +311,7 @@ router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => 
 
 // PUT /media/admin/articles/:id
 router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) => {
-  const article = await Article.findById(req.params.id);
+  const article = await articleRepository.findById(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
 
   const fields = ["title", "type", "coverImage", "excerpt", "content", "category", "tags", "author", "status", "featured"];
@@ -322,7 +322,7 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
     let baseSlug = generateSlug(req.body.title);
     let slug = baseSlug;
     let counter = 1;
-    while (await Article.findOne({ slug, _id: { $ne: article._id } })) {
+    while (await articleRepository.findOne({ slug, _id: { $ne: article._id } })) {
       slug = `${baseSlug}-${counter++}`;
     }
     article.slug = slug;
@@ -337,7 +337,7 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
 
 // DELETE /media/admin/articles/:id
 router.delete("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) => {
-  const article = await Article.findByIdAndDelete(req.params.id);
+  const article = await articleRepository.findByIdAndDelete(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
   cacheInvalidate("articles:");
   cacheInvalidate("trending:");
@@ -356,8 +356,8 @@ router.get("/admin/media-items", protect, admin, asyncHandler(async (req, res) =
   if (type) query.type = type;
 
   const [items, total] = await Promise.all([
-    MediaItem.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
-    MediaItem.countDocuments(query),
+    mediaItemRepository.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+    mediaItemRepository.countDocuments(query),
   ]);
 
   res.json({
@@ -386,7 +386,7 @@ router.post("/admin/media-items", protect, admin, asyncHandler(async (req, res) 
     if (vimeoId) finalThumbnail = `https://vumbnail.com/${vimeoId}.jpg`;
   }
 
-  const item = await MediaItem.create({
+  const item = await mediaItemRepository.create({
     type, title, description, url,
     thumbnail: finalThumbnail || "",
     album: album || "General",
@@ -403,7 +403,7 @@ router.post("/admin/media-items", protect, admin, asyncHandler(async (req, res) 
 
 // PUT /media/admin/media-items/:id
 router.put("/admin/media-items/:id", protect, admin, asyncHandler(async (req, res) => {
-  const item = await MediaItem.findById(req.params.id);
+  const item = await mediaItemRepository.findById(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Media item not found" });
 
   const fields = ["title", "description", "url", "thumbnail", "album", "category", "tags", "featured", "status", "duration"];
@@ -419,7 +419,7 @@ router.put("/admin/media-items/:id", protect, admin, asyncHandler(async (req, re
 
 // DELETE /media/admin/media-items/:id
 router.delete("/admin/media-items/:id", protect, admin, asyncHandler(async (req, res) => {
-  const item = await MediaItem.findByIdAndDelete(req.params.id);
+  const item = await mediaItemRepository.findByIdAndDelete(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Media item not found" });
   res.json({ success: true, message: "Media item deleted" });
 }));

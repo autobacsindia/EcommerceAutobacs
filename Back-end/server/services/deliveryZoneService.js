@@ -1,4 +1,4 @@
-import DeliveryZone from "../models/DeliveryZone.js";
+import deliveryZoneRepository from "../repositories/deliveryZoneRepository.js";
 
 /**
  * Delivery Zone Service for managing delivery zones and estimates
@@ -11,7 +11,7 @@ class DeliveryZoneService {
    */
   async createZone(zoneData) {
     try {
-      const zone = new DeliveryZone(zoneData);
+      const zone = deliveryZoneRepository.build(zoneData);
       await zone.save();
       return zone;
     } catch (error) {
@@ -37,7 +37,7 @@ class DeliveryZoneService {
         query.isServiceable = filters.serviceable;
       }
 
-      const zones = await DeliveryZone.find(query).sort({ priority: -1, name: 1 });
+      const zones = await deliveryZoneRepository.find(query).sort({ priority: -1, name: 1 });
       return zones;
     } catch (error) {
       console.error("Get zones error:", error);
@@ -52,7 +52,7 @@ class DeliveryZoneService {
    */
   async getZoneById(zoneId) {
     try {
-      const zone = await DeliveryZone.findById(zoneId);
+      const zone = await deliveryZoneRepository.findById(zoneId);
       
       if (!zone) {
         throw new Error("Delivery zone not found");
@@ -72,7 +72,7 @@ class DeliveryZoneService {
    */
   async getZoneByPinCode(pinCode) {
     try {
-      return await DeliveryZone.findByPinCode(pinCode);
+      return await deliveryZoneRepository.findByPinCode(pinCode);
     } catch (error) {
       console.error("Get zone by PIN code error:", error);
       throw error;
@@ -87,7 +87,7 @@ class DeliveryZoneService {
    */
   async updateZone(zoneId, updateData) {
     try {
-      const zone = await DeliveryZone.findByIdAndUpdate(
+      const zone = await deliveryZoneRepository.findByIdAndUpdate(
         zoneId,
         updateData,
         { new: true, runValidators: true }
@@ -111,7 +111,7 @@ class DeliveryZoneService {
    */
   async deleteZone(zoneId) {
     try {
-      const zone = await DeliveryZone.findByIdAndDelete(zoneId);
+      const zone = await deliveryZoneRepository.findByIdAndDelete(zoneId);
 
       if (!zone) {
         throw new Error("Delivery zone not found");
@@ -132,7 +132,7 @@ class DeliveryZoneService {
    */
   async addPinCodes(zoneId, pinCodes) {
     try {
-      return await DeliveryZone.bulkAddPinCodes(zoneId, pinCodes);
+      return await deliveryZoneRepository.bulkAddPinCodes(zoneId, pinCodes);
     } catch (error) {
       console.error("Add PIN codes error:", error);
       throw error;
@@ -147,7 +147,7 @@ class DeliveryZoneService {
    */
   async removePinCodes(zoneId, pinCodes) {
     try {
-      const zone = await DeliveryZone.findByIdAndUpdate(
+      const zone = await deliveryZoneRepository.findByIdAndUpdate(
         zoneId,
         { $pullAll: { pinCodes: pinCodes } },
         { new: true }
@@ -171,7 +171,7 @@ class DeliveryZoneService {
    */
   async checkServiceability(pinCode) {
     try {
-      const zone = await DeliveryZone.findByPinCode(pinCode);
+      const zone = await deliveryZoneRepository.findByPinCode(pinCode);
 
       return {
         serviceable: zone !== null,
@@ -194,7 +194,7 @@ class DeliveryZoneService {
    */
   async getDeliveryEstimate(pinCode, orderDate = new Date()) {
     try {
-      const zone = await DeliveryZone.findByPinCode(pinCode);
+      const zone = await deliveryZoneRepository.findByPinCode(pinCode);
 
       if (!zone) {
         throw new Error(`No delivery zone found for PIN code: ${pinCode}`);
@@ -224,7 +224,7 @@ class DeliveryZoneService {
    */
   async calculateShippingCost(pinCode, weightKg = 0) {
     try {
-      const zone = await DeliveryZone.findByPinCode(pinCode);
+      const zone = await deliveryZoneRepository.findByPinCode(pinCode);
 
       if (!zone) {
         throw new Error(`No delivery zone found for PIN code: ${pinCode}`);
@@ -254,7 +254,7 @@ class DeliveryZoneService {
    */
   async getZonesSummary() {
     try {
-      return await DeliveryZone.getZonesSummary();
+      return await deliveryZoneRepository.getZonesSummary();
     } catch (error) {
       console.error("Get zones summary error:", error);
       throw error;
@@ -289,18 +289,18 @@ class DeliveryZoneService {
 
       // Update or create zones
       for (const [zoneType, data] of Object.entries(grouped)) {
-        let zone = await DeliveryZone.findOne({ type: zoneType });
+        let zone = await deliveryZoneRepository.findOne({ type: zoneType });
 
         if (zone) {
           // Add to existing zone
-          zone = await DeliveryZone.bulkAddPinCodes(zone._id, data.pinCodes);
+          zone = await deliveryZoneRepository.bulkAddPinCodes(zone._id, data.pinCodes);
           
           // Add cities and states
           const citiesToAdd = Array.from(data.cities).filter(c => !zone.cities.includes(c));
           const statesToAdd = Array.from(data.states).filter(s => !zone.states.includes(s));
 
           if (citiesToAdd.length > 0 || statesToAdd.length > 0) {
-            zone = await DeliveryZone.findByIdAndUpdate(
+            zone = await deliveryZoneRepository.findByIdAndUpdate(
               zone._id,
               {
                 $addToSet: {
