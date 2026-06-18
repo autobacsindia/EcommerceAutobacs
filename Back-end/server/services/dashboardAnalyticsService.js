@@ -1,7 +1,7 @@
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Product from '../models/Product.js';
-import Contact from '../models/Contact.js';
+import contactRepository from '../repositories/contactRepository.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 
 // Statuses that count as a realised sale (money made). Excludes pending, failed,
@@ -309,14 +309,9 @@ class DashboardAnalyticsService {
    */
   async getMessagesAnalytics() {
     try {
-      const statusBreakdown = await Contact.aggregate([
-        {
-          $group: {
-            _id: '$status',
-            count: { $sum: 1 }
-          }
-        }
-      ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
+      const statusBreakdown = await contactRepository.getStatusBreakdown(
+        QUERY_TIMEOUTS.aggregation
+      );
 
       const breakdown = {
         new: 0,
@@ -334,11 +329,11 @@ class DashboardAnalyticsService {
       const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
 
       // Get recent messages
-      const recentMessages = await Contact.find()
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .select('_id name subject status createdAt')
-        .lean();
+      const recentMessages = await contactRepository.find({}, {
+        sort: { createdAt: -1 },
+        limit: 5,
+        select: '_id name subject status createdAt',
+      });
 
       return {
         total,

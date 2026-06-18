@@ -1,5 +1,5 @@
 import express from "express";
-import Contact from "../models/Contact.js";
+import contactRepository from "../repositories/contactRepository.js";
 import emailHandler from "../services/emailHandler.js";
 import { protect, admin, optionalAuth } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
@@ -30,7 +30,7 @@ router.post("/", optionalAuth, validateContactSubmission, asyncHandler(async (re
     contactData.user = req.user._id;
   }
 
-  const contact = await Contact.create(contactData);
+  const contact = await contactRepository.create(contactData);
 
   res.status(201).json({
     success: true,
@@ -43,8 +43,10 @@ router.post("/", optionalAuth, validateContactSubmission, asyncHandler(async (re
 // @desc    Get current user's messages
 // @access  Private
 router.get("/me", protect, asyncHandler(async (req, res) => {
-  const contacts = await Contact.find({ user: req.user._id })
-    .sort({ createdAt: -1 });
+  const contacts = await contactRepository.find(
+    { user: req.user._id },
+    { sort: { createdAt: -1 } }
+  );
 
   res.json({
     success: true,
@@ -58,7 +60,7 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
 // @access  Private/Admin
 router.get("/stats", protect, admin, asyncHandler(async (req, res) => {
   try {
-    const newCount = await Contact.countDocuments({ status: 'new' });
+    const newCount = await contactRepository.count({ status: 'new' });
     
     res.json({
       success: true,
@@ -88,12 +90,13 @@ router.get("/", protect, admin, validateContactQuery, asyncHandler(async (req, r
     query.status = status;
   }
 
-  const contacts = await Contact.find(query)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(Number(limit));
+  const contacts = await contactRepository.find(query, {
+    sort: { createdAt: -1 },
+    skip,
+    limit: Number(limit),
+  });
 
-  const total = await Contact.countDocuments(query);
+  const total = await contactRepository.count(query);
 
   res.json({
     success: true,
@@ -111,7 +114,7 @@ router.get("/", protect, admin, validateContactQuery, asyncHandler(async (req, r
 router.post("/:id/reply", protect, admin, validateContactReply, asyncHandler(async (req, res) => {
   const { message } = req.body;
 
-  const contact = await Contact.findById(req.params.id);
+  const contact = await contactRepository.findById(req.params.id);
 
   if (!contact) {
     return res.status(404).json({
@@ -124,7 +127,7 @@ router.post("/:id/reply", protect, admin, validateContactReply, asyncHandler(asy
   contact.repliedAt = Date.now();
   contact.status = 'replied';
 
-  await contact.save();
+  await contactRepository.save(contact);
 
   // Send email notification
   try {
@@ -164,7 +167,7 @@ router.post("/:id/reply", protect, admin, validateContactReply, asyncHandler(asy
 router.put("/:id", protect, admin, validateIdParam, validateContactStatusUpdate, asyncHandler(async (req, res) => {
   const { status, adminNotes } = req.body;
 
-  const contact = await Contact.findById(req.params.id);
+  const contact = await contactRepository.findById(req.params.id);
 
   if (!contact) {
     return res.status(404).json({
@@ -176,7 +179,7 @@ router.put("/:id", protect, admin, validateIdParam, validateContactStatusUpdate,
   if (status) contact.status = status;
   if (adminNotes !== undefined) contact.adminNotes = adminNotes;
 
-  await contact.save();
+  await contactRepository.save(contact);
 
   res.json({
     success: true,
@@ -188,7 +191,7 @@ router.put("/:id", protect, admin, validateIdParam, validateContactStatusUpdate,
 // @desc    Delete a contact message
 // @access  Private/Admin
 router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
-  const contact = await Contact.findById(req.params.id);
+  const contact = await contactRepository.findById(req.params.id);
 
   if (!contact) {
     return res.status(404).json({
@@ -197,7 +200,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
     });
   }
 
-  await contact.deleteOne();
+  await contactRepository.delete(req.params.id);
 
   res.json({
     success: true,
