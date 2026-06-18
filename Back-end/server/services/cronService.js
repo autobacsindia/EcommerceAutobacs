@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getRedisClient } from './redisClient.js';
-import ImportJob from '../models/ImportJob.js';
+import importJobRepository from '../repositories/importJobRepository.js';
 import { runWordPressSync } from './wordpressSyncService.js';
 
 class CronService {
@@ -100,7 +100,7 @@ class CronService {
     const jobId = `wp-sync-${Date.now()}`;
     let job = null;
     try {
-      job = await ImportJob.create({ jobId, source: 'scheduled', status: 'running', startedAt: new Date() });
+      job = await importJobRepository.create({ jobId, source: 'scheduled', status: 'running', startedAt: new Date() });
     } catch (err) {
       console.warn('[CronService] Could not create ImportJob record:', err.message);
     }

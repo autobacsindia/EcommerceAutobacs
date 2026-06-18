@@ -1,5 +1,5 @@
-import UserLocation from "../models/UserLocation.js";
-import Warehouse from "../models/Warehouse.js";
+import userLocationRepository from "../repositories/userLocationRepository.js";
+import warehouseRepository from "../repositories/warehouseRepository.js";
 import googleMapsService from "./googleMapsService.js";
 
 // Simple in-memory cache for location data
@@ -155,7 +155,7 @@ class LocationService {
       // Find nearest warehouse (non-fatal — fails gracefully if no warehouses or missing index)
       let nearestWarehouses = [];
       try {
-        nearestWarehouses = await Warehouse.findNearest(
+        nearestWarehouses = await warehouseRepository.findNearest(
           coordinates.longitude,
           coordinates.latitude
         );
@@ -189,7 +189,7 @@ class LocationService {
       };
 
       // Save location
-      const savedLocation = await UserLocation.upsertLocation(identifier, locationPayload);
+      const savedLocation = await userLocationRepository.upsertLocation(identifier, locationPayload);
 
       // Cache the location data
       const cacheKey = identifier.userId ? `user:${identifier.userId}` : `session:${identifier.sessionId}`;
@@ -230,9 +230,9 @@ class LocationService {
       let location;
       
       if (identifier.userId) {
-        location = await UserLocation.findByUser(identifier.userId);
+        location = await userLocationRepository.findByUser(identifier.userId);
       } else if (identifier.sessionId) {
-        location = await UserLocation.findBySession(identifier.sessionId);
+        location = await userLocationRepository.findBySession(identifier.sessionId);
       }
 
       if (!location) {
@@ -298,7 +298,7 @@ class LocationService {
    */
   async getRecentLocations(userId, limit = 5) {
     try {
-      return await UserLocation.getRecentLocations(userId, limit);
+      return await userLocationRepository.getRecentLocations(userId, limit);
     } catch (error) {
       console.error("Get recent locations error:", error);
       throw error;
@@ -316,7 +316,7 @@ class LocationService {
         ? { user: identifier.userId } 
         : { sessionId: identifier.sessionId };
 
-      await UserLocation.updateMany(query, { isActive: false });
+      await userLocationRepository.updateMany(query, { isActive: false });
       
       // Clear cache
       const cacheKey = identifier.userId ? `user:${identifier.userId}` : `session:${identifier.sessionId}`;
@@ -336,7 +336,7 @@ class LocationService {
    */
   async cleanupExpiredLocations(expiryDays = 7) {
     try {
-      return await UserLocation.cleanupExpired(expiryDays);
+      return await userLocationRepository.cleanupExpired(expiryDays);
     } catch (error) {
       console.error("Cleanup expired locations error:", error);
       throw error;

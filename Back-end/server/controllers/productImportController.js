@@ -1,4 +1,4 @@
-import ImportJob from '../models/ImportJob.js';
+import importJobRepository from '../repositories/importJobRepository.js';
 import ProductImportService from '../services/productImportService.js';
 import BrandProductImportService from '../services/brandProductImportService.js';
 import ScheduledImportService from '../services/scheduledImportService.js';
@@ -114,7 +114,7 @@ export async function importBrandProducts(req, res) {
 // @desc    Get recent import job list
 // @access  Private/Admin
 export async function getImportStatus(req, res) {
-  const importJobs = await ImportJob.find({}).sort({ createdAt: -1 }).limit(10);
+  const importJobs = await importJobRepository.find({}).sort({ createdAt: -1 }).limit(10);
 
   if (!importJobs.length) {
     return res.json({ success: true, jobs: [], message: 'No import jobs found' });
@@ -127,7 +127,7 @@ export async function getImportStatus(req, res) {
 // @desc    Get a specific import job status
 // @access  Private/Admin
 export async function getImportJobStatus(req, res) {
-  const importJob = await ImportJob.findOne({ jobId: req.params.jobId });
+  const importJob = await importJobRepository.findOne({ jobId: req.params.jobId });
 
   if (!importJob) {
     return res.status(404).json({ success: false, message: 'Import job not found' });

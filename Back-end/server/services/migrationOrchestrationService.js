@@ -1,6 +1,6 @@
 import ProductImportService from './productImportService.js';
 import CategoryImportService from './categoryImportService.js';
-import ImportJob from '../models/ImportJob.js';
+import importJobRepository from '../repositories/importJobRepository.js';
 
 class MigrationOrchestrationService {
   constructor() {
@@ -20,10 +20,10 @@ class MigrationOrchestrationService {
     
     try {
       // Create or update import job tracking
-      importJob = await ImportJob.findOne({ jobId });
+      importJob = await importJobRepository.findOne({ jobId });
       
       if (!importJob) {
-        importJob = new ImportJob({
+        importJob = importJobRepository.build({
           jobId,
           initiatedBy,
           source: 'wordpress',
@@ -152,10 +152,10 @@ class MigrationOrchestrationService {
     
     try {
       // Create or update import job tracking
-      importJob = await ImportJob.findOne({ jobId });
+      importJob = await importJobRepository.findOne({ jobId });
       
       if (!importJob) {
-        importJob = new ImportJob({
+        importJob = importJobRepository.build({
           jobId,
           initiatedBy,
           source: 'wordpress',
@@ -243,10 +243,10 @@ class MigrationOrchestrationService {
     
     try {
       // Create or update import job tracking
-      importJob = await ImportJob.findOne({ jobId });
+      importJob = await importJobRepository.findOne({ jobId });
       
       if (!importJob) {
-        importJob = new ImportJob({
+        importJob = importJobRepository.build({
           jobId,
           initiatedBy,
           source: 'wordpress',

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import Product from '../models/Product.js';
 import Category from '../models/Category.js';
-import ImportJob from '../models/ImportJob.js';
+import importJobRepository from '../repositories/importJobRepository.js';
 import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
 
 class BrandProductImportService {
@@ -335,10 +335,10 @@ class BrandProductImportService {
     
     try {
       // Create or update import job tracking
-      importJob = await ImportJob.findOne({ jobId });
+      importJob = await importJobRepository.findOne({ jobId });
       
       if (!importJob) {
-        importJob = new ImportJob({
+        importJob = importJobRepository.build({
           jobId,
           initiatedBy,
           source: 'wordpress',

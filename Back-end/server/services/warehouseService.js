@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import Warehouse from "../models/Warehouse.js";
-import WarehouseInventory from "../models/WarehouseInventory.js";
+import warehouseRepository from "../repositories/warehouseRepository.js";
+import warehouseInventoryRepository from "../repositories/warehouseInventoryRepository.js";
 import googleMapsService from "./googleMapsService.js";
 
 /**
@@ -25,7 +25,7 @@ class WarehouseService {
         };
       }
 
-      const warehouse = new Warehouse(warehouseData);
+      const warehouse = warehouseRepository.build(warehouseData);
       await warehouse.save();
       return warehouse;
     } catch (error) {
@@ -59,7 +59,7 @@ class WarehouseService {
         query.showOnHomepage = filters.showOnHomepage;
       }
 
-      const warehouses = await Warehouse.find(query).sort({ createdAt: -1 });
+      const warehouses = await warehouseRepository.find(query).sort({ createdAt: -1 });
       return warehouses;
     } catch (error) {
       console.error("Get warehouses error:", error);
@@ -74,7 +74,7 @@ class WarehouseService {
    */
   async getWarehouseById(warehouseId) {
     try {
-      const warehouse = await Warehouse.findById(warehouseId);
+      const warehouse = await warehouseRepository.findById(warehouseId);
       
       if (!warehouse) {
         throw new Error("Warehouse not found");
@@ -106,7 +106,7 @@ class WarehouseService {
         };
       }
 
-      const warehouse = await Warehouse.findByIdAndUpdate(
+      const warehouse = await warehouseRepository.findByIdAndUpdate(
         warehouseId,
         updateData,
         { new: true, runValidators: true }
@@ -130,7 +130,7 @@ class WarehouseService {
    */
   async deleteWarehouse(warehouseId) {
     try {
-      const warehouse = await Warehouse.findByIdAndUpdate(
+      const warehouse = await warehouseRepository.findByIdAndUpdate(
         warehouseId,
         { isActive: false, operationalStatus: "inactive" },
         { new: true }
@@ -173,12 +173,12 @@ class WarehouseService {
       }
 
       const [inventory, total] = await Promise.all([
-        WarehouseInventory.find(query)
+        warehouseInventoryRepository.find(query)
           .populate("product")
           .sort({ quantity: 1 })
           .skip(skip)
           .limit(limit),
-        WarehouseInventory.countDocuments(query)
+        warehouseInventoryRepository.countDocuments(query)
       ]);
 
       return {
@@ -205,14 +205,14 @@ class WarehouseService {
    */
   async updateWarehouseStock(warehouseId, productId, stockData) {
     try {
-      let inventory = await WarehouseInventory.findOne({
+      let inventory = await warehouseInventoryRepository.findOne({
         warehouse: warehouseId,
         product: productId
       });
 
       if (!inventory) {
         // Create new inventory record if doesn't exist
-        inventory = new WarehouseInventory({
+        inventory = warehouseInventoryRepository.build({
           warehouse: warehouseId,
           product: productId,
           quantity: 0,
@@ -261,8 +261,8 @@ class WarehouseService {
    */
   async getProductAvailability(productId) {
     try {
-      const warehouses = await WarehouseInventory.findWarehousesWithStock(productId);
-      const totalStock = await WarehouseInventory.getTotalStock(productId);
+      const warehouses = await warehouseInventoryRepository.findWarehousesWithStock(productId);
+      const totalStock = await warehouseInventoryRepository.getTotalStock(productId);
 
       return {
         totalStock: totalStock.totalQuantity,
@@ -292,7 +292,7 @@ class WarehouseService {
     try {
       const { coordinates, postalCode } = deliveryAddress;
 
-      const warehouses = await Warehouse.find({
+      const warehouses = await warehouseRepository.find({
         operationalStatus: "active",
         isActive: true
       });
@@ -332,7 +332,7 @@ class WarehouseService {
             // concurrent findOneAndUpdate within the same transaction.
             const results = await Promise.all(
               orderItems.map(item =>
-                WarehouseInventory.findOneAndUpdate(
+                warehouseInventoryRepository.findOneAndUpdate(
                   {
                     warehouse: warehouse._id,
                     product: item.productId,
@@ -392,7 +392,7 @@ class WarehouseService {
    */
   async getLowStockAlerts(warehouseId) {
     try {
-      return await WarehouseInventory.getLowStockItems(warehouseId);
+      return await warehouseInventoryRepository.getLowStockItems(warehouseId);
     } catch (error) {
       console.error("Get low stock alerts error:", error);
       throw error;
@@ -408,7 +408,7 @@ class WarehouseService {
    */
   async findNearestWarehouse(latitude, longitude, maxDistance = 50000) {
     try {
-      const warehouses = await Warehouse.findNearest(longitude, latitude, maxDistance);
+      const warehouses = await warehouseRepository.findNearest(longitude, latitude, maxDistance);
       
       if (warehouses.length === 0) {
         return null;
