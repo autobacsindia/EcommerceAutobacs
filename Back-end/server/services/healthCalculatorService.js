@@ -216,21 +216,16 @@ class HealthCalculatorService {
    * @returns {Object} Business health metrics
    */
   async calculateBusinessHealth() {
-    try {
-      // This would query actual business metrics from the database
-      // For now, return a baseline score
-      return {
-        score: 85,
-        status: 'healthy',
-        metrics: {
-          orderProcessing: 'normal',
-          paymentGateway: 'operational'
-        }
-      };
-    } catch (error) {
-      console.error('Error calculating business health:', error);
-      return { score: 50, status: 'unknown', metrics: {} };
-    }
+    // This would query actual business metrics from the database.
+    // For now, return a baseline score.
+    return {
+      score: 85,
+      status: 'healthy',
+      metrics: {
+        orderProcessing: 'normal',
+        paymentGateway: 'operational'
+      }
+    };
   }
 
   /**

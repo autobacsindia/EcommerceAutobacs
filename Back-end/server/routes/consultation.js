@@ -1,5 +1,5 @@
 import express from "express";
-import Consultation from "../models/Consultation.js";
+import consultationRepository from "../repositories/consultationRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 
@@ -22,7 +22,7 @@ router.post("/", asyncHandler(async (req, res) => {
     });
   }
 
-  const consultation = await Consultation.create({
+  const consultation = await consultationRepository.create({
     name, whatsapp, city,
     vehicleNumber: vehicleNumber || "",
     makeModel,
@@ -59,19 +59,16 @@ router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
   }
 
   const [consultations, total] = await Promise.all([
-    Consultation.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit)),
-    Consultation.countDocuments(query),
+    consultationRepository.find(query, { sort: { createdAt: -1 }, skip, limit: parseInt(limit) }),
+    consultationRepository.count(query),
   ]);
 
   // Status counts for tab badges
   const [countNew, countContacted, countCompleted, countCancelled] = await Promise.all([
-    Consultation.countDocuments({ status: "new" }),
-    Consultation.countDocuments({ status: "contacted" }),
-    Consultation.countDocuments({ status: "completed" }),
-    Consultation.countDocuments({ status: "cancelled" }),
+    consultationRepository.count({ status: "new" }),
+    consultationRepository.count({ status: "contacted" }),
+    consultationRepository.count({ status: "completed" }),
+    consultationRepository.count({ status: "cancelled" }),
   ]);
 
   res.json({
@@ -89,7 +86,7 @@ router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
 
 // GET /api/v1/consultation/admin/:id
 router.get("/admin/:id", protect, admin, asyncHandler(async (req, res) => {
-  const consultation = await Consultation.findById(req.params.id);
+  const consultation = await consultationRepository.findById(req.params.id);
   if (!consultation) {
     return res.status(404).json({ success: false, message: "Consultation not found" });
   }
@@ -103,11 +100,7 @@ router.patch("/admin/:id/status", protect, admin, asyncHandler(async (req, res) 
     return res.status(400).json({ success: false, message: "Invalid status value" });
   }
 
-  const consultation = await Consultation.findByIdAndUpdate(
-    req.params.id,
-    { status },
-    { new: true }
-  );
+  const consultation = await consultationRepository.update(req.params.id, { status });
 
   if (!consultation) {
     return res.status(404).json({ success: false, message: "Consultation not found" });
@@ -117,7 +110,7 @@ router.patch("/admin/:id/status", protect, admin, asyncHandler(async (req, res) 
 
 // DELETE /api/v1/consultation/admin/:id
 router.delete("/admin/:id", protect, admin, asyncHandler(async (req, res) => {
-  const consultation = await Consultation.findByIdAndDelete(req.params.id);
+  const consultation = await consultationRepository.delete(req.params.id);
   if (!consultation) {
     return res.status(404).json({ success: false, message: "Consultation not found" });
   }

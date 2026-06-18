@@ -53,10 +53,15 @@ export default [
       sourceType: 'module',
       globals: { ...globals.node },
     },
+  },
+
+  // Tune no-unused-vars (kept in a separate object so it merges over — rather
+  // than replaces — the recommended ruleset above). Intentionally-unused
+  // bindings are marked with a leading underscore (required-but-unused params
+  // like an Express error handler's `next`, placeholder stubs). Else remove.
+  {
+    files: ['**/*.js'],
     rules: {
-      // Intentionally-unused bindings are marked with a leading underscore
-      // (required-but-unused params like an Express error handler's `next`,
-      // placeholder destructures, etc.). Everything else must be removed.
       'no-unused-vars': ['error', {
         args: 'after-used',
         argsIgnorePattern: '^_',
