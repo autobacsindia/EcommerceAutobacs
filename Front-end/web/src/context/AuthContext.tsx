@@ -11,6 +11,7 @@ interface User {
   email: string;
   role: 'customer' | 'admin';
   sessionVersion: number;
+  isVerified: boolean;
 }
 
 interface AuthContextType {
@@ -84,6 +85,7 @@ function normalizeUser(raw: any): User {
     email:          raw.email,
     role:           raw.role,
     sessionVersion: raw.sessionVersion ?? 0,
+    isVerified:     raw.isVerified ?? false,
   };
 }
 

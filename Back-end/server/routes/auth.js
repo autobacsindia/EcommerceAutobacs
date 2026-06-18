@@ -224,15 +224,6 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     });
   }
 
-  // Block unverified accounts before issuing any tokens
-  if (!user.isVerified) {
-    return res.status(403).json({
-      success: false,
-      message: "Please verify your email before logging in. Check your inbox or request a new verification link.",
-      code: "EMAIL_NOT_VERIFIED"
-    });
-  }
-
   // Generate tokens with session management
   const tokens = generateSessionTokenPair(user, ipAddress, userAgent);
   
@@ -271,7 +262,8 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      isVerified: user.isVerified
     }
   });
 }));
@@ -324,16 +316,6 @@ router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncH
       return res.status(401).json({
         success: false,
         message: 'Invalid or expired refresh token'
-      });
-    }
-
-    // Block unverified accounts — mirrors the login check so a user who never
-    // verified their email cannot keep a live session via token rotation.
-    if (!user.isVerified) {
-      return res.status(403).json({
-        success: false,
-        message: 'Please verify your email before continuing.',
-        code: 'EMAIL_NOT_VERIFIED'
       });
     }
 
@@ -640,11 +622,16 @@ router.get("/verify-email", verifyEmailRateLimit, validateTokenQuery, asyncHandl
     });
   }
 
-  // Check if already verified
+  // Already verified — idempotent success (user may click the link twice)
   if (user.isVerified) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email is already verified'
+    return res.json({
+      success: true,
+      message: 'Email is already verified',
+      user: {
+        id: user._id,
+        email: user.email,
+        isVerified: true
+      }
     });
   }
 

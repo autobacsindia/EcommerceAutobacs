@@ -1,17 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 function VerifyEmailPageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { checkAuth } = useAuth();
   const token = searchParams.get('token');
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [message, setMessage] = useState('');
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendSent, setResendSent] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -22,14 +28,31 @@ function VerifyEmailPageInner() {
       }
       try {
         await apiClient.get(`/auth/verify-email?token=${token}`);
+        // Refresh auth state so AuthContext reflects isVerified: true immediately
+        await checkAuth();
         setStatus('success');
+        setTimeout(() => router.push('/'), 3000);
       } catch (error: any) {
         setStatus('error');
-        setMessage(error.message || 'Failed to verify email. The token may be invalid or expired.');
+        setMessage(error.message || 'The link may be invalid or expired.');
       }
     };
     verifyEmail();
-  }, [token]);
+  }, [token, checkAuth, router]);
+
+  const handleResend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resendEmail) return;
+    setResendLoading(true);
+    try {
+      await apiClient.post('/auth/resend-verification', { email: resendEmail });
+      setResendSent(true);
+    } catch {
+      setResendSent(true); // generic — don't leak enumeration
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#080808] flex items-center justify-center py-12 px-4">
@@ -47,13 +70,13 @@ function VerifyEmailPageInner() {
             <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
             <h3 className="font-condensed font-bold text-white uppercase tracking-wide text-xl mb-2">Email Verified!</h3>
             <p className="text-[#C4C4C4] font-body text-sm mb-6">
-              Your email address has been successfully verified. You can now access all features of your account.
+              Your email has been verified. Redirecting you now...
             </p>
             <Link
-              href="/login"
+              href="/"
               className="inline-block bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
             >
-              Sign In
+              Continue Shopping
             </Link>
           </div>
         )}
@@ -63,12 +86,38 @@ function VerifyEmailPageInner() {
             <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
             <h3 className="font-condensed font-bold text-white uppercase tracking-wide text-xl mb-2">Verification Failed</h3>
             <p className="text-[#C4C4C4] font-body text-sm mb-6">{message}</p>
-            <Link
-              href="/login"
-              className="font-condensed font-bold text-[#3B9EE8] hover:text-white uppercase tracking-widest text-sm transition-colors"
-            >
-              Return to Login
-            </Link>
+
+            {resendSent ? (
+              <p className="text-sm text-green-400 font-body">
+                If that email exists and is unverified, a new link has been sent. Check your inbox.
+              </p>
+            ) : (
+              <form onSubmit={handleResend} className="mt-4 text-left space-y-3">
+                <p className="text-xs text-[#C4C4C4] font-body uppercase tracking-widest">Resend verification link</p>
+                <input
+                  type="email"
+                  required
+                  placeholder="your@email.com"
+                  value={resendEmail}
+                  onChange={e => setResendEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#161616] text-white border border-[#252525] rounded-sm focus:outline-none focus:ring-2 focus:ring-[#3B9EE8]/50 focus:border-[#3B9EE8] transition-colors font-body placeholder:text-[#555555] text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={resendLoading}
+                  className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] disabled:opacity-50 text-white font-condensed font-bold uppercase tracking-widest px-6 py-2 rounded-sm transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Send New Link
+                </button>
+                <Link
+                  href="/login"
+                  className="block text-center font-condensed font-bold text-[#3B9EE8] hover:text-white uppercase tracking-widest text-xs transition-colors mt-2"
+                >
+                  Return to Login
+                </Link>
+              </form>
+            )}
           </div>
         )}
       </div>

@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
 import BrandLogo from '@/components/layout/BrandLogo';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
 
@@ -21,6 +21,7 @@ export default function RegisterPage() {
     confirmPassword: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [rateLimitResetTime, setRateLimitResetTime] = useState<number | null>(null);
   const timeUntilRetry = useRateLimitTimer(rateLimitResetTime);
@@ -60,7 +61,8 @@ export default function RegisterPage() {
     try {
       setIsLoading(true);
       await register(formData.name, formData.email, formData.password);
-      router.push('/');
+      setRegistered(true);
+      setTimeout(() => router.push('/'), 2000);
     } catch (err: any) {
       if (err.status === 429 && err.rateLimitInfo?.resetTime) {
         setRateLimitResetTime(err.rateLimitInfo.resetTime);
@@ -91,6 +93,13 @@ export default function RegisterPage() {
       <div className="w-full max-w-87.5 sm:max-w-100">
         <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 sm:p-8">
           <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-6">Create Account</h1>
+
+          {registered && (
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/40 rounded-sm flex items-start gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-green-400 font-body">Account created! Check your email to verify your account.</p>
+            </div>
+          )}
 
           {(error || (timeUntilRetry !== null && timeUntilRetry > 0)) && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-sm flex items-start gap-2">
