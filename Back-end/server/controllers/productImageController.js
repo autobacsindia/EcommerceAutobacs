@@ -119,8 +119,9 @@ export const createProductWithImages = async (req, res, next) => {
     message: 'Product created successfully',
     product: savedProduct,
   });
-
-  next();
+  // Terminal handler — do NOT call next(): the POST route has no trailing
+  // middleware, so next() would fall through to the 404 notFound handler, which
+  // can race ahead of the buffered (compressed) response and overwrite it.
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -292,8 +293,7 @@ export const deleteProductWithImages = async (req, res, next) => {
     success: true,
     message: 'Product deleted and images cleaned up successfully',
   });
-
-  next();
+  // Terminal handler — do NOT call next() (see createProductWithImages).
 };
 
 // ────────────────────────────────────────────────────────────────────────────

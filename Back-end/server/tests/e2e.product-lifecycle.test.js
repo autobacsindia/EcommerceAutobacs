@@ -95,9 +95,19 @@ async function registerAndLogin({ role = 'customer', email, password = 'Pass123!
     .post(`${AUTH_BASE}/login`)
     .send({ email: userEmail, password });
 
+  // Tokens are httpOnly cookies now (not in the response body). Extract the
+  // app-issued accessToken from the Set-Cookie header so callers can send it as
+  // a Bearer token. For admin users, login also recorded the IP/UA context
+  // hashes, which match these subsequent requests (same loopback IP + UA).
+  const setCookie = loginRes.headers['set-cookie'] || [];
+  const accessCookie = setCookie.find((c) => c.startsWith('accessToken='));
+  const accessToken = accessCookie
+    ? accessCookie.split(';')[0].slice('accessToken='.length)
+    : undefined;
+
   return {
     agent,
-    accessToken: loginRes.body.accessToken,
+    accessToken,
     csrfToken,
     email: userEmail,
   };
@@ -173,8 +183,10 @@ describe('E2E — Product lifecycle: register → login → create → update �
       expect.arrayContaining(['autobacs/e2e-img'])
     );
 
-    // Product should be soft-deleted (isActive = false), not hard-removed
-    const inDbAfterDelete = await Product.findById(productId);
+    // Product should be soft-deleted (isActive = false, deletedAt set), not
+    // hard-removed. The model's pre(/^find/) hook hides soft-deleted docs, so
+    // opt in with includeDeleted to confirm the record still exists.
+    const inDbAfterDelete = await Product.findById(productId).setOptions({ includeDeleted: true });
     expect(inDbAfterDelete).not.toBeNull();
     expect(inDbAfterDelete.isActive).toBe(false);
   });
@@ -227,7 +239,9 @@ describe('E2E — Product lifecycle: register → login → create → update �
     expect(createRes.status).toBe(201);
     const productId = createRes.body.product._id;
 
-    const getRes = await request(app).get(`${PRODUCT_BASE}/${productId}`);
+    // GET /products/:id issues a 301 to the canonical /slug/:slug URL (SEO);
+    // follow the redirect to reach the product detail payload.
+    const getRes = await request(app).get(`${PRODUCT_BASE}/${productId}`).redirects(1);
     expect(getRes.status).toBe(200);
     expect(getRes.body.product.slug).toBe(slug);
   });

@@ -127,9 +127,11 @@ class RazorpayService {
       // Capture payment verification failures in Sentry
       if (process.env.SENTRY_DSN) {
         Sentry.withScope((scope) => {
-          scope.setContext('payment_verification', { 
-            razorpay_order_id, 
-            razorpay_payment_id 
+          // Destructured consts above are block-scoped to the try; reference the
+          // in-scope paymentData here to avoid a ReferenceError in this catch.
+          scope.setContext('payment_verification', {
+            razorpay_order_id: paymentData?.razorpay_order_id,
+            razorpay_payment_id: paymentData?.razorpay_payment_id
           });
           scope.setTag('payment_action', 'verify_payment');
           Sentry.captureException(error);

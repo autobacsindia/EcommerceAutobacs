@@ -19,7 +19,24 @@
  */
 
 import { jest } from '@jest/globals';
+import crypto from 'crypto';
 import * as dbHandler from './db-handler.js';
+
+// Deterministic IP/UA so the admin context-binding middleware (authMiddleware
+// `admin`) has stable hashes to match. These must be sent on every admin
+// request AND stored on the seeded admin user (see getAdminToken / asAdmin).
+const ADMIN_IP = '198.51.100.23';
+const ADMIN_UA = 'jest-admin/1.0';
+const ADMIN_IP_HASH = crypto.createHash('sha256').update(ADMIN_IP).digest('hex');
+const ADMIN_UA_HASH = crypto.createHash('sha256').update(ADMIN_UA).digest('hex');
+
+/** Attach admin Bearer token + the IP/UA headers the context check expects. */
+function asAdmin(req, token) {
+  return req
+    .set('Authorization', `Bearer ${token}`)
+    .set('cf-connecting-ip', ADMIN_IP)
+    .set('User-Agent', ADMIN_UA);
+}
 
 // Suppress console.error during tests - we expect errors in negative test cases
 // This prevents "Simulated failure" logs from being treated as test failures
@@ -106,6 +123,11 @@ async function getAdminToken() {
     passwordHash,
     role: 'admin',
     isVerified: true,
+    // The admin middleware binds each request to the IP/UA captured at login.
+    // These tests sign tokens directly (no login), so seed the hashes to match
+    // the ADMIN_IP/ADMIN_UA sent by asAdmin().
+    lastAdminIPHash: ADMIN_IP_HASH,
+    lastAdminUAHash: ADMIN_UA_HASH,
   });
 
   return jwt.sign(
@@ -125,9 +147,10 @@ describe('PUT /products/:id — deletePublicIds deferred delete', () => {
     // No new file uploads in this request
     mockUploadMany.mockResolvedValue([]);
 
-    const res = await request(app)
-      .put(`/api/v1/products/${product._id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
       .send({
         name:           product.name,
         description:    product.description,
@@ -154,9 +177,10 @@ describe('PUT /products/:id — deletePublicIds deferred delete', () => {
     const adminToken = await getAdminToken();
     mockUploadMany.mockResolvedValue([]);
 
-    const res = await request(app)
-      .put(`/api/v1/products/${product._id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
       .send({
         name:           product.name,
         description:    product.description,
@@ -193,9 +217,10 @@ describe('PUT /products/:id — replaceImages=true', () => {
     ]);
     mockDeleteMany.mockResolvedValue([]);
 
-    const res = await request(app)
-      .put(`/api/v1/products/${product._id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
       .attach('images', Buffer.from([0xFF, 0xD8, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04,
                                      0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C,
                                      0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12]), 'new.jpg')
@@ -241,9 +266,10 @@ describe('PUT /products/:id — DB failure rolls back new uploads', () => {
         populate: () => Promise.reject(new Error('Simulated DB failure')),
       });
 
-    const res = await request(app)
-      .put(`/api/v1/products/${product._id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
       .attach('images', Buffer.from([0xFF, 0xD8, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04,
                                      0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C,
                                      0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12]), 'img.jpg')
@@ -286,9 +312,10 @@ describe('POST /products — atomic rollback on DB failure', () => {
       .spyOn(Product.prototype, 'save')
       .mockRejectedValueOnce(new Error('Simulated create failure'));
 
-    const res = await request(app)
-      .post('/api/v1/products')
-      .set('Authorization', `Bearer ${adminToken}`)
+    const res = await asAdmin(
+      request(app).post('/api/v1/products'),
+      adminToken,
+    )
       .attach('images', Buffer.from([0xFF, 0xD8, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04,
                                      0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C,
                                      0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12]), 'img.jpg')

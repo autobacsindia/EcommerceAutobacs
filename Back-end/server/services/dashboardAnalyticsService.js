@@ -326,7 +326,7 @@ class DashboardAnalyticsService {
       };
 
       statusBreakdown.forEach(item => {
-        if (breakdown.hasOwnProperty(item._id)) {
+        if (Object.prototype.hasOwnProperty.call(breakdown, item._id)) {
           breakdown[item._id] = item.count;
         }
       });

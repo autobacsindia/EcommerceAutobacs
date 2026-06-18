@@ -75,7 +75,7 @@ router.post('/sync', protect, async (req, res) => {
     
     switch (action) {
       case 'add':
-      case 'update':
+      case 'update': {
         if (!productId) {
           return res.status(400).json({
             success: false,
@@ -125,6 +125,7 @@ router.post('/sync', protect, async (req, res) => {
         }
 
         break;
+      }
 
       case 'remove':
         if (!productId) {

@@ -275,8 +275,11 @@ router.put(
   handleMulterError,
   validateUploadedFiles,
   asyncHandler(updateProductWithImages),
-  // Invalidate product detail and list cache after update
-  asyncHandler(async (req, res, next) => {
+  // Invalidate product detail and list cache after update.
+  // updateProductWithImages has already sent the response; this runs as a
+  // terminal side-effect and must NOT call next() — doing so would fall through
+  // to the 404 notFound handler and race the buffered response.
+  asyncHandler(async (req, res, _next) => {
     try {
       await invalidatePublicCache(`PRODUCT_DETAIL:*${req.params.id}*`);
       await invalidatePublicCache('PRODUCT_LIST*');
@@ -284,7 +287,6 @@ router.put(
     } catch (error) {
       console.warn('[Cache] Failed to invalidate product cache:', error.message);
     }
-    next();
   })
 );
 

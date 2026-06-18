@@ -47,11 +47,17 @@ class CategoryMappingService {
   }
 
   /**
-   * Find a category by various matching strategies
+   * Find a category by various matching strategies.
+   *
+   * NOTE: This was a duplicate `findCategory` declaration shadowed at runtime by
+   * the later definition below (JS keeps the last method of a duplicate name).
+   * Renamed to silence no-dupe-class-members with zero behavior change; the live
+   * lookups all use the later findCategory(identifier). Reconcile the two during
+   * the category-service migration.
    * @param {string} categoryName - The name of the category to find
    * @returns {Object|null} The matched category or null
    */
-  findCategory(categoryName) {
+  findCategoryByName(categoryName) {
     if (!categoryName || typeof categoryName !== 'string') {
       return null;
     }

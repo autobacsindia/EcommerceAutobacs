@@ -81,7 +81,14 @@ app.set('trust proxy', 2);
 // all see the real client IP rather than Cloudflare's edge IP.
 app.use((req, _res, next) => {
   const cfIp = req.headers['cf-connecting-ip'];
-  if (cfIp) req.ip = cfIp;
+  // req.ip is a getter-only accessor on the Express request prototype; a plain
+  // assignment throws "Cannot set property ip ... only a getter" in strict-mode
+  // ESM, which would 500 every Cloudflare request. Redefine it as a data
+  // property instead so downstream code (logging, Sentry, middleware) sees the
+  // real client IP.
+  if (cfIp) {
+    Object.defineProperty(req, 'ip', { value: cfIp, configurable: true, enumerable: true });
+  }
   next();
 });
 

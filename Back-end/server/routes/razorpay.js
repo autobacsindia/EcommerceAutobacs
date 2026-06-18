@@ -494,8 +494,8 @@ router.post("/verify-payment",
       message: 'Payment signature verified. Awaiting webhook confirmation.',
       data: {
         orderId: order._id,
-        razorpayOrderId,
-        razorpayPaymentId,
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id,
         status: 'pending_webhook',
         note: 'Order will be confirmed once Razorpay webhook is received'
       }
