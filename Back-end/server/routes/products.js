@@ -213,6 +213,34 @@ router.get("/cleanup/status", protect, admin, asyncHandler(getCleanupStatus));
 // @access  Public
 router.get("/slug/:slug", cacheMiddleware('product-detail'), publicCacheResponse('PRODUCT_DETAIL'), asyncHandler(getProductBySlug));
 
+// @route   GET /products/batch?ids=id1,id2,id3
+// @desc    Fetch multiple products by ID in one request (used by compare page)
+// @access  Public
+router.get("/batch", publicProductRateLimit, asyncHandler(async (req, res) => {
+  const raw = req.query.ids;
+  if (!raw) {
+    return res.status(400).json({ success: false, message: 'ids query param required' });
+  }
+
+  const ids = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  if (ids.length === 0 || ids.length > 4) {
+    return res.status(400).json({ success: false, message: 'Provide 1–4 product IDs' });
+  }
+
+  const mongoose = await import('mongoose');
+  const validIds = ids.filter(id => mongoose.default.Types.ObjectId.isValid(id));
+  if (validIds.length !== ids.length) {
+    return res.status(400).json({ success: false, message: 'One or more invalid product IDs' });
+  }
+
+  const products = await Product.find({ _id: { $in: validIds }, isActive: true })
+    .populate('categories', 'name slug')
+    .populate('compatibleVehicles', 'make model year variant')
+    .lean();
+
+  res.json({ success: true, products });
+}));
+
 // @route   GET /products/:id
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing
 // @access  Public

@@ -19,8 +19,8 @@ export default function ProductCardCompare({ productId, isCompared, onToggle }: 
           onChange={() => onToggle(productId)}
         />
         <div className={cn(
-          'w-5 h-5 rounded-full border-2 flex items-center justify-center',
-          isCompared ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+          'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors',
+          isCompared ? 'bg-[#3B9EE8] border-[#3B9EE8]' : 'border-[#555555]'
         )}>
           {isCompared && (
             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

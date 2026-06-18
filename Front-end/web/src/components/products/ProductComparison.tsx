@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/context/CurrencyContext';
+import { useCart } from '@/context/CartContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 
 interface ProductImage {
@@ -15,6 +17,7 @@ interface ProductImage {
 
 interface Product {
   _id: string;
+  slug?: string;
   name: string;
   description: string;
   shortDescription?: string;
@@ -41,6 +44,16 @@ export default function ProductComparison() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatPrice } = useCurrency();
+  const { addToCart } = useCart();
+
+  const handleAddToCart = async (productId: string) => {
+    try {
+      await addToCart(productId, 1);
+      toast.success('Added to cart');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add to cart');
+    }
+  };
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +68,9 @@ export default function ProductComparison() {
       try {
         setLoading(true);
         setError(null);
-        const ids = idsParam.split(',');
-        const responses = await Promise.all(ids.map(id => apiClient.get(`/products/${id}`)));
-        setProducts(responses.map(r => (r as any).product).filter(Boolean));
+        const ids = idsParam.split(',').filter(Boolean).slice(0, 4);
+        const response = await apiClient.get(`/products/batch?ids=${ids.join(',')}`) as any;
+        setProducts(response.products ?? []);
       } catch (err: any) {
         setError('Failed to load products for comparison');
       } finally {
@@ -306,12 +319,13 @@ export default function ProductComparison() {
                 {products.map((p) => (
                   <div key={`${p._id}-actions`} className="flex flex-col gap-2">
                     <button
-                      onClick={() => router.push(`/products/${p._id}`)}
+                      onClick={() => router.push(`/products/${p.slug || p._id}`)}
                       className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm text-xs transition-colors"
                     >
                       View Details
                     </button>
                     <button
+                      onClick={() => handleAddToCart(p._id)}
                       disabled={p.stock <= 0}
                       className="w-full bg-[#161616] border border-[#252525] text-[#C4C4C4] hover:border-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
