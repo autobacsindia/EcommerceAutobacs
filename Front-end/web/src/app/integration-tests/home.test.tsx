@@ -26,9 +26,9 @@ jest.mock('@/components/vehicles/VehicleSelector', () => {
   };
 });
 
-jest.mock('@/components/products/FastMovingProducts', () => {
-  return function MockFastMovingProducts() {
-    return <div data-testid="fast-moving-products">Fast Moving Products</div>;
+jest.mock('@/components/products/FeaturedProducts', () => {
+  return function MockFeaturedProducts() {
+    return <div data-testid="featured-products">Featured Products</div>;
   };
 });
 

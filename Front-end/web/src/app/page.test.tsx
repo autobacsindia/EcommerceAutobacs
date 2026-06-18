@@ -32,9 +32,9 @@ jest.mock('@/components/vehicles/VehicleSelector', () => ({
   ),
 }));
 
-jest.mock('@/components/products/FastMovingProducts', () => ({
+jest.mock('@/components/products/FeaturedProducts', () => ({
   __esModule: true,
-  default: () => <div data-testid="fast-moving-products">Fast Moving Products</div>,
+  default: () => <div data-testid="featured-products">Featured Products</div>,
 }));
 
 jest.mock('@/components/products/ModernFastMovingSection', () => ({

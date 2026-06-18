@@ -10,7 +10,7 @@ import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton'
 import { Skeleton } from '@/components/ui/Skeleton';
 import { VehicleSelectorSection, RecentlyViewedSection } from './HomeClientSection';
 
-const FastMovingProducts = dynamic(() => import('@/components/products/FastMovingProducts'), {
+const FeaturedProducts = dynamic(() => import('@/components/products/FeaturedProducts'), {
   loading: () => (
     <div className="py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -249,7 +249,7 @@ export default function Home() {
       <ModernFastMovingSection />
 
       {/* Featured Products Section */}
-      <FastMovingProducts limit={4} />
+      <FeaturedProducts limit={4} />
 
       {/* Super Cars Premium Banner */}
       <SuperCarsBanner />
