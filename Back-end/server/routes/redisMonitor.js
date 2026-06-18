@@ -10,7 +10,7 @@ import { protect, admin } from '../middleware/authMiddleware.js';
 import sessionStore from '../services/sessionStore.js';
 import cacheService from '../services/cacheService.js';
 import { rateLimit } from '../middleware/rateLimitMiddleware.js';
-import AuditLog from '../models/AuditLog.js';
+import auditLogRepository from '../repositories/auditLogRepository.js';
 
 const router = express.Router();
 
@@ -32,7 +32,7 @@ const ipAllowlist = (req, res, next) => {
     
     if (!allowedIPs.includes(clientIP)) {
       // Log the unauthorized access attempt
-      AuditLog.logAction({
+      auditLogRepository.logAction({
         adminId: req.user?._id,
         adminEmail: req.user?.email || 'unknown',
         action: 'SESSION_REVOKE_ADMIN_ATTEMPT',
@@ -136,7 +136,7 @@ router.post('/sessions/:userId/revoke-all', protect, admin, async (req, res) => 
     
     if (targetUser && targetUser.role === 'admin') {
       // Log the attempt
-      await AuditLog.logAction({
+      await auditLogRepository.logAction({
         adminId: req.user._id,
         adminEmail: req.user.email,
         action: 'SESSION_REVOKE_ADMIN_ATTEMPT',
@@ -170,7 +170,7 @@ router.post('/sessions/:userId/revoke-all', protect, admin, async (req, res) => 
     }
     
     // AUDIT LOG
-    await AuditLog.logAction({
+    await auditLogRepository.logAction({
       adminId: req.user._id,
       adminEmail: req.user.email,
       action: 'SESSION_REVOKE_ALL',
@@ -190,7 +190,7 @@ router.post('/sessions/:userId/revoke-all', protect, admin, async (req, res) => 
     console.error('[RedisMonitor] Error revoking sessions:', err.message);
     
     // Log the failure
-    await AuditLog.logAction({
+    await auditLogRepository.logAction({
       adminId: req.user?._id,
       adminEmail: req.user?.email || 'unknown',
       action: 'SESSION_REVOKE_ALL',
@@ -231,7 +231,7 @@ router.post('/cache/clear', protect, admin, async (req, res) => {
     await cacheService.clear();
     
     // AUDIT LOG (persistent, not just console)
-    await AuditLog.logAction({
+    await auditLogRepository.logAction({
       adminId: req.user._id,
       adminEmail: req.user.email,
       action: 'CACHE_CLEAR',
@@ -252,7 +252,7 @@ router.post('/cache/clear', protect, admin, async (req, res) => {
     console.error('[RedisMonitor] Error clearing cache:', err.message);
     
     // Log the failure
-    await AuditLog.logAction({
+    await auditLogRepository.logAction({
       adminId: req.user?._id,
       adminEmail: req.user?.email || 'unknown',
       action: 'CACHE_CLEAR',

@@ -1,4 +1,4 @@
-import AdaptiveThrottlingProfile from '../models/AdaptiveThrottlingProfile.js';
+import adaptiveThrottlingProfileRepository from '../repositories/adaptiveThrottlingProfileRepository.js';
 import rateLimitEventEmitter from './rateLimitEventEmitter.js';
 
 class AdaptiveThrottlingService {
@@ -30,7 +30,7 @@ class AdaptiveThrottlingService {
    */
   async refreshActiveProfile() {
     try {
-      this.activeProfile = await AdaptiveThrottlingProfile.getActiveProfile();
+      this.activeProfile = await adaptiveThrottlingProfileRepository.getActiveProfile();
       if (this.activeProfile) {
         console.log(`✓ Active throttling profile loaded: ${this.activeProfile.name}`);
       }
@@ -84,7 +84,7 @@ class AdaptiveThrottlingService {
    */
   async activateProfile(profileId, adminUserId, reason = '') {
     try {
-      const profile = await AdaptiveThrottlingProfile.findById(profileId);
+      const profile = await adaptiveThrottlingProfileRepository.findById(profileId);
       
       if (!profile) {
         throw new Error('Profile not found');
@@ -161,7 +161,7 @@ class AdaptiveThrottlingService {
    */
   async checkScheduledProfiles() {
     try {
-      const { profilesToActivate, profilesToDeactivate } = await AdaptiveThrottlingProfile.checkScheduledProfiles();
+      const { profilesToActivate, profilesToDeactivate } = await adaptiveThrottlingProfileRepository.checkScheduledProfiles();
       
       // Deactivate profiles first
       for (const profile of profilesToDeactivate) {

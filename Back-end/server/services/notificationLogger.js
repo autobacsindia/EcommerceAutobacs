@@ -3,7 +3,7 @@
  * Handles logging of all notification attempts to database
  */
 
-import NotificationLog from '../models/NotificationLog.js';
+import notificationLogRepository from '../repositories/notificationLogRepository.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class NotificationLogger {
@@ -39,7 +39,7 @@ class NotificationLogger {
       }
       
       // Create log entry
-      const log = await NotificationLog.create({
+      const log = await notificationLogRepository.create({
         notificationId,
         orderId,
         userId,
@@ -117,7 +117,7 @@ class NotificationLogger {
    */
   async updateStatus(notificationId, status, updates = {}) {
     try {
-      const log = await NotificationLog.findOne({ notificationId });
+      const log = await notificationLogRepository.findOne({ notificationId });
       
       if (!log) {
         console.error(`[NotificationLogger] Notification log not found: ${notificationId}`);
@@ -165,7 +165,7 @@ class NotificationLogger {
         query.status = options.status;
       }
       
-      const logs = await NotificationLog.find(query)
+      const logs = await notificationLogRepository.find(query)
         .sort({ createdAt: -1 })
         .limit(options.limit || 50);
       
@@ -183,7 +183,7 @@ class NotificationLogger {
    */
   async getOrderStats(orderId) {
     try {
-      const stats = await NotificationLog.getOrderStats(orderId);
+      const stats = await notificationLogRepository.getOrderStats(orderId);
       return stats;
     } catch (error) {
       console.error('[NotificationLogger] Failed to get order stats:', error.message);
@@ -201,7 +201,7 @@ class NotificationLogger {
     try {
       const cutoffDate = new Date(Date.now() - hours * 60 * 60 * 1000);
       
-      const failures = await NotificationLog.find({
+      const failures = await notificationLogRepository.find({
         status: 'failed',
         createdAt: { $gte: cutoffDate }
       })
@@ -226,7 +226,7 @@ class NotificationLogger {
     try {
       const cutoffDate = new Date(Date.now() - hours * 60 * 60 * 1000);
       
-      const stats = await NotificationLog.aggregate([
+      const stats = await notificationLogRepository.aggregate([
         {
           $match: {
             createdAt: { $gte: cutoffDate }

@@ -1,4 +1,4 @@
-import AuditLog from "../models/AuditLog.js";
+import auditLogRepository from "../repositories/auditLogRepository.js";
 
 /**
  * Service to handle audit logging for admin actions and critical system events
@@ -32,7 +32,7 @@ const auditLogger = {
       };
 
       // Create log entry asynchronously (fire and forget)
-      AuditLog.create(logEntry).catch(err => {
+      auditLogRepository.create(logEntry).catch(err => {
         console.error('Failed to create audit log entry:', err);
       });
       

@@ -1,4 +1,4 @@
-import AdaptiveThrottlingProfile from '../models/AdaptiveThrottlingProfile.js';
+import adaptiveThrottlingProfileRepository from '../repositories/adaptiveThrottlingProfileRepository.js';
 import adaptiveThrottlingService from '../services/adaptiveThrottlingService.js';
 
 /**
@@ -8,7 +8,7 @@ import adaptiveThrottlingService from '../services/adaptiveThrottlingService.js'
  */
 export const getAllProfiles = async (req, res) => {
   try {
-    const profiles = await AdaptiveThrottlingProfile.find()
+    const profiles = await adaptiveThrottlingProfileRepository.find()
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
     
@@ -34,7 +34,7 @@ export const getAllProfiles = async (req, res) => {
  */
 export const getProfile = async (req, res) => {
   try {
-    const profile = await AdaptiveThrottlingProfile.findById(req.params.id)
+    const profile = await adaptiveThrottlingProfileRepository.findById(req.params.id)
       .populate('createdBy', 'name email');
     
     if (!profile) {
@@ -70,7 +70,7 @@ export const createProfile = async (req, res) => {
       createdBy: req.user._id
     };
     
-    const profile = await AdaptiveThrottlingProfile.create(profileData);
+    const profile = await adaptiveThrottlingProfileRepository.create(profileData);
     
     console.log(`✓ Created adaptive throttling profile: ${profile.name} by ${req.user.email}`);
     
@@ -96,7 +96,7 @@ export const createProfile = async (req, res) => {
  */
 export const updateProfile = async (req, res) => {
   try {
-    const profile = await AdaptiveThrottlingProfile.findById(req.params.id);
+    const profile = await adaptiveThrottlingProfileRepository.findById(req.params.id);
     
     if (!profile) {
       return res.status(404).json({
@@ -146,7 +146,7 @@ export const updateProfile = async (req, res) => {
  */
 export const deleteProfile = async (req, res) => {
   try {
-    const profile = await AdaptiveThrottlingProfile.findById(req.params.id);
+    const profile = await adaptiveThrottlingProfileRepository.findById(req.params.id);
     
     if (!profile) {
       return res.status(404).json({
@@ -272,7 +272,7 @@ export const getStatus = async (req, res) => {
  */
 export const createFlashSalePreset = async (req, res) => {
   try {
-    const profile = await AdaptiveThrottlingProfile.create({
+    const profile = await adaptiveThrottlingProfileRepository.create({
       name: 'Flash Sale',
       description: 'Optimized limits for flash sale events with increased checkout capacity',
       endpointAdjustments: [

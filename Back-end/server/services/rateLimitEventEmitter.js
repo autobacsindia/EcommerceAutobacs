@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import RateLimitEvent from '../models/RateLimitEvent.js';
+import rateLimitEventRepository from '../repositories/rateLimitEventRepository.js';
 
 class RateLimitEventEmitter extends EventEmitter {
   constructor() {
@@ -40,7 +40,7 @@ class RateLimitEventEmitter extends EventEmitter {
   
   async persistToDatabase(eventData) {
     try {
-      await RateLimitEvent.create({
+      await rateLimitEventRepository.create({
         ...eventData,
         timestamp: new Date()
       });

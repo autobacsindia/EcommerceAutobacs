@@ -1,4 +1,4 @@
-import RateLimitEvent from '../models/RateLimitEvent.js';
+import rateLimitEventRepository from '../repositories/rateLimitEventRepository.js';
 import rateLimitEventEmitter from '../services/rateLimitEventEmitter.js';
 
 /**
@@ -91,12 +91,12 @@ export const getHistoricalEvents = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     const [events, total] = await Promise.all([
-      RateLimitEvent.find(query)
+      rateLimitEventRepository.find(query)
         .sort({ timestamp: -1 })
         .limit(parseInt(limit))
         .skip(skip)
         .lean(),
-      RateLimitEvent.countDocuments(query)
+      rateLimitEventRepository.countDocuments(query)
     ]);
     
     res.json({
@@ -129,7 +129,7 @@ export const getEventCounts = async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
     
-    const counts = await RateLimitEvent.getEventCountsByType(start, end);
+    const counts = await rateLimitEventRepository.getEventCountsByType(start, end);
     
     res.json({
       success: true,
@@ -159,7 +159,7 @@ export const getTopEndpoints = async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
     
-    const endpoints = await RateLimitEvent.getTopRateLimitedEndpoints(parseInt(limit), start, end);
+    const endpoints = await rateLimitEventRepository.getTopRateLimitedEndpoints(parseInt(limit), start, end);
     
     res.json({
       success: true,
@@ -189,7 +189,7 @@ export const getUserImpact = async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
     
-    const userMetrics = await RateLimitEvent.getUserImpactMetrics(start, end);
+    const userMetrics = await rateLimitEventRepository.getUserImpactMetrics(start, end);
     
     res.json({
       success: true,
@@ -219,7 +219,7 @@ export const getRetrySuccessRate = async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
     
-    const retryStats = await RateLimitEvent.getRetrySuccessRate(start, end);
+    const retryStats = await rateLimitEventRepository.getRetrySuccessRate(start, end);
     
     res.json({
       success: true,
@@ -263,7 +263,7 @@ export const getTimeline = async (req, res) => {
         dateFormat = { $dateToString: { format: '%Y-%m-%d %H:00', date: '$timestamp' } };
     }
     
-    const timeline = await RateLimitEvent.aggregate([
+    const timeline = await rateLimitEventRepository.aggregate([
       {
         $match: {
           timestamp: { $gte: start, $lte: end }
@@ -324,9 +324,9 @@ export const getHealthScore = async (req, res) => {
     
     // Get metrics for last hour
     const [totalEvents, blockEvents, retryStats] = await Promise.all([
-      RateLimitEvent.countDocuments({ timestamp: { $gte: oneHourAgo } }),
-      RateLimitEvent.countDocuments({ eventType: 'block', timestamp: { $gte: oneHourAgo } }),
-      RateLimitEvent.getRetrySuccessRate(oneHourAgo, now)
+      rateLimitEventRepository.countDocuments({ timestamp: { $gte: oneHourAgo } }),
+      rateLimitEventRepository.countDocuments({ eventType: 'block', timestamp: { $gte: oneHourAgo } }),
+      rateLimitEventRepository.getRetrySuccessRate(oneHourAgo, now)
     ]);
     
     // Calculate health score (0-100)
