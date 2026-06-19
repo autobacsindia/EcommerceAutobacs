@@ -116,8 +116,12 @@ function ShareBar({ title }: { title: string }) {
   );
 }
 
+// Map article.type (singular DB value) to the plural route segment
+const TYPE_ROUTE: Record<string, string> = { blog: 'blogs', news: 'news' };
+function typeRoute(t: string) { return TYPE_ROUTE[t] ?? t; }
+
 export default function ArticleDetailClient({ article, related, type }: Props) {
-  const backHref = `/media/${article.type}`;
+  const backHref = `/media/${typeRoute(article.type)}`;
   const backLabel = article.type === 'news' ? 'Back to News' : 'Back to Blog';
   const Icon = article.type === 'news' ? Newspaper : BookOpen;
 
@@ -183,7 +187,7 @@ export default function ArticleDetailClient({ article, related, type }: Props) {
 
               {/* Rich HTML content */}
               <div
-                className="prose prose-gray max-w-none prose-headings:font-bold prose-a:text-red-600 prose-img:rounded-lg"
+                className="prose prose-gray max-w-none prose-headings:font-bold prose-a:text-red-600 prose-img:rounded-lg text-gray-800 **:text-inherit"
                 dangerouslySetInnerHTML={{ __html: safeContent }}
               />
 
@@ -194,7 +198,7 @@ export default function ArticleDetailClient({ article, related, type }: Props) {
                   {article.tags.map(tag => (
                     <Link
                       key={tag}
-                      href={`/media/${article.type}?search=${tag}`}
+                      href={`/media/${typeRoute(article.type)}?search=${tag}`}
                       className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full transition-colors"
                     >
                       #{tag}
