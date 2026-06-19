@@ -38,3 +38,20 @@ export function statusFromQuantity(qty, lowThreshold = 5) {
   if (n <= lowThreshold) return STOCK_STATUS.LOW;
   return STOCK_STATUS.IN;
 }
+
+/**
+ * Coerce any stored `stock` value to a valid status. Belt-and-suspenders for
+ * pre-migration data where `stock` may still be a number (or a numeric string
+ * after Mongoose String-casts it). Already-valid statuses pass through; numeric
+ * values are mapped by quantity; anything else defaults to in stock.
+ *
+ * @param {*} value
+ * @returns {'in'|'low'|'out'}
+ */
+export function normalizeStockValue(value) {
+  if (STOCK_VALUES.includes(value)) return value;
+  if (value != null && value !== '' && !Number.isNaN(Number(value))) {
+    return statusFromQuantity(value);
+  }
+  return STOCK_STATUS.IN;
+}

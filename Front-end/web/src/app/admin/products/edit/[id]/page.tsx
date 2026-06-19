@@ -1,6 +1,6 @@
 'use client';
 
-import type { StockStatus } from '@/lib/stock';
+import { type StockStatus, getStockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import apiClient from '@/lib/api';
@@ -223,7 +223,9 @@ export default function EditProductPage() {
         price: productData.price?.toString() || '',
         originalPrice: productData.originalPrice?.toString() || '',
         brand: productData.brand || '',
-        stock: productData.stock || 'in',
+        // Normalize legacy numeric stock (e.g. 999) to a valid status so the
+        // dropdown shows a real option and saving sends a valid enum value.
+        stock: getStockStatus(productData),
         sku: productData.sku || '',
         isFeatured: productData.isFeatured || false,
         isFastMoving: productData.isFastMoving || false,
