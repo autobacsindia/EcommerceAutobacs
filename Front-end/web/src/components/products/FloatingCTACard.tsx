@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, Zap, Shield, Truck, RotateCcw, CreditCard, Heart } from 'lucide-react';
@@ -7,13 +8,16 @@ import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
 
+// Stock is a coarse status (no unit count), so cap quantity at a fixed max.
+const MAX_QUANTITY = 99;
+
 interface FloatingCTACardProps {
   product: {
     _id: string;
     name: string;
     price: number;
     originalPrice?: number;
-    stock: number;
+    stock: StockStatus;
   };
 }
 
@@ -105,27 +109,27 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           <input
             type="number"
             min="1"
-            max={product.stock}
+            max={MAX_QUANTITY}
             value={quantity}
             onChange={(e) => {
               const val = parseInt(e.target.value);
-              if (!isNaN(val) && val >= 1 && val <= product.stock) {
+              if (!isNaN(val) && val >= 1 && val <= MAX_QUANTITY) {
                 setQuantity(val);
               }
             }}
             className="px-6 py-3 text-white font-bold min-w-16 text-center border-x border-white/20 bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <button
-            onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-            disabled={quantity >= product.stock}
+            onClick={() => setQuantity(Math.min(MAX_QUANTITY, quantity + 1))}
+            disabled={quantity >= MAX_QUANTITY}
             className="px-4 py-3 text-white font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10"
           >
             +
           </button>
         </div>
-        {product.stock < 10 && (
+        {product.stock === 'low' && (
           <span className="text-orange-400 text-sm font-semibold">
-            Only {product.stock} left!
+            Low stock!
           </span>
         )}
       </div>
@@ -135,7 +139,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={handleAddToCart}
-          disabled={product.stock === 0 || cartLoading}
+          disabled={product.stock === 'out' || cartLoading}
           className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg shadow-lg shadow-orange-500/30"
         >
           <ShoppingCart className="w-6 h-6" />
@@ -145,7 +149,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={handleBuyNow}
-          disabled={product.stock === 0 || buyNowLoading}
+          disabled={product.stock === 'out' || buyNowLoading}
           className="w-full bg-white/10 hover:bg-white/20 disabled:bg-zinc-800 border border-white/30 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg"
         >
           <Zap className="w-6 h-6" />

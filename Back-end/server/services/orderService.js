@@ -3,10 +3,12 @@ import productRepository from '../repositories/productRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import cartRepository from '../repositories/cartRepository.js';
 import { getNotificationsQueue, getOrderQueue } from '../queue/queues.js';
+import { STOCK_STATUS } from '../utils/stockStatus.js';
 
 class OrderService {
   /**
-   * Validate each item against DB, re-price from DB, perform soft stock check.
+   * Validate each item against DB, re-price from DB, check availability.
+   * Stock is a coarse status, so the only gate is "not out of stock".
    * Read-only — runs OUTSIDE the transaction so the session isn't held longer
    * than necessary.
    */
@@ -23,10 +25,8 @@ class OrderService {
         throw err;
       }
 
-      if (product.stock < item.quantity) {
-        const err = new Error(
-          `Insufficient stock for ${product.name}. Only ${product.stock} available`
-        );
+      if (product.stock === STOCK_STATUS.OUT) {
+        const err = new Error(`${product.name} is out of stock`);
         err.status = 400;
         throw err;
       }
@@ -46,52 +46,11 @@ class OrderService {
   }
 
   /**
-   * Atomically reserve stock for all items.
-   *
-   * When `session` is provided (inside a transaction), MongoDB rolls back
-   * any already-deducted stock automatically on abort — no manual rollback.
-   *
-   * Without a session, we manually restore already-reserved units on failure.
-   */
-  async reserveStock(orderItems, session = null) {
-    const reserved = [];
-
-    for (const item of orderItems) {
-      const updated = await productRepository.atomicDeductStock(
-        item.product,
-        item.quantity,
-        session
-      );
-
-      if (!updated) {
-        // Manual rollback only when there is no enclosing transaction
-        if (!session && reserved.length > 0) {
-          await Promise.all(
-            reserved.map(r => productRepository.restoreStock(r.product, r.quantity))
-          );
-        }
-
-        const current  = await productRepository.findById(item.product);
-        const available = current?.stock ?? 0;
-        const name     = current?.name ?? 'Product';
-        const err = new Error(
-          `${name} is out of stock. ${available > 0 ? `Only ${available} left` : 'No units available'}.`
-        );
-        err.status = 409;
-        throw err;
-      }
-
-      reserved.push({ product: item.product, quantity: item.quantity });
-    }
-
-    return reserved;
-  }
-
-  /**
    * Full order creation flow.
    *
    * Validation (read-only) runs outside the transaction so the session lock is
-   * held only for the three writes: stock deduction, order insert, cart clear.
+   * held only for the two writes: order insert and cart clear. Stock is a
+   * coarse status, so there is no per-unit reservation/deduction.
    *
    * @param {string|ObjectId} userId
    * @param {Array}  items            [{product, quantity}]
@@ -118,14 +77,12 @@ class OrderService {
       throw err;
     }
 
-    // ── Atomic transaction: deduct stock → create order → clear cart ──────────
+    // ── Atomic transaction: create order → clear cart ─────────────────────────
     const session = await mongoose.startSession();
     let order;
 
     try {
       await session.withTransaction(async () => {
-        await this.reserveStock(orderItems, session);
-
         order = await orderRepository.create(
           {
             user: userId,

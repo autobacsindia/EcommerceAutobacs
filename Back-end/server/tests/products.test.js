@@ -33,7 +33,7 @@ describe('Products API', () => {
     name: 'Test Product',
     description: 'Test Description',
     price: 100,
-    stock: 10,
+    stock: 'in',
     images: [{ url: 'http://example.com/image.jpg', alt: 'Test Image' }],
     brand: 'Test Brand'
   };
@@ -144,7 +144,7 @@ describe('Products API', () => {
         name: 'New Product',
         description: 'New Description',
         price: 200,
-        stock: 20,
+        stock: 'in',
         images: [{ url: 'http://example.com/new.jpg', alt: 'New Image' }],
         brand: 'New Brand',
         category: 'Test Category'
@@ -165,7 +165,7 @@ describe('Products API', () => {
         name: 'User Product',
         description: 'Description',
         price: 100,
-        stock: 10,
+        stock: 'in',
         images: [{ url: 'http://example.com/img.jpg' }]
       };
 
@@ -258,7 +258,7 @@ describe('Products API', () => {
           name: 'Electronics A',
           description: 'Desc A',
           price: 50,
-          stock: 10,
+          stock: 'in',
           categories: [electronics._id],
           brand: 'Sony',
           images: [{ url: 'http://example.com/a.jpg' }]
@@ -267,7 +267,7 @@ describe('Products API', () => {
           name: 'Electronics B',
           description: 'Desc B',
           price: 150,
-          stock: 10,
+          stock: 'in',
           categories: [electronics._id],
           brand: 'Samsung',
           images: [{ url: 'http://example.com/b.jpg' }]
@@ -276,7 +276,7 @@ describe('Products API', () => {
           name: 'Book C',
           description: 'Desc C',
           price: 200,
-          stock: 10,
+          stock: 'in',
           categories: [books._id],
           brand: 'Penguin',
           images: [{ url: 'http://example.com/c.jpg' }]

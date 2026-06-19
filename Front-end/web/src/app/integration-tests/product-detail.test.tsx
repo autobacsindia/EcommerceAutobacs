@@ -93,7 +93,7 @@ describe('Product Detail Page Integration', () => {
     images: [{ url: 'test.jpg', alt: 'Test Image' }],
     averageRating: 4.5,
     totalReviews: 10,
-    stock: 5,
+    stock: 'in' as const,
     isActive: true,
     isFeatured: false,
     createdAt: '2024-01-01T00:00:00.000Z',

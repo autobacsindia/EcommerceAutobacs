@@ -1,6 +1,7 @@
 // ProductService for handling product data integration
 // This service provides methods to work with both API-fetched products and static product data
 
+import type { StockStatus } from '@/lib/stock';
 import apiClient from '@/lib/api';
 import { Product, ProductsData } from '@/lib/types';
 
@@ -23,7 +24,7 @@ interface CleanProductData {
     alt?: string;
     isPrimary?: boolean;
   }>;
-  stock: number;
+  stock: StockStatus;
   sku?: string;
   specifications?: Array<{
     key: string;
@@ -158,7 +159,7 @@ class ProductService {
         
         const matchesMaxPrice = !filters.maxPrice || product.price <= filters.maxPrice;
         
-        const matchesInStock = !filters.inStock || product.stock > 0;
+        const matchesInStock = !filters.inStock || product.stock !== 'out';
         
         return matchesKeyword && matchesCategory && matchesBrand && matchesMinPrice && matchesMaxPrice && matchesInStock;
       });

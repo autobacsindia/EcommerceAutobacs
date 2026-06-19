@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useEffect, useState } from 'react';
 import apiClient from '@/lib/api';
 import ProductGrid from '@/components/products/ProductGrid';
@@ -18,7 +19,7 @@ interface Product {
   originalPrice?: number;
   images: ProductImage[] | string;
   categories?: Array<{ _id: string; name: string; slug: string }>;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
   isFeatured?: boolean;
   isOfferFeatured?: boolean;

@@ -1,5 +1,6 @@
 'use client';
 
+import { type StockStatus, isOutOfStock } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -40,7 +41,7 @@ interface ExtendedProduct {
   sale_price?: string;
   originalPrice?: number;
   on_sale?: boolean;
-  stock?: number;
+  stock?: StockStatus;
   stock_status?: string;
   featured?: boolean;
   isFeatured?: boolean;
@@ -513,17 +514,17 @@ export default function ClientPage({ slug }: { slug: string }) {
 
                           {/* Badges */}
                           <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
-                            {(product.stock_status === 'outofstock' || (product.stock !== undefined && product.stock <= 0)) && (
+                            {isOutOfStock(product) && (
                               <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
                                 Out of Stock
                               </span>
                             )}
-                            {(product.featured || product.isFeatured) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
+                            {(product.featured || product.isFeatured) && !isOutOfStock(product) && (
                               <span className="bg-[#3B9EE8]/20 border border-[#3B9EE8]/40 text-[#3B9EE8] px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
                                 Popular
                               </span>
                             )}
-                            {(product.on_sale || (product.originalPrice && product.originalPrice > 0)) && (product.stock_status === 'instock' || (product.stock !== undefined && product.stock >= 0)) && (
+                            {(product.on_sale || (product.originalPrice && product.originalPrice > 0)) && !isOutOfStock(product) && (
                               <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
                                 Sale
                               </span>
@@ -581,7 +582,7 @@ export default function ClientPage({ slug }: { slug: string }) {
 
                               <button
                                 onClick={() => handleAddToCart(product)}
-                                disabled={product.stock_status === 'outofstock' || product.stock === 0}
+                                disabled={isOutOfStock(product)}
                                 className="flex items-center gap-1.5 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-3 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <ShoppingCart className="h-3.5 w-3.5" />

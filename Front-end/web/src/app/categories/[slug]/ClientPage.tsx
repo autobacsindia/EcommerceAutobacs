@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -33,7 +34,7 @@ interface Product {
   } | string;
   brand?: string;
   images: ProductImage[] | string;
-  stock: number;
+  stock: StockStatus;
   sku?: string;
   specifications?: Array<{
     key: string;

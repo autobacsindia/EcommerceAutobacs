@@ -13,6 +13,8 @@
  *      Source of truth (offline-safe)
  */
 
+import type { StockStatus } from '@/lib/stock';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface CartItem {
@@ -21,7 +23,7 @@ interface CartItem {
   price: number;
   quantity: number;
   images: any[];
-  stock: number;
+  stock: StockStatus;
   addedAt: string;
 }
 

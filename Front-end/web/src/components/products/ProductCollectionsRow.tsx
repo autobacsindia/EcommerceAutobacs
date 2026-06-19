@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ShoppingCart, Heart, ChevronRight } from 'lucide-react';
@@ -30,7 +31,7 @@ interface Product {
     name: string;
   } | string;
   brand?: string;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
 }
 
@@ -280,11 +281,11 @@ export default function ProductCollectionsRow({
                             {/* Compact Add to Cart Button */}
                             <button
                               onClick={(e) => handleAddToCart(product._id, e)}
-                              disabled={product.stock <= 0}
+                              disabled={product.stock === 'out'}
                               className="w-full mt-3 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
                             >
                               <ShoppingCart className="h-4 w-4" />
-                              <span>{product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'}</span>
+                              <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
                             </button>
                           </div>
                         </div>

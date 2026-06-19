@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -13,7 +14,7 @@ interface CartItem {
     name: string;
     price: number;
     images: ProductImage[] | string;
-    stock: number;
+    stock: StockStatus;
   };
   quantity: number;
 }

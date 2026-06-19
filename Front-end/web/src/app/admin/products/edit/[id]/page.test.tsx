@@ -49,7 +49,7 @@ describe('EditProductPage', () => {
     originalPrice: 200,
     category: { _id: 'cat1', name: 'Category 1' },
     brand: 'Toyota',
-    stock: 50,
+    stock: 'in',
     sku: 'SKU123',
     isFeatured: true,
     isFastMoving: false,

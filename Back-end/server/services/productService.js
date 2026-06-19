@@ -13,6 +13,7 @@
 import productRepository from '../repositories/productRepository.js';
 import elasticsearchService from './elasticsearchService.js';
 import cacheService, { TTL } from './cacheService.js';
+import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 
 class ProductService {
   /**
@@ -194,37 +195,18 @@ class ProductService {
   }
 
   /**
-   * Check product stock availability
+   * Check product stock availability. Stock is a coarse status, so a product
+   * is fulfillable as long as it is not marked out of stock (quantity-agnostic).
    */
   async checkStock(productId, requestedQuantity) {
-    const availableStock = await productRepository.getStock(productId);
-    
+    const status = await productRepository.getStock(productId);
+    const canFulfill = isPurchasable(status);
+
     return {
-      available: availableStock,
+      status,
       requested: requestedQuantity,
-      inStock: availableStock >= requestedQuantity,
-      canFulfill: availableStock >= requestedQuantity
-    };
-  }
-
-  /**
-   * Reserve stock (for cart/checkout).
-   * Uses a single atomic findOneAndUpdate with a $gte guard — no separate
-   * read step that could race with a concurrent decrement.
-   */
-  async reserveStock(productId, quantity) {
-    const updated = await productRepository.atomicDeductStock(productId, quantity);
-
-    if (!updated) {
-      const available = await productRepository.getStock(productId);
-      throw new Error(`Insufficient stock. Available: ${available}, Requested: ${quantity}`);
-    }
-
-    // atomicDeductStock returns the pre-update doc (new: false),
-    // so remaining = old stock - quantity.
-    return {
-      success: true,
-      remaining: updated.stock - quantity
+      inStock: canFulfill,
+      canFulfill
     };
   }
 
@@ -272,7 +254,7 @@ class ProductService {
     }
 
     if (inStock === 'true') {
-      query.stock = { $gt: 0 };
+      query.stock = { $ne: STOCK_STATUS.OUT };
     }
 
     // Calculate pagination

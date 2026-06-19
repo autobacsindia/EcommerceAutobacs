@@ -20,7 +20,7 @@ const testProduct = {
   description: 'Test product description',
   category: 'Test Category',
   brand: 'Test Brand',
-  stock: 10,
+  stock: 'in',
   isActive: true
 };
 

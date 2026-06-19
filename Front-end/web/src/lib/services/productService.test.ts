@@ -119,7 +119,7 @@ describe('ProductService', () => {
         category: { _id: 'c1', name: 'Cat 1', slug: 'cat-1' },
         brand: 'Brand 1',
         images: [],
-        stock: 10,
+        stock: 'in',
         isActive: true,
         isFeatured: false,
         averageRating: 0,
@@ -149,7 +149,7 @@ describe('ProductService', () => {
         category: 'Cat String', // String category
         brand: 'Brand 1',
         images: [],
-        stock: 10,
+        stock: 'in',
         isActive: true,
         isFeatured: false,
         averageRating: 0,

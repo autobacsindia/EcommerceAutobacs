@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { ShoppingCart, Zap, Shield, Truck, RotateCcw, Star } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
+import { type StockStatus, isOutOfStock, isLowStock } from '@/lib/stock';
+
+// Max quantity a customer can add per line. Stock is a coarse status, so we no
+// longer have a per-product unit count to cap against.
+const MAX_QUANTITY = 99;
 
 interface ProductInfoProps {
   product: {
@@ -12,7 +17,7 @@ interface ProductInfoProps {
     price: number;
     originalPrice?: number;
     brand?: string;
-    stock: number;
+    stock: StockStatus;
     averageRating?: number;
     totalReviews?: number;
     shortDescription?: string;
@@ -24,6 +29,9 @@ export default function ProductInfo({ product }: ProductInfoProps) {
   const { addToCart } = useCart();
   const [cartLoading, setCartLoading] = useState(false);
   const [quantity, setQuantity] = useState(1);
+
+  const outOfStock = isOutOfStock(product);
+  const lowStock = isLowStock(product);
 
   const discount = product.originalPrice
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
@@ -123,11 +131,11 @@ export default function ProductInfo({ product }: ProductInfoProps) {
 
       {/* Stock Status */}
       <div className="space-y-1">
-        {product.stock > 0 ? (
+        {!outOfStock ? (
           <>
-            {product.stock <= 5 ? (
+            {lowStock ? (
               <p className="text-sm text-red-600 font-semibold">
-                🔥 Only {product.stock} left in stock - Order now!
+                🔥 Low stock - Order now!
               </p>
             ) : (
               <p className="text-sm text-green-600 font-semibold">
@@ -160,28 +168,28 @@ export default function ProductInfo({ product }: ProductInfoProps) {
           <input
             type="number"
             min="1"
-            max={product.stock}
+            max={MAX_QUANTITY}
             value={quantity}
             onChange={(e) => {
               const val = parseInt(e.target.value);
-              if (!isNaN(val) && val >= 1 && val <= product.stock) {
+              if (!isNaN(val) && val >= 1 && val <= MAX_QUANTITY) {
                 setQuantity(val);
               }
             }}
             className="px-4 py-2 font-semibold min-w-[3rem] text-center border-x border-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <button
-            onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-            disabled={quantity >= product.stock}
+            onClick={() => setQuantity(Math.min(MAX_QUANTITY, quantity + 1))}
+            disabled={quantity >= MAX_QUANTITY}
             className="px-3 py-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100"
             aria-label="Increase quantity"
           >
             +
           </button>
         </div>
-        {product.stock < 10 && (
+        {lowStock && (
           <span className="text-orange-600 text-sm font-semibold">
-            Only {product.stock} left!
+            Low stock!
           </span>
         )}
       </div>
@@ -190,7 +198,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
       <div className="space-y-3">
         <button
           onClick={handleAddToCart}
-          disabled={product.stock === 0 || cartLoading}
+          disabled={outOfStock || cartLoading}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
         >
           <ShoppingCart className="w-5 h-5" />
@@ -199,7 +207,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
 
         <button
           onClick={handleBuyNow}
-          disabled={product.stock === 0 || cartLoading}
+          disabled={outOfStock || cartLoading}
           className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
         >
           <Zap className="w-5 h-5" />

@@ -96,7 +96,7 @@ async function seedProduct(overrides = {}) {
     name:        'Test Product',
     description: 'A test product description',
     price:       999,
-    stock:       10,
+    stock:       'in',
     slug:        `test-product-${Date.now()}`,
     isActive:    true,
     images: [
@@ -322,7 +322,7 @@ describe('POST /products — atomic rollback on DB failure', () => {
       .field('name',        'Rollback Product')
       .field('description', 'Product that should roll back')
       .field('price',       '500')
-      .field('stock',       '5')
+      .field('stock',       'low')
       .field('slug',        `rollback-${Date.now()}`);
 
     expect(res.status).toBeGreaterThanOrEqual(500);

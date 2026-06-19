@@ -47,7 +47,7 @@ describe('CartContext', () => {
           name: 'Test Product',
           price: 100,
           images: ['img.jpg'],
-          stock: 10
+          stock: 'in'
         },
         quantity: 1
       }

@@ -1,5 +1,6 @@
 'use client';
 
+import { type StockStatus, getStockLabel } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -10,7 +11,7 @@ interface Product {
   _id: string;
   name: string;
   price: number;
-  stock: number;
+  stock: StockStatus;
   categories?: { name: string }[];
   isFeatured: boolean;
 }
@@ -168,8 +169,8 @@ export default function AdminProductsPage() {
                     <div className="text-sm text-gray-900">₹{product.price.toFixed(2)}</div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className={`text-sm ${product.stock > 10 ? 'text-green-600' : 'text-red-600'}`}>
-                      {product.stock}
+                    <div className={`text-sm ${product.stock === 'in' ? 'text-green-600' : product.stock === 'low' ? 'text-orange-600' : 'text-red-600'}`}>
+                      {getStockLabel(product)}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

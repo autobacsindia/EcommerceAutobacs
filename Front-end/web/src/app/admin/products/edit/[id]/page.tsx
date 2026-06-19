@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import apiClient from '@/lib/api';
@@ -34,7 +35,7 @@ interface Product {
   category?: string; // Keep for backward compatibility if needed, but we'll use categories
   categories?: string[] | Category[];
   brand: string;
-  stock: number;
+  stock: StockStatus;
   sku: string;
   isFeatured: boolean;
   isOfferFeatured?: boolean;
@@ -222,7 +223,7 @@ export default function EditProductPage() {
         price: productData.price?.toString() || '',
         originalPrice: productData.originalPrice?.toString() || '',
         brand: productData.brand || '',
-        stock: productData.stock?.toString() || '',
+        stock: productData.stock || 'in',
         sku: productData.sku || '',
         isFeatured: productData.isFeatured || false,
         isFastMoving: productData.isFastMoving || false,
@@ -323,9 +324,9 @@ export default function EditProductPage() {
       return;
     }
 
-    const stock = parseInt(formData.stock);
-    if (isNaN(stock)) {
-      alert('Please enter a valid stock quantity');
+    const stock = formData.stock;
+    if (!['in', 'low', 'out'].includes(stock)) {
+      alert('Please select a valid stock status');
       setSubmitting(false);
       return;
     }
@@ -653,18 +654,20 @@ export default function EditProductPage() {
             
             <div className="mb-4">
               <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
-                Stock Quantity *
+                Stock Status *
               </label>
-              <input
+              <select
                 id="stock"
-                type="number"
                 name="stock"
                 value={formData.stock}
                 onChange={handleInputChange}
                 required
-                min="0"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="in">In Stock</option>
+                <option value="low">Low Stock</option>
+                <option value="out">Out of Stock</option>
+              </select>
             </div>
             
             <div className="mb-4">

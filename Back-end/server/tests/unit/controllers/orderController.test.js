@@ -15,6 +15,7 @@ const mockCart = {
 
 const mockProduct = {
   findById: jest.fn(),
+  findOne: jest.fn(),
   findByIdAndUpdate: jest.fn(),
 };
 
@@ -66,6 +67,7 @@ describe('OrderController Unit Tests', () => {
       query: {},
       params: {},
       body: {},
+      headers: {},
       user: {
         id: 'user-id',
         role: 'user'
@@ -195,30 +197,34 @@ describe('OrderController Unit Tests', () => {
         _id: 'p1',
         name: 'Test Product',
         price: 100,
-        stock: 10,
+        stock: 'in',
         isActive: true,
         images: [{ url: 'img.jpg' }]
       };
 
+      // findActiveById (used during validation) queries via findOne
       mockProduct.findById.mockResolvedValue(mockProductDoc);
-      
+      mockProduct.findOne.mockResolvedValue(mockProductDoc);
+
       const createdOrder = { _id: 'new-order', totalAmount: 210 };
-      mockOrder.create.mockResolvedValue(createdOrder);
+      // BaseRepository.create uses Model.create([data], { session }) inside the
+      // transaction and unwraps the array, so the mock must resolve an array.
+      mockOrder.create.mockResolvedValue([createdOrder]);
 
       await createOrder(req, res);
 
-      expect(mockProduct.findById).toHaveBeenCalledWith('p1');
+      // Validation resolves the product via findOne (findActiveById)
+      expect(mockProduct.findOne).toHaveBeenCalled();
       expect(mockOrder.create).toHaveBeenCalled();
-      
-      // Stock update
-      expect(mockProduct.findByIdAndUpdate).toHaveBeenCalledWith('p1', {
-        $inc: { stock: -2 }
-      });
-      
-      // Cart clear
+
+      // Stock is a coarse status — orders no longer mutate product stock.
+      expect(mockProduct.findByIdAndUpdate).not.toHaveBeenCalled();
+
+      // Cart clear (called with a transaction session as the 3rd arg)
       expect(mockCart.findOneAndUpdate).toHaveBeenCalledWith(
         { user: 'user-id' },
-        { items: [] }
+        { items: [] },
+        expect.objectContaining({ session: expect.anything() })
       );
 
       expect(res.status).toHaveBeenCalledWith(201);
@@ -228,33 +234,34 @@ describe('OrderController Unit Tests', () => {
       }));
     });
 
-    it('should fail if stock is insufficient', async () => {
+    it('should fail if product is out of stock', async () => {
       req.body = {
-        items: [{ product: 'p1', quantity: 20 }]
+        items: [{ product: 'p1', quantity: 1 }]
       };
 
       const mockProductDoc = {
         _id: 'p1',
         name: 'Test Product',
         price: 100,
-        stock: 5, // Less than 20
+        stock: 'out',
         isActive: true
       };
 
       mockProduct.findById.mockResolvedValue(mockProductDoc);
+      mockProduct.findOne.mockResolvedValue(mockProductDoc);
 
       await createOrder(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: false,
-        message: expect.stringContaining('Insufficient stock')
+        message: expect.stringContaining('out of stock')
       }));
     });
   });
 
   describe('cancelOrder', () => {
-    it('should cancel order and restore stock', async () => {
+    it('should cancel order without touching product stock', async () => {
       const mockOrderDoc = {
         _id: 'order-id',
         status: 'pending',
@@ -284,10 +291,8 @@ describe('OrderController Unit Tests', () => {
         })
       );
 
-      // Stock restoration
-      expect(mockProduct.findByIdAndUpdate).toHaveBeenCalledWith('p1', {
-        $inc: { stock: 2 }
-      });
+      // Stock is a coarse status — cancellation does not restore quantity.
+      expect(mockProduct.findByIdAndUpdate).not.toHaveBeenCalled();
 
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,

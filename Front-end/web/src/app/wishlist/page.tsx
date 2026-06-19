@@ -151,11 +151,11 @@ export default function WishlistPage() {
 
                 <button
                   onClick={() => handleAddToCart(item.product._id)}
-                  disabled={item.product?.stock === 0}
+                  disabled={item.product?.stock === 'out'}
                   className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                 >
                   <ShoppingCart className="h-4 w-4" />
-                  {item.product?.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                  {item.product?.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}
                 </button>
               </div>
             </div>

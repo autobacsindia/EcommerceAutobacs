@@ -243,7 +243,7 @@ class ElasticsearchService {
                 brand: { type: 'keyword' },
                 price: { type: 'float' },
                 originalPrice: { type: 'float' },
-                stock: { type: 'integer' },
+                stock: { type: 'keyword' },
                 sku: { type: 'keyword' },
                 isActive: { type: 'boolean' },
                 isFeatured: { type: 'boolean' },
@@ -554,7 +554,7 @@ class ElasticsearchService {
 
       if (inStock === 'true') {
         searchBody.query.function_score.query.bool.filter.push({
-          range: { stock: { gt: 0 } }
+          bool: { must_not: { term: { stock: 'out' } } }
         });
       }
 

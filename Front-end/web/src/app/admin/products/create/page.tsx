@@ -43,7 +43,7 @@ export default function CreateProductPage() {
     originalPrice: '',
     category: '',
     brand: '',
-    stock: '',
+    stock: 'in',
     sku: '',
     isFeatured: false,
     isFastMoving: false,
@@ -302,18 +302,20 @@ export default function CreateProductPage() {
             
             <div className="mb-4">
               <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
-                Stock Quantity *
+                Stock Status *
               </label>
-              <input
+              <select
                 id="stock"
-                type="number"
                 name="stock"
                 value={formData.stock}
                 onChange={handleInputChange}
                 required
-                min="0"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="in">In Stock</option>
+                <option value="low">Low Stock</option>
+                <option value="out">Out of Stock</option>
+              </select>
             </div>
             
             <div className="mb-4">

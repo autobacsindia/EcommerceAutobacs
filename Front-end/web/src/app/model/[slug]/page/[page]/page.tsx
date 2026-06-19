@@ -477,11 +477,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
                     const isOutOfStock =
                       (product as any).stock_status === 'outofstock' ||
+                      (product as any).stock === 'out' ||
                       (typeof (product as any).stock === 'number' && (product as any).stock <= 0);
 
-                    const hasStock =
-                      (product as any).stock_status === 'instock' ||
-                      (typeof (product as any).stock === 'number' && (product as any).stock >= 0);
+                    const hasStock = !isOutOfStock;
 
                     const isFeatured =
                       (product as any).featured || (product as any).isFeatured;

@@ -131,7 +131,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .field('name',        'E2E Test Product')
       .field('description', 'Created by the E2E lifecycle test')
       .field('price',       '1499')
-      .field('stock',       '20')
+      .field('stock',       'in')
       .field('slug',        `e2e-test-product-${Date.now()}`);
 
     expect(createRes.status).toBe(201);
@@ -156,7 +156,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .attach('images', JPEG_BUF, 'e2e.jpg')
       .field('name',  'E2E Updated Product')
       .field('price', '1599')
-      .field('stock', '15');
+      .field('stock', 'in');
 
     expect(updateRes.status).toBe(200);
     expect(updateRes.body.success).toBe(true);
@@ -202,7 +202,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .set('X-XSRF-TOKEN', fakeCsrf)
       .field('name',  'Should Fail')
       .field('price', '999')
-      .field('stock', '5');
+      .field('stock', 'in');
 
     // Auth guard returns 401 when no Bearer token is present
     expect(res.status).toBe(401);
@@ -216,7 +216,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .set('Authorization', `Bearer ${accessToken}`)
       .field('name',  'Should Fail')
       .field('price', '999')
-      .field('stock', '5');
+      .field('stock', 'in');
 
     expect(res.status).toBe(403);
   });
@@ -233,7 +233,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .field('name',        'E2E Public Product')
       .field('description', 'Readable by anyone')
       .field('price',       '299')
-      .field('stock',       '5')
+      .field('stock',       'in')
       .field('slug',        slug);
 
     expect(createRes.status).toBe(201);
@@ -258,7 +258,7 @@ describe('Observability — Cloudinary failure path logging', () => {
       name:        'Obs Test Product',
       description: 'For observability testing',
       price:       100,
-      stock:       1,
+      stock:       'in',
       slug:        `obs-test-${Date.now()}`,
       isActive:    true,
       images: [
@@ -314,7 +314,7 @@ describe('Observability — Cloudinary failure path logging', () => {
       .field('name',        'Upload Fail Product')
       .field('description', 'Should fail on upload')
       .field('price',       '500')
-      .field('stock',       '1')
+      .field('stock',       'in')
       .field('slug',        `upload-fail-${Date.now()}`);
 
     // Upload failure → 500 from the controller
@@ -344,7 +344,7 @@ describe('Observability — Cloudinary failure path logging', () => {
       .field('name',        'Cache Test Product')
       .field('description', 'Cache invalidation test')
       .field('price',       '100')
-      .field('stock',       '5')
+      .field('stock',       'in')
       .field('slug',        slug);
 
     expect(createRes.status).toBe(201);
@@ -357,7 +357,7 @@ describe('Observability — Cloudinary failure path logging', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .field('name',  'Cache Test Updated')
       .field('price', '200')
-      .field('stock', '3');
+      .field('stock', 'in');
 
     // Cache invalidation always logs "[Cache] Invalidated N key(s) for patterns: ..."
     const cacheLog = consoleLogSpy.mock.calls.some((args) =>

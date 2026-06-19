@@ -1,6 +1,9 @@
 import { body, param, query } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
+import { STOCK_VALUES } from '../../utils/stockStatus.js';
+
+const STOCK_MSG = `Stock must be one of: ${STOCK_VALUES.join(', ')}`;
 
 export const validateProduct = [
   body('name')
@@ -18,8 +21,9 @@ export const validateProduct = [
     .isArray({ min: 1 })
     .withMessage('At least one category is required'),
   body('stock')
-    .isInt({ min: 0 })
-    .withMessage('Valid stock quantity is required'),
+    .optional()
+    .isIn(STOCK_VALUES)
+    .withMessage(STOCK_MSG),
   validateRequest
 ];
 
@@ -52,8 +56,8 @@ export const validateProductUpdate = [
     .withMessage('Tags must be an array'),
   body('stock')
     .optional()
-    .isInt({ min: 0 })
-    .withMessage('Valid stock quantity is required'),
+    .isIn(STOCK_VALUES)
+    .withMessage(STOCK_MSG),
   validateRequest
 ];
 
@@ -75,8 +79,8 @@ export const validateStockUpdate = [
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
     .withMessage('Invalid Product ID'),
   body('stock')
-    .isInt({ min: 0 })
-    .withMessage('Valid stock quantity is required (non-negative integer)'),
+    .isIn(STOCK_VALUES)
+    .withMessage(STOCK_MSG),
   validateRequest
 ];
 

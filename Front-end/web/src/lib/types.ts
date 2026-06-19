@@ -1,5 +1,8 @@
 // Define types for our data models
 
+import type { StockStatus } from './stock';
+export type { StockStatus } from './stock';
+
 export interface Category {
   _id: string;
   name: string;
@@ -41,7 +44,7 @@ export interface Product {
   categories?: Category[];
   brand?: string;
   images: ProductImage[] | string;
-  stock: number;
+  stock: StockStatus;
   sku?: string;
   specifications?: ProductSpecification[] | string;
   features?: string[] | string;

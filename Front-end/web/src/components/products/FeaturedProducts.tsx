@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
+import type { StockStatus } from '@/lib/stock';
 import { toast } from 'react-hot-toast';
 import { productUrl } from '@/lib/types';
 import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton';
@@ -30,7 +31,7 @@ interface Product {
   category: {
     name: string;
   } | string;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
   isFeatured?: boolean;
   isNew?: boolean;
@@ -219,12 +220,12 @@ export default function FeaturedProducts({
                   </button>
 
                   {/* Badges */}
-                  {product.stock <= 0 && (
+                  {product.stock === 'out' && (
                     <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
                       Out of Stock
                     </div>
                   )}
-                  {product.stock > 0 && product.originalPrice && product.originalPrice > product.price && (
+                  {product.stock !== 'out' && product.originalPrice && product.originalPrice > product.price && (
                     <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
                       Sale
                     </div>
@@ -280,11 +281,11 @@ export default function FeaturedProducts({
                   {/* Add to Cart Button */}
                   <button
                     onClick={(e) => handleAddToCart(product._id, e)}
-                    disabled={product.stock <= 0}
+                    disabled={product.stock === 'out'}
                     className="w-full flex items-center justify-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white px-4 py-2 rounded-sm transition-colors disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed font-condensed font-bold text-sm uppercase tracking-wider"
                   >
                     <ShoppingCart className="h-4 w-4" />
-                    <span>{product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'}</span>
+                    <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
                   </button>
                 </div>
               </div>

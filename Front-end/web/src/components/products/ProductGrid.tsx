@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { GitCompare } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -27,7 +28,7 @@ interface Product {
     name: string;
     slug: string;
   }>;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
   isFeatured?: boolean;
   isNew?: boolean;

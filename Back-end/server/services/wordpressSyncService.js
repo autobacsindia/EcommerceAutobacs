@@ -25,8 +25,7 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import Brand from '../models/Brand.js';
 import { resolveBrand } from '../utils/brandResolution.js';
-
-const STOCK_AVAILABLE = 999; // untracked-but-available sentinel
+import { STOCK_STATUS, statusFromQuantity } from '../utils/stockStatus.js';
 
 function getConfig() {
   const cfg = {
@@ -93,9 +92,11 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
     return items;
   }
   const slugify = (n) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  // Map WooCommerce stock to our coarse status. When WC manages a numeric
+  // quantity, derive low/in/out from it; otherwise honor WC's stock_status flag.
   const stockFromWc = (wc) => (wc.manage_stock && wc.stock_quantity != null)
-    ? wc.stock_quantity
-    : (wc.stock_status === 'outofstock' ? 0 : STOCK_AVAILABLE);
+    ? statusFromQuantity(wc.stock_quantity)
+    : (wc.stock_status === 'outofstock' ? STOCK_STATUS.OUT : STOCK_STATUS.IN);
   function htmlToText(input, { keepNewlines = false } = {}) {
     if (input == null) return '';
     let s = String(input);

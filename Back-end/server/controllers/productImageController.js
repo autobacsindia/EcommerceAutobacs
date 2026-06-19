@@ -54,7 +54,7 @@ const parseProductFields = (body) => {
 
   if (fields.price !== undefined)         fields.price         = Number(fields.price);
   if (fields.originalPrice !== undefined) fields.originalPrice = Number(fields.originalPrice);
-  if (fields.stock !== undefined)         fields.stock         = Number(fields.stock);
+  // stock is a status string ('in' | 'low' | 'out'); leave as-is. Schema enum validates it.
 
   // Sanitize rich-text fields — strip unsafe HTML before storage
   if (fields.description)  fields.description  = cleanHTML(fields.description);

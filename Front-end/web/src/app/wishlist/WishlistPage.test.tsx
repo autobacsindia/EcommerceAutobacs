@@ -45,7 +45,7 @@ jest.mock('@/context/WishlistContext', () => ({
           price: 100,
           images: [{ url: 'img1.jpg' }],
           averageRating: 4.5,
-          stock: 10,
+          stock: 'in',
         },
       },
     ],

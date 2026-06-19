@@ -52,7 +52,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           <span className="text-lg font-bold text-blue-600">
             {formatPrice(product.price)}
           </span>
-          {product.stock > 0 ? (
+          {product.stock !== 'out' ? (
             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
               In Stock
             </span>

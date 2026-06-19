@@ -13,6 +13,7 @@
  *   import { cartDB, addToCart, syncCart } from '@/lib/enhancedCartStorage';
  */
 
+import type { StockStatus } from '@/lib/stock';
 import Dexie, { Table } from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,7 +25,7 @@ interface CartItem {
   price: number; // NOTE: Backend validates this, client price is informational only
   quantity: number;
   images: any[];
-  stock: number;
+  stock: StockStatus;
   addedAt: number;
   updatedAt: number;
   version: number; // Vector clock for conflict resolution

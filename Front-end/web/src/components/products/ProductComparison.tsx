@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'react-hot-toast';
@@ -26,7 +27,7 @@ interface Product {
   category: { _id: string; name: string; slug: string } | string;
   brand?: string;
   images: ProductImage[] | string;
-  stock: number;
+  stock: StockStatus;
   sku?: string;
   specifications?: Array<{ key: string; value: string; _id?: string }> | string;
   features?: string[] | string;
@@ -242,9 +243,9 @@ export default function ProductComparison() {
                   </div>
 
                   <div>
-                    {product.stock > 0 ? (
+                    {product.stock !== 'out' ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide bg-green-500/10 border border-green-500/30 text-green-400">
-                        In Stock ({product.stock})
+                        {product.stock === 'low' ? 'Low Stock' : 'In Stock'}
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide bg-red-500/10 border border-red-500/30 text-red-400">
@@ -326,7 +327,7 @@ export default function ProductComparison() {
                     </button>
                     <button
                       onClick={() => handleAddToCart(p._id)}
-                      disabled={p.stock <= 0}
+                      disabled={p.stock === 'out'}
                       className="w-full bg-[#161616] border border-[#252525] text-[#C4C4C4] hover:border-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Add to Cart

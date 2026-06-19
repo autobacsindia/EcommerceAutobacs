@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import Product from '../models/Product.js';
 import contactRepository from '../repositories/contactRepository.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
+import { STOCK_STATUS } from '../utils/stockStatus.js';
 
 // Statuses that count as a realised sale (money made). Excludes pending, failed,
 // cancelled and refunded. Shared by revenue and top-products so they stay consistent
@@ -275,11 +276,11 @@ class DashboardAnalyticsService {
     try {
       // Get product inventory alerts
       const lowStockProducts = await Product.countDocuments({
-        stock: { $lt: 10, $gt: 0 }
+        stock: STOCK_STATUS.LOW
       });
 
       const outOfStockProducts = await Product.countDocuments({
-        stock: 0
+        stock: STOCK_STATUS.OUT
       });
 
       return {

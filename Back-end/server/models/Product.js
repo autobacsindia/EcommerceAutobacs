@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { getSearchSyncQueue } from '../queue/queues.js';
+import { STOCK_STATUS, STOCK_VALUES } from '../utils/stockStatus.js';
 
 const ProductSchema = new mongoose.Schema({
   name: { 
@@ -59,11 +60,13 @@ const ProductSchema = new mongoose.Schema({
     alt:        { type: String },
     isPrimary:  { type: Boolean, default: false }
   }],
-  stock: { 
-    type: Number, 
+  // Availability status (coarse), not a numeric quantity. Admin-managed.
+  // See utils/stockStatus.js. No per-unit deduction happens on orders.
+  stock: {
+    type: String,
+    enum: STOCK_VALUES,
     required: true,
-    min: 0,
-    default: 0
+    default: STOCK_STATUS.IN
   },
   sku: {
     type: String,

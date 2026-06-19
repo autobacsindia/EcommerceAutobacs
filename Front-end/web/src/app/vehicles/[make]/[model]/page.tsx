@@ -139,7 +139,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ make: s
                     <span className="text-lg font-bold text-green-600">
                       ₹{product.price?.toLocaleString('en-IN')}
                     </span>
-                    {product.stock > 0 ? (
+                    {product.stock !== 'out' ? (
                       <span className="text-xs text-green-600 font-medium">In Stock</span>
                     ) : (
                       <span className="text-xs text-red-600 font-medium">Out of Stock</span>

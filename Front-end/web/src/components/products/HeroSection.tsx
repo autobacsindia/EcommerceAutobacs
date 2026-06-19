@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import FloatingCTACard from './FloatingCTACard';
@@ -10,7 +11,7 @@ interface HeroSectionProps {
     name: string;
     price: number;
     originalPrice?: number;
-    stock: number;
+    stock: StockStatus;
     shortDescription?: string;
     images?: Array<{ url: string; alt?: string }>;
   };
@@ -83,12 +84,12 @@ export default function HeroSection({ product }: HeroSectionProps) {
             </div>
 
             {/* Stock Status */}
-            {product.stock > 0 && (
+            {product.stock !== 'out' && (
               <p className="text-zinc-400 flex items-center gap-2">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                {product.stock <= 5 ? (
+                {product.stock === 'low' ? (
                   <span className="text-orange-400 font-semibold">
-                    Only {product.stock} left - Order now!
+                    Low stock - Order now!
                   </span>
                 ) : (
                   'In Stock - Ships within 24 hours'

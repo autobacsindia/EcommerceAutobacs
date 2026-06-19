@@ -65,7 +65,7 @@ const mockProduct = {
   price: 1000,
   originalPrice: 1200,
   images: [{ url: '/test-image.jpg', alt: 'Test Image' }],
-  stock: 10,
+  stock: 'in',
   averageRating: 4.5,
   categories: [{ name: 'Test Category', _id: 'cat1', slug: 'cat-1' }],
   description: 'Test Description',
@@ -116,7 +116,7 @@ describe('ProductCard Component', () => {
   });
   
   it('displays out of stock badge when stock is 0', () => {
-      const outOfStockProduct = { ...mockProduct, stock: 0 };
+      const outOfStockProduct = { ...mockProduct, stock: 'out' };
       render(<ProductCard product={outOfStockProduct as any} />);
       expect(screen.getByText('Out of Stock')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /add/i })).toBeDisabled();

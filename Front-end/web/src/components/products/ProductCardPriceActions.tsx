@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
@@ -9,7 +10,7 @@ interface Props {
   productId: string;
   price: number;
   originalPrice?: number;
-  stock: number;
+  stock: StockStatus;
 }
 
 export default function ProductCardPriceActions({ productId, price, originalPrice, stock }: Props) {
@@ -43,7 +44,7 @@ export default function ProductCardPriceActions({ productId, price, originalPric
 
       <button
         onClick={handleAddToCart}
-        disabled={stock <= 0}
+        disabled={stock === 'out'}
         className="flex items-center gap-2 bg-[#3B9EE8] text-white px-4 py-2 rounded-sm hover:bg-[#1A6FB5] transition-colors disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed font-condensed font-bold text-sm tracking-wider uppercase"
       >
         <ShoppingCart className="h-4 w-4" />

@@ -37,7 +37,7 @@ describe('Orders Integration API', () => {
     name: 'Order Test Product',
     description: 'Test Description',
     price: 500,
-    stock: 100,
+    stock: 'in',
     images: [{ url: 'http://example.com/image.jpg', alt: 'Test Image' }],
     brand: 'Test Brand',
     category: 'Test Category',
@@ -140,9 +140,9 @@ describe('Orders Integration API', () => {
       expect(res.body.order.totalAmount).toBe(1050); // 500*2 + 50
     });
 
-    it('should fail if stock is insufficient', async () => {
-       // Update stock to 1
-       await Product.findByIdAndUpdate(productId, { stock: 1 });
+    it('should fail if product is out of stock', async () => {
+       // Mark the product out of stock
+       await Product.findByIdAndUpdate(productId, { stock: 'out' });
 
        const orderData = {
         items: [{
@@ -167,7 +167,7 @@ describe('Orders Integration API', () => {
         .expect(400);
       
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain('Insufficient stock');
+      expect(res.body.message).toContain('out of stock');
     });
   });
 

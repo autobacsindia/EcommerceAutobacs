@@ -79,7 +79,7 @@ const mockProducts = [
     name: 'Product 1',
     price: 100,
     images: [{ url: 'img1.jpg' }],
-    stock: 10,
+    stock: 'in',
     averageRating: 4.5,
   },
   {
@@ -87,7 +87,7 @@ const mockProducts = [
     name: 'Product 2',
     price: 200,
     images: [{ url: 'img2.jpg' }],
-    stock: 5,
+    stock: 'in',
     averageRating: 4.0,
   },
 ];

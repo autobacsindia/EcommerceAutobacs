@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, Zap } from 'lucide-react';
@@ -12,7 +13,7 @@ interface StickyCartBarProps {
     _id: string;
     name: string;
     price: number;
-    stock: number;
+    stock: StockStatus;
   };
   isDark?: boolean;
 }
@@ -57,7 +58,7 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
     }
   };
 
-  if (!isVisible || product.stock === 0) {
+  if (!isVisible || product.stock === 'out') {
     return null;
   }
 

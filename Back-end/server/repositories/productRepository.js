@@ -13,6 +13,7 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import Vehicle from '../models/Vehicle.js';
 import Brand from '../models/Brand.js';
+import { STOCK_STATUS } from '../utils/stockStatus.js';
 import mongoose from 'mongoose';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 
@@ -175,20 +176,20 @@ class ProductRepository {
   }
 
   /**
-   * Get product stock by ID
+   * Get product stock status by ID. Missing product → treated as out of stock.
    */
   async getStock(productId) {
     const product = await Product.findById(productId, 'stock');
-    return product?.stock || 0;
+    return product?.stock ?? STOCK_STATUS.OUT;
   }
 
   /**
-   * Update product stock
+   * Set product stock status ('in' | 'low' | 'out').
    */
-  async updateStock(productId, quantityChange) {
+  async updateStock(productId, status) {
     return Product.updateOne(
       { _id: productId },
-      { $inc: { stock: -quantityChange } }
+      { stock: status }
     );
   }
 
@@ -237,30 +238,9 @@ class ProductRepository {
     return q;
   }
 
-  /**
-   * Atomically deduct stock with availability guard.
-   * Returns the old document if successful, null if stock was insufficient.
-   * Inside a transaction the caller's session handles rollback automatically —
-   * do NOT call restoreStock manually when a session is provided.
-   */
-  async atomicDeductStock(productId, quantity, session = null) {
-    return Product.findOneAndUpdate(
-      { _id: productId, stock: { $gte: quantity } },
-      { $inc: { stock: -quantity } },
-      { new: false, ...(session && { session }) }
-    );
-  }
-
-  /**
-   * Restore stock (cancellation / non-transactional rollback).
-   */
-  async restoreStock(productId, quantity, session = null) {
-    return Product.findByIdAndUpdate(
-      productId,
-      { $inc: { stock: quantity } },
-      session ? { session } : {}
-    );
-  }
+  // Stock is a coarse status (not a quantity), so orders no longer deduct or
+  // restore per-unit stock. Availability is enforced by checking that a
+  // product is not marked out of stock; see orderService.validateAndPriceItems.
 
   /**
    * Get text search suggestions

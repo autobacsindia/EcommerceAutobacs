@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/context/CurrencyContext';
@@ -24,7 +25,7 @@ interface Product {
     name: string;
   } | string;
   brand?: string;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
 }
 

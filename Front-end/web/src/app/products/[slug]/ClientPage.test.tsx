@@ -85,7 +85,7 @@ describe('ClientPage', () => {
     description: 'Test Description',
     shortDescription: 'Short Description',
     images: [{ url: 'test.jpg', alt: 'Test Image' }],
-    stock: 10,
+    stock: 'in',
     averageRating: 4.5,
     totalReviews: 10,
     variableSpecs: [

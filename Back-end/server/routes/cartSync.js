@@ -14,6 +14,7 @@ import express from 'express';
 import Cart from '../models/Cart.js';
 import Product from '../models/Product.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { STOCK_STATUS } from '../utils/stockStatus.js';
 
 const router = express.Router();
 
@@ -100,12 +101,12 @@ router.post('/sync', protect, async (req, res) => {
           });
         }
 
-        // Validate inventory
-        if (product.stock < (quantity || 1)) {
+        // Validate inventory (coarse status — out of stock blocks sync)
+        if (product.stock === STOCK_STATUS.OUT) {
           return res.status(400).json({
             success: false,
-            error: 'Insufficient stock',
-            available: product.stock
+            error: 'Out of stock',
+            stockStatus: product.stock
           });
         }
 

@@ -2,6 +2,7 @@ import Product from "../models/Product.js";
 import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
+import { STOCK_STATUS } from "../utils/stockStatus.js";
 
 class SearchService {
   /**
@@ -99,9 +100,9 @@ class SearchService {
     if (isFeatured) query.isFeatured = isFeatured === 'true';
     if (isFastMoving) query.isFastMoving = isFastMoving === 'true';
     
-    // In stock filtering
+    // In stock filtering — anything not explicitly out of stock
     if (inStock === 'true') {
-      query.stock = { $gt: 0 };
+      query.stock = { $ne: STOCK_STATUS.OUT };
     }
     
     // Support multiple ratings (find products with rating >= any of the specified ratings)

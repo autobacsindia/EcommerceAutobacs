@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
+import { isOutOfStock } from '@/lib/stock';
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsIndia.com';
 
@@ -147,9 +148,9 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       '@type': 'Offer',
       priceCurrency: 'INR',
       price: product.price,
-      availability: product.stock > 0
-        ? 'https://schema.org/InStock'
-        : 'https://schema.org/OutOfStock',
+      availability: isOutOfStock(product)
+        ? 'https://schema.org/OutOfStock'
+        : 'https://schema.org/InStock',
       url: `${SITE_URL}/products/${product.slug}`,
       seller: { '@type': 'Organization', name: 'Autobacs India' },
       

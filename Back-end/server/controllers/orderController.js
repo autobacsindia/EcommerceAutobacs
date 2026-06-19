@@ -1,5 +1,4 @@
 import orderRepository from '../repositories/orderRepository.js';
-import productRepository from '../repositories/productRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
 import orderStatusService from '../services/orderStatusService.js';
@@ -262,12 +261,8 @@ export const cancelOrder = async (req, res) => {
     return res.status(400).json({ success: false, message: result.message });
   }
 
-  // Restore product stock for each cancelled item
-  await Promise.all(
-    order.items.map(item =>
-      productRepository.restoreStock(item.product, item.quantity)
-    )
-  );
+  // Stock is a coarse status (no per-unit quantity), so cancellation has no
+  // stock to restore. Admins manage availability status directly.
 
   let refundInitiated = false;
   if (needsRefund) {

@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { ShoppingCart, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -30,7 +31,7 @@ interface Product {
     name: string;
   } | string;
   brand?: string;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
 }
 
@@ -322,19 +323,19 @@ export default function CuratedCollectionCarousel({
                     </div>
 
                     {/* Stock Warning */}
-                    {product.stock > 0 && product.stock <= 5 && (
+                    {product.stock === 'low' && (
                       <p className="text-xs text-red-600 mb-2">
-                        Only {product.stock} left in stock
+                        Low stock
                       </p>
                     )}
 
                     {/* Add to Cart Button - Amazon Orange Style */}
                     <button
                       onClick={(e) => handleAddToCart(product._id, e)}
-                      disabled={product.stock <= 0}
+                      disabled={product.stock === 'out'}
                       className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-2 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
                     >
-                      {product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'}
+                      {product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}
                     </button>
                   </div>
                 </div>

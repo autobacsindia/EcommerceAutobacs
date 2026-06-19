@@ -22,8 +22,8 @@ describe('AdminProductsPage', () => {
     total: 2,
     pages: 1,
     products: [
-      { _id: 'p1', name: 'Product 1', price: 100, stock: 20, category: { name: 'Cat 1' }, featured: true },
-      { _id: 'p2', name: 'Product 2', price: 50, stock: 5, category: { name: 'Cat 2' }, featured: false },
+      { _id: 'p1', name: 'Product 1', price: 100, stock: 'in', category: { name: 'Cat 1' }, featured: true },
+      { _id: 'p2', name: 'Product 2', price: 50, stock: 'in', category: { name: 'Cat 2' }, featured: false },
     ]
   };
 

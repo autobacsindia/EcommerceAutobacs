@@ -37,7 +37,7 @@ describe('E2E User Journey Integration Test', () => {
     description: 'A product for testing the user journey',
     price: 1000,
     categories: ['65e6d6d6d6d6d6d6d6d6d6d6'], // Dummy ObjectId
-    stock: 10,
+    stock: 'in',
     isActive: true,
     images: [{ url: 'http://example.com/image.jpg', alt: 'Test Image' }],
     specifications: [{ name: 'Spec1', value: 'Value1' }]
@@ -202,8 +202,9 @@ describe('E2E User Journey Integration Test', () => {
     expect(res.body.order.status).toBe('pending');
   });
 
-  it('Step 6: Verify Stock Deduction', async () => {
+  it('Step 6: Stock status is unchanged by ordering', async () => {
+    // Stock is a coarse status — placing an order does not deduct quantity.
     const product = await Product.findById(productId);
-    expect(product.stock).toBe(testProduct.stock - 2);
+    expect(product.stock).toBe(testProduct.stock);
   });
 });

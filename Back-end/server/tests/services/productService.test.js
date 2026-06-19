@@ -20,7 +20,6 @@ jest.mock('../repositories/productRepository.js', () => ({
   findBySlug: jest.fn(),
   getStock: jest.fn(),
   updateStock: jest.fn(),
-  atomicDeductStock: jest.fn(),
 }));
 
 jest.mock('../services/cacheService.js', () => ({
@@ -143,52 +142,43 @@ describe('ProductService', () => {
   });
 
   describe('checkStock', () => {
-    it('should return stock information', async () => {
-      productRepository.getStock.mockResolvedValue(10);
+    it('reports fulfillable when status is in stock', async () => {
+      productRepository.getStock.mockResolvedValue('in');
 
       const result = await productService.checkStock('product123', 5);
 
       expect(result).toEqual({
-        available: 10,
+        status: 'in',
         requested: 5,
         inStock: true,
         canFulfill: true
       });
     });
 
-    it('should indicate insufficient stock', async () => {
-      productRepository.getStock.mockResolvedValue(3);
+    it('reports fulfillable when status is low stock', async () => {
+      productRepository.getStock.mockResolvedValue('low');
 
       const result = await productService.checkStock('product123', 5);
 
       expect(result).toEqual({
-        available: 3,
+        status: 'low',
+        requested: 5,
+        inStock: true,
+        canFulfill: true
+      });
+    });
+
+    it('reports not fulfillable when out of stock', async () => {
+      productRepository.getStock.mockResolvedValue('out');
+
+      const result = await productService.checkStock('product123', 5);
+
+      expect(result).toEqual({
+        status: 'out',
         requested: 5,
         inStock: false,
         canFulfill: false
       });
-    });
-  });
-
-  describe('reserveStock', () => {
-    it('should reserve stock when available', async () => {
-      // atomicDeductStock returns the pre-update doc (new: false)
-      productRepository.atomicDeductStock.mockResolvedValue({ stock: 10 });
-
-      const result = await productService.reserveStock('product123', 3);
-
-      expect(result.success).toBe(true);
-      expect(result.remaining).toBe(7);
-      expect(productRepository.atomicDeductStock).toHaveBeenCalledWith('product123', 3);
-    });
-
-    it('should throw error when insufficient stock', async () => {
-      productRepository.atomicDeductStock.mockResolvedValue(null);
-      productRepository.getStock.mockResolvedValue(2);
-
-      await expect(productService.reserveStock('product123', 5))
-        .rejects
-        .toThrow('Insufficient stock. Available: 2, Requested: 5');
     });
   });
 });

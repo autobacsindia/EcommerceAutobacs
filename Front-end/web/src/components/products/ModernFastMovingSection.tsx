@@ -1,5 +1,6 @@
 'use client';
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ShoppingCart, Heart, ArrowRight } from 'lucide-react';
@@ -34,7 +35,7 @@ interface Product {
   category: {
     name: string;
   } | string;
-  stock: number;
+  stock: StockStatus;
   averageRating: number;
   isFeatured?: boolean;
   isNew?: boolean;

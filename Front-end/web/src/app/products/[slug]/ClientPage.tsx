@@ -14,7 +14,7 @@ interface Product {
   } | string;
   brand?: string;
   images?: Array<{ url: string; alt?: string }>
-  stock: number;
+  stock: StockStatus;
   sku?: string;
   specifications?: Array<{ key: string; value: string }>;
   features?: string[];
@@ -47,6 +47,7 @@ interface Product {
   slug?: string;
 }
 
+import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -113,7 +114,7 @@ interface Product {
   } | string;
   brand?: string;
   images?: Array<{ url: string; alt?: string }>
-  stock: number;
+  stock: StockStatus;
   sku?: string;
   specifications?: Array<{ key: string; value: string }>;
   features?: string[];

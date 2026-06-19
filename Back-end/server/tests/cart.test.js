@@ -24,7 +24,7 @@ describe('Cart API', () => {
     name: 'Test Product',
     description: 'Test Description',
     price: 100,
-    stock: 10,
+    stock: 'in',
     images: [{ url: 'http://example.com/image.jpg', alt: 'Test Image' }],
     brand: 'Test Brand',
     category: 'Test Category'
@@ -151,18 +151,22 @@ describe('Cart API', () => {
       expect(res.body.cart.items[0].quantity).toBe(5);
     });
 
-    it('should fail if stock is insufficient', async () => {
+    it('should fail if product is out of stock', async () => {
+      await Product.findByIdAndUpdate(productId, { stock: 'out' });
+
       const res = await request(app)
         .post('/cart/add')
         .set('Authorization', `Bearer ${userToken}`)
         .send({
           productId: productId,
-          quantity: 20 // Stock is 10
+          quantity: 1
         })
         .expect(400);
 
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain('available in stock');
+      expect(res.body.message).toContain('out of stock');
+
+      await Product.findByIdAndUpdate(productId, { stock: 'in' });
     });
 
     it('should fail if product does not exist', async () => {
@@ -205,16 +209,20 @@ describe('Cart API', () => {
       expect(updatedItem.quantity).toBe(5);
     });
 
-    it('should fail if stock is insufficient', async () => {
+    it('should fail if product is out of stock', async () => {
+      await Product.findByIdAndUpdate(productId, { stock: 'out' });
+
       const res = await request(app)
         .put(`/cart/update/${productId}`)
         .set('Authorization', `Bearer ${userToken}`)
         .send({
-          quantity: 20
+          quantity: 5
         })
         .expect(400);
 
       expect(res.body.success).toBe(false);
+
+      await Product.findByIdAndUpdate(productId, { stock: 'in' });
     });
   });
 

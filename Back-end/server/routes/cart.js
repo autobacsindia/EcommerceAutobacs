@@ -3,6 +3,7 @@ import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
+import { STOCK_STATUS } from "../utils/stockStatus.js";
 
 const router = express.Router();
 
@@ -44,73 +45,37 @@ router.get("/", asyncHandler(async (req, res) => {
     console.log('[Cart] Retrieved cart for', isAuthenticated ? `user ${req.user.id}` : `session ${sessionId}`, 'with', cart.items.length, 'items');
 
   // 🟡 LAYER 1: Cart-Level Stock Validation
-  // Filter out inactive AND out-of-stock products
+  // Stock is a coarse status, so we only drop items that are inactive or
+  // explicitly out of stock. There is no quantity cap to auto-adjust against.
   const originalItemsCount = cart.items.length;
   const removedItems = [];
-  const adjustedItems = [];
 
   cart.items = cart.items.filter(item => {
-    if (!item.product || !item.product.isActive) {
-      removedItems.push({
-        productId: item.product._id,
-        productName: item.product.name,
-        previousQuantity: item.quantity
-      });
-      return false;
-    }
-    if (item.product.stock <= 0) {
-      removedItems.push({
-        productId: item.product._id,
-        productName: item.product.name,
-        previousQuantity: item.quantity
-      });
+    if (!item.product || !item.product.isActive || item.product.stock === STOCK_STATUS.OUT) {
+      if (item.product) {
+        removedItems.push({
+          productId: item.product._id,
+          productName: item.product.name,
+          previousQuantity: item.quantity
+        });
+      }
       return false;
     }
     return true;
   });
 
-  // Auto-adjust quantities that exceed available stock
-  let adjustedCount = 0;
-  cart.items.forEach(item => {
-    if (item.quantity > item.product.stock) {
-      adjustedItems.push({
-        productId: item.product._id,
-        productName: item.product.name,
-        previousQuantity: item.quantity,
-        newQuantity: item.product.stock
-      });
-      item.quantity = item.product.stock;
-      adjustedCount++;
-    }
-  });
-
   // Log changes for transparency
-  const changesToLog = [];
-  
-  if (removedItems.length > 0) {
-    changesToLog.push(...removedItems.map(item => ({
-      type: 'REMOVED_OUT_OF_STOCK',
-      productId: item.productId,
-      productName: item.productName,
-      previousQuantity: item.previousQuantity,
-      newQuantity: 0,
-      message: `${item.productName} was removed because it's now out of stock`
-    })));
-  }
-  
-  if (adjustedItems.length > 0) {
-    changesToLog.push(...adjustedItems.map(item => ({
-      type: 'QUANTITY_ADJUSTED',
-      productId: item.productId,
-      productName: item.productName,
-      previousQuantity: item.previousQuantity,
-      newQuantity: item.newQuantity,
-      message: `${item.productName} quantity adjusted from ${item.previousQuantity} to ${item.newQuantity} based on availability`
-    })));
-  }
+  const changesToLog = removedItems.map(item => ({
+    type: 'REMOVED_OUT_OF_STOCK',
+    productId: item.productId,
+    productName: item.productName,
+    previousQuantity: item.previousQuantity,
+    newQuantity: 0,
+    message: `${item.productName} was removed because it's now out of stock`
+  }));
 
-  // Save changes if items were removed or adjusted
-  if (originalItemsCount !== cart.items.length || adjustedCount > 0) {
+  // Save changes if items were removed
+  if (originalItemsCount !== cart.items.length) {
     if (changesToLog.length > 0) {
       cart.recentChanges.push(...changesToLog);
       // Keep only last 10 changes to prevent bloat
@@ -125,9 +90,6 @@ router.get("/", asyncHandler(async (req, res) => {
   const stockMessages = [];
   if (originalItemsCount !== cart.items.length) {
     stockMessages.push(`${originalItemsCount - cart.items.length} item(s) removed - out of stock`);
-  }
-  if (adjustedCount > 0) {
-    stockMessages.push(`${adjustedCount} item(s) quantity adjusted based on availability`);
   }
 
   res.json({
@@ -160,11 +122,11 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     });
   }
 
-  // Check stock availability
-  if (product.stock < quantity) {
+  // Check stock availability (coarse status — out of stock blocks add)
+  if (product.stock === STOCK_STATUS.OUT) {
     return res.status(400).json({
       success: false,
-      message: `Only ${product.stock} items available in stock`
+      message: 'This item is out of stock'
     });
   }
 
@@ -206,16 +168,8 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   );
 
   if (existingItemIndex > -1) {
-    // Update quantity
+    // Update quantity (no per-unit stock cap under status-based availability)
     cart.items[existingItemIndex].quantity += Number(quantity);
-    
-    // Check stock again
-    if (cart.items[existingItemIndex].quantity > product.stock) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot add more. Only ${product.stock} items available in stock`
-      });
-    }
   } else {
     // Add new item
     cart.items.push({
@@ -279,21 +233,12 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
 
   // 🟡 LAYER 1: Stock Validation on Quantity Update
   const product = await Product.findById(req.params.productId);
-  
-  // Check if product is out of stock
-  if (product.stock <= 0) {
+
+  // Check if product is out of stock (coarse status — no quantity cap)
+  if (product.stock === STOCK_STATUS.OUT) {
     return res.status(400).json({
       success: false,
       message: `This item is now out of stock`
-    });
-  }
-  
-  // Check if requested quantity exceeds available stock
-  if (quantity > product.stock) {
-    return res.status(400).json({
-      success: false,
-      message: `Only ${product.stock} items available in stock`,
-      maxQuantity: product.stock
     });
   }
 
@@ -425,16 +370,16 @@ router.get("/validate", asyncHandler(async (req, res) => {
       stockErrors.push({ productId: item.product?._id, message: 'Product no longer available', type: 'unavailable' });
       continue;
     }
-    if (item.product.stock < item.quantity) {
+    if (item.product.stock === STOCK_STATUS.OUT) {
       stockErrors.push({
         productId: item.product._id,
         name: item.product.name,
-        message: item.product.stock <= 0 ? 'Out of stock' : `Only ${item.product.stock} left`,
-        availableStock: item.product.stock,
+        message: 'Out of stock',
+        stockStatus: item.product.stock,
         requestedQuantity: item.quantity,
-        type: item.product.stock <= 0 ? 'out_of_stock' : 'insufficient_stock'
+        type: 'out_of_stock'
       });
-      // Still include in repricing so the frontend can show updated prices even for low-stock items
+      // Still include in repricing so the frontend can show updated prices.
     }
     // Always use item.product.price — current DB price, never the stale cart-stored price
     validatedItems.push({
@@ -510,24 +455,12 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
       continue;
     }
 
-    if (item.product.stock <= 0) {
+    if (item.product.stock === STOCK_STATUS.OUT) {
       validationErrors.push({
         productId: item.product._id,
         name: item.product.name,
         message: 'This item is out of stock',
         type: 'out_of_stock'
-      });
-      continue;
-    }
-
-    if (item.quantity > item.product.stock) {
-      validationErrors.push({
-        productId: item.product._id,
-        name: item.product.name,
-        message: `Only ${item.product.stock} left in stock`,
-        availableStock: item.product.stock,
-        requestedQuantity: item.quantity,
-        type: 'insufficient_stock'
       });
       continue;
     }

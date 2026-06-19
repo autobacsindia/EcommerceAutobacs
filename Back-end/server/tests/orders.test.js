@@ -25,7 +25,7 @@ describe('Orders API', () => {
     description: 'Product for order testing',
     price: 1000,
     category: new mongoose.Types.ObjectId(),
-    stock: 10,
+    stock: 'in',
     images: [{ url: 'http://example.com/image.jpg', alt: 'Test Image' }],
     specifications: new Map([['Color', 'Red']]),
     compatibility: new Map([['Model', 'Test Model']]),
@@ -106,19 +106,24 @@ describe('Orders API', () => {
     });
 
     it('should fail if product out of stock', async () => {
+      await Product.findByIdAndUpdate(productId, { stock: 'out' });
+
       const res = await request(app)
         .post('/orders')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           items: [
-            { product: productId, quantity: 20 } // Stock is 10
+            { product: productId, quantity: 1 }
           ],
           shippingAddress: testAddress
         })
         .expect(400);
-        
+
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain('Insufficient stock');
+      expect(res.body.message).toContain('out of stock');
+
+      // restore for subsequent tests
+      await Product.findByIdAndUpdate(productId, { stock: 'in' });
     });
 
     it('should fail without shipping address', async () => {

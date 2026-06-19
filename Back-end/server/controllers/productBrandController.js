@@ -12,6 +12,16 @@ function normaliseSlug(value) {
   return value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
+/**
+ * Flatten the stored logo ({ url, public_id } | string) to a URL string.
+ * Returns null when no usable URL is present so callers can apply a fallback.
+ */
+function logoUrl(logo) {
+  if (typeof logo === 'string') return logo || null;
+  if (logo && typeof logo === 'object') return logo.url || null;
+  return null;
+}
+
 // @route   GET /products/brands/:brandName
 // @desc    Get products for a specific brand
 // @access  Public
@@ -72,7 +82,7 @@ export async function getBrandDetails(req, res) {
         name: brandDoc.name,
         slug: brandDoc.slug,
         logo:
-          brandDoc.logo ||
+          logoUrl(brandDoc.logo) ||
           `https://via.placeholder.com/150?text=${encodeURIComponent(brandDoc.name)}`,
         description:
           brandDoc.description || 'Premium automotive accessories and performance parts',

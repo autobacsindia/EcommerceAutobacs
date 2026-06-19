@@ -89,7 +89,7 @@ describe('CartPage Component', () => {
             price: 100,
             images: ['test.jpg'],
             slug: 'test-product',
-            stock: 10
+            stock: 'in'
           },
           quantity: 2,
         },
@@ -153,7 +153,7 @@ describe('CartPage Component', () => {
     const mockCart = {
         items: [
           {
-            product: { _id: 'p1', name: 'Test Product', price: 100, images: [], stock: 5 },
+            product: { _id: 'p1', name: 'Test Product', price: 100, images: [], stock: 'in' },
             quantity: 1,
           },
         ],
@@ -181,7 +181,7 @@ describe('CartPage Component', () => {
     const mockCart = {
         items: [
           {
-            product: { _id: 'p1', name: 'Test Product', price: 100, images: [], stock: 5 },
+            product: { _id: 'p1', name: 'Test Product', price: 100, images: [], stock: 'in' },
             quantity: 2,
           },
         ],

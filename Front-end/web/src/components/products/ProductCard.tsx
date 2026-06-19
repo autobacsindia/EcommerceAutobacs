@@ -62,10 +62,10 @@ export default function ProductCard({
       <ProductCardWishlistButton productId={product._id} />
 
       <div className="absolute top-10 left-2 flex gap-1 flex-wrap">
-        {product.stock <= 0 && (
+        {product.stock === 'out' && (
           <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">Out of Stock</div>
         )}
-        {product.stock > 0 && (product as any).isNew && (
+        {product.stock !== 'out' && (product as any).isNew && (
           <div className="bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">New</div>
         )}
         {product.originalPrice && product.originalPrice > product.price && (
@@ -73,7 +73,7 @@ export default function ProductCard({
             {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
           </div>
         )}
-        {product.isFeatured && product.stock > 0 && product.originalPrice && product.originalPrice <= product.price && (
+        {product.isFeatured && product.stock !== 'out' && product.originalPrice && product.originalPrice <= product.price && (
           <div className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold">Popular</div>
         )}
       </div>

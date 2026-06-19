@@ -228,7 +228,7 @@ function CartPageContent() {
                             </span>
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity + 1)}
-                              disabled={item.quantity >= item.product.stock || updatingItem === item.product._id}
+                              disabled={item.product.stock === 'out' || updatingItem === item.product._id}
                               className="p-2 text-[#C4C4C4] hover:bg-[#161616] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Plus className="h-4 w-4" />
@@ -239,18 +239,13 @@ function CartPageContent() {
                           </p>
                         </div>
 
-                        {item.product.stock === 0 ? (
+                        {item.product.stock === 'out' ? (
                           <div className="mt-2 flex items-center gap-2 text-red-400 bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-sm">
                             <AlertTriangle className="h-4 w-4" />
                             <span className="text-sm font-body">This item is now out of stock</span>
                           </div>
-                        ) : item.quantity >= item.product.stock ? (
-                          <div className="mt-2 flex items-center gap-2 text-orange-400 bg-orange-500/10 border border-orange-500/30 px-3 py-2 rounded-sm">
-                            <AlertTriangle className="h-4 w-4" />
-                            <span className="text-sm font-body">Maximum available: {item.product.stock}</span>
-                          </div>
-                        ) : item.product.stock <= 5 ? (
-                          <p className="text-sm text-orange-400 font-body mt-2">⚠ Only {item.product.stock} left in stock</p>
+                        ) : item.product.stock === 'low' ? (
+                          <p className="text-sm text-orange-400 font-body mt-2">⚠ Low stock</p>
                         ) : null}
                       </div>
                     </div>

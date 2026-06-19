@@ -25,6 +25,14 @@ const generateSlug = (name) => {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 };
 
+// Normalize the stored logo ({ url, public_id } | string) to a flat URL string
+// for API responses. The frontend treats `brand.logo` as a string URL.
+const logoUrl = (logo) => {
+  if (typeof logo === 'string') return logo || null;
+  if (logo && typeof logo === 'object') return logo.url || null;
+  return null;
+};
+
 // @route   GET /brands
 // @desc    Get all brands with pagination
 // @access  Public
@@ -58,6 +66,7 @@ router.get("/", cacheResponse(BRAND_LIST_TTL), asyncHandler(async (req, res) => 
       });
       return {
         ...brand.toJSON(),
+        logo: logoUrl(brand.logo),
         productCount
       };
     })
@@ -100,6 +109,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
     success: true,
     brand: {
       ...brand.toJSON(),
+      logo: logoUrl(brand.logo),
       productCount
     }
   });

@@ -3,6 +3,7 @@ import Product from '../models/Product.js';
 import categoryRepository from "../repositories/categoryRepository.js";
 import importJobRepository from '../repositories/importJobRepository.js';
 import { removeHtmlTags, truncateString } from '../utils/productUtils.js';
+import { statusFromQuantity } from '../utils/stockStatus.js';
 
 class BrandProductImportService {
   constructor() {
@@ -155,7 +156,7 @@ class BrandProductImportService {
         ? parseFloat(wpProduct.regular_price) 
         : undefined,
       sku: wpProduct.sku || undefined,
-      stock: parseInt(wpProduct.stock_quantity) || 0,
+      stock: statusFromQuantity(wpProduct.stock_quantity),
       brand: this.extractBrandFromProduct(wpProduct),
       isActive: wpProduct.status === 'publish',
       isFeatured: wpProduct.featured || false,

@@ -99,7 +99,7 @@ describe('Integration: Add to Cart Flow', () => {
     images: [{ url: 'test-image.jpg', alt: 'Test Product' }],
     category: { _id: 'cat-1', name: 'Category', slug: 'category', isActive: true, order: 1 },
     brand: 'Brand',
-    stock: 10,
+    stock: 'in' as const,
     sku: 'TEST-SKU',
     specifications: [],
     isActive: true,
