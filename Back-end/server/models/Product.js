@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { getSearchSyncQueue } from '../queue/queues.js';
-import { STOCK_STATUS, STOCK_VALUES } from '../utils/stockStatus.js';
+import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
 
 const ProductSchema = new mongoose.Schema({
   name: { 
@@ -228,6 +228,23 @@ ProductSchema.pre(/^find/, function () {
   if (!this.getOptions().includeDeleted) {
     this.where({ deletedAt: null });
   }
+});
+
+// Read guard: coerce any legacy/stray `stock` value to a valid status on the
+// way out. Until the numeric→status migration runs, the DB may still hold
+// numeric stock (e.g. the 999 import sentinel); this keeps every API response
+// — including .lean() queries — within the enum. Self-heals nothing in the DB;
+// run scripts/migrate-stock-to-status.js for that.
+function coerceStock(doc) {
+  if (doc && typeof doc === 'object' && 'stock' in doc) {
+    const normalized = normalizeStockValue(doc.stock);
+    if (doc.stock !== normalized) doc.stock = normalized;
+  }
+}
+
+ProductSchema.post(/^find/, function (res) {
+  if (Array.isArray(res)) res.forEach(coerceStock);
+  else coerceStock(res);
 });
 
 // ── Elasticsearch sync hooks ──────────────────────────────────────────────────

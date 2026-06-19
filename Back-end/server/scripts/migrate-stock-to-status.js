@@ -34,12 +34,14 @@ async function run() {
   console.log(`Stock -> status migration${DRY_RUN ? ' (DRY RUN)' : ''}`);
   console.log('='.repeat(60));
 
-  if (!process.env.MONGODB_URI) {
-    console.error('[ERROR] MONGODB_URI not set in environment');
+  // The app connects via MONGO_URI (see config/db.js); accept MONGODB_URI too.
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!uri) {
+    console.error('[ERROR] MONGO_URI not set in environment');
     process.exit(1);
   }
 
-  await mongoose.connect(process.env.MONGODB_URI);
+  await mongoose.connect(uri);
   console.log('[OK] Connected to MongoDB\n');
 
   const col = Product.collection;
