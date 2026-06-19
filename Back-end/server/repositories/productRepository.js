@@ -128,16 +128,57 @@ class ProductRepository {
   }
 
   /**
-   * Find vehicle by ID or slug
+   * Find vehicle by ID or slug with progressive fallback.
+   *
+   * The public vehicles page uses static slugs (e.g. "hyundai", "bmw") that may
+   * not exactly match the DB slugs (e.g. "hyundai-creta", "bmw-x5"). We try
+   * four strategies in order so stale/partial slugs still resolve correctly:
+   *
+   * 1. ObjectId lookup (fastest path)
+   * 2. Exact slug match
+   * 3. Slug-prefix match — "hyundai" matches "hyundai-creta"
+   * 4. Normalised match — strips non-alphanumerics, handles "isuzu-dmax" ↔ "isuzu-d-max"
+   * 5. Make-name match — treats identifier as a make name (last resort)
    */
   async findVehicleByIdOrSlug(identifier) {
     const { default: Vehicle } = await import('../models/Vehicle.js');
-    
+
     if (this.isValidObjectId(identifier)) {
       return Vehicle.findById(identifier);
     }
-    
-    return Vehicle.findOne({ slug: identifier, isActive: true });
+
+    // 2. Exact slug
+    const exact = await Vehicle.findOne({ slug: identifier, isActive: true });
+    if (exact) return exact;
+
+    // 3. Slug prefix — identifier is a leading portion of the full slug
+    //    e.g. "hyundai" matches "hyundai-creta", "bmw" matches "bmw-x5"
+    const safeId = identifier.replace(/[^a-zA-Z0-9-]/g, '');
+    if (safeId.length >= 2) {
+      const prefix = await Vehicle.findOne({
+        slug: { $regex: new RegExp(`^${safeId}-`, 'i') },
+        isActive: true,
+      }).sort({ slug: 1 });
+      if (prefix) return prefix;
+    }
+
+    // 4. Normalised slug — strip non-alphanumeric chars from both sides
+    //    handles "isuzu-dmax" ↔ "isuzu-d-max" (both normalise to "isuzudmax")
+    const norm = identifier.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    if (norm.length >= 3) {
+      const allActive = await Vehicle.find({ isActive: true }).select('_id slug').lean();
+      const hit = allActive.find(v =>
+        v.slug.replace(/[^a-z0-9]/g, '').toLowerCase().startsWith(norm)
+      );
+      if (hit) return Vehicle.findById(hit._id);
+    }
+
+    // 5. Make-name fallback — treat the identifier as a vehicle make
+    const makeQuery = identifier.replace(/-/g, ' ');
+    return Vehicle.findOne({
+      make: { $regex: new RegExp(`^${makeQuery}$`, 'i') },
+      isActive: true,
+    });
   }
 
   /**

@@ -118,8 +118,8 @@ export default function AdminVehiclesPage() {
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Vehicles Management</h1>
-        <Link 
-          href="/admin/vehicles/create" 
+        <Link
+          href="/admin/vehicles/create"
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
           <Plus className="h-4 w-4" />
