@@ -142,14 +142,13 @@ export default function EditProductPage() {
     try {
       console.log('Product ID:', productId);
         
-      // Fetch product directly by ID (returns full product data)
-      const response = await fetch(`/api/v1/products/${productId}`, {
+      // Use admin-fetch endpoint — bypasses the public SEO redirect and includes inactive products
+      const response = await fetch(`/api/v1/products/${productId}/admin-fetch`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        // redirect: 'follow' // Don't follow redirects - get raw response
       });
         
       if (!response.ok) {
@@ -344,7 +343,7 @@ export default function EditProductPage() {
       fd.append('price',            String(price));
       if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
       fd.append('stock',      String(stock));
-      fd.append('sku',        formData.sku);
+      if (formData.sku) fd.append('sku', formData.sku);
       fd.append('brand',      formData.brand);
       fd.append('isActive',   String(formData.isActive));
       fd.append('isFeatured', String(formData.isFeatured));

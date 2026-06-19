@@ -47,6 +47,7 @@ import {
   getBrandDetails,
 } from "../controllers/productBrandController.js";
 import {
+  getProduct,
   getProductBySlug,
   updateStock,
   cleanupWordPress,
@@ -240,6 +241,11 @@ router.get("/batch", publicProductRateLimit, asyncHandler(async (req, res) => {
 
   res.json({ success: true, products });
 }));
+
+// @route   GET /products/:id/admin-fetch
+// @desc    Fetch product by ID for admin editing — no redirect, returns inactive products too
+// @access  Private/Admin
+router.get("/:id/admin-fetch", protect, admin, validateProductIdParam, asyncHandler(getProduct));
 
 // @route   GET /products/:id
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing

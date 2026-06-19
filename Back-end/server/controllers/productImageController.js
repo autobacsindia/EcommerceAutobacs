@@ -15,6 +15,7 @@
  *   - Structured logging on every upload/delete for production debugging
  */
 import Product from '../models/Product.js';
+import CentralAppError from '../utils/AppError.js';
 import {
   uploadManyToCloudinary,
   deleteFromCloudinary,
@@ -62,6 +63,11 @@ const parseProductFields = (body) => {
   ['isActive', 'isFeatured', 'isFastMoving', 'isOfferFeatured'].forEach((key) => {
     if (fields[key] !== undefined) fields[key] = fields[key] === 'true' || fields[key] === true;
   });
+
+  // Sparse-unique fields: empty string is NOT null — drop them so MongoDB
+  // doesn't try to index '' and conflict with other products that also have no value.
+  if (fields.sku === '' || fields.sku === null) delete fields.sku;
+  if (fields.externalId === '' || fields.externalId === null) delete fields.externalId;
 
   return fields;
 };
@@ -218,6 +224,15 @@ export const updateProductWithImages = async (req, res, next) => {
     if (newUploads.length) {
       console.warn(`[ProductController] DB update failed — rolling back ${newUploads.length} new Cloudinary upload(s)`);
       await deleteManyFromCloudinary(newUploads.map((i) => i.public_id));
+    }
+    // Surface duplicate-key errors as a human-readable 409 instead of a generic 500
+    if (dbError.code === 11000) {
+      const conflictField = Object.keys(dbError.keyValue || {})[0] || 'field';
+      const conflictValue = dbError.keyValue?.[conflictField];
+      throw new CentralAppError(
+        `Duplicate value: another product already has ${conflictField}${conflictValue ? ` "${conflictValue}"` : ''}. Please use a unique value.`,
+        409
+      );
     }
     throw dbError;
   }

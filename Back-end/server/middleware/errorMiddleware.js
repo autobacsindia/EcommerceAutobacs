@@ -130,7 +130,12 @@ function getSafeMessage(err, isOperational) {
   if (isOperational && SAFE_ERROR_MESSAGES.has(err.message)) {
     return err.message;
   }
-  
+
+  // Allow dynamic duplicate-key messages through — they contain field names, not internals
+  if (isOperational && typeof err.message === 'string' && err.message.startsWith('Duplicate value:')) {
+    return err.message;
+  }
+
   // All other errors → generic message (including operational with dynamic messages)
   return 'Something went wrong. Please try again later.';
 }

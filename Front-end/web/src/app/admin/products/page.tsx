@@ -12,7 +12,7 @@ interface Product {
   price: number;
   stock: number;
   categories?: { name: string }[];
-  featured: boolean;
+  isFeatured: boolean;
 }
 
 interface ProductsResponse {
@@ -175,10 +175,10 @@ export default function AdminProductsPage() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span
                       className={`px-2 py-1 text-xs rounded-full ${
-                        product.featured ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        product.isFeatured ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                       }`}
                     >
-                      {product.featured ? 'Yes' : 'No'}
+                      {product.isFeatured ? 'Yes' : 'No'}
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
