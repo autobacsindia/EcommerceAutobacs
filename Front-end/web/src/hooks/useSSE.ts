@@ -107,22 +107,31 @@ export function useSSE({
         if (!response.ok) {
           if (response.status === 401) {
             // Attempt silent token refresh before giving up
-            try {
-              const refreshRes = await fetch('/api/v1/auth/refresh', {
-                method: 'POST',
-                credentials: 'include',
-              });
-              if (refreshRes.ok) {
-                // Refresh succeeded — retry the SSE connection immediately
-                if (abortController.signal.aborted) return;
-                connectFnRef.current().catch(() => {});
-                return;
+            if (!isRefreshingRef.current) {
+              isRefreshingRef.current = true;
+              try {
+                const refreshRes = await fetch('/api/v1/auth/refresh', {
+                  method: 'POST',
+                  credentials: 'include',
+                });
+                isRefreshingRef.current = false;
+                if (refreshRes.ok) {
+                  // Refresh succeeded — retry SSE connection immediately
+                  if (abortController.signal.aborted) return;
+                  reconnectAttemptsRef.current = 0;
+                  connectFnRef.current().catch(() => {});
+                  return;
+                }
+              } catch {
+                isRefreshingRef.current = false;
               }
-            } catch {
-              // Refresh failed — fall through to error
             }
-            console.warn('SSE: 401 Unauthorized - session expired');
-            throw new Error('SSE connection failed: 401 Unauthorized');
+            // Refresh failed or already in progress — session is truly expired.
+            // Stop retrying; further attempts will all get 401 until user logs in.
+            console.warn('SSE: session expired, stopping reconnect');
+            setConnectionState('error');
+            onErrorRef.current?.(new Error('Session expired'));
+            return;
           }
           throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
         }
