@@ -112,7 +112,7 @@ export default function MediaCenterPage() {
                   href={`/media/${a.type}/${a.slug}`}
                   className="group flex gap-3 bg-white rounded-lg border border-gray-100 p-3 hover:shadow-sm hover:border-orange-200 transition-all"
                 >
-                  <span className="text-2xl font-bold text-orange-200 group-hover:text-orange-400 transition-colors w-7 flex-shrink-0">
+                  <span className="text-2xl font-bold text-orange-200 group-hover:text-orange-400 transition-colors w-7 shrink-0">
                     {i + 1}
                   </span>
                   <div className="min-w-0">
@@ -148,7 +148,7 @@ function HeroFeatured({ hero, secondary }: { hero: Article; secondary: Article[]
           {/* Large hero card */}
           <Link
             href={`/media/${hero.type}/${hero.slug}`}
-            className="lg:col-span-2 group relative rounded-2xl overflow-hidden min-h-[380px] flex flex-col justify-end"
+            className="lg:col-span-2 group relative rounded-2xl overflow-hidden min-h-95 flex flex-col justify-end"
           >
             {hero.coverImage ? (
               <img src={hero.coverImage} alt={hero.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -227,8 +227,8 @@ function RecentSection({ title, href, articles, loading }: { title: string; href
               className="flex gap-4 group bg-white rounded-lg border border-gray-100 p-3 hover:shadow-sm hover:border-gray-200 transition-all"
             >
               {a.coverImage
-                ? <img src={a.coverImage} alt={a.title} className="w-20 h-16 object-cover rounded-md flex-shrink-0" />
-                : <div className="w-20 h-16 bg-gray-100 rounded-md flex-shrink-0 flex items-center justify-center"><Newspaper className="h-6 w-6 text-gray-300" /></div>}
+                ? <img src={a.coverImage} alt={a.title} className="w-20 h-16 object-cover rounded-md shrink-0" />
+                : <div className="w-20 h-16 bg-gray-100 rounded-md shrink-0 flex items-center justify-center"><Newspaper className="h-6 w-6 text-gray-300" /></div>}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 group-hover:text-red-600 transition-colors text-sm line-clamp-2 mb-1">{a.title}</p>
                 <p className="text-xs text-gray-400">

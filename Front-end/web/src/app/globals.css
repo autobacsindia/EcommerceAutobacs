@@ -203,6 +203,116 @@ textarea::placeholder {
 .animation-delay-200 { animation-delay: 200ms; }
 .animation-delay-300 { animation-delay: 300ms; }
 
+/* ── Article body typography (blog/news detail pages) ── */
+.article-body {
+  color: #1f2937;
+  line-height: 1.8;
+  font-size: 1rem;
+}
+.article-body h1, .article-body h2, .article-body h3,
+.article-body h4, .article-body h5, .article-body h6 {
+  font-weight: 700;
+  color: #111827;
+  margin-top: 1.75em;
+  margin-bottom: 0.6em;
+  line-height: 1.3;
+}
+.article-body h2 { font-size: 1.5rem; }
+.article-body h3 { font-size: 1.25rem; }
+.article-body h4 { font-size: 1.125rem; }
+.article-body p  { margin-top: 0; margin-bottom: 1.25em; }
+.article-body ul, .article-body ol { padding-left: 1.5em; margin-bottom: 1.25em; }
+.article-body ul { list-style-type: disc; }
+.article-body ol { list-style-type: decimal; }
+.article-body li { margin-bottom: 0.4em; }
+.article-body a  { color: #dc2626; text-decoration: underline; }
+.article-body a:hover { color: #b91c1c; }
+.article-body img {
+  border-radius: 0.5rem;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5em auto;
+  display: block;
+}
+.article-body strong { font-weight: 700; color: #111827; }
+.article-body em     { font-style: italic; }
+
+/* Blockquote — styled as a dark CTA callout box */
+.article-body blockquote {
+  background: #18181b;
+  border-left: 4px solid #dc2626;
+  border-radius: 0.5rem;
+  padding: 1rem 1.5rem;
+  margin: 2em 0;
+  font-style: normal;
+  font-weight: 500;
+  /* color on the element itself so it cascades to all children,
+     regardless of whether the content is wrapped in <p> or not */
+  color: #f4f4f5;
+}
+.article-body blockquote p {
+  color: #f4f4f5;
+  margin: 0;
+  line-height: 1.7;
+}
+.article-body blockquote * {
+  color: inherit;
+}
+.article-body blockquote a {
+  color: #fca5a5;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.article-body blockquote a:hover { color: #ffffff; }
+
+/* Horizontal rule */
+.article-body hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 2.5em 0;
+}
+
+/* Inline code + code blocks */
+.article-body code {
+  background: #f3f4f6;
+  padding: 0.125em 0.375em;
+  border-radius: 0.25em;
+  font-size: 0.875em;
+  color: #111827;
+}
+.article-body pre {
+  background: #111827;
+  color: #e5e7eb;
+  padding: 1em 1.5em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-bottom: 1.5em;
+}
+.article-body pre code { background: none; padding: 0; color: inherit; }
+
+/* Tables */
+.article-body table { width: 100%; border-collapse: collapse; margin-bottom: 1.5em; }
+.article-body th, .article-body td {
+  padding: 0.5em 1em;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+}
+.article-body th { background: #f9fafb; font-weight: 600; }
+
+/* ── Light-surface input reset (for form fields on white/light backgrounds) ── */
+.light-inputs input,
+.light-inputs textarea,
+.light-inputs select {
+  color: #111827;
+  background-color: #ffffff;
+  border-color: #d1d5db;
+}
+.light-inputs input::placeholder,
+.light-inputs textarea::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
 /* ── Rich Text Editor (TipTap) content styles ── */
 .rte-content .ProseMirror { outline: none; min-height: 180px; padding: 12px; color: #111827; }
 .rte-content .ProseMirror h1 { font-size: 1.875rem; font-weight: 700; margin: 0.6em 0 0.4em; line-height: 1.25; }

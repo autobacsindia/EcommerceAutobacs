@@ -1,6 +1,8 @@
 import express from "express";
 import articleRepository from "../repositories/articleRepository.js";
 import mediaItemRepository from "../repositories/mediaItemRepository.js";
+import ArticleComment from "../models/ArticleComment.js";
+import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 
@@ -19,6 +21,40 @@ function cacheGet(key) {
 function cacheSet(key, data) { cache.set(key, { data, ts: Date.now() }); }
 function cacheInvalidate(prefix) {
   for (const key of cache.keys()) { if (key.startsWith(prefix)) cache.delete(key); }
+}
+
+// ─── WP link resolution ───────────────────────────────────────────────────────
+
+const WP_PRODUCT_RE = /https?:\/\/(?:www\.)?autobacsindia\.com\/product\/([^/"'\s>]+)\/?/gi;
+
+async function resolveWpProductLinks(content) {
+  if (!content) return content;
+
+  // Collect every unique WP product slug referenced in the content
+  const slugs = new Set();
+  for (const [, slug] of content.matchAll(WP_PRODUCT_RE)) {
+    slugs.add(slug.toLowerCase());
+  }
+  if (slugs.size === 0) return content;
+
+  // Look up which slugs actually exist in our database
+  const found = await Product.find({ slug: { $in: [...slugs] } })
+    .select("slug")
+    .lean();
+  const slugMap = new Map(found.map((p) => [p.slug, p.slug]));
+
+  // Replace product links (verified → /products/slug, unknown → keep original)
+  let resolved = content.replace(WP_PRODUCT_RE, (match, wpSlug) => {
+    const key = wpSlug.toLowerCase();
+    return slugMap.has(key) ? `/products/${slugMap.get(key)}` : match;
+  });
+
+  // Structural rewrites that don't need a DB lookup
+  resolved = resolved
+    .replace(/https?:\/\/(?:www\.)?autobacsindia\.com\/product-category\/([^/"'\s>]+)\/?/gi, "/categories/$1")
+    .replace(/https?:\/\/(?:www\.)?autobacsindia\.com\/shop\/?/gi, "/shop");
+
+  return resolved;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -139,9 +175,80 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
     .sort({ publishedAt: -1 })
     .limit(4);
 
-  const payload = { success: true, data: article, related };
+  // Rewrite WordPress product/category/shop URLs in content to new-site routes.
+  // Only product links that actually exist in the database are rewritten; unknown
+  // slugs are left as-is so broken links are visible rather than silently hidden.
+  const articleObj = article.toObject();
+  articleObj.content = await resolveWpProductLinks(articleObj.content);
+
+  const payload = { success: true, data: articleObj, related };
   cacheSet(cacheKey, payload);
   res.json(payload);
+}));
+
+// GET /media/articles/:slug/adjacent  — prev/next articles of the same type
+router.get("/articles/:slug/adjacent", asyncHandler(async (req, res) => {
+  const article = await articleRepository.findOne({ slug: req.params.slug, status: "published" });
+  if (!article) return res.status(404).json({ success: false, message: "Article not found" });
+
+  const base = { status: "published", type: article.type, _id: { $ne: article._id } };
+  const date = article.publishedAt || article.createdAt;
+
+  const [prev, next] = await Promise.all([
+    articleRepository
+      .findOne({ ...base, publishedAt: { $lt: date } })
+      .select("title slug coverImage publishedAt createdAt")
+      .sort({ publishedAt: -1 }),
+    articleRepository
+      .findOne({ ...base, publishedAt: { $gt: date } })
+      .select("title slug coverImage publishedAt createdAt")
+      .sort({ publishedAt: 1 }),
+  ]);
+
+  res.json({ success: true, prev: prev || null, next: next || null });
+}));
+
+// GET /media/articles/:slug/comments
+router.get("/articles/:slug/comments", asyncHandler(async (req, res) => {
+  const article = await articleRepository.findOne({ slug: req.params.slug, status: "published" });
+  if (!article) return res.status(404).json({ success: false, message: "Article not found" });
+
+  const comments = await ArticleComment.find({ article: article._id, approved: true })
+    .select("name comment parent createdAt")
+    .sort({ createdAt: 1 })
+    .lean();
+
+  res.json({ success: true, data: comments });
+}));
+
+// POST /media/articles/:slug/comments
+router.post("/articles/:slug/comments", asyncHandler(async (req, res) => {
+  const { name, email, comment, parent } = req.body;
+  if (!name?.trim() || !email?.trim() || !comment?.trim()) {
+    return res.status(400).json({ success: false, message: "Name, email, and comment are required" });
+  }
+
+  const article = await articleRepository.findOne({ slug: req.params.slug, status: "published" });
+  if (!article) return res.status(404).json({ success: false, message: "Article not found" });
+
+  const created = await ArticleComment.create({
+    article: article._id,
+    name:    name.trim().slice(0, 100),
+    email:   email.trim().toLowerCase().slice(0, 200),
+    comment: comment.trim().slice(0, 2000),
+    parent:  parent || null,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      _id:       created._id,
+      name:      created.name,
+      comment:   created.comment,
+      parent:    created.parent,
+      createdAt: created.createdAt,
+    },
+  });
 }));
 
 // GET /media/articles-categories?type=news|blog
@@ -422,6 +529,61 @@ router.delete("/admin/media-items/:id", protect, admin, asyncHandler(async (req,
   const item = await mediaItemRepository.findByIdAndDelete(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Media item not found" });
   res.json({ success: true, message: "Media item deleted" });
+}));
+
+// ─── Admin: comment moderation ────────────────────────────────────────────────
+
+// GET /media/admin/comments?articleSlug=&approved=&page=&limit=
+router.get("/admin/comments", protect, admin, asyncHandler(async (req, res) => {
+  const { articleSlug, approved, page = 1, limit = 50 } = req.query;
+  const filter = {};
+
+  if (articleSlug) {
+    const article = await articleRepository.findOne({ slug: articleSlug });
+    if (!article) return res.json({ success: true, data: [], pagination: { page: 1, pages: 1, total: 0 } });
+    filter.article = article._id;
+  }
+  if (approved !== undefined && approved !== "") {
+    filter.approved = approved === "true";
+  }
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [data, total] = await Promise.all([
+    ArticleComment.find(filter)
+      .populate("article", "title slug type")
+      .select("name email comment parent approved createdAt article")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean(),
+    ArticleComment.countDocuments(filter),
+  ]);
+
+  res.json({
+    success: true,
+    data,
+    pagination: { page: Number(page), pages: Math.ceil(total / Number(limit)), total },
+  });
+}));
+
+// PATCH /media/admin/comments/:id/approve  — toggle approved
+router.patch("/admin/comments/:id/approve", protect, admin, asyncHandler(async (req, res) => {
+  const doc = await ArticleComment.findById(req.params.id);
+  if (!doc) return res.status(404).json({ success: false, message: "Comment not found" });
+  doc.approved = !doc.approved;
+  await doc.save();
+  res.json({ success: true, data: { _id: doc._id, approved: doc.approved } });
+}));
+
+// DELETE /media/admin/comments/:id  — also removes all direct replies
+router.delete("/admin/comments/:id", protect, admin, asyncHandler(async (req, res) => {
+  const doc = await ArticleComment.findById(req.params.id);
+  if (!doc) return res.status(404).json({ success: false, message: "Comment not found" });
+  await Promise.all([
+    ArticleComment.deleteOne({ _id: doc._id }),
+    ArticleComment.deleteMany({ parent: doc._id }),
+  ]);
+  res.json({ success: true, message: "Comment deleted" });
 }));
 
 export default router;

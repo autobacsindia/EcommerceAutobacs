@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Plus, Edit2, Trash2, Eye, EyeOff, Star, Search, Newspaper, BookOpen, Image as ImageIcon, Video, ChevronLeft, ChevronRight, TrendingUp, BarChart2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, EyeOff, Star, Search, Newspaper, BookOpen, Image as ImageIcon, Video, ChevronLeft, ChevronRight, TrendingUp, BarChart2, MessageSquare, CheckCircle, XCircle } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 
-type Tab = 'articles' | 'gallery' | 'videos';
+type Tab = 'articles' | 'gallery' | 'videos' | 'comments';
 
 interface Stats {
   articles: { total: number; published: number; news: number; blogs: number };
@@ -39,6 +39,17 @@ interface MediaItem {
   status: 'draft' | 'published';
   embedType: string;
   createdAt: string;
+}
+
+interface AdminComment {
+  _id: string;
+  name: string;
+  email: string;
+  comment: string;
+  approved: boolean;
+  parent: string | null;
+  createdAt: string;
+  article: { _id: string; title: string; slug: string; type: string } | null;
 }
 
 // ─── Article Form ──────────────────────────────────────────────────────────────
@@ -79,6 +90,13 @@ export default function AdminMediaPage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
+  // Comments tab state
+  const [comments, setComments] = useState<AdminComment[]>([]);
+  const [commentPage, setCommentPage] = useState(1);
+  const [commentPages, setCommentPages] = useState(1);
+  const [commentTotal, setCommentTotal] = useState(0);
+  const [approvedFilter, setApprovedFilter] = useState('');
+
   const fetchArticles = useCallback(async () => {
     setLoading(true);
     try {
@@ -109,14 +127,30 @@ export default function AdminMediaPage() {
     finally { setLoading(false); }
   }, [tab, pagination.page]);
 
+  const fetchComments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = { page: String(commentPage), limit: '50' };
+      if (approvedFilter !== '') params.approved = approvedFilter;
+      const res = await apiClient.get<any>(API_ENDPOINTS.ADMIN_MEDIA_COMMENTS, { params });
+      if (res.success) {
+        setComments(res.data);
+        setCommentPages(res.pagination.pages);
+        setCommentTotal(res.pagination.total);
+      }
+    } catch (_) {}
+    finally { setLoading(false); }
+  }, [commentPage, approvedFilter]);
+
   useEffect(() => {
     setPagination(p => ({ ...p, page: 1 }));
   }, [tab, typeFilter, statusFilter]);
 
   useEffect(() => {
     if (tab === 'articles') fetchArticles();
+    else if (tab === 'comments') fetchComments();
     else fetchMediaItems();
-  }, [tab, fetchArticles, fetchMediaItems]);
+  }, [tab, fetchArticles, fetchMediaItems, fetchComments]);
 
   // Fetch analytics stats
   useEffect(() => {
@@ -225,6 +259,26 @@ export default function AdminMediaPage() {
     setShowMediaForm(true);
   }
 
+  // ── Comment moderation ────────────────────────────────────────────────────────
+
+  async function deleteComment(id: string) {
+    if (!confirm('Delete this comment and its replies?')) return;
+    try {
+      await apiClient.delete(API_ENDPOINTS.ADMIN_MEDIA_COMMENT(id));
+      setComments(prev => prev.filter(c => c._id !== id && c.parent !== id));
+      setCommentTotal(t => t - 1);
+    } catch (_) {}
+  }
+
+  async function toggleCommentApproval(id: string) {
+    try {
+      const res = await apiClient.patch<any>(API_ENDPOINTS.ADMIN_MEDIA_COMMENT_APPROVE(id));
+      if (res.success) {
+        setComments(prev => prev.map(c => c._id === id ? { ...c, approved: res.data.approved } : c));
+      }
+    } catch (_) {}
+  }
+
   const filteredArticles = articles.filter(a =>
     !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.author.toLowerCase().includes(search.toLowerCase())
   );
@@ -243,16 +297,18 @@ export default function AdminMediaPage() {
               Analytics
             </button>
           )}
-          <button
-            onClick={() => {
-              if (tab === 'articles') { setEditingArticle(null); setArticleForm({ ...EMPTY_ARTICLE }); setShowArticleForm(true); }
-              else { setEditingMedia(null); setMediaForm({ ...EMPTY_MEDIA, type: tab === 'gallery' ? 'image' : 'video' }); setShowMediaForm(true); }
-            }}
-            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-          >
-            <Plus className="h-4 w-4" />
-            {tab === 'articles' ? 'New Article' : tab === 'gallery' ? 'Add Image' : 'Add Video'}
-          </button>
+          {tab !== 'comments' && (
+            <button
+              onClick={() => {
+                if (tab === 'articles') { setEditingArticle(null); setArticleForm({ ...EMPTY_ARTICLE }); setShowArticleForm(true); }
+                else { setEditingMedia(null); setMediaForm({ ...EMPTY_MEDIA, type: tab === 'gallery' ? 'image' : 'video' }); setShowMediaForm(true); }
+              }}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" />
+              {tab === 'articles' ? 'New Article' : tab === 'gallery' ? 'Add Image' : 'Add Video'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,6 +358,7 @@ export default function AdminMediaPage() {
           { id: 'articles', label: 'Articles', icon: Newspaper },
           { id: 'gallery', label: 'Gallery', icon: ImageIcon },
           { id: 'videos', label: 'Videos', icon: Video },
+          { id: 'comments', label: `Comments${commentTotal > 0 ? ` (${commentTotal})` : ''}`, icon: MessageSquare },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -373,7 +430,7 @@ export default function AdminMediaPage() {
                     <tr key={article._id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          {article.featured && <Star className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />}
+                          {article.featured && <Star className="h-3.5 w-3.5 text-amber-400 shrink-0" />}
                           <span className="font-medium text-gray-900 line-clamp-1">{article.title}</span>
                         </div>
                       </td>
@@ -492,6 +549,120 @@ export default function AdminMediaPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Comments Tab */}
+      {tab === 'comments' && (
+        <>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mb-5">
+            <select
+              value={approvedFilter}
+              onChange={e => { setApprovedFilter(e.target.value); setCommentPage(1); }}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none"
+            >
+              <option value="">All</option>
+              <option value="true">Approved</option>
+              <option value="false">Hidden</option>
+            </select>
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700">Commenter</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700">Comment</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700">Article</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700">Date</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {comments.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-gray-400">No comments yet</td></tr>
+                  ) : comments.map(c => (
+                    <tr key={c._id} className={`hover:bg-gray-50 transition-colors ${!c.approved ? 'opacity-60' : ''}`}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900">{c.name}</p>
+                        <p className="text-xs text-gray-400">{c.email}</p>
+                        {c.parent && <span className="text-xs text-blue-500">↳ reply</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 max-w-xs">
+                        <p className="line-clamp-2">{c.comment}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.article ? (
+                          <Link
+                            href={`/media/${c.article.type}/${c.article.slug}`}
+                            target="_blank"
+                            className="text-xs text-blue-600 hover:underline line-clamp-2"
+                          >
+                            {c.article.title}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.approved ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {c.approved ? 'Approved' : 'Hidden'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => toggleCommentApproval(c._id)}
+                            title={c.approved ? 'Hide comment' : 'Approve comment'}
+                            className={`p-1.5 rounded transition-colors ${c.approved ? 'text-green-500 hover:bg-red-50 hover:text-red-500' : 'text-gray-400 hover:bg-green-50 hover:text-green-600'}`}
+                          >
+                            {c.approved ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                          </button>
+                          <button
+                            onClick={() => deleteComment(c._id)}
+                            className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Comments pagination */}
+          {commentPages > 1 && (
+            <div className="flex justify-center gap-2 mt-6">
+              <button
+                disabled={commentPage <= 1}
+                onClick={() => setCommentPage(p => p - 1)}
+                className="p-2 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="flex items-center text-sm text-gray-600 px-3">Page {commentPage} of {commentPages}</span>
+              <button
+                disabled={commentPage >= commentPages}
+                onClick={() => setCommentPage(p => p + 1)}
+                className="p-2 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           )}
         </>

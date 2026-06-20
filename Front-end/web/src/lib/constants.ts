@@ -106,6 +106,9 @@ export const API_ENDPOINTS = {
   ADMIN_MEDIA_ARTICLE: (id: string) => `/media/admin/articles/${id}`,
   ADMIN_MEDIA_ITEMS: '/media/admin/media-items',
   ADMIN_MEDIA_ITEM: (id: string) => `/media/admin/media-items/${id}`,
+  ADMIN_MEDIA_COMMENTS: '/media/admin/comments',
+  ADMIN_MEDIA_COMMENT_APPROVE: (id: string) => `/media/admin/comments/${id}/approve`,
+  ADMIN_MEDIA_COMMENT: (id: string) => `/media/admin/comments/${id}`,
   MEDIA_STATS: '/media/stats',
   MEDIA_TRENDING: '/media/trending',
 

@@ -128,6 +128,10 @@ export const csrfProtection = async (req, res, next) => {
     '/api/v1/location/select',
     '/api/v1/consultation',
     '/api/v1/contact',
+    // Public article comment submissions — no cookie-based auth, same profile as
+    // /contact and /consultation. Admin article CRUD is under /media/admin/ and
+    // is NOT covered by this prefix.
+    '/api/v1/media/articles',
   ];
 
   // Exact match OR path is a strict prefix (followed by '/' to prevent
