@@ -12,6 +12,7 @@ jest.mock('lucide-react', () => ({
   Edit: () => <span data-testid="icon-edit">Edit</span>,
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
   FolderOpen: () => <span data-testid="icon-folder-open">FolderOpen</span>,
+  Package: () => <span data-testid="icon-package">Package</span>,
 }));
 
 describe('AdminCategoriesPage', () => {
@@ -27,10 +28,10 @@ describe('AdminCategoriesPage', () => {
     },
     {
       _id: 'c2',
-      name: 'Suspension', // Test the specific transformation logic
+      name: 'Suspension',
       slug: 'suspension',
       description: 'Description 2',
-      isActive: false,
+      isActive: false, // inactive category is visible via the admin/all endpoint
       order: 2,
     },
   ];
@@ -68,8 +69,8 @@ describe('AdminCategoriesPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Category 1')).toBeInTheDocument();
-      // Check for the specific transformation 'Suspension' -> 'SUSPENSION'
-      expect(screen.getByText('SUSPENSION')).toBeInTheDocument();
+      // Category name renders verbatim (no display kludge).
+      expect(screen.getByText('Suspension')).toBeInTheDocument();
       expect(screen.getByText('Description 1')).toBeInTheDocument();
       expect(screen.getByText('Active')).toBeInTheDocument();
       expect(screen.getByText('Inactive')).toBeInTheDocument();

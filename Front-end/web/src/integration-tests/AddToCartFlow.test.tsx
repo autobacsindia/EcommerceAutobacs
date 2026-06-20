@@ -137,7 +137,7 @@ describe('Integration: Add to Cart Flow', () => {
     render(
       <CartProvider>
         <div className="min-h-screen flex flex-col">
-          <Header />
+          <Header navCategories={[]} />
           <main className="flex-1 p-4">
             <ProductCard product={testProduct} />
           </main>

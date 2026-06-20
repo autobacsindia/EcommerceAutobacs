@@ -38,17 +38,20 @@ describe('SearchService Unit Tests', () => {
     // Default mocks setup
     elasticsearchService.isConnected.mockResolvedValue(false); // Default to MongoDB fallback
     
-    // Mock Product.find chain
+    // Mock Product.find chain. The service terminates the chain with
+    // `.lean().maxTimeMS(ms)`, so maxTimeMS (not lean) resolves the documents.
     const mockFind = {
       populate: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([]), // Default empty result
+      lean: jest.fn().mockReturnThis(),
+      maxTimeMS: jest.fn().mockResolvedValue([]), // Default empty result
     };
     Product.find.mockReturnValue(mockFind);
-    Product.countDocuments.mockResolvedValue(0);
+    // countDocuments is also chained with `.maxTimeMS(ms)`.
+    Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(0) });
   });
 
   describe('searchProducts', () => {
@@ -116,6 +119,38 @@ describe('SearchService Unit Tests', () => {
       expect(mockFind.limit).toHaveBeenCalledWith(20);
     });
     
+    it('should build a broad $or matching text fields and the category branch for a search term', async () => {
+      // "lights" resolves to the Lighting category tree via synonyms + category lookup.
+      categoryMappingService.findCategory.mockImplementation((t) =>
+        t === 'lighting' || t === 'lights' ? { _id: 'lightingCat' } : null
+      );
+      categoryMappingService.getAllCategoryIdsIncludingChildren.mockResolvedValue([
+        'lightingCat',
+        'ambientCat',
+      ]);
+
+      await SearchService.searchProducts({ search: 'lights' });
+
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(Array.isArray(queryArg.$or)).toBe(true);
+      // text-field branches present
+      expect(queryArg.$or).toEqual(
+        expect.arrayContaining([{ name: expect.any(RegExp) }])
+      );
+      // category-tree branch OR'd in (this is what restores "lights" -> all lights)
+      expect(queryArg.$or).toEqual(
+        expect.arrayContaining([
+          { categories: { $in: ['lightingCat', 'ambientCat'] } },
+        ])
+      );
+    });
+
+    it('should not set $text (broad regex path replaces the text-index-first approach)', async () => {
+      await SearchService.searchProducts({ search: 'anything' });
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(queryArg.$text).toBeUndefined();
+    });
+
     it('should handle category filtering correctly', async () => {
         const params = { category: 'tires' };
         

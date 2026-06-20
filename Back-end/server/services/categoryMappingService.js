@@ -192,45 +192,85 @@ class CategoryMappingService {
   }
 
   /**
-   * Get all child categories for a given category ID
-   * @param {string} categoryId - The ID of the parent category
-   * @returns {Array} Array of all child categories
+   * Build a parent-id -> direct-children adjacency map from the cache.
+   *
+   * The cache stores 4 keys per category (id, slug, name, normalized name), so we
+   * iterate only the id-keyed entries to visit each category exactly once and avoid
+   * duplicate children. `parent` is a Mongoose ObjectId, so it is normalized to a
+   * string before indexing — comparing it with `===` against a string id (as the
+   * previous implementation did) always returned false and broke aggregation.
+   * @returns {Map<string, Array>} parentId -> array of child category objects
    */
-  async getChildCategories(categoryId) {
-    const childCategories = [];
+  buildChildIndex() {
+    const childIndex = new Map();
 
-    // Find direct children
-    for (const [, category] of this.categoryCache.entries()) {
-      // Check if this is a category object and has the matching parent
-      if (category && category.parent && category.parent === categoryId) {
-        childCategories.push(category);
+    for (const [key, category] of this.categoryCache.entries()) {
+      if (!category || !category._id) continue;
+      // Only process the canonical id-keyed entry to avoid 4x duplication.
+      if (key !== category._id.toString()) continue;
+      if (!category.parent) continue;
 
-        // Recursively get grandchildren
-        const grandChildren = await this.getChildCategories(category._id.toString());
-        childCategories.push(...grandChildren);
+      const parentId = String(category.parent);
+      if (!childIndex.has(parentId)) {
+        childIndex.set(parentId, []);
       }
+      childIndex.get(parentId).push(category);
     }
 
-    return childCategories;
+    return childIndex;
   }
 
   /**
-   * Get all category IDs including child categories
+   * Get all descendant categories for a given category ID.
+   * Iterative BFS with a visited set guards against cycles and re-visits.
    * @param {string} categoryId - The ID of the parent category
-   * @returns {Array} Array of all category IDs including the parent and children
+   * @returns {Array} Array of all descendant category objects (no duplicates)
+   */
+  async getChildCategories(categoryId) {
+    const childIndex = this.buildChildIndex();
+    const descendants = [];
+    const visited = new Set([String(categoryId)]);
+    const queue = [String(categoryId)];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      const children = childIndex.get(currentId) || [];
+      for (const child of children) {
+        const childId = child._id.toString();
+        if (visited.has(childId)) continue; // cycle / diamond guard
+        visited.add(childId);
+        descendants.push(child);
+        queue.push(childId);
+      }
+    }
+
+    return descendants;
+  }
+
+  /**
+   * Get all category IDs including child categories (parent + all descendants).
+   * @param {string} categoryId - The ID of the parent category
+   * @returns {Array} Deduplicated array of category IDs (parent first)
    */
   async getAllCategoryIdsIncludingChildren(categoryId) {
-    const allCategoryIds = [categoryId];
+    const rootId = String(categoryId);
+    const childCategories = await this.getChildCategories(rootId);
 
-    // Get child categories
-    const childCategories = await this.getChildCategories(categoryId);
+    // Set preserves dedupe; root is included even if it has no children.
+    const allCategoryIds = new Set([rootId]);
+    childCategories.forEach(child => allCategoryIds.add(child._id.toString()));
 
-    // Add child category IDs
-    childCategories.forEach(child => {
-      allCategoryIds.push(child._id.toString());
-    });
+    return Array.from(allCategoryIds);
+  }
 
-    return allCategoryIds;
+  /**
+   * Drop the in-memory cache so the next lookup re-loads from the database.
+   * Call this after category create/update/delete so hierarchy changes take
+   * effect without a process restart.
+   */
+  refresh() {
+    this.categoryCache.clear();
+    this.initialized = false;
   }
 
   /**

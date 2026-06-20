@@ -11,8 +11,9 @@ import ClientSearchSuggestions from './ClientSearchSuggestions';
 import CurrencySwitcherDropdown from './CurrencySwitcherDropdown';
 import MobileMenu from './MobileMenu';
 import EnvironmentAwareComponent from './EnvironmentAwareComponent';
+import type { NavCategory } from '@/lib/navCategories';
 
-export default function HeaderInteractiveBar() {
+export default function HeaderInteractiveBar({ navCategories }: { navCategories: NavCategory[] }) {
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const { isAuthenticated, user, logout } = useAuth();
@@ -110,7 +111,7 @@ export default function HeaderInteractiveBar() {
         </div>
       )}
 
-      <MobileMenu isOpen={showMobileMenu} onClose={() => setShowMobileMenu(false)} />
+      <MobileMenu isOpen={showMobileMenu} onClose={() => setShowMobileMenu(false)} navCategories={navCategories} />
     </>
   );
 }

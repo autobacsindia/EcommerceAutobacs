@@ -1,5 +1,6 @@
 import express from "express";
 import categoryRepository from "../repositories/categoryRepository.js";
+import productRepository from "../repositories/productRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
@@ -7,6 +8,7 @@ import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js
 import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
+import categoryMappingService from "../services/categoryMappingService.js";
 
 const router = express.Router();
 
@@ -48,6 +50,62 @@ router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL)
       pages: Math.ceil(total / limit),
       limit
     }
+  });
+}));
+
+// @route   GET /categories/admin/all
+// @desc    List ALL categories incl. inactive (admin dashboard management)
+// @access  Private/Admin
+// NOTE: declared before "/:id" so the literal path is matched first, and left
+// uncached so admins always see the current state after create/update/delete.
+router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
+  const [categories, counts] = await Promise.all([
+    categoryRepository.find({})
+      .populate('parent', 'name slug')
+      .sort({ order: 1, name: 1 })
+      .lean(),
+    productRepository.countActiveByCategory(),
+  ]);
+
+  // Direct (products tagged exactly with this category) counts.
+  const directCount = new Map(counts.map((c) => [String(c._id), c.count]));
+
+  // Roll direct counts up the tree so a parent's badge reflects what
+  // "View products" shows (the whole subtree, since the search filter expands
+  // a category to all its descendants). One aggregation + an O(N) in-memory
+  // rollup using the parent pointers we already loaded.
+  const childrenOf = new Map();
+  for (const c of categories) {
+    const parentId = c.parent?._id ? String(c.parent._id) : (c.parent ? String(c.parent) : null);
+    if (!parentId) continue;
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+    childrenOf.get(parentId).push(String(c._id));
+  }
+
+  const subtreeMemo = new Map();
+  const inProgress = new Set();
+  const subtreeCount = (id) => {
+    if (subtreeMemo.has(id)) return subtreeMemo.get(id);
+    if (inProgress.has(id)) return 0; // guard against any pre-existing cycle
+    inProgress.add(id);
+    let total = directCount.get(id) || 0;
+    for (const childId of (childrenOf.get(id) || [])) total += subtreeCount(childId);
+    inProgress.delete(id);
+    subtreeMemo.set(id, total);
+    return total;
+  };
+
+  const withCounts = categories.map((c) => ({
+    ...c,
+    productCount: directCount.get(String(c._id)) || 0,
+    totalProductCount: subtreeCount(String(c._id)),
+  }));
+
+  res.set('Cache-Control', 'private, no-store');
+  res.json({
+    success: true,
+    count: withCounts.length,
+    categories: withCounts
   });
 }));
 
@@ -131,7 +189,15 @@ router.post(
   validateUploadedFiles,
   validateCategory,
   asyncHandler(async (req, res) => {
-    const { name, slug, description, parent, order } = req.body;
+    const { name, slug, description, parent, order, isActive, imageAlt } = req.body;
+
+    // Validate parent exists when provided — prevents dangling parent references.
+    if (parent) {
+      const parentExists = await categoryRepository.findById(parent).select('_id').lean();
+      if (!parentExists) {
+        return res.status(400).json({ success: false, message: 'Parent category not found.' });
+      }
+    }
 
     let imageData = req.body.image || {};  // allow plain URL object from JSON
 
@@ -143,26 +209,45 @@ router.post(
       imageData = {
         url:       uploaded.secure_url,
         public_id: uploaded.public_id,
-        alt:       name,
+        alt:       (imageAlt || name || '').trim(),
       };
     }
 
-    const category = await categoryRepository.create({
-      name,
-      slug,
-      description,
-      parent,
-      image: imageData,
-      order,
-    });
+    try {
+      const category = await categoryRepository.create({
+        name,
+        slug,
+        description,
+        parent: parent || null,
+        image: imageData,
+        order,
+        // isActive arrives as a string ("true"/"false") over multipart; coerce explicitly.
+        ...(isActive !== undefined && { isActive: isActive === true || isActive === 'true' }),
+      });
 
-    invalidateCache('categories');
+      invalidateCache('categories');
+      // Drop the in-memory hierarchy cache so new categories aggregate immediately.
+      categoryMappingService.refresh();
 
-    res.status(201).json({
-      success: true,
-      message: 'Category created successfully',
-      category,
-    });
+      return res.status(201).json({
+        success: true,
+        message: 'Category created successfully',
+        category,
+      });
+    } catch (err) {
+      if (err?.code === 11000) {
+        // Avoid leaking an orphaned Cloudinary asset uploaded just above.
+        if (req.file && imageData.public_id) {
+          try { await deleteFromCloudinary(imageData.public_id); } catch { /* best-effort */ }
+        }
+        const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'value';
+        return res.status(409).json({
+          success: false,
+          message: `Duplicate value: a category with this ${field} already exists.`,
+        });
+      }
+      throw err;
+    }
   })
 );
 
@@ -185,6 +270,46 @@ router.put(
     }
 
     const updateData = { ...req.body };
+    delete updateData.imageAlt; // not a schema field; consumed only for image alt below
+
+    // Normalize multipart string values (req.body fields arrive as strings).
+    if (updateData.isActive !== undefined) {
+      updateData.isActive = updateData.isActive === true || updateData.isActive === 'true';
+    }
+    // Empty parent means "make this a top-level category".
+    if (updateData.parent === '' || updateData.parent === 'null') {
+      updateData.parent = null;
+    }
+
+    // Parent existence + circular-hierarchy prevention.
+    if (updateData.parent) {
+      if (String(updateData.parent) === String(req.params.id)) {
+        return res.status(400).json({ success: false, message: 'A category cannot be its own parent.' });
+      }
+      const proposedParent = await categoryRepository.findById(updateData.parent).select('parent').lean();
+      if (!proposedParent) {
+        return res.status(400).json({ success: false, message: 'Parent category not found.' });
+      }
+      // Walk the ancestor chain from the proposed parent; if we reach this
+      // category, the assignment would create a cycle. `visited` guards against
+      // any pre-existing cycle in the data so the loop always terminates.
+      let ancestorId = proposedParent.parent;
+      const visited = new Set([String(updateData.parent)]);
+      while (ancestorId) {
+        const key = String(ancestorId);
+        if (key === String(req.params.id)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot set parent: this would create a circular category hierarchy.',
+          });
+        }
+        if (visited.has(key)) break;
+        visited.add(key);
+        const ancestor = await categoryRepository.findById(ancestorId).select('parent').lean();
+        if (!ancestor) break;
+        ancestorId = ancestor.parent;
+      }
+    }
 
     // If a new file was uploaded, replace old Cloudinary image
     if (req.file) {
@@ -199,19 +324,35 @@ router.put(
       updateData.image = {
         url:       uploaded.secure_url,
         public_id: uploaded.public_id,
-        alt:       updateData.name || category.name,
+        alt:       (req.body.imageAlt || updateData.name || category.name || '').trim(),
       };
     }
 
-    const updated = await categoryRepository.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
+    try {
+      const updated = await categoryRepository.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true, runValidators: true }
+      );
 
-    invalidateCache('categories');
+      invalidateCache('categories');
+      // Parent/slug/name changes alter the hierarchy; refresh the lookup cache.
+      categoryMappingService.refresh();
 
-    res.json({ success: true, message: 'Category updated successfully', category: updated });
+      return res.json({ success: true, message: 'Category updated successfully', category: updated });
+    } catch (err) {
+      if (err?.code === 11000) {
+        if (req.file && updateData.image?.public_id) {
+          try { await deleteFromCloudinary(updateData.image.public_id); } catch { /* best-effort */ }
+        }
+        const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'value';
+        return res.status(409).json({
+          success: false,
+          message: `Duplicate value: a category with this ${field} already exists.`,
+        });
+      }
+      throw err;
+    }
   })
 );
 
@@ -228,10 +369,27 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
     });
   }
 
+  // Referential-integrity guard: refuse to orphan active subcategories or leave
+  // products pointing at a (soft-)deleted category. Caller must reassign first.
+  const [childCount, productCount] = await Promise.all([
+    categoryRepository.countDocuments({ parent: req.params.id, isActive: true }),
+    productRepository.count({ categories: req.params.id }),
+  ]);
+
+  if (childCount > 0 || productCount > 0) {
+    return res.status(409).json({
+      success: false,
+      message: `Cannot delete "${category.name}": it has ${childCount} active subcategor${childCount === 1 ? 'y' : 'ies'} and ${productCount} linked product(s). Reassign or remove them first.`,
+      details: { childCount, productCount },
+    });
+  }
+
   category.isActive = false;
   await category.save();
 
   invalidateCache('categories');
+  // Soft-deleted category must drop out of hierarchy aggregation.
+  categoryMappingService.refresh();
 
   res.json({
     success: true,

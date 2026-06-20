@@ -14,6 +14,7 @@ import { PostHogProvider } from "@/providers/PostHogProvider";
 import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
+import { getNavCategories } from "@/lib/navCategories";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 
 const barlowCondensed = Barlow_Condensed({
@@ -160,6 +161,10 @@ export default async function RootLayout({
   // client-side code (useRazorpay) can read it when creating dynamic scripts.
   const nonce = (await headers()).get('x-nonce') ?? undefined;
 
+  // Resolve the header category nav server-side (data-driven, cached) so it
+  // stays in sync with admin-managed categories and renders in the SSR HTML.
+  const navCategories = await getNavCategories();
+
   return (
     <html lang="en">
       <head>
@@ -178,7 +183,7 @@ export default async function RootLayout({
                   <LocationProvider>
                     <CurrencyProvider>
                       <GlobalLoadingBar />
-                      <ConditionalHeader />
+                      <ConditionalHeader navCategories={navCategories} />
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <Toaster position="top-right" />

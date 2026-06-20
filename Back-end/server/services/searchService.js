@@ -2,6 +2,7 @@ import Product from "../models/Product.js";
 import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
+import { expand as expandSynonyms } from "../config/searchSynonyms.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
 
 class SearchService {
@@ -116,87 +117,71 @@ class SearchService {
       }
     }
     
+    // Broad, single-pass search for WordPress-style recall.
+    // A search term matches across product text fields AND the category tree, expanded
+    // with synonyms (lights -> lighting/lamp/led/...). This replaces the previous
+    // text-index-then-regex-only-on-zero approach, which missed products that had a
+    // partial text hit and never searched category names.
     if (search) {
-      // Use MongoDB text search first
-      query.$text = { $search: search };
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const terms = expandSynonyms(search);
+
+      const orConditions = [];
+      for (const term of terms) {
+        const termRegex = new RegExp(escapeRegex(term), 'i');
+        orConditions.push(
+          { name: termRegex },
+          { brand: termRegex },
+          { shortDescription: termRegex },
+          { description: termRegex },
+          { sku: termRegex },
+          { tags: termRegex },
+          { features: termRegex },
+          { 'specifications.key': termRegex },
+          { 'specifications.value': termRegex }
+        );
+      }
+
+      // Resolve the term (and synonyms) against category names and include the whole
+      // descendant branch, so searching "lights" returns every product in Lighting/*
+      // even when the term doesn't appear in the product's own text.
+      if (!categoryMappingService.initialized) {
+        await categoryMappingService.initialize();
+      }
+      const matchedCategoryIds = new Set();
+      for (const term of terms) {
+        const foundCategory = categoryMappingService.findCategory(term);
+        if (foundCategory) {
+          const ids = await categoryMappingService.getAllCategoryIdsIncludingChildren(
+            foundCategory._id.toString()
+          );
+          ids.forEach(id => matchedCategoryIds.add(id));
+        }
+      }
+      if (matchedCategoryIds.size > 0) {
+        orConditions.push({ categories: { $in: Array.from(matchedCategoryIds) } });
+      }
+
+      query.$or = orConditions;
     }
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    let sortOptions = {};
-    if (search && sortBy === 'createdAt') {
-      sortOptions = { score: { $meta: 'textScore' } };
-    } else {
-      sortOptions[sortBy] = order === 'asc' ? 1 : -1;
-    }
+    const sortOptions = {};
+    sortOptions[sortBy] = order === 'asc' ? 1 : -1;
 
     try {
-      let productQuery = search
-        ? Product.find(query, { score: { $meta: 'textScore' } })
-        : Product.find(query);
-      productQuery = productQuery
+      const products = await Product.find(query)
         .populate('categories', 'name slug')
         .populate('compatibleVehicles', 'make model year')
-        .sort(sortOptions);
-      
-      const products = await productQuery
+        .sort(sortOptions)
         .skip(skip)
         .limit(Number(limit))
         .lean()
         .maxTimeMS(3000);
 
       const total = await Product.countDocuments(query).maxTimeMS(3000);
-
-      // If text search returns no results, fallback to regex-based search
-      if (search && products.length === 0) {
-        console.log(`[SearchService] Text search returned 0 results for "${search}", trying regex fallback...`);
-        
-        // Remove text search query
-        delete query.$text;
-        
-        // Build regex-based search across multiple fields
-        const searchRegex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-        query.$or = [
-          { name: searchRegex },
-          { brand: searchRegex },
-          { shortDescription: searchRegex },
-          { description: searchRegex },
-          { sku: searchRegex },
-          { tags: searchRegex },
-          { features: searchRegex },
-          { 'specifications.key': searchRegex },
-          { 'specifications.value': searchRegex }
-        ];
-        
-        // Retry with regex search
-        productQuery = Product.find(query)
-          .populate('categories', 'name slug')
-          .populate('compatibleVehicles', 'make model year')
-          .sort({ name: 1 }); // Sort alphabetically for regex results
-        
-        const regexProducts = await productQuery
-          .skip(skip)
-          .limit(Number(limit))
-          .lean()
-          .maxTimeMS(2000);
-
-        const regexTotal = await Product.countDocuments(query).maxTimeMS(2000);
-        
-        console.log(`[SearchService] Regex fallback found ${regexTotal} results for "${search}"`);
-        
-        return {
-          products: regexProducts,
-          pagination: {
-            total: regexTotal,
-            pages: Math.ceil(regexTotal / Number(limit)),
-            currentPage: Number(page),
-            hasNext: Number(page) < Math.ceil(regexTotal / Number(limit)),
-            hasPrev: Number(page) > 1
-          },
-          searchMethod: 'regex' // Indicate this was a regex search
-        };
-      }
 
       return {
         products,
@@ -207,7 +192,7 @@ class SearchService {
           hasNext: Number(page) < Math.ceil(total / Number(limit)),
           hasPrev: Number(page) > 1
         },
-        searchMethod: 'text' // Indicate this was a text search
+        searchMethod: search ? 'broad' : 'filter'
       };
     } catch (error) {
       console.error('[SearchService] Database query failed:', error);

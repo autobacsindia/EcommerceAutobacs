@@ -3,7 +3,17 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import Header from './Header';
 import '@testing-library/jest-dom';
 
-import { APP_NAME, NAV_LINKS } from '@/lib/constants';
+import { APP_NAME } from '@/lib/constants';
+import type { NavCategory } from '@/lib/navCategories';
+
+// Header is now data-driven: categories are passed in as props (resolved
+// server-side from the live categories), plus a trailing static Offers link.
+const navCats: NavCategory[] = [
+  { label: 'Accessories', href: '/categories/accessories' },
+  { label: 'Exterior', href: '/categories/exterior' },
+  { label: 'Suspension', href: '/categories/suspension' },
+];
+const expectedNavLabels = [...navCats.map((c) => c.label), 'Offers'];
 
 // Mocks
 const mockLogout = jest.fn();
@@ -66,12 +76,12 @@ describe('Header Component', () => {
 
   it('renders loading skeleton when auth is loading', () => {
     mockAuthLoading = true;
-    render(<Header />);
+    render(<Header navCategories={navCats} />);
     expect(screen.getByTestId('skeleton-loader')).toBeInTheDocument();
   });
 
   it('renders correctly for guest user', () => {
-    render(<Header />);
+    render(<Header navCategories={navCats} />);
     expect(screen.getByTestId('brand-logo')).toBeInTheDocument();
     expect(screen.getByText('Login')).toBeInTheDocument();
     expect(screen.queryByText('Logout')).not.toBeInTheDocument();
@@ -81,7 +91,7 @@ describe('Header Component', () => {
   it('renders correctly for authenticated user', () => {
     mockIsAuthenticated = true;
     mockUser = { name: 'John Doe' };
-    render(<Header />);
+    render(<Header navCategories={navCats} />);
     
     expect(screen.getByText('John Doe')).toBeInTheDocument();
     expect(screen.getByText('Logout')).toBeInTheDocument();
@@ -90,14 +100,14 @@ describe('Header Component', () => {
 
   it('handles logout', () => {
     mockIsAuthenticated = true;
-    render(<Header />);
+    render(<Header navCategories={navCats} />);
     
     fireEvent.click(screen.getByText('Logout'));
     expect(mockLogout).toHaveBeenCalled();
   });
 
   it('toggles mobile search', () => {
-    render(<Header />);
+    render(<Header navCategories={navCats} />);
     const toggleButton = screen.getByLabelText('Toggle search');
     fireEvent.click(toggleButton);
     // Since we can't easily assert the state change effect without deeper DOM inspection of conditional rendering (which might be mocked out or hidden),
@@ -106,15 +116,10 @@ describe('Header Component', () => {
   });
 
   it('renders navigation links', () => {
-    render(<Header />);
-    NAV_LINKS.forEach(link => {
-      // We look for the link text. Note: Some links might be hidden on mobile/desktop, 
-      // but the test environment usually renders everything unless we apply styles that jsdom respects (which it mostly doesn't for display:none).
-      // However, Header.tsx has `hidden md:flex` for the nav. 
-      // JSDOM doesn't compute layout, so elements with `hidden` class are still in the DOM unless we use a matcher that checks visibility.
-      // `getByText` finds it even if it's visually hidden, unless `display: none` is inline style.
-      // Tailwind classes are just strings to JSDOM.
-      expect(screen.getByText(link.label)).toBeInTheDocument();
+    render(<Header navCategories={navCats} />);
+    // The data-driven category labels plus the trailing static Offers link.
+    expectedNavLabels.forEach(label => {
+      expect(screen.getByText(label)).toBeInTheDocument();
     });
   });
 });

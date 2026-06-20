@@ -1,10 +1,11 @@
 'use client';
 
 import { type StockStatus, getStockLabel } from '@/lib/stock';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Package, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 
 interface Product {
@@ -27,7 +28,20 @@ interface ProductsResponse {
   hasPrev?: boolean;
 }
 
-export default function AdminProductsPage() {
+interface CategoryInfo {
+  name: string;
+  parent?: { _id: string; name: string } | null;
+}
+
+function AdminProductsPageInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  // Category filter is URL-driven so it's shareable/bookmarkable. The backend
+  // search expands a category to its whole subtree, so filtering by a parent
+  // returns products from it and all descendant categories.
+  const categoryId = searchParams.get('category') || '';
+  const categoryNameParam = searchParams.get('categoryName') || '';
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,6 +50,11 @@ export default function AdminProductsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [limit] = useState(50); // Show 50 products per page
+  const [categoryInfo, setCategoryInfo] = useState<CategoryInfo | null>(null);
+
+  const goToCategory = (id: string, name: string) =>
+    router.push(`/admin/products?category=${id}&categoryName=${encodeURIComponent(name)}`);
+  const clearCategoryFilter = () => router.push('/admin/products');
 
   // Debounce search term
   useEffect(() => {
@@ -51,7 +70,40 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     fetchProducts(currentPage);
-  }, [currentPage, debouncedSearchTerm]);
+  }, [currentPage, debouncedSearchTerm, categoryId]);
+
+  // Reset to the first page whenever the category filter changes.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryId]);
+
+  // Resolve the filtered category's display name and parent (for the chip and
+  // the "view parent category" link). Seed the name from the URL to avoid a flash.
+  useEffect(() => {
+    if (!categoryId) {
+      setCategoryInfo(null);
+      return;
+    }
+    setCategoryInfo({ name: categoryNameParam, parent: null });
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get<{ category?: any }>(`/categories/${categoryId}`);
+        const cat = res?.category;
+        if (!cancelled && cat) {
+          setCategoryInfo({
+            name: cat.name || categoryNameParam,
+            parent: cat.parent?._id ? { _id: cat.parent._id, name: cat.parent.name } : null,
+          });
+        }
+      } catch {
+        // Keep the seeded name from the URL on failure.
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [categoryId, categoryNameParam]);
 
   const fetchProducts = async (page: number = 1) => {
     try {
@@ -64,7 +116,12 @@ export default function AdminProductsPage() {
       if (debouncedSearchTerm) {
         params.append('search', debouncedSearchTerm);
       }
-      
+
+      // Filter by category (backend includes all descendant categories).
+      if (categoryId) {
+        params.append('category', categoryId);
+      }
+
       // Cache busting to prevent stale data
       params.append('t', Date.now().toString());
 
@@ -126,6 +183,34 @@ export default function AdminProductsPage() {
           />
         </div>
       </div>
+
+      {categoryId && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm border border-blue-200">
+            <Package className="h-4 w-4" />
+            Category:&nbsp;<strong>{categoryInfo?.name || 'Selected category'}</strong>
+            <span className="text-blue-500">(includes subcategories)</span>
+            <button
+              onClick={clearCategoryFilter}
+              className="ml-1 hover:text-blue-900"
+              title="Clear category filter"
+              aria-label="Clear category filter"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </span>
+          {categoryInfo?.parent && (
+            <button
+              onClick={() => goToCategory(categoryInfo.parent!._id, categoryInfo.parent!.name)}
+              className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-blue-700"
+              title="View products in the parent category"
+            >
+              <ChevronUp className="h-4 w-4" />
+              View parent category: {categoryInfo.parent.name}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
@@ -258,5 +343,14 @@ export default function AdminProductsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary in the App Router.
+export default function AdminProductsPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}>
+      <AdminProductsPageInner />
+    </Suspense>
   );
 }

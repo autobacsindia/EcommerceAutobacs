@@ -30,10 +30,17 @@ describe('CreateCategoryPage', () => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
     (apiClient.get as jest.Mock).mockResolvedValue({ data: mockCategories });
-    (apiClient.post as jest.Mock).mockResolvedValue({ success: true });
-    
-    // Mock URL.createObjectURL
+
+    // The form submits a multipart request via raw fetch (so the image file is
+    // actually uploaded), not apiClient.post.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    }) as jest.Mock;
+
+    // Mock URL.createObjectURL / revokeObjectURL
     global.URL.createObjectURL = jest.fn(() => 'blob:http://localhost:3000/test-blob');
+    global.URL.revokeObjectURL = jest.fn();
   });
 
   it('renders form elements', async () => {
@@ -93,15 +100,17 @@ describe('CreateCategoryPage', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/categories', expect.objectContaining({
-        name: 'New Category',
-        slug: 'new-category',
-        description: 'Test Description',
-        order: "10",
-        isActive: true
-      }));
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/categories', expect.objectContaining({ method: 'POST' }));
     });
-    
+
+    // Assert the multipart payload carries the form values.
+    const body = (global.fetch as jest.Mock).mock.calls[0][1].body as FormData;
+    expect(body.get('name')).toBe('New Category');
+    expect(body.get('slug')).toBe('new-category');
+    expect(body.get('description')).toBe('Test Description');
+    expect(body.get('order')).toBe('10');
+    expect(body.get('isActive')).toBe('true');
+
     expect(mockRouter.push).toHaveBeenCalledWith('/admin/categories');
   });
 
@@ -126,7 +135,10 @@ describe('CreateCategoryPage', () => {
   });
 
   it('handles API error on submission', async () => {
-    (apiClient.post as jest.Mock).mockRejectedValue(new Error('API Error'));
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      json: async () => ({ message: 'API Error' }),
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     render(<CreateCategoryPage />);

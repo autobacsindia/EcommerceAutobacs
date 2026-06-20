@@ -217,6 +217,20 @@ class ProductRepository {
   }
 
   /**
+   * Count active products grouped by category id. A product can belong to
+   * multiple categories, so each membership is counted once. Returns
+   * [{ _id: categoryId, count }]. Matches the active-only listing semantics so
+   * the per-category badge equals what "View products" actually shows.
+   */
+  async countActiveByCategory() {
+    return Product.aggregate([
+      { $match: { isActive: true, categories: { $exists: true, $ne: [] } } },
+      { $unwind: '$categories' },
+      { $group: { _id: '$categories', count: { $sum: 1 } } }
+    ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
+  }
+
+  /**
    * Get product stock status by ID. Missing product → treated as out of stock.
    */
   async getStock(productId) {

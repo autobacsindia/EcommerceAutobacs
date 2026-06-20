@@ -7,12 +7,21 @@ import { API_ENDPOINTS } from '@/lib/constants';
 // Mock dependencies
 jest.mock('@/lib/api');
 
+// Mock next/navigation (the page reads the category filter from the URL).
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  useSearchParams: () => ({ get: () => null }),
+}));
+
 // Mock icons
 jest.mock('lucide-react', () => ({
   Plus: () => <span data-testid="icon-plus">Plus</span>,
   Edit: () => <span data-testid="icon-edit">Edit</span>,
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
   Search: () => <span data-testid="icon-search">Search</span>,
+  X: () => <span data-testid="icon-x">X</span>,
+  Package: () => <span data-testid="icon-package">Package</span>,
+  ChevronUp: () => <span data-testid="icon-chevron-up">ChevronUp</span>,
 }));
 
 describe('AdminProductsPage', () => {
@@ -22,8 +31,8 @@ describe('AdminProductsPage', () => {
     total: 2,
     pages: 1,
     products: [
-      { _id: 'p1', name: 'Product 1', price: 100, stock: 'in', category: { name: 'Cat 1' }, featured: true },
-      { _id: 'p2', name: 'Product 2', price: 50, stock: 'in', category: { name: 'Cat 2' }, featured: false },
+      { _id: 'p1', name: 'Product 1', price: 100, stock: 'in', categories: [{ name: 'Cat 1' }], isFeatured: true },
+      { _id: 'p2', name: 'Product 2', price: 50, stock: 'in', categories: [{ name: 'Cat 2' }], isFeatured: false },
     ]
   };
 

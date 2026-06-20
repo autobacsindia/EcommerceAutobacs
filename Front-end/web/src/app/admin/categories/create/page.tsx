@@ -33,8 +33,9 @@ export default function CreateCategoryPage() {
     parent: undefined as string | undefined,
     isActive: true,
     order: 0,
-    image: undefined as { url: string; alt?: string } | undefined,
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageAlt, setImageAlt] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,75 +60,73 @@ export default function CreateCategoryPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
-    
-    // Handle nested image properties
-    if (name.startsWith('image.')) {
-      const imageField = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        image: {
-          ...(prev.image || { url: '', alt: '' }),
-          [imageField]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value
-      }));
-    }
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // For now, we'll just store the file name as a preview
-      // In a real implementation, you would upload the file to a server
-      const previewUrl = URL.createObjectURL(file);
-      setImagePreview(previewUrl);
-      
-      // Set a placeholder URL (in a real app, this would be the uploaded file URL)
-      setFormData(prev => ({
-        ...prev,
-        image: {
-          ...(prev.image || { url: '', alt: '' }),
-          url: previewUrl
-        }
-      }));
+      // Keep the real File for multipart upload; the blob URL is preview-only.
+      setImagePreview(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
+      setImageFile(file);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (!formData.name.trim()) {
       setError('Category name is required');
       return;
     }
-    
+
     if (!formData.slug.trim()) {
       setError('Slug is required');
       return;
     }
-    
+
     try {
       setLoading(true);
       setError(null);
-      
-      // Remove image fields if they're empty
-      const dataToSend = { ...formData };
-      if (!dataToSend.image?.url) {
-        delete dataToSend['image'];
+
+      // Build multipart/form-data so the image file is actually uploaded to
+      // Cloudinary by the backend (apiClient JSON-serializes, so we use raw fetch).
+      const fd = new FormData();
+      fd.append('name', formData.name.trim());
+      fd.append('slug', formData.slug.trim());
+      if (formData.description.trim()) fd.append('description', formData.description.trim());
+      if (formData.parent) fd.append('parent', formData.parent);
+      fd.append('order', String(formData.order ?? 0));
+      fd.append('isActive', String(formData.isActive));
+      if (imageFile) {
+        fd.append('image', imageFile);
+        if (imageAlt.trim()) fd.append('imageAlt', imageAlt.trim());
       }
-      
-      // Remove parent field if it's empty
-      if (!dataToSend.parent) {
-        delete dataToSend['parent'];
-      }
-      
-      await apiClient.post('/categories', dataToSend);
-      
+
+      const token = document.cookie.match(/(?:^|;\s*)token=([^;]*)/)?.[1] ?? '';
+      const csrfToken = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '';
+
+      const res = await fetch('/api/v1/categories', {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(csrfToken ? { 'X-XSRF-TOKEN': decodeURIComponent(csrfToken) } : {}),
+        },
+        credentials: 'include',
+        body: fd,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to create category');
+
       // Redirect to categories list
       router.push('/admin/categories');
       router.refresh();
@@ -206,7 +205,7 @@ export default function CreateCategoryPage() {
                 <select
                   id="parent"
                   name="parent"
-                  value={formData.parent}
+                  value={formData.parent ?? ''}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -215,7 +214,7 @@ export default function CreateCategoryPage() {
                     .filter(cat => cat._id !== '') // Filter out invalid categories
                     .map((category) => (
                       <option key={category._id} value={category._id}>
-                        {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
+                        {category.name}
                       </option>
                     ))}
                 </select>
@@ -287,9 +286,9 @@ export default function CreateCategoryPage() {
                 <input
                   type="text"
                   id="imageAlt"
-                  name="image.alt"
-                  value={formData.image?.alt}
-                  onChange={handleChange}
+                  name="imageAlt"
+                  value={imageAlt}
+                  onChange={(e) => setImageAlt(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter alternative text for the image"
                 />

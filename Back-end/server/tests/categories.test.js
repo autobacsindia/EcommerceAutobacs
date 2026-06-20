@@ -3,12 +3,23 @@ import mongoose from 'mongoose';
 import { app, cronService, adaptiveThrottlingService } from '../app.js';
 import User from '../models/User.js';
 import Category from '../models/Category.js';
+import Product from '../models/Product.js';
 import * as dbHandler from './db-handler.js';
 import bcrypt from 'bcryptjs';
 
+const BASE = '/api/v1';
+
+/** Extract the XSRF-TOKEN value from a set-cookie header array. */
+function extractCsrfFromSetCookie(setCookieHeader = []) {
+  const xsrfCookie = setCookieHeader.find((c) => c.startsWith('XSRF-TOKEN='));
+  if (!xsrfCookie) return '';
+  return xsrfCookie.split(';')[0].split('=')[1];
+}
+
 describe('Categories API', () => {
-  let adminId;
-  let adminToken;
+  // Cookie-jar agent so the httpOnly accessToken + XSRF cookies survive requests.
+  let agent;
+  let csrfToken;
   let categoryId;
   let category;
 
@@ -49,23 +60,30 @@ describe('Categories API', () => {
     // Create admin
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(testAdmin.password, salt);
-    
-    const admin = await User.create({
+
+    await User.create({
       name: testAdmin.name,
       email: testAdmin.email,
       passwordHash,
       role: testAdmin.role
     });
-    adminId = admin._id;
 
-    // Login admin
-    const loginRes = await request(app)
-      .post('/auth/login')
-      .send({
-        email: testAdmin.email,
-        password: testAdmin.password
-      });
-    adminToken = loginRes.body.accessToken;
+    // Persistent agent: GET /ping seeds the XSRF-TOKEN cookie, then login sets
+    // the httpOnly accessToken cookie. Auth is cookie-based (not bearer tokens).
+    agent = request.agent(app);
+    await agent.get('/ping');
+
+    const loginRes = await agent
+      .post(`${BASE}/auth/login`)
+      .send({ email: testAdmin.email, password: testAdmin.password });
+
+    // Capture the XSRF-TOKEN the agent will actually send (login may rotate it).
+    // Prefer the login set-cookie, then fall back to the agent's cookie jar.
+    csrfToken = extractCsrfFromSetCookie(loginRes.headers['set-cookie'] || []);
+    if (!csrfToken && agent.jar?.getCookiesSync) {
+      const jarCookie = agent.jar.getCookiesSync('http://127.0.0.1').find((c) => c.key === 'XSRF-TOKEN');
+      csrfToken = jarCookie ? jarCookie.value : '';
+    }
 
     // Create category
     category = await Category.create(testCategory);
@@ -75,7 +93,7 @@ describe('Categories API', () => {
   describe('GET /categories', () => {
     it('should return all active categories', async () => {
       const res = await request(app)
-        .get('/categories')
+        .get(`${BASE}/categories`)
         .expect(200);
 
       expect(res.body.success).toBe(true);
@@ -87,22 +105,19 @@ describe('Categories API', () => {
   describe('GET /categories/:id', () => {
     it('should return category by id', async () => {
       const res = await request(app)
-        .get(`/categories/${categoryId}`)
+        .get(`${BASE}/categories/${categoryId}`)
         .expect(200);
 
       expect(res.body.success).toBe(true);
       expect(res.body.category.name).toBe(testCategory.name);
     });
 
-    it('should return 404 for invalid id format', async () => {
-      // Assuming validateIdParam middleware handles format check
-      // If mongoose handles it, it might be 400 or 500 depending on middleware
-      // Using a valid but non-existent ID
+    it('should return 404 for non-existent id', async () => {
       const fakeId = new mongoose.Types.ObjectId();
       const res = await request(app)
-        .get(`/categories/${fakeId}`)
+        .get(`${BASE}/categories/${fakeId}`)
         .expect(404);
-      
+
       expect(res.body.success).toBe(false);
     });
   });
@@ -110,7 +125,7 @@ describe('Categories API', () => {
   describe('GET /categories/slug/:slug', () => {
     it('should return category by slug', async () => {
       const res = await request(app)
-        .get(`/categories/slug/${testCategory.slug}`)
+        .get(`${BASE}/categories/slug/${testCategory.slug}`)
         .expect(200);
 
       expect(res.body.success).toBe(true);
@@ -118,19 +133,13 @@ describe('Categories API', () => {
     });
 
     it('should handle special slug transformations', async () => {
-        // Create special category
-        await Category.create({
-            name: 'Body Kits',
-            slug: 'body-kits',
-            isActive: true
-        });
+      await Category.create({ name: 'Body Kits', slug: 'body-kits', isActive: true });
 
-        // Test with 'bodykit'
-        const res = await request(app)
-            .get('/categories/slug/bodykit')
-            .expect(200);
-        
-        expect(res.body.category.slug).toBe('body-kits');
+      const res = await request(app)
+        .get(`${BASE}/categories/slug/bodykit`)
+        .expect(200);
+
+      expect(res.body.category.slug).toBe('body-kits');
     });
   });
 
@@ -142,9 +151,9 @@ describe('Categories API', () => {
         description: 'New Description'
       };
 
-      const res = await request(app)
-        .post('/categories')
-        .set('Authorization', `Bearer ${adminToken}`)
+      const res = await agent
+        .post(`${BASE}/categories`)
+        .set('X-XSRF-TOKEN', csrfToken)
         .send(newCategory)
         .expect(201);
 
@@ -152,56 +161,164 @@ describe('Categories API', () => {
       expect(res.body.category.name).toBe(newCategory.name);
     });
 
-    it('should fail with invalid token', async () => {
-      const newCategory = {
-        name: 'Fail Category',
-        slug: 'fail-category'
-      };
-
+    it('should fail without authentication', async () => {
       await request(app)
-        .post('/categories')
+        .post(`${BASE}/categories`)
         .set('Authorization', 'Bearer invalid_token')
-        .send(newCategory)
+        .send({ name: 'Fail Category', slug: 'fail-category' })
         .expect(401);
     });
   });
 
   describe('PUT /categories/:id', () => {
     it('should update category as admin', async () => {
-      const updatedData = {
-        name: 'Updated Category'
-      };
-
-      const res = await request(app)
-        .put(`/categories/${categoryId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(updatedData)
+      const res = await agent
+        .put(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ name: 'Updated Category' })
         .expect(200);
 
       expect(res.body.success).toBe(true);
-      expect(res.body.category.name).toBe(updatedData.name);
+      expect(res.body.category.name).toBe('Updated Category');
     });
   });
 
   describe('DELETE /categories/:id', () => {
     it('should soft delete category as admin', async () => {
-      const res = await request(app)
-        .delete(`/categories/${categoryId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
+      const res = await agent
+        .delete(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
         .expect(200);
 
       expect(res.body.success).toBe(true);
 
-      // Verify soft delete
-      const getRes = await request(app)
-        .get(`/categories/${categoryId}`)
-        .expect(200); // Admin or explicit get might still return it, but public list filters it?
-      
-      // The GET /categories/:id endpoint doesn't filter by isActive explicitly in the findById query
-      // but usually the frontend expects it. 
-      // Let's check the database directly to be sure
       const catInDb = await Category.findById(categoryId);
       expect(catInDb.isActive).toBe(false);
+    });
+
+    it('should refuse to delete a category that still has active subcategories', async () => {
+      await Category.create({
+        name: 'Child Category',
+        slug: 'child-category',
+        parent: categoryId,
+        isActive: true,
+      });
+
+      const res = await agent
+        .delete(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .expect(409);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.details.childCount).toBe(1);
+      // Ensure it was NOT soft-deleted
+      const catInDb = await Category.findById(categoryId);
+      expect(catInDb.isActive).toBe(true);
+    });
+
+    it('should refuse to delete a category that still has linked products', async () => {
+      await Product.create({
+        name: 'Linked Product',
+        description: 'A product in the category',
+        price: 100,
+        slug: 'linked-product',
+        categories: [categoryId],
+      });
+
+      const res = await agent
+        .delete(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .expect(409);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.details.productCount).toBe(1);
+    });
+  });
+
+  describe('GET /categories/admin/all', () => {
+    it('should require authentication', async () => {
+      await request(app).get(`${BASE}/categories/admin/all`).expect(401);
+    });
+
+    it('should return inactive categories too', async () => {
+      await Category.create({ name: 'Hidden Category', slug: 'hidden-category', isActive: false });
+
+      const res = await agent
+        .get(`${BASE}/categories/admin/all`)
+        .expect(200);
+
+      const slugs = res.body.categories.map((c) => c.slug);
+      expect(slugs).toContain('hidden-category'); // inactive one is present
+      expect(slugs).toContain(testCategory.slug);
+    });
+
+    it('should include direct and subtree product counts', async () => {
+      // Parent (testCategory) ← child; products split across both levels.
+      const child = await Category.create({ name: 'Child Cat', slug: 'child-cat', parent: categoryId });
+      await Product.create({ name: 'P-parent', description: 'd', price: 10, slug: 'p-parent', categories: [categoryId] });
+      await Product.create({ name: 'P-child', description: 'd', price: 10, slug: 'p-child', categories: [child._id] });
+      // Inactive product must not be counted (active-only semantics).
+      await Product.create({ name: 'P-inactive', description: 'd', price: 10, slug: 'p-inactive', categories: [child._id], isActive: false });
+
+      const res = await agent.get(`${BASE}/categories/admin/all`).expect(200);
+      const byId = new Map(res.body.categories.map((c) => [String(c._id), c]));
+
+      const parent = byId.get(String(categoryId));
+      const childRow = byId.get(String(child._id));
+
+      expect(parent.productCount).toBe(1);       // one product directly on the parent
+      expect(parent.totalProductCount).toBe(2);  // parent + child (active only)
+      expect(childRow.productCount).toBe(1);
+      expect(childRow.totalProductCount).toBe(1);
+    });
+  });
+
+  describe('Category integrity rules', () => {
+    it('should reject a duplicate slug with 409', async () => {
+      const res = await agent
+        .post(`${BASE}/categories`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ name: 'Another Name', slug: testCategory.slug })
+        .expect(409);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/Duplicate value/i);
+    });
+
+    it('should reject setting a category as its own parent', async () => {
+      const res = await agent
+        .put(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ parent: String(categoryId) })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should reject a circular parent assignment', async () => {
+      // `category` (A) is top-level. Make B a child of A, then try to make A a child of B.
+      const b = await Category.create({ name: 'B Category', slug: 'b-category', parent: categoryId });
+
+      const res = await agent
+        .put(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ parent: String(b._id) })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/circular/i);
+    });
+
+    it('should reject a non-existent parent', async () => {
+      const fakeId = new mongoose.Types.ObjectId();
+      const res = await agent
+        .put(`${BASE}/categories/${categoryId}`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ parent: String(fakeId) })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/Parent category not found/i);
     });
   });
 });

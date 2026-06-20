@@ -56,9 +56,14 @@ describe('EditCategoryPage', () => {
       return Promise.reject(new Error(`Not found: ${url}`));
     });
 
-    (apiClient.put as jest.Mock).mockResolvedValue({ success: true });
-    
+    // Updates submit via raw fetch (multipart) so a new image file is uploaded.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    }) as jest.Mock;
+
     global.URL.createObjectURL = jest.fn(() => 'blob:http://localhost:3000/test-blob');
+    global.URL.revokeObjectURL = jest.fn();
   });
 
   it('renders loading state initially', async () => {
@@ -112,12 +117,13 @@ describe('EditCategoryPage', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(apiClient.put).toHaveBeenCalledWith('/categories/c1', expect.objectContaining({
-        name: 'Updated Name',
-        order: "10"
-      }));
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/categories/c1', expect.objectContaining({ method: 'PUT' }));
     });
-    
+
+    const body = (global.fetch as jest.Mock).mock.calls[0][1].body as FormData;
+    expect(body.get('name')).toBe('Updated Name');
+    expect(body.get('order')).toBe('10');
+
     expect(mockRouter.push).toHaveBeenCalledWith('/admin/categories');
   });
 

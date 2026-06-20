@@ -4,16 +4,17 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { X, Home, ShoppingBag, Tag, Car, Heart, Gift, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { NAV_LINKS } from '@/lib/constants';
 import { usePathname } from 'next/navigation';
 import HeaderVehicleSelector from './HeaderVehicleSelector';
+import type { NavCategory } from '@/lib/navCategories';
 
 interface MobileMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  navCategories: NavCategory[];
 }
 
-export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
+export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMenuProps) {
   const { isAuthenticated, user, logout } = useAuth();
   const pathname = usePathname();
 
@@ -106,7 +107,7 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
               <HeaderVehicleSelector />
             </li>
 
-            {NAV_LINKS.map((link) => (
+            {[...navCategories, { label: 'Offers', href: '/offers' }].map((link) => (
               <li key={link.href}>
                 <Link href={link.href} onClick={onClose} className={linkClass(link.href)}>
                   {getIconForLink(link.href)}

@@ -3,8 +3,9 @@ import LocationDisplay from '@/components/location/LocationDisplay';
 import ClientSearchSuggestions from './ClientSearchSuggestions';
 import HeaderInteractiveBar from './HeaderInteractiveBar';
 import HeaderNav from './HeaderNav';
+import type { NavCategory } from '@/lib/navCategories';
 
-export default function Header() {
+export default function Header({ navCategories }: { navCategories: NavCategory[] }) {
   return (
     <header className="bg-black sticky top-0 z-50 shadow-md w-full">
       <div className="w-full px-4 sm:px-6 lg:px-8">
@@ -23,11 +24,11 @@ export default function Header() {
           </div>
 
           {/* Auth, cart/wishlist badges, mobile toggles — all interactive */}
-          <HeaderInteractiveBar />
+          <HeaderInteractiveBar navCategories={navCategories} />
         </div>
 
         {/* Bottom Row — needs usePathname for active underlines */}
-        <HeaderNav />
+        <HeaderNav categories={navCategories} />
       </div>
     </header>
   );

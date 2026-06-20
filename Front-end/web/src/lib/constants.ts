@@ -178,18 +178,10 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 };
 
 // Navigation Links - Bottom Row (Main Navigation)
-// Note: Shop, Brand, and Vehicle are rendered separately in Header component
-export const NAV_LINKS = [
-  { href: '/categories/accessories', label: 'Accessories' },
-  { href: '/categories/exterior', label: 'Exterior' },
-  { href: '/categories/interior', label: 'Interior' },
-  { href: '/categories/bodykit', label: 'Body Kits' },
-  { href: '/categories/performance', label: 'Performance' },
-  { href: '/categories/suspension', label: 'Suspension' },
-  { href: '/categories/audio', label: 'Audio' },
-  { href: '/categories/lights', label: 'Lights' },
-  { href: '/offers', label: 'Offers' },
-];
+// The header category nav is now data-driven — see `lib/navCategories.ts`
+// (resolveNavCategories / getNavCategories). The previous hardcoded NAV_LINKS
+// list used stale slugs (bodykit/audio/lights) that drifted from the real
+// category data and required backend slug-translation hacks; it was removed.
 
 // Footer Links
 export const FOOTER_LINKS = {

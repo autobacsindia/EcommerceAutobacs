@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, FolderOpen } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderOpen, Package } from 'lucide-react';
 import apiClient from '@/lib/api';
 
 // Define the Category interface inline to avoid import issues
@@ -18,6 +18,8 @@ interface Category {
   };
   isActive: boolean;
   order: number;
+  productCount?: number;       // products tagged directly with this category
+  totalProductCount?: number;  // products in this category and all its subcategories
   createdAt?: string;
   updatedAt?: string;
 }
@@ -34,7 +36,9 @@ export default function AdminCategoriesPage() {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
+      // Admin endpoint returns ALL categories (including inactive) so the
+      // active/inactive state is manageable here; the public list filters them out.
+      const response = await apiClient.get('/categories/admin/all') as { data?: Category[]; categories?: Category[] };
       setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
@@ -53,9 +57,10 @@ export default function AdminCategoriesPage() {
       await apiClient.delete(`/categories/${id}`);
       // Refresh the list
       fetchCategories();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete category:', err);
-      alert('Failed to delete category. Please try again.');
+      // Surface backend integrity errors (e.g. category still has subcategories/products).
+      alert(err?.message || 'Failed to delete category. Please try again.');
     }
   };
 
@@ -162,17 +167,28 @@ export default function AdminCategoriesPage() {
                       </div>
                     )}
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900">{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</h3>
+                      <h3 className="text-lg font-medium text-gray-900">{category.name}</h3>
                       {category.description && (
                         <p className="text-gray-500 text-sm mt-1">{category.description}</p>
                       )}
-                      <div className="flex items-center mt-1">
+                      <div className="flex items-center mt-1 flex-wrap gap-y-1">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          category.isActive 
-                            ? 'bg-green-100 text-green-800' 
+                          category.isActive
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
                         }`}>
                           {category.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        <span
+                          className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                          title={
+                            (category.totalProductCount ?? 0) !== (category.productCount ?? 0)
+                              ? `${category.productCount ?? 0} directly in this category, ${category.totalProductCount ?? 0} including subcategories`
+                              : 'Products in this category'
+                          }
+                        >
+                          {category.totalProductCount ?? category.productCount ?? 0} product
+                          {(category.totalProductCount ?? category.productCount ?? 0) === 1 ? '' : 's'}
                         </span>
                         <span className="ml-2 text-xs text-gray-500">
                           Order: {category.order}
@@ -181,7 +197,14 @@ export default function AdminCategoriesPage() {
                     </div>
                   </div>
                   <div className="flex space-x-2">
-                    <Link 
+                    <Link
+                      href={`/admin/products?category=${category._id}&categoryName=${encodeURIComponent(category.name)}`}
+                      className="p-2 text-gray-500 hover:text-blue-600"
+                      title="View products in this category"
+                    >
+                      <Package className="h-5 w-5" />
+                    </Link>
+                    <Link
                       href={`/admin/categories/edit/${category._id}`}
                       className="p-2 text-gray-500 hover:text-gray-700"
                       title="Edit"
