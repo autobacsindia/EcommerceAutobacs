@@ -251,10 +251,21 @@ class ElasticsearchService {
                 averageRating: { type: 'float' },
                 totalReviews: { type: 'integer' },
                 tags: { type: 'keyword' },
+                slug: { type: 'keyword' },
                 createdAt: { type: 'date' },
                 updatedAt: { type: 'date' },
-                vehicle_makes: { type: 'keyword' },
-                vehicle_models: { type: 'keyword' }
+                vehicle_makes: {
+                  type: 'keyword',
+                  fields: {
+                    text: { type: 'text', analyzer: 'standard' }
+                  }
+                },
+                vehicle_models: {
+                  type: 'keyword',
+                  fields: {
+                    text: { type: 'text', analyzer: 'standard' }
+                  }
+                }
               }
             }
           }
@@ -303,6 +314,7 @@ class ElasticsearchService {
       // Prepare body for Elasticsearch
       const body = {
         name: product.name,
+        slug: product.slug,
         description: product.description,
         shortDescription: product.shortDescription,
         categories: Array.isArray(product.categories) ? product.categories.map(c => 
@@ -512,10 +524,28 @@ class ElasticsearchService {
         searchBody.query.function_score.query.bool.must.push({
           multi_match: {
             query: safeQ,
-            fields: ['name^3', 'description', 'brand', 'tags', 'vehicle_makes', 'vehicle_models'],
+            fields: [
+              'name^3',
+              'brand^2',
+              'vehicle_models.text^3',
+              'vehicle_makes.text^2',
+              'tags^1.5',
+              'description^0.5'
+            ],
+            type: 'best_fields',
             fuzziness: 'AUTO'
           }
         });
+        // Boost products whose vehicle_model matches the query term
+        searchBody.query.function_score.functions.push({
+          filter: { match: { 'vehicle_models.text': safeQ } },
+          weight: 2.0
+        });
+        // Optional prefix boosting for partial/typeahead matches
+        searchBody.query.function_score.query.bool.should = [
+          { match_phrase_prefix: { 'vehicle_models.text': { query: safeQ, boost: 2.0 } } },
+          { match_phrase_prefix: { name: { query: safeQ, boost: 1.0 } } }
+        ];
       } else {
         // Match all if no query
         searchBody.query.function_score.query.bool.must.push({ match_all: {} });
@@ -649,19 +679,25 @@ class ElasticsearchService {
     if (!safeQuery) return { suggestions: [], corrections: [] };
 
     try {
-      // First, get product and brand suggestions
+      // First, get product and brand suggestions (include vehicle fields for model-based queries)
       const productBrandResult = await this.client.search({
         index: this.indexName,
         body: {
           query: {
             multi_match: {
               query: safeQuery,
-              fields: ['name^2', 'brand'],
+              fields: [
+                'name^3',
+                'brand^2',
+                'vehicle_models.text^3',
+                'vehicle_makes.text^2',
+                'tags^1.5'
+              ],
               fuzziness: 'AUTO',
               operator: 'and'
             }
           },
-          _source: ['name', 'brand', 'categories.name', 'primaryImage'],
+          _source: ['name', 'brand', 'slug', 'categories', 'primaryImage'],
           size: limit * 2
         }
       });
@@ -753,11 +789,12 @@ class ElasticsearchService {
 
           suggestions.push({
             id: `product-${hit._id}`,
+            slug: source.slug || undefined,
             text: source.name,
             type: 'product',
             category: categoryName,
             imageUrl: source.primaryImage || null,
-            value: hit._id
+            value: source.slug || hit._id
           });
         }
 
@@ -825,7 +862,8 @@ class ElasticsearchService {
       // Limit to requested number of suggestions
       return {
         suggestions: suggestions.slice(0, limit),
-        corrections: corrections.slice(0, 3) // Limit corrections to 3
+        corrections: corrections.slice(0, 3),
+        total: productBrandResult.hits.total?.value ?? 0
       };
     } catch (error) {
       console.error('Error getting search suggestions:', error);

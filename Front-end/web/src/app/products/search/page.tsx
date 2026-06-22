@@ -1,109 +1,68 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import ProductGrid from '@/components/products/ProductGrid';
 import ProductFilters from '@/components/products/ProductFilters';
-import Pagination from '@/components/layout/Pagination';
 import apiClient from '@/lib/api';
 import { trackViewItemList } from '@/lib/analytics';
 
-// Function to fetch products with proper sorting parameters
+const PAGE_SIZE = 12;
+
 async function getProducts(searchParams: any) {
-  // Build query string from search params
   const queryParams = new URLSearchParams();
-  
-  // Handle multiple categories
-  if (searchParams.category) {
-    queryParams.append('category', searchParams.category);
-  }
-  
-  if (searchParams.search) queryParams.append('search', searchParams.search);
-  if (searchParams.page) queryParams.append('page', searchParams.page);
+
+  if (searchParams.category) queryParams.append('category', searchParams.category);
+  if (searchParams.search)   queryParams.append('search', searchParams.search);
+  if (searchParams.page)     queryParams.append('page', searchParams.page);
   if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
   if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
-  if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
-  
-  // Handle multiple ratings
-  if (searchParams.rating) {
-    queryParams.append('rating', searchParams.rating);
-  }
-  
-  // Handle multiple brands
-  if (searchParams.brand) {
-    queryParams.append('brand', searchParams.brand);
-  }
-  
-  // Map frontend sort values to backend parameters
+  if (searchParams.inStock)  queryParams.append('inStock', searchParams.inStock);
+  if (searchParams.rating)   queryParams.append('rating', searchParams.rating);
+  if (searchParams.brand)    queryParams.append('brand', searchParams.brand);
+
   if (searchParams.sort) {
-    const sortValue = searchParams.sort;
-    switch (sortValue) {
-      case 'price_asc':
-        queryParams.append('sortBy', 'price');
-        queryParams.append('order', 'asc');
-        break;
-      case 'price_desc':
-        queryParams.append('sortBy', 'price');
-        queryParams.append('order', 'desc');
-        break;
-      case 'name_asc':
-        queryParams.append('sortBy', 'name');
-        queryParams.append('order', 'asc');
-        break;
-      case 'rating_desc':
-        queryParams.append('sortBy', 'averageRating');
-        queryParams.append('order', 'desc');
-        break;
-      case 'relevance':
-      default:
-        // Default sorting by relevance for search
-        break;
+    switch (searchParams.sort) {
+      case 'price_asc':   queryParams.append('sortBy', 'price');         queryParams.append('order', 'asc');  break;
+      case 'price_desc':  queryParams.append('sortBy', 'price');         queryParams.append('order', 'desc'); break;
+      case 'name_asc':    queryParams.append('sortBy', 'name');          queryParams.append('order', 'asc');  break;
+      case 'rating_desc': queryParams.append('sortBy', 'averageRating'); queryParams.append('order', 'desc'); break;
+      default: break;
     }
   }
-  
-  const queryString = queryParams.toString();
-  const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
-  
+
+  const qs = queryParams.toString();
+  const endpoint = `/products${qs ? `?${qs}` : ''}`;
+
   try {
     const data: any = await apiClient.get(endpoint);
-    return data; // Return the entire response object
+    return data;
   } catch (error: any) {
-    // Don't log abort errors as they're expected during cleanup
     if (error.name !== 'AbortError') {
       console.error('Error fetching products:', {
         error: error.message || error.toString(),
         name: error.name,
-        stack: error.stack,
-        endpoint: endpoint,
+        endpoint,
         timestamp: new Date().toISOString()
       });
     }
-    
-    // Re-throw the error to be handled by the calling function
     throw error;
   }
 }
 
-// Function to fetch search suggestions including corrections
 async function getSearchCorrections(searchTerm: string) {
   try {
-    const data: any = await apiClient.get(`/products/suggestions?q=${encodeURIComponent(searchTerm)}&limit=3`);
-    
-    if (data.success && data.corrections && data.corrections.length > 0) {
-      return data.corrections;
-    }
-    
+    const data: any = await apiClient.get(
+      `/products/suggestions?q=${encodeURIComponent(searchTerm)}&limit=3`
+    );
+    if (data.success && data.corrections?.length > 0) return data.corrections;
     return [];
   } catch (error: any) {
-    // Don't log abort errors as they're expected during cleanup
     if (error.name !== 'AbortError') {
       console.error('Error fetching search corrections:', {
         error: error.message || error.toString(),
-        name: error.name,
-        stack: error.stack,
-        endpoint: `/products/suggestions?q=${encodeURIComponent(searchTerm)}&limit=3`,
         timestamp: new Date().toISOString()
       });
     }
@@ -114,110 +73,115 @@ async function getSearchCorrections(searchTerm: string) {
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState<any>({ products: [], pagination: {} });
-  const [loading, setLoading] = useState(true);
-  const [corrections, setCorrections] = useState<any[]>([]);
-  
-  // Get current sort value from URL parameters
-  const currentSort = searchParams.get('sort') || 'relevance';
 
-  // Fetch products when search params change
+  // Pagination data lives at the top level of the API response (not nested under "pagination")
+  const [products, setProducts]     = useState<any[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [hasNext, setHasNext]       = useState(false);
+  const [loading, setLoading]       = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [corrections, setCorrections] = useState<any[]>([]);
+  const pageRef = useRef(1);
+
+  const currentSort = searchParams.get('sort') || 'relevance';
+  const searchTerm  = searchParams.get('search') || '';
+
+  // Reset and fetch page 1 whenever the query/filters/sort changes
   useEffect(() => {
     let isMounted = true;
-    
+    pageRef.current = 1;
+
     const fetchData = async () => {
       if (!isMounted) return;
-      
       setLoading(true);
-      const resolvedSearchParams = Object.fromEntries(searchParams.entries());
-      
+      setProducts([]);
+
+      const resolved = Object.fromEntries(searchParams.entries());
+      resolved.page = '1';
+
       try {
-        const result = await getProducts(resolvedSearchParams);
-        if (isMounted) {
-          setData(result);
+        const result = await getProducts(resolved);
+        if (!isMounted) return;
 
-          // Analytics: view_item_list (ADR-005)
-          trackViewItemList({
-            listType: 'search',
-            listName: resolvedSearchParams.search || resolvedSearchParams.brand || resolvedSearchParams.category,
-            itemCount: result.products?.length ?? 0,
-          });
+        const fetched: any[] = result.products || [];
+        setProducts(fetched);
+        setTotal(result.total || 0);
+        setHasNext(result.hasNext || false);
 
-          // Fetch corrections if there's a search term and no results
-          const searchTerm = searchParams.get('search') || '';
-          if (searchTerm && result.products && result.products.length === 0) {
-            const correctionResults = await getSearchCorrections(searchTerm);
-            if (isMounted) {
-              setCorrections(correctionResults);
-            }
-          } else {
-            if (isMounted) {
-              setCorrections([]);
-            }
-          }
+        trackViewItemList({
+          listType: 'search',
+          listName: resolved.search || resolved.brand || resolved.category,
+          itemCount: fetched.length,
+        });
+
+        if (searchTerm && fetched.length === 0) {
+          const correctionResults = await getSearchCorrections(searchTerm);
+          if (isMounted) setCorrections(correctionResults);
+        } else {
+          if (isMounted) setCorrections([]);
         }
       } catch (error: any) {
-        // Don't log abort errors as they're expected during cleanup
-        if (error.name !== 'AbortError') {
-          if (isMounted) {
-            // Better error serialization to avoid empty {}
-            const errorInfo = {
-              message: error.message || 'Unknown error',
-              name: error.name,
-              stack: error.stack,
-              timestamp: new Date().toISOString()
-            };
-            console.error('Error in search page:', errorInfo);
-            setData({ products: [], pagination: {} });
-            setCorrections([]);
-          }
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Error in search page:', {
+            message: error.message || 'Unknown error',
+            name: error.name,
+            timestamp: new Date().toISOString()
+          });
+          setProducts([]);
+          setTotal(0);
+          setHasNext(false);
+          setCorrections([]);
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
-    
+
     fetchData();
-    
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [searchParams]);
 
-  const { products = [], pagination = {} } = data;
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasNext) return;
+    setLoadingMore(true);
+    const nextPage = pageRef.current + 1;
+    const resolved = Object.fromEntries(searchParams.entries());
+    resolved.page = String(nextPage);
 
-  // Handle sort change
+    try {
+      const result = await getProducts(resolved);
+      setProducts(prev => [...prev, ...(result.products || [])]);
+      setTotal(result.total || 0);
+      setHasNext(result.hasNext || false);
+      pageRef.current = nextPage;
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Error loading more products:', {
+          message: error.message || 'Unknown error',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const sortValue = e.target.value;
     const currentParams = new URLSearchParams(searchParams.toString());
-    
-    // Remove existing sort parameter
     currentParams.delete('sort');
-    
-    // Add new sort parameter if it's not the default
-    if (sortValue !== 'relevance') {
-      currentParams.set('sort', sortValue);
-    }
-    
-    // Reset to first page when sorting
+    if (sortValue !== 'relevance') currentParams.set('sort', sortValue);
     currentParams.delete('page');
-    
-    // Update URL which will trigger useEffect
-    router.push(`/search?${currentParams.toString()}`);
+    router.push(`/products/search?${currentParams.toString()}`);
   };
 
-  // Handle correction click
   const handleCorrectionClick = (correctedTerm: string) => {
     const currentParams = new URLSearchParams(searchParams.toString());
     currentParams.set('search', correctedTerm);
-    router.push(`/search?${currentParams.toString()}`);
+    router.push(`/products/search?${currentParams.toString()}`);
   };
 
-  // Get search term from URL
-  const searchTerm = searchParams.get('search') || '';
-  const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
+  const remaining = Math.max(0, total - products.length);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -226,9 +190,11 @@ function SearchPageInner() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold mb-2">Search Results</h1>
           <p className="text-blue-100">
-            {searchTerm 
-              ? `Found ${pagination.total || 0} results for "${searchTerm}"` 
-              : 'Search our product catalog'}
+            {loading
+              ? searchTerm ? `Searching for "${searchTerm}"…` : 'Search our product catalog'
+              : searchTerm
+                ? `Found ${total} result${total !== 1 ? 's' : ''} for "${searchTerm}"`
+                : 'Search our product catalog'}
           </p>
         </div>
       </div>
@@ -247,7 +213,7 @@ function SearchPageInner() {
             {corrections.length > 0 && (
               <div className="mb-6 p-4 bg-blue-50 rounded-md">
                 <p className="text-blue-800 font-medium">
-                  Did you mean: 
+                  Did you mean:
                   {corrections.map((correction, index) => (
                     <span key={index}>
                       {index > 0 && ', '}
@@ -270,8 +236,10 @@ function SearchPageInner() {
                   'Loading products...'
                 ) : products.length > 0 ? (
                   <>
-                    Showing {products.length} product{products.length !== 1 ? 's' : ''}
-                    {pagination.total && ` of ${pagination.total}`}
+                    Showing {products.length}
+                    {total > products.length ? ` of ${total}` : ''}
+                    {' '}result{products.length !== 1 ? 's' : ''}
+                    {searchTerm && ` for "${searchTerm}"`}
                   </>
                 ) : (
                   'No products found'
@@ -280,9 +248,7 @@ function SearchPageInner() {
 
               {/* Sort Dropdown */}
               <div className="flex items-center gap-2">
-                <label htmlFor="sort" className="text-sm text-gray-600">
-                  Sort by:
-                </label>
+                <label htmlFor="sort" className="text-sm text-gray-600">Sort by:</label>
                 <select
                   id="sort"
                   className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -299,7 +265,7 @@ function SearchPageInner() {
               </div>
             </div>
 
-            {/* Loading state */}
+            {/* Loading skeleton */}
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, index) => (
@@ -318,27 +284,45 @@ function SearchPageInner() {
                 ))}
               </div>
             ) : products.length > 0 ? (
-              <ProductGrid products={products} />
+              <>
+                <ProductGrid products={products} />
+
+                {/* Load More */}
+                {hasNext && (
+                  <div className="mt-8 flex justify-center">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {loadingMore ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Loading…
+                        </>
+                      ) : (
+                        `Load More (${remaining} more product${remaining !== 1 ? 's' : ''})`
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {!hasNext && total > PAGE_SIZE && (
+                  <p className="mt-8 text-center text-gray-500 text-sm">
+                    All {total} products loaded
+                  </p>
+                )}
+              </>
             ) : (
               <div className="text-center py-12">
                 <p className="text-gray-500 text-lg mb-4">No products found matching your criteria</p>
-                <Link
-                  href="/products"
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
+                <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium">
                   Browse all products
                 </Link>
               </div>
-            )}
-
-            {/* Pagination */}
-            {!loading && pagination.pages > 1 && (
-              <Pagination
-                pagination={pagination}
-                currentPage={currentPage}
-                basePath="/search"
-                searchParams={searchParams}
-              />
             )}
           </div>
         </div>

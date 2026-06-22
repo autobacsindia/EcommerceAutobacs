@@ -111,6 +111,7 @@ export const getSearchSuggestions = async (req, res) => {
     success: true,
     suggestions: result.suggestions || [],
     corrections: result.corrections || [],
+    total: result.total ?? 0,
     history
   });
 };

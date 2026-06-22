@@ -301,10 +301,20 @@ class SearchService {
       }
     });
 
+    // Count total matching documents for the total field
+    const total = await Product.countDocuments({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { brand: { $regex: query, $options: 'i' } }
+      ],
+      isActive: true
+    }).maxTimeMS(1000).catch(() => 0);
+
     // Limit to requested number of suggestions
     return {
       suggestions: suggestions.slice(0, limit),
-      corrections: [] // No corrections in MongoDB fallback
+      corrections: [],
+      total
     };
   }
   

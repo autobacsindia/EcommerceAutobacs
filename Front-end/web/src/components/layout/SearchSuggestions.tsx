@@ -103,12 +103,14 @@ export default function SearchSuggestions() {
         const data: any = await apiClient.get(`/products/suggestions?q=${encodeURIComponent(query)}&limit=8`, { signal: controller.signal });
         if (data.success) {
           setSuggestions(data.suggestions || []);
-          setIsOpen((data.suggestions || []).length > 0 || history.length > 0);
+          setIsOpen(true); // Always open when query >= 2 (shows "See all results" row)
         }
       } catch (error: any) {
-        if (error.name !== 'AbortError') console.error('Error fetching suggestions:', error);
-        setSuggestions([]);
-        setIsOpen(false);
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching suggestions:', error);
+          setSuggestions([]);
+          setIsOpen(true); // Keep open so "See all results" row remains visible
+        }
       } finally {
         setIsLoading(false);
       }
@@ -120,27 +122,14 @@ export default function SearchSuggestions() {
     };
   }, [query, isMounted, history.length]);
 
-  const handleSearch = async (searchQuery: string = query) => {
+  const handleSearch = (searchQuery: string = query) => {
     if (!searchQuery.trim()) return;
-    // Analytics: search (ADR-005)
     trackSearch(searchQuery.trim(), suggestions.length);
     setHistory(prev => {
       const filtered = prev.filter(i => i.term.toLowerCase() !== searchQuery.trim().toLowerCase());
       return [{ term: searchQuery.trim(), timestamp: Date.now() }, ...filtered].slice(0, 10);
     });
-    const trimmed = searchQuery.trim().toLowerCase();
-    let current = suggestions;
-    if (current.length === 0 && trimmed.length >= 2) {
-      try {
-        const data: any = await apiClient.get(`/products/suggestions?q=${encodeURIComponent(searchQuery.trim())}&limit=8`);
-        if (data.success) current = data.suggestions || [];
-      } catch {}
-    }
-    const match = current.find(s => s.type === 'product' && s.text.toLowerCase() === trimmed && s.slug)
-      || current.find(s => s.type === 'product' && trimmed.includes(s.text.toLowerCase()) && s.slug)
-      || current.find(s => s.type === 'product' && s.text.toLowerCase().includes(trimmed) && s.slug);
-    if (match) router.push(`/products/${match.slug}`);
-    else router.push(`/products/search?search=${encodeURIComponent(searchQuery.trim())}`);
+    router.push(`/products/search?search=${encodeURIComponent(searchQuery.trim())}`);
     setIsOpen(false);
     setQuery('');
     setActiveIndex(-1);
@@ -165,20 +154,33 @@ export default function SearchSuggestions() {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) return;
-    const total = suggestions.length + (query.length === 0 && history.length > 0 ? history.length : 0);
+    const historyCount = query.length === 0 && history.length > 0 ? history.length : 0;
+    const seeAllCount = query.length >= 2 ? 1 : 0;
+    const total = historyCount + suggestions.length + seeAllCount;
     switch (e.key) {
-      case 'ArrowDown': e.preventDefault(); setActiveIndex(p => (p + 1) % total); break;
-      case 'ArrowUp': e.preventDefault(); setActiveIndex(p => (p - 1 + total) % total); break;
+      case 'ArrowDown':
+        if (total > 0) { e.preventDefault(); setActiveIndex(p => (p + 1) % total); }
+        break;
+      case 'ArrowUp':
+        if (total > 0) { e.preventDefault(); setActiveIndex(p => (p - 1 + total) % total); }
+        break;
       case 'Enter':
         e.preventDefault();
-        if (activeIndex >= 0) {
-          if (query.length === 0 && history.length > 0 && activeIndex < history.length) {
+        if (activeIndex >= 0 && total > 0) {
+          if (historyCount > 0 && activeIndex < historyCount) {
             handleHistoryItemClick(history[activeIndex].term);
           } else {
-            const si = activeIndex - (query.length === 0 && history.length > 0 ? history.length : 0);
-            if (si < suggestions.length) handleSuggestionClick(suggestions[si]);
+            const si = activeIndex - historyCount;
+            if (si < suggestions.length) {
+              handleSuggestionClick(suggestions[si]);
+            } else {
+              // "See all results" row selected
+              handleSearch();
+            }
           }
-        } else handleSearch();
+        } else {
+          handleSearch();
+        }
         break;
       case 'Escape': setIsOpen(false); setActiveIndex(-1); inputRef.current?.blur(); break;
     }
@@ -297,10 +299,21 @@ export default function SearchSuggestions() {
                 </div>
               )}
 
-              {query.length >= 2 && suggestions.length === 0 && (
-                <div className="px-4 py-3 text-[#555555] font-body">
-                  No suggestions found for &ldquo;{query}&rdquo;
-                </div>
+              {/* "See all results" row — always visible when query is active */}
+              {query.length >= 2 && (
+                <button
+                  type="button"
+                  ref={(el) => { if (el) suggestionRefs.current[suggestions.length] = el; }}
+                  onClick={() => handleSearch()}
+                  className={`w-full text-left px-4 py-3 flex items-center gap-2 transition-colors ${
+                    suggestions.length > 0 ? 'border-t border-[#252525]' : ''
+                  } ${activeIndex === suggestions.length ? 'bg-[#161616]' : 'hover:bg-[#161616]'}`}
+                >
+                  <Search className="h-4 w-4 text-[#3B9EE8] shrink-0" />
+                  <span className="text-[#3B9EE8] font-body text-sm">
+                    See all results for &ldquo;{query}&rdquo; →
+                  </span>
+                </button>
               )}
             </div>
           )}
