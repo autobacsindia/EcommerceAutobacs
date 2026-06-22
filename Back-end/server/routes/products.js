@@ -42,6 +42,7 @@ import {
   uploadProductImages,
   deleteProductImage,
 } from "../controllers/productImageController.js";
+import { uploadCSV, importProductsCSV } from "../controllers/productBulkController.js";
 import {
   getBrandProducts,
   getBrandDetails,
@@ -144,6 +145,11 @@ router.get('/brands/:brandName', publicProductRateLimit, publicCacheResponse('PR
 router.get('/brands/:brandName/details', asyncHandler(getBrandDetails));
 
 // ── Import routes ──────────────────────────────────────────────────────────────
+
+// @route   POST /products/import/csv
+// @desc    Bulk-import products from a CSV file (admin)
+// @access  Private/Admin
+router.post("/import/csv", protect, admin, uploadCSV, asyncHandler(importProductsCSV));
 
 // @route   POST /products/import/wordpress
 // @desc    Import products from WordPress
