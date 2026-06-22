@@ -304,7 +304,9 @@ export default function EditCategoryPage() {
                 >
                   <option value="">None (Top-level category)</option>
                   {categories
-                    .filter(cat => cat._id !== categoryId) // Don't allow category to be its own parent
+                    // 2-level taxonomy: parent must be a top-level (hub) category, and a
+                    // category cannot be its own parent.
+                    .filter(cat => cat._id !== categoryId && !cat.parent)
                     .map((category) => (
                       <option key={category._id} value={category._id}>
                         {category.name}
@@ -313,7 +315,8 @@ export default function EditCategoryPage() {
                 </select>
               )}
               <p className="mt-1 text-sm text-gray-500">
-                Select a parent category to create a subcategory.
+                Pick a top-level category to make this a subcategory. The catalog uses a
+                two-level structure (hub → subcategory).
               </p>
             </div>
             

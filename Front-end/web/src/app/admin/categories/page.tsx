@@ -64,6 +64,95 @@ export default function AdminCategoriesPage() {
     }
   };
 
+  // Group into a hub -> children tree. parent may be a populated object or an id string.
+  const parentIdOf = (c: Category): string | null => {
+    const p = c.parent;
+    if (!p) return null;
+    return typeof p === 'object' ? (p._id ?? null) : p;
+  };
+  const childrenByParent = new Map<string, Category[]>();
+  const topLevel: Category[] = [];
+  for (const c of categories) {
+    const pid = parentIdOf(c);
+    if (pid && categories.some(x => x._id === pid)) {
+      if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
+      childrenByParent.get(pid)!.push(c);
+    } else {
+      topLevel.push(c);
+    }
+  }
+  const byOrderThenName = (a: Category, b: Category) =>
+    (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name);
+  topLevel.sort(byOrderThenName);
+
+  const renderRow = (category: Category, depth: number) => {
+    const kids = (childrenByParent.get(category._id) || []).sort(byOrderThenName);
+    return (
+      <div key={category._id}>
+        <div className="p-4 hover:bg-gray-50" style={{ paddingLeft: 16 + depth * 28 }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              {depth > 0 && <span className="text-gray-300 mr-2 select-none">└</span>}
+              {category.image?.url ? (
+                <img
+                  src={category.image.url}
+                  alt={category.image.alt || category.name}
+                  className="h-10 w-10 rounded-md object-cover mr-3"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center mr-3">
+                  <FolderOpen className="h-5 w-5 text-gray-500" />
+                </div>
+              )}
+              <div>
+                <h3 className={depth === 0 ? 'text-base font-semibold text-gray-900' : 'text-sm font-medium text-gray-800'}>
+                  {category.name}
+                  {depth === 0 && kids.length > 0 && (
+                    <span className="ml-2 text-xs font-normal text-gray-400">{kids.length} subcategor{kids.length === 1 ? 'y' : 'ies'}</span>
+                  )}
+                </h3>
+                {category.description && (
+                  <p className="text-gray-500 text-sm mt-1">{category.description}</p>
+                )}
+                <div className="flex items-center mt-1 flex-wrap gap-y-1">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${category.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {category.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <span
+                    className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                    title={(category.totalProductCount ?? 0) !== (category.productCount ?? 0)
+                      ? `${category.productCount ?? 0} directly, ${category.totalProductCount ?? 0} including subcategories`
+                      : 'Products in this category'}
+                  >
+                    {category.totalProductCount ?? category.productCount ?? 0} product{(category.totalProductCount ?? category.productCount ?? 0) === 1 ? '' : 's'}
+                  </span>
+                  <span className="ml-2 text-xs text-gray-400">Order: {category.order}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <Link
+                href={`/admin/products?category=${category._id}&categoryName=${encodeURIComponent(category.name)}`}
+                className="p-2 text-gray-500 hover:text-blue-600"
+                title="View products in this category"
+              >
+                <Package className="h-5 w-5" />
+              </Link>
+              <Link href={`/admin/categories/edit/${category._id}`} className="p-2 text-gray-500 hover:text-gray-700" title="Edit">
+                <Edit className="h-5 w-5" />
+              </Link>
+              <button onClick={() => handleDelete(category._id)} className="p-2 text-gray-500 hover:text-red-600" title="Delete">
+                <Trash2 className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+        {kids.map(child => renderRow(child, depth + 1))}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -147,81 +236,7 @@ export default function AdminCategoriesPage() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {categories.map((category) => (
-              <div key={category._id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    {category.image?.url ? (
-                      <img 
-                        src={category.image.url} 
-                        alt={category.image.alt || category.name} 
-                        className="h-12 w-12 rounded-md object-cover mr-4"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="h-12 w-12 rounded-md bg-gray-200 flex items-center justify-center mr-4">
-                        <FolderOpen className="h-6 w-6 text-gray-500" />
-                      </div>
-                    )}
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">{category.name}</h3>
-                      {category.description && (
-                        <p className="text-gray-500 text-sm mt-1">{category.description}</p>
-                      )}
-                      <div className="flex items-center mt-1 flex-wrap gap-y-1">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          category.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {category.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                        <span
-                          className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
-                          title={
-                            (category.totalProductCount ?? 0) !== (category.productCount ?? 0)
-                              ? `${category.productCount ?? 0} directly in this category, ${category.totalProductCount ?? 0} including subcategories`
-                              : 'Products in this category'
-                          }
-                        >
-                          {category.totalProductCount ?? category.productCount ?? 0} product
-                          {(category.totalProductCount ?? category.productCount ?? 0) === 1 ? '' : 's'}
-                        </span>
-                        <span className="ml-2 text-xs text-gray-500">
-                          Order: {category.order}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Link
-                      href={`/admin/products?category=${category._id}&categoryName=${encodeURIComponent(category.name)}`}
-                      className="p-2 text-gray-500 hover:text-blue-600"
-                      title="View products in this category"
-                    >
-                      <Package className="h-5 w-5" />
-                    </Link>
-                    <Link
-                      href={`/admin/categories/edit/${category._id}`}
-                      className="p-2 text-gray-500 hover:text-gray-700"
-                      title="Edit"
-                    >
-                      <Edit className="h-5 w-5" />
-                    </Link>
-                    <button 
-                      onClick={() => handleDelete(category._id)}
-                      className="p-2 text-gray-500 hover:text-red-600"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            {topLevel.map((category) => renderRow(category, 0))}
           </div>
         )}
       </div>

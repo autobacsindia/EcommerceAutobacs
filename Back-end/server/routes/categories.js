@@ -192,10 +192,18 @@ router.post(
     const { name, slug, description, parent, order, isActive, imageAlt } = req.body;
 
     // Validate parent exists when provided — prevents dangling parent references.
+    // Enforce a 2-level taxonomy (hub -> leaf): the chosen parent must itself be
+    // top-level, so a new category can be at most one level deep.
     if (parent) {
-      const parentExists = await categoryRepository.findById(parent).select('_id').lean();
-      if (!parentExists) {
+      const parentDoc = await categoryRepository.findById(parent).select('parent').lean();
+      if (!parentDoc) {
         return res.status(400).json({ success: false, message: 'Parent category not found.' });
+      }
+      if (parentDoc.parent) {
+        return res.status(400).json({
+          success: false,
+          message: 'Categories are limited to two levels (hub → subcategory). Pick a top-level category as the parent.',
+        });
       }
     }
 
@@ -289,6 +297,22 @@ router.put(
       const proposedParent = await categoryRepository.findById(updateData.parent).select('parent').lean();
       if (!proposedParent) {
         return res.status(400).json({ success: false, message: 'Parent category not found.' });
+      }
+      // Enforce the 2-level taxonomy (hub -> leaf):
+      // (a) the chosen parent must itself be top-level, and
+      // (b) this category must not already have children (which would be pushed to depth 3).
+      if (proposedParent.parent) {
+        return res.status(400).json({
+          success: false,
+          message: 'Categories are limited to two levels (hub → subcategory). Pick a top-level category as the parent.',
+        });
+      }
+      const hasChildren = await categoryRepository.countDocuments({ parent: req.params.id });
+      if (hasChildren > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'This category has subcategories, so it must stay top-level. Re-parent its subcategories first.',
+        });
       }
       // Walk the ancestor chain from the proposed parent; if we reach this
       // category, the assignment would create a cycle. `visited` guards against

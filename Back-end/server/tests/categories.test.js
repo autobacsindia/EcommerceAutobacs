@@ -297,6 +297,8 @@ describe('Categories API', () => {
 
     it('should reject a circular parent assignment', async () => {
       // `category` (A) is top-level. Make B a child of A, then try to make A a child of B.
+      // Under the 2-level rule this is rejected because B (a subcategory) cannot be a parent,
+      // which also prevents the cycle. Any of these rejection messages is acceptable.
       const b = await Category.create({ name: 'B Category', slug: 'b-category', parent: categoryId });
 
       const res = await agent
@@ -306,7 +308,7 @@ describe('Categories API', () => {
         .expect(400);
 
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toMatch(/circular/i);
+      expect(res.body.message).toMatch(/circular|two levels|subcategor/i);
     });
 
     it('should reject a non-existent parent', async () => {
@@ -319,6 +321,20 @@ describe('Categories API', () => {
 
       expect(res.body.success).toBe(false);
       expect(res.body.message).toMatch(/Parent category not found/i);
+    });
+
+    it('should reject creating a 3rd-level category (2-level limit)', async () => {
+      // category (A) is top-level. Make B a child of A, then try to create C under B.
+      const b = await Category.create({ name: 'Sub B', slug: 'sub-b', parent: categoryId });
+
+      const res = await agent
+        .post(`${BASE}/categories`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ name: 'Deep C', slug: 'deep-c', parent: String(b._id) })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/two levels|top-level/i);
     });
   });
 });
