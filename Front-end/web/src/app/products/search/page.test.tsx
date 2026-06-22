@@ -125,14 +125,15 @@ describe('SearchPage', () => {
       }
       return Promise.resolve({
         products: [{ _id: '1', name: 'Test Product', price: 100, originalPrice: 100, images: [] }],
-        pagination: { total: 1 }
+        total: 1,
+        hasNext: false
       });
     });
-    
+
     render(<SearchPage />);
-    
+
     await waitFor(() => {
-      expect(screen.getByText('Showing 1 product of 1')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1 result/)).toBeInTheDocument();
     });
     
     // "Did you mean?" should not be present
