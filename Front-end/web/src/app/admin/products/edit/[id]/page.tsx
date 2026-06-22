@@ -1338,6 +1338,13 @@ export default function EditProductPage() {
             </div>
           </div>
 
+          {/* Optional marketing / storytelling content — collapsed by default so the
+              core edit flow stays short. */}
+          <details className="md:col-span-2 border border-gray-200 rounded-md p-3">
+            <summary className="text-lg font-semibold cursor-pointer select-none text-gray-800">
+              Marketing &amp; storytelling content (optional)
+            </summary>
+
           {/* ── Engineered for Indian Trails — Subtitle ──────────────────────── */}
           <div className="md:col-span-2">
             <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails — Subtitle</h2>
@@ -1523,6 +1530,7 @@ export default function EditProductPage() {
               )}
             </div>
           </div>
+          </details>
 
           {/* Images */}
           <div className="md:col-span-2">
