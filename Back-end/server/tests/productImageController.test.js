@@ -323,6 +323,7 @@ describe('POST /products — atomic rollback on DB failure', () => {
       .field('description', 'Product that should roll back')
       .field('price',       '500')
       .field('stock',       'low')
+      .field('categories',  JSON.stringify(['507f1f77bcf86cd799439011']))
       .field('slug',        `rollback-${Date.now()}`);
 
     expect(res.status).toBeGreaterThanOrEqual(500);

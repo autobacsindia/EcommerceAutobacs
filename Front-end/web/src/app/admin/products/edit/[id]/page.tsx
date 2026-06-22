@@ -3,6 +3,7 @@
 import { type StockStatus, getStockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -22,6 +23,12 @@ interface Vehicle {
   model: string;
   year: number;
   variant?: string;
+}
+
+interface Brand {
+  _id: string;
+  name: string;
+  slug?: string;
 }
 
 interface Product {
@@ -58,6 +65,8 @@ export default function EditProductPage() {
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [vehicleSearch, setVehicleSearch] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -114,10 +123,21 @@ export default function EditProductPage() {
   useEffect(() => {
     fetchCategories();
     fetchVehicles();
+    fetchBrands();
     if (productId) {
       fetchProduct();
     }
   }, [productId]);
+
+  const fetchBrands = async () => {
+    try {
+      const response = await apiClient.get<{ data?: Brand[]; brands?: Brand[] }>('/brands?limit=500');
+      const list = response.data || response.brands || [];
+      setBrands([...list].sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (err) {
+      console.error('Failed to fetch brands:', err);
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -793,13 +813,24 @@ export default function EditProductPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Brand
               </label>
-              <input
-                type="text"
+              <select
                 name="brand"
                 value={formData.brand}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="">— Select a brand —</option>
+                {/* Preserve a legacy brand value that isn't in the Brand list yet */}
+                {formData.brand && !brands.some(b => b.name === formData.brand) && (
+                  <option value={formData.brand}>{formData.brand} (unlisted)</option>
+                )}
+                {brands.map((b) => (
+                  <option key={b._id} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Brands are managed in <Link href="/admin/brands" className="text-blue-600 hover:underline">Admin → Brands</Link>.
+              </p>
             </div>
             
             <div className="mb-4">
@@ -907,13 +938,32 @@ export default function EditProductPage() {
           
           {/* Compatible Vehicles */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Compatible Vehicles</h2>
-            <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
-              {vehicles.length === 0 ? (
-                <p className="text-gray-500">No vehicles available. Create vehicles first.</p>
-              ) : (
+            <h2 className="text-xl font-semibold mb-4">
+              Compatible Vehicles
+              {selectedVehicles.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-gray-500">({selectedVehicles.length} selected)</span>
+              )}
+            </h2>
+            {vehicles.length === 0 ? (
+              <p className="text-gray-500">No vehicles available. Create vehicles first.</p>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Search make, model, year or variant…"
+                  value={vehicleSearch}
+                  onChange={(e) => setVehicleSearch(e.target.value)}
+                  className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {vehicles.map(vehicle => (
+                  {vehicles
+                    .filter(v => {
+                      const q = vehicleSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return `${v.make} ${v.model} ${v.year} ${v.variant ?? ''}`.toLowerCase().includes(q);
+                    })
+                    .map(vehicle => (
                     <div key={vehicle._id} className="flex items-center">
                       <input
                         type="checkbox"
@@ -934,8 +984,9 @@ export default function EditProductPage() {
                     </div>
                   ))}
                 </div>
+                </div>
+              </>
               )}
-            </div>
           </div>
 
           {/* Variable Specifications */}

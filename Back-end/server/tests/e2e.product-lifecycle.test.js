@@ -132,6 +132,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .field('description', 'Created by the E2E lifecycle test')
       .field('price',       '1499')
       .field('stock',       'in')
+      .field('categories',  JSON.stringify(['507f1f77bcf86cd799439011']))
       .field('slug',        `e2e-test-product-${Date.now()}`);
 
     expect(createRes.status).toBe(201);
@@ -234,6 +235,7 @@ describe('E2E — Product lifecycle: register → login → create → update �
       .field('description', 'Readable by anyone')
       .field('price',       '299')
       .field('stock',       'in')
+      .field('categories',  JSON.stringify(['507f1f77bcf86cd799439011']))
       .field('slug',        slug);
 
     expect(createRes.status).toBe(201);
@@ -315,6 +317,7 @@ describe('Observability — Cloudinary failure path logging', () => {
       .field('description', 'Should fail on upload')
       .field('price',       '500')
       .field('stock',       'in')
+      .field('categories',  JSON.stringify(['507f1f77bcf86cd799439011']))
       .field('slug',        `upload-fail-${Date.now()}`);
 
     // Upload failure → 500 from the controller
@@ -345,6 +348,7 @@ describe('Observability — Cloudinary failure path logging', () => {
       .field('description', 'Cache invalidation test')
       .field('price',       '100')
       .field('stock',       'in')
+      .field('categories',  JSON.stringify(['507f1f77bcf86cd799439011']))
       .field('slug',        slug);
 
     expect(createRes.status).toBe(201);

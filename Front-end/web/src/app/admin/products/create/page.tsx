@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { ArrowLeft } from 'lucide-react';
 import ImageUploader from '@/components/ui/ImageUploader';
@@ -20,17 +21,27 @@ interface Vehicle {
   variant?: string;
 }
 
+interface Brand {
+  _id: string;
+  name: string;
+  slug?: string;
+}
+
 export default function CreateProductPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  
+
   // Category Multi-select state
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categorySearch, setCategorySearch] = useState('');
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+
+  // Vehicle fitment search (the list can be 500+ entries)
+  const [vehicleSearch, setVehicleSearch] = useState('');
 
   // Tags state
   const [tagsInput, setTagsInput] = useState('');
@@ -61,6 +72,7 @@ export default function CreateProductPage() {
   useEffect(() => {
     fetchCategories();
     fetchVehicles();
+    fetchBrands();
   }, []);
 
   const fetchCategories = async () => {
@@ -69,6 +81,16 @@ export default function CreateProductPage() {
       setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
+    }
+  };
+
+  const fetchBrands = async () => {
+    try {
+      const response = await apiClient.get<{ data?: Brand[]; brands?: Brand[] }>('/brands?limit=500');
+      const list = response.data || response.brands || [];
+      setBrands([...list].sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (err) {
+      console.error('Failed to fetch brands:', err);
     }
   };
 
@@ -432,13 +454,20 @@ export default function CreateProductPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Brand
               </label>
-              <input
-                type="text"
+              <select
                 name="brand"
                 value={formData.brand}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="">— Select a brand —</option>
+                {brands.map((b) => (
+                  <option key={b._id} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Brands are managed in <Link href="/admin/brands" className="text-blue-600 hover:underline">Admin → Brands</Link>.
+              </p>
             </div>
             
             <div className="mb-4">
@@ -493,35 +522,55 @@ export default function CreateProductPage() {
           
           {/* Compatible Vehicles */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Compatible Vehicles</h2>
-            <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
-              {vehicles.length === 0 ? (
-                <p className="text-gray-500">No vehicles available. Create vehicles first.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {vehicles.map(vehicle => (
-                    <div key={vehicle._id} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id={`vehicle-${vehicle._id}`}
-                        checked={selectedVehicles.includes(vehicle._id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedVehicles([...selectedVehicles, vehicle._id]);
-                          } else {
-                            setSelectedVehicles(selectedVehicles.filter(id => id !== vehicle._id));
-                          }
-                        }}
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <label htmlFor={`vehicle-${vehicle._id}`} className="ml-2 text-sm text-gray-700">
-                        {vehicle.make} {vehicle.model} ({vehicle.year}) {vehicle.variant ? `- ${vehicle.variant}` : ''}
-                      </label>
-                    </div>
-                  ))}
-                </div>
+            <h2 className="text-xl font-semibold mb-4">
+              Compatible Vehicles
+              {selectedVehicles.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-gray-500">({selectedVehicles.length} selected)</span>
               )}
-            </div>
+            </h2>
+            {vehicles.length === 0 ? (
+              <p className="text-gray-500">No vehicles available. Create vehicles first.</p>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Search make, model, year or variant…"
+                  value={vehicleSearch}
+                  onChange={(e) => setVehicleSearch(e.target.value)}
+                  className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {vehicles
+                      .filter(v => {
+                        const q = vehicleSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        return `${v.make} ${v.model} ${v.year} ${v.variant ?? ''}`.toLowerCase().includes(q);
+                      })
+                      .map(vehicle => (
+                        <div key={vehicle._id} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id={`vehicle-${vehicle._id}`}
+                            checked={selectedVehicles.includes(vehicle._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedVehicles([...selectedVehicles, vehicle._id]);
+                              } else {
+                                setSelectedVehicles(selectedVehicles.filter(id => id !== vehicle._id));
+                              }
+                            }}
+                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <label htmlFor={`vehicle-${vehicle._id}`} className="ml-2 text-sm text-gray-700">
+                            {vehicle.make} {vehicle.model} ({vehicle.year}) {vehicle.variant ? `- ${vehicle.variant}` : ''}
+                          </label>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Variable Specifications */}

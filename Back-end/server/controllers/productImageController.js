@@ -23,6 +23,7 @@ import {
 } from '../utils/cloudinaryHelpers.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { cleanHTML } from '../utils/htmlSanitizer.js';
+import { STOCK_VALUES } from '../utils/stockStatus.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -56,6 +57,15 @@ const parseProductFields = (body) => {
   if (fields.originalPrice !== undefined) fields.originalPrice = Number(fields.originalPrice);
   // stock is a status string ('in' | 'low' | 'out'); leave as-is. Schema enum validates it.
 
+  // Always derive brandSlug from brand so filtering/URLs stay consistent regardless of
+  // what the client sends (brand is chosen from the Brand list, not free-typed).
+  if (typeof fields.brand === 'string') {
+    fields.brand = fields.brand.trim();
+    fields.brandSlug = fields.brand
+      ? fields.brand.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      : '';
+  }
+
   // Sanitize rich-text fields — strip unsafe HTML before storage
   if (fields.description)  fields.description  = cleanHTML(fields.description);
   if (fields.shortDescription) fields.shortDescription = cleanHTML(fields.shortDescription);
@@ -72,11 +82,40 @@ const parseProductFields = (body) => {
   return fields;
 };
 
+/**
+ * Validate the parsed product fields. The express-validator chains can't run on the raw
+ * multipart body (arrays arrive as JSON strings), so validation happens here on the parsed
+ * object. `partial` (update) only validates fields that are present.
+ * Throws AppError(400) on the first failure.
+ */
+const assertValidProduct = (fields, { partial = false } = {}) => {
+  const fail = (msg) => { throw new AppError(msg, 400); };
+  const has = (k) => fields[k] !== undefined && fields[k] !== null && fields[k] !== '';
+
+  if (!partial || has('name')) {
+    if (!fields.name || String(fields.name).trim().length < 3) fail('Product name must be at least 3 characters long');
+  }
+  if (!partial || has('description')) {
+    if (!fields.description || String(fields.description).trim().length < 10) fail('Product description must be at least 10 characters long');
+  }
+  if (!partial || has('price')) {
+    const p = Number(fields.price);
+    if (Number.isNaN(p) || p < 0) fail('A valid price (0 or more) is required');
+  }
+  if (!partial || fields.categories !== undefined) {
+    if (!Array.isArray(fields.categories) || fields.categories.length < 1) fail('At least one category is required');
+  }
+  if (has('stock') && !STOCK_VALUES.includes(fields.stock)) {
+    fail(`Stock must be one of: ${STOCK_VALUES.join(', ')}`);
+  }
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // POST /products  — create with images
 // ────────────────────────────────────────────────────────────────────────────
 export const createProductWithImages = async (req, res) => {
   const fields = parseProductFields(req.body);
+  assertValidProduct(fields, { partial: false });
   const files  = req.files || (req.file ? [req.file] : []);
 
   console.log(`[ProductController] CREATE product: "${fields.name}" | ${files.length} image(s)`);
@@ -143,6 +182,7 @@ export const updateProductWithImages = async (req, res, next) => {
   if (!product) throw new AppError('Product not found', 404);
 
   const fields = parseProductFields(req.body);
+  assertValidProduct(fields, { partial: true });
   const files  = req.files || (req.file ? [req.file] : []);
   const replaceImages = fields.replaceImages === 'true' || fields.replaceImages === true;
   delete fields.replaceImages;
