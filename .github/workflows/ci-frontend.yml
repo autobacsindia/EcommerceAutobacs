@@ -11,8 +11,10 @@
 name: Frontend CI
 
 on:
+  # On main, deploy.yml already runs lint + test + build before deploying, so we
+  # exclude main here to avoid running the frontend suite twice per push.
   push:
-    branches: ["**"]
+    branches-ignore: ["main"]
     paths:
       - "Front-end/web/**"
       - ".github/workflows/ci-frontend.yml"

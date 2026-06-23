@@ -90,10 +90,12 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      # No --detach: we WAIT for the Railway build so a failed image build fails
+      # this job (visible in Actions) instead of silently returning success.
       - name: Deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_BACKEND_TOKEN }}
-        run: railway up --service=EcommerceAutobacs --detach
+        run: railway up --service=EcommerceAutobacs --ci
         working-directory: Back-end/server
 
   # ── Frontend ───────────────────────────────────────────────────────────────
@@ -145,8 +147,10 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      # No --detach: we WAIT for the Railway build so a failed image build fails
+      # this job (visible in Actions) instead of silently returning success.
       - name: Deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_FRONTEND_TOKEN }}
-        run: railway up --service=EcommerceAutobacs --detach
+        run: railway up --service=EcommerceAutobacs --ci
         working-directory: Front-end/web

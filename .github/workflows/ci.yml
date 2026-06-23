@@ -13,8 +13,10 @@
 name: Backend CI
 
 on:
+  # On main, deploy.yml already runs this exact suite before deploying, so we
+  # exclude main here to avoid running the backend tests twice per push.
   push:
-    branches: ["**"]
+    branches-ignore: ["main"]
     paths:
       - "Back-end/server/**"
       - ".github/workflows/ci.yml"
