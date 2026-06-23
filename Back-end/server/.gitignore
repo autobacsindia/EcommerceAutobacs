@@ -93,3 +93,6 @@ journal/
 # Google Maps API test results (optional)
 google-maps-test-results.json
 api-test-report.json
+
+# Generated script run artifacts (audit/backfill reports)
+reports/
