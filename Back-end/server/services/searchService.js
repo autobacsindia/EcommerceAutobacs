@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import Vehicle from "../models/Vehicle.js";
 import categoryRepository from "../repositories/categoryRepository.js";
@@ -22,6 +23,10 @@ class SearchService {
       isFeatured, isFastMoving, inStock, rating,
     } = params;
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Cast id strings to ObjectId. find() auto-casts via the schema, but aggregate()
+    // (used by getFacets) does NOT — so without this, facet counts with a category
+    // filter match nothing.
+    const toObjectId = (id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id);
 
     const query = { isActive: true };
 
@@ -37,7 +42,7 @@ class SearchService {
           const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(seedId);
           allCategoryIds.push(...childCategoryIds);
         }
-        if (allCategoryIds.length > 0) query.categories = { $in: allCategoryIds };
+        if (allCategoryIds.length > 0) query.categories = { $in: allCategoryIds.map(toObjectId) };
       }
     }
 
@@ -82,15 +87,20 @@ class SearchService {
     // Broad text search across product fields + the matching category branch (synonym-expanded).
     if (search) {
       const terms = expandSynonyms(search);
+      const [literal, ...synonyms] = terms;
       const orConditions = [];
-      for (const term of terms) {
-        const termRegex = new RegExp(escapeRegex(term), 'i');
-        orConditions.push(
-          { name: termRegex }, { brand: termRegex }, { shortDescription: termRegex },
-          { description: termRegex }, { sku: termRegex }, { tags: termRegex },
-          { features: termRegex }, { 'specifications.key': termRegex }, { 'specifications.value': termRegex }
-        );
+      // Whole-word match (\b…\b) so short tokens like "led" hit the word "LED" but not
+      // substrings ("instal-led"). Precision strategy:
+      //  - the LITERAL term the user typed matches high-signal fields (name/brand/tags/sku);
+      //  - AUTO-EXPANDED synonyms match the NAME only — matching fuzzy synonyms against
+      //    SEO-stuffed tags or long descriptions made "lights" return e.g. a bumper tagged
+      //    "fog light bumper". Category-name recall is carried by the category branch below.
+      const anchor = (t) => new RegExp('\\b' + escapeRegex(t) + '\\b', 'i');
+      if (literal) {
+        const lit = anchor(literal);
+        orConditions.push({ name: lit }, { brand: lit }, { tags: lit }, { sku: lit });
       }
+      for (const s of synonyms) orConditions.push({ name: anchor(s) });
       if (!categoryMappingService.initialized) await categoryMappingService.initialize();
       const matchedCategoryIds = new Set();
       for (const term of terms) {
@@ -100,7 +110,7 @@ class SearchService {
           ids.forEach(id => matchedCategoryIds.add(id));
         }
       }
-      if (matchedCategoryIds.size > 0) orConditions.push({ categories: { $in: Array.from(matchedCategoryIds) } });
+      if (matchedCategoryIds.size > 0) orConditions.push({ categories: { $in: Array.from(matchedCategoryIds).map(toObjectId) } });
       query.$or = orConditions;
     }
 

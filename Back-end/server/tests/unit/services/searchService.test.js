@@ -1,5 +1,6 @@
 
 import { jest } from '@jest/globals';
+import mongoose from 'mongoose';
 
 // Mock dependencies
 jest.unstable_mockModule('../../../services/elasticsearchService.js', () => ({
@@ -145,6 +146,10 @@ describe('SearchService Unit Tests', () => {
       expect(queryArg.$or).toEqual(
         expect.arrayContaining([{ name: expect.any(RegExp) }])
       );
+      // synonym regexes are anchored to whole words (\b…\b) so "led" doesn't match "installed"
+      const nameBranch = queryArg.$or.find((c) => c.name instanceof RegExp);
+      expect(nameBranch.name.source.startsWith('\\b')).toBe(true);
+      expect(nameBranch.name.source.endsWith('\\b')).toBe(true);
       // category-tree branch OR'd in (this is what restores "lights" -> all lights)
       expect(queryArg.$or).toEqual(
         expect.arrayContaining([
@@ -204,6 +209,19 @@ describe('SearchService Unit Tests', () => {
         expect(Product.find).toHaveBeenCalledWith(expect.objectContaining({
             categories: { $in: ['cat123', 'cat456'] }
         }));
+    });
+
+    it('casts valid category id strings to ObjectId (so facet aggregations match)', async () => {
+        const hexId = '507f1f77bcf86cd799439011';
+        categoryMappingService.findCategory.mockReturnValue({ _id: hexId });
+        categoryMappingService.getAllCategoryIdsIncludingChildren.mockResolvedValue([hexId]);
+
+        await SearchService.searchProducts({ category: hexId });
+
+        const queryArg = Product.find.mock.calls[0][0];
+        const ids = queryArg.categories.$in;
+        expect(ids[0]).toBeInstanceOf(mongoose.Types.ObjectId);
+        expect(String(ids[0])).toBe(hexId);
     });
   });
 });
