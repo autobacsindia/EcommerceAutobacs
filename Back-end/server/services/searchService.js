@@ -188,7 +188,11 @@ class SearchService {
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    const sortOptions = {};
+    // Keep out-of-stock products visible but sink them below available ones. The stock
+    // enum sorts alphabetically as 'in' < 'low' < 'out', so an ascending primary sort on
+    // `stock` yields in-stock → low-stock → out-of-stock; the requested sort applies within
+    // each tier.
+    const sortOptions = { stock: 1 };
     sortOptions[sortBy] = order === 'asc' ? 1 : -1;
 
     try {
