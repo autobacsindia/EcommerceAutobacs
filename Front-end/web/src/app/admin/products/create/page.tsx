@@ -17,8 +17,6 @@ interface Vehicle {
   _id: string;
   make: string;
   model: string;
-  year: number;
-  variant?: string;
 }
 
 interface Brand {
@@ -534,7 +532,7 @@ export default function CreateProductPage() {
               <>
                 <input
                   type="text"
-                  placeholder="Search make, model, year or variant…"
+                  placeholder="Search make or model…"
                   value={vehicleSearch}
                   onChange={(e) => setVehicleSearch(e.target.value)}
                   className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -545,7 +543,7 @@ export default function CreateProductPage() {
                       .filter(v => {
                         const q = vehicleSearch.trim().toLowerCase();
                         if (!q) return true;
-                        return `${v.make} ${v.model} ${v.year} ${v.variant ?? ''}`.toLowerCase().includes(q);
+                        return `${v.make} ${v.model}`.toLowerCase().includes(q);
                       })
                       .map(vehicle => (
                         <div key={vehicle._id} className="flex items-center">
@@ -563,7 +561,7 @@ export default function CreateProductPage() {
                             className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                           />
                           <label htmlFor={`vehicle-${vehicle._id}`} className="ml-2 text-sm text-gray-700">
-                            {vehicle.make} {vehicle.model} ({vehicle.year}) {vehicle.variant ? `- ${vehicle.variant}` : ''}
+                            {vehicle.make} {vehicle.model}
                           </label>
                         </div>
                       ))}

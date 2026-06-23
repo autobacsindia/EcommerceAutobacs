@@ -273,18 +273,6 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                 <span className="font-medium">Model:</span>
                 <span className="ml-2">{vehicle.model}</span>
               </div>
-              {vehicle.year && (
-                <div className="flex items-center">
-                  <span className="font-medium">Year:</span>
-                  <span className="ml-2">{vehicle.year}</span>
-                </div>
-              )}
-              {vehicle.variant && (
-                <div className="flex items-center">
-                  <span className="font-medium">Variant:</span>
-                  <span className="ml-2">{vehicle.variant}</span>
-                </div>
-              )}
             </div>
           )}
         </div>

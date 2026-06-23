@@ -31,8 +31,6 @@ interface Product {
   compatibleVehicles?: Array<{
     make: string;
     model: string;
-    year: string;
-    variant: string;
   }>;
   packageContents?: string[];
   qna?: any;
@@ -131,8 +129,6 @@ interface Product {
   compatibleVehicles?: Array<{
     make: string;
     model: string;
-    year: string;
-    variant: string;
   }>;
   packageContents?: string[];
   qna?: any;

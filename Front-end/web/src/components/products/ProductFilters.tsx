@@ -34,7 +34,6 @@ interface Vehicle {
   _id: string;
   make: string;
   model: string;
-  year?: number;
 }
 
 // Helper function to parse price values consistently

@@ -36,8 +36,8 @@ describe('EditProductPage', () => {
   ];
 
   const mockVehicles = [
-    { _id: 'veh1', make: 'Toyota', model: 'Corolla', year: 2020 },
-    { _id: 'veh2', make: 'Honda', model: 'Civic', year: 2021, variant: 'Type R' },
+    { _id: 'veh1', make: 'Toyota', model: 'Corolla' },
+    { _id: 'veh2', make: 'Honda', model: 'Civic' },
   ];
 
   const mockProduct = {

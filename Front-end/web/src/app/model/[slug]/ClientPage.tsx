@@ -302,18 +302,6 @@ export default function ClientPage({ slug }: { slug: string }) {
                 <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Model</span>
                 <span>{vehicle.model}</span>
               </div>
-              {vehicle.year && (
-                <div className="flex items-center gap-2">
-                  <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Year</span>
-                  <span>{vehicle.year}</span>
-                </div>
-              )}
-              {vehicle.variant && (
-                <div className="flex items-center gap-2">
-                  <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Variant</span>
-                  <span>{vehicle.variant}</span>
-                </div>
-              )}
             </div>
           )}
         </div>

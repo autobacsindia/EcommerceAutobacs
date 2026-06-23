@@ -7,8 +7,6 @@ interface Vehicle {
   _id: string;
   make: string;
   model: string;
-  year: number;
-  variant?: string;
   slug: string;
   name: string;
   image?: {
@@ -26,7 +24,6 @@ const staticVehicles: Vehicle[] = ALL_VEHICLES.map(vehicle => ({
   _id: vehicle.id.toString(),
   make: vehicle.make,
   model: vehicle.name.replace(vehicle.make + ' ', ''),
-  year: 2022,
   slug: vehicle.slug,
   name: vehicle.name,
   isActive: true,

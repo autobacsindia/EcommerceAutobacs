@@ -33,8 +33,6 @@ describe('CreateVehiclePage', () => {
     expect(screen.getByText('Add New Vehicle')).toBeInTheDocument();
     expect(screen.getByLabelText(/Make/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Model/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Year/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Variant/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Slug/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Image URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Image Alt Text/i)).toBeInTheDocument();
@@ -43,33 +41,26 @@ describe('CreateVehiclePage', () => {
 
   it('validates required fields', async () => {
     render(<CreateVehiclePage />);
-    
-    // Clear year since it has default value
-    const yearInput = screen.getByLabelText(/Year/i);
-    fireEvent.change(yearInput, { target: { value: '' } });
 
     const form = screen.getByRole('button', { name: /Create Vehicle/i }).closest('form');
     if (!form) throw new Error('Form not found');
     fireEvent.submit(form);
-    
+
     await waitFor(() => {
       expect(screen.getByText('Make is required')).toBeInTheDocument();
       expect(screen.getByText('Model is required')).toBeInTheDocument();
-      // Year validation might be different because input type is number
-      // But we can check if api was called
     });
-    
+
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it('auto-generates slug from make, model and year', () => {
+  it('auto-generates slug from make and model', () => {
     render(<CreateVehiclePage />);
-    
+
     fireEvent.change(screen.getByLabelText(/Make/i), { target: { value: 'Toyota' } });
     fireEvent.change(screen.getByLabelText(/Model/i), { target: { value: 'Camry' } });
-    fireEvent.change(screen.getByLabelText(/Year/i), { target: { value: '2023' } });
-    
-    expect(screen.getByLabelText(/Slug/i)).toHaveValue('toyota-camry-2023');
+
+    expect(screen.getByLabelText(/Slug/i)).toHaveValue('toyota-camry');
   });
 
   it('submits form with valid data', async () => {
@@ -77,8 +68,6 @@ describe('CreateVehiclePage', () => {
     
     fireEvent.change(screen.getByLabelText(/Make/i), { target: { value: 'Toyota' } });
     fireEvent.change(screen.getByLabelText(/Model/i), { target: { value: 'Camry' } });
-    fireEvent.change(screen.getByLabelText(/Year/i), { target: { value: '2023' } });
-    fireEvent.change(screen.getByLabelText(/Variant/i), { target: { value: 'Hybrid' } });
     fireEvent.change(screen.getByLabelText(/Image URL/i), { target: { value: 'http://example.com/image.jpg' } });
     
     const form = screen.getByRole('button', { name: /Create Vehicle/i }).closest('form');
@@ -89,9 +78,7 @@ describe('CreateVehiclePage', () => {
       expect(apiClient.post).toHaveBeenCalledWith('/vehicles', expect.objectContaining({
         make: 'Toyota',
         model: 'Camry',
-        year: '2023',
-        variant: 'Hybrid',
-        slug: 'toyota-camry-2023',
+        slug: 'toyota-camry',
         image: {
           url: 'http://example.com/image.jpg',
           alt: 'Toyota Camry'

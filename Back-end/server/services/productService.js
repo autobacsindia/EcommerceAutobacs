@@ -98,7 +98,6 @@ class ProductService {
         _id: vehicle._id,
         make: vehicle.make,
         model: vehicle.model,
-        year: vehicle.year,
         slug: vehicle.slug,
         name: `${vehicle.make} ${vehicle.model}`
       },

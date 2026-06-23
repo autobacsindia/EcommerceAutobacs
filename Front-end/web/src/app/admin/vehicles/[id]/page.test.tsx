@@ -33,9 +33,7 @@ describe('EditVehiclePage', () => {
     _id: 'v1',
     make: 'Toyota',
     model: 'Camry',
-    year: 2022,
-    variant: 'SE',
-    slug: 'toyota-camry-2022',
+    slug: 'toyota-camry',
     image: {
       url: 'http://example.com/camry.jpg',
       alt: 'Toyota Camry SE'
@@ -68,9 +66,7 @@ describe('EditVehiclePage', () => {
       expect(apiClient.get).toHaveBeenCalledWith('/vehicles/v1');
       expect(screen.getByLabelText(/Make/i)).toHaveValue('Toyota');
       expect(screen.getByLabelText(/Model/i)).toHaveValue('Camry');
-      expect(screen.getByLabelText(/Year/i)).toHaveValue(2022);
-      expect(screen.getByLabelText(/Variant/i)).toHaveValue('SE');
-      expect(screen.getByLabelText(/Slug/i)).toHaveValue('toyota-camry-2022');
+      expect(screen.getByLabelText(/Slug/i)).toHaveValue('toyota-camry');
       expect(screen.getByLabelText(/Image URL/i)).toHaveValue('http://example.com/camry.jpg');
     });
   });
@@ -82,19 +78,17 @@ describe('EditVehiclePage', () => {
       expect(screen.getByLabelText(/Make/i)).toHaveValue('Toyota');
     });
     
-    fireEvent.change(screen.getByLabelText(/Variant/i), { target: { value: 'XSE' } });
-    
+    fireEvent.change(screen.getByLabelText(/Model/i), { target: { value: 'Corolla' } });
+
     const form = screen.getByRole('button', { name: /Update Vehicle/i }).closest('form');
     if (!form) throw new Error('Form not found');
     fireEvent.submit(form);
-    
+
     await waitFor(() => {
       expect(apiClient.put).toHaveBeenCalledWith('/vehicles/v1', expect.objectContaining({
         make: 'Toyota',
-        model: 'Camry',
-        year: 2022,
-        variant: 'XSE',
-        slug: 'toyota-camry-2022',
+        model: 'Corolla',
+        slug: 'toyota-corolla',
         image: {
           url: 'http://example.com/camry.jpg',
           alt: 'Toyota Camry SE'

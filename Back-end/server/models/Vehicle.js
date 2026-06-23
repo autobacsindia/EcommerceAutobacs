@@ -11,14 +11,6 @@ const VehicleSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  year: {
-    type: Number,
-    required: true
-  },
-  variant: {
-    type: String,
-    trim: true
-  },
   slug: {
     type: String,
     required: true,
@@ -38,6 +30,6 @@ const VehicleSchema = new mongoose.Schema({
 });
 
 // Compound index for vehicle queries
-VehicleSchema.index({ make: 1, model: 1, year: 1 });
+VehicleSchema.index({ make: 1, model: 1 });
 
 export default mongoose.model("Vehicle", VehicleSchema);

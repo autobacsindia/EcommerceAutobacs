@@ -7,8 +7,6 @@ import { Check } from 'lucide-react';
 interface Vehicle {
   make: string;
   model: string;
-  year: string;
-  variant: string;
 }
 
 interface VehicleCardsProps {
@@ -63,12 +61,7 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
               <h4 className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 {vehicle.make} {vehicle.model}
               </h4>
-              <div className={`flex items-center gap-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                <span>{vehicle.year}</span>
-                <span>•</span>
-                <span>{vehicle.variant}</span>
-              </div>
-              
+
               <button className={`w-full mt-4 ${isDark ? 'bg-zinc-700 hover:bg-orange-500' : 'bg-gray-200 hover:bg-orange-500 hover:text-white'} text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm`}>
                 Shop Parts for This Vehicle
               </button>

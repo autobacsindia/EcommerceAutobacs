@@ -163,7 +163,7 @@ describe('ProductController Unit Tests', () => {
 
     it('should return products for valid vehicle', async () => {
       req.params.vehicleId = 'valid-id';
-      const mockVehicleDoc = { _id: 'valid-id', make: 'Toyota', model: 'Corolla', year: 2020, slug: 'toyota-corolla' };
+      const mockVehicleDoc = { _id: 'valid-id', make: 'Toyota', model: 'Corolla', slug: 'toyota-corolla' };
       
       mockMongoose.Types.ObjectId.isValid.mockReturnValue(true);
       mockVehicle.findById.mockResolvedValue(mockVehicleDoc);

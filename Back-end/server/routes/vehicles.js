@@ -20,7 +20,7 @@ const router = express.Router();
 // @access  Public
 router.get("/", publicCacheResponse('VEHICLE_LIST'), asyncHandler(async (req, res) => {
   const vehicles = await vehicleRepository.find({ isActive: true })
-    .sort({ make: 1, model: 1, year: 1 });
+    .sort({ make: 1, model: 1 });
 
   res.json({
     success: true,
@@ -175,20 +175,18 @@ router.get('/make-model/:make/:model/products', validateMakeModelParam, asyncHan
 // @desc    Create new vehicle
 // @access  Private/Admin
 router.post("/", protect, admin, asyncHandler(async (req, res) => {
-  const { make, model, year, variant, slug, image } = req.body;
+  const { make, model, slug, image } = req.body;
 
-  if (!make || !model || !year || !slug) {
+  if (!make || !model || !slug) {
     return res.status(400).json({
       success: false,
-      message: 'Make, model, year, and slug are required'
+      message: 'Make, model, and slug are required'
     });
   }
 
   const vehicle = await vehicleRepository.create({
     make,
     model,
-    year,
-    variant,
     slug,
     image
   });
@@ -264,15 +262,14 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
     ? {
         $or: [
           { make: { $regex: search, $options: 'i' } },
-          { model: { $regex: search, $options: 'i' } },
-          { variant: { $regex: search, $options: 'i' } }
+          { model: { $regex: search, $options: 'i' } }
         ]
       }
     : {};
 
   const total = await vehicleRepository.countDocuments(query);
   const vehicles = await vehicleRepository.find(query)
-    .sort({ make: 1, model: 1, year: 1 })
+    .sort({ make: 1, model: 1 })
     .skip((page - 1) * limit)
     .limit(limit);
 

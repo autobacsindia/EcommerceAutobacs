@@ -34,8 +34,8 @@ describe('CreateProductPage', () => {
   ];
 
   const mockVehicles = [
-    { _id: 'veh1', make: 'Toyota', model: 'Corolla', year: 2020 },
-    { _id: 'veh2', make: 'Honda', model: 'Civic', year: 2021, variant: 'Type R' },
+    { _id: 'veh1', make: 'Toyota', model: 'Corolla' },
+    { _id: 'veh2', make: 'Honda', model: 'Civic' },
   ];
 
   beforeEach(() => {
@@ -66,7 +66,7 @@ describe('CreateProductPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Category/i)).toBeInTheDocument();
-      expect(screen.getByText('Toyota Corolla (2020)')).toBeInTheDocument();
+      expect(screen.getByText('Toyota Corolla')).toBeInTheDocument();
     });
   });
 
@@ -93,10 +93,10 @@ describe('CreateProductPage', () => {
     render(<CreateProductPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Toyota Corolla (2020)')).toBeInTheDocument();
+      expect(screen.getByText('Toyota Corolla')).toBeInTheDocument();
     });
 
-    const checkbox = screen.getByLabelText('Toyota Corolla (2020)');
+    const checkbox = screen.getByLabelText('Toyota Corolla');
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
   });

@@ -9,7 +9,7 @@ export async function getProduct(req, res) {
 
   const product = await Product.findById(id)
     .populate('categories', 'name slug description')
-    .populate('compatibleVehicles', 'make model year variant');
+    .populate('compatibleVehicles', 'make model');
 
   if (!product) {
     return res.status(404).json({ success: false, message: 'Product not found' });
@@ -26,7 +26,7 @@ export async function getProductBySlug(req, res) {
 
   const product = await Product.findOne({ slug, isActive: true })
     .populate('categories', 'name slug description')
-    .populate('compatibleVehicles', 'make model year variant');
+    .populate('compatibleVehicles', 'make model');
 
   if (!product) {
     return res.status(404).json({ success: false, message: 'Product not found' });

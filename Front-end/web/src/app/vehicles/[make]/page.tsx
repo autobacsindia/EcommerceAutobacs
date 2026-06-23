@@ -122,9 +122,6 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
                       <h3 className="text-sm font-condensed font-bold text-[#C4C4C4] group-hover:text-[#3B9EE8] transition-colors uppercase tracking-wide">
                         {vehicle.model}
                       </h3>
-                      {vehicle.year && (
-                        <p className="text-xs text-[#555555] font-body mt-0.5">{vehicle.year}</p>
-                      )}
                     </div>
                   </div>
                 </Link>

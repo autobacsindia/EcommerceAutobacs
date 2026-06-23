@@ -4,8 +4,6 @@ interface Vehicle {
   _id: string;
   make: string;
   model: string;
-  year: number;
-  variant?: string;
   slug: string;
   name: string;  // Added to match service implementation
   image?: {

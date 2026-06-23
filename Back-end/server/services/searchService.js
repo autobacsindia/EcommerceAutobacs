@@ -19,7 +19,7 @@ class SearchService {
   static async buildBaseQuery(params, { excludeBrand = false, excludeCategory = false } = {}) {
     const {
       category, brand, minPrice, maxPrice, search,
-      vehicle, vehicleMake, vehicleModel, year,
+      vehicle, vehicleMake, vehicleModel,
       isFeatured, isFastMoving, inStock, rating,
     } = params;
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -61,7 +61,7 @@ class SearchService {
       if (maxPrice) query.price.$lte = Number(maxPrice);
     }
 
-    // Vehicle fitment — explicit id/list, or make/model/year resolved to vehicle ids.
+    // Vehicle fitment — explicit id/list, or make/model resolved to vehicle ids.
     if (vehicle) {
       const ids = Array.isArray(vehicle) ? vehicle : String(vehicle).split(',').filter(Boolean);
       query.compatibleVehicles = ids.length > 1 ? { $in: ids } : ids[0];
@@ -69,7 +69,6 @@ class SearchService {
       const vq = {};
       if (vehicleMake)  vq.make  = new RegExp('^' + escapeRegex(String(vehicleMake).trim()) + '$', 'i');
       if (vehicleModel) vq.model = new RegExp('^' + escapeRegex(String(vehicleModel).trim()) + '$', 'i');
-      if (year && !Number.isNaN(Number(year))) vq.year = Number(year);
       const matched = await Vehicle.find(vq).select('_id').lean().maxTimeMS(2000);
       query.compatibleVehicles = { $in: matched.map((v) => v._id) };
     }
@@ -194,7 +193,7 @@ class SearchService {
     try {
       const products = await Product.find(query)
         .populate('categories', 'name slug')
-        .populate('compatibleVehicles', 'make model year')
+        .populate('compatibleVehicles', 'make model')
         .sort(sortOptions)
         .skip(skip)
         .limit(Number(limit))

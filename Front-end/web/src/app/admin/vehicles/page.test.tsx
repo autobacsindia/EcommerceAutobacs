@@ -24,9 +24,7 @@ describe('AdminVehiclesPage', () => {
       _id: 'v1',
       make: 'Toyota',
       model: 'Corolla',
-      year: 2023,
-      variant: 'SE',
-      slug: 'toyota-corolla-2023',
+      slug: 'toyota-corolla',
       isActive: true,
       productCount: 15
     },
@@ -34,9 +32,7 @@ describe('AdminVehiclesPage', () => {
       _id: 'v2',
       make: 'Honda',
       model: 'Civic',
-      year: 2022,
-      variant: 'Sport',
-      slug: 'honda-civic-2022',
+      slug: 'honda-civic',
       isActive: false,
       productCount: 8
     }
@@ -79,13 +75,9 @@ describe('AdminVehiclesPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Toyota')).toBeInTheDocument();
       expect(screen.getByText('Corolla')).toBeInTheDocument();
-      expect(screen.getByText('2023')).toBeInTheDocument();
-      expect(screen.getByText('SE')).toBeInTheDocument();
-      
+
       expect(screen.getByText('Honda')).toBeInTheDocument();
       expect(screen.getByText('Civic')).toBeInTheDocument();
-      expect(screen.getByText('2022')).toBeInTheDocument();
-      expect(screen.getByText('Sport')).toBeInTheDocument();
     });
   });
 
@@ -97,7 +89,7 @@ describe('AdminVehiclesPage', () => {
       expect(screen.getByText('Toyota')).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText('Search vehicles by make, model, or variant...');
+    const searchInput = screen.getByPlaceholderText('Search vehicles by make or model...');
     fireEvent.change(searchInput, { target: { value: 'toyota' } });
 
     act(() => {

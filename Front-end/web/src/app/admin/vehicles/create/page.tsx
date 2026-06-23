@@ -13,8 +13,6 @@ export default function CreateVehiclePage() {
   const [formData, setFormData] = useState({
     make: '',
     model: '',
-    year: new Date().getFullYear(),
-    variant: '',
     slug: '',
     imageUrl: '',
     imageAlt: '',
@@ -22,16 +20,16 @@ export default function CreateVehiclePage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Auto-generate slug when make, model, or year changes
+  // Auto-generate slug when make or model changes
   useEffect(() => {
-    if (formData.make && formData.model && formData.year) {
-      const generatedSlug = `${formData.make}-${formData.model}-${formData.year}`
+    if (formData.make && formData.model) {
+      const generatedSlug = `${formData.make}-${formData.model}`
         .toLowerCase()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '');
       setFormData(prev => ({ ...prev, slug: generatedSlug }));
     }
-  }, [formData.make, formData.model, formData.year]);
+  }, [formData.make, formData.model]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -42,11 +40,6 @@ export default function CreateVehiclePage() {
 
     if (!formData.model.trim()) {
       newErrors.model = 'Model is required';
-    }
-
-    const currentYear = new Date().getFullYear();
-    if (formData.year < 1900 || formData.year > currentYear + 2) {
-      newErrors.year = `Year must be between 1900 and ${currentYear + 2}`;
     }
 
     if (!formData.slug.trim()) {
@@ -85,8 +78,6 @@ export default function CreateVehiclePage() {
       const vehicleData = {
         make: formData.make.trim(),
         model: formData.model.trim(),
-        year: formData.year,
-        variant: formData.variant.trim() || undefined,
         slug: formData.slug.trim(),
         image: formData.imageUrl ? {
           url: formData.imageUrl.trim(),
@@ -180,40 +171,6 @@ export default function CreateVehiclePage() {
           </div>
 
           <div>
-            <label htmlFor="year" className="block text-sm font-medium text-gray-700 mb-1">
-              Year <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              id="year"
-              name="year"
-              value={formData.year}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.year ? 'border-red-500' : 'border-gray-300'
-              }`}
-              min="1900"
-              max={new Date().getFullYear() + 2}
-            />
-            {errors.year && <p className="text-red-500 text-sm mt-1">{errors.year}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="variant" className="block text-sm font-medium text-gray-700 mb-1">
-              Variant
-            </label>
-            <input
-              type="text"
-              id="variant"
-              name="variant"
-              value={formData.variant}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., Hybrid, Sport (optional)"
-            />
-          </div>
-
-          <div>
             <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
               Slug <span className="text-red-500">*</span>
             </label>
@@ -226,7 +183,7 @@ export default function CreateVehiclePage() {
               className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.slug ? 'border-red-500' : 'border-gray-300'
               }`}
-              placeholder="Auto-generated from make, model, and year"
+              placeholder="Auto-generated from make and model"
             />
             {errors.slug && <p className="text-red-500 text-sm mt-1">{errors.slug}</p>}
             <p className="text-gray-500 text-sm mt-1">

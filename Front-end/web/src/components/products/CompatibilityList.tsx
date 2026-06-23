@@ -6,8 +6,6 @@ interface CompatibilityListProps {
   vehicles?: Array<{
     make: string;
     model: string;
-    year: string;
-    variant?: string;
   }>;
 }
 
@@ -33,9 +31,6 @@ export default function CompatibilityList({ vehicles }: CompatibilityListProps) 
             <div>
               <p className="font-medium text-gray-900">
                 {vehicle.make} {vehicle.model}
-              </p>
-              <p className="text-sm text-gray-600">
-                {vehicle.year} {vehicle.variant && `• ${vehicle.variant}`}
               </p>
             </div>
           </div>

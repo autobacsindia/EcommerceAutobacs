@@ -25,7 +25,7 @@ const defaultFAQs: FAQ[] = [
   },
   {
     question: "Will it fit my car?",
-    answer: "Please check the vehicle compatibility section above to see if this product is designed for your specific make, model, and year. If you're unsure, our customer support can help verify fitment."
+    answer: "Please check the vehicle compatibility section above to see if this product is designed for your specific make and model. If you're unsure, our customer support can help verify fitment."
   },
   {
     question: "Is installation easy?",

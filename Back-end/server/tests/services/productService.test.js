@@ -100,7 +100,6 @@ describe('ProductService', () => {
         _id: 'vehicle123',
         make: 'Toyota',
         model: 'Fortuner',
-        year: 2024,
         slug: 'toyota-fortuner'
       };
       productRepository.findVehicleByIdOrSlug.mockResolvedValue(mockVehicle);

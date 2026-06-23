@@ -142,7 +142,7 @@ export const metadata: Metadata = {
           'name': 'How do I choose the right automotive accessories for my vehicle?',
           'acceptedAnswer': {
             '@type': 'Answer',
-            'text': 'Our vehicle-specific product mapping ensures compatibility. You can filter products by your vehicle make, model, and year to find perfectly compatible accessories.'
+            'text': 'Our vehicle-specific product mapping ensures compatibility. You can filter products by your vehicle make and model to find perfectly compatible accessories.'
           }
         }
       ]

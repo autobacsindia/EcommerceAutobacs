@@ -29,7 +29,7 @@ export default function HelpPage() {
             },
             {
               title: 'Vehicle Compatibility',
-              body: 'Use the vehicle selector on any product page to filter parts that fit your specific make, model, and year. Our catalogue is regularly updated to ensure accuracy.',
+              body: 'Use the vehicle selector on any product page to filter parts that fit your specific make and model. Our catalogue is regularly updated to ensure accuracy.',
             },
           ].map((section) => (
             <div key={section.title} className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6">
