@@ -1,4 +1,5 @@
 import Product from "../models/Product.js";
+import Vehicle from "../models/Vehicle.js";
 import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
@@ -35,6 +36,9 @@ class SearchService {
       maxPrice,
       search,
       vehicle,
+      vehicleMake,
+      vehicleModel,
+      year,
       isFeatured,
       isFastMoving,
       inStock,
@@ -97,7 +101,23 @@ class SearchService {
       if (maxPrice) query.price.$lte = Number(maxPrice);
     }
     
-    if (vehicle) query.compatibleVehicles = vehicle;
+    // Vehicle fitment. Accept either an explicit vehicle id/list, OR make/model/year
+    // (the customer-facing filters send make+model). Resolve make/model to the set of
+    // matching Vehicle ids so a customer picking "Toyota Fortuner" gets every Fortuner
+    // variant's products.
+    if (vehicle) {
+      const ids = Array.isArray(vehicle) ? vehicle : String(vehicle).split(',').filter(Boolean);
+      query.compatibleVehicles = ids.length > 1 ? { $in: ids } : ids[0];
+    } else if (vehicleMake || vehicleModel) {
+      const esc = (s) => String(s).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const vq = {};
+      if (vehicleMake)  vq.make  = new RegExp('^' + esc(vehicleMake) + '$', 'i');
+      if (vehicleModel) vq.model = new RegExp('^' + esc(vehicleModel) + '$', 'i');
+      if (year && !Number.isNaN(Number(year))) vq.year = Number(year);
+      const matched = await Vehicle.find(vq).select('_id').lean().maxTimeMS(2000);
+      // No matching vehicle → no products fit; $in [] yields an empty result set.
+      query.compatibleVehicles = { $in: matched.map((v) => v._id) };
+    }
     if (isFeatured) query.isFeatured = isFeatured === 'true';
     if (isFastMoving) query.isFastMoving = isFastMoving === 'true';
     

@@ -30,6 +30,13 @@ interface Brand {
   name: string;
 }
 
+interface Vehicle {
+  _id: string;
+  make: string;
+  model: string;
+  year?: number;
+}
+
 // Helper function to parse price values consistently
 const parsePriceValue = (value: string | null, defaultValue: number): number => {
   if (!value) return defaultValue;
@@ -111,6 +118,12 @@ export default function ProductFilters() {
     }
     return [];
   });
+
+  // Vehicle fitment filter ("shop for my car")
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [showVehicle, setShowVehicle] = useState(false);
+  const [selectedMake, setSelectedMake] = useState<string>(() => searchParams.get('vehicleMake') || '');
+  const [selectedModel, setSelectedModel] = useState<string>(() => searchParams.get('vehicleModel') || '');
   
   // Load saved filter preferences on mount
   useEffect(() => {
@@ -226,6 +239,26 @@ export default function ProductFilters() {
     return () => { ignore = true; };
   }, []);
 
+  // Fetch vehicles for the fitment filter
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await apiClient.get<{ vehicles?: Vehicle[]; data?: Vehicle[] }>('/vehicles?limit=1000');
+        if (!ignore) setVehicles(res.vehicles || res.data || []);
+      } catch (err) {
+        if (!ignore) console.error('Failed to fetch vehicles:', err);
+      }
+    })();
+    return () => { ignore = true; };
+  }, []);
+
+  // Unique, sorted makes; models scoped to the selected make.
+  const vehicleMakes = Array.from(new Set(vehicles.map(v => v.make).filter(Boolean))).sort();
+  const vehicleModels = Array.from(
+    new Set(vehicles.filter(v => v.make === selectedMake).map(v => v.model).filter(Boolean))
+  ).sort();
+
   const handleBrandToggle = (brandName: string) => {
     setSelectedBrands(prev => {
       if (prev.includes(brandName)) {
@@ -283,7 +316,17 @@ export default function ProductFilters() {
     } else {
       currentParams.delete('rating');
     }
-    
+
+    // Vehicle fitment (make + optional model)
+    if (selectedMake) {
+      currentParams.set('vehicleMake', selectedMake);
+      if (selectedModel) currentParams.set('vehicleModel', selectedModel);
+      else currentParams.delete('vehicleModel');
+    } else {
+      currentParams.delete('vehicleMake');
+      currentParams.delete('vehicleModel');
+    }
+
     // Update URL
     router.push(`/products?${currentParams.toString()}`);
   };
@@ -294,21 +337,63 @@ export default function ProductFilters() {
     setSelectedCategories([]);
     setInStockOnly(false);
     setSelectedRatings([]);
-    
+    setSelectedMake('');
+    setSelectedModel('');
+
     const currentParams = new URLSearchParams(searchParams.toString());
     currentParams.delete('minPrice');
     currentParams.delete('maxPrice');
     currentParams.delete('category');
     currentParams.delete('inStock');
     currentParams.delete('rating');
+    currentParams.delete('vehicleMake');
+    currentParams.delete('vehicleModel');
     currentParams.delete('page');
-    
+
     router.push(`/products?${currentParams.toString()}`);
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
       <h2 className="text-lg font-bold mb-4">Filters</h2>
+
+      {/* Vehicle fitment — "shop for my car" */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">My Vehicle</h3>
+          <button
+            type="button"
+            onClick={() => setShowVehicle(!showVehicle)}
+            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded text-gray-700 text-sm leading-none"
+            aria-label={showVehicle ? 'Collapse vehicle filter' : 'Expand vehicle filter'}
+          >
+            {showVehicle ? '-' : '+'}
+          </button>
+        </div>
+        {showVehicle && (
+          <div className="space-y-2">
+            <select
+              value={selectedMake}
+              onChange={(e) => { setSelectedMake(e.target.value); setSelectedModel(''); }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Vehicle make"
+            >
+              <option value="">All makes</option>
+              {vehicleMakes.map((mk) => <option key={mk} value={mk}>{mk}</option>)}
+            </select>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={!selectedMake}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+              aria-label="Vehicle model"
+            >
+              <option value="">{selectedMake ? 'All models' : 'Select a make first'}</option>
+              {vehicleModels.map((md) => <option key={md} value={md}>{md}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
 
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">

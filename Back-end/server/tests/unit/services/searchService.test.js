@@ -25,11 +25,18 @@ jest.unstable_mockModule('../../../models/Product.js', () => ({
   }
 }));
 
+jest.unstable_mockModule('../../../models/Vehicle.js', () => ({
+  default: {
+    find: jest.fn(),
+  }
+}));
+
 // Import the module under test using dynamic import to apply mocks
 const { default: SearchService } = await import('../../../services/searchService.js');
 const { default: elasticsearchService } = await import('../../../services/elasticsearchService.js');
 const { default: categoryMappingService } = await import('../../../services/categoryMappingService.js');
 const { default: Product } = await import('../../../models/Product.js');
+const { default: Vehicle } = await import('../../../models/Vehicle.js');
 
 describe('SearchService Unit Tests', () => {
   beforeEach(() => {
@@ -149,6 +156,22 @@ describe('SearchService Unit Tests', () => {
       await SearchService.searchProducts({ search: 'anything' });
       const queryArg = Product.find.mock.calls[0][0];
       expect(queryArg.$text).toBeUndefined();
+    });
+
+    it('should resolve vehicleMake/vehicleModel to compatibleVehicles ids', async () => {
+      Vehicle.find.mockReturnValue({
+        select: () => ({ lean: () => ({ maxTimeMS: jest.fn().mockResolvedValue([{ _id: 'v1' }, { _id: 'v2' }]) }) }),
+      });
+
+      await SearchService.searchProducts({ vehicleMake: 'Toyota', vehicleModel: 'Fortuner' });
+
+      expect(Vehicle.find).toHaveBeenCalledWith(expect.objectContaining({
+        make: expect.any(RegExp),
+        model: expect.any(RegExp),
+      }));
+      expect(Product.find).toHaveBeenCalledWith(expect.objectContaining({
+        compatibleVehicles: { $in: ['v1', 'v2'] },
+      }));
     });
 
     it('should handle category filtering correctly', async () => {
