@@ -88,6 +88,31 @@ export const getProducts = async (req, res) => {
   }
 };
 
+// GET /products/facets — per-brand and per-category counts for the filter sidebar.
+export const getProductFacets = async (req, res) => {
+  const cacheKey = `${CACHE_VERSION}:products:facets:${JSON.stringify(req.query)}`;
+  try {
+    const cached = await cacheService.get(cacheKey);
+    if (cached) return res.json(cached);
+  } catch (cacheError) {
+    console.warn('[ProductController] Facet cache read failed:', cacheError.message);
+  }
+
+  try {
+    const facets = await SearchService.getFacets(req.query);
+    const responseData = { success: true, facets };
+    try {
+      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
+    } catch (cacheError) {
+      console.warn('[ProductController] Facet cache write failed:', cacheError.message);
+    }
+    res.json(responseData);
+  } catch (error) {
+    console.error('[ProductController] Error in getProductFacets:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 export const getSearchSuggestions = async (req, res) => {
   const { q, limit = 10 } = req.query;
   

@@ -124,6 +124,10 @@ export default function ProductFilters() {
   const [showVehicle, setShowVehicle] = useState(false);
   const [selectedMake, setSelectedMake] = useState<string>(() => searchParams.get('vehicleMake') || '');
   const [selectedModel, setSelectedModel] = useState<string>(() => searchParams.get('vehicleModel') || '');
+
+  // Facet counts for the current filter context (brand name -> count, category id -> count).
+  const [facetBrands, setFacetBrands] = useState<Record<string, number>>({});
+  const [facetCategories, setFacetCategories] = useState<Record<string, number>>({});
   
   // Load saved filter preferences on mount
   useEffect(() => {
@@ -252,6 +256,29 @@ export default function ProductFilters() {
     })();
     return () => { ignore = true; };
   }, []);
+
+  // Fetch facet counts for the current filter context (re-runs when filters change).
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const qs = searchParams.toString();
+        const res = await apiClient.get<{ facets?: { brands?: { name: string; count: number }[]; categories?: { categoryId: string; count: number }[] } }>(
+          `/products/facets${qs ? `?${qs}` : ''}`
+        );
+        if (ignore) return;
+        const b: Record<string, number> = {};
+        (res.facets?.brands || []).forEach(x => { if (x.name) b[x.name.toLowerCase()] = x.count; });
+        const c: Record<string, number> = {};
+        (res.facets?.categories || []).forEach(x => { c[x.categoryId] = x.count; });
+        setFacetBrands(b);
+        setFacetCategories(c);
+      } catch (err) {
+        if (!ignore) console.error('Failed to fetch facets:', err);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [searchParams]);
 
   // Unique, sorted makes; models scoped to the selected make.
   const vehicleMakes = Array.from(new Set(vehicles.map(v => v.make).filter(Boolean))).sort();
@@ -419,9 +446,10 @@ export default function ProductFilters() {
                 ))}
               </div>
             ) : (
-              <WoofCategoryList 
+              <WoofCategoryList
                 selectedCategories={selectedCategories}
                 onCategoryChange={setSelectedCategories}
+                categoryCounts={facetCategories}
               />
             )}
           </>
@@ -465,6 +493,9 @@ export default function ProductFilters() {
                   />
                   <label htmlFor={`brand-${brand._id}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
                     {brand.name}
+                    {facetBrands[brand.name.toLowerCase()] != null && (
+                      <span className="ml-1 text-gray-400">({facetBrands[brand.name.toLowerCase()]})</span>
+                    )}
                   </label>
                 </div>
               ))

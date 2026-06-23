@@ -23,6 +23,7 @@ import {
 } from "../middleware/uploadMiddleware.js";
 import {
   getProducts,
+  getProductFacets,
   getSearchSuggestions,
   getSearchAnalytics,
   getSearchHistory,
@@ -87,6 +88,11 @@ const publicProductRateLimit = rateLimit({
 // @access  Public
 // CRITICAL: Layered rate limiting for search (broad IP cap → burst → sustained)
 router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), publicCacheResponse('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
+
+// @route   GET /products/facets
+// @desc    Per-brand and per-category counts for the filter sidebar (accepts the same filters)
+// @access  Public
+router.get("/facets", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, validateProductSearch, asyncHandler(getProductFacets));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions

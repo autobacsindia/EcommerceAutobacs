@@ -14,9 +14,10 @@ interface Category {
 interface WoofCategoryListProps {
   selectedCategories: string[];
   onCategoryChange: (selected: string[]) => void;
+  categoryCounts?: Record<string, number>;
 }
 
-export default function WoofCategoryList({ selectedCategories, onCategoryChange }: WoofCategoryListProps) {
+export default function WoofCategoryList({ selectedCategories, onCategoryChange, categoryCounts }: WoofCategoryListProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -107,6 +108,9 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange 
             className="flex-1 text-sm text-gray-700 cursor-pointer select-none"
           >
             {category.name}
+            {categoryCounts?.[category._id] != null && (
+              <span className="ml-1 text-gray-400">({categoryCounts[category._id]})</span>
+            )}
           </label>
           {hasChildren && (
             <button

@@ -8,6 +8,138 @@ import { STOCK_STATUS } from "../utils/stockStatus.js";
 
 class SearchService {
   /**
+   * Build the MongoDB filter object from search/filter params. Shared by searchProducts
+   * and getFacets so the two never drift. `exclude` lets a facet omit its own dimension
+   * (e.g. the brand facet counts brands as if no brand were selected).
+   * @param {Object} params
+   * @param {{excludeBrand?: boolean, excludeCategory?: boolean}} [exclude]
+   * @returns {Object} Mongo query
+   */
+  static async buildBaseQuery(params, { excludeBrand = false, excludeCategory = false } = {}) {
+    const {
+      category, brand, minPrice, maxPrice, search,
+      vehicle, vehicleMake, vehicleModel, year,
+      isFeatured, isFastMoving, inStock, rating,
+    } = params;
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const query = { isActive: true };
+
+    // Categories (+ all descendants)
+    if (category && !excludeCategory) {
+      const categories = Array.isArray(category) ? category : category.split(',');
+      if (categories.length > 0) {
+        const allCategoryIds = [];
+        for (const catIdentifier of categories) {
+          if (!categoryMappingService.initialized) await categoryMappingService.initialize();
+          const foundCategory = categoryMappingService.findCategory(catIdentifier);
+          const seedId = foundCategory ? foundCategory._id.toString() : catIdentifier;
+          const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(seedId);
+          allCategoryIds.push(...childCategoryIds);
+        }
+        if (allCategoryIds.length > 0) query.categories = { $in: allCategoryIds };
+      }
+    }
+
+    // Brands (case-insensitive, multiple)
+    if (brand && !excludeBrand) {
+      const brands = Array.isArray(brand) ? brand : brand.split(',');
+      if (brands.length > 0) {
+        query.brand = { $in: brands.map(b => new RegExp('^' + escapeRegex(b.trim()) + '$', 'i')) };
+      }
+    }
+
+    // Price range
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = Number(minPrice);
+      if (maxPrice) query.price.$lte = Number(maxPrice);
+    }
+
+    // Vehicle fitment — explicit id/list, or make/model/year resolved to vehicle ids.
+    if (vehicle) {
+      const ids = Array.isArray(vehicle) ? vehicle : String(vehicle).split(',').filter(Boolean);
+      query.compatibleVehicles = ids.length > 1 ? { $in: ids } : ids[0];
+    } else if (vehicleMake || vehicleModel) {
+      const vq = {};
+      if (vehicleMake)  vq.make  = new RegExp('^' + escapeRegex(String(vehicleMake).trim()) + '$', 'i');
+      if (vehicleModel) vq.model = new RegExp('^' + escapeRegex(String(vehicleModel).trim()) + '$', 'i');
+      if (year && !Number.isNaN(Number(year))) vq.year = Number(year);
+      const matched = await Vehicle.find(vq).select('_id').lean().maxTimeMS(2000);
+      query.compatibleVehicles = { $in: matched.map((v) => v._id) };
+    }
+
+    if (isFeatured) query.isFeatured = isFeatured === 'true';
+    if (isFastMoving) query.isFastMoving = isFastMoving === 'true';
+    if (inStock === 'true') query.stock = { $ne: STOCK_STATUS.OUT };
+
+    if (rating) {
+      const ratings = Array.isArray(rating) ? rating : rating.split(',').map(Number);
+      const validRatings = ratings.filter(r => !isNaN(r));
+      if (validRatings.length > 0) query.averageRating = { $gte: Math.max(...validRatings) };
+    }
+
+    // Broad text search across product fields + the matching category branch (synonym-expanded).
+    if (search) {
+      const terms = expandSynonyms(search);
+      const orConditions = [];
+      for (const term of terms) {
+        const termRegex = new RegExp(escapeRegex(term), 'i');
+        orConditions.push(
+          { name: termRegex }, { brand: termRegex }, { shortDescription: termRegex },
+          { description: termRegex }, { sku: termRegex }, { tags: termRegex },
+          { features: termRegex }, { 'specifications.key': termRegex }, { 'specifications.value': termRegex }
+        );
+      }
+      if (!categoryMappingService.initialized) await categoryMappingService.initialize();
+      const matchedCategoryIds = new Set();
+      for (const term of terms) {
+        const foundCategory = categoryMappingService.findCategory(term);
+        if (foundCategory) {
+          const ids = await categoryMappingService.getAllCategoryIdsIncludingChildren(foundCategory._id.toString());
+          ids.forEach(id => matchedCategoryIds.add(id));
+        }
+      }
+      if (matchedCategoryIds.size > 0) orConditions.push({ categories: { $in: Array.from(matchedCategoryIds) } });
+      query.$or = orConditions;
+    }
+
+    return query;
+  }
+
+  /**
+   * Facet counts for the filter sidebar. Returns per-brand and per-category product counts
+   * for the current context. Each dimension excludes its OWN selection so the counts show
+   * what you'd get by (de)selecting each value.
+   * @returns {{ brands: Array<{name:string,count:number}>, categories: Array<{categoryId:string,count:number}> }}
+   */
+  static async getFacets(params) {
+    const [brandQuery, categoryQuery] = await Promise.all([
+      SearchService.buildBaseQuery(params, { excludeBrand: true }),
+      SearchService.buildBaseQuery(params, { excludeCategory: true }),
+    ]);
+
+    const [brandAgg, categoryAgg] = await Promise.all([
+      Product.aggregate([
+        { $match: { ...brandQuery, brand: { $nin: [null, ''] } } },
+        { $group: { _id: '$brand', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).option({ maxTimeMS: 3000 }),
+      Product.aggregate([
+        { $match: categoryQuery },
+        { $unwind: '$categories' },
+        { $group: { _id: '$categories', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).option({ maxTimeMS: 3000 }),
+    ]);
+
+    return {
+      brands: brandAgg.map(b => ({ name: b._id, count: b.count })),
+      categories: categoryAgg.map(c => ({ categoryId: String(c._id), count: c.count })),
+    };
+  }
+
+  /**
    * Search products with filters and pagination
    * @param {Object} params - Search parameters
    * @returns {Object} Search results with products and pagination info
@@ -26,164 +158,18 @@ class SearchService {
       }
     }
     
-    // Fallback to MongoDB implementation
+    // Fallback to MongoDB implementation. Filter-building lives in buildBaseQuery;
+    // here we only need the paging/sort/search bits.
     const {
       page = 1,
       limit = 12,
-      category,
-      brand,
-      minPrice,
-      maxPrice,
       search,
-      vehicle,
-      vehicleMake,
-      vehicleModel,
-      year,
-      isFeatured,
-      isFastMoving,
-      inStock,
-      rating,
       sortBy = 'createdAt',
       order = 'desc'
     } = params;
 
-    // Build query
-    const query = { isActive: true };
-
-    // Support multiple categories and include child categories
-    if (category) {
-      const categories = Array.isArray(category) ? category : category.split(',');
-      if (categories.length > 0) {
-        // For each category, get all child categories
-        const allCategoryIds = [];
-        for (const catIdentifier of categories) {
-          // Make sure category mapping service is initialized
-          if (!categoryMappingService.initialized) {
-            await categoryMappingService.initialize();
-          }
-          
-          // First try to find the category by slug or name, then get its ID
-          const foundCategory = categoryMappingService.findCategory(catIdentifier);
-          if (foundCategory) {
-            const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(foundCategory._id.toString());
-            allCategoryIds.push(...childCategoryIds);
-          } else {
-            // If not found by name/slug, treat as ID directly
-            const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(catIdentifier);
-            allCategoryIds.push(...childCategoryIds);
-          }
-        }
-        
-        if (allCategoryIds.length > 0) {
-          query.categories = { $in: allCategoryIds };
-        }
-      }
-    }
-    
-    // Support multiple brands with case-insensitive matching
-    // This allows URL slugs (e.g., 'ironman') to match database values (e.g., 'Ironman')
-    if (brand) {
-      const brands = Array.isArray(brand) ? brand : brand.split(',');
-      if (brands.length > 0) {
-        // Use case-insensitive regex for each brand to match regardless of case
-        // Escape special regex characters in brand names to prevent regex injection
-        const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        query.brand = { 
-          $in: brands.map(b => new RegExp('^' + escapeRegex(b.trim()) + '$', 'i')) 
-        };
-      }
-    }
-    
-    // Price range filtering
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
-    }
-    
-    // Vehicle fitment. Accept either an explicit vehicle id/list, OR make/model/year
-    // (the customer-facing filters send make+model). Resolve make/model to the set of
-    // matching Vehicle ids so a customer picking "Toyota Fortuner" gets every Fortuner
-    // variant's products.
-    if (vehicle) {
-      const ids = Array.isArray(vehicle) ? vehicle : String(vehicle).split(',').filter(Boolean);
-      query.compatibleVehicles = ids.length > 1 ? { $in: ids } : ids[0];
-    } else if (vehicleMake || vehicleModel) {
-      const esc = (s) => String(s).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const vq = {};
-      if (vehicleMake)  vq.make  = new RegExp('^' + esc(vehicleMake) + '$', 'i');
-      if (vehicleModel) vq.model = new RegExp('^' + esc(vehicleModel) + '$', 'i');
-      if (year && !Number.isNaN(Number(year))) vq.year = Number(year);
-      const matched = await Vehicle.find(vq).select('_id').lean().maxTimeMS(2000);
-      // No matching vehicle → no products fit; $in [] yields an empty result set.
-      query.compatibleVehicles = { $in: matched.map((v) => v._id) };
-    }
-    if (isFeatured) query.isFeatured = isFeatured === 'true';
-    if (isFastMoving) query.isFastMoving = isFastMoving === 'true';
-    
-    // In stock filtering — anything not explicitly out of stock
-    if (inStock === 'true') {
-      query.stock = { $ne: STOCK_STATUS.OUT };
-    }
-    
-    // Support multiple ratings (find products with rating >= any of the specified ratings)
-    if (rating) {
-      const ratings = Array.isArray(rating) ? rating : rating.split(',').map(Number);
-      const validRatings = ratings.filter(r => !isNaN(r));
-      if (validRatings.length > 0) {
-        // Find products with rating >= the highest specified rating
-        const maxRating = Math.max(...validRatings);
-        query.averageRating = { $gte: maxRating };
-      }
-    }
-    
-    // Broad, single-pass search for WordPress-style recall.
-    // A search term matches across product text fields AND the category tree, expanded
-    // with synonyms (lights -> lighting/lamp/led/...). This replaces the previous
-    // text-index-then-regex-only-on-zero approach, which missed products that had a
-    // partial text hit and never searched category names.
-    if (search) {
-      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const terms = expandSynonyms(search);
-
-      const orConditions = [];
-      for (const term of terms) {
-        const termRegex = new RegExp(escapeRegex(term), 'i');
-        orConditions.push(
-          { name: termRegex },
-          { brand: termRegex },
-          { shortDescription: termRegex },
-          { description: termRegex },
-          { sku: termRegex },
-          { tags: termRegex },
-          { features: termRegex },
-          { 'specifications.key': termRegex },
-          { 'specifications.value': termRegex }
-        );
-      }
-
-      // Resolve the term (and synonyms) against category names and include the whole
-      // descendant branch, so searching "lights" returns every product in Lighting/*
-      // even when the term doesn't appear in the product's own text.
-      if (!categoryMappingService.initialized) {
-        await categoryMappingService.initialize();
-      }
-      const matchedCategoryIds = new Set();
-      for (const term of terms) {
-        const foundCategory = categoryMappingService.findCategory(term);
-        if (foundCategory) {
-          const ids = await categoryMappingService.getAllCategoryIdsIncludingChildren(
-            foundCategory._id.toString()
-          );
-          ids.forEach(id => matchedCategoryIds.add(id));
-        }
-      }
-      if (matchedCategoryIds.size > 0) {
-        orConditions.push({ categories: { $in: Array.from(matchedCategoryIds) } });
-      }
-
-      query.$or = orConditions;
-    }
+    // Build the Mongo filter (shared with getFacets).
+    const query = await SearchService.buildBaseQuery(params);
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);

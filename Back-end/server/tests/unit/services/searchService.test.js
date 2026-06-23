@@ -22,6 +22,7 @@ jest.unstable_mockModule('../../../models/Product.js', () => ({
   default: {
     find: jest.fn(),
     countDocuments: jest.fn(),
+    aggregate: jest.fn(),
   }
 }));
 
@@ -172,6 +173,22 @@ describe('SearchService Unit Tests', () => {
       expect(Product.find).toHaveBeenCalledWith(expect.objectContaining({
         compatibleVehicles: { $in: ['v1', 'v2'] },
       }));
+    });
+
+    it('getFacets returns per-brand and per-category counts', async () => {
+      categoryMappingService.findCategory.mockReturnValue({ _id: 'lightingCat' });
+      categoryMappingService.getAllCategoryIdsIncludingChildren.mockResolvedValue(['lightingCat']);
+      Product.aggregate
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'Auxbeam', count: 12 }, { _id: 'BMC', count: 3 }]) })
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'cat1', count: 44 }]) });
+
+      const facets = await SearchService.getFacets({ category: 'lighting' });
+
+      expect(facets.brands).toEqual([
+        { name: 'Auxbeam', count: 12 },
+        { name: 'BMC', count: 3 },
+      ]);
+      expect(facets.categories).toEqual([{ categoryId: 'cat1', count: 44 }]);
     });
 
     it('should handle category filtering correctly', async () => {
