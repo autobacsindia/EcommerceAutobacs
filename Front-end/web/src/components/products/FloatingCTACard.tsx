@@ -7,6 +7,9 @@ import { ShoppingCart, Zap, Shield, Truck, RotateCcw, CreditCard, Heart } from '
 import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
+import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
+
+const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 
 // Stock is a coarse status (no unit count), so cap quantity at a fixed max.
 const MAX_QUANTITY = 99;
@@ -171,32 +174,20 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         </motion.button>
       </div>
 
-      {/* Trust Badges */}
-      <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/20">
-        <div className="flex flex-col items-center text-center gap-2">
-          <Truck className="w-6 h-6 text-orange-400" />
-          <span className="text-xs text-zinc-300 font-medium">Shipping Extra & Exchanges</span>
-        </div>
-        <div className="flex flex-col items-center text-center gap-2">
-          <RotateCcw className="w-6 h-6 text-orange-400" />
-          <span className="text-xs text-zinc-300 font-medium">7-Day Returns</span>
-        </div>
-        <div className="flex flex-col items-center text-center gap-2">
-          <Shield className="w-6 h-6 text-orange-400" />
-          <span className="text-xs text-zinc-300 font-medium">2-Year Warranty</span>
-        </div>
-      </div>
-
-      {/* Additional Trust */}
-      <div className="space-y-2 pt-4 border-t border-white/20">
-        <div className="flex items-center gap-2 text-zinc-300 text-sm">
-          <CreditCard className="w-4 h-4 text-green-400" />
-          <span>Secure Checkout</span>
-        </div>
-        <div className="flex items-center gap-2 text-zinc-300 text-sm">
-          <Shield className="w-4 h-4 text-green-400" />
-          <span>Genuine Products</span>
-        </div>
+      {/* Trust Badges — site-wide, from a single source of truth (storePolicies) */}
+      <div
+        className="grid gap-3 pt-4 border-t border-white/20"
+        style={{ gridTemplateColumns: `repeat(${TRUST_BADGES.length}, minmax(0, 1fr))` }}
+      >
+        {TRUST_BADGES.map(({ icon, label }) => {
+          const Icon = TRUST_ICONS[icon];
+          return (
+            <div key={label} className="flex flex-col items-center text-center gap-2">
+              <Icon className="w-6 h-6 text-orange-400" />
+              <span className="text-xs text-zinc-300 font-medium">{label}</span>
+            </div>
+          );
+        })}
       </div>
     </motion.div>
   );

@@ -88,11 +88,6 @@ const ProductSchema = new mongoose.Schema({
   }],
   features: [String],
   whyChoose: [String],
-  packageContents: [String],
-  qna: [{
-    question: { type: String, required: true },
-    answer: { type: String, required: true }
-  }],
   isActive: {
     type: Boolean,
     default: true
@@ -126,30 +121,6 @@ const ProductSchema = new mongoose.Schema({
     default: 0
   },
   tags: [String],
-  variableSpecs: [{
-    key: { type: String, required: true },
-    options: [{
-      label: { type: String, required: true },
-      price: { type: Number, required: true, min: 0 },
-      image: { type: String }, // Keep for backward compatibility
-      images: [String] // Array of image URLs
-    }]
-  }],
-  // Editable product-page marketing sections
-  productStoryText: { type: String, trim: true },        // Paragraph under "Engineered for Indian Trails"
-  productStoryCards: [{                                  // The 4 condition cards in "Engineered for Indian Trails"
-    title: { type: String, required: true },
-    description: { type: String, required: true }
-  }],
-  installationSteps: [{                                  // Steps for "Easy DIY Installation"
-    title: { type: String, required: true },
-    description: { type: String, required: true }
-  }],
-  indianRoadsText: { type: String, trim: true },         // Paragraph under "Perfect for Indian Roads & Climate"
-  indianRoadsCards: [{                                   // The condition cards for "Perfect for Indian Roads & Climate"
-    title: { type: String, required: true },
-    description: { type: String, required: true }
-  }],
   externalId: {
     type: String,
     unique: true,

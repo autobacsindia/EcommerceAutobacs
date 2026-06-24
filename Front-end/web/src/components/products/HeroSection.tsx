@@ -49,22 +49,17 @@ export default function HeroSection({ product }: HeroSectionProps) {
             transition={{ duration: 0.8 }}
             className="space-y-6"
           >
-            {/* Badge */}
-            <div className="inline-block px-4 py-2 bg-orange-500/20 border border-orange-500/30 rounded-full">
-              <span className="text-orange-400 font-semibold text-sm">
-                PREMIUM OFF-ROAD GEAR
-              </span>
-            </div>
-
             {/* Product Name */}
             <h1 className="text-5xl lg:text-6xl xl:text-7xl font-black text-white leading-tight tracking-tight">
               {product.name}
             </h1>
 
-            {/* Subtitle */}
-            <p className="text-xl lg:text-2xl text-zinc-300 leading-relaxed max-w-xl">
-              {product.shortDescription || 'Built for extreme off-road visibility and rugged Indian terrain.'}
-            </p>
+            {/* Subtitle — only when the product has a real short description */}
+            {product.shortDescription && (
+              <p className="text-xl lg:text-2xl text-zinc-300 leading-relaxed max-w-xl">
+                {product.shortDescription}
+              </p>
+            )}
 
             {/* Price */}
             <div className="flex items-baseline gap-4 flex-wrap">
@@ -92,24 +87,10 @@ export default function HeroSection({ product }: HeroSectionProps) {
                     Low stock - Order now!
                   </span>
                 ) : (
-                  'In Stock - Ships within 24 hours'
+                  'In Stock'
                 )}
               </p>
             )}
-
-            {/* Social Proof */}
-            <div className="flex items-center gap-3 pt-4">
-              <div className="flex -space-x-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="w-10 h-10 rounded-full bg-zinc-700 border-2 border-zinc-900 flex items-center justify-center text-xs text-white">
-                    {String.fromCharCode(64 + i)}
-                  </div>
-                ))}
-              </div>
-              <div className="text-zinc-300 text-sm">
-                <span className="text-white font-semibold">500+</span> off-road enthusiasts installed
-              </div>
-            </div>
           </motion.div>
 
           {/* Right: Floating CTA Card (Desktop Only) */}

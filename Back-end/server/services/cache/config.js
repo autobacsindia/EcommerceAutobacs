@@ -1,4 +1,6 @@
-export const CACHE_VERSION = process.env.CACHE_VERSION || 'v1';
+// Bump on cache-key-shape or recommendation-logic changes to invalidate stale
+// entries (e.g. v2: similar/complementary reworked to structured relevance).
+export const CACHE_VERSION = process.env.CACHE_VERSION || 'v2';
 
 export const CACHE_CONFIG = {
   TTL_JITTER_PERCENT: 0.1,

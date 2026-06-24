@@ -45,9 +45,8 @@ const productFolder = (productId) => `${BASE_FOLDER}/${productId}`;
 const parseProductFields = (body) => {
   const fields = { ...body };
 
-  ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
-   'specifications', 'qna', 'variableSpecs', 'compatibleVehicles',
-   'installationSteps', 'productStoryCards', 'indianRoadsCards'].forEach((key) => {
+  ['categories', 'features', 'whyChoose', 'tags',
+   'specifications', 'compatibleVehicles'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }

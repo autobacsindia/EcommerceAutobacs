@@ -574,20 +574,30 @@ class SearchService {
 
   // ── Core recommendation functions ────────────────────────────────────────────
 
+  // Fields the recommendation controllers serialize for the product cards.
+  static RECO_FIELDS = 'name slug price originalPrice images averageRating totalReviews brand categories shortDescription description stock isActive compatibleVehicles';
+
   /**
    * Get products similar to the specified product.
-   * Strategy (name-based, since most products share a generic "Autobacs India" category):
-   *   1. Same vehicle + same product type
-   *   2. Same vehicle + price range ±40%
-   *   3. Same vehicle (all)
-   *   4. Same product type + price range ±40%
-   *   5. Same product type (all)
-   *   6. Price range ±30% (last resort)
+   *
+   * Relevance is computed from STRUCTURED signals — never a random fill. A product
+   * is only a candidate if it shares at least one real signal with the source:
+   * a category, a compatible vehicle (fitment), the brand, or the same product
+   * type (derived from the name, which stands in for category where the migrated
+   * catalog still has a generic catch-all category). Candidates are then scored:
+   *   shared categories  (×5, strongest)
+   *   shared fitment     (×3)
+   *   same brand         (+2)
+   *   same product type  (+2, name-derived)
+   *   same vehicle kw    (+2, name-derived)
+   *   price within ±30%  (+1, tiebreaker)
+   * If nothing shares a signal, returns [] (the section then hides) rather than
+   * surfacing unrelated products.
    */
   static async getSimilarProducts(productId, limit = 4) {
     try {
       const product = await Product.findById(productId)
-        .select('name price')
+        .select('name price brand categories compatibleVehicles')
         .lean();
 
       if (!product) {
@@ -595,55 +605,53 @@ class SearchService {
         return [];
       }
 
-      const vehicle   = SearchService.extractVehicleKeyword(product.name);
-      const typeSlug  = SearchService.extractProductTypeSlug(product.name);
-      const typeRegex = typeSlug ? SearchService.getProductTypeRegex(typeSlug) : null;
-      const priceMin  = product.price * 0.6;
-      const priceMax  = product.price * 1.4;
+      const categoryIds = (product.categories || []).map(c => c.toString());
+      const vehicleIds  = (product.compatibleVehicles || []).map(v => v.toString());
+      const brand       = product.brand || null;
+      const price       = product.price || 0;
 
-      console.log('[SearchService] Similar for:', product.name, '| vehicle:', vehicle, '| type:', typeSlug);
+      const vehicleKw  = SearchService.extractVehicleKeyword(product.name);
+      const typeSlug   = SearchService.extractProductTypeSlug(product.name);
+      const typeRegex  = typeSlug ? SearchService.getProductTypeRegex(typeSlug) : null;
+      const typeRe     = typeRegex ? new RegExp(typeRegex, 'i') : null;
 
-      const collected = [];
-      const seenIds   = new Set();
-      const seen      = () => Array.from(seenIds);
-      const add       = (docs) => { for (const d of docs) { const k = d._id.toString(); if (!seenIds.has(k)) { seenIds.add(k); collected.push(d); } } };
-      const need      = () => limit - collected.length;
-      const base      = { _id: { $ne: productId }, isActive: true };
-      const excl      = (extra) => ({ ...base, _id: { $ne: productId, $nin: seen() }, ...extra });
-      const find      = (filter, n) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(n).maxTimeMS(2000).populate('categories', 'name slug').lean();
+      // Candidate pool — must match at least one real signal (no random fill).
+      const or = [];
+      if (categoryIds.length) or.push({ categories: { $in: product.categories } });
+      if (vehicleIds.length)  or.push({ compatibleVehicles: { $in: product.compatibleVehicles } });
+      if (brand)              or.push({ brand });
+      if (typeRegex)          or.push({ name: { $regex: typeRegex, $options: 'i' } });
+      if (or.length === 0) return [];
 
-      // 1. Same vehicle + same product type
-      if (vehicle && typeRegex && need() > 0) {
-        add(await find(excl({ name: { $regex: vehicle, $options: 'i' } }), need()).then(r => r.filter(p => new RegExp(typeRegex, 'i').test(p.name))));
-      }
+      const candidates = await Product.find({ _id: { $ne: productId }, isActive: true, $or: or })
+        .select(SearchService.RECO_FIELDS)
+        .limit(60)
+        .populate('categories', 'name slug')
+        .lean()
+        .maxTimeMS(2000);
 
-      // 2. Same vehicle + price range
-      if (vehicle && need() > 0) {
-        add(await find(excl({ name: { $regex: vehicle, $options: 'i' }, price: { $gte: priceMin, $lte: priceMax } }), need()));
-      }
+      const scored = candidates.map((c) => {
+        let score = 0;
+        const cCats = (c.categories || []).map(x => (x._id || x).toString());
+        score += cCats.filter(id => categoryIds.includes(id)).length * 5;
+        const cVeh = (c.compatibleVehicles || []).map(x => x.toString());
+        score += cVeh.filter(id => vehicleIds.includes(id)).length * 3;
+        if (brand && c.brand === brand) score += 2;
+        if (typeRe && typeRe.test(c.name)) score += 2;
+        if (vehicleKw && (c.name || '').toLowerCase().includes(vehicleKw)) score += 2;
+        if (price > 0 && c.price >= price * 0.7 && c.price <= price * 1.3) score += 1;
+        return { c, score };
+      }).filter(s => s.score > 0);
 
-      // 3. Same vehicle (all prices)
-      if (vehicle && need() > 0) {
-        add(await find(excl({ name: { $regex: vehicle, $options: 'i' } }), need()));
-      }
+      scored.sort((a, b) =>
+        b.score - a.score ||
+        (b.c.averageRating || 0) - (a.c.averageRating || 0) ||
+        (b.c.totalReviews || 0) - (a.c.totalReviews || 0) ||
+        Math.abs((a.c.price || 0) - price) - Math.abs((b.c.price || 0) - price)
+      );
 
-      // 4. Same product type + price range
-      if (typeRegex && need() > 0) {
-        add(await find(excl({ name: { $regex: typeRegex, $options: 'i' }, price: { $gte: priceMin, $lte: priceMax } }), need()));
-      }
-
-      // 5. Same product type (all prices)
-      if (typeRegex && need() > 0) {
-        add(await find(excl({ name: { $regex: typeRegex, $options: 'i' } }), need()));
-      }
-
-      // 6. Price range fallback
-      if (collected.length === 0) {
-        add(await find(excl({ price: { $gte: priceMin, $lte: priceMax } }), limit));
-      }
-
-      console.log('[SearchService] Similar products found:', collected.length);
-      return collected.slice(0, limit);
+      console.log('[SearchService] Similar for:', product.name, '| candidates:', candidates.length, '| scored:', scored.length);
+      return scored.slice(0, limit).map(s => s.c);
     } catch (error) {
       console.error('[SearchService] getSimilarProducts failed:', error);
       return [];
@@ -651,14 +659,19 @@ class SearchService {
   }
 
   /**
-   * Get complementary products (Frequently Bought Together).
-   * Uses product name ecosystem mapping to find products installed alongside
-   * the current one (e.g. bonnet bracket → LED lights, wiring harness, switch).
+   * Get complementary products (Frequently Bought Together) — items that go WITH
+   * the product, not items like it. Priority order, each requiring a real signal:
+   *   1. Admin-curated complementaryProducts.
+   *   2. Installation-ecosystem name match (e.g. bonnet bracket → LED lights),
+   *      restricted to a DIFFERENT product type.
+   *   3. Same-fitment / same-category products of a DIFFERENT product type.
+   * The "similar" set is excluded so complementary never duplicates similar. There
+   * is NO random last resort — an empty result hides the section.
    */
   static async getComplementaryProducts(productId, limit = 4) {
     try {
       const product = await Product.findById(productId)
-        .select('complementaryProducts name')
+        .select('complementaryProducts name categories compatibleVehicles')
         .populate('complementaryProducts')
         .lean();
 
@@ -669,13 +682,23 @@ class SearchService {
 
       console.log('[SearchService] Complementary for:', product.name);
 
-      // Get similar products to exclude them from complementary results
+      // Exclude the similar set so complementary results are genuinely different.
       const similarProducts = await this.getSimilarProducts(productId, 20);
-      const similarIds      = new Set(similarProducts.map(p => p._id.toString()));
-      const excluded        = () => [productId, ...Array.from(similarIds)];
-      const find            = (filter) => Product.find(filter).sort({ averageRating: -1, totalReviews: -1 }).limit(limit).maxTimeMS(2000).populate('categories', 'name slug').lean();
+      const similarIds = new Set(similarProducts.map(p => p._id.toString()));
+      const excluded   = [new mongoose.Types.ObjectId(productId), ...similarProducts.map(p => p._id)];
+      const currentType = SearchService.extractProductTypeSlug(product.name);
+      const find = (filter) => Product.find(filter)
+        .sort({ averageRating: -1, totalReviews: -1 })
+        .limit(limit * 3)
+        .select(SearchService.RECO_FIELDS)
+        .populate('categories', 'name slug')
+        .lean()
+        .maxTimeMS(2000);
+      const differentType = (docs) => (currentType
+        ? docs.filter(p => SearchService.extractProductTypeSlug(p.name) !== currentType)
+        : docs);
 
-      // Priority 1: seeded complementary products (from seedComplementaryProducts.js)
+      // Priority 1: admin-curated.
       if (product.complementaryProducts?.length > 0) {
         const curated = product.complementaryProducts
           .filter(p => p && p.isActive && !similarIds.has(p._id.toString()))
@@ -686,46 +709,28 @@ class SearchService {
         }
       }
 
-      // Priority 2: name-based ecosystem matching (direct product-name regex)
-      // This ensures we get products from DIFFERENT categories that work together
+      // Priority 2: installation-ecosystem name match (different product type).
       const complementRegex = SearchService.getComplementaryNameRegex(product.name);
       if (complementRegex) {
-        const docs = await find({ _id: { $nin: excluded() }, isActive: true, name: { $regex: complementRegex, $options: 'i' } });
-        console.log('[SearchService] Ecosystem name matching found:', docs.length, 'products');
-        if (docs.length > 0) {
-          // Double-check: exclude any products that share the same product type as the current product
-          const currentType = SearchService.extractProductTypeSlug(product.name);
-          if (currentType) {
-            const filtered = docs.filter(p => {
-              const productType = SearchService.extractProductTypeSlug(p.name);
-              return productType !== currentType; // Must be different product type
-            });
-            if (filtered.length > 0) {
-              console.log('[SearchService] Filtered complementary (different type):', filtered.length);
-              return filtered;
-            }
-          }
-          return docs;
-        }
+        const docs = await find({ _id: { $nin: excluded }, isActive: true, name: { $regex: complementRegex, $options: 'i' } });
+        const filtered = differentType(docs);
+        console.log('[SearchService] Ecosystem match:', docs.length, '→ different-type:', filtered.length);
+        if (filtered.length > 0) return filtered.slice(0, limit);
       }
 
-      // Priority 3: different-vehicle products (contextual discovery)
-      // Ensure we get products for OTHER vehicles, not the same vehicle
-      const vehicle = SearchService.extractVehicleKeyword(product.name);
-      if (vehicle) {
-        const docs = await find({ 
-          _id: { $nin: excluded() }, 
-          isActive: true, 
-          name: { $not: new RegExp(vehicle, 'i') } // Exclude current vehicle
-        });
-        console.log('[SearchService] Different-vehicle fallback found:', docs.length);
-        if (docs.length > 0) return docs;
+      // Priority 3: same-fitment / same-category items of a DIFFERENT product type.
+      const or = [];
+      if ((product.compatibleVehicles || []).length) or.push({ compatibleVehicles: { $in: product.compatibleVehicles } });
+      if ((product.categories || []).length)         or.push({ categories: { $in: product.categories } });
+      if (or.length > 0) {
+        const docs = await find({ _id: { $nin: excluded }, isActive: true, $or: or });
+        const filtered = differentType(docs);
+        console.log('[SearchService] Fitment/category complement:', docs.length, '→ different-type:', filtered.length);
+        if (filtered.length > 0) return filtered.slice(0, limit);
       }
 
-      // Last resort: any active products except similar ones
-      const lastResort = await find({ _id: { $nin: excluded() }, isActive: true });
-      console.log('[SearchService] Last resort fallback:', lastResort.length);
-      return lastResort;
+      // No random last resort — nothing genuinely complementary found.
+      return [];
     } catch (error) {
       console.error('[SearchService] getComplementaryProducts failed:', error);
       return [];

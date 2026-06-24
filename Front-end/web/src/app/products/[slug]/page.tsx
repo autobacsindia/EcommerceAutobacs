@@ -132,15 +132,15 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       ? { '@type': 'Brand', name: typeof product.brand === 'string' ? product.brand : product.brand.name }
       : undefined,
     
-    // Aggregate ratings (ONLY if real reviews exist and are displayed on page)
-    ...(product.rating && product.reviewCount && {
+    // Aggregate ratings (ONLY if real reviews exist and are displayed on page).
+    // Field names match the Product schema: averageRating / totalReviews.
+    ...(product.averageRating > 0 && product.totalReviews > 0 && {
       aggregateRating: {
         '@type': 'AggregateRating',
-        ratingValue: product.rating,
-        reviewCount: product.reviewCount,
+        ratingValue: product.averageRating,
+        reviewCount: product.totalReviews,
         bestRating: 5,
         worstRating: 1,
-        // Note: Ensure reviews are actually displayed on the page!
       },
     }),
     
@@ -158,31 +158,10 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       itemCondition: 'https://schema.org/NewCondition',  // Default for new products
       
       // Only include priceValidUntil for ACTUAL sales/discounts with end date
-      ...(product.originalPrice && product.originalPrice > product.price && product.saleEndDate && {
-        priceValidUntil: new Date(product.saleEndDate).toISOString().split('T')[0],
+      ...(product.originalPrice && product.originalPrice > product.price && product.offerEndDate && {
+        priceValidUntil: new Date(product.offerEndDate).toISOString().split('T')[0],
       }),
     },
-    
-    // Additional SEO-rich properties for Indian market
-    ...(product.shortDescription && {
-      'additionalProperty': [
-        {
-          '@type': 'PropertyValue',
-          'name': 'Best For',
-          'value': 'Indian roads and climate conditions'
-        },
-        {
-          '@type': 'PropertyValue',
-          'name': 'Installation',
-          'value': 'Professional installation available at Autobacs service centers across India'
-        },
-        {
-          '@type': 'PropertyValue',
-          'name': 'Warranty',
-          'value': '2-year warranty for all automotive accessories'
-        }
-      ]
-    })
   } : null;
 
   // Build breadcrumb schema for enhanced search navigation

@@ -224,4 +224,60 @@ describe('SearchService Unit Tests', () => {
         expect(String(ids[0])).toBe(hexId);
     });
   });
+
+  describe('getSimilarProducts / getComplementaryProducts relevance', () => {
+    const ID = '507f1f77bcf86cd799439011';
+
+    // Chainable query mock whose terminal .maxTimeMS() resolves the candidates.
+    function findChain(result) {
+      const chain = {};
+      ['select', 'limit', 'populate', 'sort'].forEach((m) => { chain[m] = jest.fn(() => chain); });
+      chain.lean = jest.fn(() => chain);
+      chain.maxTimeMS = jest.fn().mockResolvedValue(result);
+      return chain;
+    }
+    // findById(...).select(...).populate(...).lean() resolver
+    function byIdDoc(doc) {
+      const chain = {};
+      chain.select = jest.fn(() => chain);
+      chain.populate = jest.fn(() => chain);
+      chain.lean = jest.fn().mockResolvedValue(doc);
+      return chain;
+    }
+
+    it('returns [] for similar when the product shares no structured signal (no random fill)', async () => {
+      Product.findById = jest.fn().mockReturnValue(byIdDoc({
+        _id: ID, name: 'Zzz Nondescript Thing', price: 100, brand: '', categories: [], compatibleVehicles: [],
+      }));
+
+      const result = await SearchService.getSimilarProducts(ID, 4);
+
+      expect(result).toEqual([]);
+      expect(Product.find).not.toHaveBeenCalled(); // never queries when nothing to relate on
+    });
+
+    it('ranks a shared-category candidate above a brand-only candidate', async () => {
+      Product.findById = jest.fn().mockReturnValue(byIdDoc({
+        _id: ID, name: 'Generic Item', price: 100, brand: 'BrandX',
+        categories: ['catA'], compatibleVehicles: [],
+      }));
+      const sharedCategory = { _id: 'c1', name: 'Shared Cat', price: 100, brand: 'Other', categories: [{ _id: 'catA' }], compatibleVehicles: [] };
+      const brandOnly      = { _id: 'c2', name: 'Brand Match', price: 100, brand: 'BrandX', categories: [{ _id: 'catZ' }], compatibleVehicles: [] };
+      Product.find.mockReturnValue(findChain([brandOnly, sharedCategory])); // unsorted input
+
+      const result = await SearchService.getSimilarProducts(ID, 4);
+
+      expect(result.map((p) => p._id)).toEqual(['c1', 'c2']); // category (5) > brand (2)
+    });
+
+    it('returns [] for complementary when nothing is genuinely complementary (no last resort)', async () => {
+      Product.findById = jest.fn().mockReturnValue(byIdDoc({
+        _id: ID, name: 'Lonely Nondescript Thing', complementaryProducts: [], categories: [], compatibleVehicles: [],
+      }));
+
+      const result = await SearchService.getComplementaryProducts(ID, 4);
+
+      expect(result).toEqual([]);
+    });
+  });
 });

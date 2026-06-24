@@ -14,7 +14,7 @@ export interface SeoData {
   selectedCategories: string[];
   tagsInput: string;
   features: string[];
-  qna: { question: string; answer: string }[];
+  whyChoose: string[];
 }
 
 interface Check {
@@ -188,7 +188,7 @@ function buildBaseGroups(data: SeoData): Group[] {
 
   // Group 6: Rich Content — 10 pts
   const validFeatures = data.features.filter(f => f.trim()).length;
-  const validQna = data.qna.filter(q => q.question.trim() && q.answer.trim()).length;
+  const validWhyChoose = data.whyChoose.filter(w => w.trim()).length;
   groups.push({
     title: 'Rich Content',
     checks: [
@@ -199,10 +199,10 @@ function buildBaseGroups(data: SeoData): Group[] {
         tip: validFeatures < 3 ? 'Add at least 3 key product features.' : undefined,
       },
       {
-        label: `Q&A pairs — ${validQna} (3+ ideal)`,
-        earned: validQna >= 3 ? 5 : validQna >= 1 ? 2 : 0,
+        label: `Why-choose points — ${validWhyChoose} (3+ ideal)`,
+        earned: validWhyChoose >= 3 ? 5 : validWhyChoose >= 1 ? 2 : 0,
         possible: 5,
-        tip: validQna < 3 ? 'Add Q&A pairs to help customers and boost SEO.' : undefined,
+        tip: validWhyChoose < 3 ? 'Add "Why choose" points to help customers and boost SEO.' : undefined,
       },
     ],
   });

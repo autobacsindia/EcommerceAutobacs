@@ -49,10 +49,9 @@ interface Product {
   isActive: boolean;
   images: { url: string; public_id: string; alt: string; isPrimary: boolean }[];
   features?: string[];
-  packageContents?: string[];
-  variableSpecs?: Array<{ key: string; options: Array<{ label: string; price: number; image?: string }> }>;
+  whyChoose?: string[];
+  specifications?: Array<{ key: string; value: string }>;
   compatibleVehicles?: Vehicle[];
-  qna?: Array<{ question: string; answer: string }>;
   tags?: string[];
 }
 
@@ -107,16 +106,10 @@ export default function EditProductPage() {
   const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
   // Replace mode: when true, existing gallery is wiped and replaced by new uploads
   const [replaceMode, setReplaceMode] = useState(false);
-  const [variableSpecs, setVariableSpecs] = useState<Array<{ key: string; options: Array<{ label: string; price: number; image?: string; images?: string[] }> }>>([]);
   const [features, setFeatures] = useState<string[]>([]);
-  const [packageContents, setPackageContents] = useState<string[]>([]);
-  const [qna, setQna] = useState<{ question: string; answer: string }[]>([]);
+  const [whyChoose, setWhyChoose] = useState<string[]>([]);
+  const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
-  const [productStoryText, setProductStoryText] = useState('');
-  const [productStoryCards, setProductStoryCards] = useState<{ title: string; description: string }[]>([]);
-  const [installationSteps, setInstallationSteps] = useState<{ title: string; description: string }[]>([]);
-  const [indianRoadsText, setIndianRoadsText] = useState('');
-  const [indianRoadsCards, setIndianRoadsCards] = useState<{ title: string; description: string }[]>([]);
 
   useEffect(() => {
     fetchCategories();
@@ -215,16 +208,10 @@ export default function EditProductPage() {
         isPrimary: img?.isPrimary || false,
       }));
       setExistingImages(imgs);
-      setVariableSpecs(productData.variableSpecs || []);
       setFeatures(productData.features || []);
-      setPackageContents(productData.packageContents || []);
-      setQna(productData.qna || []);
-      setProductStoryText(productData.productStoryText || '');
-      setProductStoryCards(productData.productStoryCards || []);
-      setInstallationSteps(productData.installationSteps || []);
-      setIndianRoadsText(productData.indianRoadsText || '');
-      setIndianRoadsCards(productData.indianRoadsCards || []);
-        
+      setWhyChoose(productData.whyChoose || []);
+      setSpecifications(productData.specifications || []);
+
       if (productData.compatibleVehicles && Array.isArray(productData.compatibleVehicles)) {
         // Handle both populated (objects) and unpopulated (strings) arrays
         const vehicleIds = productData.compatibleVehicles.map((v: any) => 
@@ -352,8 +339,6 @@ export default function EditProductPage() {
     }
     
     try {
-      const validQna = qna.filter(item => item.question.trim() !== '' && item.answer.trim() !== '');
-
       // Build multipart FormData so new image files travel as binary
       const fd = new FormData();
 
@@ -383,18 +368,12 @@ export default function EditProductPage() {
       fd.append('categories',      JSON.stringify(selectedCategories));
       fd.append('tags',            JSON.stringify(tagsInput.split(',').map(t => t.trim()).filter(Boolean)));
       fd.append('compatibleVehicles', JSON.stringify(selectedVehicles));
-      if (features.length)       fd.append('features',       JSON.stringify(features));
-      if (packageContents.length) fd.append('packageContents', JSON.stringify(packageContents));
-      if (variableSpecs.length)  fd.append('variableSpecs',  JSON.stringify(variableSpecs));
-      if (validQna.length)       fd.append('qna',            JSON.stringify(validQna));
-      if (productStoryText)      fd.append('productStoryText', productStoryText);
-      const validStoryCards = productStoryCards.filter(c => c.title.trim() && c.description.trim());
-      if (validStoryCards.length) fd.append('productStoryCards', JSON.stringify(validStoryCards));
-      const validSteps = installationSteps.filter(s => s.title.trim() && s.description.trim());
-      if (validSteps.length)     fd.append('installationSteps', JSON.stringify(validSteps));
-      if (indianRoadsText)       fd.append('indianRoadsText', indianRoadsText);
-      const validRoadsCards = indianRoadsCards.filter(c => c.title.trim() && c.description.trim());
-      if (validRoadsCards.length) fd.append('indianRoadsCards', JSON.stringify(validRoadsCards));
+      const validFeatures = features.filter(f => f.trim());
+      fd.append('features', JSON.stringify(validFeatures));
+      const validWhyChoose = whyChoose.filter(w => w.trim());
+      fd.append('whyChoose', JSON.stringify(validWhyChoose));
+      const validSpecs = specifications.filter(s => s.key.trim() && s.value.trim());
+      fd.append('specifications', JSON.stringify(validSpecs));
 
       // ── Existing images (keep them as-is, append mode) ────────────────────
       // replaceMode=true → controller deletes old gallery and uses only new uploads
@@ -987,222 +966,47 @@ export default function EditProductPage() {
               )}
           </div>
 
-          {/* Variable Specifications */}
+          {/* Technical Specifications (key / value) */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Variable Specifications</h2>
-            <div className="space-y-4">
-              {variableSpecs.map((spec, si) => (
-                <div key={si} className="border rounded-lg p-4 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Specification Name</label>
-                    <input
-                      type="text"
-                      value={spec.key}
-                      onChange={(e) => {
-                        const v = [...variableSpecs];
-                        v[si] = { ...v[si], key: e.target.value };
-                        setVariableSpecs(v);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
-                    <div className="space-y-2">
-                      {spec.options.map((opt, oi) => (
-                        <div key={oi} className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-gray-50 rounded">
-                          <input
-                            type="text"
-                            placeholder="Label"
-                            value={opt.label}
-                            onChange={(e) => {
-                              const v = [...variableSpecs];
-                              const opts = [...v[si].options];
-                              opts[oi] = { ...opts[oi], label: e.target.value };
-                              v[si] = { ...v[si], options: opts };
-                              setVariableSpecs(v);
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          />
-                          <input
-                            type="number"
-                            placeholder="Price"
-                            min="0"
-                            step="0.01"
-                            value={opt.price}
-                            onChange={(e) => {
-                              const v = [...variableSpecs];
-                              const opts = [...v[si].options];
-                              opts[oi] = { ...opts[oi], price: parseFloat(e.target.value || '0') };
-                              v[si] = { ...v[si], options: opts };
-                              setVariableSpecs(v);
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          />
-                          
-                          {/* Image Selection */}
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Option Images (Select multiple)</label>
-                            {existingImages.length > 0 ? (
-                              <div className="flex flex-wrap gap-2">
-                                {existingImages.map((img, imgIdx) => {
-                                  // Check if this image is selected (either via image property or images array)
-                                  const isSelected = opt.images?.includes(img.url) || opt.image === img.url;
-                                  
-                                  return (
-                                    <div 
-                                      key={imgIdx}
-                                      className={`relative w-12 h-12 border-2 rounded cursor-pointer ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`}
-                                      onClick={() => {
-                                        const v = [...variableSpecs];
-                                        const currentOption = v[si].options[oi];
-                                        
-                                        // Initialize images array if needed, including legacy image if present
-                                        let currentImages = currentOption.images ? [...currentOption.images] : [];
-                                        if (currentOption.image && !currentImages.includes(currentOption.image)) {
-                                          currentImages.push(currentOption.image);
-                                        }
-                                        
-                                        if (isSelected) {
-                                          // Deselect: remove from images array
-                                          currentImages = currentImages.filter(url => url !== img.url);
-                                          // Also clear legacy image field if it matches
-                                          if (currentOption.image === img.url) {
-                                            v[si].options[oi].image = undefined;
-                                          }
-                                        } else {
-                                          // Select: add to images array
-                                          if (!currentImages.includes(img.url)) {
-                                            currentImages.push(img.url);
-                                          }
-                                        }
-                                        
-                                        // Update images array
-                                        v[si].options[oi].images = currentImages;
-                                        // For backward compatibility/UI logic, set the first image as 'image'
-                                        v[si].options[oi].image = currentImages.length > 0 ? currentImages[0] : undefined;
-                                        
-                                        setVariableSpecs(v);
-                                      }}
-                                      title={img.alt || 'Product Image'}
-                                    >
-                                      <img src={img.url} alt={img.alt} className="w-full h-full object-cover rounded-sm" />
-                                      {isSelected && (
-                                        <div className="absolute -top-1 -right-1 bg-blue-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
-                                          ✓
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-gray-500 italic">Upload product images first to assign them to options.</p>
-                            )}
-                            <p className="text-[10px] text-gray-500 mt-1">Click to select/deselect images. Selected images will be displayed when this variant is chosen.</p>
-                            
-                            {/* Selected Images Preview with Remove Option */}
-                            {((opt.images && opt.images.length > 0) || opt.image) && (
-                              <div className="mt-3 p-2 bg-blue-50 rounded-md border border-blue-100">
-                                <label className="block text-xs font-medium text-blue-800 mb-2">Selected for this Variant:</label>
-                                <div className="flex flex-wrap gap-2">
-                                  {/* Combine and deduplicate images */}
-                                  {Array.from(new Set([...(opt.images || []), ...(opt.image ? [opt.image] : [])])).map((imgUrl, idx) => {
-                                    // Find matching existing image for details, or fallback
-                                    const imgDetails = existingImages.find(ei => ei.url === imgUrl);
-                                    
-                                    return (
-                                      <div key={idx} className="relative w-14 h-14 border border-blue-200 rounded bg-white group">
-                                        <img 
-                                          src={imgUrl} 
-                                          alt={imgDetails?.alt || 'Variant Image'} 
-                                          className="w-full h-full object-cover rounded-sm" 
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const v = [...variableSpecs];
-                                            const currentOption = v[si].options[oi];
-                                            let currentImages = currentOption.images ? [...currentOption.images] : [];
-                                            
-                                            // Ensure we have the current state captured
-                                            if (currentOption.image && !currentImages.includes(currentOption.image)) {
-                                              currentImages.push(currentOption.image);
-                                            }
-                                            
-                                            // Remove the specific image
-                                            currentImages = currentImages.filter(url => url !== imgUrl);
-                                            
-                                            // Update legacy field if needed
-                                            if (currentOption.image === imgUrl) {
-                                              v[si].options[oi].image = undefined;
-                                            }
-                                            
-                                            v[si].options[oi].images = currentImages;
-                                            // If legacy was cleared, try to set it to next available
-                                            if (!v[si].options[oi].image && currentImages.length > 0) {
-                                              v[si].options[oi].image = currentImages[0];
-                                            }
-                                            
-                                            setVariableSpecs(v);
-                                          }}
-                                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md hover:bg-red-600 transition-all z-10"
-                                          title="Remove from variant"
-                                        >
-                                          ×
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="md:col-span-2 flex justify-end">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const v = [...variableSpecs];
-                                const opts = [...v[si].options];
-                                v[si] = { ...v[si], options: opts.filter((_, idx) => idx !== oi) };
-                                setVariableSpecs(v);
-                              }}
-                              className="px-3 py-2 border rounded-md text-red-600 hover:bg-red-50"
-                            >
-                              Remove Option
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const v = [...variableSpecs];
-                          v[si] = { ...v[si], options: [...v[si].options, { label: '', price: 0 }] };
-                          setVariableSpecs(v);
-                        }}
-                        className="px-3 py-2 border rounded-md"
-                      >
-                        Add Option
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setVariableSpecs(variableSpecs.filter((_, idx) => idx !== si))}
-                      className="px-3 py-2 border rounded-md"
-                    >
-                      Remove Specification
-                    </button>
-                  </div>
+            <h2 className="text-xl font-semibold mb-4">Technical Specifications</h2>
+            <div className="space-y-3">
+              {specifications.map((spec, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={spec.key}
+                    onChange={(e) => {
+                      const next = [...specifications];
+                      next[index] = { ...next[index], key: e.target.value };
+                      setSpecifications(next);
+                    }}
+                    className="w-1/3 px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Name (e.g. Material)"
+                  />
+                  <input
+                    type="text"
+                    value={spec.value}
+                    onChange={(e) => {
+                      const next = [...specifications];
+                      next[index] = { ...next[index], value: e.target.value };
+                      setSpecifications(next);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Value (e.g. Powder-coated steel)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSpecifications(specifications.filter((_, i) => i !== index))}
+                    className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
                 </div>
               ))}
               <button
                 type="button"
-                onClick={() => setVariableSpecs([...variableSpecs, { key: '', options: [{ label: '', price: 0 }] }])}
-                className="px-4 py-2 border rounded-md"
+                onClick={() => setSpecifications([...specifications, { key: '', value: '' }])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
               >
                 Add Specification
               </button>
@@ -1245,26 +1049,26 @@ export default function EditProductPage() {
             </div>
           </div>
 
-          {/* Package Contents */}
+          {/* Why Choose */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Package Contents</h2>
+            <h2 className="text-xl font-semibold mb-4">Why Choose</h2>
             <div className="space-y-4">
-              {packageContents.map((item, index) => (
+              {whyChoose.map((item, index) => (
                 <div key={index} className="flex gap-2">
                   <input
                     type="text"
                     value={item}
                     onChange={(e) => {
-                      const newContents = [...packageContents];
-                      newContents[index] = e.target.value;
-                      setPackageContents(newContents);
+                      const next = [...whyChoose];
+                      next[index] = e.target.value;
+                      setWhyChoose(next);
                     }}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-                    placeholder="Package item"
+                    placeholder="Reason (e.g. Durable construction – built for long-term use)"
                   />
                   <button
                     type="button"
-                    onClick={() => setPackageContents(packageContents.filter((_, i) => i !== index))}
+                    onClick={() => setWhyChoose(whyChoose.filter((_, i) => i !== index))}
                     className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
                   >
                     Remove
@@ -1273,262 +1077,13 @@ export default function EditProductPage() {
               ))}
               <button
                 type="button"
-                onClick={() => setPackageContents([...packageContents, ''])}
+                onClick={() => setWhyChoose([...whyChoose, ''])}
                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
               >
-                Add Package Item
+                Add Reason
               </button>
             </div>
           </div>
-
-          {/* Q&A */}
-          <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Questions & Answers</h2>
-            <div className="space-y-6">
-              {qna.map((item, index) => (
-                <div key={index} className="border p-4 rounded-lg space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Question</label>
-                    <input
-                      type="text"
-                      value={item.question}
-                      onChange={(e) => {
-                        const newQna = [...qna];
-                        newQna[index] = { ...newQna[index], question: e.target.value };
-                        setQna(newQna);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      placeholder="Question"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Answer</label>
-                    <textarea
-                      value={item.answer}
-                      onChange={(e) => {
-                        const newQna = [...qna];
-                        newQna[index] = { ...newQna[index], answer: e.target.value };
-                        setQna(newQna);
-                      }}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      placeholder="Answer"
-                    />
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setQna(qna.filter((_, i) => i !== index))}
-                      className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
-                    >
-                      Remove Q&A
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setQna([...qna, { question: '', answer: '' }])}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Add Q&A
-              </button>
-            </div>
-          </div>
-
-          {/* Optional marketing / storytelling content — collapsed by default so the
-              core edit flow stays short. */}
-          <details className="md:col-span-2 border border-gray-200 rounded-md p-3">
-            <summary className="text-lg font-semibold cursor-pointer select-none text-gray-800">
-              Marketing &amp; storytelling content (optional)
-            </summary>
-
-          {/* ── Engineered for Indian Trails — Subtitle ──────────────────────── */}
-          <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails — Subtitle</h2>
-            <p className="text-sm text-gray-500 mb-4">Paragraph shown under the section heading. Leave blank to use the default text.</p>
-            <textarea
-              rows={3}
-              placeholder="e.g. Built specifically for the demands of Indian terrain — from potholed city roads to rugged mountain passes..."
-              value={productStoryText}
-              onChange={(e) => setProductStoryText(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            />
-          </div>
-
-          {/* ── Engineered for Indian Trails — Condition Cards ───────────────── */}
-          <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Engineered for Indian Trails — Condition Cards</h2>
-            <p className="text-sm text-gray-500 mb-4">Up to 4 cards shown in the section. Leave empty to use the default cards (Monsoon Durability, Heat Resistant, Off-Road Toughness, Highway Performance).</p>
-            <div className="space-y-3">
-              {productStoryCards.map((card, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-600">Card {index + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => setProductStoryCards(productStoryCards.filter((_, i) => i !== index))}
-                      className="px-2 py-1 text-xs border border-red-300 text-red-600 rounded-md hover:bg-red-50"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Card title, e.g. Monsoon Durability"
-                    value={card.title}
-                    onChange={(e) => {
-                      const updated = [...productStoryCards];
-                      updated[index] = { ...updated[index], title: e.target.value };
-                      setProductStoryCards(updated);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <textarea
-                    rows={2}
-                    placeholder="Card description..."
-                    value={card.description}
-                    onChange={(e) => {
-                      const updated = [...productStoryCards];
-                      updated[index] = { ...updated[index], description: e.target.value };
-                      setProductStoryCards(updated);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              ))}
-              {productStoryCards.length < 4 && (
-                <button
-                  type="button"
-                  onClick={() => setProductStoryCards([...productStoryCards, { title: '', description: '' }])}
-                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-                >
-                  Add Card
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* ── Easy DIY Installation ────────────────────────────────────────── */}
-          <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Easy DIY Installation Steps</h2>
-            <p className="text-sm text-gray-500 mb-4">Step-by-step instructions shown in the installation section. Leave empty to show generic default steps.</p>
-            <div className="space-y-4">
-              {installationSteps.map((step, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-bold shrink-0">{index + 1}</span>
-                    <span className="text-sm font-medium text-gray-600">Step {index + 1}</span>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Step title, e.g. Unpack & Inspect"
-                    value={step.title}
-                    onChange={(e) => {
-                      const updated = [...installationSteps];
-                      updated[index] = { ...updated[index], title: e.target.value };
-                      setInstallationSteps(updated);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <textarea
-                    rows={2}
-                    placeholder="Step description..."
-                    value={step.description}
-                    onChange={(e) => {
-                      const updated = [...installationSteps];
-                      updated[index] = { ...updated[index], description: e.target.value };
-                      setInstallationSteps(updated);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setInstallationSteps(installationSteps.filter((_, i) => i !== index))}
-                      className="px-3 py-1.5 text-sm border border-red-300 text-red-600 rounded-md hover:bg-red-50"
-                    >
-                      Remove Step
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setInstallationSteps([...installationSteps, { title: '', description: '' }])}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-              >
-                Add Step
-              </button>
-            </div>
-          </div>
-
-          {/* ── Perfect for Indian Roads & Climate — Description ──────────────── */}
-          <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Perfect for Indian Roads &amp; Climate — Description</h2>
-            <p className="text-sm text-gray-500 mb-4">Paragraph shown under the section heading. Leave blank to use the default text.</p>
-            <textarea
-              rows={3}
-              placeholder="e.g. Engineered to handle the unique challenges of Indian roads and climate year-round..."
-              value={indianRoadsText}
-              onChange={(e) => setIndianRoadsText(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            />
-          </div>
-
-          {/* ── Perfect for Indian Roads & Climate — Cards ───────────────────── */}
-          <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-1">Perfect for Indian Roads &amp; Climate — Condition Cards</h2>
-            <p className="text-sm text-gray-500 mb-4">Up to 4 cards shown in the section. Leave empty to use the default cards.</p>
-            <div className="space-y-3">
-              {indianRoadsCards.map((card, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-600">Card {index + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => setIndianRoadsCards(indianRoadsCards.filter((_, i) => i !== index))}
-                      className="px-2 py-1 text-xs border border-red-300 text-red-600 rounded-md hover:bg-red-50"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Card title, e.g. Monsoon Ready"
-                    value={card.title}
-                    onChange={(e) => {
-                      const updated = [...indianRoadsCards];
-                      updated[index] = { ...updated[index], title: e.target.value };
-                      setIndianRoadsCards(updated);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <textarea
-                    rows={2}
-                    placeholder="Card description..."
-                    value={card.description}
-                    onChange={(e) => {
-                      const updated = [...indianRoadsCards];
-                      updated[index] = { ...updated[index], description: e.target.value };
-                      setIndianRoadsCards(updated);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              ))}
-              {indianRoadsCards.length < 4 && (
-                <button
-                  type="button"
-                  onClick={() => setIndianRoadsCards([...indianRoadsCards, { title: '', description: '' }])}
-                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-                >
-                  Add Card
-                </button>
-              )}
-            </div>
-          </div>
-          </details>
 
           {/* Images */}
           <div className="md:col-span-2">
@@ -1598,7 +1153,7 @@ export default function EditProductPage() {
             selectedCategories,
             tagsInput,
             features,
-            qna,
+            whyChoose,
           }}
         />
       </aside>

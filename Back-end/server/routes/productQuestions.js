@@ -104,12 +104,8 @@ router.put("/:id/answer", protect, admin, questionAnswerRateLimit, validateIdPar
   
   await question.save();
 
-  // Optionally push to Product.qna for legacy support
-  // const product = await Product.findById(question.product);
-  // if (product) {
-  //   product.qna.push({ question: question.question, answer: question.answer });
-  //   await product.save();
-  // }
+  // Q&A lives solely in the ProductQuestion collection. The legacy embedded
+  // Product.qna field was removed; questions are read back via this route's GET.
 
   res.json({
     success: true,

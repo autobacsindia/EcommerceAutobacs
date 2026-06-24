@@ -57,8 +57,8 @@ describe('EditProductPage', () => {
     images: [],
     compatibleVehicles: ['veh1'],
     features: ['Feature 1'],
-    packageContents: ['Item 1'],
-    qna: [{ question: 'Q1', answer: 'A1' }],
+    whyChoose: ['Reliable – built to last'],
+    specifications: [{ key: 'Material', value: 'Steel' }],
   };
 
   beforeEach(() => {

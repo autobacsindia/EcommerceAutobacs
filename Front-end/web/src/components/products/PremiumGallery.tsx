@@ -79,7 +79,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
         </div>
 
         {/* Main Cinematic Image */}
-        <div className={`col-span-10 lg:col-span-8 relative rounded-xl overflow-hidden group ${isDark ? 'bg-zinc-900' : 'bg-gray-100'}`}>
+        <div className={`col-span-10 lg:col-span-11 relative rounded-xl overflow-hidden group ${isDark ? 'bg-zinc-900' : 'bg-gray-100'}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={activeIndex}
@@ -138,33 +138,6 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
           )}
         </div>
 
-        {/* Image Info Panel */}
-        <div className="hidden lg:flex col-span-3 flex-col gap-4">
-          <div className={`rounded-xl p-4 border ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
-            <h3 className={`font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Product Views</h3>
-            <div className="space-y-2">
-              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-                📸 Vehicle-Mounted
-              </button>
-              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-                🌙 Night Performance
-              </button>
-              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-                🔧 Installation
-              </button>
-              <button className={`w-full text-left p-3 rounded-lg transition-colors text-sm ${isDark ? 'bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-                🔍 Material Close-up
-              </button>
-            </div>
-          </div>
-
-          <div className={`rounded-xl p-4 flex-1 border ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
-            <h4 className={`font-semibold text-sm mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Product Details</h4>
-            <p className={`text-xs leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-              Click on the main image to view in fullscreen. Use arrow keys or swipe to navigate between images.
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Fullscreen Modal */}
