@@ -28,10 +28,10 @@ Adjust these values according to your Elasticsearch setup.
 
 ## Setup Process
 1. Make sure Elasticsearch is running
-2. Run the setup script to create the index and index all products:
+2. Run the reindex script to create the index and index all products:
 
 ```bash
-npm run setup-elasticsearch
+npm run reindex-products
 ```
 
 This will:

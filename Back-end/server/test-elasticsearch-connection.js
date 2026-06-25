@@ -87,7 +87,7 @@ async function testConnection() {
         console.log(`   Size: ${sizeInMB} MB`);
       } else {
         console.log('   ⚠ Products index does not exist');
-        console.log('   To create: Run "npm run setup-elasticsearch"');
+        console.log('   To create: Run "npm run reindex-products"');
       }
       
       console.log('\n✓ Elasticsearch is ready to use!');

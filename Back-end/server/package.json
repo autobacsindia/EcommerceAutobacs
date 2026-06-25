@@ -30,7 +30,6 @@
                     "cleanup-wordpress-products":  "node utils/wordpressProductCleanup.js",
                     "test-wordpress-cleanup":  "node test-wordpress-cleanup.js",
                     "check-html-products":  "node check-html-products.js",
-                    "setup-elasticsearch":  "node setup-elasticsearch.js",
                     "test-elasticsearch":  "node test-elasticsearch.js",
                     "test-elasticsearch-connection":  "node test-elasticsearch-connection.js",
                     "reindex-products":  "node reindex-products.js",

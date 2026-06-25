@@ -158,7 +158,7 @@ Audit each against current repo (✅ = appears to exist already based on routes/
 - ✅ Returns/refunds (admin has `/returns`, `/refunds`)
 - ✅ Reviews/Q&A (admin has `/reviews`, `/questions`)
 - ✅ Multi-warehouse inventory (admin `/warehouses`)
-- ❗ **Search**: Elasticsearch is integrated (`setup-elasticsearch.js`, `reindex-products.js`) — confirm search-as-you-type, typo tolerance, and faceted search (by vehicle, brand, price, category) are live on the frontend, not just backend-ready.
+- ❗ **Search**: Elasticsearch is integrated (`reindex-products.js`) — confirm search-as-you-type, typo tolerance, and faceted search (by vehicle, brand, price, category) are live on the frontend, not just backend-ready.
 - ❗ **Recommendations**: "complementary products" feature exists per package.json — confirm "frequently bought together," "you may also like," and "recently viewed" (the latter pairs well with Dexie, which is already a dependency — likely for offline/local cart or recently-viewed storage).
 - ❗ **Promotions/Coupons**: check if a coupon/discount engine exists; if not, this is a common gap vs Myntra/Flipkart.
 - ❗ **Multi-address book** for users, saved payment methods (Razorpay tokenization).
