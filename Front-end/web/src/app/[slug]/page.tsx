@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import ArticleDetailClient from '@/app/media/[type]/[slug]/ArticleDetailClient';
+import ArticleDetailClient from '@/components/blog/ArticleDetailClient';
 
 // Root-level blog post route (ADR-005). WordPress served blog posts at the domain root
 // (autobacsindia.com/<slug>), so we keep that exact path to preserve SEO with zero

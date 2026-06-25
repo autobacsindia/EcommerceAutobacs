@@ -265,11 +265,10 @@ export default async function sitemap({
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: BASE_URL,                    lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 1.0 },
     { url: `${BASE_URL}/shop`,          lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
-    { url: `${BASE_URL}/media`,         lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
-    { url: `${BASE_URL}/media/news`,    lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
-    { url: `${BASE_URL}/media/blogs`,   lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
-    { url: `${BASE_URL}/media/gallery`, lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
-    { url: `${BASE_URL}/media/videos`,  lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
+    { url: `${BASE_URL}/media`,         lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.7 },
+    { url: `${BASE_URL}/blog`,          lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
+    { url: `${BASE_URL}/blog/gallery`,  lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
+    { url: `${BASE_URL}/blog/videos`,   lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
     { url: `${BASE_URL}/about`,         lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.5 },
     { url: `${BASE_URL}/contact`,       lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.5 },
   ];

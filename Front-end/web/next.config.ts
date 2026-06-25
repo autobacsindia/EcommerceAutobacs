@@ -77,6 +77,12 @@ const nextConfig: NextConfig = {
       { source: '/product/:slug', destination: '/products/:slug', permanent: true },
       { source: '/product-category/:slug*', destination: '/categories/:slug*', permanent: true },
       { source: '/media/blogs/:slug', destination: '/:slug', permanent: true },
+      // Blog (+ gallery/videos) moved out of /media into its own /blog section.
+      { source: '/media/blogs', destination: '/blog', permanent: true },
+      { source: '/media/gallery', destination: '/blog/gallery', permanent: true },
+      { source: '/media/videos', destination: '/blog/videos', permanent: true },
+      // News was replaced by the Press Coverage page at /media.
+      { source: '/media/news', destination: '/media', permanent: true },
     ];
   },
 

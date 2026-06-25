@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, Calendar, Eye, Tag, ChevronLeft, ChevronRight, Newspaper, BookOpen } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { articleHref } from '@/lib/articleRoutes';
 
 interface Article {
   _id: string;
@@ -241,7 +242,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
 function ArticleCard({ article, colorClasses }: { article: Article; colorClasses: Record<string, string> }) {
   return (
     <Link
-      href={`/media/${article.type}/${article.slug}`}
+      href={articleHref(article.type, article.slug)}
       className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
     >
       {article.coverImage ? (

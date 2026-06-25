@@ -53,6 +53,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Content',
     items: [
+      { href: '/admin/blog', label: 'Blog', icon: '📝' },
       { href: '/admin/media', label: 'Media', icon: '🖼️' },
       { href: '/admin/messages', label: 'Messages', icon: '💬' },
       { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },

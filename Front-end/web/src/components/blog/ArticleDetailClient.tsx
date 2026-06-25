@@ -10,6 +10,7 @@ import StickyShareBar from '@/components/blog/StickyShareBar';
 import AuthorCard from '@/components/blog/AuthorCard';
 import ArticleNavigation from '@/components/blog/ArticleNavigation';
 import CommentSection from '@/components/blog/CommentSection';
+import { articleHref, articleListHref, tagHref } from '@/lib/articleRoutes';
 
 interface Article {
   _id: string;
@@ -62,9 +63,6 @@ function stripWpImageLinks(html: string): string {
   );
 }
 
-
-const TYPE_ROUTE: Record<string, string> = { blog: 'blogs', news: 'news' };
-function typeRoute(t: string) { return TYPE_ROUTE[t] ?? t; }
 
 // ── Bottom share bar (mobile / inline) ───────────────────────────────────────
 
@@ -131,7 +129,7 @@ function ShareBar({ title }: { title: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ArticleDetailClient({ article, related }: Props) {
-  const backHref  = `/media/${typeRoute(article.type)}`;
+  const backHref  = articleListHref(article.type);
   const backLabel = article.type === 'news' ? 'Back to News' : 'Back to Blog';
   const Icon      = article.type === 'news' ? Newspaper : BookOpen;
   const colorBadge = article.type === 'news' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700';
@@ -239,7 +237,7 @@ export default function ArticleDetailClient({ article, related }: Props) {
                     {article.tags.map(tag => (
                       <Link
                         key={tag}
-                        href={`/media/${typeRoute(article.type)}?search=${encodeURIComponent(tag)}`}
+                        href={tagHref(article.type, tag)}
                         className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full transition-colors"
                       >
                         #{tag}
@@ -274,7 +272,7 @@ export default function ArticleDetailClient({ article, related }: Props) {
                     {related.map(r => (
                       <Link
                         key={r._id}
-                        href={`/media/${r.type}/${r.slug}`}
+                        href={articleHref(r.type, r.slug)}
                         className="flex gap-3 group bg-white rounded-lg border border-gray-100 p-3 hover:shadow-sm hover:border-gray-200 transition-all"
                       >
                         {r.coverImage ? (

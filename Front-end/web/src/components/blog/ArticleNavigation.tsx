@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { articleHref } from '@/lib/articleRoutes';
 
 interface AdjacentArticle {
   title: string;
@@ -13,8 +14,6 @@ interface Props {
   slug: string;
   type: 'news' | 'blog';
 }
-
-const TYPE_ROUTE: Record<string, string> = { blog: 'blogs', news: 'news' };
 
 export default function ArticleNavigation({ slug, type }: Props) {
   const [prev, setPrev] = useState<AdjacentArticle | null>(null);
@@ -36,13 +35,11 @@ export default function ArticleNavigation({ slug, type }: Props) {
 
   if (!ready || (!prev && !next)) return null;
 
-  const route = TYPE_ROUTE[type] ?? type;
-
   return (
     <nav aria-label="Article navigation" className="mt-6 grid grid-cols-2 gap-3">
       {prev ? (
         <Link
-          href={`/media/${route}/${prev.slug}`}
+          href={articleHref(type, prev.slug)}
           className="group bg-white rounded-xl border border-gray-200 p-4 hover:border-red-200 hover:shadow-sm transition-all flex flex-col"
         >
           <span className="flex items-center gap-1 text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">
@@ -59,7 +56,7 @@ export default function ArticleNavigation({ slug, type }: Props) {
 
       {next ? (
         <Link
-          href={`/media/${route}/${next.slug}`}
+          href={articleHref(type, next.slug)}
           className="group bg-white rounded-xl border border-gray-200 p-4 hover:border-red-200 hover:shadow-sm transition-all flex flex-col items-end text-right"
         >
           <span className="flex items-center gap-1 text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">

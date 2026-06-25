@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { tagHref } from '@/lib/articleRoutes';
 
 interface Props {
   name: string;
@@ -14,12 +15,9 @@ function initials(name: string): string {
     .join('');
 }
 
-const TYPE_ROUTE: Record<string, string> = { blog: 'blogs', news: 'news' };
-
 export default function AuthorCard({ name, type }: Props) {
   const displayName = name || 'Autobacs Team';
   const abbr = initials(displayName);
-  const listRoute = TYPE_ROUTE[type] ?? type;
 
   return (
     <div className="mt-6 bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
@@ -33,7 +31,7 @@ export default function AuthorCard({ name, type }: Props) {
         <p className="text-xs uppercase tracking-widest text-gray-400 font-medium mb-0.5">Written by</p>
         <p className="font-bold text-gray-900 text-base leading-snug">{displayName}</p>
         <Link
-          href={`/media/${listRoute}?search=${encodeURIComponent(displayName)}`}
+          href={tagHref(type, displayName)}
           className="text-xs text-red-600 hover:underline mt-1 inline-block"
         >
           More articles by {displayName} →

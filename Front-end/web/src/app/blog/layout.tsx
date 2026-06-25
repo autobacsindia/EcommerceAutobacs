@@ -1,15 +1,13 @@
 import Link from 'next/link';
-import { Newspaper, BookOpen, Image, Video, ChevronRight } from 'lucide-react';
+import { BookOpen, Image, Video } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { href: '/media', label: 'Media Center', icon: null, exact: true },
-  { href: '/media/news', label: 'News', icon: Newspaper },
-  { href: '/media/blogs', label: 'Blog', icon: BookOpen },
-  { href: '/media/gallery', label: 'Gallery', icon: Image },
-  { href: '/media/videos', label: 'Videos', icon: Video },
+  { href: '/blog', label: 'Blog', icon: BookOpen, exact: true },
+  { href: '/blog/gallery', label: 'Gallery', icon: Image },
+  { href: '/blog/videos', label: 'Videos', icon: Video },
 ];
 
-export default function MediaLayout({ children }: { children: React.ReactNode }) {
+export default function BlogLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Sub-nav bar */}

@@ -2,6 +2,7 @@ import express from "express";
 import articleRepository from "../repositories/articleRepository.js";
 import mediaItemRepository from "../repositories/mediaItemRepository.js";
 import ArticleComment from "../models/ArticleComment.js";
+import PressCoverage from "../models/PressCoverage.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -352,6 +353,81 @@ router.get("/videos", asyncHandler(async (req, res) => {
   });
 }));
 
+// ─── PUBLIC: Press coverage ──────────────────────────────────────────────────
+
+// GET /media/press  — published external press/media coverage cards
+router.get("/press", asyncHandler(async (req, res) => {
+  const cacheKey = "press:published";
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const items = await PressCoverage.find({ status: "published" })
+    .select("publication date headline excerpt url image tilt tape featured order")
+    .sort({ featured: -1, order: 1, createdAt: -1 })
+    .lean();
+
+  const payload = { success: true, data: items };
+  cacheSet(cacheKey, payload);
+  res.json(payload);
+}));
+
+// ─── ADMIN: Press coverage CRUD ───────────────────────────────────────────────
+
+const PRESS_FIELDS = ["publication", "date", "headline", "excerpt", "url", "image", "tilt", "tape", "order", "featured", "status"];
+
+// GET /media/admin/press
+router.get("/admin/press", protect, admin, asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 50 } = req.query;
+  const query = {};
+  if (status) query.status = status;
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const [items, total] = await Promise.all([
+    PressCoverage.find(query).sort({ order: 1, createdAt: -1 }).skip(skip).limit(parseInt(limit)).lean(),
+    PressCoverage.countDocuments(query),
+  ]);
+
+  res.json({
+    success: true,
+    data: items,
+    pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) },
+  });
+}));
+
+// POST /media/admin/press
+router.post("/admin/press", protect, admin, asyncHandler(async (req, res) => {
+  const { publication, headline, url } = req.body;
+  if (!publication || !headline || !url) {
+    return res.status(400).json({ success: false, message: "Publication, headline, and URL are required" });
+  }
+
+  const payload = {};
+  PRESS_FIELDS.forEach((f) => { if (req.body[f] !== undefined) payload[f] = req.body[f]; });
+
+  const item = await PressCoverage.create(payload);
+  cacheInvalidate("press:");
+  res.status(201).json({ success: true, data: item });
+}));
+
+// PUT /media/admin/press/:id
+router.put("/admin/press/:id", protect, admin, asyncHandler(async (req, res) => {
+  const item = await PressCoverage.findById(req.params.id);
+  if (!item) return res.status(404).json({ success: false, message: "Press item not found" });
+
+  PRESS_FIELDS.forEach((f) => { if (req.body[f] !== undefined) item[f] = req.body[f]; });
+  await item.save();
+  cacheInvalidate("press:");
+  res.json({ success: true, data: item });
+}));
+
+// DELETE /media/admin/press/:id
+router.delete("/admin/press/:id", protect, admin, asyncHandler(async (req, res) => {
+  const item = await PressCoverage.findByIdAndDelete(req.params.id);
+  if (!item) return res.status(404).json({ success: false, message: "Press item not found" });
+  cacheInvalidate("press:");
+  res.json({ success: true, message: "Press item deleted" });
+}));
+
 // ─── ADMIN: Articles CRUD ─────────────────────────────────────────────────────
 
 // GET /media/admin/articles
@@ -533,15 +609,19 @@ router.delete("/admin/media-items/:id", protect, admin, asyncHandler(async (req,
 
 // ─── Admin: comment moderation ────────────────────────────────────────────────
 
-// GET /media/admin/comments?articleSlug=&approved=&page=&limit=
+// GET /media/admin/comments?articleSlug=&type=news|blog&approved=&page=&limit=
 router.get("/admin/comments", protect, admin, asyncHandler(async (req, res) => {
-  const { articleSlug, approved, page = 1, limit = 50 } = req.query;
+  const { articleSlug, type, approved, page = 1, limit = 50 } = req.query;
   const filter = {};
 
   if (articleSlug) {
     const article = await articleRepository.findOne({ slug: articleSlug });
     if (!article) return res.json({ success: true, data: [], pagination: { page: 1, pages: 1, total: 0 } });
     filter.article = article._id;
+  } else if (type && ["news", "blog"].includes(type)) {
+    // Scope comments to articles of a given type (Blog admin vs Media/Press admin)
+    const ids = await articleRepository.distinct("_id", { type });
+    filter.article = { $in: ids };
   }
   if (approved !== undefined && approved !== "") {
     filter.approved = approved === "true";
