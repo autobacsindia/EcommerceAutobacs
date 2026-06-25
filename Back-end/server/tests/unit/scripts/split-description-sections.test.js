@@ -83,6 +83,32 @@ describe('split-description-sections parser', () => {
     expect(items[1]).toBe('High-Brightness LED Illumination – Provides strong visibility.');
   });
 
+  it('parses "Title: on its own line, description on the next" into separate items', () => {
+    // The shape that previously collapsed an entire section into one bullet.
+    const text = [
+      'Ironman Foam Cell Suspension Kit',
+      'Take your off-road adventures to the next level.',
+      'Key Features',
+      'Advanced Foam Cell Technology:',
+      'Reduces shock fade and maintains consistent damping performance.',
+      'Superior Ride Comfort:',
+      'Absorbs road imperfections and vibrations for a smoother ride.',
+      'Enhanced Vehicle Stability:',
+      'Improves handling and confidence at highway speeds.',
+      'Why Choose Ironman Foam Cell Suspension Kit',
+      'Built for Adventure:',
+      'Engineered to handle demanding off-road environments.',
+      'Excellent Load Handling:',
+      'Suitable for vehicles equipped with camping gear.',
+    ].join('\n');
+    const r = partition(textBlocks(text), 'Ironman Foam Cell Suspension Kit');
+    expect(r.features).toHaveLength(3);
+    expect(r.features[0]).toBe('Advanced Foam Cell Technology – Reduces shock fade and maintains consistent damping performance.');
+    expect(r.features[1]).toMatch(/^Superior Ride Comfort – Absorbs/);
+    expect(r.whyChoose).toHaveLength(2);
+    expect(r.whyChoose[0]).toMatch(/^Built for Adventure – Engineered/);
+  });
+
   it('parses a colon-style flattened product into multiple feature items', () => {
     const colonText = [
       'Fortuner Tail Light',

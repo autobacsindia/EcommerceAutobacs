@@ -617,7 +617,10 @@ export default function CreateProductPage() {
 
           {/* Features */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Features</h2>
+            <h2 className="text-xl font-semibold mb-1">Key Features</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              One feature per box. Format: <strong>Title – description</strong> — the text before the dash shows as a bold title. (Plain text, no HTML.)
+            </p>
             <div className="space-y-4">
               {features.map((feature, index) => (
                 <div key={index} className="flex gap-2">
@@ -630,7 +633,7 @@ export default function CreateProductPage() {
                       setFeatures(newFeatures);
                     }}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-                    placeholder="Feature description"
+                    placeholder="e.g. Advanced Foam Cell Technology – Reduces shock fade on long off-road runs"
                   />
                   <button
                     type="button"
@@ -653,7 +656,10 @@ export default function CreateProductPage() {
 
           {/* Why Choose */}
           <div className="md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Why Choose</h2>
+            <h2 className="text-xl font-semibold mb-1">Why Choose</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              One reason per box. Format: <strong>Title – description</strong> — the text before the dash shows as a bold title. (Plain text, no HTML.)
+            </p>
             <div className="space-y-4">
               {whyChoose.map((item, index) => (
                 <div key={index} className="flex gap-2">

@@ -150,6 +150,35 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   const whyChoose = product.whyChoose ?? [];
   const specifications = product.specifications ?? [];
 
+  // Render a "Title – description" list item with the title bold on its own line
+  // and the description below. Accepts " – ", " - " or "Title: desc" so admins can
+  // type whichever; falls back to plain text when there's no title separator.
+  const renderTitledItem = (item: string, index: number) => {
+    let title: string | null = null;
+    let desc = item;
+    const dash = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
+    if (dash) {
+      const [t, ...rest] = item.split(dash);
+      title = t.trim();
+      desc = rest.join(dash).trim();
+    } else {
+      const colon = item.match(/^([^:]{2,60}):\s+(.+)$/);
+      if (colon) { title = colon[1].trim(); desc = colon[2].trim(); }
+    }
+    return (
+      <li key={index} className="leading-relaxed pl-1">
+        {title ? (
+          <>
+            <span className={`block font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</span>
+            <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}>{desc}</span>
+          </>
+        ) : (
+          item
+        )}
+      </li>
+    );
+  };
+
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
       {/* Theme Toggle */}
@@ -203,10 +232,8 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 Key Features <span className="text-orange-500">({features.length})</span>
               </h2>
-              <ol className={`list-decimal space-y-3 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                {features.map((feature: string, index: number) => (
-                  <li key={index} className="leading-relaxed pl-1">{feature}</li>
-                ))}
+              <ol className={`list-decimal space-y-4 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                {features.map(renderTitledItem)}
               </ol>
             </div>
           </section>
@@ -219,27 +246,8 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               <h2 className={`text-3xl font-bold mb-8 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 Why Choose {product.name}? <span className="text-orange-500">({whyChoose.length})</span>
               </h2>
-              <ol className={`list-decimal space-y-3 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                {whyChoose.map((item: string, index: number) => {
-                  const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
-
-                  if (separator) {
-                    const [title, ...rest] = item.split(separator);
-                    const description = rest.join(separator);
-                    return (
-                      <li key={index} className={`leading-relaxed pl-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                        <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</span>
-                        <span>{separator}{description}</span>
-                      </li>
-                    );
-                  }
-
-                  return (
-                    <li key={index} className={`leading-relaxed pl-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                      {item}
-                    </li>
-                  );
-                })}
+              <ol className={`list-decimal space-y-4 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                {whyChoose.map(renderTitledItem)}
               </ol>
             </div>
           </section>

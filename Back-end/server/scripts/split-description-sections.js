@@ -43,9 +43,12 @@ const HEADING_KEY_FEATURES = /^key\s+features$/i;
 const HEADING_WHY_CHOOSE   = /^why\s+choose\b/i;
 // Item title/desc separator the frontend renders/bolds on (spaced en-dash or hyphen).
 const SPACED_DASH = /\s[–-]\s/;
-// Alternate item shape seen in migrated text: "Capitalized Title:description" (no
-// space, colon instead of dash). The title is a short capitalized lead-in.
+// Inline "Capitalized Title:description" on one line (colon instead of dash).
 const TITLE_COLON = /^([A-Z][^:]{1,60}?):\s*(\S[\s\S]*)$/;
+// A line that is ONLY a title — "Advanced Foam Cell Technology:" — whose
+// description follows on the next block(s). Common in the migrated text where each
+// heading and paragraph became its own line.
+const BARE_TITLE = /^[A-Z][^:\n]{1,80}:$/;
 
 /** Strip HTML tags and decode the handful of entities WooCommerce emits. */
 function stripTags(html) {
@@ -69,16 +72,9 @@ function looksLikeHtml(s) {
   return /<\/?(h[1-6]|p|ul|ol|li|div|strong|br|span)\b/i.test(s || '');
 }
 
-// A block starts a NEW item if it carries a title marker — either a spaced dash
-// ("Title – desc") or a leading "Capitalized Title:desc". Anything else (a plain
-// follow-up sentence) is treated as a continuation of the previous item.
-function startsNewItem(item) {
-  return SPACED_DASH.test(item) || TITLE_COLON.test(item);
-}
-
 // Normalize an item to the "Title – desc" shape the frontend renders/bolds on.
-// Leaves dash-style items untouched; rewrites the leading "Title:desc" colon to
-// a spaced en-dash so colon-style and dash-style items render consistently.
+// Leaves dash-style items untouched; rewrites a leading "Title:desc" colon to a
+// spaced en-dash so colon-style and dash-style items render consistently.
 function normalizeItem(item) {
   const t = item.replace(/\s+/g, ' ').trim();
   if (SPACED_DASH.test(t)) return t;
@@ -86,24 +82,66 @@ function normalizeItem(item) {
   return m ? `${m[1].trim()} – ${m[2].trim()}` : t;
 }
 
+// Some migrated products crammed an entire section onto ONE line:
+//   "Title One:desc one. Title Two:desc two. Title Three:desc three"
+// Split such a block before each capitalized "Title:" that begins a new point
+// (at string start, or after sentence-ending punctuation). Blocks without a
+// second title are returned unchanged.
+function explodeInlineTitles(block) {
+  const re = /(^|[.!?]\s+)([A-Z][^:\n]{2,60}?:)/g;
+  const starts = [];
+  let m;
+  while ((m = re.exec(block)) !== null) starts.push(m.index + m[1].length);
+  if (starts.length <= 1) return [block.trim()].filter(Boolean);
+  const parts = [];
+  const head = block.slice(0, starts[0]).trim();
+  if (head) parts.push(head); // text before the first title (rare)
+  for (let i = 0; i < starts.length; i++) {
+    const stop = i + 1 < starts.length ? starts[i + 1] : block.length;
+    parts.push(block.slice(starts[i], stop).trim());
+  }
+  return parts.filter(Boolean);
+}
+
 /**
- * Coalesce flattened blocks into clean items. WooCommerce sometimes splits one
- * logical point across a title line and a follow-up sentence; fold those plain
- * follow-ups into the previous item, but keep every real title-led block (dash OR
- * colon style) as its own item. Then normalize each to "Title – desc".
+ * Assemble flattened blocks into clean "Title – desc" items, handling every shape
+ * seen in the migrated catalog:
+ *   • "Title – desc" on one line                  → one item
+ *   • "Title:desc" on one line                    → one item (colon → dash)
+ *   • "Title:" on its own line, desc on the next  → title + following line(s)
+ *   • multiple "Title:desc" on a single line      → split into several items
+ *   • a plain follow-up sentence                  → folded into the previous item
  */
 function coalesceItems(items) {
-  const out = [];
-  for (const raw of items) {
-    const item = (raw || '').replace(/\s+/g, ' ').trim();
-    if (!item) continue;
-    if (out.length > 0 && !startsNewItem(item)) {
-      out[out.length - 1] = `${out[out.length - 1]} ${item}`.replace(/\s+/g, ' ').trim();
+  // 1) explode any single line that packs multiple titles into separate blocks.
+  const blocks = items.flatMap((raw) => explodeInlineTitles((raw || '').replace(/\s+/g, ' ').trim()));
+
+  // 2) state machine: bare-title lines open an item that the next plain line fills.
+  const assembled = []; // { title, desc } | { whole }
+  for (const block of blocks) {
+    if (!block) continue;
+    if (BARE_TITLE.test(block)) {
+      assembled.push({ title: block.replace(/:\s*$/, '').trim(), desc: '' });
+    } else if (SPACED_DASH.test(block) || TITLE_COLON.test(block)) {
+      assembled.push({ whole: block });
     } else {
-      out.push(item);
+      const last = assembled[assembled.length - 1];
+      if (last && last.title !== undefined) {
+        last.desc = last.desc ? `${last.desc} ${block}` : block;
+      } else if (last && last.whole !== undefined) {
+        last.whole = `${last.whole} ${block}`;
+      } else {
+        assembled.push({ whole: block });
+      }
     }
   }
-  return out.map(normalizeItem);
+
+  // 3) render each to a normalized "Title – desc" string.
+  return assembled
+    .map((it) => (it.whole !== undefined
+      ? normalizeItem(it.whole)
+      : normalizeItem(it.desc ? `${it.title} – ${it.desc}` : it.title)))
+    .filter(Boolean);
 }
 
 /** Parse an HTML description into ordered blocks: { type: 'heading'|'item', text }. */

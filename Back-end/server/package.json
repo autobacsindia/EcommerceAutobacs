@@ -47,6 +47,7 @@
                     "migrate:stock-status":  "node --import=dotenv/config scripts/migrate-stock-to-status.js",
                     "migrate:split-descriptions":  "node --import=dotenv/config scripts/split-description-sections.js",
                     "migrate:strip-bolt-on":  "node --import=dotenv/config scripts/strip-bolt-on-product-fields.js",
+                    "migrate:resplit-sections":  "node --import=dotenv/config scripts/resplit-product-sections-from-backup.js",
                     "backfill-cloudinary-ids":  "node scripts/backfill-cloudinary-public-ids.js",
                     "check-cloudinary-health":  "node scripts/check-cloudinary-health.js",
                     "migrate-images":  "node scripts/migrate-all-images-to-cloudinary.js",
