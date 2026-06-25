@@ -282,6 +282,29 @@ class ElasticsearchService {
   }
 
   /**
+   * Normalize a product's `images` field into the canonical array shape the
+   * frontend/API contract expects: [{ url, alt, isPrimary }]. Accepts the
+   * Mongoose array form, a legacy single-string URL, or null/undefined.
+   * Returns [] when there is no usable image. Pure + side-effect free so it can
+   * be reused at both index time and read time.
+   */
+  static normalizeImages(images, productName = '') {
+    if (Array.isArray(images)) {
+      return images
+        .filter(img => img && (typeof img === 'string' ? img : img.url))
+        .map(img =>
+          typeof img === 'string'
+            ? { url: img, alt: productName, isPrimary: false }
+            : { url: img.url, alt: img.alt || productName, isPrimary: !!img.isPrimary }
+        );
+    }
+    if (typeof images === 'string' && images.trim() !== '') {
+      return [{ url: images, alt: productName, isPrimary: true }];
+    }
+    return [];
+  }
+
+  /**
    * Index a single product
    */
   async indexProduct(product) {
@@ -305,14 +328,14 @@ class ElasticsearchService {
         vehicleModels = [...new Set(vehicleModels)];
       }
 
-      // Handle image extraction safely
-      let primaryImage = null;
-      if (Array.isArray(product.images) && product.images.length > 0) {
-        const primary = product.images.find(img => img.isPrimary) || product.images[0];
-        primaryImage = primary ? primary.url : null;
-      } else if (typeof product.images === 'string') {
-        primaryImage = product.images;
-      }
+      // Handle image extraction safely. We index BOTH the full `images` array
+      // (so list/search responses match the API contract the frontend cards
+      // expect) and a denormalized `primaryImage` string (used by the
+      // lightweight autocomplete/suggest endpoints).
+      const images = ElasticsearchService.normalizeImages(product.images, product.name);
+      const primaryImage = images.length > 0
+        ? (images.find(img => img.isPrimary) || images[0]).url
+        : null;
 
       // Prepare body for Elasticsearch
       const body = {
@@ -338,6 +361,7 @@ class ElasticsearchService {
         updatedAt: product.updatedAt,
         vehicle_makes: vehicleMakes,
         vehicle_models: vehicleModels,
+        images,
         primaryImage: primaryImage
       };
 
@@ -620,12 +644,23 @@ class ElasticsearchService {
         body: searchBody
       });
 
-      // Process results
-      const products = result.hits.hits.map(hit => ({
-        ...hit._source,
-        _id: hit._id,
-        _score: hit._score
-      }));
+      // Process results. Guarantee every product carries an `images` array so
+      // the response matches the API/UI contract regardless of when the doc was
+      // indexed. Older docs predate the `images` field and only have the
+      // denormalized `primaryImage`, so fall back to that — this keeps product
+      // cards rendering correctly before a full reindex has run.
+      const products = result.hits.hits.map(hit => {
+        const source = hit._source;
+        const images = Array.isArray(source.images) && source.images.length > 0
+          ? source.images
+          : ElasticsearchService.normalizeImages(source.primaryImage, source.name);
+        return {
+          ...source,
+          images,
+          _id: hit._id,
+          _score: hit._score
+        };
+      });
 
       // Process aggregations for facets
       const facets = {

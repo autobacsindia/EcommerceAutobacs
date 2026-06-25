@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface EnhancedImageProps extends Omit<React.ComponentProps<typeof Image>, 'src' | 'alt'> {
   src: string | null | undefined;
@@ -23,6 +23,7 @@ export default function EnhancedImage({
 }: EnhancedImageProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   // Reset error state when src changes
   useEffect(() => {
@@ -88,6 +89,19 @@ export default function EnhancedImage({
 
   const finalSrc = getImageSource();
 
+  // When the resolved source changes on an already-mounted <img>, the ref
+  // callback won't re-run, so reconcile against the live element here too.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete) {
+      if (img.naturalWidth === 0) {
+        setImageError(true);
+      } else {
+        setImageLoaded(true);
+      }
+    }
+  }, [finalSrc]);
+
   // If we don't have a valid source even after fallback, don't render the image
   if (!finalSrc || finalSrc === '') {
     return (
@@ -124,8 +138,24 @@ export default function EnhancedImage({
     }
   };
 
+  // Browser-cached images can finish loading before React attaches `onLoad`
+  // (especially during hydration), so the load event never reaches us and the
+  // image stays stuck at opacity-0. Reconcile against the actual DOM element on
+  // mount / when the source changes so cached images become visible.
+  const reconcileLoaded = (img: HTMLImageElement | null) => {
+    imgRef.current = img;
+    if (img && img.complete) {
+      if (img.naturalWidth === 0) {
+        setImageError(true);
+      } else {
+        setImageLoaded(true);
+      }
+    }
+  };
+
   return (
     <Image
+      ref={reconcileLoaded}
       src={finalSrc}
       alt={alt}
       width={imageWidth}

@@ -60,17 +60,27 @@ export default function ModernFastMovingSection({
   const router = useRouter();
 
   useEffect(() => {
-    const cacheKey = `fastMoving_${limit}`;
+    // Bump CACHE_VERSION whenever the cached product shape changes so stale
+    // payloads (e.g. older entries missing the `images` array) are discarded
+    // rather than served indefinitely. Entries also expire via CACHE_TTL_MS.
+    const CACHE_VERSION = 'v2';
+    const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+    const cacheKey = `fastMoving_${CACHE_VERSION}_${limit}`;
 
-    const cachedProducts = localStorage.getItem(cacheKey);
-    if (cachedProducts) {
+    const cachedRaw = localStorage.getItem(cacheKey);
+    if (cachedRaw) {
       try {
-        const parsedProducts = JSON.parse(cachedProducts);
-        setProducts(parsedProducts);
-        setLoading(false);
-        return;
+        const cached = JSON.parse(cachedRaw);
+        const isFresh = cached?.cachedAt && Date.now() - cached.cachedAt < CACHE_TTL_MS;
+        if (isFresh && Array.isArray(cached.products)) {
+          setProducts(cached.products);
+          setLoading(false);
+          return;
+        }
+        localStorage.removeItem(cacheKey);
       } catch (e) {
         console.warn('Failed to parse cached fast-moving products:', e);
+        localStorage.removeItem(cacheKey);
       }
     }
 
@@ -84,7 +94,10 @@ export default function ModernFastMovingSection({
         setProducts(productsData);
 
         try {
-          localStorage.setItem(cacheKey, JSON.stringify(productsData));
+          localStorage.setItem(
+            cacheKey,
+            JSON.stringify({ products: productsData, cachedAt: Date.now() })
+          );
         } catch (e) {
           console.warn('Failed to cache fast-moving products in localStorage:', e);
         }
