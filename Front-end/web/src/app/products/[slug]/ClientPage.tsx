@@ -200,12 +200,14 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {features.length > 0 && (
           <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="max-w-4xl mx-auto">
-              <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Key Features</h2>
-              <ul className={`list-disc space-y-2 pl-5 marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+              <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Key Features <span className="text-orange-500">({features.length})</span>
+              </h2>
+              <ol className={`list-decimal space-y-3 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                 {features.map((feature: string, index: number) => (
                   <li key={index} className="leading-relaxed pl-1">{feature}</li>
                 ))}
-              </ul>
+              </ol>
             </div>
           </section>
         )}
@@ -214,8 +216,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {whyChoose.length > 0 && (
           <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="max-w-4xl mx-auto">
-              <h2 className={`text-3xl font-bold mb-8 ${isDark ? 'text-white' : 'text-gray-900'}`}>Why Choose {product.name}?</h2>
-              <div className="space-y-4">
+              <h2 className={`text-3xl font-bold mb-8 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Why Choose {product.name}? <span className="text-orange-500">({whyChoose.length})</span>
+              </h2>
+              <ol className={`list-decimal space-y-3 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                 {whyChoose.map((item: string, index: number) => {
                   const separator = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
 
@@ -223,20 +227,20 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
                     const [title, ...rest] = item.split(separator);
                     const description = rest.join(separator);
                     return (
-                      <div key={index} className={`leading-relaxed ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                      <li key={index} className={`leading-relaxed pl-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                         <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</span>
                         <span>{separator}{description}</span>
-                      </div>
+                      </li>
                     );
                   }
 
                   return (
-                    <p key={index} className={`leading-relaxed ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                    <li key={index} className={`leading-relaxed pl-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                       {item}
-                    </p>
+                    </li>
                   );
                 })}
-              </div>
+              </ol>
             </div>
           </section>
         )}

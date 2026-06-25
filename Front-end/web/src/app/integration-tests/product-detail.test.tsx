@@ -67,7 +67,7 @@ describe('Product Detail Page Integration', () => {
 
     expect(screen.getByRole('heading', { name: 'Product Description' })).toBeInTheDocument();
     expect(screen.getByText(/rugged, dependable upgrade/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Key Features' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Key Features/ })).toBeInTheDocument();
     expect(screen.getByText(/Extra cargo space/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Why Choose Test Product/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Technical Specifications' })).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe('Product Detail Page Integration', () => {
   it('omits Key Features / Why Choose / Specifications when the product has none', () => {
     render(<ProductDetailPageClient product={baseProduct} />);
 
-    expect(screen.queryByRole('heading', { name: 'Key Features' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Key Features/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Why Choose/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Technical Specifications' })).not.toBeInTheDocument();
   });
