@@ -161,7 +161,17 @@ class SearchService {
         if (!esParams.q && esParams.search) {
           esParams.q = esParams.search;
         }
-        return await elasticsearchService.searchProducts(esParams);
+        const esResult = await elasticsearchService.searchProducts(esParams);
+        // Empty-index guard: ES does NOT throw when the index is missing/wiped —
+        // it just returns zero hits. Without this, an index outage would surface
+        // to users as "no products" instead of transparently falling back to
+        // Mongo. If ES yields any hits we trust it; otherwise we drop through to
+        // the Mongo path (when Mongo is also empty the answer is identical, so
+        // the only cost is a second query on genuinely-empty searches).
+        if (esResult?.products?.length > 0) {
+          return esResult;
+        }
+        console.warn('[SearchService] Elasticsearch returned 0 results; falling back to MongoDB');
       } catch (error) {
         console.error('Elasticsearch search failed, falling back to MongoDB:', error);
       }

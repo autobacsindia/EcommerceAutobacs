@@ -92,8 +92,11 @@ class ElasticsearchService {
     
     // Perform actual connection check
     try {
+      // ES client v8 resolves to the response body directly (no `.statusCode`
+      // unless called with { meta: true }). A resolved info() carrying cluster
+      // identity means the node is reachable and authenticated.
       const info = await this.client.info();
-      const isAvailable = info.statusCode === 200;
+      const isAvailable = !!(info && (info.cluster_name || info.version));
       
       // Update connection status
       this.connectionStatus.available = isAvailable;
@@ -161,8 +164,8 @@ class ElasticsearchService {
     
     try {
       const info = await this.client.info();
-      
-      if (info.statusCode === 200) {
+
+      if (info && (info.cluster_name || info.version)) {
         console.log('✓ Elasticsearch connection successful');
         console.log(`  Cluster: ${info.cluster_name}`);
         console.log(`  Version: ${info.version.number}`);

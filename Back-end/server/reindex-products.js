@@ -1,6 +1,11 @@
 import elasticsearchService from './services/elasticsearchService.js';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+// Register schemas referenced by indexAllProducts' populate() calls. The running
+// server imports these transitively at boot; this standalone script must do so
+// explicitly or populate('categories'|'compatibleVehicles') throws MissingSchemaError.
+import './models/Category.js';
+import './models/Vehicle.js';
 
 // Load environment variables
 dotenv.config();

@@ -64,11 +64,11 @@ describe('SearchService Unit Tests', () => {
   });
 
   describe('searchProducts', () => {
-    it('should use Elasticsearch when available', async () => {
+    it('should use Elasticsearch when available and it returns hits', async () => {
       elasticsearchService.isConnected.mockResolvedValue(true);
       elasticsearchService.searchProducts.mockResolvedValue({
-        products: [],
-        pagination: { total: 0, page: 1, pages: 0 }
+        products: [{ _id: '1', name: 'Test Product' }],
+        pagination: { total: 1, page: 1, pages: 1 }
       });
 
       const params = { q: 'test' };
@@ -77,6 +77,22 @@ describe('SearchService Unit Tests', () => {
       expect(elasticsearchService.isConnected).toHaveBeenCalled();
       expect(elasticsearchService.searchProducts).toHaveBeenCalledWith(expect.objectContaining({ q: 'test' }));
       expect(Product.find).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to MongoDB when Elasticsearch returns zero hits (empty-index guard)', async () => {
+      // ES does not throw on an empty/wiped index; it returns zero hits. The
+      // service must treat that as a fallback trigger, not surface "no results".
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [],
+        pagination: { total: 0, page: 1, pages: 0 }
+      });
+
+      const params = { search: 'test' };
+      await SearchService.searchProducts(params);
+
+      expect(elasticsearchService.searchProducts).toHaveBeenCalled();
+      expect(Product.find).toHaveBeenCalled();
     });
 
     it('should fall back to MongoDB when Elasticsearch is unavailable', async () => {
