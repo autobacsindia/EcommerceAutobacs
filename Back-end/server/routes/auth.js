@@ -418,6 +418,11 @@ router.get("/sessions", protect, asyncHandler(async (req, res) => {
 router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword, asyncHandler(async (req, res) => {
   const { email } = req.body;
 
+  // Entry log: confirms the request reached the handler (i.e. passed rate-limit,
+  // validation, CSRF). If you see nothing in the logs at all, the request never
+  // got here. Logs are server-side only, so this does not leak enumeration.
+  console.log(`[Auth] Password reset requested for ${email}`);
+
   // Find user by email
   const user = await User.findOne({ email: email.toLowerCase() });
 
@@ -426,6 +431,9 @@ router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword,
   const successMessage = 'If an account with that email exists, password reset instructions have been sent';
 
   if (!user) {
+    // No account for this email — client still gets a generic success, but we log
+    // it so "no email arrived" can be distinguished from a send failure.
+    console.log(`[Auth] Password reset requested for non-existent account: ${email}`);
     return res.json({
       success: true,
       message: successMessage
