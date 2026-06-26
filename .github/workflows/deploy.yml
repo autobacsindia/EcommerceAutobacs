@@ -131,10 +131,15 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      # No --detach: we WAIT for the Railway build so a failed image build fails this job
-      # (visible in Actions). `railway up` is retried up to 3× to ride out Railway's
-      # transient "service unavailable" responses, which are not build failures.
-      - name: Deploy (with retry)
+      # No --detach: we WAIT for the Railway build + healthcheck so a bad deploy fails this
+      # job (visible in Actions) instead of silently passing.
+      #
+      # Retry policy is deliberately narrow: ONLY retry a transient upload/build-scheduling
+      # blip ("service unavailable" before the healthcheck phase). A HEALTHCHECK failure
+      # ("never became healthy" / "Healthcheck failed") means the new container crashed on
+      # boot — retrying just re-uploads the same broken image and masks the failure, so we
+      # fail fast and surface it.
+      - name: Deploy (with smart retry)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_BACKEND_TOKEN }}
         working-directory: Back-end/server
@@ -142,19 +147,32 @@ jobs:
           set -u
           for attempt in 1 2 3; do
             echo "::group::railway up — attempt ${attempt}/3"
-            if railway up --service=EcommerceAutobacs --ci; then
-              echo "::endgroup::"
+            set +e
+            out=$(railway up --service=EcommerceAutobacs --ci 2>&1)
+            rc=$?
+            set -e
+            echo "$out"
+            echo "::endgroup::"
+
+            if [ "$rc" -eq 0 ]; then
               echo "✓ Deploy succeeded on attempt ${attempt}"
               exit 0
             fi
-            echo "::endgroup::"
-            echo "✗ Attempt ${attempt} failed"
+
+            # Real deploy failure — the image built but the container won't stay healthy.
+            if echo "$out" | grep -qiE "never became healthy|Healthcheck failed"; then
+              echo "::error::Deployment FAILED its healthcheck — the new container is crashing on boot (check Railway runtime logs; common cause: REDIS_URL unreachable, which exits at startup). Not retrying."
+              exit 1
+            fi
+
+            # Otherwise treat as a transient Railway API blip and retry.
+            echo "✗ Attempt ${attempt} failed (transient). "
             if [ "${attempt}" -lt 3 ]; then
               echo "Retrying in 30s…"
               sleep 30
             fi
           done
-          echo "::error::Deploy failed after 3 attempts (likely Railway-side). Re-run via the Actions 'Run workflow' button."
+          echo "::error::Deploy failed after 3 transient attempts. Re-run via the Actions 'Run workflow' button."
           exit 1
 
   # ── Frontend ───────────────────────────────────────────────────────────────
