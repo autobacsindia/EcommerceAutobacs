@@ -1,14 +1,23 @@
 # deploy.yml — Test-gated Railway deployment (BACKEND ONLY)
 #
 # Replaces Railway's native GitHub auto-deploy (which needs a Pro plan when the
-# repo has multiple collaborators). Runs only on push to main.
+# repo has multiple collaborators).
 #
-# The backend deploys only when Back-end/server/** changed, gated on its lint + tests.
+# Triggers:
+#   • push to main            → deploys when Back-end/server/** changed, gated on tests.
+#   • workflow_dispatch       → MANUAL "Run workflow" button (Actions tab). This is the
+#                               redeploy control: use it to re-ship the current main after
+#                               a transient Railway hiccup. Leave "run_tests" checked for a
+#                               full gated deploy, or uncheck it for a fast redeploy of an
+#                               already-tested commit.
 #
-# The FRONTEND was migrated off Railway to Vercel. Vercel owns the frontend build +
-# deploy via its Git integration (production on push to main, preview deploy per PR).
-# Frontend lint/test/build CI lives entirely in ci-frontend.yml (which now runs on main
-# too) and is enforced as a required check via branch protection.
+# Reliability: `railway up` occasionally returns "service unavailable" (Railway-side, not a
+# build failure). The deploy step retries the whole command up to 3× with backoff so a
+# transient blip no longer fails the run.
+#
+# The FRONTEND was migrated off Railway to Vercel. Vercel owns the frontend build + deploy
+# via its Git integration (production on push to main, preview deploy per PR). Frontend CI
+# lives in ci-frontend.yml (runs on main too), enforced via branch protection.
 #
 # The backend uses a project-scoped token (only deploys services in its project):
 #   backend → project "bountiful-surprise", service "EcommerceAutobacs"
@@ -21,28 +30,53 @@ name: Deploy to Railway
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run lint + tests before deploying (uncheck for a fast redeploy of an already-tested commit)"
+        type: boolean
+        default: true
+
+# Serialize deploys: never let two backend deploys to the same ref run at once. We do NOT
+# cancel an in-progress deploy (cancelling mid `railway up` is undesirable); a newer run
+# queues until the current one finishes.
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  # ── Detect which app changed ────────────────────────────────────────────────
+  # ── Detect what changed (and force-deploy on manual dispatch) ────────────────
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
+      backend: ${{ steps.decide.outputs.backend }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name == 'push'
         with:
           filters: |
             backend:
               - 'Back-end/server/**'
+      - id: decide
+        # Manual dispatch always deploys the backend; push deploys only on a backend change.
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=${{ steps.filter.outputs.backend }}" >> "$GITHUB_OUTPUT"
+          fi
 
-  # ── Backend ────────────────────────────────────────────────────────────────
+  # ── Backend tests (skippable only via a manual fast-redeploy) ────────────────
   test-backend:
     name: Lint + Test Backend
     needs: [changes]
-    if: needs.changes.outputs.backend == 'true'
+    # Run on a backend change, EXCEPT when a manual dispatch explicitly unchecks run_tests.
+    if: >-
+      needs.changes.outputs.backend == 'true' &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_tests)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -79,8 +113,17 @@ jobs:
 
   deploy-backend:
     name: Deploy Backend → Railway
-    needs: [test-backend]
+    needs: [changes, test-backend]
+    # Deploy when the backend is in scope AND tests did not fail. test-backend is 'skipped'
+    # on a manual fast-redeploy (run_tests unchecked) — which is allowed; only a real
+    # 'failure'/'cancelled' blocks the deploy.
+    if: >-
+      always() &&
+      needs.changes.outputs.backend == 'true' &&
+      needs.test-backend.result != 'failure' &&
+      needs.test-backend.result != 'cancelled'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -88,13 +131,31 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      # No --detach: we WAIT for the Railway build so a failed image build fails
-      # this job (visible in Actions) instead of silently returning success.
-      - name: Deploy
+      # No --detach: we WAIT for the Railway build so a failed image build fails this job
+      # (visible in Actions). `railway up` is retried up to 3× to ride out Railway's
+      # transient "service unavailable" responses, which are not build failures.
+      - name: Deploy (with retry)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_BACKEND_TOKEN }}
-        run: railway up --service=EcommerceAutobacs --ci
         working-directory: Back-end/server
+        run: |
+          set -u
+          for attempt in 1 2 3; do
+            echo "::group::railway up — attempt ${attempt}/3"
+            if railway up --service=EcommerceAutobacs --ci; then
+              echo "::endgroup::"
+              echo "✓ Deploy succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "✗ Attempt ${attempt} failed"
+            if [ "${attempt}" -lt 3 ]; then
+              echo "Retrying in 30s…"
+              sleep 30
+            fi
+          done
+          echo "::error::Deploy failed after 3 attempts (likely Railway-side). Re-run via the Actions 'Run workflow' button."
+          exit 1
 
   # ── Frontend ───────────────────────────────────────────────────────────────
   # Frontend deploy intentionally removed: Vercel owns build + deploy via its Git
