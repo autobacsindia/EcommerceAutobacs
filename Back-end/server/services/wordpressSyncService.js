@@ -171,9 +171,24 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
           name: cleanName, slug,
           description: htmlToText(wc.description, { keepNewlines: true }),
           shortDescription: htmlToText(wc.short_description, { keepNewlines: true }),
-          price: parseFloat(wc.price) || 0,
-          salePrice: wc.sale_price ? parseFloat(wc.sale_price) : undefined,
-          regularPrice: wc.regular_price ? parseFloat(wc.regular_price) : undefined,
+          // WooCommerce price semantics:
+          //   regular_price = list price, sale_price = discounted price (blank if not on sale),
+          //   price = the effective price WC currently charges (sale_price when on sale, else regular).
+          // `price` is the customer-facing/charged price. `originalPrice` is the strikethrough
+          // "was" price the discount badge reads — set ONLY when genuinely on sale, and null
+          // otherwise so a product going off-sale clears its stale badge on the next sync.
+          ...((() => {
+            const effective = parseFloat(wc.price) || 0;
+            const regular   = wc.regular_price ? parseFloat(wc.regular_price) : 0;
+            const sale      = wc.sale_price ? parseFloat(wc.sale_price) : 0;
+            const onSale    = sale > 0 && regular > sale;
+            return {
+              price: effective || regular || 0,
+              originalPrice: onSale ? regular : null,
+              salePrice: sale || undefined,
+              regularPrice: regular || undefined,
+            };
+          })()),
           stock: stockFromWc(wc),
           sku: wc.sku || undefined,
           brand: r ? r.entry.name : '',

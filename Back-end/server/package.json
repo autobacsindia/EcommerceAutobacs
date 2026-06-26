@@ -24,6 +24,8 @@
                     "seed":  "node scripts/populate-vehicles.mjs \u0026\u0026 node add-sample-products.js",
                     "seed-complementary":  "node scripts/seedComplementaryProducts.js",
                     "seed-press":  "node --import=dotenv/config scripts/seed-press-coverage.js",
+                    "backfill-original-price":  "node --import=dotenv/config scripts/backfill-original-price.js",
+                    "sync-wordpress":  "node --import=dotenv/config scripts/run-wordpress-sync.js",
                     "count-products":  "node count-products.js",
                     "add-sample-products":  "node add-sample-products.js",
                     "bulk-import-products":  "node bulk-import-products.js",

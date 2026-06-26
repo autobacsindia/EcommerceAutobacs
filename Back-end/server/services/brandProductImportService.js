@@ -151,10 +151,19 @@ class BrandProductImportService {
       name: wpProduct.name,
       description: removeHtmlTags(wpProduct.description),
       shortDescription: truncateString(removeHtmlTags(wpProduct.short_description || wpProduct.name), 200),
-      price: parseFloat(wpProduct.regular_price) || 0,
-      originalPrice: wpProduct.sale_price && parseFloat(wpProduct.sale_price) > 0 
-        ? parseFloat(wpProduct.regular_price) 
-        : undefined,
+      // `price` is the price we charge: sale_price when genuinely on sale, else regular_price.
+      // `originalPrice` is the strikethrough "was" price the discount badge reads — set only
+      // when on sale. (Previously this charged the regular price on sale items AND set
+      // originalPrice == price, so the badge never appeared.)
+      ...((() => {
+        const regular = parseFloat(wpProduct.regular_price) || 0;
+        const sale    = parseFloat(wpProduct.sale_price) || 0;
+        const onSale  = sale > 0 && regular > sale;
+        return {
+          price: onSale ? sale : (regular || parseFloat(wpProduct.price) || 0),
+          originalPrice: onSale ? regular : undefined,
+        };
+      })()),
       sku: wpProduct.sku || undefined,
       stock: statusFromQuantity(wpProduct.stock_quantity),
       brand: this.extractBrandFromProduct(wpProduct),
