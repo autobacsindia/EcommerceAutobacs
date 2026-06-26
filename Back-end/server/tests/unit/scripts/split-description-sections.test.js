@@ -1,10 +1,7 @@
-import { jest } from '@jest/globals';
-
-// The script imports the Product model (for its run() path) but does not connect
-// to Mongo at import time; the migration runner is guarded behind an isMain check.
+// Pure parser shared by the WordPress sync, the migration scripts, and these tests.
 const {
-  looksLikeHtml, htmlBlocks, textBlocks, partition, coalesceItems,
-} = await import('../../../scripts/split-description-sections.js');
+  looksLikeHtml, htmlBlocks, textBlocks, partition, coalesceItems, splitDescriptionSections,
+} = await import('../../../utils/descriptionSections.js');
 
 describe('split-description-sections parser', () => {
   const NAME = 'Toyota Hilux Roof Rail with Cross Bar';
@@ -59,6 +56,18 @@ describe('split-description-sections parser', () => {
     expect(r.matched).toBe(false);
     expect(r.features).toEqual([]);
     expect(r.whyChoose).toEqual([]);
+  });
+
+  it('splitDescriptionSections handles the raw WC HTML the live sync feeds it', () => {
+    const r = splitDescriptionSections(HTML, NAME);
+    expect(r.matched).toBe(true);
+    expect(r.features).toHaveLength(2);
+    expect(r.whyChoose).toHaveLength(1);
+    expect(r.description).toMatch(/smart upgrade/);
+    // a body with no Key-Features / Why-Choose headings is left unmatched
+    const plain = splitDescriptionSections('<p>Just a plain product blurb.</p>', NAME);
+    expect(plain.matched).toBe(false);
+    expect(plain.features).toEqual([]);
   });
 
   it('coalesces a separator-less continuation into the previous item', () => {

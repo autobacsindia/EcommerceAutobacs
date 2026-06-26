@@ -23,7 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import Product from '../models/Product.js';
-import { looksLikeHtml, htmlBlocks, textBlocks, partition } from './split-description-sections.js';
+import { looksLikeHtml, htmlBlocks, textBlocks, partition } from '../utils/descriptionSections.js';
 
 dotenv.config();
 

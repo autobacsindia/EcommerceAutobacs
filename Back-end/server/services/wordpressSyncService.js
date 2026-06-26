@@ -26,6 +26,7 @@ import Category from '../models/Category.js';
 import Brand from '../models/Brand.js';
 import { resolveBrand } from '../utils/brandResolution.js';
 import { STOCK_STATUS, statusFromQuantity } from '../utils/stockStatus.js';
+import { splitDescriptionSections } from '../utils/descriptionSections.js';
 
 function getConfig() {
   const cfg = {
@@ -210,6 +211,20 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
             }))
             .filter(s => s.key && s.value),
         };
+        // Split "Key Features" / "Why Choose" out of the WC body into structured
+        // fields so synced products stay consistent with the rest of the catalog
+        // (same parser as scripts/split-description-sections.js). WC is the source
+        // of truth here, so mirror exactly what it has — clear the lists when the
+        // body has no such sections.
+        const sections = splitDescriptionSections(wc.description, cleanName);
+        if (sections.matched) {
+          if (sections.description) data.description = sections.description;
+          data.features = sections.features;
+          data.whyChoose = sections.whyChoose;
+        } else {
+          data.features = [];
+          data.whyChoose = [];
+        }
         if (dryRun) { existingDoc ? stats.products.updated++ : stats.products.inserted++; continue; }
         if (existingDoc) { await Product.findByIdAndUpdate(existingDoc._id, { $set: data }); stats.products.updated++; }
         else { await new Product(data).save(); stats.products.inserted++; }
