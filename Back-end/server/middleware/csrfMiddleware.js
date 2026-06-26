@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
 import { redisClient, isRedisHealthy } from './rate-limit/redisClient.js';
+import { buildCookieOptions } from '../utils/cookieOptions.js';
 
 const CSRF_WINDOW_SEC   = 60;
 const CSRF_BLOCK_THRESH = 50;
@@ -93,12 +94,12 @@ export const csrfProtection = async (req, res, next) => {
   // ── Generate CSRF cookie if absent ──────────────────────────────────────────
   if (!req.cookies['XSRF-TOKEN']) {
     const token = crypto.randomBytes(32).toString('hex');
-    res.cookie('XSRF-TOKEN', token, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    // SameSite/Domain follow COOKIE_SAMESITE/COOKIE_DOMAIN so this works cross-site during
+    // the Vercel↔Railway interim (was hardcoded 'strict', which silently broke cross-site).
+    // CSRF protection here relies on the double-submit token match; SameSite is defense-in-depth.
+    res.cookie('XSRF-TOKEN', token, buildCookieOptions({
       httpOnly: false, // Must be readable by frontend JS
-      path: '/'
-    });
+    }));
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
       return next();
     }

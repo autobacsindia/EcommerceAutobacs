@@ -1,12 +1,21 @@
 /**
  * Cache-Control Headers Middleware
- * 
- * Adds appropriate HTTP caching headers to responses based on route type
- * 
+ *
+ * Adds appropriate HTTP caching headers to responses based on route type.
+ *
  * Usage:
  * - Product listings: cacheMiddleware('product-listing')
  * - Categories/Brands: cacheMiddleware('static-data')
  * - User-specific data: Do NOT cache
+ *
+ * CDN contract (Cloudflare in front of api.<domain> — see plan §E):
+ * - Only routes returning NON-user-specific data are tagged cacheable here; the s-maxage
+ *   makes Cloudflare cache them at the edge.
+ * - We intentionally do NOT emit `Vary: Cookie`: it would key the shared cache on the full
+ *   Cookie header (analytics cookies fragment it) and collapse hit-rate. Instead, configure
+ *   Cloudflare to BYPASS cache when an auth cookie (accessToken/refreshToken) is present.
+ * - Responses carrying `Set-Cookie` (e.g. CSRF token minted on a GET) are not cached by a
+ *   compliant CDN, so per-user tokens can't leak across users.
  */
 
 export const cacheMiddleware = (cacheType = 'default') => {

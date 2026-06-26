@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { getRedisClient } from '../services/cache/redisClient.js';
 import csrfProtection from '../middleware/csrfMiddleware.js';
 import rateLimit from 'express-rate-limit';
+import { buildCookieOptions } from '../utils/cookieOptions.js';
 
 const router = express.Router();
 
@@ -228,14 +229,14 @@ router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayO
         
         await orderRepository.save(order);
 
-        // Send session token as httpOnly cookie (scoped to payment routes)
-        res.cookie('guest_session', serverSessionToken, {
+        // Send session token as httpOnly cookie (scoped to payment routes).
+        // secure/sameSite/domain follow env (cookieOptions) for domain portability;
+        // path stays tightened to the payment routes.
+        res.cookie('guest_session', serverSessionToken, buildCookieOptions({
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
           path: '/api/v1/razorpay',  // Tightened scope
           maxAge: 30 * 60 * 1000 // 30 minutes
-        });
+        }));
         
       } catch (redisError) {
         console.error('[SECURITY] Redis unavailable for session binding:', redisError.message);

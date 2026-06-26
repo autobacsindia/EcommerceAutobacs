@@ -5,10 +5,10 @@
  */
 
 import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
 import sessionStore from '../services/sessionStore.js';
 import { signToken } from './jwtSecretManager.js';
 import User from '../models/User.js';
+import { buildCookieOptions } from './cookieOptions.js';
 
 /**
  * Generate a secure refresh token
@@ -337,15 +337,12 @@ export const setAccessTokenCookie = (res, token, expiresIn) => {
     maxAge = 30 * 60 * 1000; // Default: 30 minutes
   }
   
-  const cookieOptions = {
+  const cookieOptions = buildCookieOptions({
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
     maxAge: maxAge,
     priority: 'high',
-  };
-  
+  });
+
   res.cookie('accessToken', token, cookieOptions);
 };
 
@@ -354,13 +351,10 @@ export const setAccessTokenCookie = (res, token, expiresIn) => {
  * @param {Object} res - Express response object
  */
 export const clearAccessTokenCookie = (res) => {
-  res.clearCookie('accessToken', {
+  res.clearCookie('accessToken', buildCookieOptions({
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
     priority: 'high',
-  });
+  }));
 };
 
 /**
@@ -370,15 +364,12 @@ export const clearAccessTokenCookie = (res) => {
  * @param {Date} expiresAt - Expiration date
  */
 export const setRefreshTokenCookie = (res, token, expiresAt) => {
-  const cookieOptions = {
+  const cookieOptions = buildCookieOptions({
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
     expires: expiresAt,
     priority: 'high',
-  };
-  
+  });
+
   res.cookie('refreshToken', token, cookieOptions);
 };
 
@@ -387,13 +378,10 @@ export const setRefreshTokenCookie = (res, token, expiresAt) => {
  * @param {Object} res - Express response object
  */
 export const clearRefreshTokenCookie = (res) => {
-  const cookieOptions = {
+  const cookieOptions = buildCookieOptions({
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
     priority: 'high',
-  };
+  });
 
   res.clearCookie('refreshToken', cookieOptions);
 };

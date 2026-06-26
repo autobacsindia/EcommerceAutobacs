@@ -6,18 +6,24 @@
  *  - Each Queue and Worker must receive its own connection instance
  *
  * Call createConnection() per Queue/Worker, not once shared.
+ *
+ * Redis split (see plan): BullMQ uses blocking commands + constant polling, which is
+ * expensive/fragile on Upstash's per-request serverless model. It runs on a dedicated
+ * Redis via QUEUE_REDIS_URL. Falls back to REDIS_URL so single-instance/dev still works.
  */
 
 import { Redis } from 'ioredis';
 
+const QUEUE_URL = process.env.QUEUE_REDIS_URL || process.env.REDIS_URL;
+
 export function createConnection() {
-  if (!process.env.REDIS_URL) {
-    throw new Error('REDIS_URL is required for queue workers');
+  if (!QUEUE_URL) {
+    throw new Error('QUEUE_REDIS_URL (or REDIS_URL fallback) is required for queue workers');
   }
 
-  return new Redis(process.env.REDIS_URL, {
+  return new Redis(QUEUE_URL, {
     maxRetriesPerRequest: null,   // required by BullMQ
     enableReadyCheck: false,
-    tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
+    tls: QUEUE_URL.startsWith('rediss://') ? {} : undefined,
   });
 }

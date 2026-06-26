@@ -49,6 +49,15 @@ export function validateEnvironment() {
     }
   }
 
+  // Validate COOKIE_SAMESITE enum if set (used by utils/cookieOptions.js).
+  // Optional — defaults applied in the helper when unset.
+  if (process.env.COOKIE_SAMESITE) {
+    const allowed = ['lax', 'strict', 'none'];
+    if (!allowed.includes(process.env.COOKIE_SAMESITE.toLowerCase())) {
+      errors.push(`COOKIE_SAMESITE must be one of ${allowed.join(', ')} (got "${process.env.COOKIE_SAMESITE}")`);
+    }
+  }
+
   // Validate JWT_SECRET length (only if it exists)
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 64) {
     errors.push(
@@ -88,6 +97,9 @@ export function logEnvironmentInfo() {
     JWT_SECRET: process.env.JWT_SECRET ? `✓ Set (${process.env.JWT_SECRET.length} chars)` : '✗ Missing',
     MONGO_URI: process.env.MONGO_URI ? '✓ Set' : '✗ Missing',
     REDIS_URL: process.env.REDIS_URL ? '✓ Set' : '✗ Not configured',
+    QUEUE_REDIS_URL: process.env.QUEUE_REDIS_URL ? '✓ Set (dedicated)' : '↪ Falls back to REDIS_URL',
+    COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'host-only (unset)',
+    COOKIE_SAMESITE: process.env.COOKIE_SAMESITE || 'default',
     FRONTEND_URL: process.env.FRONTEND_URL || 'Not set',
     RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET ? '✓ Set' : '✗ Missing',
     SENTRY_DSN: process.env.SENTRY_DSN ? '✓ Set' : '✗ Not configured',

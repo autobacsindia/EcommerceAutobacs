@@ -14,11 +14,49 @@
  * host). From the running service:  railway ssh -- npm run flush-cache
  *
  * Requires REDIS_URL.
+ *
+ * Edge cache (Cloudflare, see plan §C/§E): once api.<domain> is fronted by Cloudflare,
+ * flushing only Redis leaves stale copies at the edge. If CLOUDFLARE_API_TOKEN +
+ * CLOUDFLARE_ZONE_ID are set, this script also purges the Cloudflare zone so origin and
+ * edge stay consistent. Both steps run together after bulk SEO/data changes. The purge is
+ * skipped (no-op) when the creds are absent, so it's safe to run today pre-Cloudflare.
  */
 
 import Redis from 'ioredis';
 
 const PATTERNS = ['route:*', 'public:*'];
+
+/**
+ * Purge the Cloudflare edge cache for the zone. No-op unless both env vars are set.
+ * Token needs the "Zone → Cache Purge" permission, scoped to the zone.
+ */
+async function purgeCloudflare() {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!token || !zoneId) {
+    console.log('cloudflare  — skipped (CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE_ID not set)');
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ purge_everything: true }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.success === false) {
+      const detail = body?.errors?.map((e) => e.message).join('; ') || `HTTP ${res.status}`;
+      console.error(`cloudflare  — purge FAILED: ${detail}`);
+      return;
+    }
+    console.log('cloudflare  — edge cache purged (purge_everything)');
+  } catch (err) {
+    console.error('cloudflare  — purge error:', err.message);
+  }
+}
 
 async function flushPattern(redis, match) {
   let scanned = 0, deleted = 0;
@@ -47,13 +85,17 @@ async function main() {
   let total = 0;
   try {
     for (const p of PATTERNS) total += await flushPattern(redis, p);
-    console.log(`\nDone. Deleted ${total} cache key(s).`);
+    console.log(`\nRedis: deleted ${total} cache key(s).`);
   } catch (err) {
     console.error('[flush-public-cache] failed:', err.message);
     await redis.quit();
     process.exit(1);
   }
   await redis.quit();
+
+  // Purge the edge after the origin, so a cache MISS re-fills from fresh data.
+  await purgeCloudflare();
+  console.log('\nDone.');
   process.exit(0);
 }
 

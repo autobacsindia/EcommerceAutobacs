@@ -152,7 +152,7 @@ const requiredEnvVars = {
   
   // Redis (optional but recommended for production)
   REDIS_URL: {
-    description: 'Redis URL for caching and sessions',
+    description: 'Primary Redis (Upstash) for cache, sessions, CSRF',
     required: false,
     validate: (value) => {
       if (value && !value.startsWith('redis://') && !value.startsWith('rediss://')) {
@@ -161,7 +161,36 @@ const requiredEnvVars = {
       return null;
     }
   },
-  
+
+  // Dedicated Redis for BullMQ queues + rate-limit. Falls back to REDIS_URL if unset.
+  QUEUE_REDIS_URL: {
+    description: 'Dedicated Redis for BullMQ + rate-limit (falls back to REDIS_URL)',
+    required: false,
+    validate: (value) => {
+      if (value && !value.startsWith('redis://') && !value.startsWith('rediss://')) {
+        return 'Invalid format - should start with redis:// or rediss://';
+      }
+      return null;
+    }
+  },
+
+  // Cookie portability (for Vercel/Railway interim and eventual same-site cutover)
+  COOKIE_DOMAIN: {
+    description: 'Cookie Domain attr, e.g. .autobacsindia.com at cutover (unset = host-only)',
+    required: false,
+    validate: () => null,
+  },
+  COOKIE_SAMESITE: {
+    description: 'Cookie SameSite: none (cross-site interim) | lax | strict',
+    required: false,
+    validate: (value) => {
+      if (value && !['lax', 'strict', 'none'].includes(value.toLowerCase())) {
+        return 'Invalid - must be lax, strict, or none';
+      }
+      return null;
+    }
+  },
+
   // Sentry (optional but recommended)
   SENTRY_DSN: {
     description: 'Sentry DSN for error tracking',

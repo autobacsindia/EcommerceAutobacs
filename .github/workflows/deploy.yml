@@ -1,19 +1,20 @@
-# deploy.yml — Test-gated, per-service Railway deployment
+# deploy.yml — Test-gated Railway deployment (BACKEND ONLY)
 #
 # Replaces Railway's native GitHub auto-deploy (which needs a Pro plan when the
 # repo has multiple collaborators). Runs only on push to main.
 #
-# Path filtering: a service deploys only when its own files changed. Each deploy
-# is gated on that service's lint + tests (+ build for the frontend).
+# The backend deploys only when Back-end/server/** changed, gated on its lint + tests.
 #
-# Backend and frontend live in SEPARATE Railway projects, so each needs its own
-# project-scoped token (a project token only deploys services in its project):
-#   backend  → project "bountiful-surprise", service "EcommerceAutobacs"
-#   frontend → project "pleasant-analysis",  service "EcommerceAutobacs"
+# The FRONTEND was migrated off Railway to Vercel. Vercel owns the frontend build +
+# deploy via its Git integration (production on push to main, preview deploy per PR).
+# Frontend lint/test/build CI lives entirely in ci-frontend.yml (which now runs on main
+# too) and is enforced as a required check via branch protection.
+#
+# The backend uses a project-scoped token (only deploys services in its project):
+#   backend → project "bountiful-surprise", service "EcommerceAutobacs"
 #
 # Required GitHub repository secrets:
 #   RAILWAY_BACKEND_TOKEN   — project token for the backend project (production env)
-#   RAILWAY_FRONTEND_TOKEN  — project token for the frontend project (production env)
 
 name: Deploy to Railway
 
@@ -28,7 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -37,8 +37,6 @@ jobs:
           filters: |
             backend:
               - 'Back-end/server/**'
-            frontend:
-              - 'Front-end/web/**'
 
   # ── Backend ────────────────────────────────────────────────────────────────
   test-backend:
@@ -99,58 +97,5 @@ jobs:
         working-directory: Back-end/server
 
   # ── Frontend ───────────────────────────────────────────────────────────────
-  test-frontend:
-    name: Lint + Test + Build Frontend
-    needs: [changes]
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: Front-end/web
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: "npm"
-          cache-dependency-path: Front-end/web/package-lock.json
-
-      - run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      # Curated suite set (jest.ci.config.js); Playwright e2e excluded.
-      - name: Run tests
-        env:
-          NODE_ENV: test
-          NEXT_PUBLIC_API_URL: http://localhost:5000
-        run: npm run test:ci -- --forceExit --passWithNoTests
-
-      - name: Build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:5000
-          NEXT_TELEMETRY_DISABLED: "1"
-        run: npm run build
-
-  deploy-frontend:
-    name: Deploy Frontend → Railway
-    needs: [test-frontend]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      # No --detach: we WAIT for the Railway build so a failed image build fails
-      # this job (visible in Actions) instead of silently returning success.
-      - name: Deploy
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_FRONTEND_TOKEN }}
-        run: railway up --service=EcommerceAutobacs --ci
-        working-directory: Front-end/web
+  # Frontend deploy intentionally removed: Vercel owns build + deploy via its Git
+  # integration. CI for the frontend lives in ci-frontend.yml (runs on main too).
