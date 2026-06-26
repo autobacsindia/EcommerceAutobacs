@@ -118,7 +118,7 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
   });
 
   try {
-    await emailHandler.sendEmail({
+    const result = await emailHandler.sendEmail({
       to: newUser.email,
       subject: emailTemplate.subject,
       text: emailTemplate.text,
@@ -126,7 +126,11 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
     });
 
     if (process.env.NODE_ENV !== 'test') {
-      console.log(`[Auth] Verification email sent to ${newUser.email}`);
+      if (result?.success) {
+        console.log(`[Auth] Verification email sent to ${newUser.email}`);
+      } else {
+        console.error(`[Auth] Verification email NOT sent to ${newUser.email}: ${result?.error || 'email service unavailable'}`);
+      }
     }
   } catch (error) {
     if (process.env.NODE_ENV !== 'test') {
@@ -455,17 +459,24 @@ router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword,
   });
 
   try {
-    await emailHandler.sendEmail({
+    const result = await emailHandler.sendEmail({
       to: user.email,
       subject: emailTemplate.subject,
       text: emailTemplate.text,
       html: emailTemplate.html
     });
 
-    console.log(`[Auth] Password reset email sent to ${user.email}`);
-  } catch {
-    console.error('[Auth] Failed to send password reset email');
-    // SECURITY: Don't log error details (may contain sensitive info)
+    if (result?.success) {
+      console.log(`[Auth] Password reset email sent to ${user.email}`);
+    } else {
+      // sendEmail returns { success: false } (rather than throwing) when the email
+      // service is disabled or SendGrid rejects the send (e.g. unverified sender).
+      // The error message is provider metadata, not token/PII, so it is safe to log
+      // and is needed to diagnose silent delivery failures.
+      console.error(`[Auth] Password reset email NOT sent to ${user.email}: ${result?.error || 'email service unavailable'}`);
+    }
+  } catch (err) {
+    console.error(`[Auth] Failed to send password reset email to ${user.email}: ${err?.message || 'unknown error'}`);
     // Still return success to prevent email enumeration
   }
 
@@ -553,15 +564,17 @@ router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, as
   const emailTemplate = passwordChangedEmail({ name: user.name });
   
   try {
-    await emailHandler.sendEmail({
+    const result = await emailHandler.sendEmail({
       to: user.email,
       subject: emailTemplate.subject,
       text: emailTemplate.text,
       html: emailTemplate.html
     });
-  } catch {
-    console.error('[Auth] Failed to send password changed email');
-    // SECURITY: Don't log error details (may contain sensitive info)
+    if (!result?.success) {
+      console.error(`[Auth] Password changed email NOT sent to ${user.email}: ${result?.error || 'email service unavailable'}`);
+    }
+  } catch (err) {
+    console.error(`[Auth] Failed to send password changed email to ${user.email}: ${err?.message || 'unknown error'}`);
     // Continue anyway, password was changed successfully
   }
 
@@ -691,14 +704,18 @@ router.post("/resend-verification", resendVerificationRateLimit, optionalAuth, v
   });
 
   try {
-    await emailHandler.sendEmail({
+    const result = await emailHandler.sendEmail({
       to: user.email,
       subject: emailTemplate.subject,
       text: emailTemplate.text,
       html: emailTemplate.html
     });
 
-    console.log(`[Auth] Verification email sent to ${user.email}`);
+    if (result?.success) {
+      console.log(`[Auth] Verification email sent to ${user.email}`);
+    } else {
+      console.error(`[Auth] Verification email NOT sent to ${user.email}: ${result?.error || 'email service unavailable'}`);
+    }
   } catch (error) {
     console.error('[Auth] Failed to send verification email:', error);
     // Still return success to prevent email enumeration
