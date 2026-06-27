@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Pencil, Check, X, Globe } from 'lucide-react';
 import apiClient from '@/lib/api';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
+import { SITE_URL } from '@/lib/siteUrl';
 
 interface PageRow {
   path: string;

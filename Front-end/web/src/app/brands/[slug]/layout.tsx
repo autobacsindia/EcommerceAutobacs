@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { getServerApiBase } from '@/lib/server-api';
 import { resolveSeo } from '@/lib/seo';
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
+import { SITE_URL } from '@/lib/siteUrl';
 
 // The brand page is a client component, so its SEO metadata is generated here in
 // a server layout. Admin overrides (Brand.seo) are layered over computed

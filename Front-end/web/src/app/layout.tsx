@@ -16,6 +16,7 @@ import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import { getNavCategories } from "@/lib/navCategories";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
+import { SITE_URL } from "@/lib/siteUrl";
 
 const barlowCondensed = Barlow_Condensed({
   variable: "--font-barlow-condensed",
@@ -32,7 +33,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Autobacs India | Premium Automotive Accessories",
     template: "%s | Autobacs India"
@@ -46,10 +47,10 @@ export const metadata: Metadata = {
   
   // Canonical URL
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    canonical: SITE_URL,
     languages: {
-      'en-IN': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      'en': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'en-IN': SITE_URL,
+      'en': SITE_URL,
     },
   },
   
@@ -57,7 +58,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    url: SITE_URL,
     siteName: "Autobacs India",
     title: "Autobacs India | Premium Automotive Accessories",
     description: "Shop premium automotive accessories, body kits, and performance parts from India's trusted auto parts retailer",

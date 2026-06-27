@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+import { SITE_URL as BASE_URL } from '@/lib/siteUrl';
 
 // Railway health-check endpoint that also pre-warms the sitemap cache.
 // Set RAILWAY_HEALTHCHECK_PATH=/api/warmup (or call it from your deploy script).

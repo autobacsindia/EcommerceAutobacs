@@ -2,8 +2,7 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ArticleDetailClient from '@/components/blog/ArticleDetailClient';
 import { resolveSeo } from '@/lib/seo';
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
+import { SITE_URL } from '@/lib/siteUrl';
 
 // JSON.stringify does not escape < > & — unicode-escape them so an article
 // field containing </script> can't break out of the JSON-LD script tag.

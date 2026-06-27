@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getServerApiBase } from '@/lib/server-api';
 import { resolveSeo, type SeoOverrides } from '@/lib/seo';
+import { SITE_URL } from '@/lib/siteUrl';
 
 /**
  * Metadata builder for static, entity-less routes (careers, contact, legal…).
@@ -16,7 +17,6 @@ import { resolveSeo, type SeoOverrides } from '@/lib/seo';
  * fallback still produces correct metadata — the page never ends up bare.
  */
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
 const DEFAULT_OG = `${SITE_URL}/og-image.jpg`;
 
 async function fetchPageSeo(path: string): Promise<SeoOverrides | null> {

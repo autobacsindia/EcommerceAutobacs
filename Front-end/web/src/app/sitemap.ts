@@ -1,8 +1,7 @@
 import { MetadataRoute } from 'next';
 import * as Sentry from '@sentry/nextjs';
 import { getServerApiBase } from '@/lib/server-api';
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+import { SITE_URL as BASE_URL } from '@/lib/siteUrl';
 
 // ── Shard layout ───────────────────────────────────────────────────────────────
 // id = 0          → static routes + categories  (bounded: categories rarely exceed a few hundred)

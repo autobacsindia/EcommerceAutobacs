@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Share2, Copy, Check, X } from 'lucide-react';
+import { SITE_URL } from '@/lib/siteUrl';
 
 interface ShareButtonProps {
   productName: string;
@@ -9,8 +10,6 @@ interface ShareButtonProps {
   price?: number;
   imageUrl?: string;
 }
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || '';
 
 export default function ShareButton({ productName, productUrl, price, imageUrl }: ShareButtonProps) {
   const [open, setOpen] = useState(false);

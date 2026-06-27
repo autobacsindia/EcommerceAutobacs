@@ -2,8 +2,7 @@ import { Metadata } from 'next';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
 import { resolveSeo } from '@/lib/seo';
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
+import { SITE_URL } from '@/lib/siteUrl';
 
 async function getCategoryForMetadata(slug: string) {
   try {

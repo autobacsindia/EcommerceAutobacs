@@ -3,8 +3,7 @@ import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
 import { isOutOfStock } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
+import { SITE_URL } from '@/lib/siteUrl';
 
 // JSON.stringify does not escape < > & so a product field containing </script>
 // would break out of the script tag. Unicode-escape these three characters so

@@ -1,6 +1,5 @@
 import { MetadataRoute } from 'next'
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+import { SITE_URL as BASE_URL } from '@/lib/siteUrl'
 
 /**
  * Dynamic robots.txt (env-driven host). Allows crawling of public content so
