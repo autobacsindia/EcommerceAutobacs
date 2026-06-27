@@ -7,29 +7,18 @@
 #   lint   — next lint (ESLint is skipped during next build, so runs here)
 #   test   — jest unit tests
 #   build  — next build (TypeScript errors fail the build; ignoreBuildErrors: false)
-#   deploy — vercel deploy --prod (push to main only, gated on lint+test+build)
 #
-# DEPLOY: The frontend is deployed to Vercel from CI using the project owner's
-# Vercel token (secrets.VERCEL_TOKEN), NOT via Vercel's Git integration. Vercel's
-# Git auto-deploy is disabled in Front-end/web/vercel.json (git.deploymentEnabled.main
-# = false) because, on the owner's Hobby plan, a push authored by a repo collaborator
-# (not the Hobby account owner) gets rejected. Deploying via the owner's token here
-# attributes the deploy to the owner, so it is accepted regardless of who pushed.
-#
-# Required GitHub repository secrets (all from the OWNER's Vercel account):
-#   VERCEL_TOKEN        — access token from vercel.com/account/tokens (owner's account)
-#   VERCEL_ORG_ID       — from .vercel/project.json after `vercel link` (a.k.a. teamId/orgId)
-#   VERCEL_PROJECT_ID   — from .vercel/project.json after `vercel link`
-#
-# Build happens on Vercel (remote), so Production env vars stay in the Vercel
-# dashboard and are never duplicated into CI.
+# DEPLOY is NOT done here. The frontend deploys via Vercel's native Git integration
+# (vercel.json → git.deploymentEnabled.main = true) on push to main. This workflow is
+# purely the gate: its lint/test/build checks are required by branch protection on
+# main, so an unvetted commit can never be merged — and therefore never deployed.
+# Hobby's commit-author check holds because main only advances via owner-merged PRs.
 
 name: Frontend CI
 
 on:
-  # Runs on every branch including main. The frontend deploys via this workflow's
-  # `deploy` job (Vercel CLI), so this workflow is the single source of frontend CI
-  # and is the required status check enforced by branch protection on main.
+  # Runs on every branch including main. These lint/test/build checks are the required
+  # status checks enforced by branch protection on main; Vercel deploys main natively.
   push:
     paths:
       - "Front-end/web/**"
@@ -39,9 +28,6 @@ on:
     paths:
       - "Front-end/web/**"
       - ".github/workflows/ci-frontend.yml"
-  # Manual redeploy of current main — use after a Vercel hiccup or an env-var change
-  # that needs a rebuild without a code change.
-  workflow_dispatch:
 
 defaults:
   run:
@@ -131,64 +117,5 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:5000
           NEXT_TELEMETRY_DISABLED: 1
           # Sentry source-map upload is skipped when SENTRY_AUTH_TOKEN is absent —
-          # this is intentional in CI; uploads happen only from Railway on deploy.
+          # intentional in CI; uploads happen on Vercel at deploy time.
         run: npm run build
-
-  deploy:
-    name: Deploy → Vercel (production)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [lint, test, build]
-    # Production deploy only from main (push) or a manual redeploy. Never on PRs
-    # (secrets are unavailable to forked-PR runs and we don't want preview noise here).
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      github.event_name == 'workflow_dispatch'
-    # Serialize production deploys so two pushes can't race the same Vercel project.
-    concurrency:
-      group: deploy-frontend-production
-      cancel-in-progress: false
-    # Override the workflow-level working-directory: the Vercel project's Root
-    # Directory (Front-end/web) is configured in the dashboard, so we deploy from
-    # the repo root and let Vercel resolve the monorepo subdir.
-    defaults:
-      run:
-        working-directory: ${{ github.workspace }}
-
-    # PREBUILT flow (required on Vercel Hobby). `vercel deploy --prod` carries git
-    # metadata, which makes Hobby run a commit-author access check that REJECTS deploys
-    # whose pushing author isn't the Hobby account owner (our exact situation). Building
-    # the artifacts in CI and uploading them with `--prebuilt` creates a plain CLI
-    # deployment with no git-author association, so Hobby accepts it.
-    #
-    # `vercel pull` fetches the project settings + Production env vars (incl. the
-    # Front-end/web Root Directory and NEXT_PUBLIC_* values) into .vercel/, so prod env
-    # still lives in the Vercel dashboard — not duplicated here. `vercel build` then
-    # builds the monorepo subdir locally; `vercel deploy --prebuilt` ships .vercel/output.
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Pull Vercel project settings + env (production)
-        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
-
-      - name: Build project artifacts
-        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
-
-      - name: Deploy prebuilt artifacts to Vercel (production)
-        run: |
-          url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
-          echo "Deployed: $url"
-          echo "### ✅ Frontend deployed to Vercel" >> "$GITHUB_STEP_SUMMARY"
-          echo "$url" >> "$GITHUB_STEP_SUMMARY"

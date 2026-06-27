@@ -1,8 +1,10 @@
 # CI — Backend test suite
 #
-# Runs on every push and pull-request that touches Back-end/server/** or
-# this workflow file itself.  Blocks merges / Railway auto-deploys when
-# any test fails or the 60 % line-coverage floor is breached.
+# Runs on every push (all branches incl. main) and pull-request that touches
+# Back-end/server/** or this workflow file itself. This is the gate: its checks
+# are required by branch protection on main, so an unvetted commit can never be
+# merged — and Railway deploys main natively only after it passes (enable Railway's
+# "Wait for CI" so a direct push to main can't outrun this).
 #
 # Jobs
 #   test  — install deps, run jest --coverage, upload the lcov report
@@ -13,10 +15,7 @@
 name: Backend CI
 
 on:
-  # On main, deploy.yml already runs this exact suite before deploying, so we
-  # exclude main here to avoid running the backend tests twice per push.
   push:
-    branches-ignore: ["main"]
     paths:
       - "Back-end/server/**"
       - ".github/workflows/ci.yml"
