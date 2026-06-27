@@ -7,6 +7,7 @@ import apiClient from '@/lib/api';
 import { ArrowLeft } from 'lucide-react';
 import ImageUploader from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
+import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 interface Category {
   _id: string;
@@ -65,6 +66,7 @@ export default function CreateProductPage() {
   const [whyChoose, setWhyChoose] = useState<string[]>(['']);
   const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([{ key: '', value: '' }]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
+  const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   useEffect(() => {
     fetchCategories();
@@ -154,6 +156,10 @@ export default function CreateProductPage() {
 
       const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
       if (tags.length) fd.append('tags', JSON.stringify(tags));
+
+      // SEO overrides — always sent; backend trims/strips blanks so unset
+      // fields fall back to values derived from the product.
+      fd.append('seo', JSON.stringify(seo));
 
       // ── Image files ────────────────────────────────────────────────────
       images.forEach((file) => fd.append('images', file));
@@ -703,6 +709,12 @@ export default function CreateProductPage() {
               disabled={submitting}
             />
           </div>
+
+          <SeoPanel
+            value={seo}
+            onChange={setSeo}
+            defaults={{ title: formData.name, description: formData.shortDescription }}
+          />
         </div>
         
         <div className="mt-8 flex justify-end gap-4">

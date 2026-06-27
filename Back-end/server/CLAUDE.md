@@ -1,6 +1,6 @@
 # CLAUDE.md — Backend (`autobacs-server`)
 
-Express + MongoDB (Mongoose) REST API. ESM (`"type": "module"` — use `import`, `.js` extensions in paths). Deploys to Railway (Docker).
+Express + MongoDB (Mongoose) REST API. ESM (`"type": "module"` — use `import`, `.js` extensions in paths). Deploys to Railway (Docker); target prod host `api.autobacsindia.com`. CORS/redirects read `FRONTEND_URL`/`FRONTEND_URLS` (→ `https://autobacsindia.com` once frontend moves to Vercel); also update `GOOGLE_CALLBACK_URL`. See root [CLAUDE.md](../../CLAUDE.md) "Migration status".
 
 ## Commands
 

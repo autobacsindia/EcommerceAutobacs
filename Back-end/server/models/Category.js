@@ -1,11 +1,12 @@
 import mongoose from "mongoose";
+import SeoSchema from "./shared/seoSchema.js";
 
 const CategorySchema = new mongoose.Schema({
-  name: { 
-    type: String, 
+  name: {
+    type: String,
     required: true,
     unique: true,
-    trim: true 
+    trim: true
   },
   slug: {
     type: String,
@@ -34,7 +35,12 @@ const CategorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  
+
+  // SEO metadata overrides (optional; blank fields fall back to name/description
+  // on the frontend). See models/shared/seoSchema.js.
+  seo: { type: SeoSchema, default: () => ({}) },
+
+
   // WordPress/WooCommerce sync fields
   wpId: {
     type: Number,

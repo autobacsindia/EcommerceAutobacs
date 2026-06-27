@@ -29,6 +29,7 @@
         "backfill-original-price": "node --import=dotenv/config scripts/backfill-original-price.js",
         "sync-wordpress": "node --import=dotenv/config scripts/run-wordpress-sync.js",
         "sync-prices": "node --import=dotenv/config scripts/sync-prices-from-woocommerce.js",
+        "import-seo": "node --import=dotenv/config scripts/import-seo-from-woocommerce.js",
         "flush-cache": "node --import=dotenv/config scripts/flush-public-cache.js",
         "count-products": "node count-products.js",
         "add-sample-products": "node add-sample-products.js",

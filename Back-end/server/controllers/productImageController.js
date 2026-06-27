@@ -24,6 +24,7 @@ import {
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { cleanHTML } from '../utils/htmlSanitizer.js';
 import { STOCK_VALUES } from '../utils/stockStatus.js';
+import { normalizeSeo } from '../utils/seo.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -46,11 +47,20 @@ const parseProductFields = (body) => {
   const fields = { ...body };
 
   ['categories', 'features', 'whyChoose', 'tags',
-   'specifications', 'compatibleVehicles'].forEach((key) => {
+   'specifications', 'compatibleVehicles', 'seo'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
   });
+
+  // Normalize the SEO sub-document: coerce noindex, trim/strip strings, drop
+  // blank fields. We only touch `seo` when the client actually sent it, so a
+  // partial update that omits `seo` never wipes stored values — but an admin
+  // who clears every field (normalized to {}) CAN reset back to the computed
+  // defaults. Blank individual fields fall back to defaults on the frontend.
+  if ('seo' in fields) {
+    fields.seo = normalizeSeo(fields.seo);
+  }
 
   if (fields.price !== undefined)         fields.price         = Number(fields.price);
   if (fields.originalPrice !== undefined) fields.originalPrice = Number(fields.originalPrice);

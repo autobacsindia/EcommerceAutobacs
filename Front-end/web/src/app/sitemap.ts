@@ -220,12 +220,16 @@ export default async function sitemap({
       clearTimeout(timeoutId);
       
       const articles = dedup(
-        (articlesData.data ?? []).map((article: any) => ({
-          url: `${BASE_URL}/media/${article.type}/${article.slug}`,
-          lastModified: safeDate(article.updatedAt ?? article.publishedAt),
-          changeFrequency: 'weekly' as ChangeFreq,
-          priority: 0.7,
-        }))
+        (articlesData.data ?? [])
+          .filter((article: any) => article.slug)
+          .map((article: any) => ({
+            // Blog posts are served at the site root (/<slug>) for WordPress
+            // permalink parity (ADR-005) — NOT under /media/<type>/.
+            url: `${BASE_URL}/${article.slug}`,
+            lastModified: safeDate(article.updatedAt ?? article.publishedAt),
+            changeFrequency: 'weekly' as ChangeFreq,
+            priority: 0.7,
+          }))
       );
       
       const durationMs = Date.now() - startTime;
@@ -262,15 +266,24 @@ export default async function sitemap({
   }
 
   // ── Shard 0: static routes + categories ─────────────────────────────────────
+  // Indexable, real routes only. Keep in sync with the managed static pages
+  // (config/staticPages.js on the backend) and the listing roots.
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: BASE_URL,                    lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 1.0 },
     { url: `${BASE_URL}/shop`,          lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
-    { url: `${BASE_URL}/media`,         lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.7 },
+    { url: `${BASE_URL}/products`,      lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
     { url: `${BASE_URL}/blog`,          lastModified: new Date(), changeFrequency: 'daily'   as ChangeFreq, priority: 0.8 },
-    { url: `${BASE_URL}/blog/gallery`,  lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
-    { url: `${BASE_URL}/blog/videos`,   lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
-    { url: `${BASE_URL}/about`,         lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.5 },
+    { url: `${BASE_URL}/brands`,        lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
+    { url: `${BASE_URL}/categories`,    lastModified: new Date(), changeFrequency: 'weekly'  as ChangeFreq, priority: 0.6 },
+    { url: `${BASE_URL}/about-us`,      lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.5 },
+    { url: `${BASE_URL}/careers`,       lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.4 },
     { url: `${BASE_URL}/contact`,       lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.5 },
+    { url: `${BASE_URL}/faq`,           lastModified: new Date(), changeFrequency: 'monthly' as ChangeFreq, priority: 0.4 },
+    { url: `${BASE_URL}/shipping`,      lastModified: new Date(), changeFrequency: 'yearly'  as ChangeFreq, priority: 0.3 },
+    { url: `${BASE_URL}/returns`,       lastModified: new Date(), changeFrequency: 'yearly'  as ChangeFreq, priority: 0.3 },
+    { url: `${BASE_URL}/warranty`,      lastModified: new Date(), changeFrequency: 'yearly'  as ChangeFreq, priority: 0.3 },
+    { url: `${BASE_URL}/privacy`,       lastModified: new Date(), changeFrequency: 'yearly'  as ChangeFreq, priority: 0.3 },
+    { url: `${BASE_URL}/terms`,         lastModified: new Date(), changeFrequency: 'yearly'  as ChangeFreq, priority: 0.3 },
   ];
 
   // Fetch categories with timeout

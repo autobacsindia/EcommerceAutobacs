@@ -1,10 +1,13 @@
 import { Metadata } from 'next';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
+import { resolveSeo } from '@/lib/seo';
+
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
 
 async function getCategoryForMetadata(slug: string) {
   try {
-    const res = await fetch(`${getServerApiBase()}/categories/slug/${slug}`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${getServerApiBase()}/categories/slug/${slug}`, { next: { revalidate: 300 } });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.success && data.category) {
@@ -27,34 +30,42 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     }
   }
 
-  const title = `${category.name} | Autobacs India`;
-  const description = category.description 
-    ? category.description.substring(0, 160).replace(/\n/g, ' ') 
+  const computedDescription = category.description
+    ? category.description.substring(0, 160).replace(/\n/g, ' ')
     : `Shop ${category.name} at Autobacs India - Premium automotive accessories, body kits, and performance parts for Indian vehicles. Free shipping across India.`;
 
-  const images = [];
-  if (category.image) {
-      if (typeof category.image === 'string') {
-          images.push(category.image);
-      } else if (category.image.url) {
-          images.push(category.image.url);
-      }
-  }
+  const defaultImage = category.image
+    ? (typeof category.image === 'string' ? category.image : category.image.url)
+    : undefined;
+
+  // Layer admin SEO overrides over computed defaults. Plain-string default title
+  // lets the root layout template append " | Autobacs India" exactly once.
+  const seo = resolveSeo(category.seo, {
+    title: category.name,
+    description: computedDescription,
+    url: `${SITE_URL}/categories/${slug}`,
+    image: defaultImage,
+  });
+
+  const ogTitle = typeof seo.title === 'string' ? seo.title : seo.title.absolute;
+  const images = seo.ogImage ? [seo.ogImage] : [];
 
   return {
-    title,
-    description,
-    alternates: { canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/categories/${slug}` },
+    title: seo.title,
+    description: seo.description,
+    ...(seo.robots && { robots: seo.robots }),
+    alternates: { canonical: seo.canonical },
     openGraph: {
-       title,
-       description,
+       title: ogTitle,
+       description: seo.description,
+       url: seo.canonical,
        images,
        type: 'website',
     },
     twitter: {
         card: 'summary_large_image',
-        title,
-        description,
+        title: ogTitle,
+        description: seo.description,
         images,
     }
   }

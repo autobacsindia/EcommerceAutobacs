@@ -7,13 +7,29 @@
 #   lint   — next lint (ESLint is skipped during next build, so runs here)
 #   test   — jest unit tests
 #   build  — next build (TypeScript errors fail the build; ignoreBuildErrors: false)
+#   deploy — vercel deploy --prod (push to main only, gated on lint+test+build)
+#
+# DEPLOY: The frontend is deployed to Vercel from CI using the project owner's
+# Vercel token (secrets.VERCEL_TOKEN), NOT via Vercel's Git integration. Vercel's
+# Git auto-deploy is disabled in Front-end/web/vercel.json (git.deploymentEnabled.main
+# = false) because, on the owner's Hobby plan, a push authored by a repo collaborator
+# (not the Hobby account owner) gets rejected. Deploying via the owner's token here
+# attributes the deploy to the owner, so it is accepted regardless of who pushed.
+#
+# Required GitHub repository secrets (all from the OWNER's Vercel account):
+#   VERCEL_TOKEN        — access token from vercel.com/account/tokens (owner's account)
+#   VERCEL_ORG_ID       — from .vercel/project.json after `vercel link` (a.k.a. teamId/orgId)
+#   VERCEL_PROJECT_ID   — from .vercel/project.json after `vercel link`
+#
+# Build happens on Vercel (remote), so Production env vars stay in the Vercel
+# dashboard and are never duplicated into CI.
 
 name: Frontend CI
 
 on:
-  # Runs on every branch including main. The frontend deploys via Vercel (not
-  # deploy.yml), so this workflow is the single source of frontend CI and is the
-  # required status check enforced by branch protection on main.
+  # Runs on every branch including main. The frontend deploys via this workflow's
+  # `deploy` job (Vercel CLI), so this workflow is the single source of frontend CI
+  # and is the required status check enforced by branch protection on main.
   push:
     paths:
       - "Front-end/web/**"
@@ -23,6 +39,9 @@ on:
     paths:
       - "Front-end/web/**"
       - ".github/workflows/ci-frontend.yml"
+  # Manual redeploy of current main — use after a Vercel hiccup or an env-var change
+  # that needs a rebuild without a code change.
+  workflow_dispatch:
 
 defaults:
   run:
@@ -114,3 +133,44 @@ jobs:
           # Sentry source-map upload is skipped when SENTRY_AUTH_TOKEN is absent —
           # this is intentional in CI; uploads happen only from Railway on deploy.
         run: npm run build
+
+  deploy:
+    name: Deploy → Vercel (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, test, build]
+    # Production deploy only from main (push) or a manual redeploy. Never on PRs
+    # (secrets are unavailable to forked-PR runs and we don't want preview noise here).
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
+    # Serialize production deploys so two pushes can't race the same Vercel project.
+    concurrency:
+      group: deploy-frontend-production
+      cancel-in-progress: false
+    # Override the workflow-level working-directory: the Vercel project's Root
+    # Directory (Front-end/web) is configured in the dashboard, so we deploy from
+    # the repo root and let Vercel resolve the monorepo subdir.
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      # Remote build: Vercel builds using the Production env vars configured in the
+      # project dashboard. `--yes` skips interactive prompts; org/project are read
+      # from the VERCEL_ORG_ID / VERCEL_PROJECT_ID env vars.
+      - name: Deploy to Vercel (production)
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          url=$(vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "Deployed: $url"
+          echo "### ✅ Frontend deployed to Vercel" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"

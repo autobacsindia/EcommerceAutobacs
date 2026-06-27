@@ -86,6 +86,7 @@ export async function getBrandDetails(req, res) {
           `https://via.placeholder.com/150?text=${encodeURIComponent(brandDoc.name)}`,
         description:
           brandDoc.description || 'Premium automotive accessories and performance parts',
+        seo: brandDoc.seo || {},
       },
     });
   }

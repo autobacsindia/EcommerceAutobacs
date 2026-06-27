@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoScorePanel from '@/components/ui/SeoScorePanel';
+import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import { generateSlug } from '@/lib/utils';
 
 interface Category {
@@ -53,6 +54,7 @@ interface Product {
   specifications?: Array<{ key: string; value: string }>;
   compatibleVehicles?: Vehicle[];
   tags?: string[];
+  seo?: Partial<SeoFormValue>;
 }
 
 export default function EditProductPage() {
@@ -110,6 +112,7 @@ export default function EditProductPage() {
   const [whyChoose, setWhyChoose] = useState<string[]>([]);
   const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
+  const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   useEffect(() => {
     fetchCategories();
@@ -258,6 +261,9 @@ export default function EditProductPage() {
       if (productData.tags && Array.isArray(productData.tags)) {
         setTagsInput(productData.tags.join(', '));
       }
+
+      // Hydrate SEO overrides (blank fields fall back to computed defaults)
+      setSeo(toSeoFormValue(productData.seo));
     } catch (err: any) {
       console.error('Failed to fetch product:', err);
       if (err.message.includes('Failed to fetch')) {
@@ -374,6 +380,10 @@ export default function EditProductPage() {
       fd.append('whyChoose', JSON.stringify(validWhyChoose));
       const validSpecs = specifications.filter(s => s.key.trim() && s.value.trim());
       fd.append('specifications', JSON.stringify(validSpecs));
+
+      // SEO overrides — always sent so cleared fields reset back to defaults;
+      // backend trims/strips blanks.
+      fd.append('seo', JSON.stringify(seo));
 
       // ── Existing images (keep them as-is, append mode) ────────────────────
       // replaceMode=true → controller deletes old gallery and uses only new uploads
@@ -1125,6 +1135,16 @@ export default function EditProductPage() {
                 : 'Existing images can be removed individually. New images are appended on save.'}
             </p>
           </div>
+
+          <SeoPanel
+            value={seo}
+            onChange={setSeo}
+            defaults={{
+              title: formData.name,
+              description: formData.shortDescription,
+              url: slug ? `https://autobacsindia.com/products/${slug}` : undefined,
+            }}
+          />
         </div>
         
         <div className="mt-8 flex justify-end gap-4">

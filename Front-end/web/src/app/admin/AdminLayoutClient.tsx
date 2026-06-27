@@ -55,6 +55,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/blog', label: 'Blog', icon: '📝' },
       { href: '/admin/media', label: 'Media', icon: '🖼️' },
+      { href: '/admin/seo', label: 'Pages SEO', icon: '🌐' },
       { href: '/admin/messages', label: 'Messages', icon: '💬' },
       { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },
     ],

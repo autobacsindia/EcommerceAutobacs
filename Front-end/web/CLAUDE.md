@@ -1,6 +1,6 @@
 # CLAUDE.md — Frontend (`web`)
 
-Next.js 15 App Router, React 19, TypeScript, Tailwind v4. Deploys to Railway (Docker).
+Next.js 15 App Router, React 19, TypeScript, Tailwind v4. Currently Railway (Docker); **migrating to Vercel** at `autobacsindia.com` (backend stays Railway at `api.autobacsindia.com`). Env-only move — set `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_APP_URL` in prod; SEO fallbacks default to `https://autobacsindia.com`, local backend defaults to `:8080`. See root [CLAUDE.md](../../CLAUDE.md) "Migration status".
 
 ## Commands
 

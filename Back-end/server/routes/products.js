@@ -1,5 +1,6 @@
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
+import productRepository from "../repositories/productRepository.js";
 import rateLimit from 'express-rate-limit';
 import { searchRateLimit, searchBurstLimit, publicBrowsingRateLimit } from '../middleware/rateLimitMiddleware.js';
 import {
@@ -129,6 +130,28 @@ router.get("/featured", publicProductRateLimit, publicCacheResponse('PRODUCT_FEA
 // @desc    Get products to showcase on Offers page
 // @access  Public
 router.get("/offers", publicCacheResponse('PRODUCT_OFFERS'), asyncHandler(getOfferProducts));
+
+// @route   GET /products/sitemap?limit=250&page=1
+// @desc    Lightweight slug+updatedAt list for sitemap generation (indexable only)
+// @access  Public
+// NOTE: must be declared before the dynamic "/:id" route so "sitemap" isn't
+// captured as an id.
+router.get("/sitemap", publicBrowsingRateLimit, asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 250, 500);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const products = await productRepository.findSitemap({ limit, skip: (page - 1) * limit });
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({ products });
+}));
+
+// @route   GET /products/count
+// @desc    Count of indexable products (drives sitemap shard planning)
+// @access  Public
+router.get("/count", publicBrowsingRateLimit, asyncHandler(async (_req, res) => {
+  const total = await productRepository.countSitemap();
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({ total });
+}));
 
 // @route   GET /products/by-vehicle/:vehicleId
 // @desc    Get products compatible with a specific vehicle

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import SeoSchema from "./shared/seoSchema.js";
 
 const ArticleSchema = new mongoose.Schema(
   {
@@ -11,6 +12,11 @@ const ArticleSchema = new mongoose.Schema(
     category: { type: String, default: "General" },
     tags: [{ type: String, trim: true }],
     author: { type: String, default: "Autobacs Team" },
+
+    // SEO metadata overrides (optional; blank fields fall back to title/excerpt
+    // on the frontend). See models/shared/seoSchema.js.
+    seo: { type: SeoSchema, default: () => ({}) },
+
     status: { type: String, enum: ["draft", "published"], default: "draft" },
     featured: { type: Boolean, default: false },
     views: { type: Number, default: 0 },

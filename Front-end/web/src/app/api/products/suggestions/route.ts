@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server';
+import { getServerApiBase } from '@/lib/server-api';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
   const limit = searchParams.get('limit') || '10';
-  
+
   try {
-    // Get the backend API URL from environment variables
-    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:5000';
-    
+    // Single source of truth for the backend base (reads NEXT_PUBLIC_API_URL and
+    // appends /api/v1) — avoids a divergent BACKEND_API_URL that dropped the version prefix.
+    const backendUrl = getServerApiBase();
+
     // Create AbortController for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-    
+
     // Forward the request to the backend with timeout
     const response = await fetch(`${backendUrl}/products/suggestions?q=${encodeURIComponent(query || '')}&limit=${limit}`, {
       signal: controller.signal

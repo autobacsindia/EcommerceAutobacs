@@ -1,5 +1,13 @@
 import React from 'react';
 import Link from 'next/link';
+import type { Metadata } from 'next';
+import { buildPageMetadata } from '@/lib/pageSeo';
+
+export const generateMetadata = (): Promise<Metadata> =>
+  buildPageMetadata('/careers', {
+    title: 'Careers',
+    description: 'Join the Autobacs India team and help us revolutionize the automotive accessories industry in India.',
+  });
 
 export default function CareersPage() {
   return (

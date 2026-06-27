@@ -12,6 +12,7 @@ import {
 } from "../middleware/validationMiddleware.js";
 import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
+import { normalizeSeo } from "../utils/seo.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
 const router = express.Router();
@@ -147,7 +148,10 @@ router.post(
       logoData = { url: uploaded.secure_url, public_id: uploaded.public_id };
     }
 
-    const brand = await brandRepository.create({ name, slug, logo: logoData, description, isActive: true });
+    const brand = await brandRepository.create({
+      name, slug, logo: logoData, description, isActive: true,
+      seo: normalizeSeo(req.body.seo),
+    });
 
     invalidateCache('brands');
 
@@ -209,6 +213,7 @@ router.put(
 
     if (description !== undefined) brand.description = description;
     if (isActive !== undefined)    brand.isActive = isActive;
+    if (req.body.seo !== undefined) brand.seo = normalizeSeo(req.body.seo);
 
     await brand.save();
     invalidateCache('brands', 'products');

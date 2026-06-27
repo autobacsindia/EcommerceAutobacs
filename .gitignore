@@ -31,3 +31,5 @@ coverage/
 *.lcov
 
 CLAUDE.local.md
+.vercel
+.env*

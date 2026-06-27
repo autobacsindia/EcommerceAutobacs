@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { getSearchSyncQueue } from '../queue/queues.js';
 import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
+import SeoSchema from './shared/seoSchema.js';
 
 const ProductSchema = new mongoose.Schema({
   name: { 
@@ -121,6 +122,12 @@ const ProductSchema = new mongoose.Schema({
     default: 0
   },
   tags: [String],
+
+  // SEO metadata overrides (meta title/description, canonical, OG image,
+  // noindex, internal focus keyword). All optional — blank fields fall back to
+  // values derived from the product on the frontend. See models/shared/seoSchema.js.
+  seo: { type: SeoSchema, default: () => ({}) },
+
   externalId: {
     type: String,
     unique: true,

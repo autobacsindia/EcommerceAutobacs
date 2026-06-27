@@ -6,6 +6,7 @@ import PressCoverage from "../models/PressCoverage.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { normalizeSeo } from "../utils/seo.js";
 
 const router = express.Router();
 
@@ -143,6 +144,22 @@ router.get("/articles", asyncHandler(async (req, res) => {
 
   if (cacheKey) cacheSet(cacheKey, payload);
   res.json(payload);
+}));
+
+// GET /media/articles/sitemap  — lightweight slug list for sitemap generation
+// NOTE: must precede "/articles/:slug" so "sitemap" isn't captured as a slug.
+// Only published, indexable (non-noindex) BLOG articles — these are served at
+// the site root (/<slug>), matching the public route.
+router.get("/articles/sitemap", asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 2000, 5000);
+  const articles = await articleRepository
+    .find({ status: "published", type: "blog", "seo.noindex": { $ne: true } })
+    .select("slug type updatedAt publishedAt")
+    .sort({ publishedAt: -1 })
+    .limit(limit)
+    .lean();
+  res.set("Cache-Control", "public, max-age=3600");
+  res.json({ data: articles });
 }));
 
 // GET /media/articles/:slug  — single article by slug
@@ -464,7 +481,7 @@ router.get("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
 
 // POST /media/admin/articles
 router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => {
-  const { title, type, coverImage, excerpt, content, category, tags, author, status, featured } = req.body;
+  const { title, type, coverImage, excerpt, content, category, tags, author, status, featured, seo } = req.body;
 
   if (!title || !content) {
     return res.status(400).json({ success: false, message: "Title and content are required" });
@@ -485,6 +502,7 @@ router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => 
     author: author || "Autobacs Team",
     status: status || "draft",
     featured: featured || false,
+    seo: normalizeSeo(seo),
   });
 
   cacheInvalidate("articles:");
@@ -499,6 +517,10 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
 
   const fields = ["title", "type", "coverImage", "excerpt", "content", "category", "tags", "author", "status", "featured"];
   fields.forEach((f) => { if (req.body[f] !== undefined) article[f] = req.body[f]; });
+
+  // SEO overrides — normalized (trim/strip/clamp, drop unsafe URLs). Only touch
+  // when sent; an admin who clears all fields resets to computed defaults.
+  if (req.body.seo !== undefined) article.seo = normalizeSeo(req.body.seo);
 
   // Regenerate slug if title changed
   if (req.body.title && req.body.title !== article.title) {

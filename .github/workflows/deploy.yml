@@ -15,9 +15,12 @@
 # build failure). The deploy step retries the whole command up to 3× with backoff so a
 # transient blip no longer fails the run.
 #
-# The FRONTEND was migrated off Railway to Vercel. Vercel owns the frontend build + deploy
-# via its Git integration (production on push to main, preview deploy per PR). Frontend CI
-# lives in ci-frontend.yml (runs on main too), enforced via branch protection.
+# The FRONTEND was migrated off Railway to Vercel. Frontend build + deploy live in
+# ci-frontend.yml (the `deploy` job runs `vercel deploy --prod` on push to main, gated on
+# lint+test+build). Vercel's own Git auto-deploy is disabled (Front-end/web/vercel.json)
+# because the owner's Hobby plan rejects deploys from collaborator pushes — CI deploys with
+# the owner's VERCEL_TOKEN instead. That CI is also the required check enforced by branch
+# protection on main.
 #
 # The backend uses a project-scoped token (only deploys services in its project):
 #   backend → project "bountiful-surprise", service "EcommerceAutobacs"

@@ -6,6 +6,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 export default function CreateBrandPage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function CreateBrandPage() {
     logo: '',
     description: '',
   });
+  const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -38,7 +40,7 @@ export default function CreateBrandPage() {
     setError(null);
 
     try {
-      await apiClient.post(API_ENDPOINTS.BRAND_CREATE, formData);
+      await apiClient.post(API_ENDPOINTS.BRAND_CREATE, { ...formData, seo });
       alert('Brand created successfully!');
       router.push('/admin/brands');
     } catch (err: any) {
@@ -143,6 +145,12 @@ export default function CreateBrandPage() {
               placeholder="Enter a description for this brand..."
             />
           </div>
+
+          <SeoPanel
+            value={seo}
+            onChange={setSeo}
+            defaults={{ title: formData.name, description: formData.description }}
+          />
 
           {/* Actions */}
           <div className="flex gap-4 pt-4">

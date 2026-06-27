@@ -19,6 +19,39 @@ import { QUERY_TIMEOUTS } from '../config/db.js';
 
 class ProductRepository {
   /**
+   * Sitemap data: active, indexable products with a minimal projection
+   * (slug + updatedAt only). Excludes seo.noindex products. Paginated for the
+   * sharded sitemap. The pre-find hook already scopes to deletedAt: null.
+   */
+  async findSitemap({ limit = 250, skip = 0 } = {}) {
+    return Product.find({
+      isActive: true,
+      slug: { $exists: true, $nin: [null, ''] },
+      'seo.noindex': { $ne: true },
+    })
+      .select('slug updatedAt')
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
+   * Count of indexable products — drives sitemap shard planning.
+   * countDocuments does NOT trigger the /^find/ soft-delete hook, so
+   * deletedAt: null is set explicitly here.
+   */
+  async countSitemap() {
+    return Product.countDocuments({
+      isActive: true,
+      deletedAt: null,
+      slug: { $exists: true, $nin: [null, ''] },
+      'seo.noindex': { $ne: true },
+    }).maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
    * Find products by query
    */
   async find(query, options = {}) {

@@ -9,6 +9,7 @@ import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 import categoryMappingService from "../services/categoryMappingService.js";
+import { normalizeSeo } from "../utils/seo.js";
 
 const router = express.Router();
 
@@ -107,6 +108,19 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
     count: withCounts.length,
     categories: withCounts
   });
+}));
+
+// @route   GET /categories/sitemap
+// @desc    Lightweight slug+updatedAt list for sitemap generation
+// @access  Public
+// NOTE: must precede the dynamic "/:id" route so "sitemap" isn't captured as an id.
+router.get("/sitemap", cacheMiddleware('static-data'), asyncHandler(async (_req, res) => {
+  const categories = await categoryRepository
+    .find({ isActive: true })
+    .select('slug updatedAt')
+    .sort({ updatedAt: -1 })
+    .lean();
+  res.json({ categories });
 }));
 
 // @route   GET /categories/:id
@@ -231,6 +245,7 @@ router.post(
         order,
         // isActive arrives as a string ("true"/"false") over multipart; coerce explicitly.
         ...(isActive !== undefined && { isActive: isActive === true || isActive === 'true' }),
+        seo: normalizeSeo(req.body.seo),
       });
 
       invalidateCache('categories');
@@ -287,6 +302,11 @@ router.put(
     // Empty parent means "make this a top-level category".
     if (updateData.parent === '' || updateData.parent === 'null') {
       updateData.parent = null;
+    }
+    // SEO arrives as a JSON string over multipart — normalize to a clean subdoc
+    // (or {} ) so Mongoose doesn't try to cast a raw string into the schema.
+    if (updateData.seo !== undefined) {
+      updateData.seo = normalizeSeo(updateData.seo);
     }
 
     // Parent existence + circular-hierarchy prevention.

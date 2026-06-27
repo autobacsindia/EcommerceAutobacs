@@ -18,7 +18,7 @@ const TYPE_META: Record<string, { label: string; Icon: React.ElementType; color:
 
 async function fetchActiveWarehouses(): Promise<PublicWarehouse[]> {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || 'http://127.0.0.1:5000';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || 'http://127.0.0.1:8080';
     const res = await fetch(`${apiUrl}/api/v1/warehouses/public`, {
       next: { tags: ['warehouses'], revalidate: 3600 },
     });

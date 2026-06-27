@@ -6,6 +6,7 @@ import { Plus, Edit2, Trash2, Eye, EyeOff, Star, Search, BookOpen, Image as Imag
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
+import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 type Tab = 'posts' | 'gallery' | 'videos' | 'comments';
 
@@ -80,6 +81,7 @@ export default function AdminBlogPage() {
   const [showPostForm, setShowPostForm] = useState(false);
   const [editingPost, setEditingPost] = useState<Article | null>(null);
   const [postForm, setPostForm] = useState({ ...EMPTY_POST });
+  const [postSeo, setPostSeo] = useState<SeoFormValue>(EMPTY_SEO);
   const [postSaving, setPostSaving] = useState(false);
 
   // Media form state
@@ -168,6 +170,7 @@ export default function AdminBlogPage() {
         ...postForm,
         type: 'blog',
         tags: postForm.tags.split(',').map(t => t.trim()).filter(Boolean),
+        seo: postSeo,
       };
       if (editingPost) {
         await apiClient.put(API_ENDPOINTS.ADMIN_MEDIA_ARTICLE(editingPost._id), payload);
@@ -177,6 +180,7 @@ export default function AdminBlogPage() {
       setShowPostForm(false);
       setEditingPost(null);
       setPostForm({ ...EMPTY_POST });
+      setPostSeo(EMPTY_SEO);
       fetchPosts();
     } catch (_) {}
     finally { setPostSaving(false); }
@@ -211,6 +215,7 @@ export default function AdminBlogPage() {
             tags: (a.tags || []).join(', '), author: a.author,
             status: a.status, featured: a.featured,
           });
+          setPostSeo(toSeoFormValue(a.seo));
           setShowPostForm(true);
         }
       })
@@ -300,7 +305,7 @@ export default function AdminBlogPage() {
           {tab !== 'comments' && (
             <button
               onClick={() => {
-                if (tab === 'posts') { setEditingPost(null); setPostForm({ ...EMPTY_POST }); setShowPostForm(true); }
+                if (tab === 'posts') { setEditingPost(null); setPostForm({ ...EMPTY_POST }); setPostSeo(EMPTY_SEO); setShowPostForm(true); }
                 else { setEditingMedia(null); setMediaForm({ ...EMPTY_MEDIA, type: tab === 'gallery' ? 'image' : 'video' }); setShowMediaForm(true); }
               }}
               className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
@@ -769,6 +774,13 @@ export default function AdminBlogPage() {
                   />
                 </div>
               </div>
+
+              <SeoPanel
+                value={postSeo}
+                onChange={setPostSeo}
+                defaults={{ title: postForm.title, description: postForm.excerpt }}
+              />
+
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                 <button type="button" onClick={() => { setShowPostForm(false); setEditingPost(null); }} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
                   Cancel

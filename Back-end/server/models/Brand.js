@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import SeoSchema from "./shared/seoSchema.js";
 
 const BrandSchema = new mongoose.Schema({
   name: { 
@@ -41,7 +42,11 @@ const BrandSchema = new mongoose.Schema({
   aliases: {
     type: [String],
     default: []
-  }
+  },
+
+  // SEO metadata overrides (optional; blank fields fall back to name/description
+  // on the frontend). See models/shared/seoSchema.js.
+  seo: { type: SeoSchema, default: () => ({}) }
 }, {
   timestamps: true
 });

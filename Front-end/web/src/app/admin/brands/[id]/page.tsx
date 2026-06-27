@@ -6,6 +6,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Save, Loader2, Package } from 'lucide-react';
 import Link from 'next/link';
+import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 interface Brand {
   id: string;
@@ -15,6 +16,7 @@ interface Brand {
   description?: string;
   isActive: boolean;
   productCount: number;
+  seo?: Partial<SeoFormValue>;
 }
 
 export default function EditBrandPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,6 +33,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
     description: '',
     isActive: true,
   });
+  const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   useEffect(() => {
     fetchBrand();
@@ -51,6 +54,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
           description: response.brand.description || '',
           isActive: response.brand.isActive,
         });
+        setSeo(toSeoFormValue(response.brand.seo));
       }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch brand');
@@ -79,7 +83,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
     setError(null);
 
     try {
-      await apiClient.put(API_ENDPOINTS.BRAND_UPDATE(id), formData);
+      await apiClient.put(API_ENDPOINTS.BRAND_UPDATE(id), { ...formData, seo });
       alert('Brand updated successfully!');
       router.push('/admin/brands');
     } catch (err: any) {
@@ -235,6 +239,16 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
               placeholder="Enter a description for this brand..."
             />
           </div>
+
+          <SeoPanel
+            value={seo}
+            onChange={setSeo}
+            defaults={{
+              title: formData.name,
+              description: formData.description,
+              url: brand?.slug ? `https://autobacsindia.com/brands/${brand.slug}` : undefined,
+            }}
+          />
 
           {/* Active Status */}
           <div className="flex items-center gap-3">

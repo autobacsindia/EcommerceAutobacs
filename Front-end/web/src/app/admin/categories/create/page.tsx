@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Upload } from 'lucide-react';
 import apiClient from '@/lib/api';
+import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -39,6 +40,7 @@ export default function CreateCategoryPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   // Fetch all categories for parent selection
   useEffect(() => {
@@ -106,6 +108,7 @@ export default function CreateCategoryPage() {
       if (formData.parent) fd.append('parent', formData.parent);
       fd.append('order', String(formData.order ?? 0));
       fd.append('isActive', String(formData.isActive));
+      fd.append('seo', JSON.stringify(seo));
       if (imageFile) {
         fd.append('image', imageFile);
         if (imageAlt.trim()) fd.append('imageAlt', imageAlt.trim());
@@ -332,6 +335,12 @@ export default function CreateCategoryPage() {
               </p>
             </div>
             
+            <SeoPanel
+              value={seo}
+              onChange={setSeo}
+              defaults={{ title: formData.name, description: formData.description }}
+            />
+
             <div className="flex justify-end space-x-3 pt-4">
               <button
                 type="button"

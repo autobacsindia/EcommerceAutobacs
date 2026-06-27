@@ -90,7 +90,7 @@ const nextConfig: NextConfig = {
     // NEXT_PUBLIC_API_URL is validated at the Dockerfile level (build arg check).
     // It will always be set here in a properly configured Railway build.
     // For local development, set it in .env.local.
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
 
     const sanitizedUrl = apiUrl.trim().replace(/\/+$/, '');
     console.log(`[next.config.ts] ✓ API rewrite target: ${sanitizedUrl}`);
@@ -118,7 +118,7 @@ const nextConfig: NextConfig = {
   env: {
     // Baked in at build time. In production NEXT_PUBLIC_API_URL is already validated
     // above, so this is always defined when NODE_ENV === 'production'.
-    API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000',
+    API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080',
   },
   webpack(config) {
     // ─── Windows duplicate-module fix ────────────────────────────────────────

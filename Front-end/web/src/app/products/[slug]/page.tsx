@@ -2,8 +2,9 @@ import { Metadata } from 'next';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
 import { isOutOfStock } from '@/lib/stock';
+import { resolveSeo } from '@/lib/seo';
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsIndia.com';
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://autobacsindia.com';
 
 // JSON.stringify does not escape < > & so a product field containing </script>
 // would break out of the script tag. Unicode-escape these three characters so
@@ -18,7 +19,9 @@ function serializeJsonLd(data: unknown): string {
 async function getProductForMetadata(slug: string) {
   try {
     // Slug-only lookup — ObjectId URLs are permanently redirected by the backend
-    const res = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 3600 } });
+    // revalidate 60s: keeps the page cached but shrinks the window between an
+    // admin SEO/content edit and it appearing publicly (was 3600 = up to 1h).
+    const res = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 60 } });
     if (!res.ok) return null;
     const data = await res.json();
     return data.product ?? null;
@@ -38,13 +41,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     }
   }
 
-  const title = product.name;
-  const description = product.shortDescription
-    ? product.shortDescription.substring(0, 160).replace(/\n/g, ' ')
-    : product.description
-      ? product.description.substring(0, 160).replace(/\n/g, ' ')
-      : 'Shop premium automotive accessories, body kits, and performance parts.';
-
   // Build canonical URL — slug is the only identifier; no _id fallback
   const url = product.slug ? `${SITE_URL}/products/${product.slug}` : null;
   if (!url) {
@@ -52,14 +48,32 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return { title: 'Product | Autobacs India' };
   }
 
-  // Build OG image list with width/height for richer previews
+  // Computed defaults derived from the product. These apply whenever the admin
+  // has not set a corresponding `seo.*` override — so a brand-new product is
+  // fully SEO-complete with zero extra steps.
+  const computedDescription = product.shortDescription
+    ? product.shortDescription.substring(0, 160).replace(/\n/g, ' ')
+    : product.description
+      ? product.description.substring(0, 160).replace(/\n/g, ' ')
+      : 'Shop premium automotive accessories, body kits, and performance parts.';
+
+  // Layer admin SEO overrides on top of the computed defaults (override →
+  // default → site default) via the shared resolver.
+  const seo = resolveSeo(product.seo, {
+    title: product.name,
+    description: computedDescription,
+    url,
+    image: product.images?.[0] ? (typeof product.images[0] === 'string' ? product.images[0] : product.images[0]?.url) : undefined,
+  });
+
+  const title = seo.title;
+  const description = seo.description;
+
+  // Build OG image list with width/height for richer previews. seo.ogImage is
+  // already the resolved choice (override if set, else the primary image).
   const ogImages: { url: string; width: number; height: number; alt: string }[] = [];
-  if (product.images && product.images.length > 0) {
-    const img = product.images[0];
-    const imgUrl = typeof img === 'string' ? img : img?.url;
-    if (imgUrl) {
-      ogImages.push({ url: imgUrl, width: 1200, height: 630, alt: product.name });
-    }
+  if (seo.ogImage) {
+    ogImages.push({ url: seo.ogImage, width: 1200, height: 630, alt: product.name });
   }
 
   // Price for open-graph product metadata
@@ -67,14 +81,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     ? String(Number(product.price).toFixed(2))
     : undefined;
 
+  // OG/Twitter need a plain string; seo.title may be an { absolute } object
+  // when the admin set a full meta title.
+  const ogTitle = typeof title === 'string' ? title : title.absolute;
+
   return {
     title,
     description,
-    alternates: { canonical: url },
+    alternates: { canonical: seo.canonical },
+    ...(seo.robots && { robots: seo.robots }),
     openGraph: {
-      title,
+      title: ogTitle,
       description,
-      url,
+      url: seo.canonical,
       type: 'website',          // 'product' is not an official OG type; 'website' + og:price works for WhatsApp/Facebook
       images: ogImages,
       siteName: 'Autobacs India',
@@ -85,7 +104,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     },
     twitter: {
       card: 'summary_large_image',
-      title,
+      title: ogTitle,
       description,
       images: ogImages.map(i => i.url),
       site: '@AutobacsIndia',
@@ -116,7 +135,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       '@id': `${SITE_URL}/products/${product.slug}`,
     },
     name: product.name,
-    description: product.shortDescription || product.description || '',
+    description: product.seo?.metaDescription || product.shortDescription || product.description || '',
     url: `${SITE_URL}/products/${product.slug}`,  // Canonical URL (matches @id base)
     
     // Multiple images preferred by Google (≥ 1200px width)
