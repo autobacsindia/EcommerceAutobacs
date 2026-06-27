@@ -31,10 +31,15 @@ import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatib
 const PROTECTED_ROUTES = ['/account', '/orders', '/checkout'];
 const ADMIN_ROUTES = ['/admin'];
 
+// Verification options must match how the backend SIGNS tokens
+// (Back-end/server/utils/sessionManager.js → signToken with only { expiresIn }).
+// The backend issues HS256 tokens with NO `iss`/`aud` claims and verifies with
+// `algorithms: ['HS256']` only. jose would reject a token if we required issuer/
+// audience here, so we lock the algorithm (prevents alg-confusion) and nothing
+// else. The backend remains the real gate (sessionVersion revocation, RBAC).
 const JWT_OPTIONS = {
-  issuer:   process.env.JWT_ISSUER   || 'autobacs-ecommerce',
-  audience: process.env.JWT_AUDIENCE || 'autobacs-users',
-} as const;
+  algorithms: ['HS256'],
+};
 
 // JWT secret for token verification. No fallback — a missing secret would let
 // anyone forge admin tokens against a known string. We fail HARD, but only on the
