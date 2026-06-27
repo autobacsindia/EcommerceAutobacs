@@ -155,22 +155,40 @@ jobs:
       run:
         working-directory: ${{ github.workspace }}
 
+    # PREBUILT flow (required on Vercel Hobby). `vercel deploy --prod` carries git
+    # metadata, which makes Hobby run a commit-author access check that REJECTS deploys
+    # whose pushing author isn't the Hobby account owner (our exact situation). Building
+    # the artifacts in CI and uploading them with `--prebuilt` creates a plain CLI
+    # deployment with no git-author association, so Hobby accepts it.
+    #
+    # `vercel pull` fetches the project settings + Production env vars (incl. the
+    # Front-end/web Root Directory and NEXT_PUBLIC_* values) into .vercel/, so prod env
+    # still lives in the Vercel dashboard — not duplicated here. `vercel build` then
+    # builds the monorepo subdir locally; `vercel deploy --prebuilt` ships .vercel/output.
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      # Remote build: Vercel builds using the Production env vars configured in the
-      # project dashboard. `--yes` skips interactive prompts; org/project are read
-      # from the VERCEL_ORG_ID / VERCEL_PROJECT_ID env vars.
-      - name: Deploy to Vercel (production)
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Pull Vercel project settings + env (production)
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build project artifacts
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy prebuilt artifacts to Vercel (production)
         run: |
-          url=$(vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}")
+          url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
           echo "Deployed: $url"
           echo "### ✅ Frontend deployed to Vercel" >> "$GITHUB_STEP_SUMMARY"
           echo "$url" >> "$GITHUB_STEP_SUMMARY"
