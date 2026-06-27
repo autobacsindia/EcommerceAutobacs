@@ -12,6 +12,11 @@ jest.mock('next/navigation', () => ({
 jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
   Upload: () => <span data-testid="icon-upload">Upload</span>,
+  // Icons used by the embedded <SeoPanel>.
+  Search: () => <span data-testid="icon-search">Search</span>,
+  ChevronDown: () => <span data-testid="icon-chevron-down">ChevronDown</span>,
+  ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
+  Info: () => <span data-testid="icon-info">Info</span>,
 }));
 
 describe('CreateCategoryPage', () => {

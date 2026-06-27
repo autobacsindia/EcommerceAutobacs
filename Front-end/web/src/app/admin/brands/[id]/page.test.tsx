@@ -14,6 +14,11 @@ jest.mock('lucide-react', () => ({
   Save: () => <span data-testid="icon-save">Save</span>,
   Loader2: () => <span data-testid="icon-loader">Loader</span>,
   Package: () => <span data-testid="icon-package">Package</span>,
+  // Icons used by the embedded <SeoPanel>.
+  Search: () => <span data-testid="icon-search">Search</span>,
+  ChevronDown: () => <span data-testid="icon-chevron-down">ChevronDown</span>,
+  ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
+  Info: () => <span data-testid="icon-info">Info</span>,
 }));
 
 // Mock React.use to avoid Suspense issues in tests
@@ -99,6 +104,15 @@ describe('EditBrandPage', () => {
         logo: 'http://example.com/logo.png',
         description: 'Updated Desc',
         isActive: true,
+        // SeoPanel defaults sent when no SEO override is entered.
+        seo: {
+          metaTitle: '',
+          metaDescription: '',
+          canonical: '',
+          ogImage: '',
+          noindex: false,
+          focusKeyword: '',
+        },
       });
     });
     

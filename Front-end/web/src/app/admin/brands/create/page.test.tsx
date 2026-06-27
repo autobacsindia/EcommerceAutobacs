@@ -14,6 +14,11 @@ jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
   Save: () => <span data-testid="icon-save">Save</span>,
   Loader2: () => <span data-testid="icon-loader">Loader</span>,
+  // Icons used by the embedded <SeoPanel>.
+  Search: () => <span data-testid="icon-search">Search</span>,
+  ChevronDown: () => <span data-testid="icon-chevron-down">ChevronDown</span>,
+  ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
+  Info: () => <span data-testid="icon-info">Info</span>,
 }));
 // Mock constants if needed, but usually we can import them. 
 // If API_ENDPOINTS is not mocked, it uses real values.
@@ -74,7 +79,16 @@ describe('CreateBrandPage', () => {
       expect(apiClient.post).toHaveBeenCalledWith(API_ENDPOINTS.BRAND_CREATE, {
         name: 'New Brand',
         logo: 'http://logo.com',
-        description: 'Desc'
+        description: 'Desc',
+        // SeoPanel defaults sent when no SEO override is entered.
+        seo: {
+          metaTitle: '',
+          metaDescription: '',
+          canonical: '',
+          ogImage: '',
+          noindex: false,
+          focusKeyword: '',
+        },
       });
     });
     
