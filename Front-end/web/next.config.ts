@@ -5,8 +5,12 @@ import withBundleAnalyzer from "@next/bundle-analyzer";
 // BUILD OPTIMIZATION v2: Disabled image optimization, TypeScript, ESLint during build for 60-70% faster builds
 const nextConfig: NextConfig = {
   /* config options here */
-  // Enable standalone output for Docker deployment
-  output: 'standalone',
+  // Standalone output is ONLY for the self-hosted Railway/Docker target, which
+  // copies .next/standalone and runs `node server.js` (see Dockerfile). Vercel
+  // builds its own serverless/edge output from .next/ and mis-traces standalone,
+  // which surfaces as a platform-level "404: NOT_FOUND". Vercel sets VERCEL=1 at
+  // build time, so disable standalone there and let Vercel use its native output.
+  output: process.env.VERCEL ? undefined : 'standalone',
   reactStrictMode: true,
   devIndicators: false,
   // PostHog reverse-proxy (ADR-005) sends events to /ingest/* on our own domain; keep the
