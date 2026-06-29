@@ -14,6 +14,10 @@ Autobacs India e-commerce. Monorepo, two apps. Both deploy to Railway via `deplo
 - Backend serves under `/api/v1/*`.
 - Frontend proxies `/api/*` → `${NEXT_PUBLIC_API_URL}/api/v1/*` via `next.config.ts` rewrites. Never hardcode backend host in frontend code.
 
+## Environments (dev vs prod)
+
+Two tiers. **Dev** = local files (`Back-end/server/.env`, `Front-end/web/.env.local`), loaded by `npm run dev`, pointing ONLY at dev-only backing services. **Prod** = Railway dashboard (backend) + Vercel dashboard (frontend). The committed `.env.example` files are the contract. Full dev↔prod variable matrix, footguns (`MONGODB_URI`≠`MONGO_URI`; cross-app `JWT_SECRET`), and setup checklist: **[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md)**.
+
 ## Migration status (WooCommerce → this stack)
 
 The live site `autobacsindia.com` is still **WooCommerce/WordPress**. This repo is the replacement, in development. Keep WooCommerce live until cutover; don't break it.
