@@ -23,7 +23,6 @@ jest.mock('next/link', () => {
 jest.mock('lucide-react', () => ({
   ShoppingCart: () => <span data-testid="icon-cart">Cart</span>,
   Heart: () => <span data-testid="icon-heart">Heart</span>,
-  GitCompare: () => <span data-testid="icon-compare">Compare</span>,
 }));
 
 jest.mock('@/context/CartContext', () => ({

@@ -2,21 +2,16 @@ import Link from 'next/link';
 import ProductImage from '@/components/products/ProductImage';
 import ProductCardWishlistButton from './ProductCardWishlistButton';
 import ProductCardPriceActions from './ProductCardPriceActions';
-import ProductCardCompare from './ProductCardCompare';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface ProductCardProps {
   product: Product;
-  isCompared?: boolean;
-  onToggleCompare?: (id: string) => void;
   className?: string;
 }
 
 export default function ProductCard({
   product,
-  isCompared = false,
-  onToggleCompare,
   className,
 }: ProductCardProps) {
   const url = productUrl(product);
@@ -48,14 +43,6 @@ export default function ProductCard({
             <span className="text-[#555555] text-sm">No image available</span>
           </div>
         )
-      )}
-
-      {onToggleCompare && (
-        <ProductCardCompare
-          productId={product._id}
-          isCompared={isCompared}
-          onToggle={onToggleCompare}
-        />
       )}
 
       {/* Wishlist toggle — client island, absolutely positioned over the image */}

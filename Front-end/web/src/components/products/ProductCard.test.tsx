@@ -121,15 +121,4 @@ describe('ProductCard Component', () => {
       expect(screen.getByText('Out of Stock')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /add/i })).toBeDisabled();
   });
-  
-  it('handles comparison toggle', () => {
-      const mockOnToggleCompare = jest.fn();
-      render(<ProductCard product={mockProduct as any} onToggleCompare={mockOnToggleCompare} isCompared={false} />);
-      
-      // The compare checkbox is inside a label. We can find it by text 'Compare'
-      const compareLabel = screen.getByText('Compare');
-      fireEvent.click(compareLabel); // Clicking label triggers input change
-      
-      expect(mockOnToggleCompare).toHaveBeenCalledWith('123');
-  });
 });

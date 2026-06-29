@@ -29,7 +29,6 @@ export default function robots(): MetadataRoute.Robots {
         '/forgot-password',
         '/verify-email',
         '/claim-order',
-        '/compare',
         '/integration-tests',
         '/_next/static/',
       ],
