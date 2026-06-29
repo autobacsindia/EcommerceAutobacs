@@ -21,7 +21,10 @@ export const validatePagination = [
   validateRequest
 ];
 
-export const validateAnalyticsQuery = [
+// Order analytics endpoints filter by an explicit startDate/endDate range.
+// Distinct from the dashboard analytics validator in ./analytics.js (period-based);
+// kept separate to avoid a name collision in the validators barrel.
+export const validateOrderAnalyticsQuery = [
   query('startDate')
     .optional()
     .isISO8601()

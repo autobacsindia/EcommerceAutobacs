@@ -11,7 +11,7 @@ import {
   validateTrackingEvent,
   validatePaymentFailed,
   validatePagination,
-  validateAnalyticsQuery,
+  validateOrderAnalyticsQuery,
   validateOrderReturn,
   validateReturnStatusUpdate,
   validateRefundsQuery,
@@ -124,12 +124,12 @@ router.get("/:id/valid-transitions", protect, validateIdParam, asyncHandler(getV
 // @route   GET /orders/analytics/status-stats
 // @desc    Get order status statistics (Admin only)
 // @access  Private/Admin
-router.get("/analytics/status-stats", protect, admin, validateAnalyticsQuery, asyncHandler(getStatusStats));
+router.get("/analytics/status-stats", protect, admin, validateOrderAnalyticsQuery, asyncHandler(getStatusStats));
 
 // @route   GET /orders/analytics/fulfillment-metrics
 // @desc    Get fulfillment performance metrics (Admin only)
 // @access  Private/Admin
-router.get("/analytics/fulfillment-metrics", protect, admin, validateAnalyticsQuery, asyncHandler(getFulfillmentMetrics));
+router.get("/analytics/fulfillment-metrics", protect, admin, validateOrderAnalyticsQuery, asyncHandler(getFulfillmentMetrics));
 
 // ========================================
 // TRACKING ENDPOINTS
@@ -168,7 +168,7 @@ router.post("/:id/tracking/simulate", protect, admin, asyncHandler(simulateTrack
 // @route   GET /orders/analytics/tracking-stats
 // @desc    Get tracking statistics by carrier (Admin only)
 // @access  Private/Admin
-router.get("/analytics/tracking-stats", protect, admin, validateAnalyticsQuery, asyncHandler(getTrackingStats));
+router.get("/analytics/tracking-stats", protect, admin, validateOrderAnalyticsQuery, asyncHandler(getTrackingStats));
 
 // @route   GET /orders/admin/all
 // @desc    Get all orders (Admin only)
