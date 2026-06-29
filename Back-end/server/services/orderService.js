@@ -1,98 +1,123 @@
 import mongoose from 'mongoose';
-import productRepository from '../repositories/productRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import cartRepository from '../repositories/cartRepository.js';
+import couponRepository from '../repositories/couponRepository.js';
+import couponRedemptionRepository from '../repositories/couponRedemptionRepository.js';
+import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
+import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
+import userRepository from '../repositories/userRepository.js';
+import pricingService from './pricingService.js';
+import AppError from '../utils/AppError.js';
 import { getNotificationsQueue, getOrderQueue } from '../queue/queues.js';
-import { STOCK_STATUS } from '../utils/stockStatus.js';
 
 class OrderService {
   /**
-   * Validate each item against DB, re-price from DB, check availability.
-   * Stock is a coarse status, so the only gate is "not out of stock".
-   * Read-only — runs OUTSIDE the transaction so the session isn't held longer
-   * than necessary.
+   * Validate + re-price items from the DB. Thin wrapper kept for callers that only
+   * need pricing; the authoritative discount maths lives in pricingService.
    */
   async validateAndPriceItems(items) {
-    const orderItems = [];
-    let subtotal = 0;
+    const { orderItems, subtotalPaise } = await pricingService.priceItems(items);
+    return { orderItems, subtotal: Math.round(subtotalPaise) / 100 };
+  }
 
-    for (const item of items) {
-      const product = await productRepository.findActiveById(item.product);
+  /**
+   * Atomically apply a coupon to an order inside the caller's transaction.
+   * Increments the global counter with a guarded $inc, enforces the per-user limit
+   * via a guarded upsert, and writes the audit redemption. Throws (aborting the
+   * transaction) if any limit was reached between quote time and commit.
+   */
+  async _applyCoupon(code, userId, order, couponDiscount, session, now = new Date()) {
+    // Guarded global counter: only increments while under the limit (or unlimited).
+    const coupon = await couponRepository.incrementUsageGuarded(code, now, session);
+    if (!coupon) throw new AppError('This coupon has reached its usage limit', 400);
 
-      if (!product) {
-        const err = new Error(`Product ${item.product} not found or not available`);
-        err.status = 400;
+    // Per-user limit (only enforced when set): guarded upsert; a duplicate-key from
+    // the unique {coupon,user} index means the user is already at the cap.
+    if (coupon.usageLimitPerUser != null) {
+      try {
+        await couponUserUsageRepository.incrementGuarded(coupon._id, userId, coupon.usageLimitPerUser, session);
+      } catch (err) {
+        if (err?.code === 11000) throw new AppError('You have already used this coupon', 400);
         throw err;
       }
-
-      if (product.stock === STOCK_STATUS.OUT) {
-        const err = new Error(`${product.name} is out of stock`);
-        err.status = 400;
-        throw err;
-      }
-
-      orderItems.push({
-        product: product._id,
-        quantity: item.quantity,
-        price: product.price,   // always DB price, never client price
-        name: product.name,
-        image: product.images[0]?.url
-      });
-
-      subtotal += product.price * item.quantity;
     }
 
-    return { orderItems, subtotal };
+    await couponRedemptionRepository.create({
+      coupon: coupon._id,
+      user: userId,
+      order: order._id,
+      code: coupon.code,
+      discountAmount: couponDiscount
+    }, session);
+  }
+
+  /**
+   * Atomically debit redeemed karma points inside the caller's transaction.
+   * The guarded $gte filter prevents overdraw under concurrent checkouts.
+   */
+  async _redeemKarma(userId, points, order, session) {
+    const updated = await userRepository.debitKarmaGuarded(userId, points, session);
+    if (!updated) throw new AppError('Insufficient karma points', 400);
+
+    await karmaLedgerRepository.create({
+      user: userId,
+      type: 'redeem',
+      points: -points,
+      balanceAfter: updated.karmaPoints,
+      order: order._id,
+      description: `Redeemed on order ${order._id}`
+    }, session);
   }
 
   /**
    * Full order creation flow.
    *
-   * Validation (read-only) runs outside the transaction so the session lock is
-   * held only for the two writes: order insert and cart clear. Stock is a
-   * coarse status, so there is no per-unit reservation/deduction.
+   * Pricing + coupon/karma validation run OUTSIDE the transaction (pure reads).
+   * The transaction then holds locks only for the writes: order insert, coupon
+   * counter + audit, karma debit + ledger, and cart clear — all-or-nothing.
    *
    * @param {string|ObjectId} userId
    * @param {Array}  items            [{product, quantity}]
    * @param {Object} shippingAddress
-   * @param {Object} orderData        raw request body (shippingCost, tax)
+   * @param {Object} orderData        raw request body (shippingCost, couponCode, redeemKarmaPoints)
    * @param {string} [paymentMethod]
    */
   async createOrder(userId, items, shippingAddress, orderData, paymentMethod) {
-    // ── Price integrity: never trust client prices ────────────────────────────
-    // discount is always 0 until a server-side coupon system is added.
     const shippingCost = Math.max(0, Number(orderData.shippingCost) || 0);
-    const discount     = 0;
+    const couponCode = orderData.couponCode ? String(orderData.couponCode).trim().toUpperCase() : null;
+    const redeemKarmaPoints = Math.max(0, parseInt(orderData.redeemKarmaPoints, 10) || 0);
 
-    // Validate + price OUTSIDE the transaction (pure reads, no write locks needed)
-    const { orderItems, subtotal } = await this.validateAndPriceItems(items);
+    // Authoritative price breakdown — client-sent amounts are ignored entirely.
+    const quote = await pricingService.computeQuote({
+      items, couponCode, redeemKarmaPoints, userId, shippingCost
+    });
+    // An explicitly-supplied coupon that turned out invalid is a hard failure here.
+    pricingService.assertCouponApplied(quote, couponCode);
 
-    // Prices are GST-inclusive ("Inclusive of all taxes").
-    // tax is the GST portion extracted for display — it must NOT be added to subtotal.
-    const tax         = Math.round((subtotal - subtotal / 1.18) * 100) / 100;
-    const totalAmount = subtotal + shippingCost - discount;
-    if (totalAmount <= 0) {
-      const err = new Error('Order total must be greater than zero');
-      err.status = 400;
-      throw err;
-    }
+    if (quote.totalAmount <= 0) throw new AppError('Order total must be greater than zero', 400);
 
-    // ── Atomic transaction: create order → clear cart ─────────────────────────
+    const appliedCode = quote.appliedCoupon?.code || null;
+
+    // ── Atomic transaction ───────────────────────────────────────────────────
     const session = await mongoose.startSession();
     let order;
-
     try {
       await session.withTransaction(async () => {
         order = await orderRepository.create(
           {
             user: userId,
-            items: orderItems,
+            items: quote.orderItems.map(({ product, quantity, price, name, image }) =>
+              ({ product, quantity, price, name, image })),
             shippingAddress,
-            subtotal,
-            shippingCost,
-            tax,
-            discount,
-            totalAmount,
+            subtotal: quote.subtotal,
+            shippingCost: quote.shippingCost,
+            tax: quote.tax,
+            discount: quote.discount,
+            couponCode: appliedCode,
+            couponDiscount: quote.couponDiscount,
+            karmaDiscount: quote.karmaDiscount,
+            karmaPointsUsed: quote.karmaPointsUsed,
+            totalAmount: quote.totalAmount,
             status: 'pending',
             ...(paymentMethod && { paymentMethod }),
             ...(orderData.sessionId && { sessionId: orderData.sessionId })
@@ -100,15 +125,20 @@ class OrderService {
           session
         );
 
+        if (appliedCode) {
+          await this._applyCoupon(appliedCode, userId, order, quote.couponDiscount, session);
+        }
+        if (quote.karmaPointsUsed > 0) {
+          await this._redeemKarma(userId, quote.karmaPointsUsed, order, session);
+        }
+
         await cartRepository.clearCart(userId, session);
       });
     } finally {
       await session.endSession();
     }
 
-    // ── Enqueue post-order background work ───────────────────────────────────
-    // Fire-and-forget: the transaction already committed, so these are best-effort.
-    // Each queue job retries independently on failure.
+    // ── Post-order background work (best-effort, transaction already committed) ──
     if (process.env.REDIS_URL) {
       const enqueueErr = (name, err) =>
         console.error(`[Queue] Failed to enqueue ${name}:`, err.message);

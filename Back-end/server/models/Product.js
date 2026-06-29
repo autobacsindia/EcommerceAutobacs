@@ -33,6 +33,16 @@ const ProductSchema = new mongoose.Schema({
     type: Number,
     min: 0
   },
+  // Optional sale window end. When set AND originalPrice > price, the product is
+  // "on sale": `price` is the sale price, `originalPrice` is shown slashed, and a
+  // live countdown runs on the PDP. Once this passes, the effective price reverts
+  // UP to originalPrice (see pricingService read-time guard) and a cron sweep
+  // normalizes the stored fields (price←originalPrice, clears originalPrice +
+  // saleEndsAt). null/absent = no time-boxed sale.
+  saleEndsAt: {
+    type: Date,
+    default: null
+  },
   categories: [{ 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "Category"
@@ -199,6 +209,10 @@ ProductSchema.index({ syncedFromWordPress: 1 }); // Filter synced products
 
 // Sparse index for admin "show deleted products" queries
 ProductSchema.index({ deletedAt: 1 }, { sparse: true });
+
+// Sparse index drives the sale-expiry sweep (cronService) — only products with
+// an active sale window carry a saleEndsAt, so the scan stays tiny.
+ProductSchema.index({ saleEndsAt: 1 }, { sparse: true });
 
 // Automatically exclude soft-deleted products from all find queries.
 // Pass { includeDeleted: true } via .setOptions() to bypass (admin use only).

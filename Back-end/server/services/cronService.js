@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { getRedisClient } from './redisClient.js';
 import importJobRepository from '../repositories/importJobRepository.js';
 import { runWordPressSync } from './wordpressSyncService.js';
+import { expireEndedSales } from './productSaleService.js';
 
 class CronService {
   constructor() {
@@ -45,9 +46,46 @@ class CronService {
     }
 
     this.scheduleWordPressSync();
+    this.scheduleSaleExpiry();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
+    }
+  }
+
+  /**
+   * Sweep expired time-boxed sales (Product.saleEndsAt) and normalize their
+   * stored prices. Runs every minute by default — pricingService is already
+   * exact-to-the-second at read time, so this is purely for index/UI
+   * consistency. Lock-guarded so overlapping replicas don't double-run; the
+   * underlying sweep is idempotent regardless.
+   */
+  scheduleSaleExpiry() {
+    const schedule = process.env.SALE_EXPIRY_CRON || '* * * * *'; // every minute
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid SALE_EXPIRY_CRON "${schedule}" — sale-expiry sweep NOT scheduled`);
+      return;
+    }
+    try {
+      const task = cron.schedule(schedule, () =>
+        this.withDistributedLock('cron:lock:saleExpiry', 55, () =>
+          expireEndedSales().catch(err =>
+            console.error('[CronService] Sale-expiry sweep failed:', err.message)
+          )
+        ),
+        { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+      );
+      this.scheduledTasks.push({
+        name: 'saleExpiry',
+        task,
+        schedule,
+        description: 'Revert expired time-boxed product sales',
+      });
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`[CronService] Sale-expiry sweep scheduled: "${schedule}"`);
+      }
+    } catch (error) {
+      console.error('[CronService] Failed to schedule sale-expiry sweep:', error.message);
     }
   }
 

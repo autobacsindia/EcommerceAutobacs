@@ -38,6 +38,7 @@ interface Product {
   shortDescription: string;
   price: number;
   originalPrice: number;
+  saleEndsAt?: string | null;
   category?: string; // Keep for backward compatibility if needed, but we'll use categories
   categories?: string[] | Category[];
   brand: string;
@@ -90,6 +91,7 @@ export default function EditProductPage() {
     shortDescription: '',
     price: '',
     originalPrice: '',
+    saleEndsAt: '',
     // category: '', // Removed in favor of selectedCategories
     brand: '',
     stock: '',
@@ -230,6 +232,11 @@ export default function EditProductPage() {
         shortDescription: productData.shortDescription || '',
         price: productData.price?.toString() || '',
         originalPrice: productData.originalPrice?.toString() || '',
+        // UTC instant → local wall-clock string for the datetime-local input.
+        saleEndsAt: productData.saleEndsAt
+          ? new Date(new Date(productData.saleEndsAt).getTime() - new Date().getTimezoneOffset() * 60000)
+              .toISOString().slice(0, 16)
+          : '',
         brand: productData.brand || '',
         // Normalize legacy numeric stock (e.g. 999) to a valid status so the
         // dropdown shows a real option and saving sends a valid enum value.
@@ -343,7 +350,23 @@ export default function EditProductPage() {
       setSubmitting(false);
       return;
     }
-    
+
+    // A sale countdown is only meaningful with a real markdown — mirror the
+    // server-side rule so the admin gets an instant message, not a 400.
+    if (formData.saleEndsAt) {
+      const original = parseFloat(formData.originalPrice);
+      if (!(original > price)) {
+        alert('Set an Original Price higher than Price to use a sale countdown, or clear the "Sale ends at" field.');
+        setSubmitting(false);
+        return;
+      }
+      if (new Date(formData.saleEndsAt).getTime() <= Date.now()) {
+        alert('Sale end date must be in the future.');
+        setSubmitting(false);
+        return;
+      }
+    }
+
     try {
       // Build multipart FormData so new image files travel as binary
       const fd = new FormData();
@@ -354,6 +377,9 @@ export default function EditProductPage() {
       fd.append('shortDescription', formData.shortDescription);
       fd.append('price',            String(price));
       if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
+      // Always sent (even empty) so clearing the field ends a sale early.
+      // Non-empty → absolute UTC instant; empty → backend clears saleEndsAt.
+      fd.append('saleEndsAt', formData.saleEndsAt ? new Date(formData.saleEndsAt).toISOString() : '');
       fd.append('stock',      String(stock));
       if (formData.sku) fd.append('sku', formData.sku);
       fd.append('brand',      formData.brand);
@@ -659,8 +685,31 @@ export default function EditProductPage() {
                 step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Set higher than Price to run a sale (shown slashed). Leave blank for no sale.
+              </p>
             </div>
-            
+
+            {/* Sale countdown — clearing this field ends the sale immediately. */}
+            <div className="mb-4">
+              <label htmlFor="saleEndsAt" className="block text-sm font-medium text-gray-700 mb-1">
+                Sale ends at (optional)
+              </label>
+              <input
+                id="saleEndsAt"
+                type="datetime-local"
+                name="saleEndsAt"
+                value={formData.saleEndsAt}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Live countdown on the product page. When it ends, the sale price is removed and
+                the Original Price becomes live. Requires an Original Price higher than Price.
+                Clear this field to end the sale now.
+              </p>
+            </div>
+
             <div className="mb-4">
               <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
                 Stock Status *

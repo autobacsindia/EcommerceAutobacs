@@ -36,6 +36,19 @@ const SAFE_ERROR_MESSAGES = new Set([
   'Coupon already used',
   'Minimum order amount not met',
   'Maximum quantity exceeded',
+
+  // Coupon / loyalty rejection reasons (surfaced verbatim to the buyer)
+  'This coupon is no longer available',
+  'This coupon is not yet active',
+  'This coupon has expired',
+  'This coupon has reached its usage limit',
+  'You have already used this coupon',
+  'This coupon is valid on your first order only',
+  'Please log in to use this coupon',
+  'This coupon does not apply to the items in your cart',
+  'Your cart does not meet this coupon’s minimum value',
+  'Your cart exceeds this coupon’s maximum value',
+  'Order total must be greater than zero',
   
   // Payment errors
   'Payment failed',

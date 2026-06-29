@@ -64,6 +64,18 @@ const parseProductFields = (body) => {
 
   if (fields.price !== undefined)         fields.price         = Number(fields.price);
   if (fields.originalPrice !== undefined) fields.originalPrice = Number(fields.originalPrice);
+
+  // saleEndsAt: empty string / 'null' clears the sale window (set null so a
+  // partial update can explicitly end a sale early). Otherwise parse to a Date —
+  // an unparseable value becomes Invalid Date, caught by assertValidProduct.
+  if (fields.saleEndsAt !== undefined) {
+    const raw = fields.saleEndsAt;
+    if (raw === '' || raw === null || raw === 'null') {
+      fields.saleEndsAt = null;
+    } else {
+      fields.saleEndsAt = new Date(raw);
+    }
+  }
   // stock is a status string ('in' | 'low' | 'out'); leave as-is. Schema enum validates it.
 
   // Always derive brandSlug from brand so filtering/URLs stay consistent regardless of
@@ -116,6 +128,22 @@ const assertValidProduct = (fields, { partial = false } = {}) => {
   }
   if (has('stock') && !STOCK_VALUES.includes(fields.stock)) {
     fail(`Stock must be one of: ${STOCK_VALUES.join(', ')}`);
+  }
+
+  // saleEndsAt is optional, but when provided (non-null) it must describe a REAL
+  // sale: a valid future date AND a genuine markdown (originalPrice > price). A
+  // sale window with no discount is meaningless, so we reject it outright rather
+  // than storing an inert date. Both prices must be present in the payload — the
+  // admin create/edit forms always send them together with saleEndsAt.
+  if (fields.saleEndsAt instanceof Date) {
+    if (Number.isNaN(fields.saleEndsAt.getTime())) fail('Sale end date is not a valid date');
+    if (fields.saleEndsAt.getTime() <= Date.now()) fail('Sale end date must be in the future');
+    if (!has('price') || !has('originalPrice')) {
+      fail('A sale end date requires both a price and a higher original price');
+    }
+    if (!(Number(fields.originalPrice) > Number(fields.price))) {
+      fail('A sale end date requires an original price higher than the sale price');
+    }
   }
 };
 

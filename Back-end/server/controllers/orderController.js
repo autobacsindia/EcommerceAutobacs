@@ -125,7 +125,9 @@ export const createOrder = async (req, res) => {
       order
     });
   } catch (err) {
-    res.status(err.status || 500).json({ success: false, message: err.message });
+    // AppError carries a numeric statusCode (its .status is 'fail'/'error'); legacy
+    // errors set a numeric .status. Prefer statusCode so coupon/karma 400s surface correctly.
+    res.status(err.statusCode || (typeof err.status === 'number' ? err.status : 500)).json({ success: false, message: err.message });
   }
 };
 
@@ -234,7 +236,7 @@ export const createGuestOrder = async (req, res) => {
       });
     }
 
-    res.status(error.status || 500).json({
+    res.status(error.statusCode || (typeof error.status === 'number' ? error.status : 500)).json({
       success: false,
       message: error.message || 'Failed to create guest order'
     });

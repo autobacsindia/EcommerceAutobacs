@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
 import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
+import SaleCountdown, { useSaleCountdown } from './SaleCountdown';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 
@@ -20,6 +21,7 @@ interface FloatingCTACardProps {
     name: string;
     price: number;
     originalPrice?: number;
+    saleEndsAt?: string | null;
     stock: StockStatus;
   };
 }
@@ -33,8 +35,13 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
 
-  const discount = product.originalPrice
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+  const { live: saleLive } = useSaleCountdown(product.saleEndsAt);
+  const showSale =
+    !!product.originalPrice &&
+    product.originalPrice > product.price &&
+    (!product.saleEndsAt || saleLive);
+  const discount = showSale
+    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
 
   const handleAddToCart = async () => {
@@ -85,7 +92,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
             ₹{product.price.toLocaleString('en-IN')}
           </span>
         </div>
-        {discount > 0 && (
+        {showSale && (
           <div className="flex items-center gap-2">
             <span className="text-zinc-400 line-through">
               ₹{product.originalPrice?.toLocaleString('en-IN')}
@@ -95,6 +102,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
             </span>
           </div>
         )}
+        {showSale && <SaleCountdown saleEndsAt={product.saleEndsAt} />}
         <p className="text-zinc-400 text-sm">Inclusive of all taxes</p>
       </div>
 

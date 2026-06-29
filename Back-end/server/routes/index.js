@@ -49,8 +49,12 @@ import orderRoutes from './orders.js';
 import returnRoutes from './returnRoutes.js';
 import razorpayRoutes from './razorpay.js';
 import paymentMethodRoutes from './paymentMethods.js';
+import checkoutRoutes from './checkout.js';
+import couponRoutes from './coupons.js';
+import loyaltyRoutes from './loyalty.js';
 
 import dashboardRoutes from './dashboard.js';
+import analyticsRoutes from './analytics.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
 import mediaRoutes from './media.js';
@@ -114,6 +118,12 @@ apiRouter.use('/orders', setRequestTimeout(120000), checkoutRateLimit, orderRout
 apiRouter.use('/returns', setRequestTimeout(60000), returnsRateLimit, returnRoutes);
 apiRouter.use('/razorpay', setRequestTimeout(120000), checkoutRateLimit, razorpayRoutes);
 apiRouter.use('/payment-methods', checkoutRateLimit, paymentMethodRoutes);
+// Checkout pricing preview (coupon + karma). optionalAuth personalises eligibility for guests/users.
+apiRouter.use('/checkout', checkoutRateLimit, optionalAuth, checkoutRoutes);
+// Coupons: /available is public; admin CRUD is guarded in-route.
+apiRouter.use('/coupons', publicBrowsingRateLimit, optionalAuth, couponRoutes);
+// Loyalty/karma: storefront balance + admin config (guarded in-route).
+apiRouter.use('/loyalty', authenticatedUserRateLimit, loyaltyRoutes);
 
 // ============================================================================
 // ADMIN DOMAIN
@@ -122,6 +132,8 @@ apiRouter.use('/payment-methods', checkoutRateLimit, paymentMethodRoutes);
 // Timeout: 120s for wordpress sync (bulk operations)
 // ============================================================================
 apiRouter.use('/dashboard', adminRouteRateLimit, dashboardRoutes);
+// Historical analytics (admin-only, cached): /analytics/{overview,sales,revenue-breakdown,products,customers,geo,loyalty,returns-payments}
+apiRouter.use('/analytics', adminRouteRateLimit, analyticsRoutes);
 apiRouter.use('/warehouses', adminRouteRateLimit, warehouseRoutes);
 apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access

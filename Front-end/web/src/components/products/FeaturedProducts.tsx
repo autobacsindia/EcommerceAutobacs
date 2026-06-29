@@ -95,7 +95,7 @@ export default function FeaturedProducts({
     }
   };
 
-  const handleToggleWishlist = async (productId: string, e: React.MouseEvent) => {
+  const handleToggleWishlist = async (productId: string, e: React.MouseEvent, meta?: { name?: string; price?: number }) => {
     e.preventDefault();
     if (!isAuthenticated) {
       router.push('/login');
@@ -106,7 +106,7 @@ export default function FeaturedProducts({
         await removeFromWishlist(productId);
         toast.success('Removed from wishlist');
       } else {
-        await addToWishlist(productId);
+        await addToWishlist(productId, meta);
         toast.success('Added to wishlist');
       }
     } catch (error: any) {
@@ -210,7 +210,7 @@ export default function FeaturedProducts({
                   {/* Wishlist Button */}
                   <button
                     className="absolute top-2 right-2 p-1.5 bg-[#252525] rounded-full shadow-md hover:bg-[#3B9EE8]/20 transition-colors opacity-0 group-hover:opacity-100"
-                    onClick={(e) => handleToggleWishlist(product._id, e)}
+                    onClick={(e) => handleToggleWishlist(product._id, e, { name: product.name, price: product.price })}
                   >
                     <Heart className={`h-4 w-4 transition-colors duration-200 ${
                       isInWishlist(product._id)

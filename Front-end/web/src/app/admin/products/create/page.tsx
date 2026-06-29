@@ -51,6 +51,7 @@ export default function CreateProductPage() {
     shortDescription: '',
     price: '',
     originalPrice: '',
+    saleEndsAt: '',
     category: '',
     brand: '',
     stock: 'in',
@@ -127,8 +128,24 @@ export default function CreateProductPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // A sale countdown is only meaningful with a real markdown — mirror the
+    // server-side rule so the admin gets an instant message, not a 400.
+    if (formData.saleEndsAt) {
+      const price = parseFloat(formData.price);
+      const original = parseFloat(formData.originalPrice);
+      if (!(original > price)) {
+        alert('Set an Original Price higher than Price to use a sale countdown, or clear the "Sale ends at" field.');
+        return;
+      }
+      if (new Date(formData.saleEndsAt).getTime() <= Date.now()) {
+        alert('Sale end date must be in the future.');
+        return;
+      }
+    }
+
     setSubmitting(true);
-    
+
     try {
       // Build multipart/form-data so images travel with the product data
       const fd = new FormData();
@@ -143,6 +160,9 @@ export default function CreateProductPage() {
       fd.append('isFastMoving',     String(formData.isFastMoving));
       if (formData.shortDescription) fd.append('shortDescription', formData.shortDescription);
       if (formData.originalPrice)    fd.append('originalPrice',    formData.originalPrice);
+      // Sale countdown end — send as an absolute UTC instant so the server
+      // doesn't reinterpret the admin's local wall-clock time.
+      if (formData.saleEndsAt)       fd.append('saleEndsAt',       new Date(formData.saleEndsAt).toISOString());
       if (formData.brand)            fd.append('brand',            formData.brand);
       if (formData.sku)              fd.append('sku',              formData.sku);
 
@@ -321,8 +341,33 @@ export default function CreateProductPage() {
                 step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Set higher than Price to run a sale (shown slashed). Leave blank for no sale.
+              </p>
             </div>
-            
+
+            {/* Sale countdown — optional time-boxed sale. When it expires the
+                sale price is dropped and the Original Price becomes live. */}
+            <div className="mb-4">
+              <label htmlFor="saleEndsAt" className="block text-sm font-medium text-gray-700 mb-1">
+                Sale ends at (optional)
+              </label>
+              <input
+                id="saleEndsAt"
+                type="datetime-local"
+                name="saleEndsAt"
+                value={formData.saleEndsAt}
+                onChange={handleInputChange}
+                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Shows a live countdown on the product page. When it ends, the sale price is
+                removed and the Original Price becomes the live price. Requires an Original Price
+                higher than Price.
+              </p>
+            </div>
+
             <div className="mb-4">
               <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
                 Stock Status *

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
-import { identifyUser, resetAnalytics, trackSignUp } from '@/lib/analytics';
+import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 
 interface User {
   _id: string;
@@ -249,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
         writeCache(userData, userData.sessionVersion);
         identifyUser({ id: userData._id, email: userData.email, name: userData.name });
+        trackLogin('email');
       } else {
         throw new Error(response.message || 'Login failed');
       }
@@ -329,6 +330,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setIsLoading(false);
     writeCache(userData, userData.sessionVersion);
+    // Social (Google) auth completed — tie events to the user and record the login.
+    identifyUser({ id: userData._id, email: userData.email, name: userData.name });
+    trackLogin('google');
   }, []);
 
   const value: AuthContextType = {

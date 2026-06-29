@@ -8,6 +8,7 @@ import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
+import KarmaCard from '@/components/profile/KarmaCard';
 
 const inputClass = 'mt-1 block w-full bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm p-2 focus:outline-none focus:border-[#3B9EE8] font-body text-sm';
 const labelClass = 'block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1';
@@ -172,6 +173,8 @@ export default function ProfilePage() {
           <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Account</p>
           <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide">My Profile</h1>
         </div>
+
+        <KarmaCard />
 
         <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 mb-6">
           {/* Avatar + name/email */}

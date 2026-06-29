@@ -73,9 +73,16 @@ const OrderSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  totalAmount: { 
-    type: Number, 
-    required: true 
+  // Discount breakdown (server-computed; see services/pricingService.js).
+  // `discount` above is the goods-level total = couponDiscount + karmaDiscount.
+  couponCode: { type: String, default: null },      // applied coupon code snapshot
+  couponDiscount: { type: Number, default: 0 },     // rupee discount from the coupon (goods)
+  karmaDiscount: { type: Number, default: 0 },      // rupee discount from redeemed karma
+  karmaPointsUsed: { type: Number, default: 0 },     // points spent on this order
+  karmaAwarded: { type: Boolean, default: false },   // earn-on-delivery idempotency flag
+  totalAmount: {
+    type: Number,
+    required: true
   },
   status: {
     type: String,

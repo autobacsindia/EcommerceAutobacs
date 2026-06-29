@@ -4,6 +4,13 @@
  */
 
 import orderRepository from '../repositories/orderRepository.js';
+import { getOrderQueue } from '../queue/queues.js';
+
+const LOYALTY_JOB_BY_STATUS = {
+  delivered: 'post-order-delivered',
+  cancelled: 'post-order-cancelled',
+  refunded:  'post-order-refunded'
+};
 
 /**
  * Define valid status transition rules
@@ -203,6 +210,11 @@ class OrderStatusService {
 
       await orderRepository.save(order, session);
 
+      // Loyalty side-effects run in the background (idempotent, gated on order state):
+      //   delivered → award earned karma; cancelled/refunded → reverse redeemed karma,
+      //   release the coupon, and (refund) claw back earned karma.
+      this._enqueueLoyaltyEffect(order._id.toString(), newStatus);
+
       return {
         success: true,
         order,
@@ -214,6 +226,20 @@ class OrderStatusService {
         message: error.message
       };
     }
+  }
+
+  /**
+   * Enqueue the background loyalty reconciliation job for a status, if any.
+   * Best-effort and idempotent — the worker re-reads order state, so a no-op or a
+   * retried job is harmless. Silently skips when Redis isn't configured.
+   * @private
+   */
+  _enqueueLoyaltyEffect(orderId, newStatus) {
+    const jobName = LOYALTY_JOB_BY_STATUS[newStatus];
+    if (!jobName || !process.env.REDIS_URL) return;
+    getOrderQueue()
+      .add(jobName, { orderId })
+      .catch(err => console.error(`[OrderStatus] Failed to enqueue ${jobName}:`, err.message));
   }
 
   /**

@@ -16,6 +16,8 @@ import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
+import CheckoutSummary from '@/components/checkout/CheckoutSummary';
+import type { CheckoutQuote } from '@/hooks/useCheckoutQuote';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -66,6 +68,12 @@ function CheckoutPageContent() {
   const [stockValidationErrors, setStockValidationErrors] = useState<any[]>([]);
   const [serverValidation, setServerValidation] = useState<ServerValidation | null>(null);
   const [priceConfirmationPending, setPriceConfirmationPending] = useState(false);
+  // Coupon + karma selections and the server-computed breakdown (display + intent;
+  // the order total is recomputed authoritatively server-side at creation).
+  const [pricing, setPricing] = useState<{ couponCode?: string; redeemKarmaPoints: number; quote: CheckoutQuote | null }>({
+    redeemKarmaPoints: 0,
+    quote: null,
+  });
 
   const isGuest = !authLoading && !isAuthenticated;
 
@@ -296,13 +304,19 @@ function CheckoutPageContent() {
         subtotal: validated.subtotal,
         tax: validated.tax,
         shippingCost: 0,
-        discount: 0,
-        totalAmount: validated.total,
+        // Coupon + karma intent. The backend recomputes the authoritative discount
+        // and totalAmount server-side (client values below are ignored for pricing).
+        couponCode: pricing.couponCode,
+        redeemKarmaPoints: pricing.redeemKarmaPoints || 0,
+        discount: pricing.quote?.discount ?? 0,
+        totalAmount: pricing.quote?.totalAmount ?? validated.total,
       };
 
       const endpoint = isGuest ? '/orders/guest' : '/orders';
       const response = await apiClient.post(endpoint, orderData) as any;
       const newOrderId = response.order._id;
+      // Authoritative charged amount comes back on the created order (post-discount).
+      const chargedTotal = response.order.totalAmount ?? pricing.quote?.totalAmount ?? validated.total;
 
       if (isGuest) {
         localStorage.setItem('pendingClaim', JSON.stringify({
@@ -312,10 +326,10 @@ function CheckoutPageContent() {
       }
 
       if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
-        // Pass validated.total as a hint for the Razorpay modal display.
+        // Pass the post-discount charged total as a hint for the Razorpay modal display.
         // The backend /razorpay/create-order ignores this and uses order.totalAmount
         // from the DB — the browser never controls the charged amount.
-        await processPayment(newOrderId, validated.total, {
+        await processPayment(newOrderId, chargedTotal, {
           name: user?.name || address.fullName,
           email: user?.email || guestEmail || '',
           phone: address.phone,
@@ -698,7 +712,7 @@ function CheckoutPageContent() {
                         {loading || isRazorpayProcessing ? (
                           <><Loader2 className="h-4 w-4 animate-spin" /><span>Processing...</span></>
                         ) : (
-                          `Confirm & Pay ₹${serverValidation.total.toFixed(2)}`
+                          `Confirm & Pay ₹${(pricing.quote?.totalAmount ?? serverValidation.total).toFixed(2)}`
                         )}
                       </button>
                       <button
@@ -725,26 +739,12 @@ function CheckoutPageContent() {
                 <p className="text-[#C4C4C4] font-body text-sm">{PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod}</p>
               </div>
               <div className="border-t border-[#252525] pt-4">
-                <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-3">Order Summary</h3>
-                {/* Use server-validated totals once available; fall back to CartContext */}
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-[#555555] font-body">Subtotal (incl. GST)</span>
-                  <span className="text-[#C4C4C4] font-body">
-                    ₹{(serverValidation?.subtotal ?? cart?.total ?? 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm mb-3">
-                  <span className="text-[#555555] font-body">GST (18% included)</span>
-                  <span className="text-[#C4C4C4] font-body">
-                    ₹{(serverValidation?.tax ?? ((cart?.total || 0) - (cart?.total || 0) / 1.18)).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-[#252525] pt-3">
-                  <span className="font-condensed font-bold text-white uppercase tracking-wide">Total</span>
-                  <span className="text-xl font-condensed font-bold text-[#3B9EE8]">
-                    ₹{(serverValidation?.total ?? (cart?.total || 0)).toFixed(2)}
-                  </span>
-                </div>
+                {/* Coupon + karma + server-computed breakdown (single source of truth). */}
+                <CheckoutSummary
+                  items={(cart?.items || []).map((it: any) => ({ product: it.product._id, quantity: it.quantity }))}
+                  isAuthenticated={isAuthenticated}
+                  onChange={setPricing}
+                />
               </div>
             </div>
 

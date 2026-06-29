@@ -303,6 +303,31 @@ class ProductRepository {
   }
 
   /**
+   * Time-boxed sales whose window has closed (saleEndsAt <= now). Minimal
+   * projection — the sweep only needs the ids and the two prices to revert.
+   * The pre-find hook already scopes to deletedAt: null.
+   */
+  async findExpiredSales(now = new Date(), limit = 500) {
+    return Product.find({ saleEndsAt: { $ne: null, $lte: now } })
+      .select('_id price originalPrice')
+      .limit(limit)
+      .lean();
+  }
+
+  /**
+   * Revert one expired sale: charged price moves UP to originalPrice, and the
+   * sale markers (originalPrice slash + saleEndsAt window) are cleared. Uses
+   * findByIdAndUpdate so the post-update hook re-syncs Elasticsearch.
+   */
+  async revertExpiredSale(productId, revertPrice) {
+    return Product.findByIdAndUpdate(
+      productId,
+      { $set: { price: revertPrice }, $unset: { originalPrice: '', saleEndsAt: '' } },
+      { new: true }
+    );
+  }
+
+  /**
    * Check if product exists
    */
   async exists(productId) {

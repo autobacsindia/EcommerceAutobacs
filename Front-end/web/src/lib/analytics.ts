@@ -70,6 +70,10 @@ export const trackRemoveFromWishlist = (p: { id: string }) =>
 export const trackSignUp = (method: string = 'email') =>
   capture('sign_up', { method });
 
+/** Existing user logged in. Lets funnels compare logged-in vs guest behaviour. */
+export const trackLogin = (method: string = 'email') =>
+  capture('login', { method });
+
 export type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
 /** Progress through a checkout step — powers step-by-step drop-off analysis. */

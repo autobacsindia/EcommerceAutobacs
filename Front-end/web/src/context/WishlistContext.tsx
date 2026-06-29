@@ -38,7 +38,7 @@ interface WishlistContextType {
   wishlistItems: WishlistItem[];
   wishlistCount: number;
   loading: boolean;
-  addToWishlist: (productId: string) => Promise<void>;
+  addToWishlist: (productId: string, meta?: { name?: string; price?: number }) => Promise<void>;
   removeFromWishlist: (productId: string) => Promise<void>;
   isInWishlist: (productId: string) => boolean;
   fetchWishlist: () => Promise<void>;
@@ -148,7 +148,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     }, 300); // 300ms debounce
   };
 
-  const addToWishlist = async (productId: string): Promise<void> => {
+  const addToWishlist = async (productId: string, meta?: { name?: string; price?: number }): Promise<void> => {
     if (!isAuthenticated) {
       throw new Error('You must be logged in to add items to wishlist');
     }
@@ -244,8 +244,9 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
           w._id === wishlistToUse._id ? updatedWishlist : w
         ));
 
-        // Analytics: add_to_wishlist (ADR-005)
-        trackAddToWishlist({ id: productId });
+        // Analytics: add_to_wishlist (ADR-005). name/price are optional — callers that
+        // have the product in scope pass them so the dashboard can break down by name.
+        trackAddToWishlist({ id: productId, name: meta?.name, price: meta?.price });
       }
 
       // Invalidate cache after successful mutation

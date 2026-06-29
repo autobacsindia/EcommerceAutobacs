@@ -92,6 +92,20 @@ export const API_ENDPOINTS = {
   BRAND_UNMAP_PRODUCT: (brandId: string, productId: string) => `/brands/${brandId}/products/${productId}`,
   BRAND_TOGGLE_STATUS: (id: string) => `/brands/${id}/toggle-status`,
   
+  // Checkout pricing (coupon + karma preview)
+  CHECKOUT_QUOTE: '/checkout/quote',
+
+  // Coupons
+  COUPONS_AVAILABLE: '/coupons/available',
+  COUPONS: '/coupons',                                   // admin list + create
+  COUPON_DETAIL: (id: string) => `/coupons/${id}`,       // admin get/update/delete
+
+  // Loyalty / Karma points
+  LOYALTY_ME: '/loyalty/me',
+  LOYALTY_HISTORY: '/loyalty/history',
+  LOYALTY_CONFIG: '/loyalty/config',                     // admin get/update
+  LOYALTY_ADJUST: (userId: string) => `/loyalty/users/${userId}/adjust`,
+
   // Contact
   CONTACT: '/contact',
 

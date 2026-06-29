@@ -45,6 +45,14 @@ jest.unstable_mockModule('../../../models/Cart.js', () => ({ default: mockCart }
 jest.unstable_mockModule('../../../models/Product.js', () => ({ default: mockProduct }));
 jest.unstable_mockModule('../../../services/orderStatusService.js', () => ({ default: mockOrderStatusService }));
 jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({ default: mockOrderTrackingService }));
+// Loyalty disabled here so the pricing engine skips the karma balance lookup — this
+// controller test mocks only the Order/Cart/Product models and uses a non-ObjectId user id.
+// The return is set in beforeEach because jest.config resetMocks:true wipes factory impls.
+const mockGetLoyaltyConfig = jest.fn();
+jest.unstable_mockModule('../../../services/loyaltyConfigService.js', () => ({
+  getLoyaltyConfig: mockGetLoyaltyConfig,
+  invalidateLoyaltyConfig: jest.fn(),
+}));
 
 // Import controller
 const { 
@@ -62,7 +70,13 @@ describe('OrderController Unit Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
+    // Re-arm after resetMocks: loyalty off → pricing engine skips the karma path.
+    mockGetLoyaltyConfig.mockResolvedValue({
+      enabled: false, earnRatePercent: 2, pointsExpiryDays: null,
+      pointValueInRupees: 1, redeemMaxPercent: 20, minRedeemPoints: 100,
+    });
+
     req = {
       query: {},
       params: {},

@@ -40,6 +40,7 @@ export interface Product {
   shortDescription?: string;
   price: number;
   originalPrice?: number;
+  saleEndsAt?: string | null;
   category?: Category | string;
   categories?: Category[];
   brand?: string;

@@ -127,52 +127,95 @@ Already changed in this repo:
 
 ---
 
-## Step 5 — Cloudflare CDN/WAF in front of the API
+## Step 5 — Cloudflare at cutover (DNS + API security edge — NOT a CDN)
 
-**Do NOT touch the live `autobacsindia.com` apex** (still on WooCommerce) until cutover.
+**Decision (after measuring the live stack):** Cloudflare is **not** our CDN. Two CDNs already
+cover us — **Vercel's Edge Network** caches the frontend (pages' static assets are
+`x-vercel-cache: HIT`, immutable) and **Upstash Redis** caches the API at the origin
+(`x-cache: HIT`). With the same-origin `/api` proxy the browser never hits Railway directly;
+Vercel's function (Mumbai) calls the backend (Mumbai) server-to-server, so edge-caching the
+API saves only a co-located hop. So Cloudflare's job here is **DNS + a security shield on the
+API origin**, and its API caching is an optional bonus, not the reason to use it.
 
-### 5a. Now (pre-cutover) — stand it up on a hostname you control
-1. Add a Cloudflare zone for a domain/subdomain you own (a staging domain, or pre-stage
-   the future `api` record). Set the API record (e.g. `api-staging`) as a **proxied (orange
-   cloud)** CNAME → the Railway backend host.
-2. **SSL/TLS → Full (strict)** (Railway serves valid TLS). HSTS already emitted by the app.
-3. **Cache rule** (Rules → Cache Rules):
-   - Match: `http.request.uri.path matches "^/api/v1/" and http.request.method eq "GET"`.
-   - Then: *Eligible for cache*, **Respect origin** TTL (uses the app's `s-maxage`).
-   - **Bypass cache** when an auth cookie is present:
-     add condition `not any(http.request.cookie.names[*] in {"accessToken" "refreshToken"})`,
-     or a separate higher-priority rule that bypasses when those cookies exist.
-   - Enable **Tiered Cache** (Caching → Tiered Cache).
-4. **WAF / protection:** Managed Ruleset on, **Bot Fight Mode** on, a **Rate Limiting
-   rule** at the edge (defense-in-depth above the app limiter), DDoS managed rules (default).
-5. **Edge purge wiring:** create an API token scoped to *Zone → Cache Purge* for this zone.
-   Set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` on the Railway backend so
-   `npm run flush-cache` purges Redis **and** the edge together.
-6. **Verify:** `curl -sI https://api-staging.<yourdomain>/api/v1/products` twice →
-   `cf-cache-status: MISS` then `HIT`; with `-H 'Cookie: accessToken=x'` → `BYPASS`/`DYNAMIC`.
-   Confirm `Cache-Control: …s-maxage=…` is present from origin.
+Do this **at cutover only** — there's no value standing it up on a throwaway staging host
+(you'd redo every rule on the real `api.` hostname). The DNS move to Cloudflare *is* the
+cutover event. Until then, the repo is already prepped: `flush-public-cache.js` purges the
+edge when `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ZONE_ID` are set (no-op until then), and the
+origin emits `s-maxage` so the edge can cache if/when enabled.
 
-### 5b. At cutover (when you own the domain)
-1. Move `autobacsindia.com` DNS to Cloudflare (or add records there).
-2. Records: apex / `www` → **Vercel** (per Vercel's domain instructions); `api` →
-   **proxied CNAME → Railway backend**.
-3. Add the domain in **Vercel → Project → Domains** and follow verification.
-4. Flip env (no code change):
+> **Why NOT proxy the Vercel frontend through Cloudflare:** Vercel already provides global
+> CDN, TLS, and DDoS. Putting Cloudflare's orange cloud in front of it double-proxies, breaks
+> Vercel's cache/ISR headers, and buys nothing. **Apex/`www` → Vercel must be DNS-only (grey
+> cloud).** Only `api` gets the orange cloud.
+
+### 5a. Pre-flight BEFORE moving nameservers Hostinger → Cloudflare
+Moving NS to Cloudflare migrates the **whole zone**. Get this right or you break email + the
+live WooCommerce site:
+1. In Hostinger DNS, **export/screenshot every record**. Cloudflare's onboarding auto-scans
+   and imports, but **verify nothing is missed** — especially:
+   - **Email (critical):** `MX`, the SPF `TXT` (`v=spf1 …`), **DKIM** `TXT`/CNAME (Postmark's
+     `*._domainkey`), and the `DMARC` `TXT` (`_dmarc`). A missed record = silent mail failure
+     (Postmark sends from `autobacsindia.com` — see [[postmark-email-setup]]).
+   - Any domain-verification `TXT` (Google, etc.).
+2. Keep **apex `@` / `www` exactly as-is, DNS-only (grey cloud)** → still pointing at the
+   WordPress/WooCommerce host. The live site must not change.
+3. Lower TTLs at Hostinger ~24h before the NS switch (faster rollback).
+
+### 5b. At cutover — move DNS to Cloudflare and wire the API
+1. Add the zone in Cloudflare, let it import, **diff against your Hostinger export** (fix any
+   missing MX/SPF/DKIM/DMARC), then change nameservers at Hostinger → Cloudflare.
+2. Records:
+   - apex `@` / `www` → **Vercel** target, **DNS-only (grey cloud)**. Add the domain in
+     **Vercel → Project → Domains** and follow its verification.
+   - `api` → **CNAME → Railway backend host, proxied (orange cloud)**.
+3. **SSL/TLS → Full (strict)** (Railway serves valid TLS). HSTS already emitted by the app.
+4. **API security (the point of Cloudflare here):** on the `api` hostname — Managed WAF
+   Ruleset on, **Bot Fight Mode** on, an edge **Rate Limiting** rule (defense-in-depth above
+   the app limiter), DDoS managed rules (default). This also hides the Railway origin IP.
+5. **(Optional) API edge cache** — only if you want it; it's marginal given co-location:
+   - Cache Rule: match `starts_with(http.request.uri.path, "/api/v1/") and
+     http.request.method eq "GET"` → *Eligible for cache*, **Respect origin** TTL.
+   - **Bypass** when an auth cookie is present:
+     `any(http.request.cookie.names[*] in {"accessToken" "refreshToken"})` → bypass.
+   - Tiered Cache on.
+6. **Edge purge wiring:** create an API token scoped to *Zone → Cache Purge*; set
+   `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` on the Railway backend so `npm run
+   flush-cache` purges Redis **and** the edge together.
+7. **Flip env (no code change):**
    - Backend (Railway): `COOKIE_DOMAIN=.autobacsindia.com`, `COOKIE_SAMESITE=lax`
      (now same-site → more secure + re-enables strict CSRF behavior), `FRONTEND_URL=https://autobacsindia.com`.
    - Frontend (Vercel): `NEXT_PUBLIC_API_URL=https://api.autobacsindia.com`. Redeploy.
-5. Re-run the Step 3 auth smoke test on the real domain. Run `npm run flush-cache` (now
-   also purges the edge). Keep the WooCommerce origin reachable briefly for rollback.
+8. Re-run the Step 3 auth smoke test on the real domain. Run `npm run flush-cache`. Keep the
+   WooCommerce origin reachable briefly for rollback (NS back to Hostinger if needed).
 
 ---
 
 ## Final verification checklist
 
-- [ ] `x-cache: HIT` from the API (app Redis), `cf-cache-status: HIT` from Cloudflare.
-- [ ] `x-vercel-cache: HIT` on pages.
+- [ ] `x-cache: HIT` from the API (app Redis); `cf-cache-status: HIT` only if 5b.5 enabled.
+- [ ] `x-vercel-cache: HIT` on **static assets** (`/_next/static/*`). The page **document**
+      is `MISS` **by design** — see "Page caching decision" below; do not chase it.
+- [ ] `x-vercel-id` shows `bom1::bom1` (function executes in Mumbai, co-located with backend).
 - [ ] Auth + cart + test order pass on the new frontend domain.
 - [ ] Upstash holds cache/session keys; dedicated Redis holds `bull:*` + `rl:*`.
-- [ ] Login request → `cf-cache-status: BYPASS` (auth cookie not cached).
+- [ ] Cloudflare: apex/`www` **DNS-only**, `api` **proxied**; WAF + Bot Fight + edge rate-limit on.
+- [ ] Email still flows after NS move (send a test) — MX/SPF/DKIM/DMARC imported correctly.
+- [ ] Login request (if 5b.5 enabled) → `cf-cache-status: BYPASS` (auth cookie not cached).
 - [ ] `npm run flush-cache` reports both Redis deletions and `cloudflare — edge cache purged`.
-- [ ] All four stateful services (Railway, Upstash, queue-Redis, Mongo) in the same region.
+- [ ] All four stateful services (Railway, Upstash, queue-Redis, Mongo) + Vercel fn in Mumbai.
 - [ ] Branch protection requires Frontend CI on `main`; `RAILWAY_FRONTEND_TOKEN` removed.
+
+---
+
+## Page caching decision (why page documents stay dynamic)
+
+Investigated on the live Vercel deploy: every page is `x-vercel-cache: MISS` because the root
+layout reads the per-request CSP nonce (`headers()` in `app/layout.tsx`), which Next stamps
+onto **all** `<script>` tags (framework chunks + inline RSC) under `script-src 'nonce-…'
+'strict-dynamic'`. Edge-caching that HTML would serve a **stale nonce** → the fresh
+per-request CSP header rejects every script → broken page. The only way to cache it is to drop
+the nonce and fall back to `script-src … 'unsafe-inline'` — a real XSS-protection downgrade on
+a **payments** site, for a **modest** gain (JS/CSS/images are already edge-cached; API data is
+Redis-cached; the dynamic part is a lightweight shell). **Decision: keep the strict nonce CSP,
+leave page documents dynamic.** The high-value, zero-risk win was pinning the Vercel function
+region to `bom1` (`vercel.json`) so the dynamic render is co-located with users + backend.

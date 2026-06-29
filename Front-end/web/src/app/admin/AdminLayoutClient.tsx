@@ -34,6 +34,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/orders', label: 'Orders', icon: '📦' },
       { href: '/admin/returns', label: 'Returns', icon: '↩️' },
       { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
+      { href: '/admin/coupons', label: 'Coupons', icon: '🎟️' },
+      { href: '/admin/loyalty', label: 'Karma Points', icon: '✨' },
     ],
   },
   {
@@ -78,15 +80,13 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    'Catalog': false,
-    'Orders': false,
-    'Inventory': false,
-    'Customers': false,
-    'Content': false,
-    'Finance': false,
-    'System': false,
-  });
+  // Derive collapse state from the section list itself so it never drifts from NAV_SECTIONS
+  // (previously hardcoded — carried a stale 'Finance' key that matched no section).
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      NAV_SECTIONS.filter((s) => s.title !== 'Main').map((s) => [s.title, false])
+    )
+  );
   const [stats, setStats] = useState({
     totalOrders: 0,
     pendingOrders: 0,

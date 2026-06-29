@@ -4,6 +4,7 @@ import type { StockStatus } from '@/lib/stock';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import FloatingCTACard from './FloatingCTACard';
+import SaleCountdown, { useSaleCountdown } from './SaleCountdown';
 
 interface HeroSectionProps {
   product: {
@@ -11,6 +12,7 @@ interface HeroSectionProps {
     name: string;
     price: number;
     originalPrice?: number;
+    saleEndsAt?: string | null;
     stock: StockStatus;
     shortDescription?: string;
     images?: Array<{ url: string; alt?: string }>;
@@ -19,6 +21,13 @@ interface HeroSectionProps {
 
 export default function HeroSection({ product }: HeroSectionProps) {
   const lifestyleImage = product.images?.[0]?.url || '/placeholder-product.jpg';
+  // A time-boxed sale's slash hides the moment the countdown hits zero; an
+  // untimed markdown (originalPrice with no saleEndsAt) always shows.
+  const { live: saleLive } = useSaleCountdown(product.saleEndsAt);
+  const showSale =
+    !!product.originalPrice &&
+    product.originalPrice > product.price &&
+    (!product.saleEndsAt || saleLive);
 
   return (
     <section className="relative h-[80vh] min-h-150 max-h-225">
@@ -66,17 +75,20 @@ export default function HeroSection({ product }: HeroSectionProps) {
               <span className="text-4xl lg:text-5xl font-bold text-orange-500">
                 ₹{product.price.toLocaleString('en-IN')}
               </span>
-              {product.originalPrice && product.originalPrice > product.price && (
+              {showSale && (
                 <>
                   <span className="text-2xl text-zinc-500 line-through">
-                    ₹{product.originalPrice.toLocaleString('en-IN')}
+                    ₹{product.originalPrice!.toLocaleString('en-IN')}
                   </span>
                   <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-semibold text-sm border border-green-500/30">
-                    {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                    {Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)}% OFF
                   </span>
                 </>
               )}
             </div>
+
+            {/* Live sale countdown — only while a time-boxed sale is running */}
+            {showSale && <SaleCountdown saleEndsAt={product.saleEndsAt} />}
 
             {/* Stock Status */}
             {product.stock !== 'out' && (

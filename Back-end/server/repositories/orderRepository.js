@@ -76,6 +76,17 @@ class OrderRepository extends BaseRepository {
     if (session) return order.deleteOne({ session });
     return order.deleteOne();
   }
+
+  /** Count a user's orders that "count" as a prior purchase (coupon firstOrderOnly). */
+  async countActiveByUser(userId, session = null) {
+    let q = Order.countDocuments({ user: userId, status: { $nin: ['cancelled', 'failed'] } });
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  async markKarmaAwarded(orderId, session = null) {
+    return Order.updateOne({ _id: orderId }, { karmaAwarded: true }, session ? { session } : {});
+  }
 }
 
 export default new OrderRepository();

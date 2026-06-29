@@ -100,6 +100,11 @@ const UserSchema = new mongoose.Schema({
     public_id: { type: String, default: '' },  // Cloudinary public_id (for deletion)
   },
 
+  // Karma loyalty points — denormalised running balance (source of truth is KarmaLedger).
+  // Separate from `wallet` (refund store credit): karma is earned on delivery and spent at
+  // checkout. Mutated only via guarded atomic $inc alongside a KarmaLedger entry.
+  karmaPoints: { type: Number, default: 0, min: 0 },
+
   // Store Credits / Wallet
   wallet: {
     balance: { type: Number, default: 0 },

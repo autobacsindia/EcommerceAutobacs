@@ -39,7 +39,8 @@ interface Product {
   shortDescription?: string;
   price: number;
   originalPrice?: number;
-  category?: { 
+  saleEndsAt?: string | null;
+  category?: {
     _id: string;
     name: string;
     slug: string;
@@ -120,7 +121,14 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   // Analytics: product_view (once per product) — ADR-005
   useEffect(() => {
     if (product?._id) {
-      trackProductView({ id: product._id, name: product.name, price: product.price, brand: (product as any).brand });
+      trackProductView({
+        id: product._id,
+        name: product.name,
+        price: product.price,
+        brand: (product as any).brand,
+        // category can be a populated object or a bare id string — send the human-readable name.
+        category: typeof product.category === 'object' ? product.category?.name : product.category,
+      });
     }
   }, [product?._id]);
 
