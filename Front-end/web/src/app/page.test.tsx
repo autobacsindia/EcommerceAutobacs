@@ -1,113 +1,57 @@
-
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import Home from './page';
 
-// Mock next/navigation
-const mockPush = jest.fn();
+// The redesigned nav's Vehicle Makes menu uses the app router + the API client.
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
+  useRouter: () => ({ push: jest.fn() }),
 }));
-
-// Mock useIsMounted to always return true for tests
-jest.mock('@/lib/hooks/useIsMounted', () => ({
+jest.mock('@/lib/api', () => ({
   __esModule: true,
-  default: () => true,
+  default: { get: jest.fn().mockResolvedValue({ makes: [], models: [] }) },
+}));
+jest.mock('@/context/AuthContext', () => ({
+  useAuth: () => ({ user: null, isAuthenticated: false }),
 }));
 
-// Mock Child Components
-jest.mock('@/components/layout/HeroBanner', () => ({
-  __esModule: true,
-  default: () => <div data-testid="hero-banner">Hero Banner</div>,
-}));
+// The redesigned home page uses IntersectionObserver + matchMedia in effects;
+// jsdom doesn't implement them, so provide lightweight stubs.
+beforeAll(() => {
+  class IO {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  // @ts-expect-error - test stub
+  global.IntersectionObserver = IO;
 
-jest.mock('@/components/vehicles/VehicleSelector', () => ({
-  __esModule: true,
-  default: ({ onVehicleSelect }: { onVehicleSelect: (make: string, model: string) => void }) => (
-    <div data-testid="vehicle-selector">
-      <button onClick={() => onVehicleSelect('Toyota', 'Camry')}>Select Toyota Camry</button>
-    </div>
-  ),
-}));
+  window.matchMedia =
+    window.matchMedia ||
+    ((query: string) =>
+      ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList);
+});
 
-jest.mock('@/components/products/FeaturedProducts', () => ({
-  __esModule: true,
-  default: () => <div data-testid="featured-products">Featured Products</div>,
-}));
-
-jest.mock('@/components/products/ModernFastMovingSection', () => ({
-  __esModule: true,
-  default: () => <div data-testid="modern-fast-moving">Modern Fast Moving Section</div>,
-}));
-
-jest.mock('@/components/products/KeepShoppingWidget', () => ({
-  __esModule: true,
-  default: () => <div data-testid="keep-shopping">Keep Shopping Widget</div>,
-}));
-
-jest.mock('@/components/products/RecentlyViewedProducts', () => ({
-  __esModule: true,
-  default: () => <div data-testid="recently-viewed">Recently Viewed Products</div>,
-}));
-
-jest.mock('@/components/layout/SuperCarsBanner', () => ({
-  __esModule: true,
-  default: () => <div data-testid="super-cars-banner">Super Cars Banner</div>,
-}));
-
-describe('Home Page', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('renders home page structure', async () => {
+describe('Home page (redesign)', () => {
+  it('renders the hero headline and key sections', () => {
     render(<Home />);
-    
-    expect(screen.getByTestId('hero-banner')).toBeInTheDocument();
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('vehicle-selector')).toBeInTheDocument();
-    });
-    
-    expect(screen.getByText('Find Parts for Your Vehicle')).toBeInTheDocument();
+
+    // Hero
+    expect(screen.getByText('Engineer')).toBeInTheDocument();
+    expect(screen.getByText('Perfection.')).toBeInTheDocument();
+
+    // Section anchors that should always be present regardless of data wiring
+    expect(screen.getByText('Shop by Category')).toBeInTheDocument();
+    expect(screen.getByText("Editor's Pick")).toBeInTheDocument();
     expect(screen.getByText('Trusted Brands')).toBeInTheDocument();
-  });
-
-  it('handles vehicle selection and navigation', async () => {
-    render(<Home />);
-    
-    // Simulate vehicle selection from the mocked component
-    const selectBtn = screen.getByText('Select Toyota Camry');
-    fireEvent.click(selectBtn);
-    
-    // Check if the "View Parts" button appears
-    await waitFor(() => {
-      expect(screen.getByText('View Toyota Camry Parts')).toBeInTheDocument();
-    });
-    
-    // Check link href (since it uses Next.js Link, we check the attribute)
-    const viewPartsLink = screen.getByRole('link', { name: /View Toyota Camry Parts/i });
-    expect(viewPartsLink).toHaveAttribute('href', '/model/toyota-camry');
-  });
-
-  it('renders featured vehicle categories', () => {
-    render(<Home />);
-    
-    // Check for "See More" card
-    expect(screen.getByText('See More')).toBeInTheDocument();
-    expect(screen.getByText('View all vehicles')).toBeInTheDocument();
-  });
-
-  it('renders brand logos', () => {
-    render(<Home />);
-    
-    // Check for some brand alt texts that are hardcoded in the component
-    // Note: In the actual file, brands like Profender, Bushranger, Ironman are present
-    // Use getAllByAltText because the carousel might duplicate items for infinite scroll effect
-    expect(screen.getAllByAltText('Profender').length).toBeGreaterThan(0);
-    expect(screen.getAllByAltText('Bushranger').length).toBeGreaterThan(0);
-    expect(screen.getAllByAltText('Ironman').length).toBeGreaterThan(0);
+    expect(screen.getByText('What Enthusiasts Say')).toBeInTheDocument();
   });
 });

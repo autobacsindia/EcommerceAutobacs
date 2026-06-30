@@ -45,3 +45,6 @@ next-env.d.ts
 # playwright / test artifacts
 /playwright-report
 /test-results
+
+# scroll-animation source video (frames live in public/scroll-frames/)
+kling_20260628_VIDEO_Use_the_pr_25_0.mp4

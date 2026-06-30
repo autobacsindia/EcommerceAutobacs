@@ -1,0 +1,423 @@
+/**
+ * Home (redesign) content + asset registry — SINGLE SOURCE OF TRUTH.
+ *
+ * Every image URL and piece of copy on the redesigned home page lives here so
+ * the design can be re-skinned without touching component code. Swap any
+ * `image` value for your own asset:
+ *   - a file you drop in `public/` → "/images/home/hero-car.png"
+ *   - a Cloudinary / CDN URL       → "https://res.cloudinary.com/.../car.png"
+ *
+ * The current values are temporary Unsplash placeholders so the page renders
+ * complete out of the box. Replace them as real artwork arrives.
+ *
+ * NOTE: a missing local asset just shows the `FALLBACK` swatch (see
+ * <Img> in ./Img.tsx) instead of a broken-image icon, so it is safe to point
+ * at `/images/home/...` paths before the files exist.
+ */
+
+/** Neutral placeholder shown when an `image` is empty/missing. */
+export const FALLBACK_IMAGE = '';
+
+export interface CategoryItem {
+  tag: string;
+  name: string; // may contain a single \n for the two-line layout
+  href: string;
+  image: string;
+}
+
+export interface ProductItem {
+  category: string;
+  brand: string;
+  name: string;
+  price: string;
+  href: string;
+  image: string;
+}
+
+export interface TestimonialItem {
+  quote: string;
+  name: string;
+  detail: string;
+  avatar: string;
+}
+
+export interface JournalItem {
+  category: string;
+  date: string;
+  readTime: string;
+  title: string;
+  excerpt: string;
+  href: string;
+  image: string;
+}
+
+export interface StatItem {
+  value: string;
+  suffix: string;
+  label: string;
+}
+
+export const brand = {
+  name: 'AUTO',
+  nameAccent: 'BAACS',
+  /**
+   * Logo image. Drop your file in `Front-end/web/public/` and point here, e.g.
+   *   logo: '/logo.svg'   (file at Front-end/web/public/logo.svg)
+   * or use a CDN/Cloudinary URL. Leave it empty ('') to keep the text wordmark
+   * (AUTO + BAACS) below. Used in both the nav and the footer.
+   */
+  // `e_trim` strips the transparent padding baked into the source PNG (the
+  // Roavion stacked lockup is ~775×309 inside a 1160×660 canvas), so the logo
+  // fills its height in the navbar instead of floating tiny and off-centre.
+  // f_auto,q_auto = optimised delivery. Display size is controlled in CSS via
+  // `.logo-img` (see home-redesign.css), NOT by inflating the asset height.
+  logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png',
+  logoAlt: 'Autobacs India',
+  // Profile avatar in the nav (replace with the signed-in user's image later).
+  avatar:
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&q=80&auto=format&fit=crop',
+};
+
+export const navLinks = [
+  { label: 'Shop', href: '/shop' },
+  { label: 'Exterior', href: '/categories' },
+  { label: 'Interior', href: '/categories' },
+  { label: 'Vehicle Makes', href: '/brands' },
+  { label: 'Offers', href: '/offers' },
+  { label: 'Press', href: '/media' },
+];
+
+export const hero = {
+  eyebrow: 'Performance · Collection 2024',
+  headlineTop: 'Engineer',
+  headlineAccent: 'Perfection.',
+  tagline: 'Premium aftermarket parts for the discerning enthusiast.',
+  bottomTagline: 'Reimagine every drive.',
+  ctaLabel: 'Explore Collection',
+  image:
+'https://images.unsplash.com/photo-1485291571150-772bcfc10da5?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MzR8fGNhcnxlbnwwfHwwfHx8MA%3D%3D',  imageAlt: 'Performance Vehicle',
+};
+
+/**
+ * Hero scroll-frame sequence (desktop+ only). The hero "car" image is replaced
+ * by a <canvas> that scrubs through these frames as the user scrolls past the
+ * hero. Mobile and `prefers-reduced-motion` users fall back to `hero.image` and
+ * never download a single frame. See HeroSequence.tsx.
+ *
+ * Frames live in `public/scroll-frames/` (committed). To regenerate from a new
+ * source video: extract every frame at 1440px wide to WebP and keep the
+ * `frame_0001.webp … frame_NNNN.webp` naming, then update `count` here.
+ */
+export const heroSequence = {
+  dir: '/scroll-frames',
+  prefix: 'frame_',
+  ext: 'webp',
+  count: 145,
+  pad: 4, // zero-padding width of the frame number
+  naturalWidth: 1440,
+  naturalHeight: 808,
+};
+
+export const stats: StatItem[] = [
+  { value: '10,000', suffix: '+', label: 'Products Delivered' },
+  { value: '1,000', suffix: '+', label: 'Premium Parts' },
+  { value: '200', suffix: '+', label: 'Compatible Makes' },
+  { value: '50', suffix: '+', label: 'Expert Partners' },
+];
+
+export const manifesto = {
+  eyebrow: 'Our Philosophy',
+  titleTop: 'Not just parts.',
+  titleAccent: 'A transformation.',
+  body: "We source the world's finest aftermarket components for those who demand more from every drive. Every part we carry has been selected for fit, finish, and the feeling it unlocks behind the wheel.",
+};
+
+export const categories: CategoryItem[] = [
+  {
+    tag: 'Featured Category',
+    name: 'Performance\nUpgrades',
+    href: '/categories',
+    image:
+      'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=800&q=70&auto=format&fit=crop',
+  },
+  {
+    tag: 'Category',
+    name: 'Wheels &\nSuspension',
+    href: '/categories',
+    image:
+      'https://images.unsplash.com/photo-1600712242805-5f78671b24da?w=800&q=70&auto=format&fit=crop',
+  },
+  {
+    tag: 'Category',
+    name: 'Exterior &\nAero',
+    href: '/categories',
+    image:
+      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=70&auto=format&fit=crop',
+  },
+  {
+    tag: 'Category',
+    name: 'Engine &\nExhaust',
+    href: '/categories',
+    image:
+      'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?w=800&q=70&auto=format&fit=crop',
+  },
+  {
+    tag: 'Category',
+    name: 'Lighting &\nElectronics',
+    href: '/categories',
+    image:
+      'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=800&q=70&auto=format&fit=crop',
+  },
+  {
+    tag: 'Category',
+    name: 'Interior &\nCockpit',
+    href: '/categories',
+    image:
+      'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=800&q=70&auto=format&fit=crop',
+  },
+];
+
+export const showreel = {
+  eyebrow: 'In Motion',
+  titleTop: 'Feel the',
+  titleAccent: 'Difference.',
+  body: 'Every upgrade, captured in motion. Watch our transformations come alive — from stock to spectacular.',
+  // Optional video. Leave empty to keep the animated placeholder stage.
+  video: '',
+  poster: '',
+};
+
+export const products: ProductItem[] = [
+  {
+    category: "Editor's Choice",
+    brand: 'Akrapovič',
+    name: 'Evolution Line Titanium Exhaust',
+    price: '₹1,24,999',
+    href: '/products',
+    image:
+      'https://images.unsplash.com/photo-1606577924006-27d39b132ae2?w=700&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Bestseller',
+    brand: 'Brembo',
+    name: 'GT Big Brake Kit — 6 Piston',
+    price: '₹89,500',
+    href: '/products',
+    image:
+      'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=700&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Suspension',
+    brand: 'Bilstein',
+    name: 'B16 PSS10 Coilover Kit',
+    price: '₹62,000',
+    href: '/products',
+    image:
+      'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=700&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Limited',
+    brand: 'Rays / Volk',
+    name: 'TE37SL Super Lap — 18"',
+    price: '₹2,20,000',
+    href: '/products',
+    image:
+      'https://images.unsplash.com/photo-1600712242805-5f78671b24da?w=700&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Forced Induction',
+    brand: 'HKS',
+    name: 'GT2 Supercharger Pro Kit',
+    price: '₹3,45,000',
+    href: '/products',
+    image:
+      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=700&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Intake',
+    brand: 'K&N',
+    name: '77 Series Cold Air Intake',
+    price: '₹18,750',
+    href: '/products',
+    image:
+      'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?w=700&q=75&auto=format&fit=crop',
+  },
+];
+
+export const brands: string[] = [
+  'HKS',
+  'Brembo',
+  'Bilstein',
+  'Akrapovič',
+  'Recaro',
+  'Sparco',
+  'Öhlins',
+  'Rays',
+  'Enkei',
+  'Project Mu',
+  'Tein',
+  'K&N',
+  'Eibach',
+  'StopTech',
+];
+
+export const transformation = {
+  eyebrow: 'Before & After',
+  titleTop: 'The',
+  titleAccent: 'Autobaacs',
+  titleBottom: 'Effect.',
+  before:
+    'https://images.unsplash.com/photo-1502877338535-766e1452684a?w=1200&q=75&auto=format&fit=crop',
+  after:
+    'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=1200&q=75&auto=format&fit=crop',
+};
+
+export const testimonials: TestimonialItem[] = [
+  {
+    quote:
+      "Autobaacs transformed my track car into something I genuinely can't stop driving. The HKS kit arrived perfectly packaged, and their install partner in Pune was world-class.",
+    name: 'Rahul Desai',
+    detail: 'Honda Civic Type R · Mumbai',
+    avatar:
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&q=70&auto=format&fit=crop',
+  },
+  {
+    quote:
+      "I've been building cars for 15 years and Autobaacs is the only platform I trust for sourcing genuine performance parts. Delivery was faster than I expected — even to Bangalore.",
+    name: 'Arjun Krishnan',
+    detail: 'Subaru WRX STI · Bengaluru',
+    avatar:
+      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&q=70&auto=format&fit=crop',
+  },
+  {
+    quote:
+      'The Brembo kit I ordered fit perfectly, and their team helped me pick the right option for my car. Premium experience from start to finish — feels like buying from a luxury brand.',
+    name: 'Priya Mehta',
+    detail: 'BMW M3 · Delhi',
+    avatar:
+      'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&q=70&auto=format&fit=crop',
+  },
+  {
+    quote:
+      'Sourced my Akrapovič exhaust through Autobaacs and the difference is night and day. Genuine product, great price, incredibly smooth process. Will return for my next build.',
+    name: 'Vikram Shah',
+    detail: 'Porsche 911 GTS · Ahmedabad',
+    avatar:
+      'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&q=70&auto=format&fit=crop',
+  },
+];
+
+export const journal = {
+  eyebrow: 'The Garage Journal',
+  titleTop: 'Stories from',
+  titleAccent: 'under the hood.',
+  body: 'Build guides, product deep-dives and the obsessive details behind every transformation. Written by enthusiasts, for enthusiasts.',
+};
+
+export const journalPosts: JournalItem[] = [
+  {
+    category: 'Exhaust',
+    date: 'May 12, 2026',
+    readTime: '6 min read',
+    title: 'Titanium vs. Stainless: Which Exhaust Actually Sounds Better?',
+    excerpt:
+      "We put two flagship systems on the same car and the dyno — here's what the weight, the decibels and the back-pressure data really told us.",
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1606577924006-27d39b132ae2?w=900&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Suspension',
+    date: 'Apr 28, 2026',
+    readTime: '8 min read',
+    title: 'Choosing the Right Coilovers for Street & Track',
+    excerpt:
+      'Spring rates, damping, ride height — the trade-offs that decide whether your setup is a weekend weapon or a daily-driver nightmare.',
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1600712242805-5f78671b24da?w=900&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Brakes',
+    date: 'Apr 09, 2026',
+    readTime: '5 min read',
+    title: 'Big Brake Kits Explained: Do You Really Need Six Pistons?',
+    excerpt:
+      'Rotor sizing, pad compounds and heat management — a no-nonsense guide to braking upgrades that actually match how you drive.',
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=900&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Wheels',
+    date: 'Mar 22, 2026',
+    readTime: '7 min read',
+    title: 'Forged vs. Cast Wheels: Where the Money Actually Goes',
+    excerpt:
+      "Strength, weight and cost broken down with real numbers — so you know exactly what you're paying for when you go forged.",
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=900&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Engine',
+    date: 'Mar 04, 2026',
+    readTime: '9 min read',
+    title: 'Intake & Tuning Basics: Unlocking Safe, Reliable Power',
+    excerpt:
+      'From cold-air intakes to a proper remap — the sensible order of operations for chasing power without compromising longevity.',
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=900&q=75&auto=format&fit=crop',
+  },
+  {
+    category: 'Interior',
+    date: 'Feb 18, 2026',
+    readTime: '4 min read',
+    title: 'Interior Detailing at Home: A Showroom Finish on a Budget',
+    excerpt:
+      'The tools, products and techniques our detailers swear by — to make a well-used cabin look and feel factory-fresh again.',
+    href: '/blog',
+    image:
+      'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=900&q=75&auto=format&fit=crop',
+  },
+];
+
+export const footer = {
+  blurb:
+    "India's premium destination for aftermarket automotive parts and transformation services. Sourced globally, delivered with precision.",
+  columns: [
+    {
+      title: 'Shop',
+      links: [
+        { label: 'Performance', href: '/categories' },
+        { label: 'Wheels & Suspension', href: '/categories' },
+        { label: 'Exterior & Aero', href: '/categories' },
+        { label: 'Engine & Exhaust', href: '/categories' },
+        { label: 'Lighting', href: '/categories' },
+        { label: 'Interior', href: '/categories' },
+      ],
+    },
+    {
+      title: 'Company',
+      links: [
+        { label: 'About Us', href: '/about-us' },
+        { label: 'Workshop Network', href: '/consultation' },
+        { label: 'Become a Partner', href: '/contact' },
+        { label: 'Careers', href: '/careers' },
+        { label: 'Press', href: '/media' },
+      ],
+    },
+    {
+      title: 'Support',
+      links: [
+        { label: 'Track Order', href: '/track' },
+        { label: 'Returns Policy', href: '/returns' },
+        { label: 'Installation Help', href: '/help' },
+        { label: 'Fitment Guide', href: '/vehicles' },
+        { label: 'Contact Us', href: '/contact' },
+      ],
+    },
+  ],
+  copyright: `© ${new Date().getFullYear()} Autobacs India Pvt. Ltd. All rights reserved.`,
+};

@@ -144,7 +144,9 @@ function buildCsp(nonce: string): string {
     // attributes that cannot be nonce'd. CSS-injection risk is low; the
     // meaningful gain is script-src keeping its strict nonce policy.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://res.cloudinary.com https://*.gstatic.com https://*.googleapis.com",
+    // images.unsplash.com = temporary home-redesign placeholder imagery; safe to
+    // remove once all artwork is hosted on Cloudinary (res.cloudinary.com).
+    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",

@@ -12,6 +12,8 @@ interface User {
   role: 'customer' | 'admin';
   sessionVersion: number;
   isVerified: boolean;
+  /** Cloudinary profile picture URL ('' when none uploaded). */
+  avatarUrl: string;
 }
 
 interface AuthContextType {
@@ -79,6 +81,10 @@ function isCacheValid(cached: CachedAuth): boolean {
 }
 
 function normalizeUser(raw: any): User {
+  // Backend may send `avatar` as a Cloudinary URL string or as the raw
+  // { url, public_id } subdoc — accept either, plus a couple of legacy names.
+  const a = raw.avatar ?? raw.avatarUrl ?? raw.image;
+  const avatarUrl = typeof a === 'string' ? a : (a?.url ?? '');
   return {
     _id:            raw._id || raw.id,
     name:           raw.name,
@@ -86,6 +92,7 @@ function normalizeUser(raw: any): User {
     role:           raw.role,
     sessionVersion: raw.sessionVersion ?? 0,
     isVerified:     raw.isVerified ?? false,
+    avatarUrl,
   };
 }
 

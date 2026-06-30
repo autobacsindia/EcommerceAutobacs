@@ -143,12 +143,13 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
     success: true,
     message: "User registered successfully. Please check your email to verify your account",
     // NOTE: Tokens are now set as httpOnly cookies, not in response body
-    user: { 
-      id: newUser._id, 
-      name: newUser.name, 
-      email: newUser.email, 
+    user: {
+      id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
       role: newUser.role,
-      isVerified: newUser.isVerified
+      isVerified: newUser.isVerified,
+      avatar: newUser.avatar?.url || ''
     }
   });
 }));
@@ -240,7 +241,8 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
       name: user.name,
       email: user.email,
       role: user.role,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      avatar: user.avatar?.url || ''
     }
   });
 }));
@@ -258,6 +260,8 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
       name: req.user.name,
       role: req.user.role,
       isVerified: req.user.isVerified,
+      // Profile picture (Cloudinary URL); empty string when none uploaded.
+      avatar: req.user.avatar?.url || '',
       // Used by the frontend cache invalidation logic — if this value changes
       // (ban, role change, force-logout), the client detects it on next background
       // revalidation and immediately updates state without waiting for TTL expiry.
@@ -1202,7 +1206,7 @@ router.post(
     // Fetch and return user data so the frontend can hydrate auth state
     // immediately without a second GET /me round-trip.
     const user = await User.findById(parsedCode.userId)
-      .select('_id name email role isVerified sessionVersion')
+      .select('_id name email role isVerified sessionVersion avatar')
       .lean();
 
     console.log('[Auth] Sending success response');
@@ -1217,6 +1221,7 @@ router.post(
             role: user.role,
             isVerified: user.isVerified,
             sessionVersion: user.sessionVersion ?? 0,
+            avatar: user.avatar?.url || '',
           }
         : undefined,
     });

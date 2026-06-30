@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, DM_Sans } from "next/font/google";
+import { Barlow_Condensed, DM_Sans, Montserrat } from "next/font/google";
 import Script from "next/script";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -29,6 +29,20 @@ const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   subsets: ["latin"],
   weight: ["300", "400", "500"],
+  display: "swap",
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SITE DISPLAY FONT — single source of truth.
+// The redesigned UI uses Montserrat everywhere via the `--font-montserrat`
+// CSS variable (consumed by `--display-font` in home-redesign.css and any
+// future redesigned page). To change the whole site's font, swap this one
+// import (e.g. `Inter`, `Poppins`) and its `weight` list — nothing else.
+// ──────────────────────────────────────────────────────────────────────────
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -173,7 +187,7 @@ export default async function RootLayout({
         {nonce && <meta name="csp-nonce" content={nonce} />}
       </head>
       <body
-        className={`${barlowCondensed.variable} ${dmSans.variable} antialiased`}
+        className={`${barlowCondensed.variable} ${dmSans.variable} ${montserrat.variable} antialiased`}
       >
         <LogRocketProvider>
           <PostHogProvider>
