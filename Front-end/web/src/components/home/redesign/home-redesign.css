@@ -88,10 +88,14 @@
 .hr .nav-search-bar { display: none; }
 .hr .nav-mobile-row { display: flex; align-items: center; gap: 12px; }
 .hr .nav-mobile-row svg { color: var(--gold); flex-shrink: 0; }
-.hr .main-nav .nav-links { display: flex; gap: 20px; flex-shrink: 0; }
+/* Links take the middle zone and centre themselves: logo stays left,
+   search + actions stay right. flex:1 lets the group grow into the free
+   space so it sits centred without overlapping the side zones on medium
+   widths (true viewport-centring would collide with the logo/search). */
+.hr .main-nav .nav-links { display: flex; gap: 20px; flex: 1 1 auto; justify-content: center; align-items: center; }
 .hr .main-nav .nav-links a { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); transition: color 0.25s; white-space: nowrap; }
 .hr .main-nav .nav-links a:hover { color: var(--text); }
-.hr .main-nav .nav-search { margin-left: auto; flex: 0 1 220px; max-width: 220px; min-width: 110px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); transition: border-color 0.25s; }
+.hr .main-nav .nav-search { flex: 0 1 220px; max-width: 220px; min-width: 110px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); transition: border-color 0.25s; }
 .hr .main-nav .nav-search:focus-within { border-color: rgba(201, 168, 112, 0.55); }
 .hr .main-nav .nav-search svg { flex-shrink: 0; }
 .hr .main-nav .nav-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; letter-spacing: 0.1em; }
@@ -107,6 +111,11 @@
 
 /* ── VEHICLE MAKES MENU ── */
 .hr .veh { position: relative; }
+/* In the nav-links row .veh-dropdown is a flex item alongside the <a> links;
+   make it a centred flex box so its <button> trigger sits on the same baseline
+   as the links instead of riding a few px lower. (The inline mobile variant
+   stacks trigger + panel vertically, so it must stay in normal flow.) */
+.hr .veh-dropdown { display: flex; align-items: center; }
 .hr .veh-trigger { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; font-family: var(--display-font); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); transition: color 0.25s; white-space: nowrap; padding: 0; }
 .hr .veh-trigger:hover { color: var(--text); }
 .hr .veh-trigger[aria-expanded='true'] { color: var(--gold); }

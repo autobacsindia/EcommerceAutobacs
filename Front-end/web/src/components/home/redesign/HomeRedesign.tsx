@@ -14,6 +14,7 @@ import Transformation from './Transformation';
 import Testimonials from './Testimonials';
 import Journal from './Journal';
 import RedesignFooter from './RedesignFooter';
+import type { HomeData } from './homeData';
 
 /**
  * Redesigned home page (Hero.html). All sections are scoped under `.hr` so the
@@ -24,7 +25,7 @@ import RedesignFooter from './RedesignFooter';
  *   1. scroll-reveal — fade/slide `.reveal` elements in as they enter view.
  *   2. nav background — darken the fixed nav after the first scroll.
  */
-export default function HomeRedesign() {
+export default function HomeRedesign({ data }: { data: HomeData }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,13 +68,13 @@ export default function HomeRedesign() {
       <RedesignNav />
       <Hero />
       <Manifesto />
-      <Categories />
+      <Categories categories={data.categories} />
       <Showreel />
-      <EditorsPick />
-      <Brands />
+      <EditorsPick products={data.products} />
+      <Brands brands={data.brands} />
       <Transformation />
-      <Testimonials />
-      <Journal />
+      <Testimonials testimonials={data.testimonials} />
+      <Journal posts={data.journalPosts} />
       <RedesignFooter />
     </div>
   );

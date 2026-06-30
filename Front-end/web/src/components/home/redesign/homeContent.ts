@@ -44,7 +44,7 @@ export interface TestimonialItem {
 export interface JournalItem {
   category: string;
   date: string;
-  readTime: string;
+  readTime?: string;
   title: string;
   excerpt: string;
   href: string;
@@ -261,6 +261,16 @@ export const brands: string[] = [
   'StopTech',
 ];
 
+/**
+ * Before/After comparison slider. This section is NOT DB-backed — it's a
+ * curated pair of images. Paste your Cloudinary URLs below (replace the two
+ * Unsplash placeholders). Use the SAME aspect ratio for both so the wipe lines
+ * up, e.g.:
+ *   before: 'https://res.cloudinary.com/<cloud>/image/upload/f_auto,q_auto/v123/before.jpg',
+ *   after:  'https://res.cloudinary.com/<cloud>/image/upload/f_auto,q_auto/v123/after.jpg',
+ *
+ * ↓↓↓ ADD YOUR CLOUDINARY LINKS HERE ↓↓↓
+ */
 export const transformation = {
   eyebrow: 'Before & After',
   titleTop: 'The',

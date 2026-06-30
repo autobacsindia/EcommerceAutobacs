@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Img from './Img';
-import { testimonials } from './homeContent';
+import { testimonials as fallbackTestimonials, type TestimonialItem } from './homeContent';
 
-export default function Testimonials() {
+export default function Testimonials({ testimonials }: { testimonials?: TestimonialItem[] }) {
+  // Live featured reviews from the DB; static placeholders if none resolved.
+  const items = testimonials?.length ? testimonials : fallbackTestimonials;
   const trackRef = useRef<HTMLDivElement>(null);
   const [idx, setIdx] = useState(0);
 
@@ -16,7 +18,7 @@ export default function Testimonials() {
     const wrap = track?.parentElement; // .testi-track-wrap == one page width
     if (!track || !wrap) return;
     const pv = perView.current;
-    const pages = Math.max(1, Math.ceil(testimonials.length / pv));
+    const pages = Math.max(1, Math.ceil(items.length / pv));
     const clamped = Math.max(0, Math.min(pages - 1, next));
     // Each page advances by exactly one viewport width plus the inter-card gap
     // (CSS `.testi-track { gap: 24px }`), which aligns the next page's first
@@ -24,7 +26,7 @@ export default function Testimonials() {
     const GAP = 24;
     track.style.transform = `translateX(-${clamped * (wrap.offsetWidth + GAP)}px)`;
     setIdx(clamped);
-  }, []);
+  }, [items.length]);
 
   useEffect(() => {
     const sync = () => {
@@ -36,7 +38,7 @@ export default function Testimonials() {
     return () => window.removeEventListener('resize', sync);
   }, [apply]);
 
-  const pages = Math.max(1, Math.ceil(testimonials.length / perView.current));
+  const pages = Math.max(1, Math.ceil(items.length / perView.current));
 
   return (
     <section className="testimonials">
@@ -47,7 +49,7 @@ export default function Testimonials() {
 
       <div className="testi-track-wrap">
         <div className="testi-track" ref={trackRef}>
-          {testimonials.map((t) => (
+          {items.map((t) => (
             <div className="testi-card" key={t.name}>
               <div className="testi-stars">★★★★★</div>
               <div className="testi-quote">{t.quote}</div>

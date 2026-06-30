@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Img from './Img';
 import { ArrowRight, ScrollArrow } from './icons';
-import { categories } from './homeContent';
+import { categories as fallbackCategories, type CategoryItem } from './homeContent';
 
-export default function Categories() {
+export default function Categories({ categories }: { categories?: CategoryItem[] }) {
+  // Live category hubs from the DB; static placeholders if none resolved.
+  const items = categories?.length ? categories : fallbackCategories;
   const outerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -21,7 +23,7 @@ export default function Categories() {
     // swipe (see CSS), so we leave inline styles cleared.
     const desktop = window.matchMedia('(min-width: 769px)');
     let distance = 0;
-    const count = categories.length;
+    const count = items.length;
 
     const layout = () => {
       if (!desktop.matches) {
@@ -64,7 +66,7 @@ export default function Categories() {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('load', onResize);
     };
-  }, []);
+  }, [items.length]);
 
   return (
     <section className="categories">
@@ -74,7 +76,7 @@ export default function Categories() {
             <h2 className="reveal">Shop by Category</h2>
             <div className="cat-head-meta">
               <div className="cat-counter">
-                <b>{current}</b> / {String(categories.length).padStart(2, '0')}
+                <b>{current}</b> / {String(items.length).padStart(2, '0')}
               </div>
               <div className="cat-progress">
                 <div className="cat-progress-bar" ref={barRef} />
@@ -88,7 +90,7 @@ export default function Categories() {
 
           <div className="cat-track-wrap">
             <div className="cat-track" ref={trackRef}>
-              {categories.map((cat, i) => (
+              {items.map((cat, i) => (
                 <Link href={cat.href} className="cat-card" key={cat.name}>
                   <Img src={cat.image} alt={cat.name.replace('\n', ' ')} />
                   <div className="cat-num-ghost">{String(i + 1).padStart(2, '0')}</div>

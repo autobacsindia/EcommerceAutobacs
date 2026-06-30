@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Img from './Img';
 import { Diagonal } from './icons';
-import { products } from './homeContent';
+import { products as fallbackProducts, type ProductItem } from './homeContent';
 
-export default function EditorsPick() {
+export default function EditorsPick({ products }: { products?: ProductItem[] }) {
+  // Live featured products from the DB; static placeholders if none resolved.
+  const items = products?.length ? products : fallbackProducts;
   const trackRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const idxRef = useRef(0);
@@ -58,7 +60,7 @@ export default function EditorsPick() {
 
       <div className="ce-track-wrap">
         <div className="prod-track reveal reveal-d1" ref={trackRef}>
-          {products.map((p) => (
+          {items.map((p) => (
             <Link href={p.href} className="ce-card" key={p.name}>
               <Img src={p.image} alt={p.name} className="ce-bg" />
               <div className="ce-overlay" />

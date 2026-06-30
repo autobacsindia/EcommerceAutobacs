@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Img from './Img';
 import { ArrowRight, ArrowRightLong } from './icons';
-import { journal, journalPosts } from './homeContent';
+import { journal, journalPosts as fallbackJournalPosts, type JournalItem } from './homeContent';
 
-export default function Journal() {
+export default function Journal({ posts }: { posts?: JournalItem[] }) {
+  // Live blog posts from the DB; static placeholders if none resolved.
+  const items = posts?.length ? posts : fallbackJournalPosts;
   const cardRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const [active, setActive] = useState(0);
 
@@ -27,7 +29,7 @@ export default function Journal() {
     );
     cards.forEach((c) => obs.observe(c));
     return () => obs.disconnect();
-  }, []);
+  }, [items.length]);
 
   const jumpTo = (i: number) => {
     const card = cardRefs.current[i];
@@ -48,7 +50,7 @@ export default function Journal() {
           </h2>
           <p className="journal-desc reveal reveal-d2">{journal.body}</p>
           <div className="journal-index reveal reveal-d2">
-            {journalPosts.map((p, i) => (
+            {items.map((p, i) => (
               <button
                 key={p.title}
                 type="button"
@@ -66,7 +68,7 @@ export default function Journal() {
         </div>
 
         <div className="journal-right">
-          {journalPosts.map((p, i) => (
+          {items.map((p, i) => (
             <Link
               href={p.href}
               className="journal-card reveal"
@@ -81,8 +83,12 @@ export default function Journal() {
               </div>
               <div className="journal-meta">
                 <span>{p.date}</span>
-                <span className="dot" />
-                <span>{p.readTime}</span>
+                {p.readTime && (
+                  <>
+                    <span className="dot" />
+                    <span>{p.readTime}</span>
+                  </>
+                )}
               </div>
               <h3>{p.title}</h3>
               <p>{p.excerpt}</p>
