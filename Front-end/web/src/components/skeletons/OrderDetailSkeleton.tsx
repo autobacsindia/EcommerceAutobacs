@@ -21,7 +21,7 @@ export default function OrderDetailSkeleton() {
       </div>
 
       {/* Progress Bar */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
+      <div className="bg-obsidian rounded-lg shadow-sm border p-6 mb-8">
         <Skeleton className="h-6 w-48 mb-6" />
         <div className="px-4">
           <Skeleton className="h-2 w-full rounded-full mb-8" />
@@ -39,7 +39,7 @@ export default function OrderDetailSkeleton() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column - Items */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          <div className="bg-obsidian rounded-lg shadow-sm border overflow-hidden">
             <div className="p-6 border-b">
               <Skeleton className="h-6 w-32" />
             </div>
@@ -66,7 +66,7 @@ export default function OrderDetailSkeleton() {
         {/* Right Column - Summary & Info */}
         <div className="space-y-6">
           {/* Order Summary */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="bg-obsidian rounded-lg shadow-sm border p-6">
             <Skeleton className="h-6 w-32 mb-4" />
             <div className="space-y-3 border-b pb-4 mb-4">
               <div className="flex justify-between">
@@ -89,7 +89,7 @@ export default function OrderDetailSkeleton() {
           </div>
 
           {/* Shipping Info */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="bg-obsidian rounded-lg shadow-sm border p-6">
             <Skeleton className="h-6 w-40 mb-4" />
             <div className="space-y-2">
               <Skeleton className="h-4 w-48" />
@@ -100,7 +100,7 @@ export default function OrderDetailSkeleton() {
           </div>
 
           {/* Payment Info */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="bg-obsidian rounded-lg shadow-sm border p-6">
             <Skeleton className="h-6 w-40 mb-4" />
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">

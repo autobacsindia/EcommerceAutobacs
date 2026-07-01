@@ -25,7 +25,7 @@ export default function SkeletonLoader({
           </div>
           <div className="lg:grid lg:grid-cols-12 lg:gap-8">
             <div className="lg:col-span-8">
-              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="bg-obsidian rounded-lg shadow-md overflow-hidden">
                 <div className="p-4 border-b flex justify-between items-center">
                   <Skeleton className="h-6 w-24" />
                   <Skeleton className="h-4 w-20" />
@@ -55,7 +55,7 @@ export default function SkeletonLoader({
               </div>
             </div>
             <div className="lg:col-span-4 mt-8 lg:mt-0">
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="bg-obsidian rounded-lg shadow-md p-6">
                 <Skeleton className="h-6 w-32 mb-4" />
                 <div className="space-y-3 mb-6">
                   {[1, 2, 3, 4].map((i) => (
@@ -75,7 +75,7 @@ export default function SkeletonLoader({
     case 'header':
       return (
         <header 
-          className={`bg-black sticky top-0 z-50 shadow-md w-full ${className}`}
+          className={`bg-obsidian-deep sticky top-0 z-50 shadow-md w-full ${className}`}
           suppressHydrationWarning
         >
           <div className="w-full px-4 sm:px-6 lg:px-8">
@@ -96,7 +96,7 @@ export default function SkeletonLoader({
               </div>
 
               {/* Right Section skeleton */}
-              <div className="flex items-center space-x-4 text-white flex-shrink-0 ml-auto">
+              <div className="flex items-center space-x-4 text-ink flex-shrink-0 ml-auto">
                 {/* Currency Switcher skeleton */}
                 <div className="hidden sm:block">
                   <Skeleton className="h-8 w-20" />

@@ -148,21 +148,21 @@ export default function ProductCollection({
   // Loading skeleton
   if (loading) {
     return (
-      <section className={`py-16 bg-gray-50 ${className}`}>
+      <section className={`py-16 bg-obsidian-deep ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-12">
-            <div className="h-10 bg-gray-200 rounded w-64 mb-2 animate-pulse" />
-            {subtitle && <div className="h-6 bg-gray-200 rounded w-96 animate-pulse" />}
+            <div className="h-10 bg-obsidian-raised rounded w-64 mb-2 animate-pulse" />
+            {subtitle && <div className="h-6 bg-obsidian-raised rounded w-96 animate-pulse" />}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[...Array(3)].map((_, index) => (
-              <div key={index} className="bg-white rounded-lg overflow-hidden animate-pulse">
-                <div className="aspect-square bg-gray-200" />
+              <div key={index} className="bg-obsidian rounded-lg overflow-hidden animate-pulse">
+                <div className="aspect-square bg-obsidian-raised" />
                 <div className="p-6">
-                  <div className="h-4 bg-gray-200 rounded mb-2" />
-                  <div className="h-4 bg-gray-200 rounded w-2/3 mb-4" />
-                  <div className="h-8 bg-gray-200 rounded w-1/2" />
+                  <div className="h-4 bg-obsidian-raised rounded mb-2" />
+                  <div className="h-4 bg-obsidian-raised rounded w-2/3 mb-4" />
+                  <div className="h-8 bg-obsidian-raised rounded w-1/2" />
                 </div>
               </div>
             ))}
@@ -180,26 +180,26 @@ export default function ProductCollection({
   // Show empty state if no products found
   if (products.length === 0 && !loading) {
     return (
-      <section className={`py-16 bg-gray-50 ${className}`}>
+      <section className={`py-16 bg-obsidian-deep ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Header */}
           <div className="mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
+            <h2 className="text-4xl md:text-5xl font-bold text-ink mb-3">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-xl text-gray-600">{subtitle}</p>
+              <p className="text-xl text-ink-muted">{subtitle}</p>
             )}
           </div>
           
           {/* Empty State */}
-          <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-500 text-lg mb-4">
+          <div className="text-center py-12 bg-obsidian rounded-lg">
+            <p className="text-ink-muted text-lg mb-4">
               No products found {brand && `for brand "${brand}"`}{category && `in category "${category}"`}{searchKeyword && `for "${searchKeyword}"`}
             </p>
             <Link
               href="/products"
-              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold"
+              className="inline-flex items-center gap-2 text-gold hover:text-gold font-semibold"
             >
               <span>Browse All Products</span>
               <ChevronRight className="h-5 w-5" />
@@ -211,15 +211,15 @@ export default function ProductCollection({
   }
 
   return (
-    <section className={`py-16 bg-gray-50 ${className}`}>
+    <section className={`py-16 bg-obsidian-deep ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
+          <h2 className="text-4xl md:text-5xl font-bold text-ink mb-3">
             {title}
           </h2>
           {subtitle && (
-            <p className="text-xl text-gray-600">{subtitle}</p>
+            <p className="text-xl text-ink-muted">{subtitle}</p>
           )}
         </div>
         
@@ -233,9 +233,9 @@ export default function ProductCollection({
               href={url}
               className="group"
             >
-              <div className="bg-white rounded-lg overflow-hidden hover:shadow-2xl transition-all duration-300 h-full flex flex-col">
+              <div className="bg-obsidian rounded-lg overflow-hidden hover:shadow-2xl transition-all duration-300 h-full flex flex-col">
                 {/* Product Image */}
-                <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                <div className="relative aspect-square bg-obsidian-raised overflow-hidden">
                   {product.images && (
                     Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
                       <ProductImage
@@ -250,27 +250,27 @@ export default function ProductCollection({
                         className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                        <span className="text-gray-400">No image</span>
+                      <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                        <span className="text-ink-muted">No image</span>
                       </div>
                     )
                   )}
                   
                   {/* Wishlist Button */}
                   <button
-                    className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-lg hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+                    className="absolute top-4 right-4 p-2 bg-obsidian rounded-full shadow-lg hover:bg-obsidian-raised transition-colors opacity-0 group-hover:opacity-100"
                     onClick={(e) => handleToggleWishlist(product._id, e, { name: product.name, price: product.price })}
                   >
                     <Heart className={`h-5 w-5 transition-colors duration-200 ${
                       isInWishlist(product._id) 
                         ? 'text-red-500 fill-current' 
-                        : 'text-gray-600'
+                        : 'text-ink-muted'
                     }`} />
                   </button>
 
                   {/* Sale Badge */}
                   {product.originalPrice && product.originalPrice > product.price && (
-                    <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                    <div className="absolute top-4 left-4 bg-red-500 text-ink px-3 py-1 rounded-full text-sm font-bold">
                       SALE
                     </div>
                   )}
@@ -279,19 +279,19 @@ export default function ProductCollection({
                 {/* Product Info */}
                 <div className="p-6 flex-1 flex flex-col">
                   {/* Product Name */}
-                  <h3 className="font-semibold text-lg text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                  <h3 className="font-semibold text-lg text-ink mb-3 line-clamp-2 group-hover:text-gold transition-colors">
                     {product.name}
                   </h3>
 
                   {/* Brand/Category Tags */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     {product.brand && (
-                      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                      <span className="text-xs px-2 py-1 bg-obsidian-raised text-ink-muted rounded">
                         {product.brand}
                       </span>
                     )}
                     {typeof product.category === 'object' && product.category?.name && (
-                      <span className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded">
+                      <span className="text-xs px-2 py-1 bg-blue-50 text-gold rounded">
                         {product.category.name}
                       </span>
                     )}
@@ -301,23 +301,23 @@ export default function ProductCollection({
                   <div className="mt-auto">
                     {product.originalPrice && product.originalPrice > product.price ? (
                       <div className="mb-4">
-                        <p className="text-2xl font-bold text-blue-600">
+                        <p className="text-2xl font-bold text-gold">
                           {formatPrice(product.price)}
                         </p>
-                        <p className="text-sm text-gray-500 line-through">
+                        <p className="text-sm text-ink-muted line-through">
                           Original price was: {formatPrice(product.originalPrice)}
                         </p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-ink-muted">
                           Current price is: {formatPrice(product.price)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">(incl. taxes)</p>
+                        <p className="text-xs text-ink-muted mt-1">(incl. taxes)</p>
                       </div>
                     ) : (
                       <div className="mb-4">
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-2xl font-bold text-ink">
                           {formatPrice(product.price)}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">(incl. taxes)</p>
+                        <p className="text-xs text-ink-muted mt-1">(incl. taxes)</p>
                       </div>
                     )}
 
@@ -325,7 +325,7 @@ export default function ProductCollection({
                     <button
                       onClick={(e) => handleAddToCart(product._id, e)}
                       disabled={product.stock === 'out'}
-                      className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+                      className="w-full flex items-center justify-center gap-2 bg-gold text-obsidian px-6 py-3 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed font-medium"
                     >
                       <ShoppingCart className="h-5 w-5" />
                       <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
@@ -342,7 +342,7 @@ export default function ProductCollection({
         <div className="mt-12 text-center">
           <Link
             href={brand ? `/products?brand=${brand}` : category ? `/products?category=${category}` : '/products'}
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold text-lg group"
+            className="inline-flex items-center gap-2 text-gold hover:text-gold font-semibold text-lg group"
           >
             <span>View All Products</span>
             <ChevronRight className="h-5 w-5 group-hover:translate-x-2 transition-transform" />

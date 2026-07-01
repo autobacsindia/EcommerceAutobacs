@@ -320,9 +320,9 @@ export default function OptimizedProductsPageClient() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Hero Section */}
-      <div className="bg-linear-to-r from-blue-600 to-blue-800 text-white py-12">
+      <div className="bg-linear-to-r from-gold to-blue-800 text-ink py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold mb-2">Our Products</h1>
           <p className="text-blue-100">
@@ -345,7 +345,7 @@ export default function OptimizedProductsPageClient() {
             </div>
             <button 
               onClick={toggleDataSource}
-              className="text-sm bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition-colors"
+              className="text-sm bg-indigo-600 text-ink px-3 py-1 rounded hover:bg-indigo-700 transition-colors"
             >
               Switch to {useStaticData ? 'API' : 'Static'} Data
             </button>
@@ -380,7 +380,7 @@ export default function OptimizedProductsPageClient() {
           <div className="lg:col-span-3">
             {/* Results Header */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-gray-600">
+              <p className="text-ink-muted">
                 {loading ? (
                   'Loading products...'
                 ) : data.products.length > 0 ? (
@@ -408,9 +408,9 @@ export default function OptimizedProductsPageClient() {
                     id="showAll"
                     checked={showAll}
                     onChange={handleShowAllToggle}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-gold focus:ring-gold border-hairline rounded"
                   />
-                  <label htmlFor="showAll" className="ml-2 block text-sm text-gray-700">
+                  <label htmlFor="showAll" className="ml-2 block text-sm text-ink/80">
                     Show All
                   </label>
                 </div>
@@ -422,7 +422,7 @@ export default function OptimizedProductsPageClient() {
                     id="sort"
                     value={currentSort}
                     onChange={handleSortChange}
-                    className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                    className="block w-full pl-3 pr-10 py-2 text-base border-hairline focus:outline-none focus:ring-gold focus:border-gold sm:text-sm rounded-md"
                   >
                     <option value="createdAt_desc">Newest First</option>
                     <option value="price_asc">Price: Low to High</option>
@@ -446,13 +446,13 @@ export default function OptimizedProductsPageClient() {
             {loading && (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {[...Array(8)].map((_, index) => (
-                  <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
-                    <div className="aspect-square bg-gray-200"></div>
+                  <div key={index} className="bg-obsidian rounded-lg shadow-md overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-obsidian-raised"></div>
                     <div className="p-4">
-                      <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-3 bg-gray-200 rounded mb-4"></div>
-                      <div className="h-6 bg-gray-200 rounded mb-3"></div>
-                      <div className="h-10 bg-gray-200 rounded"></div>
+                      <div className="h-4 bg-obsidian-raised rounded mb-2"></div>
+                      <div className="h-3 bg-obsidian-raised rounded mb-4"></div>
+                      <div className="h-6 bg-obsidian-raised rounded mb-3"></div>
+                      <div className="h-10 bg-obsidian-raised rounded"></div>
                     </div>
                   </div>
                 ))}
@@ -481,17 +481,17 @@ export default function OptimizedProductsPageClient() {
             {/* Empty State */}
             {!loading && !error && data.products.length === 0 && (
               <div className="text-center py-12">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="mx-auto h-12 w-12 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No products found</h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <h3 className="mt-2 text-sm font-medium text-ink">No products found</h3>
+                <p className="mt-1 text-sm text-ink-muted">
                   Try adjusting your search or filter to find what you're looking for.
                 </p>
                 <div className="mt-6">
                   <button
                     onClick={() => router.push('/products')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-obsidian bg-gold hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
                   >
                     View All Products
                   </button>

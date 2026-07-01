@@ -380,17 +380,17 @@ export default function ProductFilters() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
+    <div className="bg-obsidian rounded-lg shadow-md p-4 lg:p-6">
       <h2 className="text-lg font-bold mb-4">Filters</h2>
 
       {/* Vehicle fitment — "shop for my car" */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900">My Vehicle</h3>
+          <h3 className="font-semibold text-ink">My Vehicle</h3>
           <button
             type="button"
             onClick={() => setShowVehicle(!showVehicle)}
-            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded text-gray-700 text-sm leading-none"
+            className="w-6 h-6 flex items-center justify-center border border-hairline rounded text-ink/80 text-sm leading-none"
             aria-label={showVehicle ? 'Collapse vehicle filter' : 'Expand vehicle filter'}
           >
             {showVehicle ? '-' : '+'}
@@ -401,7 +401,7 @@ export default function ProductFilters() {
             <select
               value={selectedMake}
               onChange={(e) => { setSelectedMake(e.target.value); setSelectedModel(''); }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-hairline rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gold"
               aria-label="Vehicle make"
             >
               <option value="">All makes</option>
@@ -411,7 +411,7 @@ export default function ProductFilters() {
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               disabled={!selectedMake}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+              className="w-full px-3 py-2 border border-hairline rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gold disabled:bg-obsidian-raised disabled:text-ink-muted"
               aria-label="Vehicle model"
             >
               <option value="">{selectedMake ? 'All models' : 'Select a make first'}</option>
@@ -423,11 +423,11 @@ export default function ProductFilters() {
 
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900">Categories</h3>
+          <h3 className="font-semibold text-ink">Categories</h3>
           <button
             type="button"
             onClick={() => setShowCategories(!showCategories)}
-            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded text-gray-700 text-sm leading-none"
+            className="w-6 h-6 flex items-center justify-center border border-hairline rounded text-ink/80 text-sm leading-none"
             aria-label={showCategories ? 'Collapse categories' : 'Expand categories'}
           >
             {showCategories ? '-' : '+'}
@@ -439,8 +439,8 @@ export default function ProductFilters() {
               <div className="space-y-2">
                 {[...Array(5)].map((_, index) => (
                   <div key={index} className="flex items-center animate-pulse">
-                    <div className="h-4 w-4 bg-gray-200 rounded"></div>
-                    <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-4 bg-obsidian-raised rounded"></div>
+                    <div className="ml-2 h-4 w-3/4 bg-obsidian-raised rounded"></div>
                   </div>
                 ))}
               </div>
@@ -458,11 +458,11 @@ export default function ProductFilters() {
       {/* Brand Filter */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900">Brands</h3>
+          <h3 className="font-semibold text-ink">Brands</h3>
           <button
             type="button"
             onClick={() => setShowBrands(!showBrands)}
-            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded text-gray-700 text-sm leading-none"
+            className="w-6 h-6 flex items-center justify-center border border-hairline rounded text-ink/80 text-sm leading-none"
             aria-label={showBrands ? 'Collapse brands' : 'Expand brands'}
           >
             {showBrands ? '-' : '+'}
@@ -475,8 +475,8 @@ export default function ProductFilters() {
               <div className="space-y-2">
                 {[...Array(3)].map((_, index) => (
                   <div key={index} className="flex items-center animate-pulse">
-                    <div className="h-4 w-4 bg-gray-200 rounded"></div>
-                    <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-4 bg-obsidian-raised rounded"></div>
+                    <div className="ml-2 h-4 w-3/4 bg-obsidian-raised rounded"></div>
                   </div>
                 ))}
               </div>
@@ -488,18 +488,18 @@ export default function ProductFilters() {
                     id={`brand-${brand._id}`}
                     checked={selectedBrands.includes(brand.name)}
                     onChange={() => handleBrandToggle(brand.name)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-gold focus:ring-gold border-hairline rounded"
                   />
-                  <label htmlFor={`brand-${brand._id}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                  <label htmlFor={`brand-${brand._id}`} className="ml-2 text-sm text-ink/80 cursor-pointer">
                     {brand.name}
                     {facetBrands[brand.name.toLowerCase()] != null && (
-                      <span className="ml-1 text-gray-400">({facetBrands[brand.name.toLowerCase()]})</span>
+                      <span className="ml-1 text-ink-muted">({facetBrands[brand.name.toLowerCase()]})</span>
                     )}
                   </label>
                 </div>
               ))
             ) : (
-              <p className="text-sm text-gray-500">No brands available</p>
+              <p className="text-sm text-ink-muted">No brands available</p>
             )}
           </div>
         )}
@@ -507,7 +507,7 @@ export default function ProductFilters() {
 
       {/* Price Range */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Price Range</h3>
+        <h3 className="font-semibold text-ink mb-3">Price Range</h3>
         <div className="space-y-4">
           <input
             type="range"
@@ -519,13 +519,13 @@ export default function ProductFilters() {
             className="w-full"
           />
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">{formatPrice(priceRange[0])}</span>
-            <span className="text-sm text-gray-600">{formatPrice(priceRange[1])}</span>
+            <span className="text-sm text-ink-muted">{formatPrice(priceRange[0])}</span>
+            <span className="text-sm text-ink-muted">{formatPrice(priceRange[1])}</span>
           </div>
           <div className="flex gap-2">
             <button 
               onClick={applyFilters}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+              className="flex-1 bg-gold text-obsidian px-4 py-2 rounded-md hover:bg-gold transition-colors"
             >
               Apply
             </button>
@@ -535,27 +535,27 @@ export default function ProductFilters() {
 
       {/* Stock Status */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Availability</h3>
+        <h3 className="font-semibold text-ink mb-3">Availability</h3>
         <label className="flex items-center">
           <input
             type="checkbox"
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-hairline text-gold focus:ring-gold"
             checked={inStockOnly}
             onChange={(e) => setInStockOnly(e.target.checked)}
           />
-          <span className="ml-2 text-sm text-gray-700">In Stock Only</span>
+          <span className="ml-2 text-sm text-ink/80">In Stock Only</span>
         </label>
       </div>
 
       {/* Rating */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Rating</h3>
+        <h3 className="font-semibold text-ink mb-3">Rating</h3>
         <div className="space-y-2">
           {[4, 3, 2, 1].map((rating) => (
             <label key={rating} className="flex items-center">
               <input
                 type="checkbox"
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-hairline text-gold focus:ring-gold"
                 checked={selectedRatings.includes(rating)}
                 onChange={(e) => {
                   if (e.target.checked) {
@@ -565,7 +565,7 @@ export default function ProductFilters() {
                   }
                 }}
               />
-              <span className="ml-2 text-sm text-gray-700 flex items-center">
+              <span className="ml-2 text-sm text-ink/80 flex items-center">
                 {rating}
                 <svg className="h-4 w-4 text-yellow-400 ml-1" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />

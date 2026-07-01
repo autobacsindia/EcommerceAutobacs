@@ -30,15 +30,15 @@ export default function CategoryBreadcrumbs({ category, className = '' }: Catego
   
   return (
     <nav className={`flex items-center space-x-2 text-sm ${className}`} aria-label="Breadcrumb">
-      <Link href="/" className="text-gray-500 hover:text-blue-600">
+      <Link href="/" className="text-ink-muted hover:text-gold">
         Home
       </Link>
-      <span className="text-gray-400">/</span>
-      <Link href="/categories" className="text-gray-500 hover:text-blue-600">
+      <span className="text-ink-muted">/</span>
+      <Link href="/categories" className="text-ink-muted hover:text-gold">
         Categories
       </Link>
-      <span className="text-gray-400">/</span>
-      <span className="text-gray-900 truncate max-w-xs" title={category.name}>
+      <span className="text-ink-muted">/</span>
+      <span className="text-ink truncate max-w-xs" title={category.name}>
         {category.name === 'Suspension' ? 'SUSPENSION' : category.name}
       </span>
     </nav>

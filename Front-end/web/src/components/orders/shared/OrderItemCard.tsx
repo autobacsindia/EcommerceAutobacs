@@ -50,9 +50,9 @@ export default function OrderItemCard({
       className={`flex gap-4 p-4 border rounded-lg transition ${
         mode === 'select'
           ? selected
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
-          : 'border-gray-200'
+            ? 'border-gold bg-blue-50'
+            : 'border-hairline hover:border-gray-400'
+          : 'border-hairline'
       }`}
     >
       {/* Checkbox for select mode */}
@@ -62,13 +62,13 @@ export default function OrderItemCard({
             type="checkbox"
             checked={selected}
             onChange={(e) => onSelect(e.target.checked)}
-            className="h-5 w-5 text-blue-600 focus:ring-blue-500 rounded"
+            className="h-5 w-5 text-gold focus:ring-gold rounded"
           />
         </div>
       )}
 
       {/* Product Image */}
-      <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+      <div className="w-20 h-20 bg-obsidian-raised rounded-lg overflow-hidden flex-shrink-0">
         {productImage ? (
           <img
             src={productImage}
@@ -76,7 +76,7 @@ export default function OrderItemCard({
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">
+          <div className="w-full h-full flex items-center justify-center text-ink-muted">
             <Package className="h-8 w-8" />
           </div>
         )}
@@ -84,29 +84,29 @@ export default function OrderItemCard({
 
       {/* Product Info */}
       <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-gray-900 truncate">{productName}</h4>
-        <p className="text-sm text-gray-600 mt-1">
+        <h4 className="font-semibold text-ink truncate">{productName}</h4>
+        <p className="text-sm text-ink-muted mt-1">
           Price: ₹{unitPrice.toFixed(2)} each
         </p>
         
         {/* Quantity Display/Selector */}
         {mode === 'display' && (
-          <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+          <p className="text-sm text-ink-muted">Quantity: {item.quantity}</p>
         )}
         
         {mode === 'select' && selected && (
-          <p className="text-sm text-gray-600">Available: {maxQuantity}</p>
+          <p className="text-sm text-ink-muted">Available: {maxQuantity}</p>
         )}
 
         {mode === 'quantity' && onQuantityChange && (
           <div className="mt-2 flex items-center gap-2">
-            <label className="text-sm text-gray-600">Quantity:</label>
-            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+            <label className="text-sm text-ink-muted">Quantity:</label>
+            <div className="flex items-center border border-hairline rounded-lg overflow-hidden">
               <button
                 type="button"
                 onClick={() => handleQuantityChange(selectedQuantity - 1)}
                 disabled={selectedQuantity <= 1}
-                className="px-3 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-3 py-1 bg-obsidian-raised hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 -
               </button>
@@ -116,29 +116,29 @@ export default function OrderItemCard({
                 onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                 min={1}
                 max={maxQuantity}
-                className="w-16 text-center border-x border-gray-300 py-1 focus:outline-none"
+                className="w-16 text-center border-x border-hairline py-1 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => handleQuantityChange(selectedQuantity + 1)}
                 disabled={selectedQuantity >= maxQuantity}
-                className="px-3 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-3 py-1 bg-obsidian-raised hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 +
               </button>
             </div>
-            <span className="text-xs text-gray-500">of {maxQuantity}</span>
+            <span className="text-xs text-ink-muted">of {maxQuantity}</span>
           </div>
         )}
       </div>
 
       {/* Total Price */}
       <div className="text-right">
-        <p className="font-bold text-lg text-gray-900">
+        <p className="font-bold text-lg text-ink">
           ₹{(unitPrice * (mode === 'quantity' ? selectedQuantity : item.quantity)).toFixed(2)}
         </p>
         {mode === 'quantity' && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-ink-muted mt-1">
             {selectedQuantity} × ₹{unitPrice.toFixed(2)}
           </p>
         )}

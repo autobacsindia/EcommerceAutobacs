@@ -70,7 +70,7 @@ const upgrades = [
 
 export default function SuperCarsPage() {
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-obsidian-deep text-ink">
       {/* Hero Section */}
       <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
         {/* Background with overlay */}
@@ -89,23 +89,23 @@ export default function SuperCarsPage() {
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-gray-200 to-gray-500 bg-clip-text text-transparent">
               DISCOVER A NEW IMMERSIVE EXPERIENCE
               <br />
-              <span className="text-2xl md:text-4xl lg:text-5xl font-light text-gray-400 mt-2 block">
+              <span className="text-2xl md:text-4xl lg:text-5xl font-light text-ink-muted mt-2 block">
                 BUILT AROUND YOUR SUPERCAR
               </span>
             </h1>
             
-            <p className="text-lg md:text-xl text-gray-300 max-w-4xl mx-auto mb-10 leading-relaxed animation-delay-100 animate-slide-up-enter opacity-0">
+            <p className="text-lg md:text-xl text-ink/70 max-w-4xl mx-auto mb-10 leading-relaxed animation-delay-100 animate-slide-up-enter opacity-0">
               YOU CAN ENJOY THE BEAUTY OF YOUR CAR EVEN WHEN YOU DON’T HIT THE ROAD.
             </p>
             
-            <p className="text-gray-400 max-w-3xl mx-auto mb-12 text-base md:text-lg animation-delay-200 animate-slide-up-enter opacity-0">
+            <p className="text-ink-muted max-w-3xl mx-auto mb-12 text-base md:text-lg animation-delay-200 animate-slide-up-enter opacity-0">
               Owning a supercar isn’t just about the ride—it’s about making a statement. With AUTOBACS INDIA’s cutting-edge concepts, you can now display your prized vehicle in a space as remarkable as the car itself, turning storage into a masterpiece of style.
             </p>
 
             <div className="animation-delay-300 animate-slide-up-enter opacity-0">
               <Link 
                 href="/contact" 
-                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-red-600 to-red-800 rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-red-600 to-red-800 rounded-full text-ink font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
               >
                 Start Your Journey
                 <ArrowRight className="w-5 h-5" />
@@ -119,13 +119,13 @@ export default function SuperCarsPage() {
       <section className="py-20 bg-zinc-900">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16 animate-fade-in-slow">
-            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">
+            <h2 className="text-3xl md:text-5xl font-bold mb-6 text-ink">
               Redefining Speed
             </h2>
             <p className="text-xl text-red-500 font-medium mb-4">
               Essential Upgrades for Supercar Enthusiasts
             </p>
-            <p className="text-gray-400 max-w-3xl mx-auto">
+            <p className="text-ink-muted max-w-3xl mx-auto">
               Supercars exemplify the highest standards of automotive engineering, integrating outstanding performance with advanced technology. To sustain and improve the performance of these high-performance vehicles, a variety of specialized automotive parts is necessary.
             </p>
           </div>
@@ -136,20 +136,20 @@ export default function SuperCarsPage() {
                 key={index}
                 className="group bg-zinc-800/50 border border-zinc-700/50 p-8 rounded-2xl hover:bg-zinc-800 hover:border-red-500/30 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
               >
-                <div className="mb-6 inline-flex p-3 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-colors duration-300">
+                <div className="mb-6 inline-flex p-3 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-ink transition-colors duration-300">
                   <upgrade.icon className="w-8 h-8" />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-4 group-hover:text-red-400 transition-colors">
+                <h3 className="text-xl font-bold text-ink mb-4 group-hover:text-red-400 transition-colors">
                   {upgrade.title}
                 </h3>
                 <div className="space-y-4">
                   <div>
                     <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Purpose</span>
-                    <p className="text-gray-300 mt-1">{upgrade.purpose}</p>
+                    <p className="text-ink/70 mt-1">{upgrade.purpose}</p>
                   </div>
                   <div>
                     <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Features</span>
-                    <p className="text-gray-400 mt-1 text-sm">{upgrade.features}</p>
+                    <p className="text-ink-muted mt-1 text-sm">{upgrade.features}</p>
                   </div>
                 </div>
               </div>
@@ -168,7 +168,7 @@ export default function SuperCarsPage() {
           <div className="hover:scale-105 transition-transform duration-300 inline-block">
             <Link 
               href="/contact"
-              className="inline-flex items-center gap-3 px-10 py-5 bg-white text-black text-lg font-bold rounded-full hover:bg-gray-200 transition-colors shadow-2xl"
+              className="inline-flex items-center gap-3 px-10 py-5 bg-obsidian text-ink text-lg font-bold rounded-full hover:bg-obsidian-raised transition-colors shadow-2xl"
             >
               Contact us for Expert Suggestions
               <ArrowRight className="w-5 h-5" />

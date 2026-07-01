@@ -45,10 +45,10 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
 
   const linkClass = (href: string) => {
     const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
-    return `flex items-center gap-3 px-4 py-3 transition-colors font-condensed font-bold uppercase tracking-wide text-sm ${
+    return `flex items-center gap-3 px-4 py-3 transition-colors font-display font-bold uppercase tracking-wide text-sm ${
       isActive
-        ? 'bg-[#3B9EE8]/10 text-[#3B9EE8] border-l-2 border-[#3B9EE8]'
-        : 'text-[#C4C4C4] hover:bg-[#161616] hover:text-white'
+        ? 'bg-gold/10 text-gold border-l-2 border-gold'
+        : 'text-ink/70 hover:bg-obsidian-raised hover:text-ink'
     }`;
   };
 
@@ -58,27 +58,27 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 z-40 animate-fadeIn"
+        className="fixed inset-0 bg-obsidian-deep/70 z-40 animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Slide-out Panel */}
       <div
-        className="fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-[#0E0E0E] border-l border-[#252525] shadow-2xl z-50 animate-slideInRight flex flex-col"
+        className="fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-obsidian border-l border-hairline shadow-2xl z-50 animate-slideInRight flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label="Mobile navigation menu"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#252525]">
-          <h2 className="text-lg font-condensed font-bold text-white uppercase tracking-widest">Menu</h2>
+        <div className="flex items-center justify-between p-4 border-b border-hairline">
+          <h2 className="text-lg font-display font-bold text-ink uppercase tracking-widest">Menu</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-sm hover:bg-[#161616] transition-colors"
+            className="p-2 rounded-sm hover:bg-obsidian-raised transition-colors"
             aria-label="Close menu"
           >
-            <X className="h-6 w-6 text-[#C4C4C4]" />
+            <X className="h-6 w-6 text-ink/70" />
           </button>
         </div>
 
@@ -102,8 +102,8 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
             </li>
 
             {/* Vehicle Selector */}
-            <li className="px-4 py-3 border-t border-b border-[#252525] my-2">
-              <div className="text-xs font-condensed font-bold text-[#3B9EE8] uppercase tracking-widest mb-2">Select Your Vehicle</div>
+            <li className="px-4 py-3 border-t border-b border-hairline my-2">
+              <div className="text-xs font-display font-bold text-gold uppercase tracking-widest mb-2">Select Your Vehicle</div>
               <HeaderVehicleSelector />
             </li>
 
@@ -117,7 +117,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
             ))}
           </ul>
 
-          <div className="border-t border-[#252525] my-2" />
+          <div className="border-t border-hairline my-2" />
 
           {/* User section */}
           <div className="py-2">
@@ -131,12 +131,12 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
                   <User className="h-5 w-5" />
                   <div className="flex flex-col">
                     <span>{user?.name}</span>
-                    <span className="text-xs text-[#555555] font-body normal-case tracking-normal">{user?.email}</span>
+                    <span className="text-xs text-ink-muted font-display normal-case tracking-normal">{user?.email}</span>
                   </div>
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-[#161616] hover:text-red-300 transition-colors w-full font-condensed font-bold uppercase tracking-wide text-sm"
+                  className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-obsidian-raised hover:text-red-300 transition-colors w-full font-display font-bold uppercase tracking-wide text-sm"
                 >
                   <LogOut className="h-5 w-5" />
                   <span>Logout</span>
@@ -147,7 +147,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
                 <Link
                   href="/login"
                   onClick={onClose}
-                  className="flex items-center gap-3 px-4 py-3 text-[#C4C4C4] hover:bg-[#161616] hover:text-white transition-colors font-condensed font-bold uppercase tracking-wide text-sm"
+                  className="flex items-center gap-3 px-4 py-3 text-ink/70 hover:bg-obsidian-raised hover:text-ink transition-colors font-display font-bold uppercase tracking-wide text-sm"
                 >
                   <User className="h-5 w-5" /><span>Login</span>
                 </Link>
@@ -155,7 +155,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
                   <Link
                     href="/register"
                     onClick={onClose}
-                    className="flex items-center justify-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white px-4 py-3 rounded-sm transition-colors font-condensed font-bold uppercase tracking-widest text-sm"
+                    className="flex items-center justify-center gap-2 bg-gold hover:bg-gold text-obsidian px-4 py-3 rounded-sm transition-colors font-display font-bold uppercase tracking-widest text-sm"
                   >
                     Sign Up
                   </Link>

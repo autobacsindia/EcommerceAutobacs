@@ -59,7 +59,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
             className="space-y-6"
           >
             {/* Product Name */}
-            <h1 className="text-5xl lg:text-6xl xl:text-7xl font-black text-white leading-tight tracking-tight">
+            <h1 className="text-5xl lg:text-6xl xl:text-7xl font-black text-ink leading-tight tracking-tight">
               {product.name}
             </h1>
 
@@ -125,11 +125,11 @@ export default function HeroSection({ product }: HeroSectionProps) {
         transition={{ delay: 1.5 }}
         className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
       >
-        <div className="w-6 h-10 border-2 border-white/30 rounded-full flex justify-center">
+        <div className="w-6 h-10 border-2 border-hairline/30 rounded-full flex justify-center">
           <motion.div
             animate={{ y: [0, 12, 0] }}
             transition={{ duration: 1.5, repeat: Infinity }}
-            className="w-1 h-3 bg-white/60 rounded-full mt-2"
+            className="w-1 h-3 bg-obsidian/60 rounded-full mt-2"
           />
         </div>
       </motion.div>

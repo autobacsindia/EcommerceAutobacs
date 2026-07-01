@@ -69,8 +69,8 @@ export default function LocationDisplay({
   if (isLoading && !currentLocation) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <MapPin className="h-4 w-4 text-gray-400 animate-pulse" />
-        <span className="text-sm text-gray-400">Loading...</span>
+        <MapPin className="h-4 w-4 text-ink-muted animate-pulse" />
+        <span className="text-sm text-ink-muted">Loading...</span>
       </div>
     );
   }
@@ -83,17 +83,17 @@ export default function LocationDisplay({
           <div className="relative">
             <button
               onClick={handleToggleHistory}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors group"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-obsidian-raised transition-colors group"
               aria-label="Change delivery location"
             >
               <MapPin className="h-4 w-4 text-green-400 flex-shrink-0" />
               <div className="flex flex-col items-start min-w-0">
-                <span className="text-xs text-gray-300">Deliver to</span>
+                <span className="text-xs text-ink/70">Deliver to</span>
                 <div className="flex items-center gap-1">
-                  <span className="text-sm font-medium text-white truncate max-w-[150px]">
+                  <span className="text-sm font-medium text-ink truncate max-w-[150px]">
                     {locationText}
                   </span>
-                  <ChevronDown className="h-3 w-3 text-gray-300 flex-shrink-0" />
+                  <ChevronDown className="h-3 w-3 text-ink/70 flex-shrink-0" />
                 </div>
               </div>
             </button>
@@ -108,22 +108,22 @@ export default function LocationDisplay({
           </div>
         ) : (
           // Full version for dedicated location sections
-          <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+          <div className="bg-obsidian border border-hairline rounded-lg p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 <div className="mt-1">
-                  <MapPin className="h-5 w-5 text-blue-600" />
+                  <MapPin className="h-5 w-5 text-gold" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-gray-700 mb-1">
+                  <h3 className="text-sm font-medium text-ink/80 mb-1">
                     Delivery Location
                   </h3>
                   {hasLocation ? (
                     <>
-                      <p className="text-base font-semibold text-gray-900 mb-1">
+                      <p className="text-base font-semibold text-ink mb-1">
                         {currentLocation?.selectedAddress.city}, {currentLocation?.selectedAddress.state}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-ink-muted">
                         PIN: {currentLocation?.selectedAddress.postalCode}
                       </p>
                       {deliveryZone && deliveryText && (
@@ -134,7 +134,7 @@ export default function LocationDisplay({
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-ink-muted">
                       Select a location to see delivery options
                     </p>
                   )}
@@ -143,7 +143,7 @@ export default function LocationDisplay({
               {showChangeButton && (
                 <button
                   onClick={handleOpenSelector}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                  className="text-sm font-medium text-gold hover:text-gold whitespace-nowrap"
                 >
                   {hasLocation ? 'Change' : 'Select'}
                 </button>

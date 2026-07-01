@@ -273,33 +273,33 @@ export default function ClientPage({ slug }: { slug: string }) {
 
   const displayName = vehicleName ? formatVehicleName(vehicleName) : 'Vehicle';
 
-  const paginationBtnBase = 'px-4 py-2 rounded-sm border font-condensed font-bold text-sm uppercase tracking-widest transition-colors';
-  const paginationBtnActive = `${paginationBtnBase} bg-[#3B9EE8] text-white border-[#3B9EE8]`;
-  const paginationBtnEnabled = `${paginationBtnBase} bg-[#161616] text-[#C4C4C4] border-[#252525] hover:border-[#3B9EE8] hover:text-white`;
-  const paginationBtnDisabled = `${paginationBtnBase} bg-[#161616] text-[#555555] border-[#252525] cursor-not-allowed`;
+  const paginationBtnBase = 'px-4 py-2 rounded-sm border font-display font-bold text-sm uppercase tracking-widest transition-colors';
+  const paginationBtnActive = `${paginationBtnBase} bg-gold text-obsidian border-gold`;
+  const paginationBtnEnabled = `${paginationBtnBase} bg-obsidian-raised text-ink/70 border-hairline hover:border-gold hover:text-ink`;
+  const paginationBtnDisabled = `${paginationBtnBase} bg-obsidian-raised text-ink-muted border-hairline cursor-not-allowed`;
 
   return (
-    <div className="min-h-screen bg-[#080808]">
+    <div className="min-h-screen bg-obsidian-deep">
 
       {/* Hero */}
-      <div className="bg-[#0E0E0E] border-b border-[#252525] py-16">
+      <div className="bg-obsidian border-b border-hairline py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Vehicles</p>
-          <h1 className="text-5xl font-condensed font-bold text-white uppercase tracking-wide mb-4">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Vehicles</p>
+          <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">
             {displayName} Parts & Accessories
           </h1>
-          <p className="text-[#C4C4C4] font-body max-w-3xl mx-auto">
+          <p className="text-ink/70 font-display max-w-3xl mx-auto">
             Find the perfect parts and accessories for your {displayName}
           </p>
 
           {vehicle && (
-            <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-[#C4C4C4] font-body">
+            <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-ink/70 font-display">
               <div className="flex items-center gap-2">
-                <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Make</span>
+                <span className="font-display font-bold text-ink-muted uppercase tracking-widest">Make</span>
                 <span>{vehicle.make}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-condensed font-bold text-[#555555] uppercase tracking-widest">Model</span>
+                <span className="font-display font-bold text-ink-muted uppercase tracking-widest">Model</span>
                 <span>{vehicle.model}</span>
               </div>
             </div>
@@ -309,12 +309,12 @@ export default function ClientPage({ slug }: { slug: string }) {
 
       {/* Breadcrumb */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <nav className="text-sm font-body">
-          <Link href="/" className="text-[#555555] hover:text-[#3B9EE8] transition-colors">Home</Link>
-          <span className="mx-2 text-[#252525]">/</span>
-          <Link href="/vehicles" className="text-[#555555] hover:text-[#3B9EE8] transition-colors">Vehicles</Link>
-          <span className="mx-2 text-[#252525]">/</span>
-          <span className="text-[#C4C4C4]">{displayName}</span>
+        <nav className="text-sm font-display">
+          <Link href="/" className="text-ink-muted hover:text-gold transition-colors">Home</Link>
+          <span className="mx-2 text-hairline">/</span>
+          <Link href="/vehicles" className="text-ink-muted hover:text-gold transition-colors">Vehicles</Link>
+          <span className="mx-2 text-hairline">/</span>
+          <span className="text-ink/70">{displayName}</span>
         </nav>
       </div>
 
@@ -324,21 +324,21 @@ export default function ClientPage({ slug }: { slug: string }) {
 
           {/* Sidebar */}
           <aside className="hidden lg:block">
-            <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 sticky top-24">
-              <h2 className="font-condensed font-bold text-white uppercase tracking-wide mb-5 flex items-center gap-2">
-                <Filter className="h-4 w-4 text-[#3B9EE8] shrink-0" />
+            <div className="bg-obsidian border border-hairline rounded-sm p-6 sticky top-24">
+              <h2 className="font-display font-bold text-ink uppercase tracking-wide mb-5 flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gold shrink-0" />
                 Category Filters
               </h2>
 
-              <p className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-3">Categories</p>
+              <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-3">Categories</p>
               <ul className="space-y-1">
                 <li>
                   <button
                     onClick={() => handleCategoryChange('')}
                     className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${
                       selectedCategory === ''
-                        ? 'bg-[#3B9EE8]/10 text-[#3B9EE8] font-condensed font-bold border border-[#3B9EE8]/30'
-                        : 'text-[#C4C4C4] font-body hover:bg-[#161616]'
+                        ? 'bg-gold/10 text-gold font-display font-bold border border-gold/30'
+                        : 'text-ink/70 font-display hover:bg-obsidian-raised'
                     }`}
                   >
                     All Categories
@@ -358,8 +358,8 @@ export default function ClientPage({ slug }: { slug: string }) {
                         onClick={() => handleCategoryChange(category.slug)}
                         className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${
                           selectedCategory === category.slug
-                            ? 'bg-[#3B9EE8]/10 text-[#3B9EE8] font-condensed font-bold border border-[#3B9EE8]/30'
-                            : 'text-[#C4C4C4] font-body hover:bg-[#161616]'
+                            ? 'bg-gold/10 text-gold font-display font-bold border border-gold/30'
+                            : 'text-ink/70 font-display hover:bg-obsidian-raised'
                         }`}
                       >
                         {category.name} ({categoryProductCount})
@@ -375,7 +375,7 @@ export default function ClientPage({ slug }: { slug: string }) {
           <div className="lg:col-span-3">
             {/* Results Header */}
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-[#C4C4C4] font-body">
+              <p className="text-ink/70 font-display">
                 {loading ? (
                   'Loading products...'
                 ) : filteredProducts.length > 0 ? (
@@ -391,19 +391,19 @@ export default function ClientPage({ slug }: { slug: string }) {
 
               <div className="flex items-center gap-3">
                 {/* Mobile Filter Button */}
-                <button className="lg:hidden flex items-center gap-2 text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest bg-[#161616] px-4 py-2 rounded-sm border border-[#252525] hover:border-[#3B9EE8] transition-colors">
+                <button className="lg:hidden flex items-center gap-2 text-sm font-display font-bold text-ink/70 uppercase tracking-widest bg-obsidian-raised px-4 py-2 rounded-sm border border-hairline hover:border-gold transition-colors">
                   <Filter className="h-4 w-4" />
                   Filters
                 </button>
 
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-[#555555] font-body">
+                  <label htmlFor="sort" className="text-sm text-ink-muted font-display">
                     Sort:
                   </label>
                   <select
                     id="sort"
-                    className="bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-[#3B9EE8] font-body transition-colors"
+                    className="bg-obsidian-raised border border-hairline text-ink/70 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-gold font-display transition-colors"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
@@ -422,15 +422,15 @@ export default function ClientPage({ slug }: { slug: string }) {
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden animate-pulse">
-                    <div className="h-48 bg-[#161616]" />
+                  <div key={i} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
+                    <div className="h-48 bg-obsidian-raised" />
                     <div className="p-5 space-y-3">
-                      <div className="h-4 bg-[#252525] rounded-sm" />
-                      <div className="h-4 bg-[#252525] rounded-sm w-2/3" />
-                      <div className="h-5 bg-[#252525] rounded-sm w-1/2" />
+                      <div className="h-4 bg-obsidian-raised rounded-sm" />
+                      <div className="h-4 bg-obsidian-raised rounded-sm w-2/3" />
+                      <div className="h-5 bg-obsidian-raised rounded-sm w-1/2" />
                       <div className="flex gap-3 pt-2">
-                        <div className="h-9 bg-[#252525] rounded-sm flex-1" />
-                        <div className="h-9 w-10 bg-[#252525] rounded-sm" />
+                        <div className="h-9 bg-obsidian-raised rounded-sm flex-1" />
+                        <div className="h-9 w-10 bg-obsidian-raised rounded-sm" />
                       </div>
                     </div>
                   </div>
@@ -438,11 +438,11 @@ export default function ClientPage({ slug }: { slug: string }) {
               </div>
             ) : error ? (
               <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 text-center max-w-2xl mx-auto">
-                <h3 className="text-lg font-condensed font-bold text-red-400 uppercase tracking-wide mb-3">Error Loading Products</h3>
-                <p className="text-[#C4C4C4] font-body mb-5">{error}</p>
+                <h3 className="text-lg font-display font-bold text-red-400 uppercase tracking-wide mb-3">Error Loading Products</h3>
+                <p className="text-ink/70 font-display mb-5">{error}</p>
                 <button
                   onClick={() => window.location.reload()}
-                  className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+                  className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
                 >
                   Retry
                 </button>
@@ -467,12 +467,12 @@ export default function ClientPage({ slug }: { slug: string }) {
                     return (
                       <div
                         key={product._id || product.id || `product-${product.sku}`}
-                        className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden hover:border-[#3B9EE8] transition-colors group"
+                        className="bg-obsidian border border-hairline rounded-sm overflow-hidden hover:border-gold transition-colors group"
                       >
                         {/* Product Image */}
                         <Link
                           href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined }, '/products') || '/products'}
-                          className="relative block h-52 bg-[#161616]"
+                          className="relative block h-52 bg-obsidian-raised"
                         >
                           {Array.isArray(product.images) && product.images.length > 0 ? (
                             <ProductImage
@@ -482,13 +482,13 @@ export default function ClientPage({ slug }: { slug: string }) {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <span className="text-[#555555] font-body text-xs">No image available</span>
+                              <span className="text-ink-muted font-display text-xs">No image available</span>
                             </div>
                           )}
 
                           {/* Wishlist Button */}
                           <button
-                            className={`absolute top-3 right-3 p-2 bg-[#161616] border border-[#252525] rounded-full hover:border-[#3B9EE8] transition-all duration-200 ${
+                            className={`absolute top-3 right-3 p-2 bg-obsidian-raised border border-hairline rounded-full hover:border-gold transition-all duration-200 ${
                               animatingItems[String((product._id || product.id) || '')] ? 'animate-pulse' : ''
                             }`}
                             onClick={(e) => handleToggleWishlist(product, e)}
@@ -496,28 +496,28 @@ export default function ClientPage({ slug }: { slug: string }) {
                             <Heart className={`h-4 w-4 transition-colors duration-200 ${
                               isInWishlist((product._id || product.id)?.toString() || '')
                                 ? 'text-red-500 fill-current'
-                                : 'text-[#555555]'
+                                : 'text-ink-muted'
                             }`} />
                           </button>
 
                           {/* Badges */}
                           <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
                             {isOutOfStock(product) && (
-                              <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                              <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-wide">
                                 Out of Stock
                               </span>
                             )}
                             {(product.featured || product.isFeatured) && !isOutOfStock(product) && (
-                              <span className="bg-[#3B9EE8]/20 border border-[#3B9EE8]/40 text-[#3B9EE8] px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                              <span className="bg-gold/20 border border-gold/40 text-gold px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-wide">
                                 Popular
                               </span>
                             )}
                             {(product.on_sale || (product.originalPrice && product.originalPrice > 0)) && !isOutOfStock(product) && (
-                              <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                              <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-wide">
                                 Sale
                               </span>
                             )}
-                            <span className="bg-green-500/20 border border-green-500/40 text-green-400 px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-wide">
+                            <span className="bg-green-500/20 border border-green-500/40 text-green-400 px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-wide">
                               Fits {displayName}
                             </span>
                           </div>
@@ -525,14 +525,14 @@ export default function ClientPage({ slug }: { slug: string }) {
 
                         {/* Product Info */}
                         <div className="p-4">
-                          <p className="text-xs text-[#555555] font-body uppercase tracking-wide mb-1.5">
+                          <p className="text-xs text-ink-muted font-display uppercase tracking-wide mb-1.5">
                             {Array.isArray(product.categories) && product.categories.length > 0
                               ? product.categories.filter(cat => cat).map(cat => typeof cat === 'object' ? cat.name : cat).filter(Boolean).join(', ')
                               : 'Uncategorized'}
                           </p>
 
                           <Link href={productUrl({ slug: product.slug, _id: product._id, id: product.id != null ? String(product.id) : undefined }, '/products') || '/products'}>
-                            <h3 className="font-condensed font-bold text-[#C4C4C4] group-hover:text-[#3B9EE8] mb-3 line-clamp-2 uppercase tracking-wide transition-colors">
+                            <h3 className="font-display font-bold text-ink/70 group-hover:text-gold mb-3 line-clamp-2 uppercase tracking-wide transition-colors">
                               {product.name}
                             </h3>
                           </Link>
@@ -543,7 +543,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <svg
                                     key={star}
-                                    className={`h-3.5 w-3.5 ${star <= averageRatingValue ? 'text-[#EF9F27]' : 'text-[#252525]'}`}
+                                    className={`h-3.5 w-3.5 ${star <= averageRatingValue ? 'text-gold' : 'text-hairline'}`}
                                     fill="currentColor"
                                     viewBox="0 0 20 20"
                                   >
@@ -551,27 +551,27 @@ export default function ClientPage({ slug }: { slug: string }) {
                                   </svg>
                                 ))}
                               </div>
-                              <span className="text-xs text-[#555555] font-body">({averageRatingValue.toFixed(1)})</span>
+                              <span className="text-xs text-ink-muted font-display">({averageRatingValue.toFixed(1)})</span>
                             </div>
                           )}
 
                           {hasValidPrice && (
-                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#252525]">
+                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-hairline">
                               <div>
                                 {hasOriginalPrice ? (
                                   <div className="flex items-baseline gap-2">
-                                    <span className="text-lg font-condensed font-bold text-[#3B9EE8]">{formatPrice(priceValue)}</span>
-                                    <span className="text-xs text-[#555555] font-body line-through">{formatPrice(originalPriceNumber)}</span>
+                                    <span className="text-lg font-display font-bold text-gold">{formatPrice(priceValue)}</span>
+                                    <span className="text-xs text-ink-muted font-display line-through">{formatPrice(originalPriceNumber)}</span>
                                   </div>
                                 ) : (
-                                  <span className="text-lg font-condensed font-bold text-[#3B9EE8]">{formatPrice(priceValue)}</span>
+                                  <span className="text-lg font-display font-bold text-gold">{formatPrice(priceValue)}</span>
                                 )}
                               </div>
 
                               <button
                                 onClick={() => handleAddToCart(product)}
                                 disabled={isOutOfStock(product)}
-                                className="flex items-center gap-1.5 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-3 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-3 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <ShoppingCart className="h-3.5 w-3.5" />
                                 Add
@@ -648,12 +648,12 @@ export default function ClientPage({ slug }: { slug: string }) {
               </div>
             ) : (
               <div className="text-center py-16">
-                <p className="text-[#555555] font-body text-lg mb-4">
+                <p className="text-ink-muted font-display text-lg mb-4">
                   No products found for {displayName}
                 </p>
                 <button
                   onClick={() => handleCategoryChange('')}
-                  className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors"
+                  className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors"
                 >
                   View all products
                 </button>
@@ -665,7 +665,7 @@ export default function ClientPage({ slug }: { slug: string }) {
         {/* Related Vehicles */}
         {Array.isArray(relatedVehicles) && relatedVehicles.length > 0 && (
           <section className="mt-16">
-            <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-8">
+            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-8">
               Related {vehicle?.make || 'Vehicles'}
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -675,8 +675,8 @@ export default function ClientPage({ slug }: { slug: string }) {
                   href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}
                   className="group block"
                 >
-                  <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden hover:border-[#3B9EE8] transition-colors">
-                    <div className="aspect-square bg-[#161616] flex items-center justify-center overflow-hidden">
+                  <div className="bg-obsidian border border-hairline rounded-sm overflow-hidden hover:border-gold transition-colors">
+                    <div className="aspect-square bg-obsidian-raised flex items-center justify-center overflow-hidden">
                       {(() => {
                         const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
                         const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`
@@ -704,7 +704,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                         if (!imageUrl) {
                           return (
                             <div className="w-full h-full flex items-center justify-center">
-                              <span className="text-[#555555] font-body text-xs">No image</span>
+                              <span className="text-ink-muted font-display text-xs">No image</span>
                             </div>
                           );
                         }
@@ -732,8 +732,8 @@ export default function ClientPage({ slug }: { slug: string }) {
                         );
                       })()}
                     </div>
-                    <div className="p-3 text-center bg-[#161616] border-t border-[#252525]">
-                      <h3 className="text-sm font-condensed font-bold text-[#C4C4C4] group-hover:text-[#3B9EE8] uppercase tracking-wide transition-colors">
+                    <div className="p-3 text-center bg-obsidian-raised border-t border-hairline">
+                      <h3 className="text-sm font-display font-bold text-ink/70 group-hover:text-gold uppercase tracking-wide transition-colors">
                         {relatedVehicle.model}
                       </h3>
                     </div>

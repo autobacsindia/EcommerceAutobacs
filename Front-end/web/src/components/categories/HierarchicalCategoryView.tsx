@@ -63,13 +63,13 @@ export default function HierarchicalCategoryView({ categories }: HierarchicalCat
   const categoryTree = buildCategoryTree(categories);
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="p-6 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900">Categories</h2>
-        <p className="text-gray-600 mt-1">Browse products by category</p>
+    <div className="bg-obsidian rounded-lg shadow-md overflow-hidden">
+      <div className="p-6 border-b border-hairline">
+        <h2 className="text-xl font-semibold text-ink">Categories</h2>
+        <p className="text-ink-muted mt-1">Browse products by category</p>
       </div>
       
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-hairline">
         {categoryTree.length > 0 ? (
           categoryTree.map((node) => (
             <CategoryTreeNode 
@@ -79,7 +79,7 @@ export default function HierarchicalCategoryView({ categories }: HierarchicalCat
             />
           ))
         ) : (
-          <div className="p-6 text-center text-gray-500">
+          <div className="p-6 text-center text-ink-muted">
             No categories available
           </div>
         )}
@@ -100,7 +100,7 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
   return (
     <div>
       <div 
-        className={`flex items-center p-4 hover:bg-gray-50 cursor-pointer ${
+        className={`flex items-center p-4 hover:bg-obsidian-deep cursor-pointer ${
           level > 0 ? `pl-${Math.min(16, 4 + level * 4)}` : ''
         }`}
         onClick={() => hasChildren && setIsExpanded(!isExpanded)}
@@ -111,7 +111,7 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
               e.stopPropagation();
               setIsExpanded(!isExpanded);
             }}
-            className="mr-2 text-gray-500 hover:text-gray-700"
+            className="mr-2 text-ink-muted hover:text-ink/80"
             aria-label={isExpanded ? "Collapse" : "Expand"}
           >
             {isExpanded ? (
@@ -135,8 +135,8 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
               context="category"
             />
           ) : (
-            <div className="bg-gray-200 border-2 border-dashed rounded-md w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-obsidian-raised border-2 border-dashed rounded-md w-10 h-10 flex items-center justify-center">
+              <svg className="w-5 h-5 text-ink-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
               </svg>
             </div>
@@ -149,11 +149,11 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
             className="block"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-medium text-gray-900 truncate hover:text-blue-600">
+            <h3 className="font-medium text-ink truncate hover:text-gold">
               {node.category.name === 'Suspension' ? 'SUSPENSION' : node.category.name}
             </h3>
             {node.category.description && (
-              <p className="text-sm text-gray-500 truncate mt-1">
+              <p className="text-sm text-ink-muted truncate mt-1">
                 {node.category.description}
               </p>
             )}
@@ -163,7 +163,7 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
         <div className="ml-2">
           <Link 
             href={`/products?category=${node.category._id}`}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            className="text-gold hover:text-blue-800 text-sm font-medium"
             onClick={(e) => e.stopPropagation()}
           >
             View
@@ -172,7 +172,7 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
       </div>
       
       {hasChildren && isExpanded && (
-        <div className="bg-gray-50 divide-y divide-gray-100">
+        <div className="bg-obsidian-deep divide-y divide-hairline">
           {node.children.map((childNode) => (
             <CategoryTreeNode 
               key={childNode.category._id} 

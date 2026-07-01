@@ -164,14 +164,14 @@ export default function OrderDetailPage() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-      confirmed: 'bg-[#3B9EE8]/10 text-[#3B9EE8] border-[#3B9EE8]/30',
+      confirmed: 'bg-gold/10 text-gold border-gold/30',
       processing: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
       shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
       delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
       cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
-      refunded: 'bg-[#252525] text-[#C4C4C4] border-[#252525]',
+      refunded: 'bg-obsidian-raised text-ink/70 border-hairline',
     };
-    return colors[status.toLowerCase()] || 'bg-[#252525] text-[#C4C4C4] border-[#252525]';
+    return colors[status.toLowerCase()] || 'bg-obsidian-raised text-ink/70 border-hairline';
   };
 
   const getStatusIcon = (status: string) => {
@@ -201,10 +201,10 @@ export default function OrderDetailPage() {
 
   if (error || !order) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
-          <p className="text-red-400 font-body mb-4">{error || 'Order not found'}</p>
-          <button onClick={() => router.push('/orders')} className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+          <p className="text-red-400 font-display mb-4">{error || 'Order not found'}</p>
+          <button onClick={() => router.push('/orders')} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
             Back to Orders
           </button>
         </div>
@@ -212,13 +212,13 @@ export default function OrderDetailPage() {
     );
   }
 
-  const cardClass = 'bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 mb-6';
+  const cardClass = 'bg-obsidian border border-hairline rounded-sm p-6 mb-6';
 
   return (
-    <div className="min-h-screen bg-[#080808] py-8">
+    <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Back */}
-        <Link href="/orders" className="inline-flex items-center gap-2 text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest text-sm transition-colors mb-6">
+        <Link href="/orders" className="inline-flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-widest text-sm transition-colors mb-6">
           <ArrowLeft className="h-4 w-4" />
           Back to Orders
         </Link>
@@ -227,15 +227,15 @@ export default function OrderDetailPage() {
         <div className={cardClass}>
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
             <div>
-              <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Order</p>
-              <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">
+              <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Order</p>
+              <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">
                 #{order._id.slice(-8).toUpperCase()}
               </h1>
-              <p className="text-[#555555] font-body text-sm">
+              <p className="text-ink-muted font-display text-sm">
                 Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-sm border text-sm font-condensed font-bold uppercase tracking-widest ${getStatusColor(order.status)}`}>
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-sm border text-sm font-display font-bold uppercase tracking-widest ${getStatusColor(order.status)}`}>
               {getStatusIcon(order.status)}
               {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
             </div>
@@ -247,43 +247,43 @@ export default function OrderDetailPage() {
 
         {/* Actions */}
         <div className={cardClass}>
-          <h2 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-4">Available Actions</h2>
+          <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Available Actions</h2>
           <div className="flex flex-wrap gap-3">
             {canRetryPayment(order) && (
-              <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="flex items-center gap-2 px-4 py-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                {isPaymentProcessing ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="flex items-center gap-2 px-4 py-2 bg-gold hover:bg-gold text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {isPaymentProcessing ? <div className="w-4 h-4 border-2 border-hairline border-t-transparent rounded-full animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Retry Payment
               </button>
             )}
             {canCancelOrder(order.status) && (
-              <button onClick={() => setShowCancelDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={() => setShowCancelDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <XCircle className="h-4 w-4" />
                 Cancel Order
               </button>
             )}
             {order.trackingNumber && (
-              <Link href={order.carrier?.trackingUrl || `/orders/${order._id}/tracking`} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors">
+              <Link href={order.carrier?.trackingUrl || `/orders/${order._id}/tracking`} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:bg-gold text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <Truck className="h-4 w-4" />
                 Track Package
               </Link>
             )}
             {canReturnOrder(order) && (!order.returnRequest || !order.returnRequest.status) && (
-              <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <RotateCcw className="h-4 w-4" />
                 Return / Exchange
               </button>
             )}
             {canDeleteOrder(order.status) && (
-              <button onClick={handleDeleteOrder} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={handleDeleteOrder} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <Trash2 className="h-4 w-4" />
                 Delete Order
               </button>
             )}
-            <Link href={`/contact?orderId=${order.orderNumber || order._id}`} className="flex items-center gap-2 px-4 py-2 border border-[#252525] text-[#C4C4C4] hover:text-white hover:border-[#3B9EE8] rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors">
+            <Link href={`/contact?orderId=${order.orderNumber || order._id}`} className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
               <HelpCircle className="h-4 w-4" />
               Need Help?
             </Link>
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-[#252525] text-[#C4C4C4] hover:text-white hover:border-[#3B9EE8] rounded-sm font-condensed font-bold uppercase tracking-widest text-sm transition-colors">
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
               <Download className="h-4 w-4" />
               Download Invoice
             </button>
@@ -293,28 +293,28 @@ export default function OrderDetailPage() {
         {/* Tracking Info */}
         {order.trackingNumber && (
           <div className={cardClass}>
-            <h2 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-4">Tracking Information</h2>
+            <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Tracking Information</h2>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-[#555555] font-body mb-1">Tracking Number</p>
-                <p className="font-mono text-[#C4C4C4] font-bold">{order.trackingNumber}</p>
+                <p className="text-xs text-ink-muted font-display mb-1">Tracking Number</p>
+                <p className="font-mono text-ink/70 font-bold">{order.trackingNumber}</p>
               </div>
               {order.carrier && (
                 <div>
-                  <p className="text-xs text-[#555555] font-body mb-1">Carrier</p>
-                  <p className="text-[#C4C4C4] font-condensed font-bold">{order.carrier.name}</p>
+                  <p className="text-xs text-ink-muted font-display mb-1">Carrier</p>
+                  <p className="text-ink/70 font-display font-bold">{order.carrier.name}</p>
                 </div>
               )}
               {order.estimatedDelivery && (
                 <div>
-                  <p className="text-xs text-[#555555] font-body mb-1">Estimated Delivery</p>
-                  <p className="text-[#C4C4C4] font-condensed font-bold">{new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs text-ink-muted font-display mb-1">Estimated Delivery</p>
+                  <p className="text-ink/70 font-display font-bold">{new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
               )}
               {order.deliveredAt && (
                 <div>
-                  <p className="text-xs text-[#555555] font-body mb-1">Delivered On</p>
-                  <p className="text-green-400 font-condensed font-bold">{new Date(order.deliveredAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs text-ink-muted font-display mb-1">Delivered On</p>
+                  <p className="text-green-400 font-display font-bold">{new Date(order.deliveredAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
               )}
             </div>
@@ -324,23 +324,23 @@ export default function OrderDetailPage() {
         {/* Return Request */}
         {order.returnRequest && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-sm p-6 mb-6">
-            <h2 className="font-condensed font-bold text-orange-400 uppercase tracking-wide mb-4">Return Request</h2>
+            <h2 className="font-display font-bold text-orange-400 uppercase tracking-wide mb-4">Return Request</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <div><p className="text-xs text-orange-400/70 font-body mb-1">Status</p><p className="text-orange-300 font-condensed font-bold">{order.returnRequest.status.toUpperCase()}</p></div>
-              <div><p className="text-xs text-orange-400/70 font-body mb-1">Reason</p><p className="text-orange-300 font-body text-sm">{order.returnRequest.reason}</p></div>
-              <div><p className="text-xs text-orange-400/70 font-body mb-1">Requested On</p><p className="text-orange-300 font-body text-sm">{new Date(order.returnRequest.requestedAt).toLocaleDateString('en-IN')}</p></div>
+              <div><p className="text-xs text-orange-400/70 font-display mb-1">Status</p><p className="text-orange-300 font-display font-bold">{order.returnRequest.status.toUpperCase()}</p></div>
+              <div><p className="text-xs text-orange-400/70 font-display mb-1">Reason</p><p className="text-orange-300 font-display text-sm">{order.returnRequest.reason}</p></div>
+              <div><p className="text-xs text-orange-400/70 font-display mb-1">Requested On</p><p className="text-orange-300 font-display text-sm">{new Date(order.returnRequest.requestedAt).toLocaleDateString('en-IN')}</p></div>
             </div>
           </div>
         )}
 
         {/* Refund Info */}
         {order.refundDetails && (
-          <div className="bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 rounded-sm p-6 mb-6">
-            <h2 className="font-condensed font-bold text-[#3B9EE8] uppercase tracking-wide mb-4">Refund Information</h2>
+          <div className="bg-gold/10 border border-gold/30 rounded-sm p-6 mb-6">
+            <h2 className="font-display font-bold text-gold uppercase tracking-wide mb-4">Refund Information</h2>
             <div className="grid md:grid-cols-3 gap-4">
-              <div><p className="text-xs text-[#3B9EE8]/70 font-body mb-1">Refund Amount</p><p className="text-xl font-condensed font-bold text-[#3B9EE8]">₹{(order.refundDetails.amount || 0).toFixed(2)}</p></div>
-              <div><p className="text-xs text-[#3B9EE8]/70 font-body mb-1">Status</p><p className="text-[#C4C4C4] font-condensed font-bold">{order.refundDetails.status.toUpperCase()}</p></div>
-              <div><p className="text-xs text-[#3B9EE8]/70 font-body mb-1">Method</p><p className="text-[#C4C4C4] font-condensed font-bold">{(order.refundDetails.refundMethod || '').replace(/_/g, ' ').toUpperCase()}</p></div>
+              <div><p className="text-xs text-gold/70 font-display mb-1">Refund Amount</p><p className="text-xl font-display font-bold text-gold">₹{(order.refundDetails.amount || 0).toFixed(2)}</p></div>
+              <div><p className="text-xs text-gold/70 font-display mb-1">Status</p><p className="text-ink/70 font-display font-bold">{order.refundDetails.status.toUpperCase()}</p></div>
+              <div><p className="text-xs text-gold/70 font-display mb-1">Method</p><p className="text-ink/70 font-display font-bold">{(order.refundDetails.refundMethod || '').replace(/_/g, ' ').toUpperCase()}</p></div>
             </div>
           </div>
         )}
@@ -348,38 +348,38 @@ export default function OrderDetailPage() {
         {/* Info Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-6">
           {/* Shipping */}
-          <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6">
+          <div className="bg-obsidian border border-hairline rounded-sm p-6">
             <div className="flex items-center gap-2 mb-4">
-              <MapPin className="h-4 w-4 text-[#3B9EE8]" />
-              <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest">Shipping Address</h3>
+              <MapPin className="h-4 w-4 text-gold" />
+              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Shipping Address</h3>
             </div>
-            <div className="font-body text-sm space-y-1">
-              <p className="font-condensed font-bold text-white uppercase tracking-wide">{order.shippingAddress.fullName}</p>
-              <p className="text-[#C4C4C4]">{order.shippingAddress.addressLine1}</p>
-              {order.shippingAddress.addressLine2 && <p className="text-[#C4C4C4]">{order.shippingAddress.addressLine2}</p>}
-              <p className="text-[#C4C4C4]">{order.shippingAddress.city}, {order.shippingAddress.state}</p>
-              <p className="text-[#C4C4C4]">{order.shippingAddress.postalCode}</p>
-              <p className="text-[#555555] mt-2">{order.shippingAddress.phone}</p>
+            <div className="font-display text-sm space-y-1">
+              <p className="font-display font-bold text-ink uppercase tracking-wide">{order.shippingAddress.fullName}</p>
+              <p className="text-ink/70">{order.shippingAddress.addressLine1}</p>
+              {order.shippingAddress.addressLine2 && <p className="text-ink/70">{order.shippingAddress.addressLine2}</p>}
+              <p className="text-ink/70">{order.shippingAddress.city}, {order.shippingAddress.state}</p>
+              <p className="text-ink/70">{order.shippingAddress.postalCode}</p>
+              <p className="text-ink-muted mt-2">{order.shippingAddress.phone}</p>
             </div>
           </div>
 
           {/* Payment */}
-          <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6">
+          <div className="bg-obsidian border border-hairline rounded-sm p-6">
             <div className="flex items-center gap-2 mb-4">
-              <CreditCard className="h-4 w-4 text-[#3B9EE8]" />
-              <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest">Payment Details</h3>
+              <CreditCard className="h-4 w-4 text-gold" />
+              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Payment Details</h3>
             </div>
-            <div className="font-body text-sm space-y-3">
+            <div className="font-display text-sm space-y-3">
               {order.payment ? (
                 <>
                   <div>
-                    <p className="text-xs text-[#555555] mb-0.5">Method</p>
-                    <p className="text-[#C4C4C4] font-condensed font-bold">{PAYMENT_METHOD_LABELS[(order.payment as any)?.paymentMethod] || (order.payment as any)?.paymentMethod || 'N/A'}</p>
+                    <p className="text-xs text-ink-muted mb-0.5">Method</p>
+                    <p className="text-ink/70 font-display font-bold">{PAYMENT_METHOD_LABELS[(order.payment as any)?.paymentMethod] || (order.payment as any)?.paymentMethod || 'N/A'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-[#555555] mb-0.5">Status</p>
-                    <p className={`font-condensed font-bold ${
-                      !(order.payment as any)?.status ? 'text-[#555555]' :
+                    <p className="text-xs text-ink-muted mb-0.5">Status</p>
+                    <p className={`font-display font-bold ${
+                      !(order.payment as any)?.status ? 'text-ink-muted' :
                       ['completed', 'success', 'paid'].includes((order.payment as any)?.status) ? 'text-green-400' :
                       (order.payment as any)?.status === 'pending' ? 'text-yellow-400' : 'text-red-400'
                     }`}>
@@ -390,10 +390,10 @@ export default function OrderDetailPage() {
                     <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded-sm text-sm">
                       <div className="flex items-start gap-2 text-red-400">
                         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                        <span className="font-body text-xs">Payment failed. Please verify your transaction or retry.</span>
+                        <span className="font-display text-xs">Payment failed. Please verify your transaction or retry.</span>
                       </div>
                       {canRetryPayment(order) && (
-                        <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="text-xs font-condensed font-bold text-red-400 hover:text-red-300 disabled:opacity-50 mt-2 ml-6 underline">
+                        <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="text-xs font-display font-bold text-red-400 hover:text-red-300 disabled:opacity-50 mt-2 ml-6 underline">
                           {isPaymentProcessing ? 'Processing...' : 'Retry Payment Now'}
                         </button>
                       )}
@@ -401,33 +401,33 @@ export default function OrderDetailPage() {
                   )}
                   {(order.payment as any)?.transactionId && (
                     <div>
-                      <p className="text-xs text-[#555555] mb-0.5">Transaction ID</p>
-                      <p className="font-mono text-xs text-[#C4C4C4]">{(order.payment as any)?.transactionId}</p>
+                      <p className="text-xs text-ink-muted mb-0.5">Transaction ID</p>
+                      <p className="font-mono text-xs text-ink/70">{(order.payment as any)?.transactionId}</p>
                     </div>
                   )}
                 </>
               ) : (
-                <p className="text-[#555555]">Payment information not available</p>
+                <p className="text-ink-muted">Payment information not available</p>
               )}
             </div>
           </div>
 
           {/* Order Summary */}
-          <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6">
+          <div className="bg-obsidian border border-hairline rounded-sm p-6">
             <div className="flex items-center gap-2 mb-4">
-              <Package className="h-4 w-4 text-[#3B9EE8]" />
-              <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest">Order Summary</h3>
+              <Package className="h-4 w-4 text-gold" />
+              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Order Summary</h3>
             </div>
-            <div className="font-body text-sm space-y-2">
-              <div className="flex justify-between"><span className="text-[#555555]">Subtotal</span><span className="text-[#C4C4C4]">₹{(order.subtotal || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-[#555555]">Shipping</span><span className="text-[#C4C4C4]">₹{(order.shippingCost || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-[#555555]">Tax</span><span className="text-[#C4C4C4]">₹{(order.tax || 0).toFixed(2)}</span></div>
+            <div className="font-display text-sm space-y-2">
+              <div className="flex justify-between"><span className="text-ink-muted">Subtotal</span><span className="text-ink/70">₹{(order.subtotal || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">₹{(order.shippingCost || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">₹{(order.tax || 0).toFixed(2)}</span></div>
               {(order.discount || 0) > 0 && (
-                <div className="flex justify-between"><span className="text-[#555555]">Discount</span><span className="text-green-400">-₹{(order.discount || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="text-green-400">-₹{(order.discount || 0).toFixed(2)}</span></div>
               )}
-              <div className="flex justify-between border-t border-[#252525] pt-3 mt-3">
-                <span className="font-condensed font-bold text-white uppercase tracking-wide">Total</span>
-                <span className="text-xl font-condensed font-bold text-[#3B9EE8]">₹{(order.totalAmount || 0).toFixed(2)}</span>
+              <div className="flex justify-between border-t border-hairline pt-3 mt-3">
+                <span className="font-display font-bold text-ink uppercase tracking-wide">Total</span>
+                <span className="text-xl font-display font-bold text-gold">₹{(order.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -435,7 +435,7 @@ export default function OrderDetailPage() {
 
         {/* Order Items */}
         <div className={cardClass}>
-          <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-6">
+          <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-6">
             Order Items ({order.items.length})
           </h3>
           <div className="space-y-4">
@@ -444,37 +444,37 @@ export default function OrderDetailPage() {
               const productName = product?.name || item.name || 'Unknown Product';
               const productImage = product?.images?.[0]?.url || item.image;
               return (
-                <div key={item._id || index} className="flex gap-4 border-b border-[#252525] pb-4 last:border-b-0">
-                  <div className="w-20 h-20 bg-[#161616] border border-[#252525] rounded-sm overflow-hidden shrink-0">
+                <div key={item._id || index} className="flex gap-4 border-b border-hairline pb-4 last:border-b-0">
+                  <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-sm overflow-hidden shrink-0">
                     {productImage ? (
                       <img src={productImage} alt={productName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Package className="h-8 w-8 text-[#555555]" />
+                        <Package className="h-8 w-8 text-ink-muted" />
                       </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     {product?._id ? (
-                      <Link href={productUrl(product, '/products') || '/products'} className="font-condensed font-bold text-white uppercase tracking-wide hover:text-[#3B9EE8] transition-colors line-clamp-2">
+                      <Link href={productUrl(product, '/products') || '/products'} className="font-display font-bold text-ink uppercase tracking-wide hover:text-gold transition-colors line-clamp-2">
                         {productName}
                       </Link>
                     ) : (
-                      <p className="font-condensed font-bold text-white uppercase tracking-wide">{productName}</p>
+                      <p className="font-display font-bold text-ink uppercase tracking-wide">{productName}</p>
                     )}
-                    <p className="text-[#555555] font-body text-xs mt-1">Qty: {item.quantity}</p>
-                    <p className="text-[#555555] font-body text-xs">₹{(item.price || 0).toFixed(2)} each</p>
+                    <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
+                    <p className="text-ink-muted font-display text-xs">₹{(item.price || 0).toFixed(2)} each</p>
                   </div>
                   <div className="text-right flex flex-col items-end gap-2 shrink-0">
-                    <p className="font-condensed font-bold text-[#3B9EE8]">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>
+                    <p className="font-display font-bold text-gold">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>
                     {product?._id && (
-                      <button onClick={() => handleBuyAgain(item)} disabled={addingToCart === item._id} className="flex items-center gap-1 text-xs text-[#3B9EE8] hover:text-white hover:bg-[#3B9EE8] border border-[#3B9EE8]/30 px-2 py-1 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-condensed font-bold uppercase tracking-widest">
+                      <button onClick={() => handleBuyAgain(item)} disabled={addingToCart === item._id} className="flex items-center gap-1 text-xs text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-display font-bold uppercase tracking-widest">
                         {addingToCart === item._id ? <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : <ShoppingCart className="h-3 w-3" />}
                         Buy Again
                       </button>
                     )}
                     {order.status === 'delivered' && product?._id && (
-                      <button onClick={() => handleWriteReview(item)} className="flex items-center gap-1 text-xs text-[#EF9F27] hover:text-white hover:bg-[#EF9F27] border border-[#EF9F27]/30 px-2 py-1 rounded-sm transition-colors font-condensed font-bold uppercase tracking-widest">
+                      <button onClick={() => handleWriteReview(item)} className="flex items-center gap-1 text-xs text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-sm transition-colors font-display font-bold uppercase tracking-widest">
                         <Star className="h-3 w-3" />
                         Review
                       </button>
@@ -489,7 +489,7 @@ export default function OrderDetailPage() {
         {/* Status History */}
         {order.statusHistory && order.statusHistory.length > 0 && (
           <div className={cardClass}>
-            <h3 className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-6">Order Timeline</h3>
+            <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-6">Order Timeline</h3>
             <div className="space-y-4">
               {order.statusHistory.map((history, index) => (
                 <div key={index} className="flex gap-4">
@@ -498,18 +498,18 @@ export default function OrderDetailPage() {
                       {getStatusIcon(history.status)}
                     </div>
                     {index < order.statusHistory!.length - 1 && (
-                      <div className="w-px h-12 bg-[#252525] my-1" />
+                      <div className="w-px h-12 bg-obsidian-raised my-1" />
                     )}
                   </div>
                   <div className="flex-1 pb-6">
-                    <p className="font-condensed font-bold text-white uppercase tracking-wide text-sm">
+                    <p className="font-display font-bold text-ink uppercase tracking-wide text-sm">
                       {history.status.charAt(0).toUpperCase() + history.status.slice(1)}
                     </p>
-                    <p className="text-xs text-[#555555] font-body mt-0.5">
+                    <p className="text-xs text-ink-muted font-display mt-0.5">
                       {new Date(history.timestamp).toLocaleString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>
-                    {history.reason && <p className="text-xs text-[#C4C4C4] font-body mt-1">Reason: {history.reason}</p>}
-                    {history.notes && <p className="text-xs text-[#C4C4C4] font-body mt-1">Notes: {history.notes}</p>}
+                    {history.reason && <p className="text-xs text-ink/70 font-display mt-1">Reason: {history.reason}</p>}
+                    {history.notes && <p className="text-xs text-ink/70 font-display mt-1">Notes: {history.notes}</p>}
                   </div>
                 </div>
               ))}

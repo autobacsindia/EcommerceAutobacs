@@ -17,22 +17,22 @@ export default function HeaderNav({ categories }: { categories: NavCategory[] })
       <Link
         href="/shop"
         className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
-          pathname === '/shop' ? 'text-white' : 'text-white hover:text-[#3B9EE8]'
+          pathname === '/shop' ? 'text-ink' : 'text-ink hover:text-gold'
         }`}
       >
         Shop
-        {pathname === '/shop' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3B9EE8]" />}
+        {pathname === '/shop' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />}
       </Link>
 
       <Link
         href="/brands"
         className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
-          pathname === '/brands' || pathname.startsWith('/brands') ? 'text-white' : 'text-white hover:text-[#3B9EE8]'
+          pathname === '/brands' || pathname.startsWith('/brands') ? 'text-ink' : 'text-ink hover:text-gold'
         }`}
       >
         Brand
         {(pathname === '/brands' || pathname.startsWith('/brands')) && (
-          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3B9EE8]" />
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />
         )}
       </Link>
 
@@ -47,11 +47,11 @@ export default function HeaderNav({ categories }: { categories: NavCategory[] })
             key={link.href}
             href={link.href}
             className={`text-sm font-medium transition-colors relative py-1 whitespace-nowrap ${
-              isActive ? 'text-white' : 'text-white hover:text-[#3B9EE8]'
+              isActive ? 'text-ink' : 'text-ink hover:text-gold'
             }`}
           >
             {link.label}
-            {isActive && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3B9EE8]" />}
+            {isActive && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />}
           </Link>
         );
       })}

@@ -103,9 +103,9 @@ export default function CategoryDebug() {
             {childCategories.map(category => (
               <div key={category._id} className="border p-4 rounded">
                 <p className="font-medium">{category.name}</p>
-                <p className="text-sm text-gray-600">ID: {category._id}</p>
-                <p className="text-sm text-gray-600">Slug: {category.slug}</p>
-                <p className="text-sm text-gray-600">Parent: {category.parent ? (typeof category.parent === 'string' ? category.parent : category.parent._id) : 'None'}</p>
+                <p className="text-sm text-ink-muted">ID: {category._id}</p>
+                <p className="text-sm text-ink-muted">Slug: {category.slug}</p>
+                <p className="text-sm text-ink-muted">Parent: {category.parent ? (typeof category.parent === 'string' ? category.parent : category.parent._id) : 'None'}</p>
               </div>
             ))}
           </div>
@@ -116,7 +116,7 @@ export default function CategoryDebug() {
       
       <div className="mt-8">
         <h2 className="text-xl font-semibold mb-4">All Categories</h2>
-        <pre className="bg-gray-100 p-4 rounded overflow-auto max-h-96">
+        <pre className="bg-obsidian-raised p-4 rounded overflow-auto max-h-96">
           {JSON.stringify(categories, null, 2)}
         </pre>
       </div>

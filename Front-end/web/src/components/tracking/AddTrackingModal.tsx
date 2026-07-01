@@ -62,20 +62,20 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-obsidian-deep bg-opacity-50 transition-opacity"
         onClick={handleClose}
       />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="relative bg-obsidian rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
           {/* Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Add Tracking Information</h2>
+          <div className="sticky top-0 bg-obsidian border-b border-hairline px-6 py-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-ink">Add Tracking Information</h2>
             <button
               onClick={handleClose}
               disabled={loading}
-              className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+              className="text-ink-muted hover:text-ink-muted disabled:opacity-50"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -99,7 +99,7 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
 
             {/* Carrier Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink/80 mb-2">
                 Select Carrier *
               </label>
               <CarrierSelector
@@ -110,7 +110,7 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
 
             {/* Optional Tracking Number */}
             <div>
-              <label htmlFor="tracking-number" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="tracking-number" className="block text-sm font-medium text-ink/80 mb-2">
                 Tracking Number (Optional)
               </label>
               <input
@@ -119,17 +119,17 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
                 value={trackingNumber}
                 onChange={(e) => setTrackingNumber(e.target.value)}
                 placeholder="Leave empty to auto-generate"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
                 disabled={loading}
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-ink-muted">
                 If not provided, a tracking number will be automatically generated
               </p>
             </div>
 
             {/* Notes */}
             <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="notes" className="block text-sm font-medium text-ink/80 mb-2">
                 Notes (Optional)
               </label>
               <textarea
@@ -138,7 +138,7 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Add any additional notes..."
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full px-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent resize-none"
                 disabled={loading}
               />
             </div>
@@ -146,11 +146,11 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
             {/* Info Box */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex">
-                <svg className="h-5 w-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="h-5 w-5 text-gold mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
                 <div className="ml-3">
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-gold">
                     After adding tracking information, the order status will be updated to "shipped" and customers will be able to track their package.
                   </p>
                 </div>
@@ -158,23 +158,23 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <div className="flex justify-end gap-3 pt-4 border-t border-hairline">
               <button
                 type="button"
                 onClick={handleClose}
                 disabled={loading}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 border border-hairline rounded-lg text-ink/80 hover:bg-obsidian-deep disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedCarrier}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+                className="px-6 py-2 bg-gold text-obsidian rounded-lg hover:bg-gold disabled:bg-obsidian-raised disabled:cursor-not-allowed transition-colors flex items-center"
               >
                 {loading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline mr-2"></div>
                     Adding...
                   </>
                 ) : (

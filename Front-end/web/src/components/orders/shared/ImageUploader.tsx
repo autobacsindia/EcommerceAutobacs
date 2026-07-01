@@ -157,8 +157,8 @@ export default function ImageUploader({
           onClick={() => fileInputRef.current?.click()}
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
             dragActive
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+              ? 'border-gold bg-blue-50'
+              : 'border-hairline hover:border-gray-400 hover:bg-obsidian-deep'
           }`}
         >
           <input
@@ -172,21 +172,21 @@ export default function ImageUploader({
 
           {uploadingCount > 0 ? (
             <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
-              <p className="text-sm font-medium text-gray-700">
+              <Loader2 className="h-12 w-12 text-gold animate-spin" />
+              <p className="text-sm font-medium text-ink/80">
                 Uploading {uploadingCount} image{uploadingCount > 1 ? 's' : ''}...
               </p>
             </div>
           ) : (
             <>
-              <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-sm font-medium text-gray-700 mb-1">
+              <Upload className="h-12 w-12 text-ink-muted mx-auto mb-4" />
+              <p className="text-sm font-medium text-ink/80 mb-1">
                 Click to upload or drag and drop
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-muted">
                 JPG, PNG or WebP (max {(maxFileSize / (1024 * 1024)).toFixed(0)}MB per file)
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-ink-muted mt-1">
                 {images.length} of {maxImages} images uploaded
               </p>
             </>
@@ -220,14 +220,14 @@ export default function ImageUploader({
       {/* Image Preview Grid */}
       {images.length > 0 && (
         <div className="space-y-4">
-          <p className="text-sm font-medium text-gray-700">
+          <p className="text-sm font-medium text-ink/80">
             Uploaded Images ({images.length}/{maxImages})
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {images.map((image, index) => (
-              <div key={index} className="border border-gray-300 rounded-lg p-3 bg-white">
+              <div key={index} className="border border-hairline rounded-lg p-3 bg-obsidian">
                 {/* Image Preview */}
-                <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
+                <div className="relative aspect-video bg-obsidian-raised rounded-lg overflow-hidden mb-3">
                   <img
                     src={image.url}
                     alt={`Upload ${index + 1}`}
@@ -238,7 +238,7 @@ export default function ImageUploader({
                       e.stopPropagation();
                       removeImage(index);
                     }}
-                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition shadow-lg"
+                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-ink rounded-full hover:bg-red-700 transition shadow-lg"
                     title="Remove image"
                   >
                     <X className="h-4 w-4" />
@@ -251,7 +251,7 @@ export default function ImageUploader({
                   value={image.description || ''}
                   onChange={(e) => updateImageDescription(index, e.target.value)}
                   placeholder="Add description (optional)"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-gold"
                 />
               </div>
             ))}
@@ -263,7 +263,7 @@ export default function ImageUploader({
       {images.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex gap-2">
-            <ImageIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <ImageIcon className="h-5 w-5 text-gold flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-blue-900 mb-1">Why upload images?</p>
               <p className="text-sm text-blue-800">

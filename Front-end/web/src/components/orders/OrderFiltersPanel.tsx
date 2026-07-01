@@ -120,17 +120,17 @@ export default function OrderFiltersPanel({
   const activeCount = getActiveFilterCount();
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+    <div className="bg-obsidian rounded-lg shadow-sm border border-hairline mb-6">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="p-4 border-b border-hairline flex items-center justify-between">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-gray-700 hover:text-gray-900 font-medium"
+          className="flex items-center gap-2 text-ink/80 hover:text-ink font-medium"
         >
           <Filter className="h-5 w-5" />
           <span>Filters</span>
           {activeCount > 0 && (
-            <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
+            <span className="bg-gold text-obsidian text-xs px-2 py-0.5 rounded-full">
               {activeCount}
             </span>
           )}
@@ -140,7 +140,7 @@ export default function OrderFiltersPanel({
           {activeCount > 0 && (
             <button
               onClick={handleClearFilters}
-              className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+              className="text-sm text-ink-muted hover:text-ink flex items-center gap-1"
             >
               <X className="h-4 w-4" />
               Clear All
@@ -152,7 +152,7 @@ export default function OrderFiltersPanel({
                 onFiltersChange(localFilters);
                 onApply?.();
               }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
+              className="bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold text-sm"
             >
               Apply Filters
             </button>
@@ -161,13 +161,13 @@ export default function OrderFiltersPanel({
       </div>
 
       {/* Quick Filters */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-hairline">
         <div className="flex flex-wrap gap-2">
           {QUICK_FILTERS.map((filter) => (
             <button
               key={filter.value}
               onClick={() => handleQuickFilter(filter.value)}
-              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition"
+              className="px-3 py-1.5 bg-obsidian-raised hover:bg-obsidian-raised text-ink/80 text-sm rounded-lg transition"
             >
               {filter.label}
             </button>
@@ -180,24 +180,24 @@ export default function OrderFiltersPanel({
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Search by Order Number */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               Order Number
             </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-muted" />
               <input
                 type="text"
                 placeholder="Search order #..."
                 value={localFilters.search}
                 onChange={(e) => handleFilterChange('search', e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
               />
             </div>
           </div>
 
           {/* Customer Search */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               Customer
             </label>
             <input
@@ -205,41 +205,41 @@ export default function OrderFiltersPanel({
               placeholder="Name or email..."
               value={localFilters.customer}
               onChange={(e) => handleFilterChange('customer', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
             />
           </div>
 
           {/* Status Multi-Select */}
           <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               Status
             </label>
             <button
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400"
+              className="w-full px-4 py-2 border border-hairline rounded-lg text-left flex items-center justify-between hover:border-gray-400"
             >
-              <span className="text-gray-700">
+              <span className="text-ink/80">
                 {localFilters.statuses.length === 0
                   ? 'All Statuses'
                   : `${localFilters.statuses.length} selected`}
               </span>
-              <span className="text-gray-400">▼</span>
+              <span className="text-ink-muted">▼</span>
             </button>
             
             {showStatusDropdown && (
-              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+              <div className="absolute z-10 mt-1 w-full bg-obsidian border border-hairline rounded-lg shadow-lg max-h-60 overflow-auto">
                 {Object.entries(ORDER_STATUS_LABELS).map(([key, label]) => (
                   <label
                     key={key}
-                    className="flex items-center px-4 py-2 hover:bg-gray-50 cursor-pointer"
+                    className="flex items-center px-4 py-2 hover:bg-obsidian-deep cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={localFilters.statuses.includes(key)}
                       onChange={() => handleStatusToggle(key)}
-                      className="mr-3 h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                      className="mr-3 h-4 w-4 text-gold rounded focus:ring-gold"
                     />
-                    <span className="text-sm text-gray-700">{label}</span>
+                    <span className="text-sm text-ink/80">{label}</span>
                   </label>
                 ))}
               </div>
@@ -248,39 +248,39 @@ export default function OrderFiltersPanel({
 
           {/* Date Range - Start */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               From Date
             </label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-muted" />
               <input
                 type="date"
                 value={localFilters.startDate}
                 onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
               />
             </div>
           </div>
 
           {/* Date Range - End */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               To Date
             </label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-muted" />
               <input
                 type="date"
                 value={localFilters.endDate}
                 onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
               />
             </div>
           </div>
 
           {/* Amount Range - Min */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               Min Amount (₹)
             </label>
             <input
@@ -288,13 +288,13 @@ export default function OrderFiltersPanel({
               placeholder="0"
               value={localFilters.minAmount}
               onChange={(e) => handleFilterChange('minAmount', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
             />
           </div>
 
           {/* Amount Range - Max */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-ink/80 mb-1">
               Max Amount (₹)
             </label>
             <input
@@ -302,7 +302,7 @@ export default function OrderFiltersPanel({
               placeholder="∞"
               value={localFilters.maxAmount}
               onChange={(e) => handleFilterChange('maxAmount', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent"
             />
           </div>
         </div>

@@ -96,16 +96,16 @@ export default function ManualLocationForm({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-scaleIn">
+    <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-obsidian rounded-lg shadow-xl max-w-md w-full animate-scaleIn">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-4 border-b border-hairline">
+          <h2 className="text-lg font-semibold text-ink">
             Enter Your Location
           </h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-ink-muted hover:text-ink-muted transition-colors"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -116,7 +116,7 @@ export default function ManualLocationForm({
         <div className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="city" className="block text-sm font-medium text-ink/80 mb-1">
                 City *
               </label>
               <input
@@ -125,14 +125,14 @@ export default function ManualLocationForm({
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-hairline rounded-md focus:outline-none focus:ring-2 focus:ring-gold"
                 placeholder="Enter your city"
                 required
               />
             </div>
             
             <div>
-              <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="state" className="block text-sm font-medium text-ink/80 mb-1">
                 State *
               </label>
               <input
@@ -141,14 +141,14 @@ export default function ManualLocationForm({
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-hairline rounded-md focus:outline-none focus:ring-2 focus:ring-gold"
                 placeholder="Enter your state"
                 required
               />
             </div>
             
             <div>
-              <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="postalCode" className="block text-sm font-medium text-ink/80 mb-1">
                 Postal Code *
               </label>
               <input
@@ -157,7 +157,7 @@ export default function ManualLocationForm({
                 name="postalCode"
                 value={formData.postalCode}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-hairline rounded-md focus:outline-none focus:ring-2 focus:ring-gold"
                 placeholder="Enter 6-digit postal code"
                 maxLength={6}
                 required
@@ -165,7 +165,7 @@ export default function ManualLocationForm({
             </div>
             
             <div>
-              <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="country" className="block text-sm font-medium text-ink/80 mb-1">
                 Country
               </label>
               <input
@@ -174,7 +174,7 @@ export default function ManualLocationForm({
                 name="country"
                 value={formData.country}
                 readOnly
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                className="w-full px-3 py-2 border border-hairline rounded-md bg-obsidian-deep"
               />
             </div>
             
@@ -182,7 +182,7 @@ export default function ManualLocationForm({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-gold text-obsidian py-3 rounded-lg font-medium hover:bg-gold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {isLoading ? (
                   <>
@@ -197,7 +197,7 @@ export default function ManualLocationForm({
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full mt-2 text-gray-600 py-2 rounded-lg font-medium hover:text-gray-800 transition-colors"
+                className="w-full mt-2 text-ink-muted py-2 rounded-lg font-medium hover:text-ink transition-colors"
               >
                 Cancel
               </button>

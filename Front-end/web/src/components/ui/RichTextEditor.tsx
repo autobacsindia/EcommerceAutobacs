@@ -43,7 +43,7 @@ export default function RichTextEditor({
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: 'text-blue-600 underline cursor-pointer' },
+        HTMLAttributes: { class: 'text-gold underline cursor-pointer' },
       }),
     ],
     content: '',
@@ -88,23 +88,23 @@ export default function RichTextEditor({
   if (!editor) return null;
 
   return (
-    <div className="border border-gray-300 rounded-md overflow-visible bg-white">
+    <div className="border border-hairline rounded-md overflow-visible bg-obsidian">
       {/* ── Toolbar ── */}
-      <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+      <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 bg-obsidian-deep border-b border-hairline">
 
         {/* Heading / Paragraph dropdown */}
         <div className="relative mr-1">
           <button
             type="button"
             onClick={() => setDropdownOpen((o) => !o)}
-            className="flex items-center gap-1 px-2 py-1 text-sm border border-gray-300 rounded bg-white hover:bg-gray-100 min-w-30 justify-between text-gray-800"
+            className="flex items-center gap-1 px-2 py-1 text-sm border border-hairline rounded bg-obsidian hover:bg-obsidian-raised min-w-30 justify-between text-ink"
           >
             <span>{activeHeadingLabel()}</span>
             <ChevronDown className="h-3 w-3 shrink-0" />
           </button>
 
           {dropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 min-w-40 py-1">
+            <div className="absolute top-full left-0 mt-1 bg-obsidian border border-hairline rounded shadow-lg z-50 min-w-40 py-1">
               <DropdownItem
                 label="Paragraph"
                 active={editor.isActive('paragraph') && !editor.isActive('heading')}
@@ -193,7 +193,7 @@ function Btn({ children, onClick, active, title }: {
       type="button"
       onClick={onClick}
       title={title}
-      className={`p-1.5 rounded transition-colors ${active ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-200'}`}
+      className={`p-1.5 rounded transition-colors ${active ? 'bg-blue-100 text-gold' : 'text-ink/80 hover:bg-obsidian-raised'}`}
     >
       {children}
     </button>
@@ -201,7 +201,7 @@ function Btn({ children, onClick, active, title }: {
 }
 
 function Sep() {
-  return <span className="w-px h-5 bg-gray-300 mx-1 shrink-0" />;
+  return <span className="w-px h-5 bg-obsidian-raised mx-1 shrink-0" />;
 }
 
 function DropdownItem({ label, active, className, onClick }: {
@@ -214,7 +214,7 @@ function DropdownItem({ label, active, className, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left px-3 py-1.5 hover:bg-gray-100 text-gray-800 ${active ? 'bg-gray-100' : ''} ${className ?? ''}`}
+      className={`w-full text-left px-3 py-1.5 hover:bg-obsidian-raised text-ink ${active ? 'bg-obsidian-raised' : ''} ${className ?? ''}`}
     >
       {label}
     </button>

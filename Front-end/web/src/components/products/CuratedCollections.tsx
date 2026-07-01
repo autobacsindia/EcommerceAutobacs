@@ -23,7 +23,7 @@ export default function CuratedCollections({
   className = ''
 }: CuratedCollectionsProps) {
   return (
-    <div className={`bg-gray-50 py-6 ${className}`}>
+    <div className={`bg-obsidian-deep py-6 ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
         {collections.map((collection, index) => (
           <CuratedCollectionCarousel

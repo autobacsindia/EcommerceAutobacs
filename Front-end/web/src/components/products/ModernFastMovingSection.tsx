@@ -16,7 +16,7 @@ import { ProductCardSkeleton } from '@/components/skeletons/ProductCardSkeleton'
 import dynamic from 'next/dynamic';
 
 const ProductImage = dynamic(() => import('@/components/products/ProductImage'), {
-  loading: () => <div className="w-full h-full bg-[#161616] animate-pulse" />
+  loading: () => <div className="w-full h-full bg-obsidian-raised animate-pulse" />
 });
 
 interface ProductImageType {
@@ -147,12 +147,12 @@ export default function ModernFastMovingSection({
 
   if (loading) {
     return (
-      <section className={`py-16 bg-[#080808] ${className}`}>
+      <section className={`py-16 bg-obsidian-deep ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Top Sellers</p>
-            <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Fast-Moving Products</h2>
-            <p className="text-[#C4C4C4] font-body">Top picks flying off the shelves</p>
+            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Top Sellers</p>
+            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">Fast-Moving Products</h2>
+            <p className="text-ink/70 font-display">Top picks flying off the shelves</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[...Array(limit)].map((_, index) => (
@@ -167,16 +167,16 @@ export default function ModernFastMovingSection({
   if (error || products.length === 0) return null;
 
   return (
-    <section className={`py-16 bg-[#080808] ${className}`}>
+    <section className={`py-16 bg-obsidian-deep ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <div className="animate-in slide-in-from-bottom duration-700 fade-in">
-            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Top Sellers</p>
-            <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Fast-Moving Products</h2>
-            <p className="text-[#C4C4C4] font-body mb-4">Top picks flying off the shelves</p>
+            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Top Sellers</p>
+            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">Fast-Moving Products</h2>
+            <p className="text-ink/70 font-display mb-4">Top picks flying off the shelves</p>
             <Link
               href="/products?isFastMoving=true"
-              className="inline-flex items-center text-[#3B9EE8] font-condensed font-semibold hover:text-white transition-colors group"
+              className="inline-flex items-center text-gold font-display font-semibold hover:text-ink transition-colors group"
             >
               View All Collection
               <ArrowRight className="ml-2 w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
@@ -190,11 +190,11 @@ export default function ModernFastMovingSection({
             return (
             <div
               key={product._id}
-              className="group bg-[#0E0E0E] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all duration-300 overflow-hidden flex flex-col relative"
+              className="group bg-obsidian border border-hairline rounded-lg hover:border-gold transition-all duration-300 overflow-hidden flex flex-col relative"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               {/* Product Image */}
-              <div className="relative aspect-4/3 overflow-hidden bg-[#161616]">
+              <div className="relative aspect-4/3 overflow-hidden bg-obsidian-raised">
                 <Link href={url}>
                     {product.images && Array.isArray(product.images) && product.images.length > 0 ? (
                       <ProductImage
@@ -211,8 +211,8 @@ export default function ModernFastMovingSection({
                         className="object-cover w-full h-full"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-[#161616]">
-                        <span className="text-[#555555]">No Image</span>
+                      <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                        <span className="text-ink-muted">No Image</span>
                       </div>
                     )}
                 </Link>
@@ -223,8 +223,8 @@ export default function ModernFastMovingSection({
                     onClick={(e) => handleToggleWishlist(product._id, e)}
                     className={`p-3 rounded-full shadow-lg ${
                       isAuthenticated && isInWishlist(product._id)
-                        ? 'bg-[#252525] text-red-500'
-                        : 'bg-[#252525] text-[#C4C4C4] hover:text-red-500'
+                        ? 'bg-obsidian-raised text-red-500'
+                        : 'bg-obsidian-raised text-ink/70 hover:text-red-500'
                     } transition-colors`}
                     title="Add to Wishlist"
                   >
@@ -232,7 +232,7 @@ export default function ModernFastMovingSection({
                   </button>
                   <button
                     onClick={(e) => handleAddToCart(product._id, e)}
-                    className="p-3 bg-[#252525] text-[#C4C4C4] hover:text-[#3B9EE8] rounded-full shadow-lg transition-colors"
+                    className="p-3 bg-obsidian-raised text-ink/70 hover:text-gold rounded-full shadow-lg transition-colors"
                     title="Add to Cart"
                   >
                     <ShoppingCart className="w-5 h-5" />
@@ -241,7 +241,7 @@ export default function ModernFastMovingSection({
 
                 {/* Badge */}
                 {(product.originalPrice && product.originalPrice > product.price) && (
-                  <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
+                  <div className="absolute top-4 left-4 bg-red-500 text-ink text-xs font-bold px-3 py-1 rounded-full shadow-md">
                     -{Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}%
                   </div>
                 )}
@@ -249,28 +249,28 @@ export default function ModernFastMovingSection({
 
               {/* Product Info */}
               <div className="p-4 grow flex flex-col">
-                <div className="text-xs text-[#3B9EE8] font-condensed font-bold mb-2 uppercase tracking-widest">
+                <div className="text-xs text-gold font-display font-bold mb-2 uppercase tracking-widest">
                   {typeof product.category === 'string' ? 'Auto Parts' : product.category?.name}
                 </div>
                 <Link href={url} className="block mb-2">
-                  <h3 className="font-condensed font-bold text-white uppercase tracking-wide line-clamp-2 group-hover:text-[#3B9EE8] transition-colors">
+                  <h3 className="font-display font-bold text-ink uppercase tracking-wide line-clamp-2 group-hover:text-gold transition-colors">
                     {product.name}
                   </h3>
                 </Link>
 
-                <div className="mt-auto pt-4 flex items-center justify-between border-t border-[#252525]">
+                <div className="mt-auto pt-4 flex items-center justify-between border-t border-hairline">
                   <div className="flex flex-col">
-                    <span className="text-xl font-condensed font-bold text-[#3B9EE8]">
+                    <span className="text-xl font-display font-bold text-gold">
                       {formatPrice(product.price)}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="text-sm text-[#555555] line-through">
+                      <span className="text-sm text-ink-muted line-through">
                         {formatPrice(product.originalPrice)}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center text-[#EF9F27] text-sm font-medium">
-                    <span className="text-[#C4C4C4] mr-1">{product.averageRating?.toFixed(1) || '0.0'}</span>
+                  <div className="flex items-center text-gold text-sm font-medium">
+                    <span className="text-ink/70 mr-1">{product.averageRating?.toFixed(1) || '0.0'}</span>
                     ★
                   </div>
                 </div>
@@ -282,14 +282,14 @@ export default function ModernFastMovingSection({
           {/* "See More" Card */}
            <Link
             href="/products?isFastMoving=true"
-            className="group bg-[#3B9EE8] hover:bg-[#1A6FB5] rounded-lg transition-all duration-300 overflow-hidden flex flex-col items-center justify-center p-8 text-center text-white h-full min-h-100"
+            className="group bg-gold hover:bg-gold rounded-lg transition-all duration-300 overflow-hidden flex flex-col items-center justify-center p-8 text-center text-obsidian h-full min-h-100"
           >
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-              <ArrowRight className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 bg-obsidian/20 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+              <ArrowRight className="w-8 h-8 text-ink" />
             </div>
-            <h3 className="text-2xl font-condensed font-bold uppercase tracking-wide mb-2">View All Collection</h3>
-            <p className="text-blue-100 font-body mb-6">Discover our complete range of fast-moving products</p>
-            <span className="inline-block px-6 py-2 border-2 border-white/30 rounded-sm font-condensed font-bold uppercase tracking-widest group-hover:bg-white group-hover:text-[#3B9EE8] transition-all duration-300">
+            <h3 className="text-2xl font-display font-bold uppercase tracking-wide mb-2">View All Collection</h3>
+            <p className="text-blue-100 font-display mb-6">Discover our complete range of fast-moving products</p>
+            <span className="inline-block px-6 py-2 border-2 border-hairline/30 rounded-sm font-display font-bold uppercase tracking-widest group-hover:bg-obsidian group-hover:text-gold transition-all duration-300">
               Browse Now
             </span>
           </Link>

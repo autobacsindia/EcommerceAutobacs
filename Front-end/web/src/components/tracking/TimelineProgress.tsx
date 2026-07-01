@@ -26,13 +26,13 @@ export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
     <div className="w-full">
       {/* Progress bar */}
       <div className="relative">
-        <div className="overflow-hidden h-2 flex rounded-full bg-gray-200">
+        <div className="overflow-hidden h-2 flex rounded-full bg-obsidian-raised">
           <div
             style={{ 
               width: `${progress}%`,
               background: isCancelled ? undefined : 'linear-gradient(to right, #ef4444, #f97316, #eab308, #4ade80, #16a34a)'
             }}
-            className={`transition-all duration-500 ease-out flex flex-col text-center whitespace-nowrap text-white justify-center ${
+            className={`transition-all duration-500 ease-out flex flex-col text-center whitespace-nowrap text-ink justify-center ${
               isCancelled ? 'bg-red-500' : ''
             }`}
           />
@@ -53,12 +53,12 @@ export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
                     ? isCancelled
                       ? 'bg-red-500 scale-110'
                       : `${step.color} scale-110`
-                    : 'bg-gray-300'
+                    : 'bg-obsidian-raised'
                 } ${isCurrent ? `ring-4 ${isCancelled ? 'ring-red-200' : step.ringColor}` : ''}`}
               />
               <span
                 className={`mt-2 text-xs font-medium text-center ${
-                  isActive ? 'text-gray-900' : 'text-gray-500'
+                  isActive ? 'text-ink' : 'text-ink-muted'
                 }`}
               >
                 {step.label}

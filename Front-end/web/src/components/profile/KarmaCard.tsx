@@ -44,37 +44,37 @@ export default function KarmaCard() {
   if (balance === null || !enabled) return null;
 
   return (
-    <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 mb-6">
+    <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 rounded-full flex items-center justify-center shrink-0">
-            <Sparkles className="h-6 w-6 text-[#3B9EE8]" />
+          <div className="w-12 h-12 bg-gold/10 border border-gold/30 rounded-full flex items-center justify-center shrink-0">
+            <Sparkles className="h-6 w-6 text-gold" />
           </div>
           <div>
-            <p className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest">Karma Points</p>
-            <p className="text-2xl font-condensed font-bold text-white">{balance}</p>
-            <p className="text-xs text-[#555555] font-body">≈ ₹{(balance * pointValue).toFixed(2)} value</p>
+            <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Karma Points</p>
+            <p className="text-2xl font-display font-bold text-ink">{balance}</p>
+            <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)} value</p>
           </div>
         </div>
         <button
           onClick={loadHistory}
-          className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest text-xs flex items-center gap-1 transition-colors"
+          className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest text-xs flex items-center gap-1 transition-colors"
         >
           History {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
       </div>
 
       {showHistory && (
-        <div className="mt-4 border-t border-[#252525] pt-4 space-y-2">
+        <div className="mt-4 border-t border-hairline pt-4 space-y-2">
           {entries.length === 0 ? (
-            <p className="text-[#555555] font-body text-sm">No karma activity yet.</p>
+            <p className="text-ink-muted font-display text-sm">No karma activity yet.</p>
           ) : entries.map((e) => (
             <div key={e._id} className="flex items-center justify-between text-sm">
               <div>
-                <span className="text-[#C4C4C4] font-condensed font-bold uppercase tracking-wide text-xs">{TYPE_LABEL[e.type] || e.type}</span>
-                <span className="text-[#555555] font-body ml-2">{new Date(e.createdAt).toLocaleDateString()}</span>
+                <span className="text-ink/70 font-display font-bold uppercase tracking-wide text-xs">{TYPE_LABEL[e.type] || e.type}</span>
+                <span className="text-ink-muted font-display ml-2">{new Date(e.createdAt).toLocaleDateString()}</span>
               </div>
-              <span className={`font-condensed font-bold ${e.points >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              <span className={`font-display font-bold ${e.points >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {e.points >= 0 ? '+' : ''}{e.points} pts
               </span>
             </div>

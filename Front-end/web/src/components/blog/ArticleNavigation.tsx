@@ -40,13 +40,13 @@ export default function ArticleNavigation({ slug, type }: Props) {
       {prev ? (
         <Link
           href={articleHref(type, prev.slug)}
-          className="group bg-white rounded-xl border border-gray-200 p-4 hover:border-red-200 hover:shadow-sm transition-all flex flex-col"
+          className="group bg-obsidian rounded-xl border border-hairline p-4 hover:border-red-200 hover:shadow-sm transition-all flex flex-col"
         >
-          <span className="flex items-center gap-1 text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">
+          <span className="flex items-center gap-1 text-xs text-ink-muted mb-2 font-medium uppercase tracking-wide">
             <ChevronLeft className="h-3.5 w-3.5" />
             Previous
           </span>
-          <span className="text-sm font-semibold text-gray-800 group-hover:text-red-600 transition-colors line-clamp-2 leading-snug">
+          <span className="text-sm font-semibold text-ink group-hover:text-red-600 transition-colors line-clamp-2 leading-snug">
             {prev.title}
           </span>
         </Link>
@@ -57,13 +57,13 @@ export default function ArticleNavigation({ slug, type }: Props) {
       {next ? (
         <Link
           href={articleHref(type, next.slug)}
-          className="group bg-white rounded-xl border border-gray-200 p-4 hover:border-red-200 hover:shadow-sm transition-all flex flex-col items-end text-right"
+          className="group bg-obsidian rounded-xl border border-hairline p-4 hover:border-red-200 hover:shadow-sm transition-all flex flex-col items-end text-right"
         >
-          <span className="flex items-center gap-1 text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">
+          <span className="flex items-center gap-1 text-xs text-ink-muted mb-2 font-medium uppercase tracking-wide">
             Next
             <ChevronRight className="h-3.5 w-3.5" />
           </span>
-          <span className="text-sm font-semibold text-gray-800 group-hover:text-red-600 transition-colors line-clamp-2 leading-snug">
+          <span className="text-sm font-semibold text-ink group-hover:text-red-600 transition-colors line-clamp-2 leading-snug">
             {next.title}
           </span>
         </Link>

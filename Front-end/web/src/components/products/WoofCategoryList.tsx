@@ -76,8 +76,8 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange,
       <div className="space-y-2">
         {[...Array(5)].map((_, i) => (
           <div key={i} className="flex items-center gap-2 animate-pulse">
-            <div className="h-4 w-4 bg-gray-200 rounded" />
-            <div className="h-4 w-3/4 bg-gray-200 rounded" />
+            <div className="h-4 w-4 bg-obsidian-raised rounded" />
+            <div className="h-4 w-3/4 bg-obsidian-raised rounded" />
           </div>
         ))}
       </div>
@@ -85,7 +85,7 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange,
   }
 
   if (categories.length === 0) {
-    return <p className="text-sm text-gray-500">No categories available</p>;
+    return <p className="text-sm text-ink-muted">No categories available</p>;
   }
 
   const renderCategory = (category: Category, level = 0) => {
@@ -101,22 +101,22 @@ export default function WoofCategoryList({ selectedCategories, onCategoryChange,
             id={`cat-${category._id}`}
             checked={isChecked}
             onChange={() => handleCategoryToggle(category._id)}
-            className="h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            className="h-4 w-4 shrink-0 rounded border-hairline text-gold focus:ring-gold cursor-pointer"
           />
           <label
             htmlFor={`cat-${category._id}`}
-            className="flex-1 text-sm text-gray-700 cursor-pointer select-none"
+            className="flex-1 text-sm text-ink/80 cursor-pointer select-none"
           >
             {category.name}
             {categoryCounts?.[category._id] != null && (
-              <span className="ml-1 text-gray-400">({categoryCounts[category._id]})</span>
+              <span className="ml-1 text-ink-muted">({categoryCounts[category._id]})</span>
             )}
           </label>
           {hasChildren && (
             <button
               type="button"
               onClick={() => toggleExpand(category._id)}
-              className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-800 text-xs font-bold shrink-0"
+              className="w-5 h-5 flex items-center justify-center text-ink-muted hover:text-ink text-xs font-bold shrink-0"
               aria-label={isExpanded ? `Collapse ${category.name}` : `Expand ${category.name}`}
             >
               {isExpanded ? '−' : '+'}

@@ -9,7 +9,7 @@ export default function SuperCarsBanner() {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
-    <section className="relative w-full overflow-hidden bg-black">
+    <section className="relative w-full overflow-hidden bg-obsidian-deep">
       <div className="relative w-full h-[500px] md:h-[600px] lg:h-[700px]">
         {/* Background Image with Parallax Effect */}
         <div 
@@ -39,13 +39,13 @@ export default function SuperCarsBanner() {
           <div className="flex flex-col justify-center h-full py-16">
             {/* Small Label with Slide-in Animation */}
             <div className="mb-4 animate-slide-in-left">
-              <span className="inline-block px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full text-white text-xs md:text-sm font-medium uppercase tracking-wider">
+              <span className="inline-block px-4 py-2 bg-obsidian/10 backdrop-blur-sm border border-hairline/20 rounded-full text-ink text-xs md:text-sm font-medium uppercase tracking-wider">
                 Complete Solution
               </span>
             </div>
 
             {/* Main Heading with Staggered Animation */}
-            <h2 className="text-4xl md:text-5xl lg:text-7xl font-bold text-white mb-4 animate-slide-in-left animation-delay-100">
+            <h2 className="text-4xl md:text-5xl lg:text-7xl font-bold text-ink mb-4 animate-slide-in-left animation-delay-100">
               Premium Series
             </h2>
 
@@ -56,7 +56,7 @@ export default function SuperCarsBanner() {
               </span>
             </p>
 
-            <p className="text-xl md:text-2xl lg:text-4xl font-light text-white/90 mb-12 animate-slide-in-left animation-delay-300">
+            <p className="text-xl md:text-2xl lg:text-4xl font-light text-ink/90 mb-12 animate-slide-in-left animation-delay-300">
               For Your Super Cars
             </p>
 
@@ -64,7 +64,7 @@ export default function SuperCarsBanner() {
             <div className="animate-slide-in-left animation-delay-400">
               <Link
                 href="/super-cars"
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-black font-semibold text-lg rounded-full hover:bg-linear-to-r hover:from-orange-500 hover:to-red-600 hover:text-white transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105"
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-obsidian text-ink font-semibold text-lg rounded-full hover:bg-linear-to-r hover:from-orange-500 hover:to-red-600 hover:text-ink transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
               >
@@ -75,9 +75,9 @@ export default function SuperCarsBanner() {
 
             {/* Floating Elements */}
             <div className="absolute bottom-8 right-8 hidden lg:block animate-float">
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 shadow-xl">
-                <p className="text-white text-sm font-medium mb-1">Premium Customization</p>
-                <p className="text-white/70 text-xs">Liberty Walk & More</p>
+              <div className="bg-obsidian/10 backdrop-blur-md border border-hairline/20 rounded-2xl p-6 shadow-xl">
+                <p className="text-ink text-sm font-medium mb-1">Premium Customization</p>
+                <p className="text-ink/70 text-xs">Liberty Walk & More</p>
               </div>
             </div>
           </div>

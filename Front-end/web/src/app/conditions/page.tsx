@@ -14,7 +14,7 @@ export default function ConditionsPage() {
         <h2 className="text-xl font-semibold mt-6 mb-4">1. Acceptance of Terms</h2>
         <p>
           Your use of the AutoBacs India website constitutes your acceptance of these Conditions of Use and
-          our <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>. If you
+          our <Link href="/privacy" className="text-gold hover:underline">Privacy Policy</Link>. If you
           do not agree, please discontinue use of the site.
         </p>
 
@@ -33,7 +33,7 @@ export default function ConditionsPage() {
         <h2 className="text-xl font-semibold mt-6 mb-4">4. Returns and Refunds</h2>
         <p>
           Items may be returned within 7 days of delivery in original, unused condition. Please visit our{' '}
-          <Link href="/returns" className="text-blue-600 hover:underline">Returns page</Link> for full details.
+          <Link href="/returns" className="text-gold hover:underline">Returns page</Link> for full details.
         </p>
 
         <h2 className="text-xl font-semibold mt-6 mb-4">5. Limitation of Liability</h2>
@@ -51,7 +51,7 @@ export default function ConditionsPage() {
         <h2 className="text-xl font-semibold mt-6 mb-4">7. Contact Us</h2>
         <p>
           For questions about these conditions, please contact us at{' '}
-          <Link href="mailto:support@autobacsindia.com" className="text-blue-600 hover:underline">
+          <Link href="mailto:support@autobacsindia.com" className="text-gold hover:underline">
             support@autobacsindia.com
           </Link>{' '}
           or call +91 9895257905.

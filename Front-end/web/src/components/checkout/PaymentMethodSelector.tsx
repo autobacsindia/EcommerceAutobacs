@@ -26,7 +26,7 @@ export default function PaymentMethodSelector({ selectedMethod, onSelect }: Paym
           <label
             key={method.value}
             className={`flex items-start gap-4 border rounded-lg p-4 cursor-pointer transition-all ${
-              isSelected ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' : 'border-gray-200 hover:bg-gray-50'
+              isSelected ? 'border-gold bg-blue-50 ring-1 ring-gold' : 'border-hairline hover:bg-obsidian-deep'
             }`}
           >
             <input
@@ -35,16 +35,16 @@ export default function PaymentMethodSelector({ selectedMethod, onSelect }: Paym
               value={method.value}
               checked={isSelected}
               onChange={() => onSelect(method.value)}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              className="mt-1 w-4 h-4 text-gold border-hairline focus:ring-gold"
             />
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <Icon className={`h-5 w-5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
-                <span className={`font-medium ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                <Icon className={`h-5 w-5 ${isSelected ? 'text-gold' : 'text-ink-muted'}`} />
+                <span className={`font-medium ${isSelected ? 'text-blue-900' : 'text-ink'}`}>
                   {method.label}
                 </span>
               </div>
-              <p className={`text-sm ${isSelected ? 'text-blue-700' : 'text-gray-500'}`}>
+              <p className={`text-sm ${isSelected ? 'text-gold' : 'text-ink-muted'}`}>
                 {method.description}
               </p>
             </div>

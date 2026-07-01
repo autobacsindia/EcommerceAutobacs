@@ -31,11 +31,11 @@ export default function ViewAllCard({
         h-full flex flex-col items-center justify-center
         p-6 min-h-[400px]
       `}>
-        <div className="text-white text-center">
+        <div className="text-ink text-center">
           {/* Arrow Icon */}
           <div className="mb-4 flex items-center justify-center">
-            <div className="bg-white/20 rounded-full p-4 group-hover:bg-white/30 transition-all duration-300">
-              <ChevronRight className="h-12 w-12 text-white group-hover:translate-x-1 transition-transform duration-300" />
+            <div className="bg-obsidian/20 rounded-full p-4 group-hover:bg-obsidian/30 transition-all duration-300">
+              <ChevronRight className="h-12 w-12 text-ink group-hover:translate-x-1 transition-transform duration-300" />
             </div>
           </div>
           
@@ -46,7 +46,7 @@ export default function ViewAllCard({
           
           {/* Subtitle */}
           {subtitle && (
-            <p className="text-sm text-white/90">
+            <p className="text-sm text-ink/90">
               {subtitle}
             </p>
           )}

@@ -184,9 +184,9 @@ function SearchPageInner() {
   const remaining = Math.max(0, total - products.length);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Hero Section */}
-      <div className="bg-linear-to-r from-blue-600 to-blue-800 text-white py-12">
+      <div className="bg-linear-to-r from-gold to-blue-800 text-ink py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold mb-2">Search Results</h1>
           <p className="text-blue-100">
@@ -219,7 +219,7 @@ function SearchPageInner() {
                       {index > 0 && ', '}
                       <button
                         onClick={() => handleCorrectionClick(correction.suggested)}
-                        className="underline text-blue-600 hover:text-blue-800 ml-1"
+                        className="underline text-gold hover:text-blue-800 ml-1"
                       >
                         {correction.suggested}
                       </button>
@@ -231,7 +231,7 @@ function SearchPageInner() {
 
             {/* Results Header */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-gray-600">
+              <p className="text-ink-muted">
                 {loading ? (
                   'Loading products...'
                 ) : products.length > 0 ? (
@@ -248,10 +248,10 @@ function SearchPageInner() {
 
               {/* Sort Dropdown */}
               <div className="flex items-center gap-2">
-                <label htmlFor="sort" className="text-sm text-gray-600">Sort by:</label>
+                <label htmlFor="sort" className="text-sm text-ink-muted">Sort by:</label>
                 <select
                   id="sort"
-                  className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="border border-hairline rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
                   value={currentSort}
                   onChange={handleSortChange}
                   disabled={loading}
@@ -269,15 +269,15 @@ function SearchPageInner() {
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
-                    <div className="h-48 bg-gray-200"></div>
+                  <div key={index} className="bg-obsidian rounded-lg shadow-md overflow-hidden animate-pulse">
+                    <div className="h-48 bg-obsidian-raised"></div>
                     <div className="p-4">
-                      <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-4"></div>
-                      <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+                      <div className="h-4 bg-obsidian-raised rounded mb-2"></div>
+                      <div className="h-4 bg-obsidian-raised rounded w-2/3 mb-4"></div>
+                      <div className="h-6 bg-obsidian-raised rounded w-1/3 mb-4"></div>
                       <div className="flex justify-between">
-                        <div className="h-10 bg-gray-200 rounded w-24"></div>
-                        <div className="h-10 bg-gray-200 rounded w-24"></div>
+                        <div className="h-10 bg-obsidian-raised rounded w-24"></div>
+                        <div className="h-10 bg-obsidian-raised rounded w-24"></div>
                       </div>
                     </div>
                   </div>
@@ -293,7 +293,7 @@ function SearchPageInner() {
                     <button
                       onClick={handleLoadMore}
                       disabled={loadingMore}
-                      className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors font-medium"
+                      className="flex items-center gap-2 px-6 py-3 bg-gold text-obsidian rounded-md hover:bg-gold disabled:opacity-70 disabled:cursor-not-allowed transition-colors font-medium"
                     >
                       {loadingMore ? (
                         <>
@@ -311,15 +311,15 @@ function SearchPageInner() {
                 )}
 
                 {!hasNext && total > PAGE_SIZE && (
-                  <p className="mt-8 text-center text-gray-500 text-sm">
+                  <p className="mt-8 text-center text-ink-muted text-sm">
                     All {total} products loaded
                   </p>
                 )}
               </>
             ) : (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found matching your criteria</p>
-                <Link href="/products" className="text-blue-600 hover:text-blue-700 font-medium">
+                <p className="text-ink-muted text-lg mb-4">No products found matching your criteria</p>
+                <Link href="/products" className="text-gold hover:text-gold font-medium">
                   Browse all products
                 </Link>
               </div>

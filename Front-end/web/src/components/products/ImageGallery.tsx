@@ -197,8 +197,8 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
 
   if (!images || images.length === 0) {
     return (
-      <div className={`bg-gray-100 rounded-lg aspect-square flex items-center justify-center ${className}`}>
-        <span className="text-gray-400">No images available</span>
+      <div className={`bg-obsidian-raised rounded-lg aspect-square flex items-center justify-center ${className}`}>
+        <span className="text-ink-muted">No images available</span>
       </div>
     );
   }
@@ -214,13 +214,13 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
     
     return createPortal(
       <div 
-        className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 overflow-hidden"
+        className="fixed inset-0 bg-obsidian-deep/90 z-[9999] flex items-center justify-center p-4 overflow-hidden"
         onClick={() => setIsLightboxOpen(false)}
       >
         {/* Global Close Button - Fixed to viewport */}
         <button
           onClick={() => setIsLightboxOpen(false)}
-          className="fixed top-4 right-4 z-[10000] p-2 bg-white text-black rounded-full shadow-lg hover:bg-gray-200 transition-all"
+          className="fixed top-4 right-4 z-[10000] p-2 bg-obsidian text-ink rounded-full shadow-lg hover:bg-obsidian-raised transition-all"
           aria-label="Close full screen"
         >
           <X className="h-6 w-6" />
@@ -235,32 +235,32 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
             className="flex justify-between items-center mb-4 z-20 pr-16"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 text-white">
+            <div className="flex items-center gap-2 text-ink">
               <span className="text-sm font-medium">{currentIndex + 1} / {images.length}</span>
             </div>
             
-            <div className="flex items-center gap-2 bg-black/50 rounded-lg p-1 backdrop-blur-sm">
+            <div className="flex items-center gap-2 bg-obsidian-deep/50 rounded-lg p-1 backdrop-blur-sm">
               <button
                 onClick={handleZoomOut}
                 disabled={scale <= 1}
-                className={`p-2 rounded-md hover:bg-white/20 text-white transition-colors ${scale <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`p-2 rounded-md hover:bg-obsidian/20 text-ink transition-colors ${scale <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Zoom Out (-)"
               >
                 <ZoomOut className="h-5 w-5" />
               </button>
-              <span className="min-w-[3ch] text-center text-white text-sm select-none">{Math.round(scale * 100)}%</span>
+              <span className="min-w-[3ch] text-center text-ink text-sm select-none">{Math.round(scale * 100)}%</span>
               <button
                 onClick={handleZoomIn}
                 disabled={scale >= 4}
-                className={`p-2 rounded-md hover:bg-white/20 text-white transition-colors ${scale >= 4 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`p-2 rounded-md hover:bg-obsidian/20 text-ink transition-colors ${scale >= 4 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Zoom In (+)"
               >
                 <ZoomIn className="h-5 w-5" />
               </button>
-              <div className="w-px h-5 bg-white/20 mx-1"></div>
+              <div className="w-px h-5 bg-obsidian/20 mx-1"></div>
               <button
                 onClick={handleResetZoom}
-                className="p-2 rounded-md hover:bg-white/20 text-white transition-colors"
+                className="p-2 rounded-md hover:bg-obsidian/20 text-ink transition-colors"
                 title="Reset Zoom (0)"
               >
                 <RotateCcw className="h-5 w-5" />
@@ -273,14 +273,14 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
-                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 lg:-translate-x-12 p-3 text-white/70 hover:text-white transition-colors z-20 hidden md:block"
+                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 lg:-translate-x-12 p-3 text-ink/70 hover:text-ink transition-colors z-20 hidden md:block"
                 aria-label="Previous image"
               >
                 <ChevronLeft className="h-10 w-10" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); goToNext(); }}
-                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 lg:translate-x-12 p-3 text-white/70 hover:text-white transition-colors z-20 hidden md:block"
+                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 lg:translate-x-12 p-3 text-ink/70 hover:text-ink transition-colors z-20 hidden md:block"
                 aria-label="Next image"
               >
                 <ChevronRight className="h-10 w-10" />
@@ -290,7 +290,7 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
 
           {/* Lightbox image container */}
           <div 
-            className="flex-1 relative flex items-center justify-center overflow-hidden cursor-default select-none rounded-lg bg-black/20"
+            className="flex-1 relative flex items-center justify-center overflow-hidden cursor-default select-none rounded-lg bg-obsidian-deep/20"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -323,7 +323,7 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
             </div>
           </div>
           
-          <div className="text-center text-white/70 text-sm mt-2 h-6 select-none">
+          <div className="text-center text-ink/70 text-sm mt-2 h-6 select-none">
             {scale > 1 ? 'Drag to pan' : 'Click zoom controls or use +/- keys to zoom'}
           </div>
         </div>
@@ -333,10 +333,10 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
   };
 
   return (
-    <div className={`bg-white rounded-lg ${className}`}>
+    <div className={`bg-obsidian rounded-lg ${className}`}>
       {/* Main Image Display */}
       <div 
-        className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden group cursor-zoom-in"
+        className="relative aspect-square bg-obsidian-raised rounded-lg overflow-hidden group cursor-zoom-in"
         onMouseMove={handleMainMouseMove}
         onMouseLeave={handleMainMouseLeave}
         onClick={() => setIsLightboxOpen(true)}
@@ -363,7 +363,7 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
         {/* Loading indicator */}
         {!mainImageLoaded && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold"></div>
           </div>
         )}
 
@@ -375,20 +375,20 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
                 e.stopPropagation();
                 goToPrevious();
               }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute left-4 top-1/2 -translate-y-1/2 bg-obsidian/80 hover:bg-obsidian rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               aria-label="Previous image"
             >
-              <ChevronLeft className="h-5 w-5 text-gray-800" />
+              <ChevronLeft className="h-5 w-5 text-ink" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 goToNext();
               }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-4 top-1/2 -translate-y-1/2 bg-obsidian/80 hover:bg-obsidian rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               aria-label="Next image"
             >
-              <ChevronRight className="h-5 w-5 text-gray-800" />
+              <ChevronRight className="h-5 w-5 text-ink" />
             </button>
           </>
         )}
@@ -396,15 +396,15 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
         {/* Zoom button */}
         <button
           onClick={() => setIsLightboxOpen(true)}
-          className="absolute bottom-4 right-4 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute bottom-4 right-4 bg-obsidian/80 hover:bg-obsidian rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
           aria-label="View full size image"
         >
-          <ZoomIn className="h-5 w-5 text-gray-800" />
+          <ZoomIn className="h-5 w-5 text-ink" />
         </button>
 
         {/* Image counter */}
         {images.length > 1 && (
-          <div className="absolute top-4 left-4 bg-black/50 text-white text-sm px-2 py-1 rounded">
+          <div className="absolute top-4 left-4 bg-obsidian-deep/50 text-ink text-sm px-2 py-1 rounded">
             {currentIndex + 1} of {images.length}
           </div>
         )}
@@ -418,7 +418,7 @@ export default function ImageGallery({ images, className = '' }: ImageGalleryPro
               key={image.id || index}
               onClick={() => goToImage(index)}
               className={`flex-shrink-0 w-20 h-20 rounded-md overflow-hidden border-2 transition-all ${
-                index === currentIndex ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
+                index === currentIndex ? 'border-gold' : 'border-transparent hover:border-hairline'
               }`}
               aria-label={`View image ${index + 1}`}
             >

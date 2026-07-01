@@ -55,26 +55,26 @@ function VerifyEmailPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080808] flex items-center justify-center py-12 px-4">
+    <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full text-center">
         {status === 'verifying' && (
           <div className="flex flex-col items-center">
-            <Loader2 className="h-12 w-12 text-[#3B9EE8] animate-spin mb-4" />
-            <h2 className="text-xl font-condensed font-bold text-white uppercase tracking-wide">Verifying your email...</h2>
-            <p className="mt-2 text-[#C4C4C4] font-body text-sm">Please wait while we confirm your email address.</p>
+            <Loader2 className="h-12 w-12 text-gold animate-spin mb-4" />
+            <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide">Verifying your email...</h2>
+            <p className="mt-2 text-ink/70 font-display text-sm">Please wait while we confirm your email address.</p>
           </div>
         )}
 
         {status === 'success' && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-8">
             <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-            <h3 className="font-condensed font-bold text-white uppercase tracking-wide text-xl mb-2">Email Verified!</h3>
-            <p className="text-[#C4C4C4] font-body text-sm mb-6">
+            <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-2">Email Verified!</h3>
+            <p className="text-ink/70 font-display text-sm mb-6">
               Your email has been verified. Redirecting you now...
             </p>
             <Link
               href="/"
-              className="inline-block bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+              className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
             >
               Continue Shopping
             </Link>
@@ -84,35 +84,35 @@ function VerifyEmailPageInner() {
         {status === 'error' && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8">
             <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-            <h3 className="font-condensed font-bold text-white uppercase tracking-wide text-xl mb-2">Verification Failed</h3>
-            <p className="text-[#C4C4C4] font-body text-sm mb-6">{message}</p>
+            <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-2">Verification Failed</h3>
+            <p className="text-ink/70 font-display text-sm mb-6">{message}</p>
 
             {resendSent ? (
-              <p className="text-sm text-green-400 font-body">
+              <p className="text-sm text-green-400 font-display">
                 If that email exists and is unverified, a new link has been sent. Check your inbox.
               </p>
             ) : (
               <form onSubmit={handleResend} className="mt-4 text-left space-y-3">
-                <p className="text-xs text-[#C4C4C4] font-body uppercase tracking-widest">Resend verification link</p>
+                <p className="text-xs text-ink/70 font-display uppercase tracking-widest">Resend verification link</p>
                 <input
                   type="email"
                   required
                   placeholder="your@email.com"
                   value={resendEmail}
                   onChange={e => setResendEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#161616] text-white border border-[#252525] rounded-sm focus:outline-none focus:ring-2 focus:ring-[#3B9EE8]/50 focus:border-[#3B9EE8] transition-colors font-body placeholder:text-[#555555] text-sm"
+                  className="w-full px-3 py-2 bg-obsidian-raised text-ink border border-hairline rounded-sm focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-colors font-display placeholder:text-ink-muted text-sm"
                 />
                 <button
                   type="submit"
                   disabled={resendLoading}
-                  className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] disabled:opacity-50 text-white font-condensed font-bold uppercase tracking-widest px-6 py-2 rounded-sm transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full bg-gold hover:bg-gold disabled:opacity-50 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2 rounded-sm transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                   Send New Link
                 </button>
                 <Link
                   href="/login"
-                  className="block text-center font-condensed font-bold text-[#3B9EE8] hover:text-white uppercase tracking-widest text-xs transition-colors mt-2"
+                  className="block text-center font-display font-bold text-gold hover:text-ink uppercase tracking-widest text-xs transition-colors mt-2"
                 >
                   Return to Login
                 </Link>
@@ -127,7 +127,7 @@ function VerifyEmailPageInner() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#080808]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
       <VerifyEmailPageInner />
     </Suspense>
   );

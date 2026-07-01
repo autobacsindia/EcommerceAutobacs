@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function SidebarSkeleton() {
   return (
-    <div className="w-full bg-white rounded-lg shadow-sm border p-4 space-y-6">
+    <div className="w-full bg-obsidian rounded-lg shadow-sm border p-4 space-y-6">
       {/* Title */}
       <Skeleton className="h-6 w-32 mb-4" />
 

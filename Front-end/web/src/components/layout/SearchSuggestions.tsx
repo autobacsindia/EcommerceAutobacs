@@ -188,7 +188,7 @@ export default function SearchSuggestions() {
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <div className="flex rounded-sm overflow-hidden border border-[#252525] focus-within:border-[#3B9EE8] transition-colors">
+      <div className="flex rounded-sm overflow-hidden border border-hairline focus-within:border-gold transition-colors">
         <input
           ref={inputRef}
           type="text"
@@ -199,23 +199,23 @@ export default function SearchSuggestions() {
             if (query.length >= 2 || (query.length === 0 && history.length > 0)) setIsOpen(true);
           }}
           placeholder="Search products, brands, categories..."
-          className="w-full px-4 py-2 bg-[#161616] text-white placeholder:text-[#555555] border-0 focus:outline-none font-body"
+          className="w-full px-4 py-2 bg-obsidian-raised text-ink placeholder:text-ink-muted border-0 focus:outline-none font-display"
         />
         <button
           type="button"
           onClick={() => handleSearch()}
           aria-label="Search"
-          className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white px-4 py-2 transition-colors"
+          className="bg-gold hover:bg-gold text-obsidian px-4 py-2 transition-colors"
         >
           <Search className="h-5 w-5" />
         </button>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-[#0E0E0E] border border-[#252525] rounded-sm shadow-2xl">
+        <div className="absolute z-50 w-full mt-1 bg-obsidian border border-hairline rounded-sm shadow-2xl">
           {isLoading ? (
-            <div className="px-4 py-3 text-[#C4C4C4] font-body flex items-center gap-3">
-              <svg className="animate-spin h-5 w-5 text-[#3B9EE8]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <div className="px-4 py-3 text-ink/70 font-display flex items-center gap-3">
+              <svg className="animate-spin h-5 w-5 text-gold" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
@@ -226,9 +226,9 @@ export default function SearchSuggestions() {
               {/* History */}
               {query.length === 0 && history.length > 0 && (
                 <div>
-                  <div className="px-4 py-2 flex justify-between items-center border-b border-[#252525]">
-                    <span className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest">Recent Searches</span>
-                    <button onClick={clearHistory} className="text-xs text-[#3B9EE8] hover:text-white transition-colors font-body">Clear all</button>
+                  <div className="px-4 py-2 flex justify-between items-center border-b border-hairline">
+                    <span className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Recent Searches</span>
+                    <button onClick={clearHistory} className="text-xs text-gold hover:text-ink transition-colors font-display">Clear all</button>
                   </div>
                   <ul>
                     {history.map((item, index) => (
@@ -236,14 +236,14 @@ export default function SearchSuggestions() {
                         <div
                           ref={(el) => { if (el) suggestionRefs.current[index] = el; }}
                           className={`w-full text-left px-4 py-2 flex items-center justify-between cursor-pointer transition-colors ${
-                            activeIndex === index ? 'bg-[#161616]' : 'hover:bg-[#161616]'
+                            activeIndex === index ? 'bg-obsidian-raised' : 'hover:bg-obsidian-raised'
                           }`}
                         >
                           <div className="flex items-center gap-2 grow" onClick={() => handleHistoryItemClick(item.term)}>
-                            <Clock className="h-4 w-4 text-[#555555]" />
-                            <span className="text-[#C4C4C4] font-body">{item.term}</span>
+                            <Clock className="h-4 w-4 text-ink-muted" />
+                            <span className="text-ink/70 font-display">{item.term}</span>
                           </div>
-                          <button onClick={(e) => removeFromHistory(item.term, e)} className="text-[#555555] hover:text-[#C4C4C4] ml-2 transition-colors">
+                          <button onClick={(e) => removeFromHistory(item.term, e)} className="text-ink-muted hover:text-ink/70 ml-2 transition-colors">
                             <X className="h-4 w-4" />
                           </button>
                         </div>
@@ -256,8 +256,8 @@ export default function SearchSuggestions() {
               {/* Suggestions */}
               {suggestions.length > 0 && (
                 <div>
-                  <div className="px-4 py-2 border-b border-[#252525]">
-                    <span className="text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest">Suggestions</span>
+                  <div className="px-4 py-2 border-b border-hairline">
+                    <span className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Suggestions</span>
                   </div>
                   <ul>
                     {suggestions.map((suggestion, index) => {
@@ -269,11 +269,11 @@ export default function SearchSuggestions() {
                             ref={(el) => { if (el) suggestionRefs.current[actualIndex] = el; }}
                             onClick={(e) => handleSuggestionClick(suggestion, e)}
                             className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors ${
-                              activeIndex === actualIndex ? 'bg-[#161616]' : 'hover:bg-[#161616]'
+                              activeIndex === actualIndex ? 'bg-obsidian-raised' : 'hover:bg-obsidian-raised'
                             }`}
                           >
                             {suggestion.imageUrl && (
-                              <div className="shrink-0 w-10 h-10 bg-[#252525] rounded-sm overflow-hidden relative">
+                              <div className="shrink-0 w-10 h-10 bg-obsidian-raised rounded-sm overflow-hidden relative">
                                 <EnhancedImage
                                   src={suggestion.imageUrl}
                                   alt={suggestion.text}
@@ -285,8 +285,8 @@ export default function SearchSuggestions() {
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
-                              <div className="font-condensed font-bold text-white truncate uppercase tracking-wide">{suggestion.text}</div>
-                              <div className="flex items-center text-xs text-[#555555] font-body">
+                              <div className="font-display font-bold text-ink truncate uppercase tracking-wide">{suggestion.text}</div>
+                              <div className="flex items-center text-xs text-ink-muted font-display">
                                 <span className="capitalize">{suggestion.type}</span>
                                 {suggestion.category && <><span className="mx-1">·</span><span>{suggestion.category}</span></>}
                               </div>
@@ -306,11 +306,11 @@ export default function SearchSuggestions() {
                   ref={(el) => { if (el) suggestionRefs.current[suggestions.length] = el; }}
                   onClick={() => handleSearch()}
                   className={`w-full text-left px-4 py-3 flex items-center gap-2 transition-colors ${
-                    suggestions.length > 0 ? 'border-t border-[#252525]' : ''
-                  } ${activeIndex === suggestions.length ? 'bg-[#161616]' : 'hover:bg-[#161616]'}`}
+                    suggestions.length > 0 ? 'border-t border-hairline' : ''
+                  } ${activeIndex === suggestions.length ? 'bg-obsidian-raised' : 'hover:bg-obsidian-raised'}`}
                 >
-                  <Search className="h-4 w-4 text-[#3B9EE8] shrink-0" />
-                  <span className="text-[#3B9EE8] font-body text-sm">
+                  <Search className="h-4 w-4 text-gold shrink-0" />
+                  <span className="text-gold font-display text-sm">
                     See all results for &ldquo;{query}&rdquo; →
                   </span>
                 </button>

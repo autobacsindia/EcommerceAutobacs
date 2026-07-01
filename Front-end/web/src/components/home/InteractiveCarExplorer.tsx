@@ -53,18 +53,18 @@ export default function InteractiveCarExplorer({
       <div className="mb-8 text-center">
         <h2
           id="car-explorer-heading"
-          className="text-2xl font-bold text-gray-900 sm:text-3xl"
+          className="text-2xl font-bold text-ink sm:text-3xl"
         >
           Find parts by where they fit
         </h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 text-sm text-ink-muted">
           Tap a part of the vehicle to jump straight to those products.
         </p>
       </div>
 
       {/* Interactive artwork + hotspots */}
       <div
-        className="relative mx-auto aspect-[16/9] w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-gradient-to-b from-gray-50 to-gray-100"
+        className="relative mx-auto aspect-[16/9] w-full max-w-4xl overflow-hidden rounded-2xl border border-hairline bg-gradient-to-b from-gray-50 to-gray-100"
         style={
           EXPLORER_ART
             ? { backgroundImage: `url(${EXPLORER_ART})`, backgroundSize: 'cover', backgroundPosition: 'center' }
@@ -72,7 +72,7 @@ export default function InteractiveCarExplorer({
         }
       >
         {!EXPLORER_ART && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-widest text-gray-400">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-widest text-ink-muted">
             Vehicle artwork
           </div>
         )}
@@ -93,13 +93,13 @@ export default function InteractiveCarExplorer({
             >
               {/* Pulsing dot */}
               <span className="relative flex h-4 w-4 items-center justify-center">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B9EE8] opacity-60 group-hover:opacity-90" />
-                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-white bg-[#3B9EE8] shadow" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-60 group-hover:opacity-90" />
+                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-hairline bg-gold shadow" />
               </span>
               {/* Tooltip */}
               <span
                 role="tooltip"
-                className={`pointer-events-none absolute left-1/2 top-5 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-lg transition-opacity ${
+                className={`pointer-events-none absolute left-1/2 top-5 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-obsidian-deep px-2 py-1 text-xs font-medium text-ink shadow-lg transition-opacity ${
                   isActive ? 'opacity-100' : 'opacity-0'
                 }`}
               >
@@ -116,7 +116,7 @@ export default function InteractiveCarExplorer({
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {regions.map((region) => (
             <div key={region}>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 {REGION_LABELS[region]}
               </p>
               <ul className="space-y-1">
@@ -126,7 +126,7 @@ export default function InteractiveCarExplorer({
                     <li key={h.id}>
                       <Link
                         href={h.href}
-                        className="text-sm text-gray-700 hover:text-[#3B9EE8] hover:underline"
+                        className="text-sm text-ink/80 hover:text-gold hover:underline"
                       >
                         {h.label}
                       </Link>

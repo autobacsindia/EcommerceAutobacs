@@ -116,10 +116,10 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
 
   if (brandLoading || !brand) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto mb-4" />
-          <p className="text-[#C4C4C4] font-body">Loading brand...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4" />
+          <p className="text-ink/70 font-display">Loading brand...</p>
         </div>
       </div>
     );
@@ -127,17 +127,17 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
 
   if (!brand && !brandLoading && error) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
           <div className="bg-red-500/10 border border-red-500/30 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
             <svg className="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-4">
+          <h1 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-4">
             {error === 'Brand not found' ? 'Brand Not Found' : 'Error Loading Brand'}
           </h1>
-          <p className="text-[#C4C4C4] font-body mb-6">
+          <p className="text-ink/70 font-display mb-6">
             {error === 'Brand not found'
               ? "The brand you're looking for doesn't exist or has been removed."
               : error}
@@ -145,14 +145,14 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/brands"
-              className="inline-flex items-center justify-center px-6 py-3 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors"
+              className="inline-flex items-center justify-center px-6 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Brands
             </Link>
             <Link
               href="/products"
-              className="inline-flex items-center justify-center px-6 py-3 bg-[#161616] border border-[#252525] hover:border-[#3B9EE8] text-[#C4C4C4] hover:text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-all"
+              className="inline-flex items-center justify-center px-6 py-3 bg-obsidian-raised border border-hairline hover:border-gold text-ink/70 hover:text-ink font-display font-bold uppercase tracking-widest rounded-sm transition-all"
             >
               Browse Products
             </Link>
@@ -163,12 +163,12 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808]">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Brand Header */}
-      <div className="bg-[#0E0E0E] border-b border-[#252525] py-12">
+      <div className="bg-obsidian border-b border-hairline py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center gap-8">
-            <div className="bg-[#161616] border border-[#252525] rounded-lg p-4 w-32 h-32 flex items-center justify-center shrink-0">
+            <div className="bg-obsidian-raised border border-hairline rounded-lg p-4 w-32 h-32 flex items-center justify-center shrink-0">
               {brand.logo ? (
                 <img
                   src={brand.logo}
@@ -177,16 +177,16 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
-                <span className="text-3xl font-condensed font-bold text-[#3B9EE8]">{brand.name?.charAt(0)}</span>
+                <span className="text-3xl font-display font-bold text-gold">{brand.name?.charAt(0)}</span>
               )}
             </div>
             <div className="text-center md:text-left">
-              <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Brand</p>
-              <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide mb-2">{brand.name}</h1>
+              <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Brand</p>
+              <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-2">{brand.name}</h1>
               {brand.description && (
-                <p className="text-[#C4C4C4] font-body mb-4 max-w-2xl">{brand.description}</p>
+                <p className="text-ink/70 font-display mb-4 max-w-2xl">{brand.description}</p>
               )}
-              <span className="inline-block bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 text-[#3B9EE8] font-condensed font-bold uppercase tracking-widest px-3 py-1 rounded-sm text-sm">
+              <span className="inline-block bg-gold/10 border border-gold/30 text-gold font-display font-bold uppercase tracking-widest px-3 py-1 rounded-sm text-sm">
                 {data.pagination?.total || 0} Products
               </span>
             </div>
@@ -198,7 +198,7 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Results count */}
         <div className="mb-6">
-          <p className="text-[#C4C4C4] font-body text-sm">
+          <p className="text-ink/70 font-display text-sm">
             {loading ? 'Loading products...' : data.products.length > 0
               ? `Showing ${data.products.length} product${data.products.length !== 1 ? 's' : ''}${data.pagination?.total ? ` of ${data.pagination.total}` : ''}`
               : 'No products found'}
@@ -208,11 +208,11 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
         {/* Error */}
         {error && !loading && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center mb-6">
-            <h3 className="text-lg font-condensed font-bold text-red-400 uppercase mb-2">Error Loading Products</h3>
-            <p className="text-[#C4C4C4] font-body mb-4">{error}</p>
+            <h3 className="text-lg font-display font-bold text-red-400 uppercase mb-2">Error Loading Products</h3>
+            <p className="text-ink/70 font-display mb-4">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="inline-flex items-center px-4 py-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors"
+              className="inline-flex items-center px-4 py-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry
@@ -224,12 +224,12 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden animate-pulse">
-                <div className="h-48 bg-[#161616]" />
+              <div key={i} className="bg-obsidian border border-hairline rounded-lg overflow-hidden animate-pulse">
+                <div className="h-48 bg-obsidian-raised" />
                 <div className="p-4 space-y-2">
-                  <div className="h-4 bg-[#252525] rounded w-3/4" />
-                  <div className="h-4 bg-[#252525] rounded w-1/2" />
-                  <div className="h-6 bg-[#252525] rounded w-1/3" />
+                  <div className="h-4 bg-obsidian-raised rounded w-3/4" />
+                  <div className="h-4 bg-obsidian-raised rounded w-1/2" />
+                  <div className="h-6 bg-obsidian-raised rounded w-1/3" />
                 </div>
               </div>
             ))}
@@ -248,8 +248,8 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
           </>
         ) : !error ? (
           <div className="text-center py-12">
-            <p className="text-[#555555] font-body text-lg mb-4">No products found for this brand</p>
-            <Link href="/products" className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors">
+            <p className="text-ink-muted font-display text-lg mb-4">No products found for this brand</p>
+            <Link href="/products" className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors">
               Browse all products
             </Link>
           </div>
@@ -261,7 +261,7 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
 
 export default function BrandPage({ params }: { params: Promise<{ slug: string }> }) {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#080808]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
       <BrandPageInner params={params} />
     </Suspense>
   );

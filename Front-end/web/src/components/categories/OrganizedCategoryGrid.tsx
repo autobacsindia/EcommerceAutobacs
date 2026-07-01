@@ -27,10 +27,10 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
         return (
           <div key={category._id} className="space-y-6">
             {/* Main Category */}
-            <div className="border-b border-gray-200 pb-4">
-              <h2 className="text-2xl font-bold text-gray-900">{mainCategory.name}</h2>
+            <div className="border-b border-hairline pb-4">
+              <h2 className="text-2xl font-bold text-ink">{mainCategory.name}</h2>
               {mainCategory.description && (
-                <p className="text-gray-600 mt-1">{mainCategory.description}</p>
+                <p className="text-ink-muted mt-1">{mainCategory.description}</p>
               )}
             </div>
             
@@ -44,7 +44,7 @@ export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryG
               {/* Subcategories */}
               {subcategories.length > 0 && (
                 <div className="sm:col-span-1 lg:col-span-2">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Subcategories</h3>
+                  <h3 className="text-lg font-semibold text-ink mb-4">Subcategories</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {subcategories.map((subCategory) => (
                       <CategoryCard key={subCategory._id} category={subCategory} />

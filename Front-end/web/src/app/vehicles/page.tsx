@@ -43,12 +43,12 @@ export default function VehiclesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#080808]">
-        <div className="bg-[#0E0E0E] border-b border-[#252525] py-20">
+      <div className="min-h-screen bg-obsidian-deep">
+        <div className="bg-obsidian border-b border-hairline py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-3">Browse by Vehicle</p>
-            <h1 className="text-5xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Explore by Vehicle</h1>
-            <p className="text-[#C4C4C4] font-body text-lg max-w-3xl mx-auto">
+            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-3">Browse by Vehicle</p>
+            <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">Explore by Vehicle</h1>
+            <p className="text-ink/70 font-display text-lg max-w-3xl mx-auto">
               Find the perfect parts and accessories for your vehicle
             </p>
           </div>
@@ -56,10 +56,10 @@ export default function VehiclesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {[...Array(10)].map((_, index) => (
-              <div key={index} className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden animate-pulse">
-                <div className="aspect-square bg-[#161616]" />
-                <div className="p-3 bg-[#0E0E0E]">
-                  <div className="h-4 bg-[#252525] rounded w-3/4 mx-auto" />
+              <div key={index} className="bg-obsidian border border-hairline rounded-lg overflow-hidden animate-pulse">
+                <div className="aspect-square bg-obsidian-raised" />
+                <div className="p-3 bg-obsidian">
+                  <div className="h-4 bg-obsidian-raised rounded w-3/4 mx-auto" />
                 </div>
               </div>
             ))}
@@ -71,13 +71,13 @@ export default function VehiclesPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-condensed font-bold text-red-400 uppercase mb-4">Error Loading Vehicles</h2>
-          <p className="text-[#C4C4C4] font-body mb-6">{error}</p>
+          <h2 className="text-2xl font-display font-bold text-red-400 uppercase mb-4">Error Loading Vehicles</h2>
+          <p className="text-ink/70 font-display mb-6">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+            className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
           >
             Retry
           </button>
@@ -87,13 +87,13 @@ export default function VehiclesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808]">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Hero */}
-      <div className="bg-[#0E0E0E] border-b border-[#252525] py-20">
+      <div className="bg-obsidian border-b border-hairline py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-3">Browse by Vehicle</p>
-          <h1 className="text-5xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Explore by Vehicle</h1>
-          <p className="text-[#C4C4C4] font-body text-lg max-w-3xl mx-auto">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-3">Browse by Vehicle</p>
+          <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">Explore by Vehicle</h1>
+          <p className="text-ink/70 font-display text-lg max-w-3xl mx-auto">
             Find the perfect parts and accessories for your vehicle
           </p>
         </div>
@@ -102,15 +102,15 @@ export default function VehiclesPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-2">All Vehicles</h2>
-          <p className="text-[#C4C4C4] font-body max-w-2xl mx-auto">
+          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">All Vehicles</h2>
+          <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Select your vehicle make to browse compatible parts and accessories
           </p>
         </div>
 
         {vehicles.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-[#555555] font-body text-lg">No vehicles found.</p>
+            <p className="text-ink-muted font-display text-lg">No vehicles found.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -120,8 +120,8 @@ export default function VehiclesPage() {
                 href={`/model/${encodeURIComponent(vehicle.slug)}`}
                 className="group block"
               >
-                <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300">
-                  <div className="aspect-square bg-[#161616] flex items-center justify-center overflow-hidden">
+                <div className="bg-obsidian border border-hairline rounded-lg overflow-hidden hover:border-gold transition-all duration-300">
+                  <div className="aspect-square bg-obsidian-raised flex items-center justify-center overflow-hidden">
                     <img
                       src={vehicle.image?.url || `/images/vehicles/${vehicle.slug}.jpg`}
                       alt={vehicle.name || vehicle.make + ' ' + vehicle.model}
@@ -138,8 +138,8 @@ export default function VehiclesPage() {
                       loading="lazy"
                     />
                   </div>
-                  <div className="p-3 text-center bg-[#0E0E0E] border-t border-[#252525]">
-                    <h3 className="text-sm font-condensed font-bold text-white uppercase tracking-wide group-hover:text-[#3B9EE8] transition-colors">
+                  <div className="p-3 text-center bg-obsidian border-t border-hairline">
+                    <h3 className="text-sm font-display font-bold text-ink uppercase tracking-wide group-hover:text-gold transition-colors">
                       {vehicle.name}
                     </h3>
                   </div>

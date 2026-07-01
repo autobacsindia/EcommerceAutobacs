@@ -74,23 +74,23 @@ export default function KeepShoppingWidget({
   if (loading) {
     return (
       <section className={`${className}`}>
-        <div className="bg-white rounded p-4">
+        <div className="bg-obsidian rounded p-4">
           {/* Title skeleton */}
-          <div className="h-5 bg-gray-200 rounded w-40 mb-3 animate-pulse" />
+          <div className="h-5 bg-obsidian-raised rounded w-40 mb-3 animate-pulse" />
           
           {/* 2x2 Grid skeleton */}
           <div className="grid grid-cols-2 gap-3 mb-3">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="animate-pulse">
-                <div className="aspect-square bg-gray-200 rounded mb-1" />
-                <div className="h-3 bg-gray-200 rounded mb-1" />
-                <div className="h-3 bg-gray-200 rounded w-2/3" />
+                <div className="aspect-square bg-obsidian-raised rounded mb-1" />
+                <div className="h-3 bg-obsidian-raised rounded mb-1" />
+                <div className="h-3 bg-obsidian-raised rounded w-2/3" />
               </div>
             ))}
           </div>
           
           {/* See more skeleton */}
-          <div className="h-4 bg-gray-200 rounded w-20 animate-pulse" />
+          <div className="h-4 bg-obsidian-raised rounded w-20 animate-pulse" />
         </div>
       </section>
     );
@@ -103,9 +103,9 @@ export default function KeepShoppingWidget({
   return (
     <section className={`${className}`}>
       {/* Amazon "Keep shopping for" Style - Compact 2x2 Grid Widget */}
-      <div className="bg-white rounded p-4">
+      <div className="bg-obsidian rounded p-4">
         {/* Title */}
-        <h2 className="text-base font-bold text-gray-900 mb-3">
+        <h2 className="text-base font-bold text-ink mb-3">
           {title}
         </h2>
 
@@ -120,7 +120,7 @@ export default function KeepShoppingWidget({
               className="group block"
             >
               {/* Product Image - Square */}
-              <div className="relative aspect-square bg-gray-100 overflow-hidden rounded mb-1">
+              <div className="relative aspect-square bg-obsidian-raised overflow-hidden rounded mb-1">
                 {product.images && (
                   Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
                     <ProductImage
@@ -135,20 +135,20 @@ export default function KeepShoppingWidget({
                       className="object-contain w-full h-full p-2 group-hover:scale-105 transition-transform duration-200"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                      <span className="text-gray-400 text-xs">No image</span>
+                    <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                      <span className="text-ink-muted text-xs">No image</span>
                     </div>
                   )
                 )}
               </div>
 
               {/* Product Name - Truncated to 2 lines */}
-              <p className="text-xs text-gray-900 line-clamp-2 mb-1 group-hover:text-blue-600">
+              <p className="text-xs text-ink line-clamp-2 mb-1 group-hover:text-gold">
                 {product.name}
               </p>
 
               {/* Price */}
-              <p className="text-sm font-semibold text-gray-900">
+              <p className="text-sm font-semibold text-ink">
                 {formatPrice(product.price)}
               </p>
             </Link>
@@ -159,7 +159,7 @@ export default function KeepShoppingWidget({
         {/* See more Link */}
         <Link
           href={viewAllLink || `/products?search=${searchKeyword}`}
-          className="text-xs text-blue-600 hover:text-orange-600 hover:underline inline-flex items-center"
+          className="text-xs text-gold hover:text-orange-600 hover:underline inline-flex items-center"
         >
           See more
         </Link>

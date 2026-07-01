@@ -71,20 +71,20 @@ export default function ReturnRequestModal({
   // Check eligibility
   if (daysSinceDelivery > 7) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-md w-full p-6">
+      <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-obsidian rounded-lg max-w-md w-full p-6">
           <div className="flex items-center justify-center mb-4">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
               <AlertCircle className="h-10 w-10 text-red-600" />
             </div>
           </div>
           <h3 className="text-xl font-bold text-center mb-2">Return Window Expired</h3>
-          <p className="text-gray-600 text-center mb-6">
+          <p className="text-ink-muted text-center mb-6">
             Returns must be requested within 7 days of delivery. Your order was delivered {daysSinceDelivery} days ago.
           </p>
           <button
             onClick={onClose}
-            className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition"
+            className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg hover:bg-gold font-medium transition"
           >
             Close
           </button>
@@ -218,8 +218,8 @@ export default function ReturnRequestModal({
   // Success view
   if (success) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-obsidian rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="p-6">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
@@ -228,12 +228,12 @@ export default function ReturnRequestModal({
             </div>
 
             <h3 className="text-2xl font-bold text-center mb-2">Request Submitted</h3>
-            <p className="text-gray-600 text-center mb-4">
+            <p className="text-ink-muted text-center mb-4">
               Your {requestType} request for order #{orderNumber} has been submitted successfully.
             </p>
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-              <p className="text-sm font-medium text-gray-700 mb-1">Request ID</p>
+            <div className="bg-obsidian-deep border border-hairline rounded-lg p-4 mb-6">
+              <p className="text-sm font-medium text-ink/80 mb-1">Request ID</p>
               <p className="text-lg font-mono font-bold">{success.returnRequestId}</p>
             </div>
 
@@ -241,21 +241,21 @@ export default function ReturnRequestModal({
               <p className="text-sm font-medium text-blue-900 mb-3">What happens next:</p>
               <ul className="space-y-2 text-sm text-blue-800">
                 <li className="flex gap-2">
-                  <span className="text-blue-600 font-bold">1.</span>
+                  <span className="text-gold font-bold">1.</span>
                   <span>We'll review your request within 24-48 hours</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-blue-600 font-bold">2.</span>
+                  <span className="text-gold font-bold">2.</span>
                   <span>You'll receive an email if your request is approved</span>
                 </li>
                 {requestType === 'return' ? (
                   <li className="flex gap-2">
-                    <span className="text-blue-600 font-bold">3.</span>
+                    <span className="text-gold font-bold">3.</span>
                     <span>Refund will be credited to your wallet after inspection</span>
                   </li>
                 ) : (
                   <li className="flex gap-2">
-                    <span className="text-blue-600 font-bold">3.</span>
+                    <span className="text-gold font-bold">3.</span>
                     <span>Replacement item will be shipped after we receive the return</span>
                   </li>
                 )}
@@ -268,7 +268,7 @@ export default function ReturnRequestModal({
                   onSuccess();
                   onClose();
                 }}
-                className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium transition"
+                className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg hover:bg-gold font-medium transition"
               >
                 Done
               </button>
@@ -280,18 +280,18 @@ export default function ReturnRequestModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-obsidian rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b z-10">
+        <div className="sticky top-0 bg-obsidian border-b z-10">
           <div className="flex items-center justify-between p-6">
             <div>
               <h3 className="text-2xl font-bold">Request Return / Exchange</h3>
-              <p className="text-sm text-gray-600 mt-1">Order #{orderNumber}</p>
+              <p className="text-sm text-ink-muted mt-1">Order #{orderNumber}</p>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition"
+              className="text-ink-muted hover:text-ink-muted transition"
               disabled={isSubmitting}
             >
               <X className="h-6 w-6" />
@@ -306,8 +306,8 @@ export default function ReturnRequestModal({
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                       step <= currentStep
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-600'
+                        ? 'bg-gold text-obsidian'
+                        : 'bg-obsidian-raised text-ink-muted'
                     }`}
                   >
                     {step}
@@ -315,14 +315,14 @@ export default function ReturnRequestModal({
                   {step < 4 && (
                     <div
                       className={`flex-1 h-1 mx-2 ${
-                        step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
+                        step < currentStep ? 'bg-gold' : 'bg-obsidian-raised'
                       }`}
                     />
                   )}
                 </div>
               ))}
             </div>
-            <div className="flex justify-between text-xs text-gray-600">
+            <div className="flex justify-between text-xs text-ink-muted">
               <span>Items & Type</span>
               <span>Reason</span>
               <span>Evidence</span>
@@ -345,7 +345,7 @@ export default function ReturnRequestModal({
             <div className="space-y-6">
               <div>
                 <h4 className="font-bold text-lg mb-2">Select Items</h4>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-ink-muted mb-4">
                   Choose which items you'd like to return or exchange
                 </p>
               </div>
@@ -357,8 +357,8 @@ export default function ReturnRequestModal({
                   onClick={() => setRequestType('return')}
                   className={`flex-1 p-4 border rounded-lg text-center transition ${
                     requestType === 'return'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                      : 'border-gray-300 hover:border-gray-400'
+                      ? 'border-gold bg-blue-50 text-gold font-medium'
+                      : 'border-hairline hover:border-gray-400'
                   }`}
                 >
                   Return for Refund
@@ -368,8 +368,8 @@ export default function ReturnRequestModal({
                   onClick={() => setRequestType('exchange')}
                   className={`flex-1 p-4 border rounded-lg text-center transition ${
                     requestType === 'exchange'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
-                      : 'border-gray-300 hover:border-gray-400'
+                      ? 'border-gold bg-blue-50 text-gold font-medium'
+                      : 'border-hairline hover:border-gray-400'
                   }`}
                 >
                   Exchange Item
@@ -391,12 +391,12 @@ export default function ReturnRequestModal({
                       />
                       {isSelected && selectedItem && (
                         <div className="ml-14 mt-2 flex items-center gap-4">
-                          <label className="text-sm font-medium text-gray-700">Quantity:</label>
-                          <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                          <label className="text-sm font-medium text-ink/80">Quantity:</label>
+                          <div className="flex items-center border border-hairline rounded-lg overflow-hidden">
                             <button
                               type="button"
                               onClick={() => handleQuantityChange(item._id, Math.max(1, selectedItem.quantity - 1))}
-                              className="px-3 py-1 bg-gray-100 hover:bg-gray-200 transition"
+                              className="px-3 py-1 bg-obsidian-raised hover:bg-obsidian-raised transition"
                             >
                               -
                             </button>
@@ -404,12 +404,12 @@ export default function ReturnRequestModal({
                             <button
                               type="button"
                               onClick={() => handleQuantityChange(item._id, Math.min(item.quantity, selectedItem.quantity + 1))}
-                              className="px-3 py-1 bg-gray-100 hover:bg-gray-200 transition"
+                              className="px-3 py-1 bg-obsidian-raised hover:bg-obsidian-raised transition"
                             >
                               +
                             </button>
                           </div>
-                          <span className="text-sm text-gray-500">of {item.quantity} available</span>
+                          <span className="text-sm text-ink-muted">of {item.quantity} available</span>
                         </div>
                       )}
                     </div>
@@ -424,7 +424,7 @@ export default function ReturnRequestModal({
                       <p className="text-sm font-medium text-blue-900">
                         {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
                       </p>
-                      <p className="text-xs text-blue-700 mt-1">
+                      <p className="text-xs text-gold mt-1">
                         Estimated refund: ₹{calculateRefundAmount().toFixed(2)} (Store Credit)
                       </p>
                     </div>
@@ -439,7 +439,7 @@ export default function ReturnRequestModal({
             <div className="space-y-6">
               <div>
                 <h4 className="font-bold text-lg mb-2">Reason for {requestType === 'return' ? 'Return' : 'Exchange'}</h4>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-ink-muted mb-4">
                   Please tell us why you're requesting a {requestType}
                 </p>
               </div>
@@ -450,8 +450,8 @@ export default function ReturnRequestModal({
                     key={reason.value}
                     className={`flex flex-col p-4 border rounded-lg cursor-pointer transition ${
                       returnReason === reason.value
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                        ? 'border-gold bg-blue-50'
+                        : 'border-hairline hover:border-gray-400'
                     }`}
                   >
                     <div className="flex items-start">
@@ -461,11 +461,11 @@ export default function ReturnRequestModal({
                         value={reason.value}
                         checked={returnReason === reason.value}
                         onChange={(e) => setReturnReason(e.target.value)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 mt-1"
+                        className="h-4 w-4 text-gold focus:ring-gold mt-1"
                       />
                       <div className="ml-3 flex-1">
-                        <span className="font-medium text-gray-900">{reason.label}</span>
-                        <p className="text-sm text-gray-600 mt-1">{reason.description}</p>
+                        <span className="font-medium text-ink">{reason.label}</span>
+                        <p className="text-sm text-ink-muted mt-1">{reason.description}</p>
                       </div>
                     </div>
                   </label>
@@ -475,7 +475,7 @@ export default function ReturnRequestModal({
               {/* Description */}
               {returnReason && (
                 <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="description" className="block text-sm font-medium text-ink/80 mb-2">
                     Describe the issue {['defective', 'wrong_item', 'not_as_described', 'other'].includes(returnReason) && (
                       <span className="text-red-500">*</span>
                     )}
@@ -487,15 +487,15 @@ export default function ReturnRequestModal({
                     placeholder="Please provide additional details..."
                     rows={4}
                     maxLength={1000}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    className="w-full px-4 py-3 border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-gold resize-none"
                   />
                   <div className="flex justify-between mt-2">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-ink-muted">
                       {['defective', 'wrong_item', 'not_as_described', 'other'].includes(returnReason)
                         ? 'Required - Please provide details'
                         : 'Optional'}
                     </p>
-                    <p className="text-xs text-gray-500">{description.length}/1000</p>
+                    <p className="text-xs text-ink-muted">{description.length}/1000</p>
                   </div>
                 </div>
               )}
@@ -507,18 +507,18 @@ export default function ReturnRequestModal({
             <div className="space-y-6">
               <div>
                 <h4 className="font-bold text-lg mb-2">Evidence (Optional but Recommended)</h4>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-ink-muted mb-4">
                   Photos and videos help us expedite your request, especially for damaged or defective items.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Photos</label>
+                <label className="block text-sm font-medium text-ink/80 mb-2">Photos</label>
                 <ImageUploader images={images} onImagesChange={setImages} />
               </div>
 
               <div>
-                <label htmlFor="videoUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="videoUrl" className="block text-sm font-medium text-ink/80 mb-2">
                   Unboxing/Issue Video URL
                 </label>
                 <input
@@ -527,9 +527,9 @@ export default function ReturnRequestModal({
                   value={videoUrl}
                   onChange={(e) => setVideoUrl(e.target.value)}
                   placeholder="https://drive.google.com/..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-gold"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-ink-muted mt-1">
                   Please upload your video to a cloud storage (Google Drive, Dropbox, etc.) and paste the shareable link here.
                 </p>
               </div>
@@ -541,17 +541,17 @@ export default function ReturnRequestModal({
             <div className="space-y-6">
               <div>
                 <h4 className="font-bold text-lg mb-2">Review Request</h4>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-ink-muted mb-4">
                   Please review details before submitting
                 </p>
               </div>
 
-              <div className="border border-gray-300 rounded-lg p-4">
+              <div className="border border-hairline rounded-lg p-4">
                 <div className="flex justify-between mb-2">
-                  <span className="font-medium text-gray-900">Type</span>
+                  <span className="font-medium text-ink">Type</span>
                   <span className="capitalize">{requestType}</span>
                 </div>
-                <p className="font-medium text-gray-900 mb-3">Items</p>
+                <p className="font-medium text-ink mb-3">Items</p>
                 <div className="space-y-2">
                   {Array.from(selectedItems.entries()).map(([itemId, selectedItem]) => {
                     const item = items.find(i => i._id === itemId);
@@ -559,28 +559,28 @@ export default function ReturnRequestModal({
                     const productName = item.product?.name || item.name || 'Unknown Product';
                     return (
                       <div key={itemId} className="flex justify-between text-sm">
-                        <span className="text-gray-700">{productName} × {selectedItem.quantity}</span>
+                        <span className="text-ink/80">{productName} × {selectedItem.quantity}</span>
                       </div>
                     );
                   })}
                   {requestType === 'return' && (
                     <div className="flex justify-between pt-2 border-t font-bold mt-2">
                       <span>Refund (Store Credit)</span>
-                      <span className="text-blue-600">₹{calculateRefundAmount().toFixed(2)}</span>
+                      <span className="text-gold">₹{calculateRefundAmount().toFixed(2)}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-4 bg-obsidian-deep rounded-lg">
                 <input
                   type="checkbox"
                   id="policy"
                   checked={policyAccepted}
                   onChange={(e) => setPolicyAccepted(e.target.checked)}
-                  className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500 mt-0.5"
+                  className="h-5 w-5 text-gold rounded focus:ring-gold mt-0.5"
                 />
-                <label htmlFor="policy" className="text-sm text-gray-700 cursor-pointer">
+                <label htmlFor="policy" className="text-sm text-ink/80 cursor-pointer">
                   I confirm that the items are in their original condition (unless defective) and I have read the return policy.
                 </label>
               </div>
@@ -589,10 +589,10 @@ export default function ReturnRequestModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-white border-t p-6 flex justify-between z-10">
+        <div className="sticky bottom-0 bg-obsidian border-t p-6 flex justify-between z-10">
           <button
             onClick={currentStep === 1 ? onClose : handleBack}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition"
+            className="px-6 py-2 border border-hairline rounded-lg text-ink/80 font-medium hover:bg-obsidian-deep transition"
             disabled={isSubmitting}
           >
             {currentStep === 1 ? 'Cancel' : 'Back'}
@@ -601,13 +601,13 @@ export default function ReturnRequestModal({
           <button
             onClick={currentStep === totalSteps ? handleSubmit : handleNext}
             disabled={isSubmitting}
-            className={`px-6 py-2 rounded-lg text-white font-medium transition flex items-center gap-2 ${
-              isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            className={`px-6 py-2 rounded-lg text-ink font-medium transition flex items-center gap-2 ${
+              isSubmitting ? 'bg-gold cursor-not-allowed' : 'bg-gold hover:bg-gold'
             }`}
           >
             {isSubmitting ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-hairline border-t-transparent rounded-full animate-spin"></div>
                 Submitting...
               </>
             ) : currentStep === totalSteps ? (

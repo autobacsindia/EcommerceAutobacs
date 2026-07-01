@@ -20,7 +20,7 @@ export default function StickyShareBar({ title }: Props) {
   }
 
   const btnBase =
-    'w-9 h-9 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center transition-colors';
+    'w-9 h-9 rounded-full bg-obsidian border border-hairline shadow-sm flex items-center justify-center transition-colors';
 
   return (
     <div className="hidden lg:flex fixed left-4 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-3">
@@ -43,7 +43,7 @@ export default function StickyShareBar({ title }: Props) {
         target="_blank"
         rel="noopener noreferrer"
         title="Share on X / Twitter"
-        className={`${btnBase} text-gray-800 hover:bg-gray-50`}
+        className={`${btnBase} text-ink hover:bg-obsidian-deep`}
       >
         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -56,7 +56,7 @@ export default function StickyShareBar({ title }: Props) {
         target="_blank"
         rel="noopener noreferrer"
         title="Share on LinkedIn"
-        className={`${btnBase} text-blue-700 hover:bg-blue-50 hover:border-blue-200`}
+        className={`${btnBase} text-gold hover:bg-blue-50 hover:border-blue-200`}
       >
         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
           <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
@@ -67,7 +67,7 @@ export default function StickyShareBar({ title }: Props) {
       <button
         onClick={copyLink}
         title={copied ? 'Copied!' : 'Copy link'}
-        className={`${btnBase} ${copied ? 'text-green-600 border-green-200' : 'text-gray-500 hover:bg-gray-50'}`}
+        className={`${btnBase} ${copied ? 'text-green-600 border-green-200' : 'text-ink-muted hover:bg-obsidian-deep'}`}
       >
         {copied ? (
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

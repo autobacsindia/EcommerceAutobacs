@@ -22,14 +22,14 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
 
   return (
     <>
-      <div className="flex items-center space-x-4 text-white flex-shrink-0 ml-auto">
+      <div className="flex items-center space-x-4 text-ink flex-shrink-0 ml-auto">
         <div className="hidden sm:block">
           <CurrencySwitcherDropdown />
         </div>
 
         <button
           onClick={() => setShowMobileSearch(prev => !prev)}
-          className="md:hidden p-2 text-white hover:text-[#3B9EE8] transition-colors"
+          className="md:hidden p-2 text-ink hover:text-gold transition-colors"
           aria-label="Toggle search"
         >
           <Search className="h-5 w-5" />
@@ -49,26 +49,26 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
               <>
                 <Link
                   href="/profile"
-                  className="flex items-center space-x-1 text-white hover:text-[#3B9EE8] transition-colors"
+                  className="flex items-center space-x-1 text-ink hover:text-gold transition-colors"
                 >
                   <User className="h-5 w-5" />
                   <span className="hidden lg:inline text-sm">{user?.name}</span>
                 </Link>
                 <button
                   onClick={logout}
-                  className="text-sm text-white hover:text-[#3B9EE8] transition-colors"
+                  className="text-sm text-ink hover:text-gold transition-colors"
                 >
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <Link href="/login" className="text-sm text-white hover:text-[#3B9EE8] transition-colors">
+                <Link href="/login" className="text-sm text-ink hover:text-gold transition-colors">
                   Login
                 </Link>
                 <Link
                   href="/register"
-                  className="text-sm bg-[#3B9EE8] text-white px-4 py-2 rounded-md hover:bg-[#1A6FB5] transition-colors font-medium font-condensed tracking-wider uppercase"
+                  className="text-sm bg-gold text-obsidian px-4 py-2 rounded-md hover:bg-gold transition-colors font-medium font-display tracking-wider uppercase"
                 >
                   Sign Up
                 </Link>
@@ -77,19 +77,19 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
           </div>
         </EnvironmentAwareComponent>
 
-        <Link href="/wishlist" className="relative p-2 text-white hover:text-[#3B9EE8] transition-colors">
+        <Link href="/wishlist" className="relative p-2 text-ink hover:text-gold transition-colors">
           <Heart className="h-5 w-5" />
           {wishlistCount > 0 && (
-            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-ink text-xs rounded-full h-5 w-5 flex items-center justify-center">
               {wishlistCount}
             </span>
           )}
         </Link>
 
-        <Link href="/cart" className="relative p-2 text-white hover:text-[#3B9EE8] transition-colors" aria-label="Cart">
+        <Link href="/cart" className="relative p-2 text-ink hover:text-gold transition-colors" aria-label="Cart">
           <ShoppingCart className="h-5 w-5" />
           {itemCount > 0 && (
-            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-ink text-xs rounded-full h-5 w-5 flex items-center justify-center">
               {itemCount}
             </span>
           )}
@@ -97,7 +97,7 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
 
         <button
           onClick={() => setShowMobileMenu(true)}
-          className="md:hidden p-2 text-white hover:text-[#3B9EE8] transition-colors"
+          className="md:hidden p-2 text-ink hover:text-gold transition-colors"
           aria-label="Open menu"
         >
           <Menu className="h-6 w-6" />
@@ -106,7 +106,7 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
 
       {/* Fixed overlay — appears below the sticky header top row on mobile */}
       {showMobileSearch && (
-        <div className="md:hidden fixed left-0 right-0 top-16 z-40 bg-black px-4 py-4 border-t border-gray-800">
+        <div className="md:hidden fixed left-0 right-0 top-16 z-40 bg-obsidian-deep px-4 py-4 border-t border-gray-800">
           <ClientSearchSuggestions />
         </div>
       )}

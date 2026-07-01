@@ -58,13 +58,13 @@ export default function QuestionForm({ productId, onSuccess }: QuestionFormProps
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
-      <h3 className="text-lg font-bold text-gray-900 mb-4">Ask a Question</h3>
+    <div className="bg-obsidian border border-hairline rounded-xl p-6">
+      <h3 className="text-lg font-bold text-ink mb-4">Ask a Question</h3>
       <form onSubmit={handleSubmit} className="space-y-4">
         {!isAuthenticated && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="userName" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="userName" className="block text-sm font-medium text-ink/80 mb-1">
                 Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -73,11 +73,11 @@ export default function QuestionForm({ productId, onSuccess }: QuestionFormProps
                 required
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="w-full rounded-lg border-hairline shadow-sm focus:border-gold focus:ring-gold"
               />
             </div>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-medium text-ink/80 mb-1">
                 Email <span className="text-red-500">*</span>
               </label>
               <input
@@ -86,14 +86,14 @@ export default function QuestionForm({ productId, onSuccess }: QuestionFormProps
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="w-full rounded-lg border-hairline shadow-sm focus:border-gold focus:ring-gold"
               />
             </div>
           </div>
         )}
 
         <div>
-          <label htmlFor="question" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="question" className="block text-sm font-medium text-ink/80 mb-1">
             Your Question <span className="text-red-500">*</span>
           </label>
           <textarea
@@ -102,7 +102,7 @@ export default function QuestionForm({ productId, onSuccess }: QuestionFormProps
             rows={4}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            className="w-full rounded-lg border-hairline shadow-sm focus:border-gold focus:ring-gold"
             placeholder="Type your question here..."
           />
         </div>
@@ -116,7 +116,7 @@ export default function QuestionForm({ productId, onSuccess }: QuestionFormProps
         <button
           type="submit"
           disabled={loading}
-          className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 transition-colors"
+          className="w-full sm:w-auto px-6 py-2 bg-gold text-obsidian rounded-lg font-medium hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold disabled:bg-gray-400 transition-colors"
         >
           {loading ? 'Submitting...' : 'Submit Question'}
         </button>

@@ -250,7 +250,7 @@ function ProductsPageInner() {
       {/* Mobile filter drawer */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
           <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
               <Eyebrow as="span">Filters</Eyebrow>

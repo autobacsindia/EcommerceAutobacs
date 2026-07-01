@@ -10,8 +10,8 @@ import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
 import KarmaCard from '@/components/profile/KarmaCard';
 
-const inputClass = 'mt-1 block w-full bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm p-2 focus:outline-none focus:border-[#3B9EE8] font-body text-sm';
-const labelClass = 'block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1';
+const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm p-2 focus:outline-none focus:border-gold font-display text-sm';
+const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -158,8 +158,8 @@ export default function ProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8]" />
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold" />
       </div>
     );
   }
@@ -167,43 +167,43 @@ export default function ProfilePage() {
   if (!isAuthenticated || !user) return null;
 
   return (
-    <div className="min-h-screen bg-[#080808] py-8">
+    <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Account</p>
-          <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide">My Profile</h1>
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Account</p>
+          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">My Profile</h1>
         </div>
 
         <KarmaCard />
 
-        <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 mb-6">
+        <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
           {/* Avatar + name/email */}
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-20 h-20 bg-[#161616] border border-[#252525] rounded-full flex items-center justify-center shrink-0">
-              <User className="h-10 w-10 text-[#3B9EE8]" />
+            <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-full flex items-center justify-center shrink-0">
+              <User className="h-10 w-10 text-gold" />
             </div>
             <div>
-              <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide">
+              <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide">
                 {editing ? (
                   <input
                     type="text"
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    className="bg-transparent border-b border-[#3B9EE8] text-white focus:outline-none font-condensed font-bold uppercase tracking-wide text-2xl w-full"
+                    className="bg-transparent border-b border-gold text-ink focus:outline-none font-display font-bold uppercase tracking-wide text-2xl w-full"
                   />
                 ) : (
                   profile?.name
                 )}
               </h2>
-              <p className="text-[#C4C4C4] font-body mt-1">
+              <p className="text-ink/70 font-display mt-1">
                 {editing ? (
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="bg-transparent border-b border-[#3B9EE8] text-[#C4C4C4] focus:outline-none font-body text-sm w-full"
+                    className="bg-transparent border-b border-gold text-ink/70 focus:outline-none font-display text-sm w-full"
                   />
                 ) : (
                   profile?.email
@@ -220,19 +220,19 @@ export default function ProfilePage() {
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 <div className="flex-1">
-                  <h3 className="text-sm font-condensed font-bold text-yellow-400 uppercase tracking-wide">Email Not Verified</h3>
-                  <p className="mt-1 text-sm text-yellow-300/80 font-body">
+                  <h3 className="text-sm font-display font-bold text-yellow-400 uppercase tracking-wide">Email Not Verified</h3>
+                  <p className="mt-1 text-sm text-yellow-300/80 font-display">
                     Please verify your email address to access all features. Check your inbox for the verification email.
                   </p>
                   {resendMessage && (
-                    <p className={`mt-2 text-sm font-body ${resendMessage.includes('sent') ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className={`mt-2 text-sm font-display ${resendMessage.includes('sent') ? 'text-green-400' : 'text-red-400'}`}>
                       {resendMessage}
                     </p>
                   )}
                   <button
                     onClick={handleResendVerification}
                     disabled={isResendingVerification}
-                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-500/40 text-sm font-condensed font-bold uppercase tracking-widest rounded-sm text-yellow-400 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-500/40 text-sm font-display font-bold uppercase tracking-widest rounded-sm text-yellow-400 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isResendingVerification ? 'Sending...' : 'Resend Verification Email'}
                   </button>
@@ -249,8 +249,8 @@ export default function ProfilePage() {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
                 <div>
-                  <h3 className="text-sm font-condensed font-bold text-green-400 uppercase tracking-wide">Email Verified</h3>
-                  <p className="mt-1 text-sm text-green-300/80 font-body">
+                  <h3 className="text-sm font-display font-bold text-green-400 uppercase tracking-wide">Email Verified</h3>
+                  <p className="mt-1 text-sm text-green-300/80 font-display">
                     Your email address has been verified.
                     {verificationStatus.verifiedAt && (
                       <span className="ml-1">(Verified on {new Date(verificationStatus.verifiedAt).toLocaleDateString()})</span>
@@ -264,9 +264,9 @@ export default function ProfilePage() {
           {/* Addresses */}
           {editing ? (
             <div className="mb-6">
-              <h3 className="text-sm font-condensed font-bold text-[#555555] uppercase tracking-widest mb-4">Addresses</h3>
+              <h3 className="text-sm font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Addresses</h3>
               {formData.addresses.map((address, index) => (
-                <div key={index} className="border border-[#252525] rounded-sm p-4 mb-4 bg-[#161616]">
+                <div key={index} className="border border-hairline rounded-sm p-4 mb-4 bg-obsidian-raised">
                   <div className="flex justify-between items-start">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 grow">
                       {(['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const).map((field) => (
@@ -289,8 +289,8 @@ export default function ProfilePage() {
               ))}
 
               {showAddAddress ? (
-                <div className="border border-[#3B9EE8]/30 rounded-sm p-4 mb-4 bg-[#161616]">
-                  <h4 className="text-sm font-condensed font-bold text-[#3B9EE8] uppercase tracking-widest mb-4">Add New Address</h4>
+                <div className="border border-gold/30 rounded-sm p-4 mb-4 bg-obsidian-raised">
+                  <h4 className="text-sm font-display font-bold text-gold uppercase tracking-widest mb-4">Add New Address</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const).map((field) => (
                       <div key={field}>
@@ -305,16 +305,16 @@ export default function ProfilePage() {
                     ))}
                   </div>
                   <div className="mt-4 flex gap-3">
-                    <button onClick={addNewAddress} className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                    <button onClick={addNewAddress} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                       Add Address
                     </button>
-                    <button onClick={() => setShowAddAddress(false)} className="bg-[#252525] hover:bg-[#161616] text-[#C4C4C4] font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                    <button onClick={() => setShowAddAddress(false)} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setShowAddAddress(true)} className="flex items-center gap-2 text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest text-sm transition-colors mb-4">
+                <button onClick={() => setShowAddAddress(true)} className="flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-widest text-sm transition-colors mb-4">
                   <Plus className="h-4 w-4" />
                   Add Address
                 </button>
@@ -322,22 +322,22 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div className="mb-6">
-              <h3 className="text-sm font-condensed font-bold text-[#555555] uppercase tracking-widest mb-4">Addresses</h3>
+              <h3 className="text-sm font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Addresses</h3>
               {profile?.addresses && profile.addresses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {profile.addresses.map((address, index) => (
-                    <div key={index} className="border border-[#252525] rounded-sm p-4 bg-[#161616]">
+                    <div key={index} className="border border-hairline rounded-sm p-4 bg-obsidian-raised">
                       <div className="flex items-start gap-3">
-                        <MapPin className="h-5 w-5 text-[#3B9EE8] mt-0.5 shrink-0" />
-                        <div className="font-body text-sm">
-                          <p className="font-condensed font-bold text-white uppercase tracking-wide mb-1">{address.fullName}</p>
-                          <p className="text-[#C4C4C4]">{address.addressLine1}</p>
-                          {address.addressLine2 && <p className="text-[#C4C4C4]">{address.addressLine2}</p>}
-                          <p className="text-[#C4C4C4]">{address.city}, {address.state} {address.postalCode}</p>
-                          <p className="text-[#C4C4C4]">{address.country}</p>
-                          <p className="text-[#555555]">Phone: {address.phone}</p>
+                        <MapPin className="h-5 w-5 text-gold mt-0.5 shrink-0" />
+                        <div className="font-display text-sm">
+                          <p className="font-display font-bold text-ink uppercase tracking-wide mb-1">{address.fullName}</p>
+                          <p className="text-ink/70">{address.addressLine1}</p>
+                          {address.addressLine2 && <p className="text-ink/70">{address.addressLine2}</p>}
+                          <p className="text-ink/70">{address.city}, {address.state} {address.postalCode}</p>
+                          <p className="text-ink/70">{address.country}</p>
+                          <p className="text-ink-muted">Phone: {address.phone}</p>
                           {address.isDefault && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-condensed font-bold uppercase tracking-widest bg-[#3B9EE8]/10 text-[#3B9EE8] border border-[#3B9EE8]/30 mt-2">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-widest bg-gold/10 text-gold border border-gold/30 mt-2">
                               Default
                             </span>
                           )}
@@ -347,35 +347,35 @@ export default function ProfilePage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-[#555555] font-body text-sm">No addresses added yet.</p>
+                <p className="text-ink-muted font-display text-sm">No addresses added yet.</p>
               )}
             </div>
           )}
 
           {/* Action buttons */}
-          <div className="flex flex-wrap gap-3 pt-4 border-t border-[#252525]">
+          <div className="flex flex-wrap gap-3 pt-4 border-t border-hairline">
             {editing ? (
               <>
-                <button onClick={handleSave} className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                <button onClick={handleSave} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                   Save Changes
                 </button>
-                <button onClick={handleCancelEdit} className="bg-[#252525] hover:bg-[#161616] text-[#C4C4C4] font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                <button onClick={handleCancelEdit} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                   Cancel
                 </button>
               </>
             ) : (
-              <button onClick={handleEdit} className="flex items-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <button onClick={handleEdit} className="flex items-center gap-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                 <Edit className="h-4 w-4" />
                 Edit Profile
               </button>
             )}
             {user?.role === 'admin' && (
-              <Link href="/admin/dashboard" className="flex items-center gap-2 bg-[#252525] hover:bg-[#3B9EE8] text-[#C4C4C4] hover:text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <Link href="/admin/dashboard" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-obsidian/70 hover:text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                 <Shield className="h-4 w-4" />
                 Admin Dashboard
               </Link>
             )}
-            <button onClick={logout} className="bg-[#161616] hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-[#252525] hover:border-red-500/30 font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+            <button onClick={logout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
               Logout
             </button>
           </div>

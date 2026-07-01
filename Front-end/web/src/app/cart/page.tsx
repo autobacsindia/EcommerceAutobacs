@@ -113,14 +113,14 @@ function CartPageContent() {
 
   if (!cart || cart.items?.length === 0) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center py-12">
-          <ShoppingBag className="mx-auto h-24 w-24 text-[#252525] mb-4" />
-          <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Your cart is empty</h2>
-          <p className="text-[#C4C4C4] font-body mb-6">Add some products to get started!</p>
+          <ShoppingBag className="mx-auto h-24 w-24 text-hairline mb-4" />
+          <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-2">Your cart is empty</h2>
+          <p className="text-ink/70 font-display mb-6">Add some products to get started!</p>
           <Link
             href="/products"
-            className="inline-flex items-center gap-2 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+            className="inline-flex items-center gap-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
           >
             Browse Products
             <ArrowRight className="h-4 w-4" />
@@ -131,12 +131,12 @@ function CartPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] py-8">
+    <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide">Shopping Cart</h1>
-          <p className="text-[#C4C4C4] font-body mt-1">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in your cart</p>
+          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">Shopping Cart</h1>
+          <p className="text-ink/70 font-display mt-1">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in your cart</p>
         </div>
 
         {/* Stock change banner */}
@@ -145,10 +145,10 @@ function CartPageContent() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-6 w-6 text-orange-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="text-sm font-condensed font-bold text-orange-400 uppercase tracking-wide">Cart Updates Due to Stock Changes</h3>
+                <h3 className="text-sm font-display font-bold text-orange-400 uppercase tracking-wide">Cart Updates Due to Stock Changes</h3>
                 <ul className="mt-2 space-y-1">
                   {recentChanges.map((change, idx) => (
-                    <li key={idx} className="text-sm text-orange-300 font-body flex items-start gap-2">
+                    <li key={idx} className="text-sm text-orange-300 font-display flex items-start gap-2">
                       <span className="text-orange-400 mt-0.5">·</span>
                       <span>
                         {change.type === 'REMOVED_OUT_OF_STOCK' ? (
@@ -168,21 +168,21 @@ function CartPageContent() {
         <div className="lg:grid lg:grid-cols-12 lg:gap-8">
           {/* Cart Items */}
           <div className="lg:col-span-8">
-            <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg">
-              <div className="p-4 border-b border-[#252525] flex justify-between items-center">
-                <h2 className="font-condensed font-bold text-white uppercase tracking-wide">Cart Items</h2>
-                <button onClick={handleClearCart} className="text-sm text-red-400 hover:text-red-300 font-body transition-colors">
+            <div className="bg-obsidian border border-hairline rounded-lg">
+              <div className="p-4 border-b border-hairline flex justify-between items-center">
+                <h2 className="font-display font-bold text-ink uppercase tracking-wide">Cart Items</h2>
+                <button onClick={handleClearCart} className="text-sm text-red-400 hover:text-red-300 font-display transition-colors">
                   Clear Cart
                 </button>
               </div>
 
-              <div className="divide-y divide-[#252525]">
+              <div className="divide-y divide-hairline">
                 {cart.items.map((item, index) => (
                   <div key={`${item.product._id}-${index}`} className="p-6">
                     <div className="flex gap-4">
                       <Link
                         href={productUrl(item.product, '/products') || '/products'}
-                        className="shrink-0 w-24 h-24 bg-[#161616] border border-[#252525] rounded-sm overflow-hidden"
+                        className="shrink-0 w-24 h-24 bg-obsidian-raised border border-hairline rounded-sm overflow-hidden"
                       >
                         <EnhancedImage
                           src={getFirstImageUrl(item.product.images)}
@@ -199,15 +199,15 @@ function CartPageContent() {
                           <div>
                             <Link
                               href={productUrl(item.product, '/products') || '/products'}
-                              className="font-condensed font-bold text-white uppercase tracking-wide hover:text-[#3B9EE8] transition-colors"
+                              className="font-display font-bold text-ink uppercase tracking-wide hover:text-gold transition-colors"
                             >
                               {item.product.name}
                             </Link>
-                            <p className="text-sm text-[#555555] font-body mt-1">{formatPrice(item.product.price)} each</p>
+                            <p className="text-sm text-ink-muted font-display mt-1">{formatPrice(item.product.price)} each</p>
                           </div>
                           <button
                             onClick={() => handleRemoveItem(item.product._id)}
-                            className="text-[#555555] hover:text-red-400 transition-colors"
+                            className="text-ink-muted hover:text-red-400 transition-colors"
                             title="Remove item"
                           >
                             <Trash2 className="h-5 w-5" />
@@ -215,26 +215,26 @@ function CartPageContent() {
                         </div>
 
                         <div className="mt-4 flex items-center justify-between">
-                          <div className="flex items-center border border-[#252525] rounded-sm">
+                          <div className="flex items-center border border-hairline rounded-sm">
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity - 1)}
                               disabled={item.quantity <= 1 || updatingItem === item.product._id}
-                              className="p-2 text-[#C4C4C4] hover:bg-[#161616] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              className="p-2 text-ink/70 hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Minus className="h-4 w-4" />
                             </button>
-                            <span className="px-4 py-2 min-w-12 text-center text-white font-condensed font-bold">
+                            <span className="px-4 py-2 min-w-12 text-center text-ink font-display font-bold">
                               {item.quantity}
                             </span>
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity + 1)}
                               disabled={item.product.stock === 'out' || updatingItem === item.product._id}
-                              className="p-2 text-[#C4C4C4] hover:bg-[#161616] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              className="p-2 text-ink/70 hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
-                          <p className="text-lg font-condensed font-bold text-[#3B9EE8]">
+                          <p className="text-lg font-display font-bold text-gold">
                             {formatPrice(item.product.price * item.quantity)}
                           </p>
                         </div>
@@ -242,10 +242,10 @@ function CartPageContent() {
                         {item.product.stock === 'out' ? (
                           <div className="mt-2 flex items-center gap-2 text-red-400 bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-sm">
                             <AlertTriangle className="h-4 w-4" />
-                            <span className="text-sm font-body">This item is now out of stock</span>
+                            <span className="text-sm font-display">This item is now out of stock</span>
                           </div>
                         ) : item.product.stock === 'low' ? (
-                          <p className="text-sm text-orange-400 font-body mt-2">⚠ Low stock</p>
+                          <p className="text-sm text-orange-400 font-display mt-2">⚠ Low stock</p>
                         ) : null}
                       </div>
                     </div>
@@ -255,7 +255,7 @@ function CartPageContent() {
             </div>
 
             <div className="mt-6">
-              <Link href="/products" className="inline-flex items-center gap-2 text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors">
+              <Link href="/products" className="inline-flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors">
                 ← Continue Shopping
               </Link>
             </div>
@@ -263,51 +263,51 @@ function CartPageContent() {
 
           {/* Order Summary */}
           <div className="lg:col-span-4 mt-8 lg:mt-0">
-            <div className="bg-[#0E0E0E] border border-[#252525] rounded-lg p-6 sticky top-20">
-              <h2 className="text-lg font-condensed font-bold text-white uppercase tracking-wide mb-4">Order Summary</h2>
+            <div className="bg-obsidian border border-hairline rounded-lg p-6 sticky top-20">
+              <h2 className="text-lg font-display font-bold text-ink uppercase tracking-wide mb-4">Order Summary</h2>
 
               <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-[#C4C4C4] font-body text-sm">
+                <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Subtotal</span>
                   <span>{formatPrice((cart.total || 0) / 1.18)}</span>
                 </div>
-                <div className="flex justify-between text-[#C4C4C4] font-body text-sm">
+                <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Shipping</span>
-                  <span className="text-[#555555]">Calculated at checkout</span>
+                  <span className="text-ink-muted">Calculated at checkout</span>
                 </div>
-                <div className="flex justify-between text-[#C4C4C4] font-body text-sm">
+                <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Tax (18% GST)</span>
                   <span>{formatPrice((cart.total || 0) - ((cart.total || 0) / 1.18))}</span>
                 </div>
-                <div className="border-t border-[#252525] pt-3 flex justify-between">
-                  <span className="font-condensed font-bold text-white uppercase tracking-wide">Total</span>
-                  <span className="text-xl font-condensed font-bold text-[#3B9EE8]">{formatPrice(cart.total || 0)}</span>
+                <div className="border-t border-hairline pt-3 flex justify-between">
+                  <span className="font-display font-bold text-ink uppercase tracking-wide">Total</span>
+                  <span className="text-xl font-display font-bold text-gold">{formatPrice(cart.total || 0)}</span>
                 </div>
-                <p className="text-xs text-[#555555] font-body">* Final tax calculated at checkout</p>
+                <p className="text-xs text-ink-muted font-display">* Final tax calculated at checkout</p>
               </div>
 
               <Link
                 href="/checkout"
-                className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors flex items-center justify-center gap-2"
               >
                 Proceed to Checkout
                 <ArrowRight className="h-5 w-5" />
               </Link>
 
               <div className="mt-4 text-center">
-                <p className="text-xs text-[#555555] font-body">🔒 Secure Checkout · Safe Payment</p>
+                <p className="text-xs text-ink-muted font-display">🔒 Secure Checkout · Safe Payment</p>
               </div>
 
               {/* Promo code */}
-              <div className="mt-6 pt-6 border-t border-[#252525]">
-                <p className="text-sm font-condensed font-bold text-[#C4C4C4] uppercase tracking-widest mb-2">Have a promo code?</p>
+              <div className="mt-6 pt-6 border-t border-hairline">
+                <p className="text-sm font-display font-bold text-ink/70 uppercase tracking-widest mb-2">Have a promo code?</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Enter code"
-                    className="flex-1 bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-[#3B9EE8] font-body"
+                    className="flex-1 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-gold font-display"
                   />
-                  <button className="bg-[#252525] hover:bg-[#3B9EE8] text-[#C4C4C4] hover:text-white px-4 py-2 rounded-sm text-sm font-condensed font-bold uppercase tracking-widest transition-colors">
+                  <button className="bg-obsidian-raised hover:bg-gold text-obsidian/70 hover:text-obsidian px-4 py-2 rounded-sm text-sm font-display font-bold uppercase tracking-widest transition-colors">
                     Apply
                   </button>
                 </div>

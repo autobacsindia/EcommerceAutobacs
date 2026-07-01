@@ -68,19 +68,19 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 
             id="complementary-products-heading"
-            className={`text-2xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}
+            className={`text-2xl font-bold mb-6 ${isDark ? 'text-ink' : 'text-ink'}`}
           >
             Frequently Bought Together
           </h2>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className={`${isDark ? 'bg-zinc-800' : 'bg-white'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
-                <div className={`aspect-square ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
+              <div key={i} className={`${isDark ? 'bg-zinc-800' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
+                <div className={`aspect-square ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'}`} />
                 <div className="p-4 space-y-3">
-                  <div className={`h-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded w-3/4`} />
-                  <div className={`h-3 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded w-1/2`} />
-                  <div className={`h-5 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} rounded w-1/3`} />
+                  <div className={`h-4 ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'} rounded w-3/4`} />
+                  <div className={`h-3 ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'} rounded w-1/2`} />
+                  <div className={`h-5 ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'} rounded w-1/3`} />
                 </div>
               </div>
             ))}
@@ -105,12 +105,12 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
           <div>
             <h2 
               id="complementary-products-heading"
-              className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}
+              className={`text-2xl font-bold ${isDark ? 'text-ink' : 'text-ink'}`}
               aria-live="polite"
             >
               Frequently Bought Together
             </h2>
-            <p className={`text-sm mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+            <p className={`text-sm mt-1 ${isDark ? 'text-zinc-400' : 'text-ink-muted'}`}>
               Complete your purchase with these complementary items
             </p>
           </div>
@@ -150,13 +150,13 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
             return (
               <article 
                 key={product._id}
-                className={`${isDark ? 'bg-zinc-800 hover:bg-zinc-750' : 'bg-white hover:bg-gray-50'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2`}
+                className={`${isDark ? 'bg-zinc-800 hover:bg-zinc-750' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
                 tabIndex={0}
                 role="link"
                 aria-label={`View ${product.name} - ₹${product.price}`}
               >
                 <Link href={`/products/${product.slug}`} className="block">
-                  <div className={`relative aspect-square ${isDark ? 'bg-zinc-700' : 'bg-gray-50'} overflow-hidden`}>
+                  <div className={`relative aspect-square ${isDark ? 'bg-zinc-700' : 'bg-obsidian-deep'} overflow-hidden`}>
                     <Image
                       src={getImageUrl()}
                       alt={getImageAlt()}
@@ -166,23 +166,23 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                       loading="lazy"
                     />
                     {discount && (
-                      <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
+                      <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-1 rounded text-xs font-bold">
                         {discount}% OFF
                       </div>
                     )}
                   </div>
                   
                   <div className="p-4">
-                    <h3 className={`font-semibold text-sm line-clamp-2 mb-2 ${isDark ? 'text-white hover:text-blue-400' : 'text-gray-900 hover:text-blue-600'} transition-colors`}>
+                    <h3 className={`font-semibold text-sm line-clamp-2 mb-2 ${isDark ? 'text-ink hover:text-gold' : 'text-ink hover:text-gold'} transition-colors`}>
                       {product.name}
                     </h3>
                     
                     <div className="flex items-baseline gap-2 mb-2">
-                      <span className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      <span className={`text-lg font-bold ${isDark ? 'text-ink' : 'text-ink'}`}>
                         ₹{product.price.toLocaleString('en-IN')}
                       </span>
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-500'} line-through`}>
+                        <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-ink-muted'} line-through`}>
                           ₹{product.originalPrice.toLocaleString('en-IN')}
                         </span>
                       )}
@@ -193,7 +193,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                         <svg className="w-4 h-4 text-yellow-400 fill-current" viewBox="0 0 20 20">
                           <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
                         </svg>
-                        <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                        <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-ink-muted'}`}>
                           {product.averageRating.toFixed(1)} ({product.totalReviews || 0})
                         </span>
                       </div>
@@ -203,7 +203,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-indigo-900/50 text-indigo-300' : 'bg-indigo-100 text-indigo-800'}`}>
                         {product.brand || 'Autobacs'}
                       </span>
-                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-ink-muted'}`}>
                         {product.categories?.[0]?.name || 'Auto Parts'}
                       </span>
                     </div>
@@ -217,7 +217,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
         <div className="mt-8 text-center">
           <Link 
             href="/products"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-obsidian bg-gold hover:bg-gold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
           >
             Browse All Products
           </Link>

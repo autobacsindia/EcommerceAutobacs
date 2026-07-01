@@ -44,21 +44,21 @@ function CommentItem({ comment, onReply, isReplying }: CommentItemProps) {
     <div className="flex gap-3">
       <div
         aria-hidden="true"
-        className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-xs font-bold select-none"
+        className="flex-shrink-0 w-9 h-9 rounded-full bg-obsidian-raised flex items-center justify-center text-ink-muted text-xs font-bold select-none"
       >
         {initials(comment.name)}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1">
-          <span className="font-semibold text-sm text-gray-900">{comment.name}</span>
-          <span className="text-xs text-gray-400">{timeAgo(comment.createdAt)}</span>
+          <span className="font-semibold text-sm text-ink">{comment.name}</span>
+          <span className="text-xs text-ink-muted">{timeAgo(comment.createdAt)}</span>
         </div>
-        <p className="text-sm text-gray-700 leading-relaxed">{comment.comment}</p>
+        <p className="text-sm text-ink/80 leading-relaxed">{comment.comment}</p>
         {onReply && (
           <button
             onClick={onReply}
             className={`mt-1.5 text-xs font-medium transition-colors ${
-              isReplying ? 'text-red-600' : 'text-gray-400 hover:text-gray-700'
+              isReplying ? 'text-red-600' : 'text-ink-muted hover:text-ink/80'
             }`}
           >
             {isReplying ? 'Cancel reply' : 'Reply'}
@@ -128,11 +128,11 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
   const replyTarget = comments.find(c => c._id === replyTo);
 
   const inputClass =
-    'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent';
+    'w-full px-3 py-2 text-sm border border-hairline rounded-lg text-ink bg-obsidian placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent';
 
   return (
-    <section className="mt-6 bg-white rounded-xl border border-gray-200 p-6 light-inputs">
-      <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+    <section className="mt-6 bg-obsidian rounded-xl border border-hairline p-6 light-inputs">
+      <h2 className="text-xl font-bold text-ink mb-6 flex items-center gap-2">
         <MessageSquare className="h-5 w-5" />
         Comments{!loading && ` (${comments.length})`}
       </h2>
@@ -142,20 +142,20 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
         <div className="space-y-4 mb-8">
           {[1, 2].map(i => (
             <div key={i} className="animate-pulse flex gap-3">
-              <div className="w-9 h-9 rounded-full bg-gray-200 flex-shrink-0" />
+              <div className="w-9 h-9 rounded-full bg-obsidian-raised flex-shrink-0" />
               <div className="flex-1 space-y-2">
-                <div className="h-3 bg-gray-200 rounded w-1/4" />
-                <div className="h-3 bg-gray-200 rounded w-full" />
-                <div className="h-3 bg-gray-200 rounded w-3/4" />
+                <div className="h-3 bg-obsidian-raised rounded w-1/4" />
+                <div className="h-3 bg-obsidian-raised rounded w-full" />
+                <div className="h-3 bg-obsidian-raised rounded w-3/4" />
               </div>
             </div>
           ))}
         </div>
       ) : topLevel.length === 0 ? (
         <div className="text-center py-8 mb-8">
-          <MessageSquare className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-          <p className="font-medium text-gray-700">Be the first to comment</p>
-          <p className="text-sm text-gray-500 mt-1">Share your thoughts on this article</p>
+          <MessageSquare className="h-10 w-10 mx-auto mb-3 text-ink/70" />
+          <p className="font-medium text-ink/80">Be the first to comment</p>
+          <p className="text-sm text-ink-muted mt-1">Share your thoughts on this article</p>
         </div>
       ) : (
         <div className="space-y-6 mb-8">
@@ -168,7 +168,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
               />
               {/* Threaded replies */}
               {repliesFor(c._id).length > 0 && (
-                <div className="ml-12 mt-3 space-y-4 border-l-2 border-gray-100 pl-4">
+                <div className="ml-12 mt-3 space-y-4 border-l-2 border-hairline pl-4">
                   {repliesFor(c._id).map(r => (
                     <CommentItem key={r._id} comment={r} />
                   ))}
@@ -180,14 +180,14 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
       )}
 
       {/* Comment form */}
-      <div className="border-t border-gray-100 pt-6">
-        <h3 className="font-semibold text-gray-900 mb-4">
+      <div className="border-t border-hairline pt-6">
+        <h3 className="font-semibold text-ink mb-4">
           {replyTarget ? (
             <span className="flex items-center gap-2">
               Replying to <span className="text-red-600">{replyTarget.name}</span>
               <button
                 onClick={() => setReplyTo(null)}
-                className="text-xs text-gray-400 hover:text-gray-700 font-normal underline ml-1"
+                className="text-xs text-ink-muted hover:text-ink/80 font-normal underline ml-1"
               >
                 cancel
               </button>
@@ -198,7 +198,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="comment-name" className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="comment-name" className="block text-xs font-medium text-ink/80 mb-1">
                 Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -213,7 +213,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
               />
             </div>
             <div>
-              <label htmlFor="comment-email" className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="comment-email" className="block text-xs font-medium text-ink/80 mb-1">
                 Email <span className="text-red-500">*</span>
               </label>
               <input
@@ -230,7 +230,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
           </div>
 
           <div>
-            <label htmlFor="comment-text" className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="comment-text" className="block text-xs font-medium text-ink/80 mb-1">
               Comment <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -255,7 +255,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
           <button
             type="submit"
             disabled={submitting}
-            className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-ink text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-4 w-4" />
             {submitting ? 'Posting…' : 'Post Comment'}

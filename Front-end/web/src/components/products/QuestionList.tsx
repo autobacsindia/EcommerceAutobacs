@@ -59,7 +59,7 @@ export default function QuestionList({ productId, legacyQna = [] }: QuestionList
   ];
 
   if (loading && legacyQna.length === 0) {
-    return <div className="text-center py-4 text-gray-500">Loading questions...</div>;
+    return <div className="text-center py-4 text-ink-muted">Loading questions...</div>;
   }
 
   if (allQuestions.length === 0) {
@@ -69,12 +69,12 @@ export default function QuestionList({ productId, legacyQna = [] }: QuestionList
   return (
     <div className="space-y-4 mt-6">
       {allQuestions.map((item) => (
-        <div key={item.id} className="bg-white border border-gray-200 rounded-xl p-6">
+        <div key={item.id} className="bg-obsidian border border-hairline rounded-xl p-6">
           <div className="flex items-start gap-3 mb-3">
-            <span className="flex-shrink-0 h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">Q</span>
+            <span className="flex-shrink-0 h-6 w-6 rounded-full bg-blue-100 text-gold flex items-center justify-center font-bold text-xs">Q</span>
             <div>
-              <h3 className="font-semibold text-gray-900">{item.question}</h3>
-              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+              <h3 className="font-semibold text-ink">{item.question}</h3>
+              <div className="flex items-center gap-2 mt-1 text-xs text-ink-muted">
                 <span className="flex items-center gap-1">
                   <User className="h-3 w-3" />
                   {item.user}
@@ -90,9 +90,9 @@ export default function QuestionList({ productId, legacyQna = [] }: QuestionList
           </div>
           
           {item.answer && (
-            <div className="flex items-start gap-3 pl-9 border-t border-gray-100 pt-3 mt-3">
+            <div className="flex items-start gap-3 pl-9 border-t border-hairline pt-3 mt-3">
               <span className="flex-shrink-0 h-6 w-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold text-xs">A</span>
-              <p className="text-gray-700 leading-relaxed">{item.answer}</p>
+              <p className="text-ink/80 leading-relaxed">{item.answer}</p>
             </div>
           )}
         </div>

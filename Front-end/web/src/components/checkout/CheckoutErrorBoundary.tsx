@@ -100,15 +100,15 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
       const feature = this.props.feature || 'checkout';
       
       return (
-        <div className="min-h-[400px] flex items-center justify-center p-6 bg-gray-50">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+        <div className="min-h-[400px] flex items-center justify-center p-6 bg-obsidian-deep">
+          <div className="max-w-md w-full bg-obsidian rounded-lg shadow-lg p-8 text-center">
             {/* Error Icon */}
             <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
 
             {/* Error Title */}
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <h2 className="text-2xl font-bold text-ink mb-2">
               {feature === 'payment' 
                 ? 'Payment System Error'
                 : feature === 'cart'
@@ -117,7 +117,7 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
             </h2>
 
             {/* Error Message */}
-            <p className="text-gray-600 mb-6">
+            <p className="text-ink-muted mb-6">
               {feature === 'payment'
                 ? 'We couldn\'t initialize the payment system. Please try again.'
                 : feature === 'cart'
@@ -128,11 +128,11 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
             {/* Cart Status (for cart/checkout errors) */}
             {(feature === 'cart' || feature === 'checkout') && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-center gap-2 text-blue-700">
+                <div className="flex items-center justify-center gap-2 text-gold">
                   <ShoppingCart className="w-5 h-5" />
                   <span className="font-medium">Your cart is saved</span>
                 </div>
-                <p className="text-sm text-blue-600 mt-1">
+                <p className="text-sm text-gold mt-1">
                   Your items are safe. You can continue shopping or try checkout again.
                 </p>
               </div>
@@ -142,14 +142,14 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
             <div className="space-y-3">
               <button
                 onClick={this.handleRetry}
-                className="w-full px-6 py-3 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+                className="w-full px-6 py-3 bg-obsidian-deep text-ink rounded-lg font-medium hover:bg-obsidian-raised transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
                 {feature === 'payment' ? 'Retry Payment' : 'Try Again'}
               </button>
 
               {/* Support Contact */}
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center justify-center gap-2 text-sm text-ink-muted">
                 <Headphones className="w-4 h-4" />
                 <span>Need help? Contact support</span>
               </div>
@@ -158,10 +158,10 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
             {/* Error Details (Dev Only) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-6 text-left">
-                <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                <summary className="cursor-pointer text-sm text-ink-muted hover:text-ink/80">
                   Error Details (Dev Only)
                 </summary>
-                <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-auto">
+                <pre className="mt-2 p-3 bg-obsidian-raised rounded text-xs overflow-auto">
                   {this.state.error.message}
                   {'\n\n'}
                   {this.state.error.stack}

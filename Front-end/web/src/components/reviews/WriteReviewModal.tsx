@@ -76,14 +76,14 @@ export default function WriteReviewModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-lg w-full flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-obsidian rounded-lg max-w-lg w-full flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-bold text-gray-900">Write a Review</h3>
+          <h3 className="text-lg font-bold text-ink">Write a Review</h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition"
+            className="text-ink-muted hover:text-ink-muted transition"
           >
             <X className="h-6 w-6" />
           </button>
@@ -92,7 +92,7 @@ export default function WriteReviewModal({
         {/* Content */}
         <div className="p-6 overflow-y-auto">
           {/* Product Info */}
-          <div className="flex items-center gap-4 mb-6 p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-4 mb-6 p-3 bg-obsidian-deep rounded-lg">
             {productImage ? (
               <img
                 src={productImage}
@@ -100,13 +100,13 @@ export default function WriteReviewModal({
                 className="w-12 h-12 object-cover rounded"
               />
             ) : (
-              <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-xs">
+              <div className="w-12 h-12 bg-obsidian-raised rounded flex items-center justify-center text-ink-muted text-xs">
                 No Img
               </div>
             )}
             <div>
-              <p className="font-medium text-gray-900 line-clamp-1">{productName}</p>
-              <p className="text-sm text-gray-500">Order ID: {orderId.slice(-6).toUpperCase()}</p>
+              <p className="font-medium text-ink line-clamp-1">{productName}</p>
+              <p className="text-sm text-ink-muted">Order ID: {orderId.slice(-6).toUpperCase()}</p>
             </div>
           </div>
 
@@ -120,7 +120,7 @@ export default function WriteReviewModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Rating */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-ink/80">
                 Overall Rating
               </label>
               <div className="flex items-center gap-1">
@@ -137,12 +137,12 @@ export default function WriteReviewModal({
                       className={`h-8 w-8 ${
                         star <= (hoverRating || rating)
                           ? 'fill-yellow-400 text-yellow-400'
-                          : 'text-gray-300'
+                          : 'text-ink/70'
                       }`}
                     />
                   </button>
                 ))}
-                <span className="ml-2 text-sm font-medium text-gray-600">
+                <span className="ml-2 text-sm font-medium text-ink-muted">
                   {hoverRating || rating ? (
                     <span className="text-yellow-600">
                       {hoverRating || rating} Star{(hoverRating || rating) > 1 ? 's' : ''}
@@ -156,7 +156,7 @@ export default function WriteReviewModal({
 
             {/* Title */}
             <div className="space-y-2">
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="title" className="block text-sm font-medium text-ink/80">
                 Review Title (Optional)
               </label>
               <input
@@ -165,13 +165,13 @@ export default function WriteReviewModal({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Summarize your experience"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                className="w-full px-3 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-gold transition"
               />
             </div>
 
             {/* Comment */}
             <div className="space-y-2">
-              <label htmlFor="comment" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="comment" className="block text-sm font-medium text-ink/80">
                 Review Details
               </label>
               <textarea
@@ -180,10 +180,10 @@ export default function WriteReviewModal({
                 onChange={(e) => setComment(e.target.value)}
                 rows={4}
                 placeholder="What did you like or dislike? How was the quality?"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition resize-none"
+                className="w-full px-3 py-2 border border-hairline rounded-lg focus:ring-2 focus:ring-gold focus:border-gold transition resize-none"
               />
               <div className="flex justify-end">
-                <span className={`text-xs ${comment.length > 0 && comment.length < 10 ? 'text-red-500' : 'text-gray-500'}`}>
+                <span className={`text-xs ${comment.length > 0 && comment.length < 10 ? 'text-red-500' : 'text-ink-muted'}`}>
                   {comment.length} characters (min. 10)
                 </span>
               </div>
@@ -194,7 +194,7 @@ export default function WriteReviewModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                className="px-4 py-2 text-sm font-medium text-ink/80 bg-obsidian border border-hairline rounded-lg hover:bg-obsidian-deep transition"
                 disabled={isSubmitting}
               >
                 Cancel
@@ -202,7 +202,7 @@ export default function WriteReviewModal({
               <button
                 type="submit"
                 disabled={isSubmitting || rating === 0 || comment.trim().length < 10}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium text-obsidian bg-gold rounded-lg hover:bg-gold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSubmitting ? (
                   <>

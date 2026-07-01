@@ -145,10 +145,10 @@ export default function VehicleFilterSidebar() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <h3 className="font-semibold text-gray-900 mb-4">Filter by Vehicle</h3>
+      <div className="bg-obsidian rounded-lg shadow-md p-4">
+        <h3 className="font-semibold text-ink mb-4">Filter by Vehicle</h3>
         <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gold"></div>
           <span>Loading vehicles...</span>
         </div>
       </div>
@@ -157,8 +157,8 @@ export default function VehicleFilterSidebar() {
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <h3 className="font-semibold text-gray-900 mb-4">Filter by Vehicle</h3>
+      <div className="bg-obsidian rounded-lg shadow-md p-4">
+        <h3 className="font-semibold text-ink mb-4">Filter by Vehicle</h3>
         <div className="text-red-500 text-sm">
           {error}
         </div>
@@ -167,13 +167,13 @@ export default function VehicleFilterSidebar() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
+    <div className="bg-obsidian rounded-lg shadow-md p-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold text-gray-900">Filter by Vehicle</h3>
+        <h3 className="font-semibold text-ink">Filter by Vehicle</h3>
         {(currentVehicleMake || currentVehicleModel) && (
           <button
             onClick={clearVehicleFilters}
-            className="text-sm text-blue-600 hover:text-blue-800"
+            className="text-sm text-gold hover:text-blue-800"
           >
             Clear
           </button>
@@ -182,14 +182,14 @@ export default function VehicleFilterSidebar() {
 
       <div className="space-y-4">
         <div>
-          <label htmlFor="sidebar-vehicle-make" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="sidebar-vehicle-make" className="block text-sm font-medium text-ink/80 mb-1">
             Make
           </label>
           <select
             id="sidebar-vehicle-make"
             value={selectedMake}
             onChange={handleMakeChange}
-            className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 shadow-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
           >
             <option value="">All Makes</option>
             {makes.map((make) => (
@@ -201,7 +201,7 @@ export default function VehicleFilterSidebar() {
         </div>
 
         <div>
-          <label htmlFor="sidebar-vehicle-model" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="sidebar-vehicle-model" className="block text-sm font-medium text-ink/80 mb-1">
             Model
           </label>
           <select
@@ -209,7 +209,7 @@ export default function VehicleFilterSidebar() {
             value={selectedModel}
             onChange={handleModelChange}
             disabled={!selectedMake && !currentVehicleMake}
-            className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+            className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 shadow-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold disabled:bg-obsidian-raised"
           >
             <option value="">All Models</option>
             {models.map((model) => (
@@ -222,15 +222,15 @@ export default function VehicleFilterSidebar() {
       </div>
 
       {(currentVehicleMake || currentVehicleModel) && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <h4 className="text-sm font-medium text-gray-900 mb-2">Active Filters</h4>
+        <div className="mt-4 pt-4 border-t border-hairline">
+          <h4 className="text-sm font-medium text-ink mb-2">Active Filters</h4>
           <div className="flex flex-wrap gap-2">
             {currentVehicleMake && (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                 {currentVehicleMake}
                 <button
                   type="button"
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-blue-400 hover:bg-blue-200 hover:text-blue-500 focus:outline-none"
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gold hover:bg-blue-200 hover:text-gold focus:outline-none"
                   onClick={() => {
                     const currentParams = new URLSearchParams(searchParams.toString());
                     currentParams.delete('vehicleMake');
@@ -250,7 +250,7 @@ export default function VehicleFilterSidebar() {
                 {currentVehicleModel}
                 <button
                   type="button"
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-blue-400 hover:bg-blue-200 hover:text-blue-500 focus:outline-none"
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gold hover:bg-blue-200 hover:text-gold focus:outline-none"
                   onClick={() => {
                     const currentParams = new URLSearchParams(searchParams.toString());
                     currentParams.delete('vehicleModel');

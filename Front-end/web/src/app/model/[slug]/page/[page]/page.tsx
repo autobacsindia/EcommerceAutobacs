@@ -239,25 +239,25 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
   const paginatedProducts = filteredProducts;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-obsidian">
       {/* Show loading state if slug is not yet available */}
       {!slug ? (
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+            <p className="text-ink-muted">Loading...</p>
           </div>
         </div>
       ) : (
         <>
       
       {/* Hero Section */}
-      <div className="bg-linear-to-r from-blue-900 to-black text-white py-20">
+      <div className="bg-linear-to-r from-blue-900 to-black text-ink py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-5xl font-bold mb-6">{vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
               .filter(word => word)
               .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'} Parts & Accessories</h1>
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+          <p className="text-xl text-ink/70 max-w-3xl mx-auto">
             Find the perfect parts and accessories for your {vehicleName ? vehicleName.replace(/-/g, ' ')
               .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'vehicle'}
           </p>
@@ -280,16 +280,16 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
       {/* Breadcrumb */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <nav className="text-sm text-gray-600">
-          <Link href="/" className="hover:text-blue-600 transition-colors">Home</Link>
+        <nav className="text-sm text-ink-muted">
+          <Link href="/" className="hover:text-gold transition-colors">Home</Link>
           <span className="mx-2">/</span>
-          <Link href="/vehicles" className="hover:text-blue-600 transition-colors">Vehicles</Link>
+          <Link href="/vehicles" className="hover:text-gold transition-colors">Vehicles</Link>
           <span className="mx-2">/</span>
-          <Link href={slug ? `/model/${slug}` : '/vehicles'} className="hover:text-blue-600 transition-colors">
+          <Link href={slug ? `/model/${slug}` : '/vehicles'} className="hover:text-gold transition-colors">
             {vehicleName ? vehicleName.replace(/-/g, ' ').split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'Vehicle'}
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-gray-900 font-medium">Page {pageNumber}</span>
+          <span className="text-ink font-medium">Page {pageNumber}</span>
         </nav>
       </div>
 
@@ -303,22 +303,22 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               <VehicleModelFilterSidebar currentVehicleSlug={slug} />
               
               {/* Category Filters */}
-              <div className="bg-white rounded-xl shadow-md p-6 sticky top-24 border border-gray-100">
-                <h2 className="text-lg font-bold mb-5 flex items-center text-gray-900">
+              <div className="bg-obsidian rounded-xl shadow-md p-6 sticky top-24 border border-hairline">
+                <h2 className="text-lg font-bold mb-5 flex items-center text-ink">
                   <Filter className="h-5 w-5 mr-2" />
                   Category Filters
                 </h2>
                 
                 <div className="mb-6">
-                  <h3 className="font-semibold text-gray-800 mb-4 text-base">Categories</h3>
+                  <h3 className="font-semibold text-ink mb-4 text-base">Categories</h3>
                   <ul className="space-y-2">
                     <li>
                       <button
                         onClick={() => handleCategoryChange('')}
                         className={`text-left w-full px-4 py-2.5 rounded-lg text-sm transition-colors ${
                           selectedCategory === '' 
-                            ? 'bg-blue-50 text-blue-700 font-medium border border-blue-200' 
-                            : 'text-gray-700 hover:bg-gray-50'
+                            ? 'bg-blue-50 text-gold font-medium border border-blue-200' 
+                            : 'text-ink/80 hover:bg-obsidian-deep'
                         }`}
                       >
                         All Categories
@@ -339,8 +339,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                             onClick={() => handleCategoryChange(category.slug)}
                             className={`text-left w-full px-4 py-2.5 rounded-lg text-sm transition-colors ${
                               selectedCategory === category.slug
-                                ? 'bg-blue-50 text-blue-700 font-medium border border-blue-200'
-                                : 'text-gray-700 hover:bg-gray-50'
+                                ? 'bg-blue-50 text-gold font-medium border border-blue-200'
+                                : 'text-ink/80 hover:bg-obsidian-deep'
                             }`}
                           >
                             {category.name} ({categoryProductCount})
@@ -358,7 +358,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           <div className="lg:col-span-3">
             {/* Results Header */}
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-gray-600 text-lg">
+              <p className="text-ink-muted text-lg">
                 {loading ? (
                   'Loading products...'
                 ) : filteredProducts.length > 0 ? (
@@ -376,19 +376,19 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
               {/* Controls */}
               <div className="flex items-center gap-4">
                 {/* Mobile Filter Button */}
-                <button className="lg:hidden flex items-center gap-2 text-sm text-gray-700 bg-white px-4 py-2 rounded-md shadow-sm border border-gray-200 hover:border-gray-300 transition-colors">
+                <button className="lg:hidden flex items-center gap-2 text-sm text-ink/80 bg-obsidian px-4 py-2 rounded-md shadow-sm border border-hairline hover:border-hairline transition-colors">
                   <Filter className="h-4 w-4" />
                   Filters
                 </button>
                 
                 {/* Sort Dropdown */}
                 <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-gray-700 font-medium">
+                  <label htmlFor="sort" className="text-sm text-ink/80 font-medium">
                     Sort by:
                   </label>
                   <select
                     id="sort"
-                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="border border-hairline rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold bg-obsidian"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
@@ -407,15 +407,15 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-gray-100 rounded-xl overflow-hidden shadow-sm animate-pulse border border-gray-200">
-                    <div className="h-48 bg-gray-200"></div>
+                  <div key={index} className="bg-obsidian-raised rounded-xl overflow-hidden shadow-sm animate-pulse border border-hairline">
+                    <div className="h-48 bg-obsidian-raised"></div>
                     <div className="p-5">
-                      <div className="h-5 bg-gray-200 rounded mb-3"></div>
-                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-4"></div>
-                      <div className="h-6 bg-gray-200 rounded w-1/2 mb-5"></div>
+                      <div className="h-5 bg-obsidian-raised rounded mb-3"></div>
+                      <div className="h-4 bg-obsidian-raised rounded w-2/3 mb-4"></div>
+                      <div className="h-6 bg-obsidian-raised rounded w-1/2 mb-5"></div>
                       <div className="flex justify-between gap-3">
-                        <div className="h-10 bg-gray-200 rounded w-full"></div>
-                        <div className="h-10 bg-gray-200 rounded w-12"></div>
+                        <div className="h-10 bg-obsidian-raised rounded w-full"></div>
+                        <div className="h-10 bg-obsidian-raised rounded w-12"></div>
                       </div>
                     </div>
                   </div>
@@ -427,7 +427,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                 <p className="text-red-600 mb-5">{error}</p>
                 <button
                   onClick={() => window.location.reload()}
-                  className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors"
+                  className="bg-red-600 text-ink px-6 py-3 rounded-md hover:bg-red-700 transition-colors"
                 >
                   Retry
                 </button>
@@ -496,10 +496,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     return (
                     <div
                       key={productId || (product as any).id || (product as any).sku || `product-${Math.random()}`}
-                      className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 group"
+                      className="bg-obsidian rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-hairline group"
                     >
                       {/* Product Image */}
-                      <Link href={productPageUrl} className="block relative h-52 bg-gray-100">
+                      <Link href={productPageUrl} className="block relative h-52 bg-obsidian-raised">
                         {imageSrc ? (
                           <ProductImage
                             src={imageSrc}
@@ -507,14 +507,14 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                             className="object-cover w-full h-full"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                            <span className="text-gray-400">No image available</span>
+                          <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                            <span className="text-ink-muted">No image available</span>
                           </div>
                         )}
                         
                         {/* Wishlist Button */}
                         <button
-                          className={`absolute top-3 right-3 p-2 bg-white rounded-full shadow-md hover:bg-gray-50 transition-all duration-200 ${
+                          className={`absolute top-3 right-3 p-2 bg-obsidian rounded-full shadow-md hover:bg-obsidian-deep transition-all duration-200 ${
                             productId && animatingItems[productId] ? 'animate-pulse' : ''
                           }`}
                           onClick={(e) => handleToggleWishlist(product, e)}
@@ -522,29 +522,29 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           <Heart className={`h-5 w-5 transition-colors duration-200 ${
                             productId && isInWishlist(productId) 
                               ? 'text-red-500 fill-current' 
-                              : 'text-gray-500'
+                              : 'text-ink-muted'
                           }`} />
                         </button>
 
                         {/* Badges */}
                         <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
                           {isOutOfStock && (
-                            <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
+                            <div className="bg-red-500 text-ink px-2.5 py-1 rounded-md text-xs font-semibold">
                               Out of Stock
                             </div>
                           )}
                           {isFeatured && hasStock && (
-                            <div className="bg-blue-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
+                            <div className="bg-gold text-obsidian px-2.5 py-1 rounded-md text-xs font-semibold">
                               Popular
                             </div>
                           )}
                           {hasSale && hasStock && (
-                            <div className="bg-red-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
+                            <div className="bg-red-500 text-ink px-2.5 py-1 rounded-md text-xs font-semibold">
                               Sale
                             </div>
                           )}
                           {/* Vehicle Compatibility Badge */}
-                          <div className="bg-green-500 text-white px-2.5 py-1 rounded-md text-xs font-semibold">
+                          <div className="bg-green-500 text-ink px-2.5 py-1 rounded-md text-xs font-semibold">
                             Fits {vehicleName.replace(/-/g, ' ').split(' ')
                               .map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                           </div>
@@ -554,7 +554,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                       {/* Product Info */}
                       <div className="p-5">
                         {/* Categories */}
-                        <p className="text-xs text-gray-500 uppercase mb-2">
+                        <p className="text-xs text-ink-muted uppercase mb-2">
                           {product.categories && Array.isArray(product.categories) && product.categories.length > 0
                             ? product.categories.filter((cat: any) => cat && cat.name).map((cat: any) => cat.name).join(', ')
                             : 'Uncategorized'}
@@ -562,7 +562,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
 
                         {/* Product Name */}
                         <Link href={productPageUrl}>
-                          <h3 className="font-bold text-gray-900 mb-3 line-clamp-2 hover:text-blue-600 transition-colors">
+                          <h3 className="font-bold text-ink mb-3 line-clamp-2 hover:text-gold transition-colors">
                             {product.name}
                           </h3>
                         </Link>
@@ -577,7 +577,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                                   className={`h-4 w-4 ${
                                     star <= averageRatingValue 
                                       ? 'text-yellow-400' 
-                                      : 'text-gray-300'
+                                      : 'text-ink/70'
                                   }`}
                                   fill="currentColor"
                                   viewBox="0 0 20 20"
@@ -586,26 +586,26 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                                 </svg>
                               ))}
                             </div>
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm text-ink-muted">
                               ({averageRatingValue.toFixed(1)})
                             </span>
                           </div>
                         )}
 
                         {hasValidPrice && (
-                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-hairline">
                             <div>
                               {hasOriginalPrice ? (
                                 <div className="flex items-baseline gap-2">
-                                  <p className="text-xl font-bold text-blue-600">
+                                  <p className="text-xl font-bold text-gold">
                                     {formatPrice(priceValue)}
                                   </p>
-                                  <p className="text-sm text-gray-500 line-through">
+                                  <p className="text-sm text-ink-muted line-through">
                                     {formatPrice(originalPriceNumber)}
                                   </p>
                                 </div>
                               ) : (
-                                <p className="text-xl font-bold text-blue-600">
+                                <p className="text-xl font-bold text-gold">
                                   {formatPrice(priceValue)}
                                 </p>
                               )}
@@ -614,7 +614,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                             <button
                               onClick={() => handleAddToCart(product)}
                               disabled={product.stock_status !== 'instock'}
-                              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                              className="flex items-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed"
                             >
                               <ShoppingCart className="h-4 w-4" />
                               <span className="text-sm font-medium">Add</span>
@@ -640,7 +640,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           }
                         }}
                         disabled={pageNumber === 1}
-                        className={`px-4 py-2 rounded-md border ${pageNumber === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                        className={`px-4 py-2 rounded-md border ${pageNumber === 1 ? 'bg-obsidian-raised text-ink-muted cursor-not-allowed' : 'bg-obsidian text-ink/80 hover:bg-obsidian-deep border-hairline'}`}
                       >
                         Previous
                       </button>
@@ -674,7 +674,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                                 router.push(baseUrl);
                               }
                             }}
-                            className={`px-4 py-2 rounded-md border ${pageNumber === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                            className={`px-4 py-2 rounded-md border ${pageNumber === pageNum ? 'bg-gold text-obsidian border-gold' : 'bg-obsidian text-obsidian/80 hover:bg-obsidian-deep border-hairline'}`}
                           >
                             {pageNum}
                           </button>
@@ -690,7 +690,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           }
                         }}
                         disabled={pageNumber === totalPages}
-                        className={`px-4 py-2 rounded-md border ${pageNumber === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-300'}`}
+                        className={`px-4 py-2 rounded-md border ${pageNumber === totalPages ? 'bg-obsidian-raised text-ink-muted cursor-not-allowed' : 'bg-obsidian text-ink/80 hover:bg-obsidian-deep border-hairline'}`}
                       >
                         Next
                       </button>
@@ -699,9 +699,9 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                 )}
               </div>
             ) : (              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg mb-4">No products found for {vehicleName ? vehicleName.replace(/-/g, ' ')
+                <p className="text-ink-muted text-lg mb-4">No products found for {vehicleName ? vehicleName.replace(/-/g, ' ')
                   .split(' ').filter(word => word).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'this vehicle'}</p>
-                <Link href={slug ? `/model/${slug}` : '/vehicles'} className="text-blue-600 hover:text-blue-700 font-medium">
+                <Link href={slug ? `/model/${slug}` : '/vehicles'} className="text-gold hover:text-gold font-medium">
                   View all products
                 </Link>
               </div>
@@ -713,7 +713,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         {Array.isArray(relatedVehicles) && relatedVehicles.length > 0 && (
           <section className="mt-16">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-8">Related {vehicle?.make || 'Vehicles'}</h2>
+              <h2 className="text-2xl font-bold text-ink mb-8">Related {vehicle?.make || 'Vehicles'}</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
                 {relatedVehicles
                   .filter(v => v && v._id && v.slug)
@@ -724,7 +724,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}
                     className="block group"
                   >
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100">
+                    <div className="bg-obsidian rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-hairline">
                       <div className="aspect-square bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
                         {(() => {
                           const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
@@ -754,7 +754,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           
                           if (!imageUrl) {
                             return (
-                              <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <div className="w-full h-full flex items-center justify-center text-ink-muted">
                                 <span className="text-sm">No image</span>
                               </div>
                             );
@@ -784,8 +784,8 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                           );
                         })()}
                       </div>
-                      <div className="p-3 text-center bg-gray-50">
-                        <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                      <div className="p-3 text-center bg-obsidian-deep">
+                        <h3 className="text-sm font-semibold text-ink group-hover:text-gold transition-colors">
                           {relatedVehicle.model}
                         </h3>
                       </div>

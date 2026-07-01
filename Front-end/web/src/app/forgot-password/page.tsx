@@ -35,14 +35,14 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#080808] py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-obsidian-deep py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Account</p>
-          <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Account</p>
+          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">
             {migrated ? 'Set Your Password' : 'Forgot Password'}
           </h2>
-          <p className="mt-2 text-sm text-[#C4C4C4] font-body">
+          <p className="mt-2 text-sm text-ink/70 font-display">
             {migrated
               ? 'Welcome back! Your account moved to our new site. Enter your email and we’ll send a link to set a password — your details and orders are safe.'
               : 'Enter your email address and we’ll send you a link to reset your password.'}
@@ -54,12 +54,12 @@ export default function ForgotPasswordPage() {
             <div className="flex gap-3">
               <Mail className="h-5 w-5 text-green-400 shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-sm font-condensed font-bold text-green-400 uppercase tracking-wide">Check Your Email</h3>
-                <p className="mt-2 text-sm text-green-300/80 font-body">
+                <h3 className="text-sm font-display font-bold text-green-400 uppercase tracking-wide">Check Your Email</h3>
+                <p className="mt-2 text-sm text-green-300/80 font-display">
                   If an account exists for {email}, we have sent a password reset link to it.
                   Please check your inbox and spam folder.
                 </p>
-                <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-sm font-condensed font-bold text-green-400 hover:text-white transition-colors uppercase tracking-widest">
+                <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-sm font-display font-bold text-green-400 hover:text-ink transition-colors uppercase tracking-widest">
                   <ArrowLeft className="h-4 w-4" />
                   Back to Login
                 </Link>
@@ -70,12 +70,12 @@ export default function ForgotPasswordPage() {
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             {status === 'error' && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-4">
-                <p className="text-sm text-red-400 font-body">{errorMessage}</p>
+                <p className="text-sm text-red-400 font-display">{errorMessage}</p>
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1">
+              <label htmlFor="email" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
                 Email Address
               </label>
               <input
@@ -86,7 +86,7 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm px-4 py-2.5 focus:outline-none focus:border-[#3B9EE8] font-body text-sm transition-colors"
+                className="w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors"
                 placeholder="you@example.com"
               />
             </div>
@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="w-full flex justify-center items-center py-3 px-4 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex justify-center items-center py-3 px-4 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {status === 'loading' ? (
                 <><Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />Sending...</>
@@ -104,7 +104,7 @@ export default function ForgotPasswordPage() {
             </button>
 
             <div className="flex items-center justify-center">
-              <Link href="/login" className="inline-flex items-center gap-1 font-condensed font-bold text-[#3B9EE8] hover:text-white text-sm uppercase tracking-widest transition-colors">
+              <Link href="/login" className="inline-flex items-center gap-1 font-display font-bold text-gold hover:text-ink text-sm uppercase tracking-widest transition-colors">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Login
               </Link>

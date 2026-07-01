@@ -80,7 +80,7 @@ export default function CategoryMappingDemo() {
       
       <div>
         <h2 className="text-xl font-semibold mb-4">Category Hierarchy</h2>
-        <pre className="bg-gray-100 p-4 rounded overflow-auto">
+        <pre className="bg-obsidian-raised p-4 rounded overflow-auto">
           {JSON.stringify(hierarchy, null, 2)}
         </pre>
       </div>

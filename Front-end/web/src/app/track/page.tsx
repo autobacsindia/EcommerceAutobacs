@@ -101,9 +101,9 @@ function TrackOrderPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200" role="banner">
+      <header className="bg-obsidian shadow-sm border-b border-hairline" role="banner">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center" aria-label="Autobacs Home">
             <span className="text-2xl font-bold text-red-600">AUTOBACS</span>
@@ -111,7 +111,7 @@ function TrackOrderPageInner() {
           {trackingData && (
             <button
               onClick={resetTracking}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded px-2 py-1"
+              className="text-sm text-gold hover:text-gold font-medium focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 rounded px-2 py-1"
               aria-label="Track another order"
             >
               Track Another Order
@@ -125,17 +125,17 @@ function TrackOrderPageInner() {
         {!trackingData ? (
           /* Tracking Input Section */
           <section className="max-w-2xl mx-auto" aria-labelledby="track-heading">
-            <div className="bg-white rounded-lg shadow-md p-8">
-              <h1 id="track-heading" className="text-3xl font-bold text-gray-900 mb-2 text-center">
+            <div className="bg-obsidian rounded-lg shadow-md p-8">
+              <h1 id="track-heading" className="text-3xl font-bold text-ink mb-2 text-center">
                 Track Your Order
               </h1>
-              <p className="text-gray-600 mb-6 text-center">
+              <p className="text-ink-muted mb-6 text-center">
                 Enter your tracking number to see the latest updates on your shipment
               </p>
 
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="tracking-number" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="tracking-number" className="block text-sm font-medium text-ink/80 mb-2">
                     Tracking Number
                   </label>
                   <div className="flex gap-2">
@@ -147,15 +147,15 @@ function TrackOrderPageInner() {
                       onKeyPress={handleKeyPress}
                       placeholder="Enter tracking number"
                       autoFocus
-                      className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        validationError || error ? 'border-red-300' : 'border-gray-300'
+                      className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent ${
+                        validationError || error ? 'border-red-300' : 'border-hairline'
                       }`}
                       disabled={loading}
                     />
                     <button
                       onClick={() => handleTrackingSubmit()}
                       disabled={loading || !trackingNumber.trim()}
-                      className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      className="px-6 py-3 bg-gold text-obsidian font-medium rounded-lg hover:bg-gold disabled:bg-obsidian-raised disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2"
                       aria-label="Track order"
                     >
                       {loading ? 'Tracking...' : 'Track'}
@@ -181,7 +181,7 @@ function TrackOrderPageInner() {
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4" role="complementary" aria-label="Tracking tips">
                   <h3 className="text-sm font-medium text-blue-900 mb-2">Tips:</h3>
-                  <ul className="text-sm text-blue-700 space-y-1">
+                  <ul className="text-sm text-gold space-y-1">
                     <li>• Tracking numbers are 10-25 characters long</li>
                     <li>• You can find your tracking number in the shipping confirmation email</li>
                     <li>• Tracking information updates every few hours</li>
@@ -195,26 +195,26 @@ function TrackOrderPageInner() {
           <section aria-labelledby="results-heading">
             <h2 id="results-heading" className="sr-only">Tracking Results</h2>
             {/* Order Details Card */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Order Details</h2>
+            <div className="bg-obsidian rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-ink mb-4">Order Details</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600">Tracking Number</p>
-                  <p className="text-lg font-semibold text-gray-900">{trackingData.trackingNumber}</p>
+                  <p className="text-sm text-ink-muted">Tracking Number</p>
+                  <p className="text-lg font-semibold text-ink">{trackingData.trackingNumber}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Carrier</p>
-                  <p className="text-lg font-semibold text-gray-900">{trackingData.carrier.name}</p>
+                  <p className="text-sm text-ink-muted">Carrier</p>
+                  <p className="text-lg font-semibold text-ink">{trackingData.carrier.name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Current Status</p>
+                  <p className="text-sm text-ink-muted">Current Status</p>
                   <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeColor(trackingData.currentStatus)}`}>
                     {trackingData.currentStatus.charAt(0).toUpperCase() + trackingData.currentStatus.slice(1)}
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Estimated Delivery</p>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-sm text-ink-muted">Estimated Delivery</p>
+                  <p className="text-lg font-semibold text-ink">
                     {new Date(trackingData.estimatedDelivery).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
@@ -224,9 +224,9 @@ function TrackOrderPageInner() {
                 </div>
               </div>
               
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-sm text-gray-600">Destination</p>
-                <p className="text-base text-gray-900">
+              <div className="mt-4 pt-4 border-t border-hairline">
+                <p className="text-sm text-ink-muted">Destination</p>
+                <p className="text-base text-ink">
                   {trackingData.destination.city}, {trackingData.destination.state} {trackingData.destination.postalCode}
                 </p>
               </div>
@@ -237,7 +237,7 @@ function TrackOrderPageInner() {
                     href={trackingData.carrier.trackingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium"
+                    className="inline-flex items-center text-gold hover:text-gold font-medium"
                   >
                     View on {trackingData.carrier.name} Website
                     <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +251,7 @@ function TrackOrderPageInner() {
             {/* Timeline and Map Grid - Responsive Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Tracking Timeline Card */}
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="bg-obsidian rounded-lg shadow-md p-6">
                 <TrackingTimeline
                   events={trackingData.events}
                   currentStatus={trackingData.currentStatus}
@@ -260,7 +260,7 @@ function TrackOrderPageInner() {
               </div>
 
               {/* Tracking Map Card */}
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="bg-obsidian rounded-lg shadow-md p-6">
                 <TrackingMap
                   events={trackingData.events}
                   destination={trackingData.destination}

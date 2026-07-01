@@ -124,12 +124,12 @@ export default function LocationHistory({
   return (
     <div
       ref={dropdownRef}
-      className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 animate-slideDown"
+      className="absolute top-full left-0 mt-2 w-80 bg-obsidian border border-hairline rounded-lg shadow-lg z-50 animate-slideDown"
       role="menu"
       aria-label="Recent locations"
     >
-      <div className="px-4 py-3 border-b border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+      <div className="px-4 py-3 border-b border-hairline">
+        <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
           <Clock className="h-4 w-4" />
           Recent Locations
         </h3>
@@ -138,16 +138,16 @@ export default function LocationHistory({
       <div className="max-h-80 overflow-y-auto">
         {history.length === 0 ? (
           <div className="px-4 py-8 text-center">
-            <MapPin className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500 mb-1">No recent locations</p>
-            <p className="text-xs text-gray-400 mb-4">Select a location to get started</p>
+            <MapPin className="h-10 w-10 text-ink/70 mx-auto mb-2" />
+            <p className="text-sm text-ink-muted mb-1">No recent locations</p>
+            <p className="text-xs text-ink-muted mb-4">Select a location to get started</p>
             {onOpenSelector && (
               <button
                 onClick={() => {
                   onClose();
                   onOpenSelector();
                 }}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                className="text-sm text-gold hover:text-gold font-medium"
               >
                 Select Location
               </button>
@@ -171,16 +171,16 @@ export default function LocationHistory({
                     isCurrent
                       ? 'bg-blue-50 cursor-default'
                       : isSelected
-                      ? 'bg-gray-100'
-                      : 'hover:bg-gray-50'
-                  } ${index !== history.length - 1 ? 'border-b border-gray-100' : ''}`}
+                      ? 'bg-obsidian-raised'
+                      : 'hover:bg-obsidian-deep'
+                  } ${index !== history.length - 1 ? 'border-b border-hairline' : ''}`}
                   role="menuitem"
                   aria-current={isCurrent ? 'location' : undefined}
                 >
                   <div className="flex items-start gap-3">
                     <MapPin
                       className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
-                        isCurrent ? 'text-blue-600' : 'text-gray-400'
+                        isCurrent ? 'text-gold' : 'text-ink-muted'
                       }`}
                     />
 
@@ -188,19 +188,19 @@ export default function LocationHistory({
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <p
                           className={`text-sm font-medium truncate ${
-                            isCurrent ? 'text-blue-900' : 'text-gray-900'
+                            isCurrent ? 'text-blue-900' : 'text-ink'
                           }`}
                         >
                           {item.address.city}, {item.address.state}
                         </p>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {isCurrent && (
-                            <CheckCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                            <CheckCircle className="h-4 w-4 text-gold flex-shrink-0" />
                           )}
                           {!isCurrent && (
                             <span
                               onClick={(event) => handleRemoveItem(event, item.id)}
-                              className="text-gray-400 hover:text-red-600 cursor-pointer p-1"
+                              className="text-ink-muted hover:text-red-600 cursor-pointer p-1"
                               aria-label="Remove saved location"
                             >
                               <X className="h-4 w-4" />
@@ -209,7 +209,7 @@ export default function LocationHistory({
                         </div>
                       </div>
 
-                      <p className="text-xs text-gray-500 mb-2">
+                      <p className="text-xs text-ink-muted mb-2">
                         PIN: {item.address.postalCode}
                       </p>
 
@@ -221,13 +221,13 @@ export default function LocationHistory({
                             {locationService.getZoneTypeDisplay(item.deliveryZone.type)}
                           </span>
                         )}
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-ink-muted">
                           {formatTimeAgo(item.timestamp)}
                         </span>
                       </div>
 
                       {isCurrent && (
-                        <p className="text-xs text-blue-600 font-medium mt-1">
+                        <p className="text-xs text-gold font-medium mt-1">
                           Current location
                         </p>
                       )}
@@ -241,13 +241,13 @@ export default function LocationHistory({
       </div>
 
       {history.length > 0 && onOpenSelector && (
-        <div className="px-4 py-3 border-t border-gray-200">
+        <div className="px-4 py-3 border-t border-hairline">
           <button
             onClick={() => {
               onClose();
               onOpenSelector();
             }}
-            className="w-full px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="w-full px-4 py-2 text-sm font-medium text-gold hover:bg-blue-50 rounded-lg transition-colors"
           >
             Enter Different Location
           </button>

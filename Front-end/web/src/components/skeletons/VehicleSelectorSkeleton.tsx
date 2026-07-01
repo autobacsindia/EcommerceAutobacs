@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export function VehicleSelectorSkeleton() {
   return (
-    <div className="w-full space-y-4 p-4 border rounded-xl bg-white shadow-sm">
+    <div className="w-full space-y-4 p-4 border rounded-xl bg-obsidian shadow-sm">
       <div className="flex items-center space-x-4">
         <Skeleton className="h-12 w-12 rounded-full" />
         <div className="space-y-2">

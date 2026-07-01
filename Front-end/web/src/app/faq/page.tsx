@@ -53,13 +53,13 @@ export default function FAQPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#080808]">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Hero */}
-      <section className="bg-[#0E0E0E] border-b border-[#252525]">
+      <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Support</p>
-          <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Frequently Asked Questions</h1>
-          <p className="text-[#C4C4C4] font-body max-w-2xl mx-auto">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Support</p>
+          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Frequently Asked Questions</h1>
+          <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Find answers to common questions about our products, services, and policies.
           </p>
         </div>
@@ -69,24 +69,24 @@ export default function FAQPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center">
-            <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-3">How can we help you?</h2>
-            <p className="text-[#C4C4C4] font-body max-w-2xl mx-auto">
+            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-3">How can we help you?</h2>
+            <p className="text-ink/70 font-display max-w-2xl mx-auto">
               Browse our FAQ categories below or contact our support team if you can&apos;t find what you&apos;re looking for.
             </p>
           </div>
 
           <div className="space-y-6">
             {faqCategories.map((category, categoryIndex) => (
-              <div key={categoryIndex} className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden">
-                <div className="bg-[#161616] border-b border-[#252525] px-6 py-4">
-                  <h3 className="font-condensed font-bold text-white uppercase tracking-wide">{category.title}</h3>
+              <div key={categoryIndex} className="bg-obsidian border border-hairline rounded-sm overflow-hidden">
+                <div className="bg-obsidian-raised border-b border-hairline px-6 py-4">
+                  <h3 className="font-display font-bold text-ink uppercase tracking-wide">{category.title}</h3>
                 </div>
                 <div className="p-6">
                   <div className="space-y-5">
                     {category.faqs.map((faq, faqIndex) => (
-                      <div key={faqIndex} className="border-b border-[#252525] pb-5 last:border-b-0 last:pb-0">
-                        <h4 className="font-condensed font-bold text-white uppercase tracking-wide text-sm mb-2">{faq.question}</h4>
-                        <p className="text-[#C4C4C4] font-body text-sm leading-relaxed">{faq.answer}</p>
+                      <div key={faqIndex} className="border-b border-hairline pb-5 last:border-b-0 last:pb-0">
+                        <h4 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">{faq.question}</h4>
+                        <p className="text-ink/70 font-display text-sm leading-relaxed">{faq.answer}</p>
                       </div>
                     ))}
                   </div>
@@ -96,17 +96,17 @@ export default function FAQPage() {
           </div>
 
           {/* Still Need Help */}
-          <div className="mt-12 bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 rounded-sm p-8 text-center">
-            <h3 className="text-xl font-condensed font-bold text-white uppercase tracking-wide mb-3">Still need help?</h3>
-            <p className="text-[#C4C4C4] font-body mb-6 max-w-xl mx-auto">
+          <div className="mt-12 bg-gold/10 border border-gold/30 rounded-sm p-8 text-center">
+            <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-3">Still need help?</h3>
+            <p className="text-ink/70 font-display mb-6 max-w-xl mx-auto">
               Can&apos;t find the answer you&apos;re looking for? Our customer support team is here to help you.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Link href="/contact" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors">
+              <Link href="/contact" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors">
                 Contact Us
                 <ChevronRight className="h-4 w-4" />
               </Link>
-              <Link href="/support/chat" className="inline-flex items-center justify-center px-6 py-3 bg-[#161616] border border-[#252525] text-[#C4C4C4] hover:text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors">
+              <Link href="/support/chat" className="inline-flex items-center justify-center px-6 py-3 bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold uppercase tracking-widest rounded-sm transition-colors">
                 Live Chat
               </Link>
             </div>

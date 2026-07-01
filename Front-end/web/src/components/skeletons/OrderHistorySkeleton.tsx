@@ -11,7 +11,7 @@ export default function OrderHistorySkeleton() {
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
+      <div className="bg-obsidian rounded-lg shadow-sm border p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           {/* Search */}
           <div className="flex-1">
@@ -34,7 +34,7 @@ export default function OrderHistorySkeleton() {
       {/* Orders List */}
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-white border rounded-lg p-6">
+          <div key={i} className="bg-obsidian border rounded-lg p-6">
             <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">

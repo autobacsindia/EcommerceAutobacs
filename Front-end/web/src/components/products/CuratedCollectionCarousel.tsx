@@ -158,15 +158,15 @@ export default function CuratedCollectionCarousel({
     
     switch (collection.badgeColor) {
       case 'red':
-        return `${baseClasses} bg-red-600 text-white`;
+        return `${baseClasses} bg-red-600 text-ink`;
       case 'orange':
-        return `${baseClasses} bg-orange-600 text-white`;
+        return `${baseClasses} bg-orange-600 text-ink`;
       case 'blue':
-        return `${baseClasses} bg-blue-600 text-white`;
+        return `${baseClasses} bg-gold text-obsidian`;
       case 'green':
-        return `${baseClasses} bg-green-600 text-white`;
+        return `${baseClasses} bg-green-600 text-ink`;
       default:
-        return `${baseClasses} bg-gray-900 text-white`;
+        return `${baseClasses} bg-obsidian-deep text-ink`;
     }
   };
 
@@ -174,20 +174,20 @@ export default function CuratedCollectionCarousel({
   if (loading) {
     return (
       <section className={`py-4 ${className}`}>
-        <div className="bg-white rounded-lg p-6">
+        <div className="bg-obsidian rounded-lg p-6">
           {/* Header skeleton */}
           <div className="flex items-center justify-between mb-4">
-            <div className="h-6 bg-gray-200 rounded w-64 animate-pulse" />
-            <div className="h-5 bg-gray-200 rounded w-20 animate-pulse" />
+            <div className="h-6 bg-obsidian-raised rounded w-64 animate-pulse" />
+            <div className="h-5 bg-obsidian-raised rounded w-20 animate-pulse" />
           </div>
           
           {/* Horizontal cards skeleton */}
           <div className="flex gap-4 overflow-hidden">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex-shrink-0 w-52 animate-pulse">
-                <div className="aspect-square bg-gray-200 rounded mb-2" />
-                <div className="h-4 bg-gray-200 rounded mb-2" />
-                <div className="h-5 bg-gray-200 rounded w-1/2" />
+                <div className="aspect-square bg-obsidian-raised rounded mb-2" />
+                <div className="h-4 bg-obsidian-raised rounded mb-2" />
+                <div className="h-5 bg-obsidian-raised rounded w-1/2" />
               </div>
             ))}
           </div>
@@ -203,17 +203,17 @@ export default function CuratedCollectionCarousel({
   return (
     <section className={`py-4 ${className}`}>
       {/* Amazon India Style - Horizontal Scroll with Vertical Cards */}
-      <div className="bg-white rounded-lg p-6">
+      <div className="bg-obsidian rounded-lg p-6">
         {/* Collection Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">
+          <h2 className="text-xl font-bold text-ink">
             {collection.title}
           </h2>
           
           {/* See All Link */}
           <Link
             href={collection.viewAllLink || `/products?search=${collection.searchKeyword}`}
-            className="text-sm text-blue-600 hover:text-orange-600 hover:underline"
+            className="text-sm text-gold hover:text-orange-600 hover:underline"
           >
             See all
           </Link>
@@ -225,11 +225,11 @@ export default function CuratedCollectionCarousel({
           {canScrollLeft && (
             <button
               onClick={() => scroll('left')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow-lg rounded-sm p-3 opacity-90 hover:opacity-100 transition-opacity"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-obsidian shadow-lg rounded-sm p-3 opacity-90 hover:opacity-100 transition-opacity"
               style={{ marginLeft: '-12px' }}
               aria-label="Scroll left"
             >
-              <ChevronLeft className="h-8 w-8 text-gray-900" />
+              <ChevronLeft className="h-8 w-8 text-ink" />
             </button>
           )}
 
@@ -254,7 +254,7 @@ export default function CuratedCollectionCarousel({
                 {/* Vertical Card Layout - Amazon Style */}
                 <div className="relative">
                   {/* Large Product Image */}
-                  <div className="relative aspect-square bg-gray-100 overflow-hidden rounded mb-2">
+                  <div className="relative aspect-square bg-obsidian-raised overflow-hidden rounded mb-2">
                     {product.images && (
                       Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
                         <ProductImage
@@ -269,28 +269,28 @@ export default function CuratedCollectionCarousel({
                           className="object-cover w-full h-full group-hover/card:scale-105 transition-transform duration-300"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                          <span className="text-gray-400 text-xs">No image</span>
+                        <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                          <span className="text-ink-muted text-xs">No image</span>
                         </div>
                       )
                     )}
                     
                     {/* Sale Badge */}
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded-sm text-xs font-bold">
+                      <div className="absolute top-2 left-2 bg-red-600 text-ink px-2 py-1 rounded-sm text-xs font-bold">
                         {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% off
                       </div>
                     )}
 
                     {/* Wishlist Button */}
                     <button
-                      className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-md hover:bg-gray-50 transition-colors"
+                      className="absolute top-2 right-2 p-1.5 bg-obsidian rounded-full shadow-md hover:bg-obsidian-deep transition-colors"
                       onClick={(e) => handleToggleWishlist(product._id, e)}
                     >
                       <Heart className={`h-4 w-4 transition-colors duration-200 ${
                         isInWishlist(product._id) 
                           ? 'text-red-500 fill-current' 
-                          : 'text-gray-600'
+                          : 'text-ink-muted'
                       }`} />
                     </button>
                   </div>
@@ -298,7 +298,7 @@ export default function CuratedCollectionCarousel({
                   {/* Product Info Below Image */}
                   <div>
                     {/* Product Name */}
-                    <h3 className="text-sm text-gray-900 mb-1 line-clamp-2 min-h-[40px] group-hover/card:text-blue-600 transition-colors">
+                    <h3 className="text-sm text-ink mb-1 line-clamp-2 min-h-[40px] group-hover/card:text-gold transition-colors">
                       {product.name}
                     </h3>
 
@@ -307,16 +307,16 @@ export default function CuratedCollectionCarousel({
                       {product.originalPrice && product.originalPrice > product.price ? (
                         <div>
                           <div className="flex items-baseline gap-2">
-                            <span className="text-lg font-bold text-gray-900">
+                            <span className="text-lg font-bold text-ink">
                               {formatPrice(product.price)}
                             </span>
-                            <span className="text-xs text-gray-500 line-through">
+                            <span className="text-xs text-ink-muted line-through">
                               {formatPrice(product.originalPrice)}
                             </span>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-lg font-bold text-gray-900">
+                        <p className="text-lg font-bold text-ink">
                           {formatPrice(product.price)}
                         </p>
                       )}
@@ -333,7 +333,7 @@ export default function CuratedCollectionCarousel({
                     <button
                       onClick={(e) => handleAddToCart(product._id, e)}
                       disabled={product.stock === 'out'}
-                      className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-2 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                      className="w-full bg-yellow-400 hover:bg-yellow-500 text-ink px-3 py-2 rounded-lg transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium shadow-sm"
                     >
                       {product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}
                     </button>
@@ -350,9 +350,9 @@ export default function CuratedCollectionCarousel({
               style={{ minHeight: '380px' }}
             >
               <div className="text-center p-6">
-                <ChevronRight className="h-12 w-12 text-blue-600 mx-auto mb-3" />
+                <ChevronRight className="h-12 w-12 text-gold mx-auto mb-3" />
                 <p className="text-base font-semibold text-blue-900 mb-1">See all offers</p>
-                <p className="text-xs text-blue-700">View more products</p>
+                <p className="text-xs text-gold">View more products</p>
               </div>
             </Link>
           </div>
@@ -361,11 +361,11 @@ export default function CuratedCollectionCarousel({
           {canScrollRight && (
             <button
               onClick={() => scroll('right')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white shadow-lg rounded-sm p-3 opacity-90 hover:opacity-100 transition-opacity"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-obsidian shadow-lg rounded-sm p-3 opacity-90 hover:opacity-100 transition-opacity"
               style={{ marginRight: '-12px' }}
               aria-label="Scroll right"
             >
-              <ChevronRight className="h-8 w-8 text-gray-900" />
+              <ChevronRight className="h-8 w-8 text-ink" />
             </button>
           )}
         </div>

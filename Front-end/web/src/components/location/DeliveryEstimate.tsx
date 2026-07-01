@@ -83,8 +83,8 @@ export default function DeliveryEstimate({
   if (isLoading) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        {showIcon && <Clock className="h-4 w-4 text-gray-400 animate-pulse" />}
-        <span className="text-sm text-gray-400">Checking delivery...</span>
+        {showIcon && <Clock className="h-4 w-4 text-ink-muted animate-pulse" />}
+        <span className="text-sm text-ink-muted">Checking delivery...</span>
       </div>
     );
   }
@@ -113,11 +113,11 @@ export default function DeliveryEstimate({
         <div className="flex items-center gap-2">
           {showIcon && <Truck className="h-5 w-5 text-green-600" />}
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-medium text-ink">
               Delivery: <span className="text-green-700">{deliveryInfo.days}</span>
             </p>
             {deliveryInfo.range && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-muted">
                 Expected {deliveryInfo.range}
               </p>
             )}
@@ -131,7 +131,7 @@ export default function DeliveryEstimate({
           </span>
           
           {currentLocation && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-ink-muted">
               to {currentLocation.selectedAddress.city}, {currentLocation.selectedAddress.postalCode}
             </span>
           )}

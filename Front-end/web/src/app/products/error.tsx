@@ -20,8 +20,8 @@ export default function ProductsError({
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-8">
+    <div className="min-h-screen flex items-center justify-center bg-obsidian-deep px-4">
+      <div className="max-w-md w-full bg-obsidian shadow-lg rounded-lg p-8">
         <div className="text-center">
           <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
             <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -30,21 +30,21 @@ export default function ProductsError({
             </svg>
           </div>
 
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Products unavailable</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="text-2xl font-bold text-ink mb-2">Products unavailable</h2>
+          <p className="text-ink-muted mb-6">
             We couldn&apos;t load the product catalog. Please try again in a moment.
           </p>
 
           <div className="space-y-3">
             <button
               onClick={reset}
-              className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-obsidian bg-gold hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold transition-colors"
             >
               Try Again
             </button>
             <button
               onClick={() => { window.location.href = '/'; }}
-              className="w-full inline-flex justify-center items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              className="w-full inline-flex justify-center items-center px-6 py-3 border border-hairline text-base font-medium rounded-md text-ink/80 bg-obsidian hover:bg-obsidian-deep focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold transition-colors"
             >
               Go Home
             </button>
@@ -52,13 +52,13 @@ export default function ProductsError({
 
           {process.env.NODE_ENV === 'development' && (
             <details className="mt-6 text-left">
-              <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+              <summary className="cursor-pointer text-sm text-ink-muted hover:text-ink/80">
                 Error Details (Dev Only)
               </summary>
-              <div className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-64">
+              <div className="mt-2 p-4 bg-obsidian-raised rounded text-xs overflow-auto max-h-64">
                 <p className="font-mono text-red-600 mb-2">{error.message}</p>
-                <pre className="text-gray-700 whitespace-pre-wrap">{error.stack}</pre>
-                {error.digest && <p className="mt-2 text-gray-500">Digest: {error.digest}</p>}
+                <pre className="text-ink/80 whitespace-pre-wrap">{error.stack}</pre>
+                {error.digest && <p className="mt-2 text-ink-muted">Digest: {error.digest}</p>}
               </div>
             </details>
           )}

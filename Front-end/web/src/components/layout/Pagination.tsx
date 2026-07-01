@@ -43,14 +43,14 @@ export default function Pagination({ pagination, currentPage, basePath, searchPa
 
   const pageNumbers = getPageNumbers();
 
-  const btnBase = 'px-3 py-2 rounded-sm border transition-colors font-condensed font-bold text-sm';
-  const btnActive = `${btnBase} bg-[#3B9EE8] text-white border-[#3B9EE8]`;
-  const btnInactive = `${btnBase} bg-[#161616] text-[#C4C4C4] hover:bg-[#252525] hover:text-white border-[#252525]`;
-  const btnDisabled = `${btnBase} bg-[#0E0E0E] text-[#555555] border-[#252525] cursor-not-allowed`;
+  const btnBase = 'px-3 py-2 rounded-sm border transition-colors font-display font-bold text-sm';
+  const btnActive = `${btnBase} bg-gold text-obsidian border-gold`;
+  const btnInactive = `${btnBase} bg-obsidian-raised text-ink/70 hover:bg-obsidian-raised hover:text-ink border-hairline`;
+  const btnDisabled = `${btnBase} bg-obsidian text-ink-muted border-hairline cursor-not-allowed`;
 
   return (
     <div className="mt-8 flex flex-col items-center gap-4">
-      <div className="text-sm text-[#555555] font-body">
+      <div className="text-sm text-ink-muted font-display">
         Page {currentPage} of {totalPages}{totalItems ? ` · ${totalItems} total items` : ''}
       </div>
 
@@ -71,7 +71,7 @@ export default function Pagination({ pagination, currentPage, basePath, searchPa
 
         {pageNumbers.map((page, index) =>
           page === '...' ? (
-            <span key={`dots-${index}`} className="px-3 py-2 text-[#555555] font-body">...</span>
+            <span key={`dots-${index}`} className="px-3 py-2 text-ink-muted font-display">...</span>
           ) : (
             <Link
               key={page}

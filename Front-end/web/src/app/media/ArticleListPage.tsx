@@ -93,10 +93,10 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   const Icon = type === 'news' ? Newspaper : BookOpen;
   const color = type === 'news' ? 'blue' : 'green';
   const colorClasses = {
-    badge: type === 'news' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700',
-    btn: type === 'news' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700',
-    active: type === 'news' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white',
-    hover: type === 'news' ? 'hover:text-blue-600' : 'hover:text-green-600',
+    badge: type === 'news' ? 'bg-blue-100 text-gold' : 'bg-green-100 text-green-700',
+    btn: type === 'news' ? 'bg-gold hover:bg-gold' : 'bg-green-600 hover:bg-green-700',
+    active: type === 'news' ? 'bg-gold text-obsidian' : 'bg-green-600 text-obsidian',
+    hover: type === 'news' ? 'hover:text-gold' : 'hover:text-green-600',
   };
 
   const title = type === 'news' ? 'News' : 'Blog';
@@ -107,13 +107,13 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   return (
     <div>
       {/* Header */}
-      <div className={`bg-linear-to-r ${type === 'news' ? 'from-blue-700 to-blue-900' : 'from-green-700 to-green-900'} text-white py-14 px-4`}>
+      <div className={`bg-linear-to-r ${type === 'news' ? 'from-gold to-blue-900' : 'from-green-700 to-green-900'} text-ink py-14 px-4`}>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <Icon className="h-8 w-8 opacity-80" />
             <h1 className="text-4xl font-bold">{title}</h1>
           </div>
-          <p className="text-white/80 text-lg">{desc}</p>
+          <p className="text-ink/80 text-lg">{desc}</p>
         </div>
       </div>
 
@@ -123,12 +123,12 @@ function ArticleListContent({ type }: ArticleListPageProps) {
           {/* Search */}
           <form onSubmit={handleSearch} className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted" />
               <input
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 placeholder={`Search ${title.toLowerCase()}...`}
-                className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-hairline text-sm focus:outline-none focus:ring-2 focus:ring-gold"
               />
             </div>
           </form>
@@ -138,7 +138,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
             <div className="flex flex-wrap gap-2 items-center">
               <button
                 onClick={() => updateParam('category', '')}
-                className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${!category ? colorClasses.active + ' border-transparent' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${!category ? colorClasses.active + ' border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
               >
                 All
               </button>
@@ -146,7 +146,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
                 <button
                   key={cat}
                   onClick={() => updateParam('category', cat)}
-                  className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${category === cat ? colorClasses.active + ' border-transparent' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                  className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${category === cat ? colorClasses.active + ' border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
                 >
                   {cat}
                 </button>
@@ -157,18 +157,18 @@ function ArticleListContent({ type }: ArticleListPageProps) {
 
         {/* Active filters */}
         {(search || category) && (
-          <div className="flex items-center gap-2 mb-5 text-sm text-gray-600">
+          <div className="flex items-center gap-2 mb-5 text-sm text-ink-muted">
             <span>Showing results for:</span>
             {search && (
-              <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded-full">
+              <span className="flex items-center gap-1 bg-obsidian-raised px-2 py-0.5 rounded-full">
                 <Search className="h-3 w-3" /> {search}
-                <button onClick={() => { setSearchInput(''); updateParam('search', ''); }} className="ml-1 text-gray-400 hover:text-gray-700">×</button>
+                <button onClick={() => { setSearchInput(''); updateParam('search', ''); }} className="ml-1 text-ink-muted hover:text-ink/80">×</button>
               </span>
             )}
             {category && (
-              <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded-full">
+              <span className="flex items-center gap-1 bg-obsidian-raised px-2 py-0.5 rounded-full">
                 <Tag className="h-3 w-3" /> {category}
-                <button onClick={() => updateParam('category', '')} className="ml-1 text-gray-400 hover:text-gray-700">×</button>
+                <button onClick={() => updateParam('category', '')} className="ml-1 text-ink-muted hover:text-ink/80">×</button>
               </span>
             )}
           </div>
@@ -178,12 +178,12 @@ function ArticleListContent({ type }: ArticleListPageProps) {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden animate-pulse">
-                <div className="h-48 bg-gray-100" />
+              <div key={i} className="bg-obsidian rounded-xl border border-hairline overflow-hidden animate-pulse">
+                <div className="h-48 bg-obsidian-raised" />
                 <div className="p-4 space-y-3">
-                  <div className="h-4 bg-gray-100 rounded w-1/3" />
-                  <div className="h-5 bg-gray-100 rounded w-full" />
-                  <div className="h-4 bg-gray-100 rounded w-2/3" />
+                  <div className="h-4 bg-obsidian-raised rounded w-1/3" />
+                  <div className="h-5 bg-obsidian-raised rounded w-full" />
+                  <div className="h-4 bg-obsidian-raised rounded w-2/3" />
                 </div>
               </div>
             ))}
@@ -191,7 +191,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
         ) : articles.length === 0 ? (
           <div className="text-center py-20">
             <Icon className="h-16 w-16 text-gray-200 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">No {title.toLowerCase()} articles found.</p>
+            <p className="text-ink-muted text-lg">No {title.toLowerCase()} articles found.</p>
             {(search || category) && (
               <button onClick={() => { setSearchInput(''); router.push('?'); }} className="mt-3 text-sm text-red-600 hover:underline">
                 Clear filters
@@ -212,7 +212,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
             <button
               disabled={page <= 1}
               onClick={() => updateParam('page', String(page - 1))}
-              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg border border-hairline hover:bg-obsidian-deep disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -220,7 +220,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
               <button
                 key={i}
                 onClick={() => updateParam('page', String(i + 1))}
-                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${page === i + 1 ? colorClasses.active + ' border-transparent' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${page === i + 1 ? colorClasses.active + ' border-transparent' : 'border border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
               >
                 {i + 1}
               </button>
@@ -228,7 +228,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
             <button
               disabled={page >= pagination.pages}
               onClick={() => updateParam('page', String(page + 1))}
-              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg border border-hairline hover:bg-obsidian-deep disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -243,7 +243,7 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
   return (
     <Link
       href={articleHref(article.type, article.slug)}
-      className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+      className="group bg-obsidian rounded-xl border border-hairline overflow-hidden hover:shadow-md transition-shadow"
     >
       {article.coverImage ? (
         <img
@@ -255,9 +255,9 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
       ) : (
         <div className="w-full h-48 bg-linear-to-br from-gray-100 to-gray-200 flex items-center justify-center">
           {article.type === 'news' ? (
-            <Newspaper className="h-12 w-12 text-gray-300" />
+            <Newspaper className="h-12 w-12 text-ink/70" />
           ) : (
-            <BookOpen className="h-12 w-12 text-gray-300" />
+            <BookOpen className="h-12 w-12 text-ink/70" />
           )}
         </div>
       )}
@@ -270,13 +270,13 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
             {article.category}
           </span>
         </div>
-        <h3 className={`font-semibold text-gray-900 group-hover:text-red-600 transition-colors line-clamp-2 mb-2 text-sm`}>
+        <h3 className={`font-semibold text-ink group-hover:text-red-600 transition-colors line-clamp-2 mb-2 text-sm`}>
           {article.title}
         </h3>
         {article.excerpt && (
-          <p className="text-xs text-gray-500 line-clamp-2 mb-3">{article.excerpt}</p>
+          <p className="text-xs text-ink-muted line-clamp-2 mb-3">{article.excerpt}</p>
         )}
-        <div className="flex items-center justify-between text-xs text-gray-400">
+        <div className="flex items-center justify-between text-xs text-ink-muted">
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
             {new Date(article.publishedAt || article.createdAt || Date.now()).toLocaleDateString('en-IN', {

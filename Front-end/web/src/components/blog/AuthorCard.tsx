@@ -20,16 +20,16 @@ export default function AuthorCard({ name, type }: Props) {
   const abbr = initials(displayName);
 
   return (
-    <div className="mt-6 bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
+    <div className="mt-6 bg-obsidian rounded-xl border border-hairline p-5 flex items-center gap-4">
       <div
-        className="flex-shrink-0 w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-lg select-none"
+        className="flex-shrink-0 w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-ink font-bold text-lg select-none"
         aria-hidden="true"
       >
         {abbr}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs uppercase tracking-widest text-gray-400 font-medium mb-0.5">Written by</p>
-        <p className="font-bold text-gray-900 text-base leading-snug">{displayName}</p>
+        <p className="text-xs uppercase tracking-widest text-ink-muted font-medium mb-0.5">Written by</p>
+        <p className="font-bold text-ink text-base leading-snug">{displayName}</p>
         <Link
           href={tagHref(type, displayName)}
           className="text-xs text-red-600 hover:underline mt-1 inline-block"

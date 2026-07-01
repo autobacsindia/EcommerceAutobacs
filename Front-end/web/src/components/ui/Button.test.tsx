@@ -9,12 +9,12 @@ describe('Button Component', () => {
     const button = screen.getByRole('button', { name: /click me/i });
     expect(button).toBeInTheDocument();
     // We check for partial class match as tailwind-merge might reorder or we might not match full string
-    expect(button.className).toContain('bg-blue-600'); 
+    expect(button.className).toContain('bg-gold');
   });
 
   it('renders different variants correctly', () => {
     const { rerender } = render(<Button variant="secondary">Secondary</Button>);
-    expect(screen.getByRole('button').className).toContain('bg-gray-100');
+    expect(screen.getByRole('button').className).toContain('bg-obsidian-raised');
 
     rerender(<Button variant="danger">Danger</Button>);
     expect(screen.getByRole('button').className).toContain('bg-red-600');

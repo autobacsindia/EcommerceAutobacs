@@ -53,7 +53,7 @@ export default function ProductCardWishlistButton({ productId }: { productId: st
   return (
     <button
       className={cn(
-        'absolute top-2 right-2 p-2 bg-[#252525] rounded-full hover:bg-[#3B9EE8]/20 transition-colors',
+        'absolute top-2 right-2 p-2 bg-obsidian-raised rounded-full hover:bg-gold/20 transition-colors',
         animating && 'animate-pulse'
       )}
       onClick={handleToggle}
@@ -61,7 +61,7 @@ export default function ProductCardWishlistButton({ productId }: { productId: st
       <Heart
         className={cn(
           'h-5 w-5 transition-colors duration-200',
-          isInWishlist(productId) ? 'text-red-500 fill-current' : 'text-gray-600'
+          isInWishlist(productId) ? 'text-red-500 fill-current' : 'text-ink-muted'
         )}
       />
     </button>

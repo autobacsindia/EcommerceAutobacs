@@ -129,7 +129,7 @@ export default function LocationSelector({
             <span>{errorMessage}</span>
             <div className="flex space-x-2 pt-1">
               <button 
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                className="px-2 py-1 bg-gold text-obsidian text-xs rounded"
                 onClick={() => {
                   toast.dismiss(t.id);
                   setShowManualForm(true);
@@ -138,7 +138,7 @@ export default function LocationSelector({
                 Enter Manually
               </button>
               <button 
-                className="px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded"
+                className="px-2 py-1 bg-obsidian-raised text-ink text-xs rounded"
                 onClick={() => toast.dismiss(t.id)}
               >
                 Dismiss
@@ -157,7 +157,7 @@ export default function LocationSelector({
             </span>
             <div className="flex space-x-2 pt-1">
               <button
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                className="px-2 py-1 bg-gold text-obsidian text-xs rounded"
                 onClick={() => {
                   toast.dismiss(t.id);
                   setShowManualForm(true);
@@ -166,7 +166,7 @@ export default function LocationSelector({
                 Enter Manually
               </button>
               <button
-                className="px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded"
+                className="px-2 py-1 bg-obsidian-raised text-ink text-xs rounded"
                 onClick={() => toast.dismiss(t.id)}
               >
                 Dismiss
@@ -188,16 +188,16 @@ export default function LocationSelector({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-scaleIn">
+    <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-obsidian rounded-lg shadow-xl max-w-md w-full animate-scaleIn">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-4 border-b border-hairline">
+          <h2 className="text-lg font-semibold text-ink">
             Select Your Location
           </h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-ink-muted hover:text-ink-muted transition-colors"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -209,7 +209,7 @@ export default function LocationSelector({
           <div className="animate-fadeIn">
             {/* Use Current Location */}
             <div className="mb-4">
-              <p className="text-center text-gray-600 mb-6">
+              <p className="text-center text-ink-muted mb-6">
                 We use your location to show nearby stores and provide accurate delivery estimates.
               </p>
             </div>
@@ -218,7 +218,7 @@ export default function LocationSelector({
               <button
                 onClick={() => handleUseCurrentLocation()}
                 disabled={useCurrentLocation}
-                className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-gold text-obsidian py-3 rounded-lg font-medium hover:bg-gold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {useCurrentLocation ? (
                   <>
@@ -234,21 +234,21 @@ export default function LocationSelector({
               </button>
               
               <div className="relative flex items-center justify-center">
-                <div className="border-t border-gray-300 grow"></div>
-                <span className="mx-4 text-gray-500 text-sm">OR</span>
-                <div className="border-t border-gray-300 grow"></div>
+                <div className="border-t border-hairline grow"></div>
+                <span className="mx-4 text-ink-muted text-sm">OR</span>
+                <div className="border-t border-hairline grow"></div>
               </div>
               
               <button
                 onClick={() => setShowManualForm(true)}
-                className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full border border-hairline text-ink/80 py-3 rounded-lg font-medium hover:bg-obsidian-deep transition-colors flex items-center justify-center gap-2"
               >
                 <MapPin className="h-5 w-5" />
                 Enter Location Manually
               </button>
             </div>
             
-            <p className="mt-4 text-xs text-center text-gray-500">
+            <p className="mt-4 text-xs text-center text-ink-muted">
               🇮🇳 We deliver anywhere in India
             </p>
           </div>

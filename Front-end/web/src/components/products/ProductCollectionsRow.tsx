@@ -142,25 +142,25 @@ export default function ProductCollectionsRow({
   // Loading skeleton
   if (loading) {
     return (
-      <section className={`py-16 bg-white ${className}`}>
+      <section className={`py-16 bg-obsidian ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {collections.map((collection, idx) => (
               <div key={idx} className="space-y-6">
                 {/* Header skeleton */}
                 <div className="mb-6">
-                  <div className="h-8 bg-gray-200 rounded w-48 mb-2 animate-pulse" />
-                  <div className="h-6 bg-gray-200 rounded w-32 animate-pulse" />
+                  <div className="h-8 bg-obsidian-raised rounded w-48 mb-2 animate-pulse" />
+                  <div className="h-6 bg-obsidian-raised rounded w-32 animate-pulse" />
                 </div>
                 
                 {/* Products skeleton */}
                 {[...Array(productsPerCollection)].map((_, i) => (
-                  <div key={i} className="bg-gray-50 rounded-lg overflow-hidden animate-pulse">
-                    <div className="aspect-[4/3] bg-gray-200" />
+                  <div key={i} className="bg-obsidian-deep rounded-lg overflow-hidden animate-pulse">
+                    <div className="aspect-[4/3] bg-obsidian-raised" />
                     <div className="p-4">
-                      <div className="h-4 bg-gray-200 rounded mb-2" />
-                      <div className="h-4 bg-gray-200 rounded w-2/3 mb-3" />
-                      <div className="h-6 bg-gray-200 rounded w-1/2" />
+                      <div className="h-4 bg-obsidian-raised rounded mb-2" />
+                      <div className="h-4 bg-obsidian-raised rounded w-2/3 mb-3" />
+                      <div className="h-6 bg-obsidian-raised rounded w-1/2" />
                     </div>
                   </div>
                 ))}
@@ -173,7 +173,7 @@ export default function ProductCollectionsRow({
   }
 
   return (
-    <section className={`py-16 bg-white ${className}`}>
+    <section className={`py-16 bg-obsidian ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Three Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -184,10 +184,10 @@ export default function ProductCollectionsRow({
               <div key={collectionIdx} className="space-y-6">
                 {/* Collection Header */}
                 <div className="mb-6">
-                  <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+                  <h2 className="text-3xl md:text-4xl font-bold text-ink mb-2">
                     {collection.title}
                   </h2>
-                  <p className="text-xl text-gray-600">
+                  <p className="text-xl text-ink-muted">
                     {collection.subtitle}
                   </p>
                 </div>
@@ -203,9 +203,9 @@ export default function ProductCollectionsRow({
                         href={url}
                         className="group block"
                       >
-                        <div className="bg-gray-50 rounded-lg overflow-hidden hover:shadow-lg transition-all duration-300">
+                        <div className="bg-obsidian-deep rounded-lg overflow-hidden hover:shadow-lg transition-all duration-300">
                           {/* Compact Product Image - Reduced Size */}
-                          <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+                          <div className="relative aspect-[4/3] bg-obsidian-raised overflow-hidden">
                             {product.images && (
                               Array.isArray(product.images) && product.images.length > 0 && product.images[0].url ? (
                                 <ProductImage
@@ -220,27 +220,27 @@ export default function ProductCollectionsRow({
                                   className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                                 />
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                                  <span className="text-gray-400 text-sm">No image</span>
+                                <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                                  <span className="text-ink-muted text-sm">No image</span>
                                 </div>
                               )
                             )}
                             
                             {/* Wishlist Button - Smaller for compact view */}
                             <button
-                              className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+                              className="absolute top-2 right-2 p-1.5 bg-obsidian rounded-full shadow-md hover:bg-obsidian-raised transition-colors opacity-0 group-hover:opacity-100"
                               onClick={(e) => handleToggleWishlist(product._id, e)}
                             >
                               <Heart className={`h-4 w-4 transition-colors duration-200 ${
                                 isInWishlist(product._id) 
                                   ? 'text-red-500 fill-current' 
-                                  : 'text-gray-600'
+                                  : 'text-ink-muted'
                               }`} />
                             </button>
 
                             {/* Sale Badge - Smaller */}
                             {product.originalPrice && product.originalPrice > product.price && (
-                              <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                              <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-0.5 rounded-full text-xs font-bold">
                                 SALE
                               </div>
                             )}
@@ -249,13 +249,13 @@ export default function ProductCollectionsRow({
                           {/* Compact Product Info */}
                           <div className="p-4">
                             {/* Product Name - 2 lines max */}
-                            <h3 className="font-semibold text-sm text-gray-900 mb-2 line-clamp-2 group-hover:text-blue-600 transition-colors min-h-[40px]">
+                            <h3 className="font-semibold text-sm text-ink mb-2 line-clamp-2 group-hover:text-gold transition-colors min-h-[40px]">
                               {product.name}
                             </h3>
 
                             {/* Brand Tag - Compact */}
                             {product.brand && (
-                              <span className="inline-block text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded mb-2">
+                              <span className="inline-block text-xs px-2 py-0.5 bg-obsidian-raised text-ink-muted rounded mb-2">
                                 {product.brand}
                               </span>
                             )}
@@ -264,15 +264,15 @@ export default function ProductCollectionsRow({
                             <div className="mt-2">
                               {product.originalPrice && product.originalPrice > product.price ? (
                                 <div>
-                                  <p className="text-lg font-bold text-blue-600">
+                                  <p className="text-lg font-bold text-gold">
                                     {formatPrice(product.price)}
                                   </p>
-                                  <p className="text-xs text-gray-500 line-through">
+                                  <p className="text-xs text-ink-muted line-through">
                                     {formatPrice(product.originalPrice)}
                                   </p>
                                 </div>
                               ) : (
-                                <p className="text-lg font-bold text-gray-900">
+                                <p className="text-lg font-bold text-ink">
                                   {formatPrice(product.price)}
                                 </p>
                               )}
@@ -282,7 +282,7 @@ export default function ProductCollectionsRow({
                             <button
                               onClick={(e) => handleAddToCart(product._id, e)}
                               disabled={product.stock === 'out'}
-                              className="w-full mt-3 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+                              className="w-full mt-3 flex items-center justify-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium"
                             >
                               <ShoppingCart className="h-4 w-4" />
                               <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
@@ -295,13 +295,13 @@ export default function ProductCollectionsRow({
                   </div>
                 ) : (
                   /* Empty State */
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <p className="text-gray-500 text-sm mb-3">
+                  <div className="text-center py-12 bg-obsidian-deep rounded-lg">
+                    <p className="text-ink-muted text-sm mb-3">
                       No products found
                     </p>
                     <Link
                       href="/products"
-                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                      className="inline-flex items-center gap-1 text-gold hover:text-gold font-semibold text-sm"
                     >
                       <span>Browse All</span>
                       <ChevronRight className="h-4 w-4" />
@@ -314,7 +314,7 @@ export default function ProductCollectionsRow({
                   <div className="mt-6">
                     <Link
                       href={collection.viewAllLink || `/products?search=${collection.searchKeyword}`}
-                      className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold text-sm group"
+                      className="inline-flex items-center gap-2 text-gold hover:text-gold font-semibold text-sm group"
                     >
                       <span>View All</span>
                       <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />

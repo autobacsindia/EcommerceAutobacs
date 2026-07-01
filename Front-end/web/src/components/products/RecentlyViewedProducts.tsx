@@ -50,16 +50,16 @@ export default function RecentlyViewedProducts() {
   if (products.length === 0) return null;
 
   return (
-    <section className="py-12 bg-[#080808] border-t border-[#252525]">
+    <section className="py-12 bg-obsidian-deep border-t border-hairline">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Your History</p>
-            <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide">Recently Viewed</h2>
+            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Your History</p>
+            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide">Recently Viewed</h2>
           </div>
           <button
             onClick={clearHistory}
-            className="text-sm text-[#C4C4C4] hover:text-red-400 font-body px-3 py-1 rounded-sm hover:bg-[#252525] transition-colors"
+            className="text-sm text-ink/70 hover:text-red-400 font-display px-3 py-1 rounded-sm hover:bg-obsidian-raised transition-colors"
           >
             Clear History
           </button>
@@ -69,8 +69,8 @@ export default function RecentlyViewedProducts() {
           {products.slice(0, 5).map((product) => {
             const url = productUrl(product, '/products');
             return (
-            <div key={product._id} className="group bg-[#0E0E0E] border border-[#252525] rounded-lg hover:border-[#3B9EE8] transition-all duration-300">
-              <Link href={url} className="block relative aspect-4/3 overflow-hidden rounded-t-lg bg-[#161616]">
+            <div key={product._id} className="group bg-obsidian border border-hairline rounded-lg hover:border-gold transition-all duration-300">
+              <Link href={url} className="block relative aspect-4/3 overflow-hidden rounded-t-lg bg-obsidian-raised">
                 {product.image && !imageErrors[product._id] ? (
                   <Image
                     src={product.image}
@@ -80,24 +80,24 @@ export default function RecentlyViewedProducts() {
                     onError={() => handleImageError(product._id)}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-[#161616]">
-                    <span className="text-[#555555] text-xs">No Image</span>
+                  <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+                    <span className="text-ink-muted text-xs">No Image</span>
                   </div>
                 )}
               </Link>
 
               <div className="p-4">
                 <Link href={url}>
-                  <h3 className="font-condensed font-bold text-white text-sm uppercase tracking-wide line-clamp-2 min-h-[2.5em] group-hover:text-[#3B9EE8] transition-colors">
+                  <h3 className="font-display font-bold text-ink text-sm uppercase tracking-wide line-clamp-2 min-h-[2.5em] group-hover:text-gold transition-colors">
                     {product.name}
                   </h3>
                 </Link>
 
                 <div className="mt-3 flex items-end justify-between">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-condensed font-bold text-[#3B9EE8]">{formatPrice(product.price)}</span>
+                    <span className="text-lg font-display font-bold text-gold">{formatPrice(product.price)}</span>
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="text-xs text-[#555555] line-through">{formatPrice(product.originalPrice)}</span>
+                      <span className="text-xs text-ink-muted line-through">{formatPrice(product.originalPrice)}</span>
                     )}
                   </div>
 
@@ -111,7 +111,7 @@ export default function RecentlyViewedProducts() {
                         toast.error(error.message || 'Failed to add to cart');
                       }
                     }}
-                    className="p-2 bg-[#252525] text-[#C4C4C4] rounded-full hover:bg-[#3B9EE8] hover:text-white transition-colors"
+                    className="p-2 bg-obsidian-raised text-obsidian/70 rounded-full hover:bg-gold hover:text-obsidian transition-colors"
                     title="Add to Cart"
                   >
                     <ShoppingCart className="h-4 w-4" />

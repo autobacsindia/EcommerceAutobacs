@@ -107,14 +107,14 @@ export default function VehicleSelector({
   return (
     <div className="flex flex-col sm:flex-row gap-4">
       <div className="flex-1">
-        <label htmlFor="vehicle-make" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="vehicle-make" className="block text-sm font-medium text-ink/80 mb-1">
           Vehicle Make
         </label>
         <select
           id="vehicle-make"
           value={selectedMake}
           onChange={handleMakeChange}
-          className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 shadow-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
         >
           <option value="">Select Make</option>
           {(makes ?? []).map((make) => (
@@ -126,7 +126,7 @@ export default function VehicleSelector({
       </div>
 
       <div className="flex-1">
-        <label htmlFor="vehicle-model" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="vehicle-model" className="block text-sm font-medium text-ink/80 mb-1">
           Vehicle Model
         </label>
         <select
@@ -134,7 +134,7 @@ export default function VehicleSelector({
           value={selectedModel}
           onChange={handleModelChange}
           disabled={!selectedMake}
-          className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+          className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 shadow-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold disabled:bg-obsidian-raised"
         >
           <option value="">Select Model</option>
           {models.map((model) => (

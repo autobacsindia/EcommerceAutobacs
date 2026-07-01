@@ -87,19 +87,19 @@ export default function ClaimOrderPage() {
     }
   };
 
-  const inputClass = 'w-full bg-[#161616] border border-[#252525] text-white placeholder:text-[#555555] rounded-sm px-4 py-2.5 focus:outline-none focus:border-[#3B9EE8] font-body text-sm transition-colors';
+  const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors';
   const inputWithIconClass = inputClass + ' pl-10';
 
   if (claimed) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center py-12 px-4">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full text-center">
-          <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-10">
+          <div className="bg-obsidian border border-hairline rounded-sm p-10">
             <CheckCircle className="h-20 w-20 text-green-400 mx-auto mb-6 animate-bounce" />
-            <h2 className="text-3xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Account Claimed!</h2>
-            <p className="text-[#C4C4C4] font-body mb-8">You&apos;re now logged in. Redirecting to your orders...</p>
-            <div className="w-full bg-[#252525] rounded-full h-1.5">
-              <div className="bg-[#3B9EE8] h-1.5 rounded-full animate-pulse" style={{ width: '100%' }} />
+            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Account Claimed!</h2>
+            <p className="text-ink/70 font-display mb-8">You&apos;re now logged in. Redirecting to your orders...</p>
+            <div className="w-full bg-obsidian-raised rounded-full h-1.5">
+              <div className="bg-gold h-1.5 rounded-full animate-pulse" style={{ width: '100%' }} />
             </div>
           </div>
         </div>
@@ -108,14 +108,14 @@ export default function ClaimOrderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] flex items-center justify-center py-12 px-4">
+    <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Account Access</p>
-          <h2 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Account Access</p>
+          <h2 className="text-4xl font-display font-bold text-ink uppercase tracking-wide">
             {step === 'request' ? 'Claim Your Order' : 'Verify Magic Link'}
           </h2>
-          <p className="mt-2 text-[#C4C4C4] font-body text-sm">
+          <p className="mt-2 text-ink/70 font-display text-sm">
             {step === 'request'
               ? 'Access your order without creating an account'
               : 'Enter the token from your email/SMS'}
@@ -123,13 +123,13 @@ export default function ClaimOrderPage() {
         </div>
 
         {step === 'request' ? (
-          <form onSubmit={handleRequestMagicLink} className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 space-y-4">
+          <form onSubmit={handleRequestMagicLink} className="bg-obsidian border border-hairline rounded-sm p-6 space-y-4">
             <div>
-              <label htmlFor="email" className="block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1">
+              <label htmlFor="email" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#555555]" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted" />
                 <input
                   id="email"
                   name="email"
@@ -143,11 +143,11 @@ export default function ClaimOrderPage() {
             </div>
 
             <div>
-              <label htmlFor="phone" className="block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1">
+              <label htmlFor="phone" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
                 Phone Number
               </label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#555555]" />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted" />
                 <input
                   id="phone"
                   name="phone"
@@ -161,8 +161,8 @@ export default function ClaimOrderPage() {
             </div>
 
             <div>
-              <label htmlFor="orderId" className="block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1">
-                Order ID <span className="normal-case font-body tracking-normal">(optional)</span>
+              <label htmlFor="orderId" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+                Order ID <span className="normal-case font-display tracking-normal">(optional)</span>
               </label>
               <input
                 id="orderId"
@@ -175,8 +175,8 @@ export default function ClaimOrderPage() {
               />
             </div>
 
-            <div className="bg-[#3B9EE8]/10 border border-[#3B9EE8]/30 rounded-sm px-4 py-3">
-              <p className="text-[#3B9EE8] font-body text-sm text-center">
+            <div className="bg-gold/10 border border-gold/30 rounded-sm px-4 py-3">
+              <p className="text-gold font-display text-sm text-center">
                 We&apos;ll send a magic link to your email/SMS to verify your identity.
               </p>
             </div>
@@ -184,23 +184,23 @@ export default function ClaimOrderPage() {
             <button
               type="submit"
               disabled={loading || (!email && !phone)}
-              className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
-                <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Sending...</>
+                <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" /> Sending...</>
               ) : (
                 'Send Magic Link'
               )}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyMagicLink} className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-6 space-y-4">
+          <form onSubmit={handleVerifyMagicLink} className="bg-obsidian border border-hairline rounded-sm p-6 space-y-4">
             <div>
-              <label htmlFor="token" className="block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1">
+              <label htmlFor="token" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
                 Magic Link Token
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#555555]" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted" />
                 <input
                   id="token"
                   name="token"
@@ -215,8 +215,8 @@ export default function ClaimOrderPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-condensed font-bold text-[#555555] uppercase tracking-widest mb-1">
-                Set Password <span className="normal-case font-body tracking-normal">(optional)</span>
+              <label htmlFor="password" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+                Set Password <span className="normal-case font-display tracking-normal">(optional)</span>
               </label>
               <input
                 id="password"
@@ -227,11 +227,11 @@ export default function ClaimOrderPage() {
                 className={inputClass}
                 placeholder="Choose a password (optional)"
               />
-              <p className="text-[#555555] font-body text-xs mt-1">Leave blank for passwordless login via magic link</p>
+              <p className="text-ink-muted font-display text-xs mt-1">Leave blank for passwordless login via magic link</p>
             </div>
 
             <div className="bg-green-500/10 border border-green-500/30 rounded-sm px-4 py-3">
-              <p className="text-green-300 font-body text-sm text-center">
+              <p className="text-green-300 font-display text-sm text-center">
                 After verification, you&apos;ll be automatically logged in.
               </p>
             </div>
@@ -239,10 +239,10 @@ export default function ClaimOrderPage() {
             <button
               type="submit"
               disabled={loading || !token}
-              className="w-full bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
-                <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Verifying...</>
+                <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" /> Verifying...</>
               ) : (
                 'Verify & Claim Account'
               )}
@@ -251,7 +251,7 @@ export default function ClaimOrderPage() {
             <button
               type="button"
               onClick={() => setStep('request')}
-              className="w-full text-sm font-condensed font-bold text-[#3B9EE8] hover:text-white uppercase tracking-widest transition-colors py-2"
+              className="w-full text-sm font-display font-bold text-gold hover:text-ink uppercase tracking-widest transition-colors py-2"
             >
               ← Request New Magic Link
             </button>

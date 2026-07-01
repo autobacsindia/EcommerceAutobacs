@@ -118,7 +118,7 @@ export default function HeaderVehicleSelector() {
       {/* Vehicle Selector Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-sm font-medium transition-colors relative py-1 whitespace-nowrap text-white hover:text-green-200 flex items-center gap-1"
+        className="text-sm font-medium transition-colors relative py-1 whitespace-nowrap text-ink hover:text-green-200 flex items-center gap-1"
       >
         <Car className="h-4 w-4" />
         <span>Vehicle</span>
@@ -127,14 +127,14 @@ export default function HeaderVehicleSelector() {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 p-4">
+        <div className="absolute top-full left-0 mt-2 w-80 bg-obsidian rounded-lg shadow-xl border border-hairline z-50 p-4">
           <div className="space-y-3">
             {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">Select Your Vehicle</h3>
+            <div className="flex items-center justify-between pb-2 border-b border-hairline">
+              <h3 className="font-semibold text-ink">Select Your Vehicle</h3>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-ink-muted hover:text-ink-muted"
               >
                 ✕
               </button>
@@ -142,14 +142,14 @@ export default function HeaderVehicleSelector() {
 
             {/* Make Selector */}
             <div>
-              <label htmlFor="header-vehicle-make" className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="header-vehicle-make" className="block text-xs font-medium text-ink/80 mb-1">
                 Vehicle Make
               </label>
               <select
                 id="header-vehicle-make"
                 value={selectedMake}
                 onChange={handleMakeChange}
-                className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
               >
                 <option value="">Select Make</option>
                 {makes.map((make) => (
@@ -162,7 +162,7 @@ export default function HeaderVehicleSelector() {
 
             {/* Model Selector */}
             <div>
-              <label htmlFor="header-vehicle-model" className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor="header-vehicle-model" className="block text-xs font-medium text-ink/80 mb-1">
                 Vehicle Model
               </label>
               <select
@@ -170,7 +170,7 @@ export default function HeaderVehicleSelector() {
                 value={selectedModel}
                 onChange={handleModelChange}
                 disabled={!selectedMake || loading}
-                className="w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:bg-obsidian-raised disabled:cursor-not-allowed"
               >
                 <option value="">
                   {!selectedMake ? 'Select Make First' : loading ? 'Loading...' : 'Select Model'}
@@ -187,7 +187,7 @@ export default function HeaderVehicleSelector() {
             <button
               onClick={handleBrowseParts}
               disabled={!selectedMake || !selectedModel}
-              className="w-full bg-green-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="w-full bg-green-600 text-ink py-2 px-4 rounded-md text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed"
             >
               Browse {selectedModel || 'Parts'}
             </button>

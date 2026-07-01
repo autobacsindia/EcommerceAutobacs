@@ -316,14 +316,14 @@ export default function ClientPage({ slug }: { slug: string }) {
 
   if (error && (error === 'Category not found' || error === 'Invalid category')) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center py-12">
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 max-w-md mx-4 text-center">
           <svg className="w-14 h-14 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <h2 className="text-xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Category Not Available</h2>
-          <p className="text-[#C4C4C4] font-body mb-6">{error === 'Invalid category' ? 'Invalid category URL.' : "The category you're looking for doesn't exist or has been removed."}</p>
-          <Link href="/categories" className="bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+          <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-2">Category Not Available</h2>
+          <p className="text-ink/70 font-display mb-6">{error === 'Invalid category' ? 'Invalid category URL.' : "The category you're looking for doesn't exist or has been removed."}</p>
+          <Link href="/categories" className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
             Browse All Categories
           </Link>
         </div>
@@ -332,7 +332,7 @@ export default function ClientPage({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808]">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
@@ -343,14 +343,14 @@ export default function ClientPage({ slug }: { slug: string }) {
       />
 
       {/* Hero */}
-      <div className="bg-[#0E0E0E] border-b border-[#252525] py-10">
+      <div className="bg-obsidian border-b border-hairline py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Category</p>
-          <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Category</p>
+          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide">
             {category?.name || 'Products'}
           </h1>
           {category?.description && (
-            <p className="text-[#C4C4C4] font-body mt-2 max-w-2xl">{category.description}</p>
+            <p className="text-ink/70 font-display mt-2 max-w-2xl">{category.description}</p>
           )}
         </div>
       </div>
@@ -367,7 +367,7 @@ export default function ClientPage({ slug }: { slug: string }) {
           <div className="lg:col-span-3">
             {/* Results Header */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-[#555555] font-body text-sm">
+              <p className="text-ink-muted font-display text-sm">
                 {loading ? 'Loading products...' : data.products.length > 0 ? (
                   showAll
                     ? `Showing all ${data.products.length} product${data.products.length !== 1 ? 's' : ''}`
@@ -382,17 +382,17 @@ export default function ClientPage({ slug }: { slug: string }) {
                     id="showAll"
                     checked={showAll}
                     onChange={handleShowAllToggle}
-                    className="h-4 w-4 accent-[#3B9EE8] rounded border-[#252525] bg-[#161616]"
+                    className="h-4 w-4 accent-[#3B9EE8] rounded border-hairline bg-obsidian-raised"
                   />
-                  <label htmlFor="showAll" className={`text-sm font-body ${showAll ? 'text-[#3B9EE8]' : 'text-[#C4C4C4]'}`}>
+                  <label htmlFor="showAll" className={`text-sm font-display ${showAll ? 'text-gold' : 'text-ink/70'}`}>
                     Show All{showAll && ' (Active)'}
                   </label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-[#555555] font-body">Sort:</label>
+                  <label htmlFor="sort" className="text-sm text-ink-muted font-display">Sort:</label>
                   <select
                     id="sort"
-                    className="bg-[#161616] border border-[#252525] text-[#C4C4C4] rounded-sm px-3 py-1.5 text-sm focus:outline-none focus:border-[#3B9EE8] font-body"
+                    className="bg-obsidian-raised border border-hairline text-ink/70 rounded-sm px-3 py-1.5 text-sm focus:outline-none focus:border-gold font-display"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
@@ -411,15 +411,15 @@ export default function ClientPage({ slug }: { slug: string }) {
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-[#0E0E0E] border border-[#252525] rounded-sm overflow-hidden animate-pulse">
-                    <div className="h-48 bg-[#161616]" />
+                  <div key={index} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
+                    <div className="h-48 bg-obsidian-raised" />
                     <div className="p-4">
-                      <div className="h-4 bg-[#252525] rounded-sm mb-2" />
-                      <div className="h-4 bg-[#252525] rounded-sm w-2/3 mb-4" />
-                      <div className="h-6 bg-[#252525] rounded-sm w-1/3 mb-4" />
+                      <div className="h-4 bg-obsidian-raised rounded-sm mb-2" />
+                      <div className="h-4 bg-obsidian-raised rounded-sm w-2/3 mb-4" />
+                      <div className="h-6 bg-obsidian-raised rounded-sm w-1/3 mb-4" />
                       <div className="flex justify-between gap-2">
-                        <div className="h-9 bg-[#252525] rounded-sm flex-1" />
-                        <div className="h-9 bg-[#252525] rounded-sm flex-1" />
+                        <div className="h-9 bg-obsidian-raised rounded-sm flex-1" />
+                        <div className="h-9 bg-obsidian-raised rounded-sm flex-1" />
                       </div>
                     </div>
                   </div>
@@ -429,8 +429,8 @@ export default function ClientPage({ slug }: { slug: string }) {
               <ProductGrid products={data.products} />
             ) : (
               <div className="text-center py-12">
-                <p className="text-[#555555] font-body mb-4">No products found in this category</p>
-                <Link href="/categories" className="text-[#3B9EE8] hover:text-white font-condensed font-bold uppercase tracking-widest transition-colors text-sm">
+                <p className="text-ink-muted font-display mb-4">No products found in this category</p>
+                <Link href="/categories" className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors text-sm">
                   Browse Other Categories
                 </Link>
               </div>

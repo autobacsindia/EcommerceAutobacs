@@ -77,7 +77,7 @@ export default function ProductGallery({ images, productName }: ProductGalleryPr
     <div className="space-y-4" ref={galleryRef}>
       {/* Main Image */}
       <div 
-        className="relative aspect-square bg-gray-50 rounded-2xl overflow-hidden group cursor-zoom-in"
+        className="relative aspect-square bg-obsidian-deep rounded-2xl overflow-hidden group cursor-zoom-in"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onMouseMove={handleMouseMove}
@@ -102,14 +102,14 @@ export default function ProductGallery({ images, productName }: ProductGalleryPr
           <>
             <button
               onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
-              className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute left-3 top-1/2 -translate-y-1/2 bg-obsidian/90 hover:bg-obsidian rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               aria-label="Previous image"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); goToNext(); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-3 top-1/2 -translate-y-1/2 bg-obsidian/90 hover:bg-obsidian rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               aria-label="Next image"
             >
               <ChevronRight className="w-5 h-5" />
@@ -118,13 +118,13 @@ export default function ProductGallery({ images, productName }: ProductGalleryPr
         )}
 
         {/* Zoom Indicator */}
-        <div className="absolute top-3 right-3 bg-white/90 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <ZoomIn className="w-4 h-4 text-gray-700" />
+        <div className="absolute top-3 right-3 bg-obsidian/90 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <ZoomIn className="w-4 h-4 text-ink/80" />
         </div>
 
         {/* Image Counter */}
         {displayImages.length > 1 && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-obsidian-deep/70 text-ink px-3 py-1 rounded-full text-sm">
             {activeIndex + 1} / {displayImages.length}
           </div>
         )}
@@ -139,8 +139,8 @@ export default function ProductGallery({ images, productName }: ProductGalleryPr
               onClick={() => setActiveIndex(index)}
               className={`relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
                 activeIndex === index
-                  ? 'border-blue-600 ring-2 ring-blue-200'
-                  : 'border-gray-200 hover:border-gray-300'
+                  ? 'border-gold ring-2 ring-blue-200'
+                  : 'border-hairline hover:border-hairline'
               }`}
               aria-label={`View image ${index + 1}`}
             >

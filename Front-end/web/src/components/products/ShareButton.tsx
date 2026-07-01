@@ -86,7 +86,7 @@ export default function ShareButton({ productName, productUrl, price, imageUrl }
     {
       label: 'Twitter / X',
       href: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
-      color: 'bg-black hover:bg-gray-800',
+      color: 'bg-obsidian-deep hover:bg-obsidian-raised',
       icon: (
         <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white" xmlns="http://www.w3.org/2000/svg">
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.849L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -101,7 +101,7 @@ export default function ShareButton({ productName, productUrl, price, imageUrl }
       <button
         onClick={handleNativeShare}
         title="Share this product"
-        className="px-4 py-4 border border-gray-200 rounded-xl transition-all flex items-center justify-center hover:bg-gray-50 text-gray-400 hover:text-blue-600"
+        className="px-4 py-4 border border-hairline rounded-xl transition-all flex items-center justify-center hover:bg-obsidian-deep text-ink-muted hover:text-gold"
         aria-label="Share product"
       >
         <Share2 className="h-6 w-6" />
@@ -117,10 +117,10 @@ export default function ShareButton({ productName, productUrl, price, imageUrl }
           />
 
           {/* Panel */}
-          <div className="absolute right-0 bottom-full mb-2 z-50 bg-white rounded-2xl shadow-xl border border-gray-100 p-4 w-64">
+          <div className="absolute right-0 bottom-full mb-2 z-50 bg-obsidian rounded-2xl shadow-xl border border-hairline p-4 w-64">
             <div className="flex items-center justify-between mb-3">
-              <span className="font-semibold text-gray-900 text-sm">Share this product</span>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <span className="font-semibold text-ink text-sm">Share this product</span>
+              <button onClick={() => setOpen(false)} className="text-ink-muted hover:text-ink-muted">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -145,7 +145,7 @@ export default function ShareButton({ productName, productUrl, price, imageUrl }
             {/* Copy link */}
             <button
               onClick={handleCopy}
-              className="w-full flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2.5 border border-hairline rounded-xl text-sm text-ink/80 hover:bg-obsidian-deep transition-colors"
             >
               {copied ? (
                 <>

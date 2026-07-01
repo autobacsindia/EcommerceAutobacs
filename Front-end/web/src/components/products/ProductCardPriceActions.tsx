@@ -34,18 +34,18 @@ export default function ProductCardPriceActions({ productId, price, originalPric
       <div>
         {originalPrice && originalPrice > price ? (
           <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-condensed font-bold text-[#3B9EE8]">{formatPrice(price)}</p>
-            <p className="text-sm text-[#555555] line-through">{formatPrice(originalPrice)}</p>
+            <p className="text-2xl font-display font-bold text-gold">{formatPrice(price)}</p>
+            <p className="text-sm text-ink-muted line-through">{formatPrice(originalPrice)}</p>
           </div>
         ) : (
-          <p className="text-2xl font-condensed font-bold text-[#3B9EE8]">{formatPrice(price)}</p>
+          <p className="text-2xl font-display font-bold text-gold">{formatPrice(price)}</p>
         )}
       </div>
 
       <button
         onClick={handleAddToCart}
         disabled={stock === 'out'}
-        className="flex items-center gap-2 bg-[#3B9EE8] text-white px-4 py-2 rounded-sm hover:bg-[#1A6FB5] transition-colors disabled:bg-[#252525] disabled:text-[#555555] disabled:cursor-not-allowed font-condensed font-bold text-sm tracking-wider uppercase"
+        className="flex items-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-sm hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm tracking-wider uppercase"
       >
         <ShoppingCart className="h-4 w-4" />
         <span className="text-sm font-medium">Add</span>

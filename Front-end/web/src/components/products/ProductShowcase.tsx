@@ -29,7 +29,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
         : 'Uncategorized';
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
+    <div className="bg-obsidian rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
       <div className="aspect-square overflow-hidden relative">
         <EnhancedImage 
           src={primaryImage} 
@@ -41,15 +41,15 @@ const ProductCard = ({ product }: ProductCardProps) => {
         />
       </div>
       <div className="p-4">
-        <div className="text-xs text-gray-500 uppercase mb-1">
+        <div className="text-xs text-ink-muted uppercase mb-1">
           {categoryName === 'Suspension' ? 'SUSPENSION' : categoryName}
         </div>
         <h3 className="font-semibold text-lg mb-1 line-clamp-2">{product.name}</h3>
-        <p className="text-gray-600 text-sm mb-2 line-clamp-2">
+        <p className="text-ink-muted text-sm mb-2 line-clamp-2">
           {product.shortDescription || product.description.substring(0, 100) + '...'}
         </p>
         <div className="flex items-center justify-between">
-          <span className="text-lg font-bold text-blue-600">
+          <span className="text-lg font-bold text-gold">
             {formatPrice(product.price)}
           </span>
           {product.stock !== 'out' ? (
@@ -64,7 +64,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
         </div>
         <Link 
           href={url}
-          className="mt-3 inline-block w-full text-center bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors"
+          className="mt-3 inline-block w-full text-center bg-gold text-obsidian py-2 rounded-md hover:bg-gold transition-colors"
         >
           View Details
         </Link>
@@ -116,13 +116,13 @@ export default function ProductShowcase() {
         <h2 className="text-2xl font-bold mb-6">Featured Products</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[...Array(4)].map((_, index) => (
-            <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
-              <div className="aspect-square bg-gray-200"></div>
+            <div key={index} className="bg-obsidian rounded-lg shadow-md overflow-hidden animate-pulse">
+              <div className="aspect-square bg-obsidian-raised"></div>
               <div className="p-4">
-                <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded mb-4"></div>
-                <div className="h-6 bg-gray-200 rounded mb-3"></div>
-                <div className="h-10 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-obsidian-raised rounded mb-2"></div>
+                <div className="h-3 bg-obsidian-raised rounded mb-4"></div>
+                <div className="h-6 bg-obsidian-raised rounded mb-3"></div>
+                <div className="h-10 bg-obsidian-raised rounded"></div>
               </div>
             </div>
           ))}
@@ -139,7 +139,7 @@ export default function ProductShowcase() {
           <p className="text-red-800">{error}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+            className="mt-4 bg-red-600 text-ink px-4 py-2 rounded hover:bg-red-700"
           >
             Retry
           </button>
@@ -152,7 +152,7 @@ export default function ProductShowcase() {
     <div className="py-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Featured Products</h2>
-        <Link href="/products" className="text-blue-600 hover:text-blue-800 font-medium">
+        <Link href="/products" className="text-gold hover:text-blue-800 font-medium">
           View All Products →
         </Link>
       </div>
@@ -165,7 +165,7 @@ export default function ProductShowcase() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-gray-500">No featured products available at the moment.</p>
+          <p className="text-ink-muted">No featured products available at the moment.</p>
         </div>
       )}
     </div>

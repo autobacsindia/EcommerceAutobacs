@@ -332,18 +332,18 @@ export default function EnhancedProductFilters() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 sticky top-20">
+    <div className="bg-obsidian rounded-lg shadow-md p-6 sticky top-20">
       <h2 className="text-lg font-bold mb-4">Filters</h2>
 
       {/* Categories */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Categories</h3>
+        <h3 className="font-semibold text-ink mb-3">Categories</h3>
         {loadingCategories ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, index) => (
               <div key={index} className="flex items-center animate-pulse">
-                <div className="h-4 w-4 bg-gray-200 rounded"></div>
-                <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+                <div className="h-4 w-4 bg-obsidian-raised rounded"></div>
+                <div className="ml-2 h-4 w-3/4 bg-obsidian-raised rounded"></div>
               </div>
             ))}
           </div>
@@ -354,7 +354,7 @@ export default function EnhancedProductFilters() {
               <input
                 type="text"
                 placeholder="Search categories..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="w-full px-3 py-2 border border-hairline rounded-md text-sm"
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
               />
@@ -366,7 +366,7 @@ export default function EnhancedProductFilters() {
                   <label key={category._id} className="flex items-center py-1">
                     <input
                       type="checkbox"
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-hairline text-gold focus:ring-gold"
                       checked={selectedCategories.includes(category._id)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -376,11 +376,11 @@ export default function EnhancedProductFilters() {
                         }
                       }}
                     />
-                    <span className="ml-2 text-sm text-gray-700">{category.name}</span>
+                    <span className="ml-2 text-sm text-ink/80">{category.name}</span>
                   </label>
                 ))
               ) : (
-                <p className="text-sm text-gray-500 py-2">No categories found</p>
+                <p className="text-sm text-ink-muted py-2">No categories found</p>
               )}
             </div>
           </div>
@@ -389,7 +389,7 @@ export default function EnhancedProductFilters() {
 
       {/* Price Range */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Price Range</h3>
+        <h3 className="font-semibold text-ink mb-3">Price Range</h3>
         <div className="space-y-4">
           <input
             type="range"
@@ -401,13 +401,13 @@ export default function EnhancedProductFilters() {
             className="w-full"
           />
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">{formatPrice(priceRange[0])}</span>
-            <span className="text-sm text-gray-600">{formatPrice(priceRange[1])}</span>
+            <span className="text-sm text-ink-muted">{formatPrice(priceRange[0])}</span>
+            <span className="text-sm text-ink-muted">{formatPrice(priceRange[1])}</span>
           </div>
           <div className="flex gap-2">
             <button 
               onClick={applyFilters}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+              className="flex-1 bg-gold text-obsidian px-4 py-2 rounded-md hover:bg-gold transition-colors"
             >
               Apply
             </button>
@@ -417,27 +417,27 @@ export default function EnhancedProductFilters() {
 
       {/* Stock Status */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Availability</h3>
+        <h3 className="font-semibold text-ink mb-3">Availability</h3>
         <label className="flex items-center">
           <input
             type="checkbox"
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-hairline text-gold focus:ring-gold"
             checked={inStockOnly}
             onChange={(e) => setInStockOnly(e.target.checked)}
           />
-          <span className="ml-2 text-sm text-gray-700">In Stock Only</span>
+          <span className="ml-2 text-sm text-ink/80">In Stock Only</span>
         </label>
       </div>
 
       {/* Rating */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Rating</h3>
+        <h3 className="font-semibold text-ink mb-3">Rating</h3>
         <div className="space-y-2">
           {[4, 3, 2, 1].map((rating) => (
             <label key={rating} className="flex items-center">
               <input
                 type="checkbox"
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-hairline text-gold focus:ring-gold"
                 checked={selectedRatings.includes(rating)}
                 onChange={(e) => {
                   if (e.target.checked) {
@@ -447,7 +447,7 @@ export default function EnhancedProductFilters() {
                   }
                 }}
               />
-              <span className="ml-2 text-sm text-gray-700 flex items-center">
+              <span className="ml-2 text-sm text-ink/80 flex items-center">
                 {rating}
                 <svg className="h-4 w-4 text-yellow-400 ml-1" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -461,13 +461,13 @@ export default function EnhancedProductFilters() {
 
       {/* Brand Filter */}
       <div className="mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Brand</h3>
+        <h3 className="font-semibold text-ink mb-3">Brand</h3>
         {loadingBrands ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, index) => (
               <div key={index} className="flex items-center animate-pulse">
-                <div className="h-4 w-4 bg-gray-200 rounded"></div>
-                <div className="ml-2 h-4 w-3/4 bg-gray-200 rounded"></div>
+                <div className="h-4 w-4 bg-obsidian-raised rounded"></div>
+                <div className="ml-2 h-4 w-3/4 bg-obsidian-raised rounded"></div>
               </div>
             ))}
           </div>
@@ -478,7 +478,7 @@ export default function EnhancedProductFilters() {
               <input
                 type="text"
                 placeholder="Search brands..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="w-full px-3 py-2 border border-hairline rounded-md text-sm"
                 value={brandSearch}
                 onChange={(e) => setBrandSearch(e.target.value)}
               />
@@ -490,7 +490,7 @@ export default function EnhancedProductFilters() {
                   <label key={brand._id} className="flex items-center py-1">
                     <input
                       type="checkbox"
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-hairline text-gold focus:ring-gold"
                       checked={selectedBrands.includes(brand._id)}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -500,11 +500,11 @@ export default function EnhancedProductFilters() {
                         }
                       }}
                     />
-                    <span className="ml-2 text-sm text-gray-700">{brand.name}</span>
+                    <span className="ml-2 text-sm text-ink/80">{brand.name}</span>
                   </label>
                 ))
               ) : (
-                <p className="text-sm text-gray-500 py-2">No brands found</p>
+                <p className="text-sm text-ink-muted py-2">No brands found</p>
               )}
             </div>
           </div>
@@ -514,7 +514,7 @@ export default function EnhancedProductFilters() {
       {/* Clear Filters */}
       <button 
         onClick={clearFilters}
-        className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+        className="w-full bg-obsidian-raised text-ink/80 px-4 py-2 rounded-md hover:bg-obsidian-raised transition-colors"
       >
         Clear All Filters
       </button>

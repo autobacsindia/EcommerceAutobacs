@@ -52,7 +52,7 @@ export default function ImageModal({ images, activeIndex, isOpen, onClose, onNav
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm"
+        className="fixed inset-0 z-[9999] bg-obsidian-deep/95 backdrop-blur-sm"
         onClick={onClose}
       >
         {/* Close Button */}
@@ -62,9 +62,9 @@ export default function ImageModal({ images, activeIndex, isOpen, onClose, onNav
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={onClose}
-          className="absolute top-6 right-6 z-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full p-3 transition-colors"
+          className="absolute top-6 right-6 z-10 bg-obsidian/10 hover:bg-obsidian/20 border border-hairline/20 rounded-full p-3 transition-colors"
         >
-          <X className="w-6 h-6 text-white" />
+          <X className="w-6 h-6 text-ink" />
         </motion.button>
 
         {/* Navigation Arrows */}
@@ -74,17 +74,17 @@ export default function ImageModal({ images, activeIndex, isOpen, onClose, onNav
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
-              className="absolute left-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full p-4 transition-colors"
+              className="absolute left-6 top-1/2 -translate-y-1/2 z-10 bg-obsidian/10 hover:bg-obsidian/20 border border-hairline/20 rounded-full p-4 transition-colors"
             >
-              <ChevronLeft className="w-8 h-8 text-white" />
+              <ChevronLeft className="w-8 h-8 text-ink" />
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={(e) => { e.stopPropagation(); goToNext(); }}
-              className="absolute right-6 top-1/2 -translate-y-1/2 z-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full p-4 transition-colors"
+              className="absolute right-6 top-1/2 -translate-y-1/2 z-10 bg-obsidian/10 hover:bg-obsidian/20 border border-hairline/20 rounded-full p-4 transition-colors"
             >
-              <ChevronRight className="w-8 h-8 text-white" />
+              <ChevronRight className="w-8 h-8 text-ink" />
             </motion.button>
           </>
         )}
@@ -95,22 +95,22 @@ export default function ImageModal({ images, activeIndex, isOpen, onClose, onNav
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={(e) => { e.stopPropagation(); setZoom(Math.min(zoom + 0.5, 3)); }}
-            className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-full p-3 transition-colors"
+            className="bg-obsidian/10 hover:bg-obsidian/20 border border-hairline/20 rounded-full p-3 transition-colors"
           >
-            <ZoomIn className="w-5 h-5 text-white" />
+            <ZoomIn className="w-5 h-5 text-ink" />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={(e) => { e.stopPropagation(); setZoom(Math.max(zoom - 0.5, 1)); }}
-            className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-full p-3 transition-colors"
+            className="bg-obsidian/10 hover:bg-obsidian/20 border border-hairline/20 rounded-full p-3 transition-colors"
           >
-            <ZoomOut className="w-5 h-5 text-white" />
+            <ZoomOut className="w-5 h-5 text-ink" />
           </motion.button>
         </div>
 
         {/* Image Counter */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-white/10 border border-white/20 text-white px-6 py-3 rounded-full text-sm font-medium">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 bg-obsidian/10 border border-hairline/20 text-ink px-6 py-3 rounded-full text-sm font-medium">
           {activeIndex + 1} / {images.length}
         </div>
 

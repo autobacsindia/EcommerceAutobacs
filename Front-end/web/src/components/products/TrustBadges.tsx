@@ -3,14 +3,14 @@ import { ShieldCheck, Truck, RotateCcw, CreditCard } from 'lucide-react';
 
 export default function TrustBadges() {
   return (
-    <div className="grid grid-cols-2 gap-4 py-6 border-t border-gray-100 mt-6">
+    <div className="grid grid-cols-2 gap-4 py-6 border-t border-hairline mt-6">
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-blue-50 rounded-full text-blue-600">
+        <div className="p-2 bg-blue-50 rounded-full text-gold">
           <ShieldCheck className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">Secure Payment</p>
-          <p className="text-xs text-gray-500">100% Protected</p>
+          <p className="text-sm font-semibold text-ink">Secure Payment</p>
+          <p className="text-xs text-ink-muted">100% Protected</p>
         </div>
       </div>
       
@@ -19,8 +19,8 @@ export default function TrustBadges() {
           <Truck className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">Fast Shipping</p>
-          <p className="text-xs text-gray-500">Pan India Delivery</p>
+          <p className="text-sm font-semibold text-ink">Fast Shipping</p>
+          <p className="text-xs text-ink-muted">Pan India Delivery</p>
         </div>
       </div>
 
@@ -29,8 +29,8 @@ export default function TrustBadges() {
           <RotateCcw className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">Easy Returns</p>
-          <p className="text-xs text-gray-500">7 Days Policy</p>
+          <p className="text-sm font-semibold text-ink">Easy Returns</p>
+          <p className="text-xs text-ink-muted">7 Days Policy</p>
         </div>
       </div>
 
@@ -39,8 +39,8 @@ export default function TrustBadges() {
           <CreditCard className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">EMI Available</p>
-          <p className="text-xs text-gray-500">On Select Cards</p>
+          <p className="text-sm font-semibold text-ink">EMI Available</p>
+          <p className="text-xs text-ink-muted">On Select Cards</p>
         </div>
       </div>
     </div>

@@ -44,7 +44,7 @@ export default function CurrencySwitcherDropdown() {
       {/* Dropdown Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors text-white"
+        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-obsidian-raised transition-colors text-ink"
         aria-label="Select currency"
         aria-expanded={isOpen}
       >
@@ -57,7 +57,7 @@ export default function CurrencySwitcherDropdown() {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 animate-fadeIn">
+        <div className="absolute top-full right-0 mt-2 w-48 bg-obsidian rounded-lg shadow-lg border border-hairline py-1 z-50 animate-fadeIn">
           {CURRENCIES.map((curr) => {
             const Icon = curr.icon;
             const isSelected = curr.code === currency;
@@ -66,25 +66,25 @@ export default function CurrencySwitcherDropdown() {
               <button
                 key={curr.code}
                 onClick={() => handleCurrencySelect(curr.code)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors ${
+                className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-obsidian-deep transition-colors ${
                   isSelected ? 'bg-blue-50' : ''
                 }`}
               >
                 <Icon className={`h-5 w-5 ${
-                  isSelected ? 'text-blue-600' : 'text-gray-600'
+                  isSelected ? 'text-gold' : 'text-ink-muted'
                 }`} />
                 <div className="flex-1 text-left">
                   <div className={`text-sm font-medium ${
-                    isSelected ? 'text-blue-600' : 'text-gray-900'
+                    isSelected ? 'text-gold' : 'text-ink'
                   }`}>
                     {curr.code}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-ink-muted">
                     {curr.name}
                   </div>
                 </div>
                 {isSelected && (
-                  <div className="w-2 h-2 rounded-full bg-blue-600" />
+                  <div className="w-2 h-2 rounded-full bg-gold" />
                 )}
               </button>
             );

@@ -12,7 +12,7 @@ export default function TermsPage() {
         <p>
           Welcome to AutoBacs India (&quot;we,&quot; &quot;our,&quot; &quot;us&quot;). These Terms and Conditions govern your access to and use of our
           website located at{' '}
-          <Link href="/" className="text-[#3B9EE8] hover:text-white transition-colors">autobacsindia.com</Link>
+          <Link href="/" className="text-gold hover:text-ink transition-colors">autobacsindia.com</Link>
           {' '}(the &quot;Website&quot;) and our services. By accessing or using our Website, you agree to be bound
           by these Terms and Conditions and our Privacy Policy. If you do not agree to these terms, please do not
           use our Website.
@@ -26,7 +26,7 @@ export default function TermsPage() {
           <p className="mb-3">AutoBacs India provides an online platform for the sale of automotive parts, accessories, and related products. Our services include:</p>
           <ul className="space-y-1.5 pl-4">
             {['Online retail of automotive products', 'Product information and specifications', 'Order processing and fulfillment', 'Customer support services', 'Installation service coordination (where available)'].map(item => (
-              <li key={item} className="flex items-start gap-2"><span className="text-[#3B9EE8] mt-1">—</span><span>{item}</span></li>
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
             ))}
           </ul>
         </>
@@ -43,7 +43,7 @@ export default function TermsPage() {
           <p className="mb-3">To access certain features of our Website, you may be required to create an account. You agree to:</p>
           <ul className="space-y-1.5 pl-4">
             {['Provide accurate, current, and complete information during registration', 'Maintain and promptly update your account information', 'Maintain the security of your password', 'Notify us immediately of any unauthorized use of your account'].map(item => (
-              <li key={item} className="flex items-start gap-2"><span className="text-[#3B9EE8] mt-1">—</span><span>{item}</span></li>
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
             ))}
           </ul>
           <p className="mt-3">You are responsible for all activities that occur under your account.</p>
@@ -61,7 +61,7 @@ export default function TermsPage() {
           <p className="mb-3">All prices are listed in Indian Rupees (INR) and are subject to change without notice. Prices do not include applicable taxes, which will be added at checkout. We reserve the right to refuse or cancel any order for any reason, including but not limited to:</p>
           <ul className="space-y-1.5 pl-4">
             {['Product unavailability', 'Errors in pricing or product information', 'Suspicion of fraudulent activity'].map(item => (
-              <li key={item} className="flex items-start gap-2"><span className="text-[#3B9EE8] mt-1">—</span><span>{item}</span></li>
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
             ))}
           </ul>
         </>
@@ -77,7 +77,7 @@ export default function TermsPage() {
     },
     {
       heading: '9. Returns and Refunds',
-      content: <p>Our return policy is outlined in our{' '}<Link href="/returns" className="text-[#3B9EE8] hover:text-white transition-colors">Refund Policy</Link>. Please review this policy before making a purchase.</p>,
+      content: <p>Our return policy is outlined in our{' '}<Link href="/returns" className="text-gold hover:text-ink transition-colors">Refund Policy</Link>. Please review this policy before making a purchase.</p>,
     },
     {
       heading: '10. Intellectual Property',
@@ -90,7 +90,7 @@ export default function TermsPage() {
           <p className="mb-3">You agree not to:</p>
           <ul className="space-y-1.5 pl-4">
             {['Use our Website for any unlawful purpose', 'Interfere with or disrupt our Website or servers', 'Attempt to gain unauthorized access to our Website', 'Transmit any viruses or malicious code', 'Harvest or collect information about other users'].map(item => (
-              <li key={item} className="flex items-start gap-2"><span className="text-[#3B9EE8] mt-1">—</span><span>{item}</span></li>
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
             ))}
           </ul>
         </>
@@ -129,7 +129,7 @@ export default function TermsPage() {
       content: (
         <p>
           If you have any questions about these Terms and Conditions, please contact us at AutoBacs India Private Limited —
-          Email:{' '}<Link href="mailto:support@autobacsindia.com" className="text-[#3B9EE8] hover:text-white transition-colors">support@autobacsindia.com</Link>
+          Email:{' '}<Link href="mailto:support@autobacsindia.com" className="text-gold hover:text-ink transition-colors">support@autobacsindia.com</Link>
           {' '}— Phone: +91 9895257905
         </p>
       ),
@@ -141,13 +141,13 @@ export default function TermsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#080808]">
+    <div className="min-h-screen bg-obsidian-deep">
       {/* Hero */}
-      <section className="bg-[#0E0E0E] border-b border-[#252525]">
+      <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-2">Legal</p>
-          <h1 className="text-4xl font-condensed font-bold text-white uppercase tracking-wide mb-4">Terms and Conditions</h1>
-          <p className="text-[#C4C4C4] font-body max-w-3xl mx-auto">
+          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Legal</p>
+          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Terms and Conditions</h1>
+          <p className="text-ink/70 font-display max-w-3xl mx-auto">
             Please read these terms and conditions carefully before using our website and services.
           </p>
         </div>
@@ -156,14 +156,14 @@ export default function TermsPage() {
       {/* Content */}
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-[#0E0E0E] border border-[#252525] rounded-sm p-8">
-            <p className="text-[#555555] font-body text-sm mb-8">Last Updated: {lastUpdated}</p>
+          <div className="bg-obsidian border border-hairline rounded-sm p-8">
+            <p className="text-ink-muted font-display text-sm mb-8">Last Updated: {lastUpdated}</p>
 
             <div className="space-y-8">
               {sections.map(({ heading, content }, i) => (
-                <div key={heading} className={i > 0 ? 'border-t border-[#252525] pt-8' : ''}>
-                  <h2 className="font-condensed font-bold text-white uppercase tracking-wide text-lg mb-3">{heading}</h2>
-                  <div className="text-[#C4C4C4] font-body leading-relaxed">{content}</div>
+                <div key={heading} className={i > 0 ? 'border-t border-hairline pt-8' : ''}>
+                  <h2 className="font-display font-bold text-ink uppercase tracking-wide text-lg mb-3">{heading}</h2>
+                  <div className="text-ink/70 font-display leading-relaxed">{content}</div>
                 </div>
               ))}
             </div>

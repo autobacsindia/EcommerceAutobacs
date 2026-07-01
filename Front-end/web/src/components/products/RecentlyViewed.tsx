@@ -44,16 +44,16 @@ const RecentlyViewed = () => {
   if (!mounted || products.length === 0) return null;
 
   return (
-    <div className="bg-[#080808] border-t border-[#252525] py-8">
+    <div className="bg-obsidian-deep border-t border-hairline py-8">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-[#3B9EE8] font-condensed font-bold text-sm uppercase tracking-widest mb-1">Your History</p>
-            <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide">Recently Viewed</h2>
+            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Your History</p>
+            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide">Recently Viewed</h2>
           </div>
           <button
             onClick={clearHistory}
-            className="text-sm text-[#C4C4C4] hover:text-red-400 font-body px-3 py-1 rounded-sm hover:bg-[#252525] transition-colors"
+            className="text-sm text-ink/70 hover:text-red-400 font-display px-3 py-1 rounded-sm hover:bg-obsidian-raised transition-colors"
           >
             Clear History
           </button>
@@ -66,9 +66,9 @@ const RecentlyViewed = () => {
             <Link
               key={product._id}
               href={url}
-              className="group block bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300"
+              className="group block bg-obsidian border border-hairline rounded-lg overflow-hidden hover:border-gold transition-all duration-300"
             >
-              <div className="aspect-square relative bg-[#161616]">
+              <div className="aspect-square relative bg-obsidian-raised">
                 <EnhancedImage
                   src={product.image}
                   alt={product.name}
@@ -79,15 +79,15 @@ const RecentlyViewed = () => {
                 />
               </div>
               <div className="p-4">
-                <h3 className="font-condensed font-bold text-white text-sm uppercase tracking-wide line-clamp-2 min-h-10 mb-2 group-hover:text-[#3B9EE8] transition-colors">
+                <h3 className="font-display font-bold text-ink text-sm uppercase tracking-wide line-clamp-2 min-h-10 mb-2 group-hover:text-gold transition-colors">
                   {product.name}
                 </h3>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-condensed font-bold text-[#3B9EE8]">
+                  <span className="text-lg font-display font-bold text-gold">
                     {formatPrice(product.price)}
                   </span>
                   {product.originalPrice && product.originalPrice > product.price && (
-                    <span className="text-xs text-[#555555] line-through">
+                    <span className="text-xs text-ink-muted line-through">
                       {formatPrice(product.originalPrice)}
                     </span>
                   )}

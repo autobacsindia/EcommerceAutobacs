@@ -106,10 +106,10 @@ export default function EnhancedImage({
   if (!finalSrc || finalSrc === '') {
     return (
       <div 
-        className={`flex items-center justify-center bg-gray-100 ${className}`}
+        className={`flex items-center justify-center bg-obsidian-raised ${className}`}
         style={{ width: width || 200, height: height || 200 }}
       >
-        <span className="text-gray-400 text-sm">No image</span>
+        <span className="text-ink-muted text-sm">No image</span>
       </div>
     );
   }
@@ -118,10 +118,10 @@ export default function EnhancedImage({
   if (imageError) {
     return (
       <div 
-        className={`flex items-center justify-center bg-gray-100 ${className}`}
+        className={`flex items-center justify-center bg-obsidian-raised ${className}`}
         style={{ width: width || 200, height: height || 200 }}
       >
-        <span className="text-gray-400 text-sm">Image unavailable</span>
+        <span className="text-ink-muted text-sm">Image unavailable</span>
       </div>
     );
   }

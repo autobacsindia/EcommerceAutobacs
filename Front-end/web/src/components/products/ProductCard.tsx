@@ -39,8 +39,8 @@ export default function ProductCard({
             className="object-cover w-full h-full"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-[#161616]">
-            <span className="text-[#555555] text-sm">No image available</span>
+          <div className="w-full h-full flex items-center justify-center bg-obsidian-raised">
+            <span className="text-ink-muted text-sm">No image available</span>
           </div>
         )
       )}
@@ -50,18 +50,18 @@ export default function ProductCard({
 
       <div className="absolute top-10 left-2 flex gap-1 flex-wrap">
         {product.stock === 'out' && (
-          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">Out of Stock</div>
+          <div className="bg-red-500 text-ink px-2 py-1 rounded text-xs font-semibold">Out of Stock</div>
         )}
         {product.stock !== 'out' && (product as any).isNew && (
-          <div className="bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">New</div>
+          <div className="bg-green-500 text-ink px-2 py-1 rounded text-xs font-semibold">New</div>
         )}
         {product.originalPrice && product.originalPrice > product.price && (
-          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
+          <div className="bg-red-500 text-ink px-2 py-1 rounded text-xs font-semibold">
             {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
           </div>
         )}
         {product.isFeatured && product.stock !== 'out' && product.originalPrice && product.originalPrice <= product.price && (
-          <div className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-semibold">Popular</div>
+          <div className="bg-gold text-obsidian px-2 py-1 rounded text-xs font-semibold">Popular</div>
         )}
       </div>
     </>
@@ -69,21 +69,21 @@ export default function ProductCard({
 
   return (
     <div className={cn(
-      'bg-[#0E0E0E] border border-[#252525] rounded-lg overflow-hidden hover:border-[#3B9EE8] transition-all duration-300 group',
+      'bg-obsidian border border-hairline rounded-lg overflow-hidden hover:border-gold transition-all duration-300 group',
       className
     )}>
       {url ? (
-        <Link href={url} className="block relative h-48 bg-[#161616]">
+        <Link href={url} className="block relative h-48 bg-obsidian-raised">
           {imageContents}
         </Link>
       ) : (
-        <div className="relative h-48 bg-[#161616]">
+        <div className="relative h-48 bg-obsidian-raised">
           {imageContents}
         </div>
       )}
 
       <div className="p-4">
-        <p className="text-xs text-[#3B9EE8] uppercase font-condensed font-bold tracking-widest mb-1">
+        <p className="text-xs text-gold uppercase font-display font-bold tracking-widest mb-1">
           {product.categories && product.categories.length > 0 ? (
             product.categories[0].name.toUpperCase()
           ) : typeof product.category === 'object' && product.category !== null ? (
@@ -97,12 +97,12 @@ export default function ProductCard({
 
         {url ? (
           <Link href={url}>
-            <h3 className="font-condensed font-bold text-white mb-2 line-clamp-2 hover:text-[#3B9EE8] text-base uppercase tracking-wide">
+            <h3 className="font-display font-bold text-ink mb-2 line-clamp-2 hover:text-gold text-base uppercase tracking-wide">
               {product.name}
             </h3>
           </Link>
         ) : (
-          <h3 className="font-condensed font-bold text-white mb-2 line-clamp-2 text-base uppercase tracking-wide">
+          <h3 className="font-display font-bold text-ink mb-2 line-clamp-2 text-base uppercase tracking-wide">
             {product.name}
           </h3>
         )}
@@ -113,7 +113,7 @@ export default function ProductCard({
               {[1, 2, 3, 4, 5].map((star) => (
                 <svg
                   key={star}
-                  className={cn('h-4 w-4', star <= product.averageRating ? 'text-[#EF9F27]' : 'text-[#252525]')}
+                  className={cn('h-4 w-4', star <= product.averageRating ? 'text-gold' : 'text-hairline')}
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -121,7 +121,7 @@ export default function ProductCard({
                 </svg>
               ))}
             </div>
-            <span className="text-sm text-[#C4C4C4]">({product.averageRating.toFixed(1)})</span>
+            <span className="text-sm text-ink/70">({product.averageRating.toFixed(1)})</span>
           </div>
         )}
 
