@@ -49,6 +49,16 @@ router.get("/", cacheResponse(BRAND_LIST_TTL), asyncHandler(async (req, res) => 
     query.name = { $regex: search, $options: 'i' };
   }
 
+  // Optional facet filters (omitted → unchanged legacy behaviour: all brands).
+  //   make=true  → only car makes (type:'make')
+  //   make=false → parts brands + house (everything except makes)
+  //   active=true|false → filter by isActive
+  const { make, active } = req.query;
+  if (make === 'true') query.type = 'make';
+  else if (make === 'false') query.type = { $ne: 'make' };
+  if (active === 'true') query.isActive = true;
+  else if (active === 'false') query.isActive = false;
+
   // Get total count for pagination
   const total = await brandRepository.countDocuments(query);
 

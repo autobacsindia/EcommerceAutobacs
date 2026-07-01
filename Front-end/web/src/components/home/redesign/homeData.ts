@@ -184,7 +184,7 @@ async function fetchJournal(): Promise<JournalItem[]> {
 
 async function fetchBrands(): Promise<string[]> {
   const res = await serverFetch<{ brands?: ApiBrand[] }>(
-    `/brands?limit=${LIMITS.brands}`,
+    `/brands?make=false&active=true&limit=${LIMITS.brands}`,
     { next: { revalidate: REVALIDATE, tags: ['home:brands'] } }
   );
   return (res.brands ?? []).map((b) => b.name).filter(Boolean);

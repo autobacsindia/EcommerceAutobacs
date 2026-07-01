@@ -86,7 +86,7 @@ export default function CreateProductPage() {
 
   const fetchBrands = async () => {
     try {
-      const response = await apiClient.get<{ data?: Brand[]; brands?: Brand[] }>('/brands?limit=500');
+      const response = await apiClient.get<{ data?: Brand[]; brands?: Brand[] }>('/brands?make=false&active=true&limit=500');
       const list = response.data || response.brands || [];
       setBrands([...list].sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {

@@ -23,6 +23,24 @@ import {
   type ResponseInterceptor,
 } from './api-types';
 
+// Client-readable "a session existed" hint, written by AuthContext on login
+// (localStorage key). Under httpOnly-cookie auth JS cannot read the refresh
+// token, so this is the only signal available to decide whether a 401 should
+// trigger a silent refresh vs. be treated as a plain guest response.
+// Keep in sync with CACHE_KEY in context/AuthContext.tsx.
+const AUTH_HINT_KEY = 'auth_check';
+
+/** True when the client believes it has (or had) an authenticated session. SSR-safe. */
+function hasSessionHint(): boolean {
+  if (tokenManager.refreshToken != null) return true; // legacy bearer flow
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(AUTH_HINT_KEY) != null;
+  } catch {
+    return false;
+  }
+}
+
 class APIClient {
   private loadingCount = 0;
   private loadingListeners: Array<(isLoading: boolean, count: number) => void> = [];
@@ -159,11 +177,12 @@ class APIClient {
           return { action: 'skip' };
         }
 
-        // refreshToken is always null with httpOnly cookies — JS cannot read it.
-        // TODO: remove this guard once httpOnly-cookie auth is validated end-to-end;
-        //       refreshSession() already deduplicates concurrent calls via _refreshPromise.
-        if (!tokenManager.refreshToken) {
-          console.debug('401 detected but no refresh token in memory (guest or httpOnly flow)');
+        // Under httpOnly-cookie auth `tokenManager.refreshToken` is always null
+        // (JS can't read the cookie), so we gate the silent refresh on the login
+        // hint instead. Genuine guests (no hint) skip refresh so public-page 401s
+        // don't bounce them to login; expired sessions refresh via the httpOnly
+        // refreshToken cookie the browser sends to /auth/refresh automatically.
+        if (!hasSessionHint()) {
           return { action: 'skip' };
         }
 
@@ -172,6 +191,10 @@ class APIClient {
           return { action: 'retry' };
         } catch (refreshError) {
           tokenManager.clearAuthToken();
+          // Drop the stale login hint so a hard-expired session doesn't loop.
+          try {
+            if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_HINT_KEY);
+          } catch { /* storage unavailable — non-fatal */ }
           console.error('Token refresh failed:', refreshError);
           if (typeof window !== 'undefined') {
             window.location.href = '/login?reason=refresh_failed';
