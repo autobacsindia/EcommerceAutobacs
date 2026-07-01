@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, FolderOpen, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, FolderOpen, Package, Star } from 'lucide-react';
 import apiClient from '@/lib/api';
 
 // Define the Category interface inline to avoid import issues
@@ -17,6 +17,7 @@ interface Category {
     alt?: string;
   };
   isActive: boolean;
+  isFeatured?: boolean;
   order: number;
   productCount?: number;       // products tagged directly with this category
   totalProductCount?: number;  // products in this category and all its subcategories
@@ -61,6 +62,20 @@ export default function AdminCategoriesPage() {
       console.error('Failed to delete category:', err);
       // Surface backend integrity errors (e.g. category still has subcategories/products).
       alert(err?.message || 'Failed to delete category. Please try again.');
+    }
+  };
+
+  // One-click featured toggle. Updates the row in place from the response so the
+  // whole list doesn't refetch on every star click.
+  const handleToggleFeature = async (id: string) => {
+    try {
+      const res = await apiClient.patch(`/categories/${id}/feature`) as { isFeatured?: boolean };
+      setCategories(prev =>
+        prev.map(c => (c._id === id ? { ...c, isFeatured: res.isFeatured ?? !c.isFeatured } : c))
+      );
+    } catch (err: any) {
+      console.error('Failed to toggle featured:', err);
+      alert(err?.message || 'Failed to update featured status. Please try again.');
     }
   };
 
@@ -119,6 +134,11 @@ export default function AdminCategoriesPage() {
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${category.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                     {category.isActive ? 'Active' : 'Inactive'}
                   </span>
+                  {depth === 0 && category.isFeatured && (
+                    <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                      <Star className="h-3 w-3 fill-current" /> Featured
+                    </span>
+                  )}
                   <span
                     className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
                     title={(category.totalProductCount ?? 0) !== (category.productCount ?? 0)
@@ -132,6 +152,15 @@ export default function AdminCategoriesPage() {
               </div>
             </div>
             <div className="flex space-x-2">
+              {depth === 0 && (
+                <button
+                  onClick={() => handleToggleFeature(category._id)}
+                  className={`p-2 ${category.isFeatured ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-amber-500'}`}
+                  title={category.isFeatured ? 'Unfeature from homepage carousel' : 'Feature on homepage carousel'}
+                >
+                  <Star className={`h-5 w-5 ${category.isFeatured ? 'fill-current' : ''}`} />
+                </button>
+              )}
               <Link
                 href={`/admin/products?category=${category._id}&categoryName=${encodeURIComponent(category.name)}`}
                 className="p-2 text-gray-500 hover:text-blue-600"

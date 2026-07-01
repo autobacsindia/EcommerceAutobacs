@@ -18,6 +18,7 @@ interface Category {
     alt?: string;
   };
   isActive: boolean;
+  isFeatured?: boolean;
   order: number;
   createdAt?: string;
   updatedAt?: string;
@@ -37,6 +38,7 @@ export default function EditCategoryPage() {
     description: '',
     parent: undefined as string | undefined,
     isActive: true,
+    isFeatured: false,
     order: 0,
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -83,6 +85,7 @@ export default function EditCategoryPage() {
         description: categoryData.description || '',
         parent: categoryData.parent?._id || categoryData.parent || undefined,
         isActive: categoryData.isActive !== undefined ? categoryData.isActive : true,
+        isFeatured: !!categoryData.isFeatured,
         order: categoryData.order || 0,
       });
       setSeo(toSeoFormValue(categoryData.seo));
@@ -149,6 +152,7 @@ export default function EditCategoryPage() {
       fd.append('parent', formData.parent ?? '');
       fd.append('order', String(formData.order ?? 0));
       fd.append('isActive', String(formData.isActive));
+      fd.append('isFeatured', String(formData.isFeatured));
       fd.append('seo', JSON.stringify(seo));
       if (imageFile) {
         fd.append('image', imageFile);
@@ -433,7 +437,24 @@ export default function EditCategoryPage() {
                 Inactive categories won't be displayed to users.
               </p>
             </div>
-            
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isFeatured"
+                name="isFeatured"
+                checked={formData.isFeatured}
+                onChange={handleChange}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="isFeatured" className="ml-2 block text-sm text-gray-700">
+                Featured
+              </label>
+              <p className="ml-2 text-sm text-gray-500">
+                Featured hubs lead the homepage categories carousel with a distinct badge.
+              </p>
+            </div>
+
             <SeoPanel
               value={seo}
               onChange={setSeo}

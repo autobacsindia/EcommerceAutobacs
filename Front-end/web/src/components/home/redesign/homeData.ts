@@ -76,6 +76,7 @@ interface ApiCategory {
   slug?: string;
   parent?: { _id: string } | string | null;
   image?: { url?: string; alt?: string };
+  isFeatured?: boolean;
 }
 interface ApiTestimonial {
   id: string;
@@ -121,12 +122,12 @@ const mapProduct = (p: ApiProduct): ProductItem => ({
 });
 
 const mapCategory = (c: ApiCategory): CategoryItem => ({
-  // Uniform badge across all cards — the label is decorative, not a real
-  // "featured" attribute (no such flag exists on Category).
-  tag: 'Category',
+  // Badge reflects the real admin-controlled `isFeatured` flag.
+  tag: c.isFeatured ? 'Featured' : 'Category',
   name: c.name,
   href: c.slug ? `/categories/${c.slug}` : '/categories',
   image: c.image?.url || '',
+  featured: !!c.isFeatured,
 });
 
 const mapTestimonial = (t: ApiTestimonial): TestimonialItem => ({
@@ -163,8 +164,12 @@ async function fetchCategories(): Promise<CategoryItem[]> {
     { next: { revalidate: REVALIDATE, tags: ['home:categories'] } }
   );
   // Hubs only = top-level categories (no parent). The list is pre-sorted by
-  // `order` server-side, so the first N are the curated lead hubs.
-  const hubs = (res.categories ?? []).filter((c) => !c.parent);
+  // `order` server-side; a stable featured-first pass floats promoted hubs to
+  // the front (preserving `order` within each group) so they're guaranteed to
+  // land inside the sliced window and lead the carousel.
+  const hubs = (res.categories ?? [])
+    .filter((c) => !c.parent)
+    .sort((a, b) => Number(!!b.isFeatured) - Number(!!a.isFeatured));
   return hubs.slice(0, LIMITS.categories).map(mapCategory);
 }
 

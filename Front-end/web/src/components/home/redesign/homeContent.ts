@@ -23,6 +23,7 @@ export interface CategoryItem {
   name: string; // may contain a single \n for the two-line layout
   href: string;
   image: string;
+  featured?: boolean; // editorially promoted hub — leads the carousel, distinct badge
 }
 
 export interface ProductItem {

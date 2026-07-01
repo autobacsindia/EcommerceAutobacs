@@ -35,6 +35,13 @@ const CategorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Editorially promoted hub. Featured categories lead the homepage categories
+  // carousel and render a distinct badge. Independent of `order` (which still
+  // sequences peers). Applies to top-level hubs — the carousel only shows hubs.
+  isFeatured: {
+    type: Boolean,
+    default: false
+  },
 
   // SEO metadata overrides (optional; blank fields fall back to name/description
   // on the frontend). See models/shared/seoSchema.js.

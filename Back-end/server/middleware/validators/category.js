@@ -24,6 +24,10 @@ export const validateCategory = [
     .optional()
     .isInt()
     .withMessage('Order must be an integer'),
+  body('isFeatured')
+    .optional()
+    .isBoolean()
+    .withMessage('isFeatured must be a boolean'),
   validateRequest
 ];
 
@@ -49,6 +53,10 @@ export const validateCategoryUpdate = [
     .optional()
     .isInt()
     .withMessage('Order must be an integer'),
+  body('isFeatured')
+    .optional()
+    .isBoolean()
+    .withMessage('isFeatured must be a boolean'),
   validateRequest
 ];
 

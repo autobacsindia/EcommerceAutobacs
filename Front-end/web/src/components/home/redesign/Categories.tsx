@@ -95,7 +95,7 @@ export default function Categories({ categories }: { categories?: CategoryItem[]
                   <Img src={cat.image} alt={cat.name.replace('\n', ' ')} />
                   <div className="cat-num-ghost">{String(i + 1).padStart(2, '0')}</div>
                   <div className="cat-info">
-                    <div className="cat-tag">{cat.tag}</div>
+                    <div className={`cat-tag${cat.featured ? ' cat-tag-featured' : ''}`}>{cat.tag}</div>
                     <div className="cat-name">
                       {cat.name.split('\n').map((line, j) => (
                         <span key={j}>

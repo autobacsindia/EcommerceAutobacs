@@ -183,6 +183,43 @@ describe('Categories API', () => {
     });
   });
 
+  describe('Featured flag', () => {
+    it('creates a category with isFeatured=true', async () => {
+      const res = await agent
+        .post(`${BASE}/categories`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .send({ name: 'Featured Hub', slug: 'featured-hub', isFeatured: true })
+        .expect(201);
+
+      expect(res.body.category.isFeatured).toBe(true);
+    });
+
+    it('toggles isFeatured via PATCH /:id/feature', async () => {
+      const cat = await Category.create({ name: 'Toggle Hub', slug: 'toggle-hub', isFeatured: false });
+
+      const on = await agent
+        .patch(`${BASE}/categories/${cat._id}/feature`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .expect(200);
+      expect(on.body.isFeatured).toBe(true);
+      expect((await Category.findById(cat._id)).isFeatured).toBe(true);
+
+      const off = await agent
+        .patch(`${BASE}/categories/${cat._id}/feature`)
+        .set('X-XSRF-TOKEN', csrfToken)
+        .expect(200);
+      expect(off.body.isFeatured).toBe(false);
+    });
+
+    it('rejects the feature toggle without authentication', async () => {
+      const cat = await Category.create({ name: 'NoAuth Hub', slug: 'noauth-hub' });
+      await request(app)
+        .patch(`${BASE}/categories/${cat._id}/feature`)
+        .set('Authorization', 'Bearer invalid_token')
+        .expect(401);
+    });
+  });
+
   describe('DELETE /categories/:id', () => {
     it('should soft delete category as admin', async () => {
       const res = await agent

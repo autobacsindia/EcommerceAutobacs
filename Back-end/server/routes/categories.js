@@ -203,7 +203,7 @@ router.post(
   validateUploadedFiles,
   validateCategory,
   asyncHandler(async (req, res) => {
-    const { name, slug, description, parent, order, isActive, imageAlt } = req.body;
+    const { name, slug, description, parent, order, isActive, isFeatured, imageAlt } = req.body;
 
     // Validate parent exists when provided — prevents dangling parent references.
     // Enforce a 2-level taxonomy (hub -> leaf): the chosen parent must itself be
@@ -243,8 +243,9 @@ router.post(
         parent: parent || null,
         image: imageData,
         order,
-        // isActive arrives as a string ("true"/"false") over multipart; coerce explicitly.
+        // isActive/isFeatured arrive as strings ("true"/"false") over multipart; coerce explicitly.
         ...(isActive !== undefined && { isActive: isActive === true || isActive === 'true' }),
+        ...(isFeatured !== undefined && { isFeatured: isFeatured === true || isFeatured === 'true' }),
         seo: normalizeSeo(req.body.seo),
       });
 
@@ -298,6 +299,9 @@ router.put(
     // Normalize multipart string values (req.body fields arrive as strings).
     if (updateData.isActive !== undefined) {
       updateData.isActive = updateData.isActive === true || updateData.isActive === 'true';
+    }
+    if (updateData.isFeatured !== undefined) {
+      updateData.isFeatured = updateData.isFeatured === true || updateData.isFeatured === 'true';
     }
     // Empty parent means "make this a top-level category".
     if (updateData.parent === '' || updateData.parent === 'null') {
@@ -438,6 +442,28 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
   res.json({
     success: true,
     message: 'Category deleted successfully'
+  });
+}));
+
+// @route   PATCH /categories/:id/feature
+// @desc    Toggle a category's homepage-featured flag (one-click from the admin list)
+// @access  Private/Admin
+router.patch("/:id/feature", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
+  const category = await categoryRepository.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  category.isFeatured = !category.isFeatured;
+  await category.save();
+
+  // Featured only affects presentation/ordering, not the hierarchy — no mapping refresh.
+  invalidateCache('categories');
+
+  res.json({
+    success: true,
+    message: `Category ${category.isFeatured ? 'featured' : 'unfeatured'} successfully`,
+    isFeatured: category.isFeatured,
   });
 }));
 
