@@ -120,8 +120,10 @@ const mapProduct = (p: ApiProduct): ProductItem => ({
   image: primaryImage(p.images),
 });
 
-const mapCategory = (c: ApiCategory, i: number): CategoryItem => ({
-  tag: i === 0 ? 'Featured Category' : 'Category',
+const mapCategory = (c: ApiCategory): CategoryItem => ({
+  // Uniform badge across all cards — the label is decorative, not a real
+  // "featured" attribute (no such flag exists on Category).
+  tag: 'Category',
   name: c.name,
   href: c.slug ? `/categories/${c.slug}` : '/categories',
   image: c.image?.url || '',

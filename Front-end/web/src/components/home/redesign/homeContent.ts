@@ -134,7 +134,7 @@ export const manifesto = {
 
 export const categories: CategoryItem[] = [
   {
-    tag: 'Featured Category',
+    tag: 'Category',
     name: 'Performance\nUpgrades',
     href: '/categories',
     image:
