@@ -129,10 +129,23 @@ export const admin = asyncHandler(async (req, res, next) => {
     });
   }
 
-  if (storedIPHash !== currentIPHash || storedUAHash !== currentUAHash) {
+  // IP binding is only meaningful with a *trusted* client IP. Behind the current
+  // Vercel proxy (Cloudflare not yet in front) req.ip is a rotating proxy egress,
+  // not the client — comparing it produces false 401s on every admin request.
+  // Enforce IP match only when a real client IP is observable (cf-connecting-ip,
+  // i.e. Cloudflare fronting) or when explicitly forced on via env. UA binding
+  // always applies. Flip ADMIN_CONTEXT_BIND_IP=true at the Cloudflare cutover.
+  const ipBindingEnabled =
+    process.env.ADMIN_CONTEXT_BIND_IP === 'true' ||
+    (process.env.ADMIN_CONTEXT_BIND_IP !== 'false' && !!req.headers['cf-connecting-ip']);
+
+  const ipMismatch = ipBindingEnabled && storedIPHash !== currentIPHash;
+  const uaMismatch = storedUAHash !== currentUAHash;
+
+  if (ipMismatch || uaMismatch) {
     console.error(
       `[SECURITY] Admin session context mismatch | User: ${req.user.email} | ` +
-      `IP changed: ${storedIPHash !== currentIPHash} | UA changed: ${storedUAHash !== currentUAHash} | ` +
+      `IP changed: ${ipMismatch} (binding ${ipBindingEnabled ? 'on' : 'off'}) | UA changed: ${uaMismatch} | ` +
       `IP: ${currentIP} | UA: ${currentUA}`
     );
     Sentry.captureMessage('Admin session context mismatch — access denied', {
@@ -140,8 +153,9 @@ export const admin = asyncHandler(async (req, res, next) => {
       extra: {
         userId: req.user._id,
         email: req.user.email,
-        ipChanged: storedIPHash !== currentIPHash,
-        uaChanged: storedUAHash !== currentUAHash,
+        ipChanged: ipMismatch,
+        uaChanged: uaMismatch,
+        ipBindingEnabled,
         ip: currentIP
       }
     });
