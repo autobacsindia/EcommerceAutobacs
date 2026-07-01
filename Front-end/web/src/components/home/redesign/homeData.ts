@@ -198,8 +198,13 @@ async function fetchJournal(): Promise<JournalItem[]> {
 }
 
 async function fetchBrands(): Promise<string[]> {
+  // Parts brands only (make=false), active only — car makes live in the Vehicles
+  // section and never appear here. `v=2` is a deliberate cache-key reset: an older
+  // build cached `/brands?limit=24` BEFORE the make/active filter was added, so
+  // Next's Data Cache could keep serving the stale, unfiltered brand list. Bumping
+  // the URL forces a fresh, properly-tagged entry (mirrors the categories fetch).
   const res = await serverFetch<{ brands?: ApiBrand[] }>(
-    `/brands?make=false&active=true&limit=${LIMITS.brands}`,
+    `/brands?make=false&active=true&limit=${LIMITS.brands}&v=2`,
     { next: { revalidate: REVALIDATE, tags: ['home:brands'] } }
   );
   return (res.brands ?? []).map((b) => b.name).filter(Boolean);

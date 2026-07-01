@@ -39,9 +39,9 @@ export default function AdminBrandsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [limit] = useState(20);
-  // Car makes (Toyota, BMW…) are managed in their own tab so they don't pollute
-  // the parts-brand list. Inactive brands are hidden unless explicitly shown.
-  const [view, setView] = useState<'brands' | 'makes'>('brands');
+  // This screen lists ONLY parts brands (make=false). Car makes are managed
+  // entirely in the Vehicles section, so there's no makes view here. Inactive
+  // brands are hidden unless explicitly shown.
   const [showInactive, setShowInactive] = useState(false);
 
   // Debounce search term
@@ -54,14 +54,14 @@ export default function AdminBrandsPage() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset to first page when the tab or inactive filter changes.
+  // Reset to first page when the inactive filter changes.
   useEffect(() => {
     setCurrentPage(1);
-  }, [view, showInactive]);
+  }, [showInactive]);
 
   useEffect(() => {
     fetchBrands(currentPage);
-  }, [currentPage, debouncedSearchTerm, view, showInactive]);
+  }, [currentPage, debouncedSearchTerm, showInactive]);
 
   const fetchBrands = async (page: number = 1) => {
     try {
@@ -69,7 +69,7 @@ export default function AdminBrandsPage() {
       const params = new URLSearchParams();
       params.append('page', page.toString());
       params.append('limit', limit.toString());
-      params.append('make', view === 'makes' ? 'true' : 'false');
+      params.append('make', 'false');
       if (!showInactive) {
         params.append('active', 'true');
       }
@@ -136,30 +136,8 @@ export default function AdminBrandsPage() {
         </Link>
       </div>
 
-      <div className="mb-6 flex items-center justify-between border-b">
-        <div className="flex gap-1">
-          <button
-            onClick={() => setView('brands')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              view === 'brands'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Parts Brands
-          </button>
-          <button
-            onClick={() => setView('makes')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              view === 'makes'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Car Makes
-          </button>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer pb-2">
+      <div className="mb-6 flex items-center justify-end">
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
             checked={showInactive}
@@ -175,7 +153,7 @@ export default function AdminBrandsPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
-            placeholder={view === 'makes' ? 'Search car makes...' : 'Search brands...'}
+            placeholder="Search brands..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg"
