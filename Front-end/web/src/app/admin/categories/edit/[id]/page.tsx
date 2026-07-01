@@ -32,6 +32,9 @@ export default function EditCategoryPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  // Original nature of the category: a hub (top-level) has no parent selector and
+  // can be featured; a subcategory gets a hub-only selector and can't be featured.
+  const [isSubcategory, setIsSubcategory] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -79,6 +82,7 @@ export default function EditCategoryPage() {
       const categoryData = response.category;
       
       setCategory(categoryData);
+      setIsSubcategory(Boolean(categoryData.parent));
       setFormData({
         name: categoryData.name || '',
         slug: categoryData.slug || '',
@@ -148,11 +152,12 @@ export default function EditCategoryPage() {
       fd.append('name', formData.name.trim());
       fd.append('slug', formData.slug.trim());
       fd.append('description', formData.description.trim());
-      // Empty string => backend resets to top-level category.
-      fd.append('parent', formData.parent ?? '');
+      // Hub stays top-level (empty parent); a subcategory keeps/moves to a hub.
+      fd.append('parent', isSubcategory ? (formData.parent ?? '') : '');
       fd.append('order', String(formData.order ?? 0));
       fd.append('isActive', String(formData.isActive));
-      fd.append('isFeatured', String(formData.isFeatured));
+      // Only hubs can be featured (the homepage carousel shows hubs only).
+      fd.append('isFeatured', String(isSubcategory ? false : formData.isFeatured));
       fd.append('seo', JSON.stringify(seo));
       if (imageFile) {
         fd.append('image', imageFile);
@@ -247,11 +252,13 @@ export default function EditCategoryPage() {
           className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
-          Back to Categories
+          Back
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Edit Category</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {isSubcategory ? 'Edit Subcategory' : 'Edit Hub'}
+        </h1>
       </div>
-      
+
       <div className="bg-white rounded-lg shadow-md p-6 max-w-2xl">
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
@@ -294,39 +301,53 @@ export default function EditCategoryPage() {
               </p>
             </div>
             
-            <div>
-              <label htmlFor="parent" className="block text-sm font-medium text-gray-700 mb-1">
-                Parent Category
-              </label>
-              {loadingCategories ? (
-                <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 animate-pulse">
-                  Loading categories...
+            {/* Hubs have no parent selector — they ARE the top level. Subcategories
+                get a hub-only selector so they can be moved between hubs. */}
+            {isSubcategory ? (
+              <div>
+                <label htmlFor="parent" className="block text-sm font-medium text-gray-700 mb-1">
+                  Parent hub
+                </label>
+                {loadingCategories ? (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 animate-pulse">
+                    Loading hubs...
+                  </div>
+                ) : (
+                  <select
+                    id="parent"
+                    name="parent"
+                    value={formData.parent ?? ''}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {categories
+                      // 2-level taxonomy: a subcategory must live under a top-level hub,
+                      // and cannot be its own parent.
+                      .filter(cat => cat._id !== categoryId && !cat.parent)
+                      .map((hub) => (
+                        <option key={hub._id} value={hub._id}>
+                          {hub.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+                <p className="mt-1 text-sm text-gray-500">
+                  Move this subcategory to a different hub. The catalog uses a two-level
+                  structure (hub → subcategory).
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Level</label>
+                <div className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-gray-700">
+                  Top-level hub
                 </div>
-              ) : (
-                <select
-                  id="parent"
-                  name="parent"
-                  value={formData.parent ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">None (Top-level category)</option>
-                  {categories
-                    // 2-level taxonomy: parent must be a top-level (hub) category, and a
-                    // category cannot be its own parent.
-                    .filter(cat => cat._id !== categoryId && !cat.parent)
-                    .map((category) => (
-                      <option key={category._id} value={category._id}>
-                        {category.name}
-                      </option>
-                    ))}
-                </select>
-              )}
-              <p className="mt-1 text-sm text-gray-500">
-                Pick a top-level category to make this a subcategory. The catalog uses a
-                two-level structure (hub → subcategory).
-              </p>
-            </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  This is a top-level hub, so it has no parent. Its subcategories are
+                  managed from its detail page.
+                </p>
+              </div>
+            )}
             
             <div>
               <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
@@ -438,22 +459,25 @@ export default function EditCategoryPage() {
               </p>
             </div>
 
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="isFeatured"
-                name="isFeatured"
-                checked={formData.isFeatured}
-                onChange={handleChange}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="isFeatured" className="ml-2 block text-sm text-gray-700">
-                Featured
-              </label>
-              <p className="ml-2 text-sm text-gray-500">
-                Featured hubs lead the homepage categories carousel with a distinct badge.
-              </p>
-            </div>
+            {/* Featured applies to hubs only (homepage carousel shows hubs). */}
+            {!isSubcategory && (
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isFeatured"
+                  name="isFeatured"
+                  checked={formData.isFeatured}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="isFeatured" className="ml-2 block text-sm text-gray-700">
+                  Featured
+                </label>
+                <p className="ml-2 text-sm text-gray-500">
+                  Featured hubs lead the homepage categories carousel with a distinct badge.
+                </p>
+              </div>
+            )}
 
             <SeoPanel
               value={seo}

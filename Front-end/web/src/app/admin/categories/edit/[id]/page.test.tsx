@@ -92,8 +92,8 @@ describe('EditCategoryPage', () => {
       expect(screen.getByLabelText(/Image Alt Text/i)).toHaveValue('Existing Image');
     });
 
-    // Check parent dropdown
-    const parentSelect = await screen.findByLabelText(/Parent Category/i);
+    // A category WITH a parent is a subcategory -> shows the hub-only selector.
+    const parentSelect = await screen.findByLabelText(/Parent hub/i);
     expect(parentSelect).toHaveValue('p1');
     
     // Check that own category is not in parent options
@@ -108,6 +108,25 @@ describe('EditCategoryPage', () => {
     expect(optionTexts).not.toContain('Existing Category');
     expect(optionTexts).toContain('Parent Cat');
     expect(optionTexts).toContain('Other Category');
+  });
+
+  it('hides the parent selector when editing a top-level hub', async () => {
+    // A category with no parent is a hub: no parent selector, featured is offered.
+    (apiClient.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/categories') return Promise.resolve({ data: mockCategories });
+      if (url === '/categories/c1') {
+        return Promise.resolve({ category: { ...mockCategory, parent: null } });
+      }
+      return Promise.reject(new Error(`Not found: ${url}`));
+    });
+
+    render(<EditCategoryPage />);
+
+    await waitFor(() => expect(screen.getByLabelText(/^Name/i)).toHaveValue('Existing Category'));
+
+    expect(screen.queryByLabelText(/Parent hub/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Top-level hub/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/Featured/i)).toBeInTheDocument();
   });
 
   it('updates category successfully', async () => {
