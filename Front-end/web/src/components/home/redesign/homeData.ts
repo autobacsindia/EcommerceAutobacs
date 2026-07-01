@@ -159,8 +159,14 @@ async function fetchProducts(): Promise<ProductItem[]> {
 }
 
 async function fetchCategories(): Promise<CategoryItem[]> {
+  // NOTE: the `v=2` param is a deliberate cache-key reset. Next.js keys the Data
+  // Cache by request URL, and an older build cached `/categories?limit=200`
+  // BEFORE this fetch carried the `home:categories` tag — leaving a permanent,
+  // untaggable entry that `revalidateTag` couldn't purge (it kept serving deleted
+  // hubs like "Other" with no featured flags). Bumping the URL forces a fresh,
+  // properly-tagged entry that honours `revalidate` + on-demand revalidation.
   const res = await serverFetch<{ categories?: ApiCategory[] }>(
-    `/categories?limit=200`,
+    `/categories?limit=200&v=2`,
     { next: { revalidate: REVALIDATE, tags: ['home:categories'] } }
   );
   // Hubs only = top-level categories (no parent), pre-sorted by `order`
