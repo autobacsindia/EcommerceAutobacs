@@ -13,6 +13,7 @@ jest.mock('lucide-react', () => ({
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
   FolderOpen: () => <span data-testid="icon-folder-open">FolderOpen</span>,
   Package: () => <span data-testid="icon-package">Package</span>,
+  Star: () => <span data-testid="icon-star">Star</span>,
 }));
 
 describe('AdminCategoriesPage', () => {
