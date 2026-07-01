@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -41,6 +42,7 @@ export default function CreateBrandPage() {
 
     try {
       await apiClient.post(API_ENDPOINTS.BRAND_CREATE, { ...formData, seo });
+      revalidateHome('home:brands');
       alert('Brand created successfully!');
       router.push('/admin/brands');
     } catch (err: any) {

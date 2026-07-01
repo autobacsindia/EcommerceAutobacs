@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Upload } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 // Define the Category interface inline to avoid import issues
@@ -154,6 +155,9 @@ function CreateCategoryForm() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Failed to create category');
+
+      // Refresh the home page's cached categories section.
+      revalidateHome('home:categories');
 
       // Back to where it belongs: the hub detail page for a subcategory, the hub
       // list otherwise.

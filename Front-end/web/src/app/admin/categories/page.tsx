@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Edit, Trash2, FolderOpen, Package, Star, ChevronRight } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -59,8 +60,9 @@ export default function AdminCategoriesPage() {
 
     try {
       await apiClient.delete(`/categories/${id}`);
-      // Refresh the list
+      // Refresh the list + the home page's cached categories section.
       fetchCategories();
+      revalidateHome('home:categories');
     } catch (err: any) {
       console.error('Failed to delete category:', err);
       // Surface backend integrity errors (e.g. category still has subcategories/products).
@@ -76,6 +78,8 @@ export default function AdminCategoriesPage() {
       setCategories(prev =>
         prev.map(c => (c._id === id ? { ...c, isFeatured: res.isFeatured ?? !c.isFeatured } : c))
       );
+      // Featured drives the home carousel — refresh it immediately.
+      revalidateHome('home:categories');
     } catch (err: any) {
       console.error('Failed to toggle featured:', err);
       alert(err?.message || 'Failed to update featured status. Please try again.');

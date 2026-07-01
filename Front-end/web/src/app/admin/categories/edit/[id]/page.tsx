@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Upload } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 // Define the Category interface inline to avoid import issues
@@ -180,7 +181,8 @@ export default function EditCategoryPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Failed to update category');
 
-      // Redirect to categories list
+      // Refresh the home page's cached categories section, then redirect.
+      revalidateHome('home:categories');
       router.push('/admin/categories');
       router.refresh();
     } catch (err: any) {

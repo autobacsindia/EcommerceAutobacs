@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, Package, Eye, ToggleLeft, ToggleRight } from 'lucide-react';
 import Link from 'next/link';
@@ -98,6 +99,7 @@ export default function AdminBrandsPage() {
     try {
       await apiClient.delete(API_ENDPOINTS.BRAND_DELETE(id));
       fetchBrands(currentPage);
+      revalidateHome('home:brands');
       alert('Brand deleted successfully');
     } catch (err: any) {
       alert(err.message || 'Failed to delete brand');
@@ -108,6 +110,8 @@ export default function AdminBrandsPage() {
     try {
       await apiClient.patch(API_ENDPOINTS.BRAND_TOGGLE_STATUS(id));
       fetchBrands(currentPage);
+      // active/inactive changes what the home marquee shows (active only).
+      revalidateHome('home:brands');
     } catch (err: any) {
       alert(err.message || 'Failed to toggle brand status');
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Save, Loader2, Package } from 'lucide-react';
 import Link from 'next/link';
@@ -84,6 +85,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
 
     try {
       await apiClient.put(API_ENDPOINTS.BRAND_UPDATE(id), { ...formData, seo });
+      revalidateHome('home:brands');
       alert('Brand updated successfully!');
       router.push('/admin/brands');
     } catch (err: any) {
