@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { CheckCircle, XCircle, Trash2, Search, Plus, Star, Quote } from 'lucide-react';
 
 interface Review {
@@ -121,7 +122,9 @@ export default function AdminReviewsPage() {
           ? { ...review, isApproved: true } 
           : review
       ));
-      
+
+      // A review shows on the homepage only when testimonial + approved — refresh it.
+      revalidateHome('home:testimonials');
       alert('Review approved successfully');
     } catch (err: any) {
       alert('Failed to approve review');
@@ -140,7 +143,8 @@ export default function AdminReviewsPage() {
           ? { ...review, isApproved: false } 
           : review
       ));
-      
+
+      revalidateHome('home:testimonials');
       alert('Review rejected successfully');
     } catch (err: any) {
       alert('Failed to reject review');
@@ -159,7 +163,8 @@ export default function AdminReviewsPage() {
       
       // Remove from UI immediately
       setReviews(reviews.filter(review => review._id !== reviewId));
-      
+
+      revalidateHome('home:testimonials');
       alert('Review deleted successfully');
     } catch (err: any) {
       alert('Failed to delete review');
@@ -171,6 +176,8 @@ export default function AdminReviewsPage() {
     try {
       await apiClient.put(`/reviews/${reviewId}/testimonial`, { isTestimonial: value });
       setReviews(reviews.map(r => r._id === reviewId ? { ...r, isTestimonial: value } : r));
+      // Testimonial flag directly drives the homepage testimonials shelf.
+      revalidateHome('home:testimonials');
     } catch (err) {
       alert('Failed to update testimonial flag');
       console.error(err);
@@ -227,6 +234,7 @@ export default function AdminReviewsPage() {
       setShowAdd(false);
       resetForm();
       fetchReviews();
+      revalidateHome('home:testimonials');
     } catch (err) {
       alert('Failed to create review');
       console.error(err);

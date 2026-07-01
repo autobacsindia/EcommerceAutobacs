@@ -4,6 +4,7 @@ import { type StockStatus, getStockLabel } from '@/lib/stock';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, X, Package, ChevronUp, Upload } from 'lucide-react';
 import Link from 'next/link';
@@ -145,6 +146,8 @@ function AdminProductsPageInner() {
     try {
       await apiClient.delete(`${API_ENDPOINTS.PRODUCTS}/${id}`);
       setProducts(products.filter(p => p._id !== id));
+      // Deleting a product may remove it from the homepage's featured shelf.
+      revalidateHome('home:products');
       alert('Product deleted successfully');
     } catch (err: any) {
       alert(err.message || 'Failed to delete product');

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
@@ -487,6 +488,9 @@ export default function EditProductPage() {
         throw new Error(data.message || data.error || `Failed to update product (${res.status})`);
       }
 
+      // Edits to the featured flag / name / price / image should reflect on the
+      // homepage's featured shelf right away.
+      revalidateHome('home:products');
       alert('Product updated successfully');
       router.push('/admin/products');
     } catch (err: any) {

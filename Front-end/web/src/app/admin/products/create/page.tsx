@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { ArrowLeft } from 'lucide-react';
 import ImageUploader from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
@@ -205,6 +206,8 @@ export default function CreateProductPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create product');
 
+      // A new (featured) product may belong on the homepage's featured shelf.
+      revalidateHome('home:products');
       alert('Product created successfully');
       router.push('/admin/products');
     } catch (err: any) {

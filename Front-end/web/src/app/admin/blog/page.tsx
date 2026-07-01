@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Plus, Edit2, Trash2, Eye, EyeOff, Star, Search, BookOpen, Image as ImageIcon, Video, ChevronLeft, ChevronRight, TrendingUp, BarChart2, MessageSquare, CheckCircle, XCircle } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
@@ -182,6 +183,8 @@ export default function AdminBlogPage() {
       setPostForm({ ...EMPTY_POST });
       setPostSeo(EMPTY_SEO);
       fetchPosts();
+      // Refresh the homepage's Journal shelf (blog posts).
+      revalidateHome('home:journal');
     } catch (_) {}
     finally { setPostSaving(false); }
   }
@@ -191,6 +194,7 @@ export default function AdminBlogPage() {
     try {
       await apiClient.delete(API_ENDPOINTS.ADMIN_MEDIA_ARTICLE(id));
       fetchPosts();
+      revalidateHome('home:journal');
     } catch (_) {}
   }
 
@@ -200,6 +204,8 @@ export default function AdminBlogPage() {
         status: article.status === 'published' ? 'draft' : 'published',
       });
       fetchPosts();
+      // Publish/unpublish adds or removes the post from the homepage Journal.
+      revalidateHome('home:journal');
     } catch (_) {}
   }
 
