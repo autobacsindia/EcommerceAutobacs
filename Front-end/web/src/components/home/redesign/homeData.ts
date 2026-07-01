@@ -163,14 +163,16 @@ async function fetchCategories(): Promise<CategoryItem[]> {
     `/categories?limit=200`,
     { next: { revalidate: REVALIDATE, tags: ['home:categories'] } }
   );
-  // Hubs only = top-level categories (no parent). The list is pre-sorted by
-  // `order` server-side; a stable featured-first pass floats promoted hubs to
-  // the front (preserving `order` within each group) so they're guaranteed to
-  // land inside the sliced window and lead the carousel.
-  const hubs = (res.categories ?? [])
-    .filter((c) => !c.parent)
-    .sort((a, b) => Number(!!b.isFeatured) - Number(!!a.isFeatured));
-  return hubs.slice(0, LIMITS.categories).map(mapCategory);
+  // Hubs only = top-level categories (no parent), pre-sorted by `order`
+  // server-side. The "Shop by Category" section is a CURATED shelf: it shows
+  // ONLY admin-featured hubs (the featured flag exists for exactly this section).
+  // If nothing is featured yet, degrade gracefully to the first hubs by `order`
+  // so the homepage is never empty — rather than falling through to the static
+  // placeholders in withFallback().
+  const hubs = (res.categories ?? []).filter((c) => !c.parent);
+  const featured = hubs.filter((c) => c.isFeatured);
+  const selected = featured.length ? featured : hubs;
+  return selected.slice(0, LIMITS.categories).map(mapCategory);
 }
 
 async function fetchTestimonials(): Promise<TestimonialItem[]> {
