@@ -54,12 +54,15 @@ export default function HeroSequence({
     const frameUrl = (i: number) =>
       `${dir}/${prefix}${String(i + 1).padStart(pad, '0')}.${ext}`;
 
-    const images: (HTMLImageElement | null)[] = new Array(count).fill(null);
+    // ImageBitmaps are decoded off the main thread (see loadNext), so drawing a
+    // frame never triggers a synchronous WebP decode inside the scroll frame —
+    // that sync decode was the source of the first-scroll stutter.
+    const images: (ImageBitmap | null)[] = new Array(count).fill(null);
     let currentIndex = -1;
     let targetIndex = 0;
     let cancelled = false;
 
-    function nearestLoaded(i: number): HTMLImageElement | null {
+    function nearestLoaded(i: number): ImageBitmap | null {
       if (images[i]) return images[i];
       for (let d = 1; d < count; d++) {
         if (i - d >= 0 && images[i - d]) return images[i - d];
@@ -68,10 +71,10 @@ export default function HeroSequence({
       return null;
     }
 
-    function drawCover(img: HTMLImageElement) {
+    function drawCover(img: ImageBitmap) {
       const cw = canvas.width;
       const ch = canvas.height;
-      const imgRatio = img.naturalWidth / img.naturalHeight;
+      const imgRatio = img.width / img.height;
       const canvasRatio = cw / ch;
       let dw: number;
       let dh: number;
@@ -128,26 +131,33 @@ export default function HeroSequence({
     }
 
     // --- bounded-concurrency progressive preload ---------------------------
+    // fetch → blob → createImageBitmap decodes each frame OFF the main thread,
+    // so by the time it lands in `images[]` it's a ready-to-blit bitmap and
+    // drawCover never forces a synchronous decode during scroll.
     let nextToLoad = 0;
     const CONCURRENCY = 6;
-    function loadNext() {
+    const abort = new AbortController();
+    async function loadNext(): Promise<void> {
       if (cancelled) return;
       const i = nextToLoad++;
       if (i >= count) return;
-      const img = new Image();
-      img.decoding = 'async';
-      img.onload = () => {
-        if (cancelled) return;
-        images[i] = img;
+      try {
+        const res = await fetch(frameUrl(i), { signal: abort.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const bitmap = await createImageBitmap(await res.blob());
+        if (cancelled) {
+          bitmap.close();
+          return;
+        }
+        images[i] = bitmap;
         // Draw immediately if this is the frame we currently want (or the very
         // first frame to arrive), so the hero is never blank.
         if (i === targetIndex || currentIndex < 0) render();
-        loadNext();
-      };
-      img.onerror = () => {
-        if (!cancelled) loadNext();
-      };
-      img.src = frameUrl(i);
+      } catch {
+        // Network/decode error or aborted teardown — skip this frame; render()
+        // falls back to the nearest loaded one.
+      }
+      return loadNext();
     }
 
     resize();
@@ -175,9 +185,12 @@ export default function HeroSequence({
 
     return () => {
       cancelled = true;
+      abort.abort();
       resizeObserver.disconnect();
       io.disconnect();
       if (scrollBound) window.removeEventListener('scroll', onScroll);
+      // Release decoded-bitmap memory eagerly instead of waiting for GC.
+      for (const bmp of images) bmp?.close();
     };
   }, [sectionRef]);
 
