@@ -4,6 +4,7 @@ import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import QuestionForm from '@/components/products/QuestionForm';
 import QuestionList from '@/components/products/QuestionList';
@@ -13,19 +14,18 @@ import { trackProductView } from '@/lib/analytics';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
 import StickyCartBar from '@/components/products/StickyCartBar';
-import HeroSection from '@/components/products/HeroSection';
-import FloatingCTACard from '@/components/products/FloatingCTACard';
-import PremiumGallery from '@/components/products/PremiumGallery';
 import VehicleCards from '@/components/products/VehicleCards';
-import ThemeToggle from '@/components/products/ThemeToggle';
+import Eyebrow from '@/components/ui/Eyebrow';
+import Reveal from '@/components/ui/Reveal';
+import Gallery from '@/components/products/redesign/Gallery';
+import BuyBox from '@/components/products/redesign/BuyBox';
 
-async function getProduct(slugOrId: string): Promise<any> {
-  // Resolve exclusively via slug endpoint (canonical SEO URL)
+async function getProduct(slugOrId: string): Promise<Product | null> {
   try {
-    const response: any = await apiClient.get(`/products/slug/${encodeURIComponent(slugOrId)}`);
+    const response = await apiClient.get<{ product?: Product }>(`/products/slug/${encodeURIComponent(slugOrId)}`);
     if (response?.product) return response.product;
-  } catch (slugError: any) {
-    if (slugError?.status !== 404) {
+  } catch (slugError: unknown) {
+    if ((slugError as { status?: number })?.status !== 404) {
       console.error('Slug lookup error:', slugError);
     }
   }
@@ -40,131 +40,96 @@ interface Product {
   price: number;
   originalPrice?: number;
   saleEndsAt?: string | null;
-  category?: {
-    _id: string;
-    name: string;
-    slug: string;
-  } | string;
+  category?: { _id: string; name: string; slug: string } | string;
   brand?: string;
-  images?: Array<{ url: string; alt?: string }>
+  images?: Array<{ url: string; alt?: string; _id?: string }>;
   stock: StockStatus;
   sku?: string;
   specifications?: Array<{ key: string; value: string }>;
   features?: string[];
   whyChoose?: string[];
-  compatibleVehicles?: Array<{
-    make: string;
-    model: string;
-  }>;
-  qna?: any;
+  compatibleVehicles?: Array<{ make: string; model: string }>;
   isActive: boolean;
   isFeatured: boolean;
   averageRating: number;
   totalReviews: number;
   tags?: string[];
-  createdAt: string;
-  updatedAt: string;
-  __v?: number;
   slug?: string;
 }
 
-export function ProductDetailPageClient({ product }: { product: Product | null }) {
-  // Theme state
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('product-page-theme');
-      return saved !== 'light'; // Default to dark
-    }
-    return true;
-  });
+const sectionCls = 'border-t border-hairline py-16';
+const headingCls = 'text-[clamp(26px,3vw,40px)] font-light leading-tight text-ink';
 
+export function ProductDetailPageClient({ product }: { product: Product | null }) {
   const { isAuthenticated, user } = useAuth();
   const [showQuestionForm, setShowQuestionForm] = useState(false);
 
-  // Save theme preference
-  useEffect(() => {
-    localStorage.setItem('product-page-theme', isDark ? 'dark' : 'light');
-    document.documentElement.classList.toggle('dark', isDark);
-    document.documentElement.classList.toggle('light', !isDark);
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark(!isDark);
-
-  // Strip any residual HTML tags from the (now intro-only) description.
   const stripHtml = (html: string) => (html ? html.replace(/<[^>]*>/g, '') : '');
 
-  // Save to recently viewed
+  // Recently viewed
   useEffect(() => {
-    if (product) {
-      try {
-        const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
-        const recent = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        // Remove duplicate if exists
-        const filtered = recent.filter((p: any) => p._id !== product._id);
-        // Add to front
-        const newRecent = [{
+    if (!product) return;
+    try {
+      const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
+      const recent = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const filtered = recent.filter((p: { _id: string }) => p._id !== product._id);
+      const newRecent = [
+        {
           _id: product._id,
           name: product.name,
           price: product.price,
           originalPrice: product.originalPrice,
           image: product.images?.[0]?.url,
-          slug: product.slug || ''
-        }, ...filtered].slice(0, 10); // Keep last 10
-
-        localStorage.setItem(storageKey, JSON.stringify(newRecent));
-      } catch (e) {
-        console.error('Failed to save recently viewed', e);
-      }
+          slug: product.slug || '',
+        },
+        ...filtered,
+      ].slice(0, 10);
+      localStorage.setItem(storageKey, JSON.stringify(newRecent));
+    } catch (e) {
+      console.error('Failed to save recently viewed', e);
     }
   }, [product, user]);
 
-  // Analytics: product_view (once per product) — ADR-005
+  // Analytics
   useEffect(() => {
     if (product?._id) {
       trackProductView({
         id: product._id,
         name: product.name,
         price: product.price,
-        brand: (product as any).brand,
-        // category can be a populated object or a bare id string — send the human-readable name.
+        brand: product.brand,
         category: typeof product.category === 'object' ? product.category?.name : product.category,
       });
     }
-  }, [product?._id]);
+  }, [product?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Null guard — placed after all hooks so hook order stays stable (rules-of-hooks).
   if (!product) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-obsidian">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
-          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-b-2 border-gold" />
+          <p className="mt-4 font-display text-[13px] tracking-[0.1em] text-ink-muted">Loading product…</p>
         </div>
       </div>
     );
   }
 
-  const displayImages = (product.images && product.images.length > 0)
-    ? product.images.map((img: any, index: number) => ({
-        id: img._id || index,
-        src: img.url,
-        alt: img.alt || `${product.name} image ${index + 1}`,
-        name: img.alt,
-      }))
-    : [];
+  const displayImages = (product.images ?? [])
+    .filter((img) => img?.url)
+    .map((img, i) => ({ src: img.url, alt: img.alt || `${product.name} image ${i + 1}` }));
 
+  const onSale = !!product.originalPrice && product.originalPrice > product.price;
   const cleanDescription = stripHtml(product.description);
   const features = product.features ?? [];
   const whyChoose = product.whyChoose ?? [];
   const specifications = product.specifications ?? [];
+  const categoryName = typeof product.category === 'object' ? product.category?.name : product.category;
+  const categorySlug = typeof product.category === 'object' ? product.category?.slug : undefined;
 
-  // Render a "Title – description" list item with the title bold on its own line
-  // and the description below. Accepts " – ", " - " or "Title: desc" so admins can
-  // type whichever; falls back to plain text when there's no title separator.
   const renderTitledItem = (item: string, index: number) => {
     let title: string | null = null;
     let desc = item;
-    const dash = item.includes(' – ') ? ' – ' : (item.includes(' - ') ? ' - ' : null);
+    const dash = item.includes(' – ') ? ' – ' : item.includes(' - ') ? ' - ' : null;
     if (dash) {
       const [t, ...rest] = item.split(dash);
       title = t.trim();
@@ -174,11 +139,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       if (colon) { title = colon[1].trim(); desc = colon[2].trim(); }
     }
     return (
-      <li key={index} className="leading-relaxed pl-1">
+      <li key={index} className="pl-1 leading-relaxed">
         {title ? (
           <>
-            <span className={`block font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</span>
-            <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}>{desc}</span>
+            <span className="block font-medium text-ink">{title}</span>
+            <span className="text-ink-muted">{desc}</span>
           </>
         ) : (
           item
@@ -188,211 +153,178 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   };
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
-      {/* Theme Toggle */}
-      <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-      
-      {/* Premium Gallery - Moved to Top */}
-      <section className="pt-24 pb-16">
-        <PremiumGallery
-          images={displayImages}
-          productName={product.name}
-          isDark={isDark}
-        />
-      </section>
+    <div className="min-h-screen bg-obsidian font-display text-ink">
+      <div className="mx-auto max-w-[1340px] px-5 py-10 sm:px-8">
+        {/* Breadcrumb */}
+        <nav className="mb-8 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-ink-muted">
+          <Link href="/products" className="hover:text-gold">Products</Link>
+          {categoryName && (
+            <>
+              <ChevronRight className="h-3 w-3" />
+              <Link href={categorySlug ? `/categories/${categorySlug}` : '/products'} className="hover:text-gold">
+                {categoryName}
+              </Link>
+            </>
+          )}
+          <ChevronRight className="h-3 w-3" />
+          <span className="text-ink/70 normal-case tracking-normal">{product.name}</span>
+        </nav>
 
-      {/* Hero Section */}
-      <HeroSection product={product} />
+        {/* Gallery + Buy box */}
+        <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+          <Reveal y={20}>
+            <Gallery images={displayImages} name={product.name} onSale={onSale} />
+          </Reveal>
+          <Reveal y={20} delay={0.08}>
+            <BuyBox product={product} />
+          </Reveal>
+        </div>
 
-      {/* Mobile purchase panel — FloatingCTACard is desktop-only inside the hero
-          (hidden lg:block), so on mobile we render it here below the hero image. */}
-      <div className="lg:hidden bg-zinc-950 px-4 pt-6 pb-8">
-        <FloatingCTACard product={product} />
-      </div>
-
-      <div className="w-full px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        {/* Vehicle Compatibility — only when the product has real fitment data */}
+        {/* Vehicle compatibility */}
         {product.compatibleVehicles && product.compatibleVehicles.length > 0 && (
-          <section className="py-16">
-            <h2 className={`text-4xl lg:text-5xl font-black mb-8 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Vehicle Compatibility
-            </h2>
-            <VehicleCards vehicles={product.compatibleVehicles} isDark={isDark} />
+          <section className={`${sectionCls} mt-16`}>
+            <Eyebrow className="mb-4">Fitment</Eyebrow>
+            <h2 className={`${headingCls} mb-8`}>Vehicle Compatibility</h2>
+            <VehicleCards vehicles={product.compatibleVehicles} isDark />
           </section>
         )}
 
-        {/* Product Description (intro) */}
+        {/* Description */}
         {cleanDescription && (
-          <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-            <div className="max-w-4xl mx-auto">
-              <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Product Description</h2>
-              <div className={`prose prose-lg max-w-none leading-relaxed whitespace-pre-line ${isDark ? 'prose-invert text-zinc-300' : 'text-gray-700'}`}>
-                {cleanDescription}
-              </div>
+          <section className={sectionCls}>
+            <Eyebrow className="mb-4">Overview</Eyebrow>
+            <h2 className={`${headingCls} mb-6`}>Product Description</h2>
+            <div className="max-w-3xl whitespace-pre-line text-[15px] font-light leading-[1.85] text-ink-muted">
+              {cleanDescription}
             </div>
           </section>
         )}
 
-        {/* Key Features */}
+        {/* Features */}
         {features.length > 0 && (
-          <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-            <div className="max-w-4xl mx-auto">
-              <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Key Features <span className="text-orange-500">({features.length})</span>
-              </h2>
-              <ol className={`list-decimal space-y-4 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                {features.map(renderTitledItem)}
-              </ol>
-            </div>
+          <section className={sectionCls}>
+            <Eyebrow className="mb-4">Highlights</Eyebrow>
+            <h2 className={`${headingCls} mb-6`}>Key Features</h2>
+            <ol className="max-w-3xl list-decimal space-y-4 pl-6 text-[15px] font-light text-ink-muted marker:text-gold">
+              {features.map(renderTitledItem)}
+            </ol>
           </section>
         )}
 
-        {/* Why Choose */}
+        {/* Why choose */}
         {whyChoose.length > 0 && (
-          <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-            <div className="max-w-4xl mx-auto">
-              <h2 className={`text-3xl font-bold mb-8 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Why Choose {product.name}? <span className="text-orange-500">({whyChoose.length})</span>
-              </h2>
-              <ol className={`list-decimal space-y-4 pl-6 marker:font-bold marker:text-orange-500 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                {whyChoose.map(renderTitledItem)}
-              </ol>
-            </div>
+          <section className={sectionCls}>
+            <Eyebrow className="mb-4">Why Choose</Eyebrow>
+            <h2 className={`${headingCls} mb-6`}>Why {product.name}?</h2>
+            <ol className="max-w-3xl list-decimal space-y-4 pl-6 text-[15px] font-light text-ink-muted marker:text-gold">
+              {whyChoose.map(renderTitledItem)}
+            </ol>
           </section>
         )}
 
-        {/* Technical Specifications */}
+        {/* Specifications */}
         {specifications.length > 0 && (
-          <section className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-            <div className="max-w-4xl mx-auto">
-              <h2 className={`text-3xl font-bold mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>Technical Specifications</h2>
-              <div className={`rounded-2xl p-6 sm:p-8 ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-gray-100 border border-gray-300'}`}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
-                  {specifications.map((spec: any, index: number) => (
-                    <div key={index} className={`flex justify-between border-b py-3 last:border-0 ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
-                      <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{spec.key}</span>
-                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{spec.value}</span>
-                    </div>
-                  ))}
+          <section className={sectionCls}>
+            <Eyebrow className="mb-4">Details</Eyebrow>
+            <h2 className={`${headingCls} mb-6`}>Technical Specifications</h2>
+            <div className="grid max-w-4xl grid-cols-1 gap-x-12 sm:grid-cols-2">
+              {specifications.map((spec, i) => (
+                <div key={i} className="flex justify-between border-b border-hairline py-3.5 text-[14px]">
+                  <span className="text-ink-muted">{spec.key}</span>
+                  <span className="font-medium text-ink">{spec.value}</span>
                 </div>
-              </div>
+              ))}
             </div>
           </section>
         )}
 
-        {/* Questions & Answers */}
-        <section id="qa" className={`py-16 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Questions & Answers</h2>
-              {!showQuestionForm && (
-                <button
-                  onClick={() => setShowQuestionForm(true)}
-                  className="text-orange-500 font-medium hover:text-orange-400"
-                >
-                  Ask a Question
-                </button>
-              )}
+        {/* Q&A */}
+        <section id="qa" className={sectionCls}>
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <Eyebrow className="mb-4">Ask us</Eyebrow>
+              <h2 className={headingCls}>Questions &amp; Answers</h2>
             </div>
-
-            {showQuestionForm && (
-              <div className="mb-8">
-                <QuestionForm productId={product._id} onSuccess={() => { /* keep success message visible */ }} />
-              </div>
+            {!showQuestionForm && (
+              <button
+                onClick={() => setShowQuestionForm(true)}
+                className="shrink-0 font-display text-[11px] uppercase tracking-[0.18em] text-gold hover:opacity-80"
+              >
+                Ask a question
+              </button>
             )}
-
-            <QuestionList productId={product._id} />
           </div>
+          {showQuestionForm && (
+            <div className="mb-8">
+              <QuestionForm productId={product._id} onSuccess={() => { /* keep success message visible */ }} />
+            </div>
+          )}
+          <QuestionList productId={product._id} />
         </section>
 
-        {/* Customer Reviews */}
-        <section className="py-16" id="reviews">
-          <h2 className={`text-4xl lg:text-5xl font-black mb-8 text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Customer Reviews
-          </h2>
-          <Reviews
-            productId={product._id}
-            isAuthenticated={isAuthenticated}
-          />
+        {/* Reviews */}
+        <section id="reviews" className={sectionCls}>
+          <Eyebrow className="mb-4">Verified buyers</Eyebrow>
+          <h2 className={`${headingCls} mb-8`}>Customer Reviews</h2>
+          <Reviews productId={product._id} isAuthenticated={isAuthenticated} />
         </section>
 
-        {/* Similar Products Section */}
+        {/* Similar + complementary */}
+        <section className={sectionCls}>
+          <SimilarProductsSection productId={product._id} isDark />
+        </section>
         <section className="py-16">
-          <SimilarProductsSection productId={product._id} isDark={isDark} />
-        </section>
-
-        {/* Complementary Products Section */}
-        <section className="py-16">
-          <ComplementaryProductsSection productId={product._id} isDark={isDark} />
+          <ComplementaryProductsSection productId={product._id} isDark />
         </section>
       </div>
 
-      {/* Sticky Cart Bar for Mobile */}
-      <StickyCartBar product={product} isDark={isDark} />
+      <StickyCartBar product={product} isDark />
     </div>
   );
 }
 
-export default function ClientPage({
-  slug,
-}: {
-  slug: string;
-}) {
+export default function ClientPage({ slug }: { slug: string }) {
   const router = useRouter();
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchProduct() {
+    (async () => {
       setLoading(true);
-      const fetchedProduct = await getProduct(slug);
-      setProduct(fetchedProduct);
+      const fetched = await getProduct(slug);
+      setProduct(fetched);
       setLoading(false);
-
-      // Client-side canonical redirect: if the URL segment looks like a MongoDB ObjectId
-      // but the product resolved to a real slug, replace URL to preserve back-button UX
-      // (backend already issues HTTP 301 for direct hits; this handles in-app navigation)
-      if (fetchedProduct?.slug && fetchedProduct.slug !== slug) {
-        router.replace(`/products/${fetchedProduct.slug}`, { scroll: false });
+      if (fetched?.slug && fetched.slug !== slug) {
+        router.replace(`/products/${fetched.slug}`, { scroll: false });
       }
-    }
-
-    fetchProduct();
+    })();
   }, [slug, router]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-obsidian">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3B9EE8] mx-auto"></div>
-          <p className="mt-4 text-[#C4C4C4] font-body">Loading product...</p>
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-b-2 border-gold" />
+          <p className="mt-4 font-display text-[13px] tracking-[0.1em] text-ink-muted">Loading product…</p>
         </div>
       </div>
     );
   }
 
-  // Product not found
   if (!product) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
-        <div className="text-center max-w-md px-4">
-          <div className="text-6xl mb-4">🔍</div>
-          <h2 className="text-2xl font-condensed font-bold text-white uppercase tracking-wide mb-2">Product Not Found</h2>
-          <p className="text-[#C4C4C4] font-body mb-6">
+      <div className="flex min-h-screen items-center justify-center bg-obsidian">
+        <div className="max-w-md px-4 text-center">
+          <h2 className="mb-3 font-display text-[28px] font-light text-ink">Product not found</h2>
+          <p className="mb-8 font-display text-[14px] font-light text-ink-muted">
             The product you&apos;re looking for doesn&apos;t exist or has been removed.
           </p>
-          <div className="flex gap-4 justify-center">
-            <Link
-              href="/products"
-              className="inline-flex items-center px-6 py-3 bg-[#3B9EE8] hover:bg-[#1A6FB5] text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors"
-            >
-              Browse Products
+          <div className="flex justify-center gap-3">
+            <Link href="/products" className="bg-gold px-7 py-3.5 font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-obsidian hover:opacity-90">
+              Browse products
             </Link>
-            <Link
-              href="/"
-              className="inline-flex items-center px-6 py-3 bg-[#161616] border border-[#252525] text-[#C4C4C4] hover:text-white font-condensed font-bold uppercase tracking-widest rounded-sm transition-colors"
-            >
-              Go Home
+            <Link href="/" className="border border-hairline px-7 py-3.5 font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-ink hover:border-gold hover:text-gold">
+              Go home
             </Link>
           </div>
         </div>

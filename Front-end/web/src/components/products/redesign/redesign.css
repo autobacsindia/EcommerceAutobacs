@@ -1,0 +1,95 @@
+/* ============================================================================
+ * Storefront product listing — low-level styling that Tailwind utilities can't
+ * express cleanly (range-input thumbs, native control accents, marquee-free
+ * scroll affordances). Everything else is done with theme utilities.
+ * ========================================================================== */
+
+/* ── Price histogram + dual-range slider ── */
+.pf-range-chart {
+  width: 100%;
+  height: 54px;
+  display: block;
+}
+.pf-range-track {
+  position: relative;
+  height: 16px;
+  margin-top: 6px;
+}
+.pf-range-rail {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+}
+.pf-range-fill {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: #c9a870;
+}
+.pf-range-track input[type='range'] {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  transform: translateY(-50%);
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.pf-range-track input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #c9a870;
+  border: 2px solid #0d0e0e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.pf-range-track input[type='range']::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #c9a870;
+  border: 2px solid #0d0e0e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.pf-range-bubbles {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #f0ede7;
+}
+
+/* ── Gold native checkboxes (filter rows) ── */
+.pf-check {
+  width: 16px;
+  height: 16px;
+  accent-color: #c9a870;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+/* ── Hide scrollbars on horizontal scroll affordances ── */
+.sf-noscroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sf-noscroll::-webkit-scrollbar {
+  display: none;
+}

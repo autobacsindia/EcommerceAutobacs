@@ -18,10 +18,8 @@ jest.mock('@/lib/analytics', () => ({
 
 // Mock the heavy presentational children so the test focuses on ClientPage's own
 // data-driven sections (description, features, why-choose, specifications).
-jest.mock('@/components/products/ThemeToggle', () => () => <div data-testid="theme-toggle" />);
-jest.mock('@/components/products/PremiumGallery', () => () => <div data-testid="gallery" />);
-jest.mock('@/components/products/HeroSection', () => () => <div data-testid="hero" />);
-jest.mock('@/components/products/FloatingCTACard', () => () => <div data-testid="cta" />);
+jest.mock('@/components/products/redesign/Gallery', () => () => <div data-testid="gallery" />);
+jest.mock('@/components/products/redesign/BuyBox', () => () => <div data-testid="buybox" />);
 jest.mock('@/components/products/StickyCartBar', () => () => <div data-testid="sticky-cart" />);
 jest.mock('@/components/products/VehicleCards', () => () => <div data-testid="vehicle-cards" />);
 jest.mock('@/components/products/QuestionForm', () => () => <div data-testid="question-form" />);
@@ -69,7 +67,7 @@ describe('Product Detail Page Integration', () => {
     expect(screen.getByText(/rugged, dependable upgrade/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Key Features/ })).toBeInTheDocument();
     expect(screen.getByText(/Extra cargo space/)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Why Choose Test Product/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Why Test Product/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Technical Specifications' })).toBeInTheDocument();
     expect(screen.getByText('Material')).toBeInTheDocument();
     // Kept sections still mount

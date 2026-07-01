@@ -1,12 +1,13 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import Footer from './Footer';
+import RedesignFooter from '@/components/home/redesign/RedesignFooter';
+import '@/components/home/redesign/home-redesign.css';
 
 /**
- * Renders Footer only on non-auth, non-admin pages.
- * The redesigned home page (`/`) ships its own footer, so the global Footer is
- * suppressed there too.
+ * Global storefront footer — the redesigned obsidian+gold footer (wrapped in the
+ * `.hr` scope its styles need). Suppressed on `/` (HomeRedesign ships its own),
+ * the auth pages, and `/admin/*`.
  */
 export default function ConditionalFooter() {
   const pathname = usePathname();
@@ -15,5 +16,12 @@ export default function ConditionalFooter() {
     pathname === '/login' ||
     pathname === '/register' ||
     pathname?.startsWith('/admin');
-  return hide ? null : <Footer />;
+
+  if (hide) return null;
+
+  return (
+    <div className="hr">
+      <RedesignFooter />
+    </div>
+  );
 }

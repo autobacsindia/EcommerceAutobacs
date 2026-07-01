@@ -51,6 +51,34 @@
   --font-mono: ui-monospace, monospace;
 }
 
+/* ============================================================================
+ * STOREFRONT DESIGN SYSTEM — obsidian + gold, Montserrat.
+ *
+ * Single source of truth for the redesigned storefront theme (ported from the
+ * `.hr` home-redesign tokens). Every migrated page/component styles itself with
+ * these Tailwind utilities — never hardcode hex. To re-skin the whole store,
+ * change the values here.
+ *
+ *   bg:  bg-obsidian / bg-obsidian-deep / bg-obsidian-raised
+ *   text: text-ink / text-ink-muted / text-gold
+ *   line: border-hairline
+ *   font: font-display  (Montserrat)
+ * ========================================================================== */
+@theme {
+  --color-obsidian:        #111212;
+  --color-obsidian-deep:   #0d0e0e;
+  --color-obsidian-raised: #181a1a;
+  --color-ink:             #f0ede7;
+  --color-ink-muted:       rgba(240, 237, 231, 0.38);
+  --color-gold:            #c9a870;
+  --color-gold-soft:       rgba(201, 168, 112, 0.15);
+  --color-hairline:        rgba(255, 255, 255, 0.06);
+
+  --font-display: var(--font-montserrat), system-ui, sans-serif;
+
+  --ease-lux: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /*
  * Global dark theme. Hard-coded values (not prefers-color-scheme) to avoid
  * the OS dark-mode flip that previously caused white-on-white on mobile.
