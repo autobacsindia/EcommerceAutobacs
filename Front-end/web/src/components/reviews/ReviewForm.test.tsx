@@ -24,24 +24,6 @@ jest.mock('./StarRating', () => {
   };
 });
 
-// Mock CSS module
-jest.mock('./ReviewForm.module.css', () => ({
-  reviewFormContainer: 'reviewFormContainer',
-  reviewForm: 'reviewForm',
-  formGroup: 'formGroup',
-  error: 'error',
-  errorInput: 'errorInput',
-  characterCount: 'characterCount',
-  imageUploadSection: 'imageUploadSection',
-  imagePreview: 'imagePreview',
-  removeImageBtn: 'removeImageBtn',
-  imageUploadPlaceholder: 'imageUploadPlaceholder',
-  imageLimit: 'imageLimit',
-  formActions: 'formActions',
-  submitBtn: 'submitBtn',
-  cancelBtn: 'cancelBtn',
-}));
-
 describe('ReviewForm Component', () => {
   const mockOnSubmit = jest.fn();
   const mockOnCancel = jest.fn();

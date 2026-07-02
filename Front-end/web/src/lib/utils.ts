@@ -11,6 +11,18 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Sanitize a post-auth redirect target to an internal, same-origin path.
+ * Guards against open-redirect: only single-slash-rooted relative paths are
+ * allowed (rejects absolute URLs like `https://evil.com` and protocol-relative
+ * `//evil.com`). Returns the path if safe, otherwise `null`.
+ */
+export function safeInternalPath(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null;
+  return raw;
+}
+
+/**
  * Format currency for display
  */
 export function formatCurrency(amount: number, currency: string = 'INR'): string {

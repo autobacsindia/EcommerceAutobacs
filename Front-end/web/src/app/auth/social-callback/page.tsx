@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api-client';
+import { safeInternalPath } from '@/lib/utils';
 
 type ExchangeCodeResponse = {
   success: boolean;
@@ -36,6 +37,8 @@ export default function SocialCallbackPage() {
         console.log('[Social Callback] Starting callback handler');
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
+        // Post-login destination threaded through OAuth (sanitized; defaults home).
+        const redirectTo = safeInternalPath(params.get('redirect')) ?? '/';
 
         console.log('[Social Callback] Code from URL:', code ? `${code.substring(0, 10)}...` : 'NOT FOUND');
 
@@ -60,8 +63,8 @@ export default function SocialCallbackPage() {
             // Fallback: backend didn't return user data (older deploy), fetch it.
             await checkAuth();
           }
-          console.log('[Social Callback] Auth hydrated, redirecting to home');
-          router.replace('/');
+          console.log('[Social Callback] Auth hydrated, redirecting to', redirectTo);
+          router.replace(redirectTo);
           return;
         }
 
@@ -84,7 +87,8 @@ export default function SocialCallbackPage() {
         console.warn('[Social Callback] Using legacy hash-based auth (deprecated)');
         apiClient.setAuthToken(accessToken);
         await checkAuth();
-        router.replace('/');
+        // Fallback path carries the redirect in the hash fragment.
+        router.replace(safeInternalPath(hashParams.get('redirect')) ?? redirectTo);
       } catch (error) {
         console.error('[Social Callback] Callback failed:', error);
         setErrorMsg(

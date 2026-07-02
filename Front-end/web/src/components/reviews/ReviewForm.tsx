@@ -1,6 +1,8 @@
+'use client';
+
 import React, { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import StarRating from './StarRating';
-import styles from './ReviewForm.module.css';
 
 interface ReviewFormProps {
   productId: string;
@@ -15,11 +17,13 @@ interface ReviewFormData {
   images: { url: string; alt: string }[];
 }
 
-const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit, onCancel }) => {
+const inputCls =
+  'w-full rounded-lg border border-hairline bg-obsidian-raised px-3 py-2 text-ink placeholder:text-ink-muted focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold transition-colors';
+
+const ReviewForm: React.FC<ReviewFormProps> = ({ onSubmit, onCancel }) => {
   const [rating, setRating] = useState(0);
   const [title, setTitle] = useState('');
   const [comment, setComment] = useState('');
-  const [images, setImages] = useState<{ url: string; alt: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -42,29 +46,20 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit, onCancel }
       newErrors.title = 'Title must be less than 100 characters';
     }
 
-    if (images.length > 5) {
-      newErrors.images = 'Maximum 5 images allowed';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsSubmitting(true);
     try {
-      await onSubmit({ rating, title, comment, images });
-      // Reset form on successful submission
+      await onSubmit({ rating, title, comment, images: [] });
       setRating(0);
       setTitle('');
       setComment('');
-      setImages([]);
     } catch (error) {
       console.error('Error submitting review:', error);
     } finally {
@@ -72,100 +67,64 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ productId, onSubmit, onCancel }
     }
   };
 
-  const handleImageAdd = (url: string, alt: string) => {
-    if (images.length < 5) {
-      setImages([...images, { url, alt }]);
-    }
-  };
-
-  const handleImageRemove = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
-  };
-
   return (
-    <div className={styles.reviewFormContainer}>
-      <h3>Write a Review</h3>
-      <form onSubmit={handleSubmit} className={styles.reviewForm}>
-        <div className={styles.formGroup}>
-          <label htmlFor="rating">Rating *</label>
-          <StarRating 
-            rating={rating} 
-            interactive={true} 
-            onRatingChange={setRating}
-            size="large"
-          />
-          {errors.rating && <span className={styles.error}>{errors.rating}</span>}
+    <div className="rounded-2xl border border-hairline bg-obsidian-raised/40 p-6">
+      <h3 className="mb-4 text-lg font-medium text-ink">Write a Review</h3>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-2">
+          <label htmlFor="rating" className="block text-sm font-medium text-ink/80">
+            Rating *
+          </label>
+          <StarRating rating={rating} interactive onRatingChange={setRating} size="large" />
+          {errors.rating && <span className="block text-sm text-red-400">{errors.rating}</span>}
         </div>
 
-        <div className={styles.formGroup}>
-          <label htmlFor="title">Title</label>
+        <div className="space-y-2">
+          <label htmlFor="title" className="block text-sm font-medium text-ink/80">
+            Title
+          </label>
           <input
             type="text"
             id="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Summarize your review (optional)"
-            className={errors.title ? styles.errorInput : ''}
+            className={inputCls}
           />
-          {errors.title && <span className={styles.error}>{errors.title}</span>}
+          {errors.title && <span className="block text-sm text-red-400">{errors.title}</span>}
         </div>
 
-        <div className={styles.formGroup}>
-          <label htmlFor="comment">Comment *</label>
+        <div className="space-y-2">
+          <label htmlFor="comment" className="block text-sm font-medium text-ink/80">
+            Comment *
+          </label>
           <textarea
             id="comment"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Share your experience with this product"
             rows={5}
-            className={errors.comment ? styles.errorInput : ''}
+            className={`${inputCls} resize-none`}
           />
-          <div className={styles.characterCount}>
-            {comment.length}/1000
-          </div>
-          {errors.comment && <span className={styles.error}>{errors.comment}</span>}
+          <div className="text-right text-xs text-ink-muted">{comment.length}/1000</div>
+          {errors.comment && <span className="block text-sm text-red-400">{errors.comment}</span>}
         </div>
 
-        {/* Image upload section - simplified for now */}
-        <div className={styles.formGroup}>
-          <label htmlFor="images">Images (optional)</label>
-          <div className={styles.imageUploadSection}>
-            {images.map((image, index) => (
-              <div key={index} className={styles.imagePreview}>
-                <img src={image.url} alt={image.alt || 'Review image'} />
-                <button 
-                  type="button" 
-                  onClick={() => handleImageRemove(index)}
-                  className={styles.removeImageBtn}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {images.length < 5 && (
-              <div className={styles.imageUploadPlaceholder}>
-                <p>Image upload functionality would be implemented here</p>
-                <p className={styles.imageLimit}>Max 5 images</p>
-              </div>
-            )}
-          </div>
-          {errors.images && <span className={styles.error}>{errors.images}</span>}
-        </div>
-
-        <div className={styles.formActions}>
-          <button 
-            type="submit" 
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="submit"
             disabled={isSubmitting}
-            className={styles.submitBtn}
+            className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-medium text-obsidian transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSubmitting ? 'Submitting...' : 'Submit Review'}
           </button>
           {onCancel && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={onCancel}
-              className={styles.cancelBtn}
               disabled={isSubmitting}
+              className="rounded-lg border border-hairline px-5 py-2.5 text-sm font-medium text-ink/80 transition-colors hover:bg-obsidian-raised disabled:opacity-50"
             >
               Cancel
             </button>

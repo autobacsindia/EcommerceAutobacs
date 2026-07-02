@@ -152,15 +152,15 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                     )}
                   </div>
                   
-                  {product.averageRating && (
+                  {product.averageRating ? (
                     <div className="flex items-center mb-2">
                       <span className="text-yellow-400 mr-1">★</span>
                       <span className={`text-sm ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
                         {product.averageRating.toFixed(1)} ({product.totalReviews || 0})
                       </span>
                     </div>
-                  )}
-                  
+                  ) : null}
+
                   <div className="flex items-center justify-between mt-3">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-gold/50 text-gold' : 'bg-gold/10 text-gold'}`}>
                       {product.brand || 'Autobacs'}

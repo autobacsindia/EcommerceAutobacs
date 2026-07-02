@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
+import { safeInternalPath } from '@/lib/utils';
 import Image from 'next/image';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
@@ -21,6 +22,9 @@ export default function LoginPage() {
     refresh_failed: 'Your session expired. Please sign in again.',
   };
   const reasonBanner = searchParams.get('reason') ? reasonMessages[searchParams.get('reason')!] ?? null : null;
+  // Where to send the user after a successful login. Sanitized to an internal path
+  // to avoid open-redirect; defaults to home.
+  const redirectTo = safeInternalPath(searchParams.get('redirect')) ?? '/';
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -54,7 +58,7 @@ export default function LoginPage() {
     try {
       setIsLoading(true);
       await login(formData.email, formData.password);
-      router.push('/');
+      router.push(redirectTo);
     } catch (err: any) {
       // Migrated WooCommerce accounts (ADR-005) have no password yet — send them to set one.
       if (err.rawData?.code === 'PASSWORD_RESET_REQUIRED') {
@@ -71,7 +75,10 @@ export default function LoginPage() {
   };
 
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
-    navigateTo(`/api/v1/auth/${provider}`);
+    // Carry the post-login destination through the OAuth round-trip (backend
+    // packs it into the OAuth `state` param and echoes it back at the callback).
+    const suffix = redirectTo !== '/' ? `?redirect=${encodeURIComponent(redirectTo)}` : '';
+    navigateTo(`/api/v1/auth/${provider}${suffix}`);
   };
 
   return (

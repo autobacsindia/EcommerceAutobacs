@@ -1,6 +1,7 @@
+'use client';
+
 import React, { useState } from 'react';
 import ReviewItem from './ReviewItem';
-import styles from './ReviewList.module.css';
 
 interface Review {
   id: string;
@@ -23,10 +24,11 @@ interface ReviewListProps {
   totalReviews: number;
 }
 
-const ReviewList: React.FC<ReviewListProps> = ({ reviews, onHelpful, totalReviews }) => {
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'highest' | 'lowest' | 'helpful'>('newest');
+type SortOption = 'newest' | 'oldest' | 'highest' | 'lowest' | 'helpful';
 
-  // Sort reviews based on selected option
+const ReviewList: React.FC<ReviewListProps> = ({ reviews, onHelpful, totalReviews }) => {
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+
   const sortedReviews = [...reviews].sort((a, b) => {
     switch (sortBy) {
       case 'newest':
@@ -45,16 +47,18 @@ const ReviewList: React.FC<ReviewListProps> = ({ reviews, onHelpful, totalReview
   });
 
   return (
-    <div className={styles.reviewList}>
-      <div className={styles.reviewListHeader}>
-        <h3>{totalReviews} Reviews</h3>
-        <div className={styles.sortContainer}>
-          <label htmlFor="sort">Sort by:</label>
-          <select 
-            id="sort" 
-            value={sortBy} 
-            onChange={(e) => setSortBy(e.target.value as any)}
-            className={styles.sortSelect}
+    <div className="mt-8">
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <h3 className="text-lg font-medium text-ink">{totalReviews} Reviews</h3>
+        <div className="flex items-center gap-2">
+          <label htmlFor="review-sort" className="text-sm text-ink-muted">
+            Sort by:
+          </label>
+          <select
+            id="review-sort"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="rounded-lg border border-hairline bg-obsidian-raised px-3 py-1.5 text-sm text-ink focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
           >
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
@@ -65,13 +69,9 @@ const ReviewList: React.FC<ReviewListProps> = ({ reviews, onHelpful, totalReview
         </div>
       </div>
 
-      <div className={styles.reviewItems}>
+      <div>
         {sortedReviews.map((review) => (
-          <ReviewItem
-            key={review.id}
-            {...review}
-            onHelpful={onHelpful}
-          />
+          <ReviewItem key={review.id} {...review} onHelpful={onHelpful} />
         ))}
       </div>
     </div>

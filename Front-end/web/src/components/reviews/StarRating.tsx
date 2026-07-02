@@ -1,101 +1,87 @@
+'use client';
+
 import React, { useState } from 'react';
-import styles from './StarRating.module.css';
+import { Star } from 'lucide-react';
 
 interface StarRatingProps {
-  rating: number;
+  rating?: number;
   interactive?: boolean;
   onRatingChange?: (rating: number) => void;
   size?: 'small' | 'medium' | 'large';
+  /** Render the numeric value alongside the stars. */
+  showValue?: boolean;
 }
 
-const StarRating: React.FC<StarRatingProps> = ({ 
-  rating = 0, 
-  interactive = false, 
+const SIZE: Record<NonNullable<StarRatingProps['size']>, string> = {
+  small: 'h-4 w-4',
+  medium: 'h-5 w-5',
+  large: 'h-7 w-7',
+};
+
+/**
+ * Obsidian + gold star rating. Two modes:
+ *  - interactive: clickable stars for the review form (whole-star selection).
+ *  - display: read-only stars with fractional fill (e.g. a 4.3 average) via a
+ *    width-clipped gold overlay layered over an empty base row.
+ */
+const StarRating: React.FC<StarRatingProps> = ({
+  rating = 0,
+  interactive = false,
   onRatingChange,
-  size = 'medium'
+  size = 'medium',
+  showValue = false,
 }) => {
   const [hoverRating, setHoverRating] = useState(0);
+  const starCls = SIZE[size];
 
-  const handleClick = (ratingValue: number) => {
-    if (interactive && onRatingChange) {
-      onRatingChange(ratingValue);
-    }
-  };
-
-  const handleMouseEnter = (ratingValue: number) => {
-    if (interactive) {
-      setHoverRating(ratingValue);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (interactive) {
-      setHoverRating(0);
-    }
-  };
-
-  const displayRating = hoverRating || rating;
-
-  return (
-    <div 
-      className={`${styles.starRating} ${styles[size]}`}
-      onMouseLeave={handleMouseLeave}
-    >
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          className={`${styles.star} ${
-            interactive ? styles.interactive : ''
-          } ${
-            star <= displayRating 
-              ? styles.filled 
-              : star - 0.5 <= displayRating 
-              ? styles.halfFilled 
-              : styles.empty
-          }`}
-          onClick={() => handleClick(star)}
-          onMouseEnter={() => handleMouseEnter(star)}
-          disabled={!interactive}
-          aria-label={`Rate ${star} out of 5 stars`}
-        >
-          <svg 
-            className={styles.starIcon} 
-            viewBox="0 0 24 24" 
-            fill="currentColor"
+  if (interactive) {
+    const active = hoverRating || rating;
+    return (
+      <div className="flex items-center gap-1" onMouseLeave={() => setHoverRating(0)}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            className="p-0.5 transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold rounded"
+            onMouseEnter={() => setHoverRating(star)}
+            onClick={() => onRatingChange?.(star)}
+            aria-label={`Rate ${star} out of 5 stars`}
           >
-            {star <= displayRating ? (
-              // Full star
-              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-            ) : star - 0.5 <= displayRating ? (
-              // Half star
-              <>
-                <defs>
-                  <linearGradient id={`half-${star}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="50%" stopColor="currentColor" />
-                    <stop offset="50%" stopColor="transparent" />
-                  </linearGradient>
-                </defs>
-                <path 
-                  d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" 
-                  fill={`url(#half-${star})`} 
-                />
-              </>
-            ) : (
-              // Empty star
-              <path 
-                d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="1"
-              />
-            )}
-          </svg>
-        </button>
-      ))}
-      <span className={styles.ratingText}>
-        {rating.toFixed(1)}
-      </span>
+            <Star
+              className={`${starCls} ${
+                star <= active ? 'fill-gold text-gold' : 'text-ink-muted'
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  const fillPct = Math.max(0, Math.min(100, (rating / 5) * 100));
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="relative inline-flex"
+        role="img"
+        aria-label={`Rated ${rating.toFixed(1)} out of 5 stars`}
+      >
+        <div className="flex">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <Star key={star} className={`${starCls} text-ink-muted`} />
+          ))}
+        </div>
+        <div
+          className="absolute inset-0 flex overflow-hidden"
+          style={{ width: `${fillPct}%` }}
+          aria-hidden="true"
+        >
+          {[1, 2, 3, 4, 5].map((star) => (
+            <Star key={star} className={`${starCls} shrink-0 fill-gold text-gold`} />
+          ))}
+        </div>
+      </div>
+      {showValue && <span className="text-sm text-ink-muted">{rating.toFixed(1)}</span>}
     </div>
   );
 };

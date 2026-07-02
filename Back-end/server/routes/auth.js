@@ -798,7 +798,12 @@ const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
   return user;
 };
 
-const completeSocialLogin = async (req, res, user, provider) => {
+// Only allow internal, single-slash-rooted paths as post-login redirect targets
+// (rejects absolute URLs and protocol-relative `//host`) to prevent open-redirect.
+const safeInternalPath = (raw) =>
+  typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "";
+
+const completeSocialLogin = async (req, res, user, provider, redirectPath = "") => {
   const ipAddress = req.headers['cf-connecting-ip'] || req.ip || req.connection?.remoteAddress;
   const userAgent = req.headers["user-agent"];
 
@@ -859,7 +864,8 @@ const completeSocialLogin = async (req, res, user, provider) => {
       'EX',
       60
     );
-    return res.redirect(`${frontendUrl}/auth/social-callback?code=${code}`);
+    const redirectQuery = redirectPath ? `&redirect=${encodeURIComponent(redirectPath)}` : "";
+    return res.redirect(`${frontendUrl}/auth/social-callback?code=${code}${redirectQuery}`);
   }
 
   // ── Fallback (no Redis): legacy hash fragment ─────────────────────────────
@@ -869,7 +875,8 @@ const completeSocialLogin = async (req, res, user, provider) => {
   const hashParams = new URLSearchParams({
     accessToken: tokens.accessToken,
     expiresIn: String(tokens.accessTokenExpiry),
-    provider
+    provider,
+    ...(redirectPath ? { redirect: redirectPath } : {})
   }).toString();
   res.redirect(`${frontendUrl}/auth/social-callback#${hashParams}`);
 };
@@ -900,6 +907,11 @@ router.get("/google", (req, res) => {
     access_type: "offline",
     prompt: "consent"
   });
+
+  // Carry the post-login redirect through the OAuth round-trip via `state`
+  // (Google echoes it back to the callback). Sanitized to an internal path.
+  const state = safeInternalPath(req.query.redirect);
+  if (state) params.set("state", state);
 
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
@@ -992,7 +1004,7 @@ router.get(
         isVerified: emailVerified
       });
 
-      await completeSocialLogin(req, res, user, "google");
+      await completeSocialLogin(req, res, user, "google", safeInternalPath(req.query.state));
     } catch (error) {
       console.error("[Auth] Google social login error:", error);
       res.status(500).json({
@@ -1022,6 +1034,10 @@ router.get("/facebook", (req, res) => {
     response_type: "code",
     scope: ["email", "public_profile"].join(",")
   });
+
+  // Carry the post-login redirect through OAuth via `state` (echoed back at callback).
+  const state = safeInternalPath(req.query.redirect);
+  if (state) params.set("state", state);
 
   res.redirect(`https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`);
 });
@@ -1110,7 +1126,7 @@ router.get(
         isVerified: true
       });
 
-      await completeSocialLogin(req, res, user, "facebook");
+      await completeSocialLogin(req, res, user, "facebook", safeInternalPath(req.query.state));
     } catch (error) {
       console.error("[Auth] Facebook social login error:", error);
       res.status(500).json({
