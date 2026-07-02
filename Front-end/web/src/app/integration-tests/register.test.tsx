@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 // Mock dependencies
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
+  useSearchParams: jest.fn(() => new URLSearchParams()),
 }));
 
 jest.mock('@/context/AuthContext', () => ({

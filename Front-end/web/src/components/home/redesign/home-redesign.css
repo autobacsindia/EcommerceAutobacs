@@ -545,6 +545,8 @@
 .hr .sb-btn .sb-arrow-flip { transform: scaleX(-1); }
 .hr .sb-back:hover { gap: 14px; }
 .hr .sb-next:hover { gap: 14px; }
+/* "All Articles" CTA, centred at the bottom of the section. */
+.hr .journal-foot { display: flex; justify-content: center; margin-top: 40px; }
 @media (prefers-reduced-motion: reduce) {
   .hr .sb-card { transition: none; }
   .hr .sb-cap { transition: none; }

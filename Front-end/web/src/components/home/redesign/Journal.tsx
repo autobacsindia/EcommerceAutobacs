@@ -108,9 +108,6 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
           </h2>
           <p className="journal-desc reveal reveal-d2">{journal.body}</p>
         </div>
-        <Link className="journal-cta reveal reveal-d2" href="/blog">
-          All Articles <ArrowRightLong />
-        </Link>
       </div>
 
       <div className="sb reveal">
@@ -159,6 +156,12 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
             </button>
           </div>
         ) : null}
+      </div>
+
+      <div className="journal-foot reveal">
+        <Link className="journal-cta" href="/blog">
+          All Articles <ArrowRightLong />
+        </Link>
       </div>
     </section>
   );
