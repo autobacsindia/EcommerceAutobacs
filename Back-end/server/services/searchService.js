@@ -142,10 +142,65 @@ class SearchService {
       ]).option({ maxTimeMS: 3000 }),
     ]);
 
+    // The aggregation yields DIRECT counts (products tagged with each exact
+    // category). But the sidebar renders top-level hubs, and selecting a hub
+    // expands to its whole subtree in buildBaseQuery — so a hub's badge must
+    // reflect the subtree, not the (usually zero) direct count. Roll direct
+    // counts up the parent tree, mirroring the admin dashboard's
+    // `totalProductCount` (categories.js /admin/all) so the two never drift.
+    const rolledCategories = SearchService.rollUpCategoryCounts(categoryAgg);
+
     return {
       brands: brandAgg.map(b => ({ name: b._id, count: b.count })),
-      categories: categoryAgg.map(c => ({ categoryId: String(c._id), count: c.count })),
+      categories: rolledCategories,
     };
+  }
+
+  /**
+   * Roll direct per-category product counts up the category tree so every
+   * ancestor's count includes its descendants. Uses the cached parent→children
+   * index. This intentionally matches the admin badge rollup: a product tagged
+   * with both an ancestor and a descendant is counted at each (products are
+   * normally tagged with leaves, so this is rare) — the point is parity between
+   * the filter sidebar and the admin dashboard.
+   * @param {Array<{_id: any, count: number}>} directAgg
+   * @returns {Array<{categoryId: string, count: number}>} descending by count
+   */
+  static rollUpCategoryCounts(directAgg) {
+    if (!categoryMappingService.initialized) {
+      // Cache not warm — fall back to raw direct counts rather than crashing.
+      return directAgg
+        .map(c => ({ categoryId: String(c._id), count: c.count }))
+        .sort((a, b) => b.count - a.count);
+    }
+
+    const childIndex = categoryMappingService.buildChildIndex(); // parentId -> [child]
+    const directById = new Map(directAgg.map(c => [String(c._id), c.count]));
+
+    const memo = new Map();
+    const inProgress = new Set();
+    const subtreeCount = (id) => {
+      if (memo.has(id)) return memo.get(id);
+      if (inProgress.has(id)) return 0; // cycle guard
+      inProgress.add(id);
+      let total = directById.get(id) || 0;
+      for (const child of (childIndex.get(id) || [])) {
+        total += subtreeCount(String(child._id));
+      }
+      inProgress.delete(id);
+      memo.set(id, total);
+      return total;
+    };
+
+    // Every category that has a direct count OR is a parent of something needs
+    // a rolled-up figure (a hub with no direct products still gets its subtree).
+    const ids = new Set(directById.keys());
+    for (const parentId of childIndex.keys()) ids.add(parentId);
+
+    return Array.from(ids)
+      .map(id => ({ categoryId: id, count: subtreeCount(id) }))
+      .filter(c => c.count > 0)
+      .sort((a, b) => b.count - a.count);
   }
 
   /**

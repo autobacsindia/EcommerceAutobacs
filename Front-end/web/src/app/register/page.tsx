@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { safeInternalPath } from '@/lib/utils';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
 import BrandLogo from '@/components/layout/BrandLogo';
@@ -13,6 +14,11 @@ import { FaFacebook } from 'react-icons/fa';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Where to land after registering. Sanitised to an internal path to avoid
+  // open-redirect; defaults to home. Mirrors the login page's behaviour so the
+  // checkout gate (?redirect=/checkout) round-trips through either screen.
+  const redirectTo = safeInternalPath(searchParams.get('redirect')) ?? '/';
   const { register, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
@@ -62,7 +68,7 @@ export default function RegisterPage() {
       setIsLoading(true);
       await register(formData.name, formData.email, formData.password);
       setRegistered(true);
-      setTimeout(() => router.push('/'), 2000);
+      setTimeout(() => router.push(redirectTo), 2000);
     } catch (err: any) {
       if (err.status === 429 && err.rateLimitInfo?.resetTime) {
         setRateLimitResetTime(err.rateLimitInfo.resetTime);
@@ -257,7 +263,7 @@ export default function RegisterPage() {
             </div>
             <div className="mt-4">
               <Link
-                href="/login"
+                href={redirectTo !== '/' ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}
                 className="block w-full bg-obsidian-raised hover:bg-obsidian-raised border border-hairline hover:border-gold text-ink font-display font-bold uppercase tracking-widest text-sm py-2.5 px-4 rounded-sm transition-all text-center"
               >
                 Sign In

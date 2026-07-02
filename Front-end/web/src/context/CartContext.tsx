@@ -3,6 +3,7 @@
 import type { StockStatus } from '@/lib/stock';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
+import { AUTH_LOGIN_EVENT } from '@/lib/api-client';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
 import { ProductImage } from '@/lib/types';
@@ -122,6 +123,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
     refreshCart();
   }, [isAuthenticated, isMounted, authLoading, refreshCart]);
 
+  // On a fresh login/register/social auth, merge the guest (session) cart into
+  // the now-authenticated user's cart, then refresh so the badge reflects the
+  // merged items. The merge endpoint claims the guest cart atomically, so this
+  // is safe to fire even if the event lands more than once.
+  useEffect(() => {
+    const onLogin = async () => {
+      try {
+        await apiClient.post(API_ENDPOINTS.CART_MERGE, {});
+      } catch (err) {
+        // Non-fatal: even if the merge fails, still refresh to show the user's
+        // server cart. The guest items remain claimable until a merge succeeds.
+        console.error('Cart merge after login failed:', err);
+      } finally {
+        refreshCart();
+      }
+    };
+    window.addEventListener(AUTH_LOGIN_EVENT, onLogin);
+    return () => window.removeEventListener(AUTH_LOGIN_EVENT, onLogin);
+  }, [refreshCart]);
+
   const addToCart = async (productId: string, quantity: number = 1) => {
     const previousCart = cart;
 
@@ -177,17 +198,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         throw new Error(response.message || 'Failed to add to cart');
       }
     } catch (err: any) {
+      // Roll the optimistic update back to the last known-good cart. The cart
+      // API supports guests via the x-session-id header (optionalAuth), so a
+      // failure here is a real error — surface it rather than swallowing it,
+      // otherwise callers show a false "Added to cart" toast while the badge
+      // never updates.
       setCart(previousCart);
-
-      // Handle "Not authorized" or "Route not found" errors for guest users gracefully
-      // Backend has a middleware quirk where protect sends 401 but Express continues to 404 handler
-      if ((err.status === 401 || err.status === 404) &&
-          (err.message?.includes('Not authorized') ||
-           err.message?.includes('Route not found') ||
-           err.message?.includes('no token'))) {
-        console.debug('Guest user attempted cart add - this is expected (backend middleware quirk)');
-        return;
-      }
 
       const errorMessage = err.message || 'Failed to add item to cart';
       setError(errorMessage);

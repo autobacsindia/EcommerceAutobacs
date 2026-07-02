@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
-import { SESSION_EXPIRED_EVENT } from '@/lib/api-client';
+import { SESSION_EXPIRED_EVENT, emitAuthLogin } from '@/lib/api-client';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 
@@ -282,6 +282,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         writeCache(userData, userData.sessionVersion);
         identifyUser({ id: userData._id, email: userData.email, name: userData.name });
         trackLogin('email');
+        // Merge any guest (session) cart into this account. Fire-and-forget:
+        // CartContext handles the merge + refresh so auth stays decoupled from cart.
+        emitAuthLogin();
       } else {
         throw new Error(response.message || 'Login failed');
       }
@@ -316,6 +319,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         writeCache(userData, userData.sessionVersion);
         identifyUser({ id: userData._id, email: userData.email, name: userData.name });
         trackSignUp('email');
+        emitAuthLogin();
       } else {
         throw new Error(response.message || 'Registration failed');
       }
@@ -368,6 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Social (Google) auth completed — tie events to the user and record the login.
     identifyUser({ id: userData._id, email: userData.email, name: userData.name });
     trackLogin('google');
+    emitAuthLogin();
   }, []);
 
   const value: AuthContextType = {

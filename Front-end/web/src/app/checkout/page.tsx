@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { LogIn } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
@@ -352,6 +354,46 @@ function CheckoutPageContent() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-gold mx-auto"></div>
           <p className="mt-4 text-ink/70 font-display">Loading checkout...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Checkout requires an account. Guests keep their cart (it lives server-side by
+  // session and merges into the account on login) but must sign in or register to
+  // proceed. `redirect=/checkout` returns them here afterwards.
+  if (isGuest) {
+    return (
+      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-obsidian border border-hairline rounded-sm p-8 text-center">
+          <div className="bg-gold/10 border border-gold/30 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
+            <LogIn className="h-8 w-8 text-gold" />
+          </div>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Almost there</p>
+          <h1 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-3">Sign in to check out</h1>
+          <p className="text-ink/70 font-display text-sm mb-8">
+            Your cart is saved. Log in or create an account to complete your order — your items will be waiting.
+          </p>
+          <div className="space-y-3">
+            <Link
+              href="/login?redirect=/checkout"
+              className="block w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors"
+            >
+              Log In
+            </Link>
+            <Link
+              href="/register?redirect=/checkout"
+              className="block w-full bg-obsidian-raised border border-hairline text-ink hover:border-gold/40 font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors"
+            >
+              Create Account
+            </Link>
+          </div>
+          <button
+            onClick={() => router.push('/cart')}
+            className="mt-6 text-ink-muted hover:text-ink font-display text-xs uppercase tracking-widest transition-colors"
+          >
+            Back to cart
+          </button>
         </div>
       </div>
     );

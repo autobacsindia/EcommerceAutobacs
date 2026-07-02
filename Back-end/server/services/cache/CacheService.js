@@ -155,25 +155,35 @@ class CacheService {
 
   async invalidatePattern(pattern) {
     console.log(`[CacheService] Invalidating pattern: ${pattern}`);
+    this.metrics.patternInvalidations++;
     if (redisClient) {
+      // Redis SCAN MATCH is glob, not substring: a bare word like "products"
+      // matches ONLY the literal key "products", never "v2:products:facets:…".
+      // Callers pass substrings (see invalidateCache docs), so wrap the pattern
+      // in wildcards unless it already carries its own glob.
+      const glob = pattern.includes('*') ? pattern : `*${pattern}*`;
       let cursor = '0';
       const keys = [];
       do {
-        const result = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        const result = await redisClient.scan(cursor, 'MATCH', glob, 'COUNT', 100);
         cursor = result[0];
         keys.push(...result[1]);
       } while (cursor !== '0');
       if (keys.length > 0) await redisClient.del(keys);
-    } else {
-      for (const key of this.cache.keys()) {
-        if (this.matchesPattern(key, pattern)) await this.delete(key);
-      }
+      return keys.length;
     }
-    this.metrics.patternInvalidations++;
+    let removed = 0;
+    for (const key of this.cache.keys()) {
+      if (this.matchesPattern(key, pattern)) { await this.delete(key); removed++; }
+    }
+    return removed;
   }
 
+  // Substring/glob match (NOT anchored) — the documented contract of
+  // invalidateCache is "keys that CONTAIN the pattern". `*` is honoured as a
+  // wildcard so callers can still pass explicit globs.
   matchesPattern(key, pattern) {
-    return new RegExp('^' + pattern.replace(/\*/g, '.*') + '$').test(key);
+    return new RegExp(pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')).test(key);
   }
 
   // ── Tag Cleanup ───────────────────────────────────────────────────────────

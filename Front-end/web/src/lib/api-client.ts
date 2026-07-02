@@ -43,6 +43,19 @@ function emitSessionExpired(): void {
   }
 }
 
+/** Broadcast a "just authenticated" signal (login / register / social). CartContext
+ *  listens and merges the guest (session) cart into the now-authenticated user's cart
+ *  so items added while logged out are not lost. Decouples auth from cart state. */
+export const AUTH_LOGIN_EVENT = 'auth:login';
+export function emitAuthLogin(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_LOGIN_EVENT));
+  } catch {
+    /* CustomEvent unavailable — non-fatal */
+  }
+}
+
 /** True when the client believes it has (or had) an authenticated session. SSR-safe. */
 function hasSessionHint(): boolean {
   if (tokenManager.refreshToken != null) return true; // legacy bearer flow

@@ -16,6 +16,7 @@ jest.unstable_mockModule('../../../services/categoryMappingService.js', () => ({
     initialize: jest.fn(),
     findCategory: jest.fn(),
     getAllCategoryIdsIncludingChildren: jest.fn(),
+    buildChildIndex: jest.fn(() => new Map()),
   }
 }));
 
@@ -199,6 +200,7 @@ describe('SearchService Unit Tests', () => {
     it('getFacets returns per-brand and per-category counts', async () => {
       categoryMappingService.findCategory.mockReturnValue({ _id: 'lightingCat' });
       categoryMappingService.getAllCategoryIdsIncludingChildren.mockResolvedValue(['lightingCat']);
+      categoryMappingService.buildChildIndex.mockReturnValue(new Map());
       Product.aggregate
         .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'Auxbeam', count: 12 }, { _id: 'BMC', count: 3 }]) })
         .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'cat1', count: 44 }]) });
@@ -210,6 +212,29 @@ describe('SearchService Unit Tests', () => {
         { name: 'BMC', count: 3 },
       ]);
       expect(facets.categories).toEqual([{ categoryId: 'cat1', count: 44 }]);
+    });
+
+    it('getFacets rolls direct category counts up the tree so a hub reflects its subtree', async () => {
+      // Tree: hub -> [subA, subB]. Products are tagged on the leaves only, so
+      // the hub has NO direct count — its badge must equal subA + subB.
+      categoryMappingService.findCategory.mockReturnValue(null);
+      categoryMappingService.buildChildIndex.mockReturnValue(new Map([
+        ['hub', [{ _id: 'subA' }, { _id: 'subB' }]],
+      ]));
+      Product.aggregate
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([
+          { _id: 'subA', count: 30 },
+          { _id: 'subB', count: 14 },
+        ]) });
+
+      const facets = await SearchService.getFacets({});
+
+      expect(facets.categories).toEqual([
+        { categoryId: 'hub', count: 44 },
+        { categoryId: 'subA', count: 30 },
+        { categoryId: 'subB', count: 14 },
+      ]);
     });
 
     it('should handle category filtering correctly', async () => {

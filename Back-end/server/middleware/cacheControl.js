@@ -42,9 +42,12 @@ export const cacheMiddleware = (cacheType = 'default') => {
         'Vary': 'Accept-Encoding'
       },
       
-      // Categories, brands - cache for 1 hour (rarely change)
+      // Categories / brands — rarely change, but admin edits must surface quickly
+      // in the storefront. Short BROWSER cache so a returning shopper picks up an
+      // added/renamed/removed category within ~1 min; long CDN s-maxage keeps the
+      // edge absorbing load (purge the edge on bulk taxonomy changes at cutover).
       'static-data': {
-        'Cache-Control': 'public, max-age=3600, s-maxage=7200', // 1 hour browser, 2 hours CDN
+        'Cache-Control': 'public, max-age=60, s-maxage=7200', // 1 min browser, 2 hours CDN
         'Vary': 'Accept-Encoding'
       },
       

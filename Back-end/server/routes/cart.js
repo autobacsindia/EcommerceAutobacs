@@ -189,6 +189,68 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   });
 }));
 
+// @route   POST /cart/merge
+// @desc    Merge a guest (session) cart into the authenticated user's cart.
+//          Called once right after login/register/social so items added while
+//          logged out survive authentication. Ordered merge → save → delete so a
+//          mid-flight failure never drops the guest items (they stay claimable);
+//          a sequential retry finds the guest cart already consumed, so it won't
+//          double-count.
+// @access  Private (optionalAuth runs at router level; we require req.user here)
+router.post("/merge", asyncHandler(async (req, res) => {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required to merge cart'
+    });
+  }
+
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+
+  const guestCart = sessionId
+    ? await Cart.findOne({ sessionId })
+    : null;
+
+  let userCart = await Cart.findOne({ user: req.user.id });
+  if (!userCart) {
+    userCart = new Cart({ user: req.user.id, items: [], isGuest: false });
+  }
+
+  if (guestCart && guestCart.items.length > 0) {
+    for (const guestItem of guestCart.items) {
+      const productId = (guestItem.product._id || guestItem.product).toString();
+      const existing = userCart.items.find(
+        item => (item.product._id || item.product).toString() === productId
+      );
+      if (existing) {
+        // Union: sum quantities so re-adding a product the user already had accumulates.
+        existing.quantity += guestItem.quantity;
+      } else {
+        userCart.items.push({
+          product: guestItem.product,
+          quantity: guestItem.quantity,
+          price: guestItem.price
+        });
+      }
+    }
+  }
+
+  await userCart.save();
+
+  // Consume the guest cart only after the merged user cart is safely persisted.
+  if (guestCart) {
+    await Cart.deleteOne({ _id: guestCart._id });
+  }
+
+  await userCart.populate('items.product', 'name price images stock isActive');
+
+  res.json({
+    success: true,
+    message: 'Cart merged',
+    cart: userCart
+  });
+}));
+
 // @route   PUT /cart/update/:productId
 // @desc    Update cart item quantity
 // @access  Public (optional auth)

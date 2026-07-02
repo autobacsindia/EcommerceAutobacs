@@ -249,7 +249,9 @@ router.post(
         seo: normalizeSeo(req.body.seo),
       });
 
-      invalidateCache('categories');
+      // 'products' also clears the facet/list caches — a new category can appear
+      // as a filter facet and shifts the sidebar counts.
+      invalidateCache('categories', 'products');
       // Drop the in-memory hierarchy cache so new categories aggregate immediately.
       categoryMappingService.refresh();
 
@@ -383,7 +385,9 @@ router.put(
         { new: true, runValidators: true }
       );
 
-      invalidateCache('categories');
+      // Parent/name/active changes alter the hierarchy AND the rolled-up facet
+      // counts, so bust the product/facet caches too.
+      invalidateCache('categories', 'products');
       // Parent/slug/name changes alter the hierarchy; refresh the lookup cache.
       categoryMappingService.refresh();
 
@@ -435,7 +439,8 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
   category.isActive = false;
   await category.save();
 
-  invalidateCache('categories');
+  // Soft-delete removes a facet and changes ancestor counts → bust products too.
+  invalidateCache('categories', 'products');
   // Soft-deleted category must drop out of hierarchy aggregation.
   categoryMappingService.refresh();
 

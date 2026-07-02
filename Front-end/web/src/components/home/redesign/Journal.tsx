@@ -1,34 +1,88 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Img from './Img';
 import { ArrowRightLong } from './icons';
 import { journal, journalPosts as fallbackJournalPosts, type JournalItem } from './homeContent';
 
-const AUTOPLAY_MS = 6000;
-// Past this horizontal drag/swipe distance (px), a release advances the slide.
-const SWIPE_THRESHOLD = 60;
+const AUTOPLAY_MS = 5000;
 
+/**
+ * Scrapbook-style journal carousel: a horizontally scroll-snapping row of
+ * tilted "pinned photo" cards, each with a 1–2 line title in its bottom caption.
+ *
+ * Tilt is CSS-only (deterministic `:nth-child` angles) so there's no SSR/client
+ * hydration mismatch. Scrolling is native scroll-snap; autoplay just nudges the
+ * track to the next card and pauses on hover/focus/reduced-motion.
+ */
 export default function Journal({ posts }: { posts?: JournalItem[] }) {
   // Live blog posts from the DB; static placeholders if none resolved.
   const items = posts?.length ? posts : fallbackJournalPosts;
   const n = items.length;
 
+  const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
-  const swipe = useRef({ startX: 0, dragging: false, moved: false });
 
-  const go = (dir: 1 | -1) => setActive((a) => (a + dir + n) % n);
-  const current = items[active];
+  const prefersReducedMotion = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // Autoplay — paused on hover/focus and when reduced motion is preferred.
+  // Snap card `i` into view by scrolling the track to its offset.
+  const scrollToCard = useCallback((i: number) => {
+    const track = trackRef.current;
+    const card = track?.children[i] as HTMLElement | undefined;
+    if (!track || !card) return;
+    track.scrollTo({
+      left: card.offsetLeft - track.offsetLeft,
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+  }, []);
+
+  const go = useCallback(
+    (dir: 1 | -1) => {
+      setActive((a) => {
+        const next = (a + dir + n) % n;
+        scrollToCard(next);
+        return next;
+      });
+    },
+    [n, scrollToCard],
+  );
+
+  // Autoplay — advance one card; paused on hover/focus and reduced motion.
   useEffect(() => {
-    if (n <= 1 || paused) return;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const id = window.setInterval(() => setActive((a) => (a + 1) % n), AUTOPLAY_MS);
+    if (n <= 1 || paused || prefersReducedMotion()) return;
+    const id = window.setInterval(() => {
+      setActive((a) => {
+        const next = (a + 1) % n;
+        scrollToCard(next);
+        return next;
+      });
+    }, AUTOPLAY_MS);
     return () => window.clearInterval(id);
-  }, [n, paused]);
+  }, [n, paused, scrollToCard]);
+
+  // Keep `active` in sync when the user scrolls/drags the track by hand, so
+  // autoplay resumes from wherever they landed (nearest card to the centre).
+  const onScroll = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const center = track.scrollLeft + track.clientWidth / 2;
+    let nearest = 0;
+    let best = Infinity;
+    Array.from(track.children).forEach((el, i) => {
+      const c = el as HTMLElement;
+      const cardCenter = c.offsetLeft - track.offsetLeft + c.clientWidth / 2;
+      const d = Math.abs(cardCenter - center);
+      if (d < best) {
+        best = d;
+        nearest = i;
+      }
+    });
+    setActive(nearest);
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') {
@@ -38,22 +92,6 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
       e.preventDefault();
       go(1);
     }
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    swipe.current = { startX: e.clientX, dragging: true, moved: false };
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (swipe.current.dragging && Math.abs(e.clientX - swipe.current.startX) > 8) {
-      swipe.current.moved = true;
-    }
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (!swipe.current.dragging) return;
-    const dx = e.clientX - swipe.current.startX;
-    swipe.current.dragging = false;
-    if (dx <= -SWIPE_THRESHOLD) go(1);
-    else if (dx >= SWIPE_THRESHOLD) go(-1);
   };
 
   return (
@@ -75,58 +113,52 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
         </Link>
       </div>
 
-      <div className="mc reveal">
+      <div className="sb reveal">
         <div
-          className="mc-frame"
+          className="sb-track"
+          ref={trackRef}
           role="group"
           aria-roledescription="carousel"
           aria-label="The Garage Journal articles"
           tabIndex={0}
           onKeyDown={onKeyDown}
+          onScroll={onScroll}
           onFocus={() => setPaused(true)}
           onBlur={() => setPaused(false)}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
         >
           {items.map((p, i) => (
-            <div
-              className={`mc-slide${i === active ? ' active' : ''}`}
+            <Link
+              className={`sb-card${i === active ? ' is-active' : ''}`}
               key={p.title}
-              aria-hidden={i !== active}
+              href={p.href}
+              aria-label={`Read article: ${p.title}`}
+              aria-current={i === active ? 'true' : undefined}
+              draggable={false}
             >
-              <Img src={p.image} alt={p.title} draggable={false} />
-            </div>
+              <div className="sb-photo">
+                <Img src={p.image} alt={p.title} draggable={false} />
+                {/* Title-only caption, overlaid at the bottom and revealed on the
+                    focused/active (or hovered) card — clean photos otherwise. */}
+                <div className="sb-cap">
+                  <h3 className="sb-title">{p.title}</h3>
+                </div>
+              </div>
+            </Link>
           ))}
-
-          {/* Full-frame link to the current article (kept out of the nav bar so
-              we never nest a <button> inside an <a>). */}
-          <Link
-            className="mc-open"
-            href={current.href}
-            aria-label={`Read article: ${current.title}`}
-            onClick={(e) => {
-              // A swipe ends in a click on this overlay — don't navigate then.
-              if (swipe.current.moved) e.preventDefault();
-            }}
-          />
-
-          <div className="mc-bar">
-            <div className="mc-title" aria-live="polite">
-              {current.title}
-            </div>
-            <div className="mc-nav">
-              <button type="button" className="mc-btn mc-back" onClick={() => go(-1)}>
-                <ArrowRightLong className="mc-arrow-flip" aria-hidden />
-                <span>Back</span>
-              </button>
-              <button type="button" className="mc-btn mc-next" onClick={() => go(1)}>
-                <span>Next</span>
-                <ArrowRightLong aria-hidden />
-              </button>
-            </div>
-          </div>
         </div>
+
+        {n > 1 ? (
+          <div className="sb-nav">
+            <button type="button" className="sb-btn sb-back" onClick={() => go(-1)}>
+              <ArrowRightLong className="sb-arrow-flip" aria-hidden />
+              <span>Back</span>
+            </button>
+            <button type="button" className="sb-btn sb-next" onClick={() => go(1)}>
+              <span>Next</span>
+              <ArrowRightLong aria-hidden />
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );
