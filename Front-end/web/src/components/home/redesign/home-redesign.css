@@ -455,44 +455,28 @@
 .hr .journal-cta { display: inline-flex; align-items: center; gap: 12px; border: 1px solid var(--gold); color: var(--gold); background: none; padding: 15px 30px; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; cursor: pointer; transition: all 0.28s; font-family: var(--display-font); flex-shrink: 0; white-space: nowrap; }
 .hr .journal-cta:hover { background: var(--gold); color: var(--bg); }
 
-/* ── Modern coverflow carousel ── */
-.hr .mc { position: relative; max-width: 1340px; margin: 0 auto; outline: none; }
-.hr .mc-stage { position: relative; height: clamp(440px, 52vw, 560px); display: flex; align-items: center; justify-content: center; touch-action: pan-y; cursor: grab; perspective: 1800px; }
-.hr .mc-stage:active { cursor: grabbing; }
-.hr .mc-card { position: absolute; top: 0; left: 50%; width: clamp(300px, 42vw, 520px); height: 100%; margin-left: calc(clamp(300px, 42vw, 520px) / -2); transform-style: preserve-3d; transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform, opacity; display: flex; flex-direction: column; }
-/* Off-centre cards (peek): scaled down, dimmed, pushed aside, tilted. */
-.hr .mc-card[data-off="0"]  { transform: translateX(0)      translateZ(0)      scale(1);    opacity: 1;    z-index: 4; }
-.hr .mc-card[data-off="1"]  { transform: translateX(58%)    translateZ(-160px) rotateY(-16deg) scale(0.86); opacity: 0.45; z-index: 3; }
-.hr .mc-card[data-off="-1"] { transform: translateX(-58%)   translateZ(-160px) rotateY(16deg)  scale(0.86); opacity: 0.45; z-index: 3; }
-.hr .mc-card[data-off="2"]  { transform: translateX(104%)   translateZ(-320px) rotateY(-20deg) scale(0.7);  opacity: 0.12; z-index: 2; }
-.hr .mc-card[data-off="-2"] { transform: translateX(-104%)  translateZ(-320px) rotateY(20deg)  scale(0.7);  opacity: 0.12; z-index: 2; }
-.hr .mc-card:not(.is-center) { cursor: pointer; }
-.hr .mc-card .thumb { position: relative; aspect-ratio: 16 / 10; overflow: hidden; background: #1a1c1c; margin-bottom: 24px; flex-shrink: 0; }
-.hr .mc-card .thumb img { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.82); transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s; -webkit-user-drag: none; user-select: none; }
-.hr .mc-card.is-center:hover .thumb img { transform: scale(1.06); filter: brightness(0.95); }
-.hr .mc-card .thumb .cat { position: absolute; top: 18px; left: 18px; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--bg); background: var(--gold); padding: 6px 13px; z-index: 2; }
-.hr .mc-body { padding: 0 4px; }
-.hr .journal-meta { display: flex; align-items: center; gap: 14px; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
-.hr .journal-meta .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--gold); }
-.hr .mc-card h3 { font-size: clamp(20px, 1.7vw, 26px); font-weight: 400; line-height: 1.24; color: var(--text); margin-bottom: 14px; transition: color 0.3s; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.hr .mc-card.is-center:hover h3 { color: var(--gold); }
-.hr .mc-card p { font-size: 13.5px; font-weight: 300; line-height: 1.75; color: var(--muted); margin-bottom: 20px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.hr .journal-readlink { display: inline-flex; align-items: center; gap: 10px; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); transition: gap 0.3s; }
-.hr .mc-card.is-center:hover .journal-readlink { gap: 18px; }
-.hr .journal-readlink svg { color: var(--gold); }
-/* Arrows */
-.hr .mc-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 6; width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line); background: rgba(15, 16, 16, 0.55); backdrop-filter: blur(6px); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.28s; }
-.hr .mc-arrow:hover { border-color: var(--gold); color: var(--gold); }
-.hr .mc-arrow svg { width: 20px; height: 20px; }
-.hr .mc-prev { left: 8px; }
-.hr .mc-next { right: 8px; }
-/* Dots */
-.hr .mc-dots { display: flex; justify-content: center; gap: 12px; margin-top: 40px; }
-.hr .mc-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; background: rgba(240, 237, 231, 0.22); cursor: pointer; transition: all 0.3s; }
-.hr .mc-dot:hover { background: rgba(240, 237, 231, 0.5); }
-.hr .mc-dot.active { width: 26px; border-radius: 4px; background: var(--gold); }
+/* ── Modern carousel (single image card + bottom nav bar + caption) ── */
+.hr .mc { position: relative; max-width: 1040px; margin: 0 auto; }
+.hr .mc-frame { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #12100f; outline: none; touch-action: pan-y; user-select: none; box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.8); }
+.hr .mc-frame:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 30px 80px -40px rgba(0, 0, 0, 0.8); }
+/* Slides stacked & cross-faded. */
+.hr .mc-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1); will-change: opacity; }
+.hr .mc-slide.active { opacity: 1; }
+.hr .mc-slide img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
+/* Whole-image link, above slides but below the nav bar. */
+.hr .mc-open { position: absolute; top: 0; left: 0; right: 0; bottom: 66px; z-index: 2; display: block; }
+/* Bottom nav bar — solid strip over the image's lower edge. */
+.hr .mc-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 24px; background: rgba(9, 10, 10, 0.94); backdrop-filter: blur(4px); }
+.hr .mc-title { flex: 1; min-width: 0; font-family: var(--display-font); font-size: 15px; font-weight: 300; line-height: 1.35; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr .mc-nav { display: flex; align-items: center; gap: 26px; flex-shrink: 0; }
+.hr .mc-btn { display: inline-flex; align-items: center; gap: 10px; background: none; border: none; cursor: pointer; padding: 6px 2px; font-family: var(--display-font); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(240, 237, 231, 0.6); transition: color 0.25s, gap 0.25s; }
+.hr .mc-btn:hover { color: var(--text); }
+.hr .mc-btn svg { color: var(--gold); }
+.hr .mc-btn .mc-arrow-flip { transform: scaleX(-1); }
+.hr .mc-back:hover { gap: 14px; }
+.hr .mc-next:hover { gap: 14px; }
 @media (prefers-reduced-motion: reduce) {
-  .hr .mc-card { transition: none; }
+  .hr .mc-slide { transition: none; }
 }
 
 /* ── FOOTER ── */
@@ -609,17 +593,14 @@
   .hr .testimonials .section-header { margin-bottom: 44px; }
   .hr .testi-card { flex: 0 0 100%; padding: 32px 26px; }
 
-  /* JOURNAL carousel — mobile: near-full-width centre card, tiny side peeks. */
-  .hr .journal { padding: 72px 0; }
-  .hr .journal-head, .hr .mc-dots { padding-left: 22px; padding-right: 22px; }
-  .hr .mc-stage { height: clamp(430px, 118vw, 540px); }
-  .hr .mc-card { width: 82vw; margin-left: -41vw; }
-  .hr .mc-card[data-off="1"]  { transform: translateX(64%)  translateZ(-120px) rotateY(-12deg) scale(0.9); opacity: 0.32; }
-  .hr .mc-card[data-off="-1"] { transform: translateX(-64%) translateZ(-120px) rotateY(12deg)  scale(0.9); opacity: 0.32; }
-  .hr .mc-card[data-off="2"], .hr .mc-card[data-off="-2"] { opacity: 0; }
-  .hr .mc-arrow { width: 42px; height: 42px; }
-  .hr .mc-prev { left: 4px; }
-  .hr .mc-next { right: 4px; }
+  /* JOURNAL carousel — mobile: taller frame, title stacks above the nav row. */
+  .hr .journal { padding: 72px 22px; }
+  .hr .mc-frame { aspect-ratio: 4 / 5; }
+  .hr .mc-open { bottom: 92px; }
+  .hr .mc-bar { min-height: 92px; padding: 14px 16px; gap: 10px; flex-direction: column; align-items: stretch; }
+  .hr .mc-title { flex: none; white-space: normal; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+  .hr .mc-nav { gap: 20px; width: 100%; justify-content: flex-end; }
+  .hr .mc-btn { font-size: 10px; letter-spacing: 0.2em; }
 
   /* FOOTER */
   .hr .footer { padding: 64px 22px 32px; }
