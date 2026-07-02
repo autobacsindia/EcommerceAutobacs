@@ -145,8 +145,8 @@ export default function TermsPage() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Legal</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Terms and Conditions</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Legal</p>
+          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Terms and Conditions</h1>
           <p className="text-ink/70 font-display max-w-3xl mx-auto">
             Please read these terms and conditions carefully before using our website and services.
           </p>
@@ -162,7 +162,7 @@ export default function TermsPage() {
             <div className="space-y-8">
               {sections.map(({ heading, content }, i) => (
                 <div key={heading} className={i > 0 ? 'border-t border-hairline pt-8' : ''}>
-                  <h2 className="font-display font-bold text-ink uppercase tracking-wide text-lg mb-3">{heading}</h2>
+                  <h2 className="font-display font-light text-ink tracking-[-0.01em] text-lg mb-3">{heading}</h2>
                   <div className="text-ink/70 font-display leading-relaxed">{content}</div>
                 </div>
               ))}

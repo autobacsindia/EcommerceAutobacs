@@ -169,9 +169,9 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Account</p>
-          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">My Profile</h1>
+        <div className="mb-10">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Account</p>
+          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Profile</h1>
         </div>
 
         <KarmaCard />
@@ -183,7 +183,7 @@ export default function ProfilePage() {
               <User className="h-10 w-10 text-gold" />
             </div>
             <div>
-              <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide">
+              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">
                 {editing ? (
                   <input
                     type="text"
@@ -305,7 +305,7 @@ export default function ProfilePage() {
                     ))}
                   </div>
                   <div className="mt-4 flex gap-3">
-                    <button onClick={addNewAddress} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                    <button onClick={addNewAddress} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                       Add Address
                     </button>
                     <button onClick={() => setShowAddAddress(false)} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
@@ -330,7 +330,7 @@ export default function ProfilePage() {
                       <div className="flex items-start gap-3">
                         <MapPin className="h-5 w-5 text-gold mt-0.5 shrink-0" />
                         <div className="font-display text-sm">
-                          <p className="font-display font-bold text-ink uppercase tracking-wide mb-1">{address.fullName}</p>
+                          <p className="font-display font-light text-ink tracking-[-0.01em] mb-1">{address.fullName}</p>
                           <p className="text-ink/70">{address.addressLine1}</p>
                           {address.addressLine2 && <p className="text-ink/70">{address.addressLine2}</p>}
                           <p className="text-ink/70">{address.city}, {address.state} {address.postalCode}</p>
@@ -356,7 +356,7 @@ export default function ProfilePage() {
           <div className="flex flex-wrap gap-3 pt-4 border-t border-hairline">
             {editing ? (
               <>
-                <button onClick={handleSave} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                <button onClick={handleSave} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                   Save Changes
                 </button>
                 <button onClick={handleCancelEdit} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
@@ -364,13 +364,13 @@ export default function ProfilePage() {
                 </button>
               </>
             ) : (
-              <button onClick={handleEdit} className="flex items-center gap-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <button onClick={handleEdit} className="flex items-center gap-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                 <Edit className="h-4 w-4" />
                 Edit Profile
               </button>
             )}
             {user?.role === 'admin' && (
-              <Link href="/admin/dashboard" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-obsidian/70 hover:text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <Link href="/admin/dashboard" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
                 <Shield className="h-4 w-4" />
                 Admin Dashboard
               </Link>

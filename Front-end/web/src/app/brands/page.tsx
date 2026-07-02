@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Tag, ArrowLeft, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api';
+import Eyebrow from '@/components/ui/Eyebrow';
+import Reveal from '@/components/ui/Reveal';
 
 interface Brand {
   id?: string;
@@ -71,12 +73,12 @@ export default function BrandsPage() {
           <div className="bg-red-500/10 border border-red-500/30 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
             <Tag className="h-8 w-8 text-red-400" />
           </div>
-          <h1 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-4">Error Loading Brands</h1>
+          <h1 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">Error Loading Brands</h1>
           <p className="text-ink/70 font-display mb-6">{error}</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={fetchBrands}
-              className="inline-flex items-center justify-center px-6 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
+              className="inline-flex items-center justify-center px-6 py-3 bg-gold text-obsidian hover:opacity-90 font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry
@@ -97,27 +99,22 @@ export default function BrandsPage() {
   return (
     <div className="min-h-screen bg-obsidian-deep">
       {/* Hero */}
-      <div className="bg-obsidian border-b border-hairline py-16 md:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="flex items-center justify-center mb-6">
-            <div className="bg-gold/10 border border-gold/30 rounded-full p-4">
-              <Tag className="h-12 w-12 text-gold" />
-            </div>
-          </div>
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-3">Our Partners</p>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-ink uppercase tracking-wide mb-4">
-            Premium Automotive Brands
+      <div className="bg-obsidian border-b border-hairline px-5 py-20 sm:px-8 md:py-28">
+        <Reveal className="mx-auto max-w-[1400px] text-center">
+          <Eyebrow>Our Partners</Eyebrow>
+          <h1 className="mx-auto mt-5 max-w-4xl text-[clamp(40px,6.5vw,84px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">
+            Premium automotive <em className="font-light not-italic text-gold">brands</em>
           </h1>
-          <p className="text-ink/70 font-display text-lg max-w-3xl mx-auto">
-            Explore our curated collection of world-class automotive brands. Find authentic parts and accessories from trusted manufacturers.
+          <p className="mx-auto mt-6 max-w-2xl font-display text-[15px] font-light leading-relaxed text-ink-muted">
+            A curated collection of world-class marques — authentic parts and accessories from trusted manufacturers.
           </p>
           {!loading && brands.length > 0 && (
-            <div className="mt-6 flex items-center justify-center gap-2 text-ink/70">
-              <div className="w-2 h-2 bg-gold rounded-full animate-pulse" />
-              <span className="text-sm font-display font-bold uppercase tracking-widest">{brands.length} Brands Available</span>
+            <div className="mt-7 flex items-center justify-center gap-2.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+              <span className="font-display text-[11px] uppercase tracking-[0.2em] text-ink-muted">{brands.length} brands available</span>
             </div>
           )}
-        </div>
+        </Reveal>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
@@ -170,7 +167,7 @@ export default function BrandsPage() {
 
                   {/* Brand info */}
                   <div className="p-5 border-t border-hairline text-center flex-1 flex flex-col">
-                    <h3 className="text-lg font-display font-bold text-ink uppercase tracking-wide mb-1 group-hover:text-gold transition-colors">
+                    <h3 className="text-lg font-display font-light text-ink tracking-[-0.01em] mb-1 group-hover:text-gold transition-colors">
                       {brand.name}
                     </h3>
                     <div className="flex items-center justify-center gap-1 text-sm text-ink-muted mb-3">
@@ -184,7 +181,7 @@ export default function BrandsPage() {
                       <p className="text-xs text-ink-muted font-display line-clamp-2 mb-3">{brand.description}</p>
                     )}
                     <div className="mt-auto pt-3 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300">
-                      <div className="bg-gold hover:bg-gold text-obsidian text-center py-2 rounded-sm font-display font-bold text-sm uppercase tracking-widest transition-colors">
+                      <div className="bg-gold text-obsidian hover:opacity-90 text-center py-2 rounded-sm font-display font-bold text-sm uppercase tracking-widest transition-colors">
                         View Products →
                       </div>
                     </div>
@@ -218,13 +215,13 @@ export default function BrandsPage() {
             <div className="bg-obsidian-raised border border-hairline rounded-full p-8 w-32 h-32 mx-auto mb-6 flex items-center justify-center">
               <Tag className="h-16 w-16 text-ink-muted" />
             </div>
-            <h3 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-3">No Brands Available</h3>
+            <h3 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-3">No Brands Available</h3>
             <p className="text-ink/70 font-display mb-8 max-w-md mx-auto">
               We&apos;re currently updating our brand catalog. Please check back later or browse our product collection.
             </p>
             <Link
               href="/products"
-              className="inline-flex items-center px-8 py-4 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
+              className="inline-flex items-center px-8 py-4 bg-gold text-obsidian hover:opacity-90 font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               Browse All Products
             </Link>

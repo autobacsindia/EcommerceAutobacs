@@ -45,7 +45,7 @@ export default function BulkActionsBar({
   const statusOptions = [
     { value: 'confirmed', label: 'Confirm', icon: CheckCircle, color: 'text-green-600' },
     { value: 'processing', label: 'Process', icon: Package, color: 'text-gold' },
-    { value: 'shipped', label: 'Ship', icon: Package, color: 'text-purple-600' },
+    { value: 'shipped', label: 'Ship', icon: Package, color: 'text-gold' },
     { value: 'delivered', label: 'Deliver', icon: CheckCircle, color: 'text-green-600' },
     { value: 'cancelled', label: 'Cancel', icon: XCircle, color: 'text-red-600' },
     { value: 'refunded', label: 'Refund', icon: AlertCircle, color: 'text-yellow-600' },
@@ -61,7 +61,7 @@ export default function BulkActionsBar({
             </span>
             <button
               onClick={onSelectAll}
-              className="text-sm text-gold hover:text-blue-800"
+              className="text-sm text-gold hover:text-gold"
               disabled={selectedCount === totalCount}
             >
               Select all

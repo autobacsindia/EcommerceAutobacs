@@ -367,12 +367,12 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
           return (
             <details
               key={group.title}
-              className={`border rounded-md overflow-hidden ${group.isKeywordGroup ? 'border-blue-200' : 'border-hairline'}`}
+              className={`border rounded-md overflow-hidden ${group.isKeywordGroup ? 'border-gold/40' : 'border-hairline'}`}
               open
             >
               <summary className={`flex items-center justify-between px-3 py-2 text-xs font-semibold cursor-pointer select-none list-none
                 ${group.isKeywordGroup
-                  ? allPassed ? 'bg-blue-50 text-gold' : 'bg-blue-50 text-gold'
+                  ? allPassed ? 'bg-gold/10 text-gold' : 'bg-gold/10 text-gold'
                   : allPassed ? 'bg-green-50 text-green-700' : 'bg-obsidian-deep text-ink/80'
                 }`}
               >
@@ -387,7 +387,7 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
                 </span>
               </summary>
 
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-hairline">
                 {group.checks.map(check => {
                   const passed  = check.earned === check.possible;
                   const partial = check.earned > 0 && !passed;
@@ -423,8 +423,8 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
 
         {/* Placeholder when no keyword yet */}
         {!focusKeyword.trim() && (
-          <div className="border border-dashed border-blue-200 rounded-md px-3 py-4 text-center">
-            <Search className="h-4 w-4 text-blue-200 mx-auto mb-1.5" />
+          <div className="border border-dashed border-gold/40 rounded-md px-3 py-4 text-center">
+            <Search className="h-4 w-4 text-gold mx-auto mb-1.5" />
             <p className="text-xs text-ink-muted leading-snug">
               Enter a focus keyword above to check title, slug, description placement, and keyword density
             </p>

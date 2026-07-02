@@ -169,7 +169,7 @@ export default function LocationHistory({
                   disabled={isCurrent}
                   className={`w-full px-4 py-3 text-left transition-colors ${
                     isCurrent
-                      ? 'bg-blue-50 cursor-default'
+                      ? 'bg-gold/10 cursor-default'
                       : isSelected
                       ? 'bg-obsidian-raised'
                       : 'hover:bg-obsidian-deep'
@@ -188,7 +188,7 @@ export default function LocationHistory({
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <p
                           className={`text-sm font-medium truncate ${
-                            isCurrent ? 'text-blue-900' : 'text-ink'
+                            isCurrent ? 'text-gold' : 'text-ink'
                           }`}
                         >
                           {item.address.city}, {item.address.state}
@@ -247,7 +247,7 @@ export default function LocationHistory({
               onClose();
               onOpenSelector();
             }}
-            className="w-full px-4 py-2 text-sm font-medium text-gold hover:bg-blue-50 rounded-lg transition-colors"
+            className="w-full px-4 py-2 text-sm font-medium text-gold hover:bg-gold/10 rounded-lg transition-colors"
           >
             Enter Different Location
           </button>

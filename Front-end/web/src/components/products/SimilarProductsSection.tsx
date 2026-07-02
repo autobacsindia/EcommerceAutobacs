@@ -65,17 +65,17 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
 
   if (loading) {
     return (
-      <section className={`py-8 ${isDark ? 'bg-zinc-900' : 'bg-obsidian-deep'}`}>
+      <section className={`py-8 ${isDark ? 'bg-obsidian-deep' : 'bg-obsidian-deep'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className={`text-2xl font-bold mb-6 ${isDark ? 'text-ink' : 'text-ink'}`}>Similar Products</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className={`${isDark ? 'bg-zinc-800' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
-                <div className={`h-48 ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'}`} />
+              <div key={i} className={`${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
+                <div className={`h-48 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'}`} />
                 <div className="p-4">
-                  <div className={`h-4 ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'} rounded w-3/4 mb-2`} />
-                  <div className={`h-4 ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'} rounded w-1/2 mb-3`} />
-                  <div className={`h-6 ${isDark ? 'bg-zinc-700' : 'bg-blue-100'} rounded w-1/3`} />
+                  <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-3/4 mb-2`} />
+                  <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-1/2 mb-3`} />
+                  <div className={`h-6 ${isDark ? 'bg-obsidian-raised' : 'bg-gold/10'} rounded w-1/3`} />
                 </div>
               </div>
             ))}
@@ -93,7 +93,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
     <section 
       ref={containerRef}
       aria-labelledby="similar-products-heading"
-      className={`py-8 ${isDark ? 'bg-zinc-900' : 'bg-obsidian-deep'}`}
+      className={`py-8 ${isDark ? 'bg-obsidian-deep' : 'bg-obsidian-deep'}`}
       tabIndex={-1}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -109,7 +109,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
           {products.map((product) => (
             <article 
               key={product._id}
-              className={`${isDark ? 'bg-zinc-800 hover:bg-zinc-750' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+              className={`${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
               tabIndex={0}
             >
               <Link 
@@ -130,8 +130,8 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                       priority={false}
                     />
                   ) : (
-                    <div className={`w-full h-full ${isDark ? 'bg-zinc-700' : 'bg-obsidian-raised'} flex items-center justify-center`}>
-                      <span className={`${isDark ? 'text-zinc-500' : 'text-ink-muted'} text-sm`}>No image</span>
+                    <div className={`w-full h-full ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} flex items-center justify-center`}>
+                      <span className={`${isDark ? 'text-ink-muted' : 'text-ink-muted'} text-sm`}>No image</span>
                     </div>
                   )}
                 </div>
@@ -146,7 +146,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                       ₹{product.price.toLocaleString()}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <span className={`ml-2 text-sm line-through ${isDark ? 'text-zinc-500' : 'text-ink-muted'}`}>
+                      <span className={`ml-2 text-sm line-through ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
                         ₹{product.originalPrice.toLocaleString()}
                       </span>
                     )}
@@ -155,17 +155,17 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                   {product.averageRating && (
                     <div className="flex items-center mb-2">
                       <span className="text-yellow-400 mr-1">★</span>
-                      <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-ink-muted'}`}>
+                      <span className={`text-sm ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
                         {product.averageRating.toFixed(1)} ({product.totalReviews || 0})
                       </span>
                     </div>
                   )}
                   
                   <div className="flex items-center justify-between mt-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-800'}`}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-gold/50 text-gold' : 'bg-gold/10 text-gold'}`}>
                       {product.brand || 'Autobacs'}
                     </span>
-                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-ink-muted'}`}>
+                    <span className={`text-xs ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
                       {product.categories?.[0]?.name || 'Auto Parts'}
                     </span>
                   </div>

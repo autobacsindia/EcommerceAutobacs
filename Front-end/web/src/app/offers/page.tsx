@@ -49,8 +49,8 @@ export default function OffersPage() {
     <div className="min-h-screen bg-obsidian-deep">
       <div className="bg-obsidian border-b border-hairline py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Limited Time</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-3">Offers</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Limited Time</p>
+          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-3">Offers</h1>
           <p className="text-ink/70 font-display">Your Dream Upgrades, Now More Affordable!</p>
         </div>
       </div>

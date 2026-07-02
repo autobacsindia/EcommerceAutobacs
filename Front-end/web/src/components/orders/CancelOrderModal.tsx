@@ -101,9 +101,9 @@ export default function CancelOrderModal({
 
             {/* Refund Information */}
             {success.refundInitiated && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm font-medium text-blue-900 mb-2">Refund Information</p>
-                <p className="text-sm text-blue-800">
+              <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6">
+                <p className="text-sm font-medium text-gold mb-2">Refund Information</p>
+                <p className="text-sm text-gold">
                   A refund of ₹{success.refundAmount.toFixed(2)} will be processed to your original payment method 
                   {success.refundTimeline && ` within ${success.refundTimeline}`}.
                 </p>
@@ -191,8 +191,8 @@ export default function CancelOrderModal({
                   key={index}
                   className={`flex items-center p-4 border rounded-lg cursor-pointer transition ${
                     selectedReason === reason.value
-                      ? 'border-gold bg-blue-50'
-                      : 'border-hairline hover:border-gray-400'
+                      ? 'border-gold bg-gold/10'
+                      : 'border-hairline hover:border-hairline'
                   }`}
                 >
                   <input
@@ -236,9 +236,9 @@ export default function CancelOrderModal({
 
           {/* Refund Information */}
           {hasPayment && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm font-medium text-blue-900 mb-2">Refund Information</p>
-              <div className="space-y-1 text-sm text-blue-800">
+            <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6">
+              <p className="text-sm font-medium text-gold mb-2">Refund Information</p>
+              <div className="space-y-1 text-sm text-gold">
                 <p>• Refund amount: ₹{totalAmount.toFixed(2)}</p>
                 <p>• Refund method: Original payment method</p>
                 <p>• Estimated timeline: 3-5 business days</p>

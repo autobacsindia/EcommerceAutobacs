@@ -11,7 +11,7 @@ export default function PageLoader({ type = 'home' }: PageLoaderProps) {
       return (
         <div className="flex min-h-screen flex-col">
           {/* Hero Section Skeleton */}
-          <section className="bg-linear-to-r from-gold to-blue-800 text-ink py-20">
+          <section className="bg-linear-to-r from-gold to-gold text-ink py-20">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
               <div className="h-16 bg-gold rounded mb-6 animate-pulse mx-auto max-w-3xl" />
               <div className="h-8 bg-gold rounded mb-8 mx-auto max-w-2xl" />
@@ -28,7 +28,7 @@ export default function PageLoader({ type = 'home' }: PageLoaderProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                 {[1, 2, 3, 4].map((item) => (
                   <div key={item} className="text-center">
-                    <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse" />
+                    <div className="bg-gold/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse" />
                     <div className="h-6 bg-obsidian-raised rounded mb-2 mx-auto max-w-xs" />
                     <div className="h-4 bg-obsidian-raised rounded mx-auto max-w-xs" />
                   </div>

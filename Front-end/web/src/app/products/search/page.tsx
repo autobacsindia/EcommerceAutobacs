@@ -186,14 +186,17 @@ function SearchPageInner() {
   return (
     <div className="min-h-screen bg-obsidian-deep">
       {/* Hero Section */}
-      <div className="bg-linear-to-r from-gold to-blue-800 text-ink py-12">
+      <div className="bg-obsidian border-b border-hairline py-14">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold mb-2">Search Results</h1>
-          <p className="text-blue-100">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Search</p>
+          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">
+            {searchTerm ? <>Results for <em className="not-italic text-gold">“{searchTerm}”</em></> : 'Search Results'}
+          </h1>
+          <p className="mt-3 font-display text-[13px] font-light tracking-[0.04em] text-ink-muted">
             {loading
               ? searchTerm ? `Searching for "${searchTerm}"…` : 'Search our product catalog'
               : searchTerm
-                ? `Found ${total} result${total !== 1 ? 's' : ''} for "${searchTerm}"`
+                ? `Found ${total} result${total !== 1 ? 's' : ''}`
                 : 'Search our product catalog'}
           </p>
         </div>
@@ -211,15 +214,15 @@ function SearchPageInner() {
           <div className="lg:col-span-3">
             {/* "Did you mean?" suggestions */}
             {corrections.length > 0 && (
-              <div className="mb-6 p-4 bg-blue-50 rounded-md">
-                <p className="text-blue-800 font-medium">
+              <div className="mb-6 p-4 bg-gold/10 rounded-md">
+                <p className="text-gold font-medium">
                   Did you mean:
                   {corrections.map((correction, index) => (
                     <span key={index}>
                       {index > 0 && ', '}
                       <button
                         onClick={() => handleCorrectionClick(correction.suggested)}
-                        className="underline text-gold hover:text-blue-800 ml-1"
+                        className="underline text-gold hover:text-gold ml-1"
                       >
                         {correction.suggested}
                       </button>

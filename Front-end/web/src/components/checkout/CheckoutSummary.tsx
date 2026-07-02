@@ -100,7 +100,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
             <button
               onClick={applyCoupon}
               disabled={!couponInput.trim()}
-              className="px-4 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-sm rounded-sm disabled:bg-obsidian-raised disabled:text-obsidian-muted disabled:cursor-not-allowed transition-colors"
+              className="px-4 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest text-sm rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
             >
               Apply
             </button>
@@ -179,7 +179,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           <Row label="GST (18% included)" value={money(quote?.tax ?? 0)} muted />
         </div>
         <div className="flex justify-between border-t border-hairline pt-3 mt-3">
-          <span className="font-display font-bold text-ink uppercase tracking-wide">Total</span>
+          <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
           <span className="text-xl font-display font-bold text-gold">{money(quote?.totalAmount ?? 0)}</span>
         </div>
       </div>

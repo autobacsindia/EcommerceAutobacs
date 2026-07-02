@@ -38,7 +38,7 @@ export default function ProductDetailError({
           <div className="space-y-3">
             <button
               onClick={reset}
-              className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-obsidian bg-gold hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold transition-colors"
+              className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-obsidian bg-gold hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold transition-colors"
             >
               Try Again
             </button>

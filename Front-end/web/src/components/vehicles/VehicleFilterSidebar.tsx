@@ -173,7 +173,7 @@ export default function VehicleFilterSidebar() {
         {(currentVehicleMake || currentVehicleModel) && (
           <button
             onClick={clearVehicleFilters}
-            className="text-sm text-gold hover:text-blue-800"
+            className="text-sm text-gold hover:text-gold"
           >
             Clear
           </button>
@@ -226,11 +226,11 @@ export default function VehicleFilterSidebar() {
           <h4 className="text-sm font-medium text-ink mb-2">Active Filters</h4>
           <div className="flex flex-wrap gap-2">
             {currentVehicleMake && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gold/10 text-gold">
                 {currentVehicleMake}
                 <button
                   type="button"
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gold hover:bg-blue-200 hover:text-gold focus:outline-none"
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gold hover:bg-gold/10 hover:text-gold focus:outline-none"
                   onClick={() => {
                     const currentParams = new URLSearchParams(searchParams.toString());
                     currentParams.delete('vehicleMake');
@@ -246,11 +246,11 @@ export default function VehicleFilterSidebar() {
               </span>
             )}
             {currentVehicleModel && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gold/10 text-gold">
                 {currentVehicleModel}
                 <button
                   type="button"
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gold hover:bg-blue-200 hover:text-gold focus:outline-none"
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-gold hover:bg-gold/10 hover:text-gold focus:outline-none"
                   onClick={() => {
                     const currentParams = new URLSearchParams(searchParams.toString());
                     currentParams.delete('vehicleModel');

@@ -291,7 +291,7 @@ export default function ProductCollection({
                       </span>
                     )}
                     {typeof product.category === 'object' && product.category?.name && (
-                      <span className="text-xs px-2 py-1 bg-blue-50 text-gold rounded">
+                      <span className="text-xs px-2 py-1 bg-gold/10 text-gold rounded">
                         {product.category.name}
                       </span>
                     )}

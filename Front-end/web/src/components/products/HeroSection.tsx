@@ -65,7 +65,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
 
             {/* Subtitle — only when the product has a real short description */}
             {product.shortDescription && (
-              <p className="text-xl lg:text-2xl text-zinc-300 leading-relaxed max-w-xl">
+              <p className="text-xl lg:text-2xl text-ink/70 leading-relaxed max-w-xl">
                 {product.shortDescription}
               </p>
             )}
@@ -77,7 +77,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
               </span>
               {showSale && (
                 <>
-                  <span className="text-2xl text-zinc-500 line-through">
+                  <span className="text-2xl text-ink-muted line-through">
                     ₹{product.originalPrice!.toLocaleString('en-IN')}
                   </span>
                   <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-semibold text-sm border border-green-500/30">
@@ -92,7 +92,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
 
             {/* Stock Status */}
             {product.stock !== 'out' && (
-              <p className="text-zinc-400 flex items-center gap-2">
+              <p className="text-ink-muted flex items-center gap-2">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 {product.stock === 'low' ? (
                   <span className="text-orange-400 font-semibold">

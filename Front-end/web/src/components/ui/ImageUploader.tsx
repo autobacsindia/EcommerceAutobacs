@@ -129,7 +129,7 @@ export default function ImageUploader({
           transition-colors
           ${dragging
             ? 'border-red-400 bg-red-500/10'
-            : 'border-gray-600 hover:border-gray-400 bg-obsidian-raised/50'}
+            : 'border-hairline hover:border-hairline bg-obsidian-raised/50'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >

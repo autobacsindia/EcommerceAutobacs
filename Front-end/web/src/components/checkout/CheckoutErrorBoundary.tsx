@@ -127,7 +127,7 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
 
             {/* Cart Status (for cart/checkout errors) */}
             {(feature === 'cart' || feature === 'checkout') && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mb-6 p-4 bg-gold/10 border border-gold/40 rounded-lg">
                 <div className="flex items-center justify-center gap-2 text-gold">
                   <ShoppingCart className="w-5 h-5" />
                   <span className="font-medium">Your cart is saved</span>

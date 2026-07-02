@@ -155,7 +155,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
                   <Link
                     href="/register"
                     onClick={onClose}
-                    className="flex items-center justify-center gap-2 bg-gold hover:bg-gold text-obsidian px-4 py-3 rounded-sm transition-colors font-display font-bold uppercase tracking-widest text-sm"
+                    className="flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian px-4 py-3 rounded-sm transition-colors font-display font-bold uppercase tracking-widest text-sm"
                   >
                     Sign Up
                   </Link>

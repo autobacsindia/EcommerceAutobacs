@@ -7,8 +7,8 @@ export default function WarrantyPage() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Policy</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Warranty Information</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Policy</p>
+          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Warranty Information</h1>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
             We stand behind the quality of every product we sell.
           </p>
@@ -19,7 +19,7 @@ export default function WarrantyPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
           <div className="bg-obsidian border border-hairline rounded-sm p-8">
-            <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">Our Warranty Promise</h2>
+            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">Our Warranty Promise</h2>
             <p className="text-ink/70 font-display leading-relaxed mb-4">
               At Autobacs India, we stand behind the quality of our products. All products come with a standard
               manufacturer warranty, typically ranging from 6 months to 2 years depending on the product category.
@@ -31,7 +31,7 @@ export default function WarrantyPage() {
           </div>
 
           <div className="bg-obsidian border border-hairline rounded-sm p-8">
-            <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">What Is Covered</h2>
+            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">What Is Covered</h2>
             <ul className="space-y-2">
               {['Manufacturing defects', 'Material failures under normal use', 'Premature component failure within the warranty period'].map((item) => (
                 <li key={item} className="flex items-start gap-3">
@@ -43,7 +43,7 @@ export default function WarrantyPage() {
           </div>
 
           <div className="bg-obsidian border border-hairline rounded-sm p-8">
-            <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">What Is Not Covered</h2>
+            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">What Is Not Covered</h2>
             <ul className="space-y-2">
               {['Damage caused by misuse or accidents', 'Normal wear and tear', 'Improper installation', 'Modifications or alterations to the product'].map((item) => (
                 <li key={item} className="flex items-start gap-3">
@@ -60,7 +60,7 @@ export default function WarrantyPage() {
             </p>
             <Link
               href="/contact"
-              className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+              className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
             >
               Contact Support
             </Link>

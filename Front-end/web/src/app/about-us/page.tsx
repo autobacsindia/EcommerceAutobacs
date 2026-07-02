@@ -39,8 +39,8 @@ export default function AboutUsPage() {
           />
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-3">Our Story</p>
-          <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-6">About Autobacs India</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-3">Our Story</p>
+          <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-6">About Autobacs India</h1>
           <p className="text-ink/70 font-display text-xl max-w-2xl mx-auto">
             Premium automotive parts and accessories since 2010
           </p>
@@ -51,8 +51,8 @@ export default function AboutUsPage() {
       <section className="py-16 bg-obsidian border-y border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Company</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Who We Are</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Company</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Who We Are</h2>
             <div className="w-16 h-0.5 bg-gold mx-auto" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
@@ -83,8 +83,8 @@ export default function AboutUsPage() {
       <section className="py-16 bg-obsidian-deep">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Background</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Our Story</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Background</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Our Story</h2>
             <div className="w-16 h-0.5 bg-gold mx-auto mb-6" />
             <p className="text-ink/70 font-display max-w-2xl mx-auto">
               Our journey began with an unwavering passion for creating automotive marvels that transcend ordinary imagination.
@@ -92,7 +92,7 @@ export default function AboutUsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-obsidian border border-hairline rounded-sm p-8">
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide mb-4">Our Journey</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-4">Our Journey</h3>
               <p className="text-ink/70 font-display mb-3 leading-relaxed">
                 As leaders in the industry, we have set out to redefine the landscape of Indian automobiles; this endeavor requires a seamless blend of innovation, design and engineering.
               </p>
@@ -101,7 +101,7 @@ export default function AboutUsPage() {
               </p>
             </div>
             <div className="bg-obsidian border border-hairline rounded-sm p-8">
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide mb-4">Our Vision</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-4">Our Vision</h3>
               <p className="text-ink/70 font-display leading-relaxed">
                 We believe that the future of mobility lies in our hands. Our commitment remains steadfast as we continue to push boundaries and introduce innovative solutions to the Indian automotive market.
               </p>
@@ -114,8 +114,8 @@ export default function AboutUsPage() {
       <section className="py-16 bg-obsidian border-y border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Philosophy</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Our Approach</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Philosophy</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Our Approach</h2>
             <div className="w-16 h-0.5 bg-gold mx-auto" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -128,7 +128,7 @@ export default function AboutUsPage() {
               { t: 'Innovation', d: 'We continuously source the finest products globally to enable our customers to achieve their dream car transformations.' },
             ].map((item, i) => (
               <div key={i} className="bg-obsidian-raised border border-hairline rounded-sm p-6">
-                <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">{item.t}</h3>
+                <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">{item.t}</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">{item.d}</p>
               </div>
             ))}
@@ -154,15 +154,15 @@ export default function AboutUsPage() {
       <section className="py-16 bg-obsidian-deep">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Reasons</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Why Choose Us</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Reasons</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Why Choose Us</h2>
             <div className="w-16 h-0.5 bg-gold mx-auto" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, index) => (
               <div key={index} className="bg-obsidian border border-hairline hover:border-gold rounded-sm p-8 transition-colors">
                 <div className="mb-4">{feature.icon}</div>
-                <h3 className="font-display font-bold text-ink uppercase tracking-wide mb-2">{feature.title}</h3>
+                <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-2">{feature.title}</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">{feature.description}</p>
               </div>
             ))}
@@ -173,8 +173,8 @@ export default function AboutUsPage() {
       {/* Contact */}
       <section className="py-16 bg-obsidian border-t border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Get In Touch</p>
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-8">Have Questions?</h2>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Get In Touch</p>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-8">Have Questions?</h2>
           <div className="flex flex-col sm:flex-row justify-center gap-6 mb-6">
             <a href="tel:+919895257905" className="text-2xl font-display font-bold text-gold hover:text-ink transition-colors">+91 9895257905</a>
             <a href="tel:+919895502139" className="text-2xl font-display font-bold text-gold hover:text-ink transition-colors">+91 9895502139</a>
@@ -187,8 +187,8 @@ export default function AboutUsPage() {
       <section className="py-16 bg-obsidian-deep border-t border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Partners</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Premium Brands</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Partners</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Premium Brands</h2>
             <div className="w-16 h-0.5 bg-gold mx-auto" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">

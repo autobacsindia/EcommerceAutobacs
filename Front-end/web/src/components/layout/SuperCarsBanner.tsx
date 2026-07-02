@@ -51,7 +51,7 @@ export default function SuperCarsBanner() {
 
             {/* Subheading with Gradient Text */}
             <p className="text-2xl md:text-3xl lg:text-5xl font-semibold mb-8 animate-slide-in-left animation-delay-200">
-              <span className="bg-linear-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+              <span className="bg-linear-to-r from-ink via-gold to-gold bg-clip-text text-transparent">
                 Give New Look
               </span>
             </p>

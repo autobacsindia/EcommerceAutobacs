@@ -67,7 +67,7 @@ export default function CurrencySwitcherDropdown() {
                 key={curr.code}
                 onClick={() => handleCurrencySelect(curr.code)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-obsidian-deep transition-colors ${
-                  isSelected ? 'bg-blue-50' : ''
+                  isSelected ? 'bg-gold/10' : ''
                 }`}
               >
                 <Icon className={`h-5 w-5 ${

@@ -96,7 +96,7 @@ export default function ClaimOrderPage() {
         <div className="max-w-md w-full text-center">
           <div className="bg-obsidian border border-hairline rounded-sm p-10">
             <CheckCircle className="h-20 w-20 text-green-400 mx-auto mb-6 animate-bounce" />
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Account Claimed!</h2>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Account Claimed!</h2>
             <p className="text-ink/70 font-display mb-8">You&apos;re now logged in. Redirecting to your orders...</p>
             <div className="w-full bg-obsidian-raised rounded-full h-1.5">
               <div className="bg-gold h-1.5 rounded-full animate-pulse" style={{ width: '100%' }} />
@@ -111,8 +111,8 @@ export default function ClaimOrderPage() {
     <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Account Access</p>
-          <h2 className="text-4xl font-display font-bold text-ink uppercase tracking-wide">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Account Access</p>
+          <h2 className="text-4xl font-display font-light text-ink tracking-[-0.01em]">
             {step === 'request' ? 'Claim Your Order' : 'Verify Magic Link'}
           </h2>
           <p className="mt-2 text-ink/70 font-display text-sm">
@@ -184,7 +184,7 @@ export default function ClaimOrderPage() {
             <button
               type="submit"
               disabled={loading || (!email && !phone)}
-              className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
                 <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" /> Sending...</>
@@ -239,7 +239,7 @@ export default function ClaimOrderPage() {
             <button
               type="submit"
               disabled={loading || !token}
-              className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
                 <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" /> Verifying...</>

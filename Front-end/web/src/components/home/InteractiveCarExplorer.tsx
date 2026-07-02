@@ -64,7 +64,7 @@ export default function InteractiveCarExplorer({
 
       {/* Interactive artwork + hotspots */}
       <div
-        className="relative mx-auto aspect-[16/9] w-full max-w-4xl overflow-hidden rounded-2xl border border-hairline bg-gradient-to-b from-gray-50 to-gray-100"
+        className="relative mx-auto aspect-[16/9] w-full max-w-4xl overflow-hidden rounded-2xl border border-hairline bg-gradient-to-b from-obsidian to-obsidian-deep"
         style={
           EXPLORER_ART
             ? { backgroundImage: `url(${EXPLORER_ART})`, backgroundSize: 'cover', backgroundPosition: 'center' }

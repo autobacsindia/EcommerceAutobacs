@@ -157,7 +157,7 @@ export default function ConsultationPage() {
           <div className="w-20 h-20 bg-green-500/20 border border-green-500/40 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="h-10 w-10 text-green-400" />
           </div>
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-3">You&apos;re All Set!</h2>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">You&apos;re All Set!</h2>
           <p className="text-ink/70 font-display mb-8">
             Our team will review your build profile and reach out within 24 hours.
             Want a faster response? Ping us on WhatsApp now.
@@ -213,7 +213,7 @@ export default function ConsultationPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={scrollToForm}
-              className="px-8 py-4 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm text-sm transition-colors flex items-center justify-center gap-2 group shadow-lg shadow-[#3B9EE8]/20"
+              className="px-8 py-4 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm text-sm transition-colors flex items-center justify-center gap-2 group shadow-lg shadow-gold/20"
             >
               Book Your Consultation
               <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -233,8 +233,8 @@ export default function ConsultationPage() {
       {/* Trust Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
         <div className="text-center mb-14">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Why Autobacs</p>
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-ink uppercase tracking-wide">Built for Enthusiasts. Trusted by Owners.</h2>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Why Autobacs</p>
+          <h2 className="text-3xl md:text-4xl font-display font-light text-ink tracking-[-0.01em]">Built for Enthusiasts. Trusted by Owners.</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {TRUST_ITEMS.map(({ icon: Icon, title, desc }) => (
@@ -242,7 +242,7 @@ export default function ConsultationPage() {
               <div className="w-12 h-12 bg-gold/10 rounded-sm flex items-center justify-center mb-4 group-hover:bg-gold/20 transition-colors">
                 <Icon className="h-6 w-6 text-gold" />
               </div>
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">{title}</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">{title}</h3>
               <p className="text-ink/70 font-display text-sm leading-relaxed">{desc}</p>
             </div>
           ))}
@@ -252,8 +252,8 @@ export default function ConsultationPage() {
       {/* Multi-step Form */}
       <section ref={formRef} className="py-12 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto scroll-mt-8">
         <div className="text-center mb-10">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Get Started</p>
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-ink uppercase tracking-wide mb-2">Build Your Upgrade Profile</h2>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Get Started</p>
+          <h2 className="text-3xl md:text-4xl font-display font-light text-ink tracking-[-0.01em] mb-2">Build Your Upgrade Profile</h2>
           <p className="text-ink/70 font-display">Takes 3 minutes. Transforms your build.</p>
         </div>
 
@@ -285,7 +285,7 @@ export default function ConsultationPage() {
           {step === 0 && (
             <div className="space-y-5">
               <div>
-                <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-1 flex items-center gap-2">
+                <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-1 flex items-center gap-2">
                   <User className="h-5 w-5 text-gold" /> Basic Information
                 </h3>
                 <p className="text-ink/70 font-display text-sm mb-4">Let us know who you are so we can personalise your consultation.</p>
@@ -361,7 +361,7 @@ export default function ConsultationPage() {
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-1 flex items-center gap-2">
+                <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-1 flex items-center gap-2">
                   <Car className="h-5 w-5 text-gold" /> Vehicle Information
                 </h3>
                 <p className="text-ink/70 font-display text-sm mb-4">Tell us about your car — the more detail, the better we can plan.</p>
@@ -397,7 +397,7 @@ export default function ConsultationPage() {
           {step === 2 && (
             <div className="space-y-5">
               <div>
-                <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-1 flex items-center gap-2">
+                <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-1 flex items-center gap-2">
                   <Zap className="h-5 w-5 text-gold" /> Choose Your Upgrades
                 </h3>
                 <p className="text-ink/70 font-display text-sm mb-4">Select all that interest you — mix and match freely.</p>
@@ -436,7 +436,7 @@ export default function ConsultationPage() {
           {step === 3 && (
             <div className="space-y-7">
               <div>
-                <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-1 flex items-center gap-2">
+                <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-1 flex items-center gap-2">
                   <Flame className="h-5 w-5 text-gold" /> Your Driving Profile
                 </h3>
                 <p className="text-ink/70 font-display text-sm">This helps us tune recommendations to how you actually drive.</p>
@@ -478,7 +478,7 @@ export default function ConsultationPage() {
           {step === 4 && (
             <div className="space-y-7">
               <div>
-                <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-1 flex items-center gap-2">
+                <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-1 flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-gold" /> Consultation Preference
                 </h3>
                 <p className="text-ink/70 font-display text-sm">How and when would you like to meet our experts?</p>
@@ -538,7 +538,7 @@ export default function ConsultationPage() {
           {step === 5 && (
             <div className="space-y-5">
               <div>
-                <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-1 flex items-center gap-2">
+                <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-1 flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-gold" /> Your Build Vision
                 </h3>
                 <p className="text-ink/70 font-display text-sm mb-4">
@@ -588,7 +588,7 @@ export default function ConsultationPage() {
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex items-center gap-2 px-8 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors shadow-lg shadow-[#3B9EE8]/20 group text-sm"
+                className="flex items-center gap-2 px-8 py-3 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors shadow-lg shadow-gold/20 group text-sm"
               >
                 Continue <ChevronRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
               </button>
@@ -597,7 +597,7 @@ export default function ConsultationPage() {
                 type="button"
                 onClick={submit}
                 disabled={submitting}
-                className="flex items-center gap-2 px-8 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors shadow-lg shadow-[#3B9EE8]/20 disabled:opacity-50 text-sm"
+                className="flex items-center gap-2 px-8 py-3 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors shadow-lg shadow-gold/20 disabled:opacity-50 text-sm"
               >
                 {submitting ? (
                   <><span className="w-4 h-4 border-2 border-hairline/30 border-t-white rounded-full animate-spin" /> Submitting...</>
@@ -631,11 +631,11 @@ export default function ConsultationPage() {
       {/* Final CTA */}
       <section className="py-16 px-4">
         <div className="max-w-3xl mx-auto text-center bg-obsidian border border-hairline rounded-sm p-10 md:p-16">
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Ready to Build Your Dream Machine?</h2>
+          <h2 className="text-3xl md:text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Ready to Build Your Dream Machine?</h2>
           <p className="text-ink/70 font-display mb-8 text-lg">Every iconic build starts with one conversation. Yours is waiting.</p>
           <button
             onClick={scrollToForm}
-            className="px-10 py-4 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm text-sm transition-colors shadow-lg shadow-[#3B9EE8]/20 inline-flex items-center gap-3"
+            className="px-10 py-4 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm text-sm transition-colors shadow-lg shadow-gold/20 inline-flex items-center gap-3"
           >
             Get My Build Plan <Zap className="h-5 w-5" />
           </button>

@@ -40,8 +40,8 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
       {/* Hero */}
       <div className="bg-obsidian border-b border-hairline py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Vehicles</p>
-          <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Vehicles</p>
+          <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-4">
             {vehicleMake} Parts & Accessories
           </h1>
           <p className="text-ink/70 font-display max-w-3xl mx-auto">
@@ -64,7 +64,7 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-3">
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">
             {vehicleMake} Parts & Accessories
           </h2>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
@@ -82,14 +82,14 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
             <p className="text-red-400 font-display text-lg mb-4">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+              className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
             >
               Retry
             </button>
           </div>
         ) : vehicles.length > 0 ? (
           <div className="mb-12">
-            <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-6 text-center">
+            <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6 text-center">
               Available {vehicleMake} Models
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
@@ -130,7 +130,7 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
             <div className="text-center">
               <button
                 onClick={goToVehicleParts}
-                className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+                className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
               >
                 Browse All {vehicleMake} Parts
               </button>
@@ -141,7 +141,7 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
             <p className="text-ink-muted font-display text-lg mb-6">No specific models found for {vehicleMake}</p>
             <button
               onClick={goToVehicleParts}
-              className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+              className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
             >
               Browse All {vehicleMake} Parts
             </button>

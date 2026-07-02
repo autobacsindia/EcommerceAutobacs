@@ -321,9 +321,9 @@ export default function ClientPage({ slug }: { slug: string }) {
           <svg className="w-14 h-14 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-2">Category Not Available</h2>
+          <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Category Not Available</h2>
           <p className="text-ink/70 font-display mb-6">{error === 'Invalid category' ? 'Invalid category URL.' : "The category you're looking for doesn't exist or has been removed."}</p>
-          <Link href="/categories" className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+          <Link href="/categories" className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
             Browse All Categories
           </Link>
         </div>
@@ -343,14 +343,14 @@ export default function ClientPage({ slug }: { slug: string }) {
       />
 
       {/* Hero */}
-      <div className="bg-obsidian border-b border-hairline py-10">
+      <div className="bg-obsidian border-b border-hairline py-14">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Category</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Category</p>
+          <h1 className="mt-4 text-[clamp(36px,5.5vw,68px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">
             {category?.name || 'Products'}
           </h1>
           {category?.description && (
-            <p className="text-ink/70 font-display mt-2 max-w-2xl">{category.description}</p>
+            <p className="mt-4 max-w-2xl font-display text-[14px] font-light leading-relaxed text-ink-muted">{category.description}</p>
           )}
         </div>
       </div>
@@ -382,7 +382,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                     id="showAll"
                     checked={showAll}
                     onChange={handleShowAllToggle}
-                    className="h-4 w-4 accent-[#3B9EE8] rounded border-hairline bg-obsidian-raised"
+                    className="h-4 w-4 accent-gold rounded border-hairline bg-obsidian-raised"
                   />
                   <label htmlFor="showAll" className={`text-sm font-display ${showAll ? 'text-gold' : 'text-ink/70'}`}>
                     Show All{showAll && ' (Active)'}

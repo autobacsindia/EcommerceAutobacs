@@ -79,7 +79,7 @@ export default function SkeletonLoader({
           suppressHydrationWarning
         >
           <div className="w-full px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center h-16 border-b border-gray-800 gap-4">
+            <div className="flex items-center h-16 border-b border-hairline gap-4">
               {/* Logo skeleton */}
               <div className="flex-shrink-0">
                 <Skeleton className="h-8 w-32" />

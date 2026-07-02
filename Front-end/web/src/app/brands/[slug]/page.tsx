@@ -134,7 +134,7 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-4">
+          <h1 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">
             {error === 'Brand not found' ? 'Brand Not Found' : 'Error Loading Brand'}
           </h1>
           <p className="text-ink/70 font-display mb-6">
@@ -145,7 +145,7 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/brands"
-              className="inline-flex items-center justify-center px-6 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
+              className="inline-flex items-center justify-center px-6 py-3 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Brands
@@ -181,12 +181,12 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
               )}
             </div>
             <div className="text-center md:text-left">
-              <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Brand</p>
-              <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-2">{brand.name}</h1>
+              <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Brand</p>
+              <h1 className="mt-3 text-[clamp(38px,5.5vw,72px)] font-light leading-[0.95] tracking-[-0.01em] text-ink mb-3">{brand.name}</h1>
               {brand.description && (
-                <p className="text-ink/70 font-display mb-4 max-w-2xl">{brand.description}</p>
+                <p className="mb-5 max-w-2xl font-display text-[14px] font-light leading-relaxed text-ink-muted">{brand.description}</p>
               )}
-              <span className="inline-block bg-gold/10 border border-gold/30 text-gold font-display font-bold uppercase tracking-widest px-3 py-1 rounded-sm text-sm">
+              <span className="inline-block bg-gold/10 border border-gold/30 text-gold font-display text-[11px] uppercase tracking-[0.2em] px-3.5 py-1.5">
                 {data.pagination?.total || 0} Products
               </span>
             </div>
@@ -212,7 +212,7 @@ function BrandPageInner({ params }: { params: Promise<{ slug: string }> }) {
             <p className="text-ink/70 font-display mb-4">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="inline-flex items-center px-4 py-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
+              className="inline-flex items-center px-4 py-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry

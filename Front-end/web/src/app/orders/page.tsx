@@ -97,7 +97,7 @@ export default function OrdersPage() {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
       confirmed: 'bg-gold/10 text-gold border-gold/30',
-      processing: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+      processing: 'bg-gold/10 text-gold border-gold/40/30',
       shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
       delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
       cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
@@ -132,7 +132,7 @@ export default function OrdersPage() {
           <p className="text-ink/70 font-display mb-4">{error}</p>
           <button
             onClick={fetchOrders}
-            className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm"
+            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm"
           >
             Try Again
           </button>
@@ -146,11 +146,11 @@ export default function OrdersPage() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center max-w-md mx-auto py-16 px-4">
           <Package className="mx-auto h-20 w-20 text-hairline mb-6" />
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-3">No Orders Yet</h2>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">No Orders Yet</h2>
           <p className="text-ink/70 font-display mb-8">Start shopping to place your first order and track it here</p>
           <button
             onClick={() => router.push('/products')}
-            className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
           >
             Browse Products
           </button>
@@ -165,10 +165,10 @@ export default function OrdersPage() {
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Account</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide">My Orders</h1>
-          <p className="text-ink/70 font-display mt-1">Track and manage your orders</p>
+        <div className="mb-10">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Account</p>
+          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Orders</h1>
+          <p className="mt-3 font-display text-[13px] font-light tracking-[0.04em] text-ink-muted">Track and manage your orders</p>
         </div>
 
         {/* Filters and Search */}
@@ -251,7 +251,7 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-3 mb-2">
                       <span className="text-xl">{getStatusIcon(order.status)}</span>
                       <div>
-                        <h3 className="font-display font-bold text-ink uppercase tracking-wide">
+                        <h3 className="font-display font-light text-ink tracking-[-0.01em]">
                           Order #{order._id.slice(-8).toUpperCase()}
                         </h3>
                         <p className="text-ink-muted font-display text-sm">
@@ -309,7 +309,7 @@ export default function OrdersPage() {
                   </div>
                   <Link
                     href={`/orders/${order._id}`}
-                    className="flex items-center justify-center gap-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2.5 rounded-sm transition-colors text-sm"
+                    className="flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2.5 rounded-sm transition-colors text-sm"
                   >
                     <Eye className="h-4 w-4" />
                     View Details

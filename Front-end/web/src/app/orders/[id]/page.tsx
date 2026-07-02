@@ -165,7 +165,7 @@ export default function OrderDetailPage() {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
       confirmed: 'bg-gold/10 text-gold border-gold/30',
-      processing: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+      processing: 'bg-gold/10 text-gold border-gold/40/30',
       shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
       delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
       cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
@@ -204,7 +204,7 @@ export default function OrderDetailPage() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
           <p className="text-red-400 font-display mb-4">{error || 'Order not found'}</p>
-          <button onClick={() => router.push('/orders')} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+          <button onClick={() => router.push('/orders')} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
             Back to Orders
           </button>
         </div>
@@ -227,8 +227,8 @@ export default function OrderDetailPage() {
         <div className={cardClass}>
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
             <div>
-              <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Order</p>
-              <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">
+              <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-1">Order</p>
+              <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">
                 #{order._id.slice(-8).toUpperCase()}
               </h1>
               <p className="text-ink-muted font-display text-sm">
@@ -250,7 +250,7 @@ export default function OrderDetailPage() {
           <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Available Actions</h2>
           <div className="flex flex-wrap gap-3">
             {canRetryPayment(order) && (
-              <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="flex items-center gap-2 px-4 py-2 bg-gold hover:bg-gold text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {isPaymentProcessing ? <div className="w-4 h-4 border-2 border-hairline border-t-transparent rounded-full animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Retry Payment
               </button>
@@ -262,7 +262,7 @@ export default function OrderDetailPage() {
               </button>
             )}
             {order.trackingNumber && (
-              <Link href={order.carrier?.trackingUrl || `/orders/${order._id}/tracking`} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:bg-gold text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <Link href={order.carrier?.trackingUrl || `/orders/${order._id}/tracking`} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <Truck className="h-4 w-4" />
                 Track Package
               </Link>
@@ -354,7 +354,7 @@ export default function OrderDetailPage() {
               <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Shipping Address</h3>
             </div>
             <div className="font-display text-sm space-y-1">
-              <p className="font-display font-bold text-ink uppercase tracking-wide">{order.shippingAddress.fullName}</p>
+              <p className="font-display font-light text-ink tracking-[-0.01em]">{order.shippingAddress.fullName}</p>
               <p className="text-ink/70">{order.shippingAddress.addressLine1}</p>
               {order.shippingAddress.addressLine2 && <p className="text-ink/70">{order.shippingAddress.addressLine2}</p>}
               <p className="text-ink/70">{order.shippingAddress.city}, {order.shippingAddress.state}</p>
@@ -426,7 +426,7 @@ export default function OrderDetailPage() {
                 <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="text-green-400">-₹{(order.discount || 0).toFixed(2)}</span></div>
               )}
               <div className="flex justify-between border-t border-hairline pt-3 mt-3">
-                <span className="font-display font-bold text-ink uppercase tracking-wide">Total</span>
+                <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
                 <span className="text-xl font-display font-bold text-gold">₹{(order.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
@@ -456,11 +456,11 @@ export default function OrderDetailPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     {product?._id ? (
-                      <Link href={productUrl(product, '/products') || '/products'} className="font-display font-bold text-ink uppercase tracking-wide hover:text-gold transition-colors line-clamp-2">
+                      <Link href={productUrl(product, '/products') || '/products'} className="font-display font-light text-ink tracking-[-0.01em] hover:text-gold transition-colors line-clamp-2">
                         {productName}
                       </Link>
                     ) : (
-                      <p className="font-display font-bold text-ink uppercase tracking-wide">{productName}</p>
+                      <p className="font-display font-light text-ink tracking-[-0.01em]">{productName}</p>
                     )}
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
                     <p className="text-ink-muted font-display text-xs">₹{(item.price || 0).toFixed(2)} each</p>
@@ -502,7 +502,7 @@ export default function OrderDetailPage() {
                     )}
                   </div>
                   <div className="flex-1 pb-6">
-                    <p className="font-display font-bold text-ink uppercase tracking-wide text-sm">
+                    <p className="font-display font-light text-ink tracking-[-0.01em] text-sm">
                       {history.status.charAt(0).toUpperCase() + history.status.slice(1)}
                     </p>
                     <p className="text-xs text-ink-muted font-display mt-0.5">

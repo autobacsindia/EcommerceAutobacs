@@ -252,7 +252,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
         <>
       
       {/* Hero Section */}
-      <div className="bg-linear-to-r from-blue-900 to-black text-ink py-20">
+      <div className="bg-linear-to-r from-gold to-black text-ink py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-5xl font-bold mb-6">{vehicleName ? vehicleName.replace(/-/g, ' ').split(' ')
               .filter(word => word)
@@ -264,7 +264,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
           
           {/* Vehicle Details */}
           {vehicle && (
-            <div className="mt-6 flex flex-wrap justify-center gap-4 text-sm text-gray-200">
+            <div className="mt-6 flex flex-wrap justify-center gap-4 text-sm text-ink/70">
               <div className="flex items-center">
                 <span className="font-medium">Make:</span>
                 <span className="ml-2">{vehicle.make}</span>
@@ -317,7 +317,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                         onClick={() => handleCategoryChange('')}
                         className={`text-left w-full px-4 py-2.5 rounded-lg text-sm transition-colors ${
                           selectedCategory === '' 
-                            ? 'bg-blue-50 text-gold font-medium border border-blue-200' 
+                            ? 'bg-gold/10 text-gold font-medium border border-gold/40' 
                             : 'text-ink/80 hover:bg-obsidian-deep'
                         }`}
                       >
@@ -339,7 +339,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                             onClick={() => handleCategoryChange(category.slug)}
                             className={`text-left w-full px-4 py-2.5 rounded-lg text-sm transition-colors ${
                               selectedCategory === category.slug
-                                ? 'bg-blue-50 text-gold font-medium border border-blue-200'
+                                ? 'bg-gold/10 text-gold font-medium border border-gold/40'
                                 : 'text-ink/80 hover:bg-obsidian-deep'
                             }`}
                           >
@@ -725,7 +725,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ slug: s
                     className="block group"
                   >
                     <div className="bg-obsidian rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 border border-hairline">
-                      <div className="aspect-square bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center overflow-hidden">
+                      <div className="aspect-square bg-linear-to-br from-obsidian to-obsidian-deep flex items-center justify-center overflow-hidden">
                         {(() => {
                           const slugKey = (relatedVehicle.slug || '').toString().toLowerCase();
                           const nameKey = `${relatedVehicle.make || ''}-${relatedVehicle.model || ''}`

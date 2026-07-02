@@ -26,7 +26,7 @@ export default function PaymentMethodSelector({ selectedMethod, onSelect }: Paym
           <label
             key={method.value}
             className={`flex items-start gap-4 border rounded-lg p-4 cursor-pointer transition-all ${
-              isSelected ? 'border-gold bg-blue-50 ring-1 ring-gold' : 'border-hairline hover:bg-obsidian-deep'
+              isSelected ? 'border-gold bg-gold/10 ring-1 ring-gold' : 'border-hairline hover:bg-obsidian-deep'
             }`}
           >
             <input
@@ -40,7 +40,7 @@ export default function PaymentMethodSelector({ selectedMethod, onSelect }: Paym
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <Icon className={`h-5 w-5 ${isSelected ? 'text-gold' : 'text-ink-muted'}`} />
-                <span className={`font-medium ${isSelected ? 'text-blue-900' : 'text-ink'}`}>
+                <span className={`font-medium ${isSelected ? 'text-gold' : 'text-ink'}`}>
                   {method.label}
                 </span>
               </div>

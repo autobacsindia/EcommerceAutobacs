@@ -92,7 +92,7 @@ export default function RegisterPage() {
       {/* Register Card */}
       <div className="w-full max-w-87.5 sm:max-w-100">
         <div className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8">
-          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-6">Create Account</h1>
+          <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-6">Create Account</h1>
 
           {registered && (
             <div className="mb-4 p-3 bg-green-500/10 border border-green-500/40 rounded-sm flex items-start gap-2">
@@ -196,7 +196,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading || (timeUntilRetry !== null && timeUntilRetry > 0)}
-              className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-2.5 px-4 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-2.5 px-4 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continue'}
             </button>

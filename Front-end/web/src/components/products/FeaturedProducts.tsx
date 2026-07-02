@@ -128,8 +128,8 @@ export default function FeaturedProducts({
       <section className={`py-16 bg-obsidian border-y border-hairline ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Curated For You</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">Featured Products</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Curated For You</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">Featured Products</h2>
             <p className="text-ink/70 font-display">Popular products customers love to buy</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
@@ -148,15 +148,15 @@ export default function FeaturedProducts({
       <section className={`py-16 bg-obsidian border-y border-hairline ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Curated For You</p>
-            <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">Featured Products</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Curated For You</p>
+            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">Featured Products</h2>
             <p className="text-ink/70 font-display">Popular products customers love to buy</p>
           </div>
           <div className="text-center py-12">
             <div className="text-red-400 font-display mb-4">{error}</div>
             <button
               onClick={() => fetchProducts()}
-              className="px-6 py-3 bg-gold hover:bg-gold text-obsidian rounded-sm font-display font-bold uppercase tracking-widest transition-colors"
+              className="px-6 py-3 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest transition-colors"
             >
               Retry
             </button>
@@ -173,8 +173,8 @@ export default function FeaturedProducts({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-12">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Curated For You</p>
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">Featured Products</h2>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Curated For You</p>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">Featured Products</h2>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">Popular products customers love to buy</p>
         </div>
 
@@ -282,7 +282,7 @@ export default function FeaturedProducts({
                   <button
                     onClick={(e) => handleAddToCart(product._id, e)}
                     disabled={product.stock === 'out'}
-                    className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold text-obsidian px-4 py-2 rounded-sm transition-colors disabled:bg-obsidian-raised disabled:text-obsidian-muted disabled:cursor-not-allowed font-display font-bold text-sm uppercase tracking-wider"
+                    className="w-full flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian px-4 py-2 rounded-sm transition-colors disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm uppercase tracking-wider"
                   >
                     <ShoppingCart className="h-4 w-4" />
                     <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
@@ -298,7 +298,7 @@ export default function FeaturedProducts({
             href="/products?isFeatured=true"
             className="group block"
           >
-            <div className="bg-gold hover:bg-gold rounded-lg overflow-hidden transition-all duration-300 h-full flex flex-col items-center justify-center p-6 min-h-100">
+            <div className="bg-gold hover:opacity-90 rounded-lg overflow-hidden transition-all duration-300 h-full flex flex-col items-center justify-center p-6 min-h-100">
               <div className="text-ink text-center">
                 <div className="mb-4 flex items-center justify-center">
                   <div className="bg-obsidian/20 rounded-full p-4 group-hover:bg-obsidian/30 group-hover:scale-110 transition-all duration-300">

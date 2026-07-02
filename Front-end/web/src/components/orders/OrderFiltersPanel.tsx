@@ -216,7 +216,7 @@ export default function OrderFiltersPanel({
             </label>
             <button
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              className="w-full px-4 py-2 border border-hairline rounded-lg text-left flex items-center justify-between hover:border-gray-400"
+              className="w-full px-4 py-2 border border-hairline rounded-lg text-left flex items-center justify-between hover:border-hairline"
             >
               <span className="text-ink/80">
                 {localFilters.statuses.length === 0

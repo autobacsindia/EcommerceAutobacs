@@ -284,8 +284,8 @@ export default function ClientPage({ slug }: { slug: string }) {
       {/* Hero */}
       <div className="bg-obsidian border-b border-hairline py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Vehicles</p>
-          <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Vehicles</p>
+          <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-4">
             {displayName} Parts & Accessories
           </h1>
           <p className="text-ink/70 font-display max-w-3xl mx-auto">
@@ -325,7 +325,7 @@ export default function ClientPage({ slug }: { slug: string }) {
           {/* Sidebar */}
           <aside className="hidden lg:block">
             <div className="bg-obsidian border border-hairline rounded-sm p-6 sticky top-24">
-              <h2 className="font-display font-bold text-ink uppercase tracking-wide mb-5 flex items-center gap-2">
+              <h2 className="font-display font-light text-ink tracking-[-0.01em] mb-5 flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gold shrink-0" />
                 Category Filters
               </h2>
@@ -442,7 +442,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                 <p className="text-ink/70 font-display mb-5">{error}</p>
                 <button
                   onClick={() => window.location.reload()}
-                  className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+                  className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
                 >
                   Retry
                 </button>
@@ -571,7 +571,7 @@ export default function ClientPage({ slug }: { slug: string }) {
                               <button
                                 onClick={() => handleAddToCart(product)}
                                 disabled={isOutOfStock(product)}
-                                className="flex items-center gap-1.5 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-3 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-3 py-2 rounded-sm text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <ShoppingCart className="h-3.5 w-3.5" />
                                 Add
@@ -665,7 +665,7 @@ export default function ClientPage({ slug }: { slug: string }) {
         {/* Related Vehicles */}
         {Array.isArray(relatedVehicles) && relatedVehicles.length > 0 && (
           <section className="mt-16">
-            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-8">
+            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-8">
               Related {vehicle?.make || 'Vehicles'}
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

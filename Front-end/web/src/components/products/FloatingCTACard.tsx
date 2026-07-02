@@ -94,7 +94,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
         </div>
         {showSale && (
           <div className="flex items-center gap-2">
-            <span className="text-zinc-400 line-through">
+            <span className="text-ink-muted line-through">
               ₹{product.originalPrice?.toLocaleString('en-IN')}
             </span>
             <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-bold border border-green-500/30">
@@ -103,12 +103,12 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           </div>
         )}
         {showSale && <SaleCountdown saleEndsAt={product.saleEndsAt} />}
-        <p className="text-zinc-400 text-sm">Inclusive of all taxes</p>
+        <p className="text-ink-muted text-sm">Inclusive of all taxes</p>
       </div>
 
       {/* Quantity Selector */}
       <div className="flex items-center gap-4">
-        <label className="text-zinc-300 font-semibold">Quantity:</label>
+        <label className="text-ink/70 font-semibold">Quantity:</label>
         <div className="flex items-center bg-obsidian/10 border border-hairline/20 rounded-lg">
           <button
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -151,7 +151,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           whileTap={{ scale: 0.98 }}
           onClick={handleAddToCart}
           disabled={product.stock === 'out' || cartLoading}
-          className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg shadow-lg shadow-orange-500/30"
+          className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-obsidian-raised text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg shadow-lg shadow-orange-500/30"
         >
           <ShoppingCart className="w-6 h-6" />
           {cartLoading ? 'Adding...' : 'Add to Cart'}
@@ -161,7 +161,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           whileTap={{ scale: 0.98 }}
           onClick={handleBuyNow}
           disabled={product.stock === 'out' || buyNowLoading}
-          className="w-full bg-obsidian/10 hover:bg-obsidian/20 disabled:bg-zinc-800 border border-hairline/30 text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg"
+          className="w-full bg-obsidian/10 hover:bg-obsidian/20 disabled:bg-obsidian-raised border border-hairline/30 text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg"
         >
           <Zap className="w-6 h-6" />
           {buyNowLoading ? 'Processing...' : 'Buy Now'}
@@ -174,7 +174,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           className={`w-full border font-bold py-3 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg ${
             isWishlisted
               ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
-              : 'bg-obsidian/5 border-hairline/20 text-zinc-300 hover:bg-obsidian/10 hover:border-hairline/30'
+              : 'bg-obsidian/5 border-hairline/20 text-ink/70 hover:bg-obsidian/10 hover:border-hairline/30'
           }`}
         >
           <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-current' : ''}`} />
@@ -192,7 +192,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           return (
             <div key={label} className="flex flex-col items-center text-center gap-2">
               <Icon className="w-6 h-6 text-orange-400" />
-              <span className="text-xs text-zinc-300 font-medium">{label}</span>
+              <span className="text-xs text-ink/70 font-medium">{label}</span>
             </div>
           );
         })}

@@ -205,7 +205,7 @@ export default function SearchSuggestions() {
           type="button"
           onClick={() => handleSearch()}
           aria-label="Search"
-          className="bg-gold hover:bg-gold text-obsidian px-4 py-2 transition-colors"
+          className="bg-gold hover:opacity-90 text-obsidian px-4 py-2 transition-colors"
         >
           <Search className="h-5 w-5" />
         </button>

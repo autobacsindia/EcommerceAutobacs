@@ -152,7 +152,7 @@ export default function ProductShowcase() {
     <div className="py-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Featured Products</h2>
-        <Link href="/products" className="text-gold hover:text-blue-800 font-medium">
+        <Link href="/products" className="text-gold hover:text-gold font-medium">
           View All Products →
         </Link>
       </div>

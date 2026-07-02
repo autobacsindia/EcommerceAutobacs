@@ -237,9 +237,9 @@ export default function ReturnRequestModal({
               <p className="text-lg font-mono font-bold">{success.returnRequestId}</p>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm font-medium text-blue-900 mb-3">What happens next:</p>
-              <ul className="space-y-2 text-sm text-blue-800">
+            <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6">
+              <p className="text-sm font-medium text-gold mb-3">What happens next:</p>
+              <ul className="space-y-2 text-sm text-gold">
                 <li className="flex gap-2">
                   <span className="text-gold font-bold">1.</span>
                   <span>We'll review your request within 24-48 hours</span>
@@ -357,8 +357,8 @@ export default function ReturnRequestModal({
                   onClick={() => setRequestType('return')}
                   className={`flex-1 p-4 border rounded-lg text-center transition ${
                     requestType === 'return'
-                      ? 'border-gold bg-blue-50 text-gold font-medium'
-                      : 'border-hairline hover:border-gray-400'
+                      ? 'border-gold bg-gold/10 text-gold font-medium'
+                      : 'border-hairline hover:border-hairline'
                   }`}
                 >
                   Return for Refund
@@ -368,8 +368,8 @@ export default function ReturnRequestModal({
                   onClick={() => setRequestType('exchange')}
                   className={`flex-1 p-4 border rounded-lg text-center transition ${
                     requestType === 'exchange'
-                      ? 'border-gold bg-blue-50 text-gold font-medium'
-                      : 'border-hairline hover:border-gray-400'
+                      ? 'border-gold bg-gold/10 text-gold font-medium'
+                      : 'border-hairline hover:border-hairline'
                   }`}
                 >
                   Exchange Item
@@ -418,10 +418,10 @@ export default function ReturnRequestModal({
               </div>
 
               {selectedItems.size > 0 && requestType === 'return' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mt-4">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm font-medium text-blue-900">
+                      <p className="text-sm font-medium text-gold">
                         {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
                       </p>
                       <p className="text-xs text-gold mt-1">
@@ -450,8 +450,8 @@ export default function ReturnRequestModal({
                     key={reason.value}
                     className={`flex flex-col p-4 border rounded-lg cursor-pointer transition ${
                       returnReason === reason.value
-                        ? 'border-gold bg-blue-50'
-                        : 'border-hairline hover:border-gray-400'
+                        ? 'border-gold bg-gold/10'
+                        : 'border-hairline hover:border-hairline'
                     }`}
                   >
                     <div className="flex items-start">
@@ -602,7 +602,7 @@ export default function ReturnRequestModal({
             onClick={currentStep === totalSteps ? handleSubmit : handleNext}
             disabled={isSubmitting}
             className={`px-6 py-2 rounded-lg text-ink font-medium transition flex items-center gap-2 ${
-              isSubmitting ? 'bg-gold cursor-not-allowed' : 'bg-gold hover:bg-gold'
+              isSubmitting ? 'bg-gold cursor-not-allowed' : 'bg-gold hover:opacity-90'
             }`}
           >
             {isSubmitting ? (

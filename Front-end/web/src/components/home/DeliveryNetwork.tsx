@@ -70,7 +70,7 @@ export default async function DeliveryNetwork() {
                 {/* Info */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h3 className="text-sm font-display font-bold text-ink uppercase tracking-wide truncate">
+                    <h3 className="text-sm font-display font-light text-ink tracking-[-0.01em] truncate">
                       {w.city}
                     </h3>
                     <span className={`text-xs font-display font-bold uppercase tracking-wider ${meta.color}`}>

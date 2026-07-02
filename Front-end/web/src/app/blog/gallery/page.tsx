@@ -81,7 +81,7 @@ function GalleryContent() {
   return (
     <div>
       {/* Header */}
-      <div className="bg-linear-to-r from-purple-700 to-purple-900 text-ink py-14 px-4">
+      <div className="bg-linear-to-r from-gold to-gold text-ink py-14 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <ImageIcon className="h-8 w-8 opacity-80" />
@@ -99,7 +99,7 @@ function GalleryContent() {
               <button
                 key={a}
                 onClick={() => updateParam('album', a)}
-                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${album === a ? 'bg-purple-600 text-ink border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
+                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${album === a ? 'bg-gold text-obsidian border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
               >
                 {a === 'all' ? 'All Albums' : a}
               </button>
@@ -116,7 +116,7 @@ function GalleryContent() {
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-20">
-            <ImageIcon className="h-16 w-16 text-gray-200 mx-auto mb-4" />
+            <ImageIcon className="h-16 w-16 text-ink/70 mx-auto mb-4" />
             <p className="text-ink-muted">No photos in this album yet.</p>
           </div>
         ) : (
@@ -125,7 +125,7 @@ function GalleryContent() {
               <button
                 key={item._id}
                 onClick={() => openLightbox(index)}
-                className="group aspect-square relative overflow-hidden rounded-lg bg-obsidian-raised focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="group aspect-square relative overflow-hidden rounded-lg bg-obsidian-raised focus:outline-none focus:ring-2 focus:ring-gold"
               >
                 <img
                   src={item.thumbnail || item.url}
@@ -148,7 +148,7 @@ function GalleryContent() {
               <button
                 key={i}
                 onClick={() => updateParam('page', String(i + 1))}
-                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-purple-600 text-ink border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
+                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-gold text-obsidian border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
               >
                 {i + 1}
               </button>
@@ -206,7 +206,7 @@ function GalleryContent() {
 
 export default function GalleryPage() {
   return (
-    <Suspense fallback={<div className="h-96 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-purple-600 border-t-transparent rounded-full" /></div>}>
+    <Suspense fallback={<div className="h-96 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-gold/40 border-t-transparent rounded-full" /></div>}>
       <GalleryContent />
     </Suspense>
   );

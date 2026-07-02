@@ -86,7 +86,7 @@ export default function SuperCarsPage() {
             <span className="inline-block px-4 py-1 mb-6 border border-red-500/50 rounded-full bg-red-500/10 text-red-400 text-sm font-tracking-wider uppercase">
               ROAVION - Powered by AutoBacs India
             </span>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-gray-200 to-gray-500 bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-ink via-gold to-gold bg-clip-text text-transparent">
               DISCOVER A NEW IMMERSIVE EXPERIENCE
               <br />
               <span className="text-2xl md:text-4xl lg:text-5xl font-light text-ink-muted mt-2 block">
@@ -116,7 +116,7 @@ export default function SuperCarsPage() {
       </section>
 
       {/* Upgrades Section */}
-      <section className="py-20 bg-zinc-900">
+      <section className="py-20 bg-obsidian-deep">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16 animate-fade-in-slow">
             <h2 className="text-3xl md:text-5xl font-bold mb-6 text-ink">
@@ -134,7 +134,7 @@ export default function SuperCarsPage() {
             {upgrades.map((upgrade, index) => (
               <div
                 key={index}
-                className="group bg-zinc-800/50 border border-zinc-700/50 p-8 rounded-2xl hover:bg-zinc-800 hover:border-red-500/30 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
+                className="group bg-obsidian-raised/50 border border-hairline/50 p-8 rounded-2xl hover:bg-obsidian-raised hover:border-red-500/30 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
               >
                 <div className="mb-6 inline-flex p-3 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-ink transition-colors duration-300">
                   <upgrade.icon className="w-8 h-8" />
@@ -144,11 +144,11 @@ export default function SuperCarsPage() {
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Purpose</span>
+                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Purpose</span>
                     <p className="text-ink/70 mt-1">{upgrade.purpose}</p>
                   </div>
                   <div>
-                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Features</span>
+                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Features</span>
                     <p className="text-ink-muted mt-1 text-sm">{upgrade.features}</p>
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export default function SuperCarsPage() {
       <section className="py-24 relative overflow-hidden">
         <div className="absolute inset-0 bg-linear-to-r from-red-900 to-black opacity-50"></div>
         <div className="container mx-auto px-4 relative z-10 text-center">
-          <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-linear-to-b from-white to-gray-400 mb-8 tracking-tight animate-fade-in-slow">
+          <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-linear-to-b from-ink to-gold mb-8 tracking-tight animate-fade-in-slow">
             SKY IS THE LIMIT
           </h2>
           <div className="hover:scale-105 transition-transform duration-300 inline-block">

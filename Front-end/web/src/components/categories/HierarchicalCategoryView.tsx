@@ -163,7 +163,7 @@ function CategoryTreeNode({ node, level }: CategoryTreeNodeProps) {
         <div className="ml-2">
           <Link 
             href={`/products?category=${node.category._id}`}
-            className="text-gold hover:text-blue-800 text-sm font-medium"
+            className="text-gold hover:text-gold text-sm font-medium"
             onClick={(e) => e.stopPropagation()}
           >
             View

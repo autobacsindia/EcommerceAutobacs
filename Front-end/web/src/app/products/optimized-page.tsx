@@ -322,30 +322,30 @@ export default function OptimizedProductsPageClient() {
   return (
     <div className="min-h-screen bg-obsidian-deep">
       {/* Hero Section */}
-      <div className="bg-linear-to-r from-gold to-blue-800 text-ink py-12">
+      <div className="bg-linear-to-r from-gold to-gold text-ink py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold mb-2">Our Products</h1>
-          <p className="text-blue-100">
+          <p className="text-gold">
             Explore our premium collection of automotive accessories and performance parts
           </p>
         </div>
       </div>
 
       {/* Data Source Toggle */}
-      <div className="bg-indigo-50 border-b border-indigo-200">
+      <div className="bg-gold/10 border-b border-gold/40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <svg className="h-5 w-5 text-indigo-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="h-5 w-5 text-gold mr-2" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <p className="text-indigo-800 text-sm">
+              <p className="text-gold text-sm">
                 <span className="font-medium">Performance Mode:</span> Using {useStaticData ? 'static data (faster)' : 'API data (real-time)'}
               </p>
             </div>
             <button 
               onClick={toggleDataSource}
-              className="text-sm bg-indigo-600 text-ink px-3 py-1 rounded hover:bg-indigo-700 transition-colors"
+              className="text-sm bg-gold text-obsidian px-3 py-1 rounded hover:bg-gold transition-colors"
             >
               Switch to {useStaticData ? 'API' : 'Static'} Data
             </button>
@@ -491,7 +491,7 @@ export default function OptimizedProductsPageClient() {
                 <div className="mt-6">
                   <button
                     onClick={() => router.push('/products')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-obsidian bg-gold hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-obsidian bg-gold hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
                   >
                     View All Products
                   </button>

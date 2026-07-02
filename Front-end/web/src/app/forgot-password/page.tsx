@@ -38,8 +38,8 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-obsidian-deep py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Account</p>
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Account</p>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em]">
             {migrated ? 'Set Your Password' : 'Forgot Password'}
           </h2>
           <p className="mt-2 text-sm text-ink/70 font-display">
@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="w-full flex justify-center items-center py-3 px-4 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex justify-center items-center py-3 px-4 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {status === 'loading' ? (
                 <><Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />Sending...</>

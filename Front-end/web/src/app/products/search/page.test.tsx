@@ -78,8 +78,8 @@ describe('SearchPage', () => {
     render(<SearchPage />);
     
     await waitFor(() => {
-      expect(screen.getByText('Search Results')).toBeInTheDocument();
-      expect(screen.getByText('Found 0 results for "test"')).toBeInTheDocument();
+      expect(screen.getByText(/Results for/i)).toBeInTheDocument();
+      expect(screen.getByText(/Found 0 results/i)).toBeInTheDocument();
     });
   });
 

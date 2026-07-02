@@ -57,8 +57,8 @@ export default function FAQPage() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Support</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Frequently Asked Questions</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Support</p>
+          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Frequently Asked Questions</h1>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Find answers to common questions about our products, services, and policies.
           </p>
@@ -69,7 +69,7 @@ export default function FAQPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center">
-            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-3">How can we help you?</h2>
+            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-3">How can we help you?</h2>
             <p className="text-ink/70 font-display max-w-2xl mx-auto">
               Browse our FAQ categories below or contact our support team if you can&apos;t find what you&apos;re looking for.
             </p>
@@ -79,13 +79,13 @@ export default function FAQPage() {
             {faqCategories.map((category, categoryIndex) => (
               <div key={categoryIndex} className="bg-obsidian border border-hairline rounded-sm overflow-hidden">
                 <div className="bg-obsidian-raised border-b border-hairline px-6 py-4">
-                  <h3 className="font-display font-bold text-ink uppercase tracking-wide">{category.title}</h3>
+                  <h3 className="font-display font-light text-ink tracking-[-0.01em]">{category.title}</h3>
                 </div>
                 <div className="p-6">
                   <div className="space-y-5">
                     {category.faqs.map((faq, faqIndex) => (
                       <div key={faqIndex} className="border-b border-hairline pb-5 last:border-b-0 last:pb-0">
-                        <h4 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">{faq.question}</h4>
+                        <h4 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">{faq.question}</h4>
                         <p className="text-ink/70 font-display text-sm leading-relaxed">{faq.answer}</p>
                       </div>
                     ))}
@@ -97,12 +97,12 @@ export default function FAQPage() {
 
           {/* Still Need Help */}
           <div className="mt-12 bg-gold/10 border border-gold/30 rounded-sm p-8 text-center">
-            <h3 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-3">Still need help?</h3>
+            <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-3">Still need help?</h3>
             <p className="text-ink/70 font-display mb-6 max-w-xl mx-auto">
               Can&apos;t find the answer you&apos;re looking for? Our customer support team is here to help you.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Link href="/contact" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors">
+              <Link href="/contact" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors">
                 Contact Us
                 <ChevronRight className="h-4 w-4" />
               </Link>

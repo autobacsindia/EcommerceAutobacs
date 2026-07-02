@@ -71,7 +71,7 @@ export default function QuestionList({ productId, legacyQna = [] }: QuestionList
       {allQuestions.map((item) => (
         <div key={item.id} className="bg-obsidian border border-hairline rounded-xl p-6">
           <div className="flex items-start gap-3 mb-3">
-            <span className="flex-shrink-0 h-6 w-6 rounded-full bg-blue-100 text-gold flex items-center justify-center font-bold text-xs">Q</span>
+            <span className="flex-shrink-0 h-6 w-6 rounded-full bg-gold/10 text-gold flex items-center justify-center font-bold text-xs">Q</span>
             <div>
               <h3 className="font-semibold text-ink">{item.question}</h3>
               <div className="flex items-center gap-2 mt-1 text-xs text-ink-muted">

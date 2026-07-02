@@ -13,6 +13,8 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
+import Eyebrow from '@/components/ui/Eyebrow';
+import Reveal from '@/components/ui/Reveal';
 
 export default function CartPage() {
   return (
@@ -114,13 +116,14 @@ function CartPageContent() {
   if (!cart || cart.items?.length === 0) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
-        <div className="text-center py-12">
-          <ShoppingBag className="mx-auto h-24 w-24 text-hairline mb-4" />
-          <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-2">Your cart is empty</h2>
-          <p className="text-ink/70 font-display mb-6">Add some products to get started!</p>
+        <div className="text-center py-12 px-6">
+          <ShoppingBag className="mx-auto h-16 w-16 text-hairline mb-8" strokeWidth={1} />
+          <Eyebrow className="mb-4">Your bag</Eyebrow>
+          <h2 className="text-[clamp(32px,5vw,52px)] font-light leading-tight text-ink mb-4">Your cart is empty</h2>
+          <p className="text-ink-muted font-display font-light mb-8">Nothing here yet — let&apos;s find something.</p>
           <Link
             href="/products"
-            className="inline-flex items-center gap-2 bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+            className="inline-flex items-center gap-2.5 bg-gold text-obsidian font-display text-[10px] font-semibold uppercase tracking-[0.2em] px-7 py-4 transition-opacity hover:opacity-90"
           >
             Browse Products
             <ArrowRight className="h-4 w-4" />
@@ -134,10 +137,13 @@ function CartPageContent() {
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">Shopping Cart</h1>
-          <p className="text-ink/70 font-display mt-1">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in your cart</p>
-        </div>
+        <Reveal className="mb-10">
+          <Eyebrow>Your bag</Eyebrow>
+          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">Shopping Cart</h1>
+          <p className="mt-3 font-display text-[13px] tracking-[0.04em] text-ink-muted">
+            <span className="text-ink">{cart.items.length}</span> item{cart.items.length !== 1 ? 's' : ''} in your cart
+          </p>
+        </Reveal>
 
         {/* Stock change banner */}
         {recentChanges.length > 0 && (
@@ -170,7 +176,7 @@ function CartPageContent() {
           <div className="lg:col-span-8">
             <div className="bg-obsidian border border-hairline rounded-lg">
               <div className="p-4 border-b border-hairline flex justify-between items-center">
-                <h2 className="font-display font-bold text-ink uppercase tracking-wide">Cart Items</h2>
+                <h2 className="font-display font-light text-ink tracking-[-0.01em]">Cart Items</h2>
                 <button onClick={handleClearCart} className="text-sm text-red-400 hover:text-red-300 font-display transition-colors">
                   Clear Cart
                 </button>
@@ -199,7 +205,7 @@ function CartPageContent() {
                           <div>
                             <Link
                               href={productUrl(item.product, '/products') || '/products'}
-                              className="font-display font-bold text-ink uppercase tracking-wide hover:text-gold transition-colors"
+                              className="font-display font-light text-ink tracking-[-0.01em] hover:text-gold transition-colors"
                             >
                               {item.product.name}
                             </Link>
@@ -264,7 +270,7 @@ function CartPageContent() {
           {/* Order Summary */}
           <div className="lg:col-span-4 mt-8 lg:mt-0">
             <div className="bg-obsidian border border-hairline rounded-lg p-6 sticky top-20">
-              <h2 className="text-lg font-display font-bold text-ink uppercase tracking-wide mb-4">Order Summary</h2>
+              <h2 className="text-lg font-display font-light text-ink tracking-[-0.01em] mb-4">Order Summary</h2>
 
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-ink/70 font-display text-sm">
@@ -280,7 +286,7 @@ function CartPageContent() {
                   <span>{formatPrice((cart.total || 0) - ((cart.total || 0) / 1.18))}</span>
                 </div>
                 <div className="border-t border-hairline pt-3 flex justify-between">
-                  <span className="font-display font-bold text-ink uppercase tracking-wide">Total</span>
+                  <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
                   <span className="text-xl font-display font-bold text-gold">{formatPrice(cart.total || 0)}</span>
                 </div>
                 <p className="text-xs text-ink-muted font-display">* Final tax calculated at checkout</p>
@@ -288,10 +294,10 @@ function CartPageContent() {
 
               <Link
                 href="/checkout"
-                className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-gold text-obsidian font-display text-[11px] font-semibold uppercase tracking-[0.2em] py-4 transition-opacity hover:opacity-90 flex items-center justify-center gap-2.5"
               >
                 Proceed to Checkout
-                <ArrowRight className="h-5 w-5" />
+                <ArrowRight className="h-4 w-4" />
               </Link>
 
               <div className="mt-4 text-center">
@@ -307,7 +313,7 @@ function CartPageContent() {
                     placeholder="Enter code"
                     className="flex-1 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-gold font-display"
                   />
-                  <button className="bg-obsidian-raised hover:bg-gold text-obsidian/70 hover:text-obsidian px-4 py-2 rounded-sm text-sm font-display font-bold uppercase tracking-widest transition-colors">
+                  <button className="bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian px-4 py-2 rounded-sm text-sm font-display font-bold uppercase tracking-widest transition-colors">
                     Apply
                   </button>
                 </div>

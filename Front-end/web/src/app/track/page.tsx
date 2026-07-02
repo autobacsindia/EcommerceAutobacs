@@ -179,8 +179,8 @@ function TrackOrderPageInner() {
                   </div>
                 )}
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4" role="complementary" aria-label="Tracking tips">
-                  <h3 className="text-sm font-medium text-blue-900 mb-2">Tips:</h3>
+                <div className="bg-gold/10 border border-gold/40 rounded-lg p-4" role="complementary" aria-label="Tracking tips">
+                  <h3 className="text-sm font-medium text-gold mb-2">Tips:</h3>
                   <ul className="text-sm text-gold space-y-1">
                     <li>• Tracking numbers are 10-25 characters long</li>
                     <li>• You can find your tracking number in the shipping confirmation email</li>

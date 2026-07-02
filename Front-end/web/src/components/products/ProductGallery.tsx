@@ -139,7 +139,7 @@ export default function ProductGallery({ images, productName }: ProductGalleryPr
               onClick={() => setActiveIndex(index)}
               className={`relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
                 activeIndex === index
-                  ? 'border-gold ring-2 ring-blue-200'
+                  ? 'border-gold ring-2 ring-gold'
                   : 'border-hairline hover:border-hairline'
               }`}
               aria-label={`View image ${index + 1}`}

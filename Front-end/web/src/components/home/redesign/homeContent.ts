@@ -278,9 +278,9 @@ export const transformation = {
   titleAccent: 'Autobaacs',
   titleBottom: 'Effect.',
   before:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1782898005/kling_20260701_IMAGE_I_am_givin_290_0_lmodnq.png',
+'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1782907582/before_bmw_hlwaqs.jpg',
   after:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1782899141/kling_20260701_IMAGE_I_want_you_4515_1_f8bxim.png',
+'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1782907582/after_bmw_svmikn.jpg',
 };
 
 export const testimonials: TestimonialItem[] = [

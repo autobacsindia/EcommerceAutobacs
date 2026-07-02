@@ -25,7 +25,7 @@ export default function ThemeToggle({ isDark, onToggle }: ThemeToggleProps) {
       {isDark ? (
         <Sun className="w-5 h-5 text-yellow-400" />
       ) : (
-        <Moon className="w-5 h-5 text-zinc-700" />
+        <Moon className="w-5 h-5 text-ink/80" />
       )}
     </motion.button>
   );

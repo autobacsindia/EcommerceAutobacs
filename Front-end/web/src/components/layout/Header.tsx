@@ -10,7 +10,7 @@ export default function Header({ navCategories }: { navCategories: NavCategory[]
     <header className="bg-obsidian-deep sticky top-0 z-50 shadow-md w-full">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* Top Row */}
-        <div className="flex items-center h-16 border-b border-gray-800 gap-4">
+        <div className="flex items-center h-16 border-b border-hairline gap-4">
           <div className="shrink-0">
             <BrandLogo variant="full" />
           </div>

@@ -65,7 +65,7 @@ function ResetPasswordPageInner() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="mx-auto h-12 w-12 text-gold animate-spin" />
-          <h2 className="mt-4 text-xl font-display font-bold text-ink uppercase tracking-wide">Verifying link...</h2>
+          <h2 className="mt-4 text-xl font-display font-light text-ink tracking-[-0.01em]">Verifying link...</h2>
         </div>
       </div>
     );
@@ -77,11 +77,11 @@ function ResetPasswordPageInner() {
         <div className="max-w-md w-full text-center">
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 mb-6">
             <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-            <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-2">Invalid Link</h3>
+            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Invalid Link</h3>
             <p className="text-ink/70 font-display text-sm mb-6">{errorMessage}</p>
             <Link
               href="/forgot-password"
-              className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2.5 rounded-sm transition-colors text-sm"
+              className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2.5 rounded-sm transition-colors text-sm"
             >
               Request New Reset Link
             </Link>
@@ -100,13 +100,13 @@ function ResetPasswordPageInner() {
         <div className="max-w-md w-full text-center">
           <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-8">
             <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-            <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-2">Password Reset Successful</h3>
+            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Password Reset Successful</h3>
             <p className="text-ink/70 font-display text-sm mb-6">
               Your password has been successfully updated. You can now log in with your new password.
             </p>
             <Link
               href="/login"
-              className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+              className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
             >
               Sign In
             </Link>
@@ -120,8 +120,8 @@ function ResetPasswordPageInner() {
     <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Security</p>
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">Reset Password</h2>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Security</p>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em]">Reset Password</h2>
           <p className="mt-2 text-ink/70 font-display text-sm">Please enter your new password below.</p>
         </div>
 
@@ -170,7 +170,7 @@ function ResetPasswordPageInner() {
           <button
             type="submit"
             disabled={status === 'submitting'}
-            className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
+            className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
           >
             {status === 'submitting' ? (
               <><Loader2 className="animate-spin h-4 w-4" /> Resetting...</>

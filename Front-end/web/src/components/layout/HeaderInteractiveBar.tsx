@@ -106,7 +106,7 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
 
       {/* Fixed overlay — appears below the sticky header top row on mobile */}
       {showMobileSearch && (
-        <div className="md:hidden fixed left-0 right-0 top-16 z-40 bg-obsidian-deep px-4 py-4 border-t border-gray-800">
+        <div className="md:hidden fixed left-0 right-0 top-16 z-40 bg-obsidian-deep px-4 py-4 border-t border-hairline">
           <ClientSearchSuggestions />
         </div>
       )}

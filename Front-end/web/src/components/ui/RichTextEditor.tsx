@@ -193,7 +193,7 @@ function Btn({ children, onClick, active, title }: {
       type="button"
       onClick={onClick}
       title={title}
-      className={`p-1.5 rounded transition-colors ${active ? 'bg-blue-100 text-gold' : 'text-ink/80 hover:bg-obsidian-raised'}`}
+      className={`p-1.5 rounded transition-colors ${active ? 'bg-gold/10 text-gold' : 'text-ink/80 hover:bg-obsidian-raised'}`}
     >
       {children}
     </button>

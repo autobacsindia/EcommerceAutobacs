@@ -70,8 +70,8 @@ function ContactPageInner() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Support</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Contact Us</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Support</p>
+          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Contact Us</h1>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Have questions or need assistance? We&apos;re here to help you with all your automotive needs.
           </p>
@@ -84,7 +84,7 @@ function ContactPageInner() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             {/* Contact Info */}
             <div>
-              <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-4">Get In Touch</h2>
+              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">Get In Touch</h2>
               <p className="text-ink/70 font-display mb-8">
                 We&apos;d love to hear from you! Whether you have a question about our products, need help with an order,
                 or want to explore partnership opportunities, our team is ready to assist you.
@@ -94,7 +94,7 @@ function ContactPageInner() {
                   <div key={index} className="flex gap-4">
                     <div className="shrink-0 mt-0.5">{item.icon}</div>
                     <div>
-                      <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-1">{item.title}</h3>
+                      <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-1">{item.title}</h3>
                       <ul className="space-y-0.5">
                         {item.details.map((detail, idx) => (
                           <li key={idx} className="text-ink/70 font-display text-sm">{detail}</li>
@@ -105,7 +105,7 @@ function ContactPageInner() {
                 ))}
               </div>
               <div className="mt-10">
-                <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-4">Our Location</h3>
+                <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-4">Our Location</h3>
                 <div className="bg-obsidian-raised border-2 border-dashed border-hairline rounded-sm w-full h-64 flex items-center justify-center">
                   <span className="text-ink-muted font-display text-sm">Interactive Map Placeholder</span>
                 </div>
@@ -114,7 +114,7 @@ function ContactPageInner() {
 
             {/* Contact Form */}
             <div>
-              <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-6">Send Us a Message</h2>
+              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-6">Send Us a Message</h2>
 
               {submitStatus && (
                 <div className={`mb-6 p-4 rounded-sm flex items-start gap-3 ${submitStatus.type === 'success' ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
@@ -144,7 +144,7 @@ function ContactPageInner() {
                   <label htmlFor="message" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Message</label>
                   <textarea id="message" name="message" value={formData.message} onChange={handleChange} required disabled={submitting} rows={5} className={inputClass + ' resize-none'} placeholder="Please describe your inquiry..." />
                 </div>
-                <button type="submit" disabled={submitting} className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 px-4 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                <button type="submit" disabled={submitting} className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 px-4 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                   {submitting ? (
                     <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" />Sending...</>
                   ) : (
@@ -161,8 +161,8 @@ function ContactPageInner() {
       <section className="py-16 bg-obsidian border-t border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Quick Answers</p>
-            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide">Frequently Asked Questions</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Quick Answers</p>
+            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Frequently Asked Questions</h2>
             <p className="text-ink/70 font-display mt-2">Find answers to common questions about our services</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -173,13 +173,13 @@ function ContactPageInner() {
               { q: 'How can I track my order?', a: "Once your order ships, you'll receive a tracking number via email. You can also track your order in your account dashboard." },
             ].map((item, i) => (
               <div key={i} className="bg-obsidian-raised border border-hairline rounded-sm p-6">
-                <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">{item.q}</h3>
+                <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">{item.q}</h3>
                 <p className="text-ink/70 font-display text-sm">{item.a}</p>
               </div>
             ))}
           </div>
           <div className="text-center mt-10">
-            <Link href="/faq" className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
+            <Link href="/faq" className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
               View All FAQs
             </Link>
           </div>

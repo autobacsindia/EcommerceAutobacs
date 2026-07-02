@@ -50,8 +50,8 @@ export default function OrderItemCard({
       className={`flex gap-4 p-4 border rounded-lg transition ${
         mode === 'select'
           ? selected
-            ? 'border-gold bg-blue-50'
-            : 'border-hairline hover:border-gray-400'
+            ? 'border-gold bg-gold/10'
+            : 'border-hairline hover:border-hairline'
           : 'border-hairline'
       }`}
     >

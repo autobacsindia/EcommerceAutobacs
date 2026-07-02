@@ -11,6 +11,8 @@ import { useCurrency } from '@/context/CurrencyContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
+import Eyebrow from '@/components/ui/Eyebrow';
+import Reveal from '@/components/ui/Reveal';
 
 export default function WishlistPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -64,11 +66,11 @@ export default function WishlistPage() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
           <Heart className="mx-auto h-12 w-12 text-red-400 mb-4" />
-          <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-2">Error Loading Wishlist</h2>
+          <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Error Loading Wishlist</h2>
           <p className="text-ink/70 font-display mb-4">{error}</p>
           <button
             onClick={fetchWishlistWrapper}
-            className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors"
+            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors"
           >
             Try Again
           </button>
@@ -80,13 +82,14 @@ export default function WishlistPage() {
   if (wishlistItems.length === 0) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
-        <div className="text-center py-12">
-          <Heart className="mx-auto h-16 w-16 text-hairline mb-4" />
-          <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide mb-2">Your wishlist is empty</h2>
-          <p className="text-ink/70 font-display mb-6">Add products to your wishlist to save them for later</p>
+        <div className="text-center py-12 px-6">
+          <Heart className="mx-auto h-16 w-16 text-hairline mb-8" strokeWidth={1} />
+          <Eyebrow className="mb-4">Saved Items</Eyebrow>
+          <h2 className="text-[clamp(32px,5vw,52px)] font-light leading-tight text-ink mb-4">Your wishlist is empty</h2>
+          <p className="text-ink-muted font-display font-light mb-8">Save products you love to find them here later.</p>
           <button
             onClick={() => router.push('/products')}
-            className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+            className="inline-flex items-center gap-2.5 bg-gold text-obsidian font-display text-[10px] font-semibold uppercase tracking-[0.2em] px-7 py-4 transition-opacity hover:opacity-90"
           >
             Browse Products
           </button>
@@ -98,13 +101,13 @@ export default function WishlistPage() {
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-8">
+        <Reveal className="flex flex-wrap items-end justify-between gap-4 mb-10">
           <div>
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Saved Items</p>
-            <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">My Wishlist</h1>
+            <Eyebrow>Saved Items</Eyebrow>
+            <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Wishlist</h1>
           </div>
-          <span className="text-ink-muted font-display">({wishlistItems.length} items)</span>
-        </div>
+          <span className="font-display text-[13px] tracking-[0.04em] text-ink-muted"><span className="text-ink">{wishlistItems.length}</span> item{wishlistItems.length !== 1 ? 's' : ''}</span>
+        </Reveal>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {wishlistItems.map((item: any) => (
@@ -131,7 +134,7 @@ export default function WishlistPage() {
 
               <div className="p-4 flex flex-col">
                 <Link href={productUrl(item.product, '/products') || '/products'} className="hover:text-gold transition-colors">
-                  <h3 className="font-display font-bold text-ink uppercase tracking-wide mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
+                  <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
                 </Link>
 
                 {item.product?.averageRating > 0 && (
@@ -152,7 +155,7 @@ export default function WishlistPage() {
                 <button
                   onClick={() => handleAddToCart(item.product._id)}
                   disabled={item.product?.stock === 'out'}
-                  className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-obsidian-raised disabled:text-obsidian-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                 >
                   <ShoppingCart className="h-4 w-4" />
                   {item.product?.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}

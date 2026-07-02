@@ -60,7 +60,7 @@ function VerifyEmailPageInner() {
         {status === 'verifying' && (
           <div className="flex flex-col items-center">
             <Loader2 className="h-12 w-12 text-gold animate-spin mb-4" />
-            <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide">Verifying your email...</h2>
+            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em]">Verifying your email...</h2>
             <p className="mt-2 text-ink/70 font-display text-sm">Please wait while we confirm your email address.</p>
           </div>
         )}
@@ -68,13 +68,13 @@ function VerifyEmailPageInner() {
         {status === 'success' && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-8">
             <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-            <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-2">Email Verified!</h3>
+            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Email Verified!</h3>
             <p className="text-ink/70 font-display text-sm mb-6">
               Your email has been verified. Redirecting you now...
             </p>
             <Link
               href="/"
-              className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+              className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
             >
               Continue Shopping
             </Link>
@@ -84,7 +84,7 @@ function VerifyEmailPageInner() {
         {status === 'error' && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8">
             <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-            <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-2">Verification Failed</h3>
+            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Verification Failed</h3>
             <p className="text-ink/70 font-display text-sm mb-6">{message}</p>
 
             {resendSent ? (
@@ -105,7 +105,7 @@ function VerifyEmailPageInner() {
                 <button
                   type="submit"
                   disabled={resendLoading}
-                  className="w-full bg-gold hover:bg-gold disabled:opacity-50 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2 rounded-sm transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full bg-gold hover:opacity-90 disabled:opacity-50 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2 rounded-sm transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                   Send New Link

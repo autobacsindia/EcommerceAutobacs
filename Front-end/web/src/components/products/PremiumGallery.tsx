@@ -64,7 +64,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
               className={`relative w-full aspect-square rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
                 activeIndex === index
                   ? 'border-orange-500 shadow-lg shadow-orange-500/30'
-                  : isDark ? 'border-zinc-700 hover:border-zinc-500' : 'border-hairline hover:border-gray-400'
+                  : isDark ? 'border-hairline hover:border-hairline' : 'border-hairline hover:border-hairline'
               }`}
             >
               <Image
@@ -79,7 +79,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
         </div>
 
         {/* Main Cinematic Image */}
-        <div className={`col-span-10 lg:col-span-11 relative rounded-xl overflow-hidden group ${isDark ? 'bg-zinc-900' : 'bg-obsidian-raised'}`}>
+        <div className={`col-span-10 lg:col-span-11 relative rounded-xl overflow-hidden group ${isDark ? 'bg-obsidian-deep' : 'bg-obsidian-raised'}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={activeIndex}
@@ -110,7 +110,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={goToPrevious}
-                className={`absolute left-4 top-1/2 -translate-y-1/2 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 border ${isDark ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-700' : 'bg-obsidian/90 hover:bg-obsidian border-hairline'}`}
+                className={`absolute left-4 top-1/2 -translate-y-1/2 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 border ${isDark ? 'bg-obsidian-deep/80 hover:bg-obsidian-raised border-hairline' : 'bg-obsidian/90 hover:bg-obsidian border-hairline'}`}
               >
                 <ChevronLeft className={`w-6 h-6 ${isDark ? 'text-ink' : 'text-ink/80'}`} />
               </motion.button>
@@ -118,7 +118,7 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={goToNext}
-                className={`absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 border ${isDark ? 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-700' : 'bg-obsidian/90 hover:bg-obsidian border-hairline'}`}
+                className={`absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 border ${isDark ? 'bg-obsidian-deep/80 hover:bg-obsidian-raised border-hairline' : 'bg-obsidian/90 hover:bg-obsidian border-hairline'}`}
               >
                 <ChevronRight className={`w-6 h-6 ${isDark ? 'text-ink' : 'text-ink/80'}`} />
               </motion.button>
@@ -126,13 +126,13 @@ export default function PremiumGallery({ images, productName, isDark = true }: P
           )}
 
           {/* Zoom Indicator */}
-          <div className={`absolute top-4 right-4 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity border ${isDark ? 'bg-zinc-900/80 border-zinc-700' : 'bg-obsidian/90 border-hairline'}`}>
-            <ZoomIn className={`w-5 h-5 ${isDark ? 'text-zinc-300' : 'text-ink-muted'}`} />
+          <div className={`absolute top-4 right-4 rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity border ${isDark ? 'bg-obsidian-deep/80 border-hairline' : 'bg-obsidian/90 border-hairline'}`}>
+            <ZoomIn className={`w-5 h-5 ${isDark ? 'text-ink/70' : 'text-ink-muted'}`} />
           </div>
 
           {/* Image Counter */}
           {displayImages.length > 1 && (
-            <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-medium border ${isDark ? 'bg-zinc-900/90 border-zinc-700 text-zinc-300' : 'bg-obsidian/90 border-hairline text-ink/80'}`}>
+            <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-medium border ${isDark ? 'bg-obsidian-deep/90 border-hairline text-ink/70' : 'bg-obsidian/90 border-hairline text-ink/80'}`}>
               {activeIndex + 1} / {displayImages.length}
             </div>
           )}

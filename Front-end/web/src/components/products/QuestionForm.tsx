@@ -116,7 +116,7 @@ export default function QuestionForm({ productId, onSuccess }: QuestionFormProps
         <button
           type="submit"
           disabled={loading}
-          className="w-full sm:w-auto px-6 py-2 bg-gold text-obsidian rounded-lg font-medium hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold disabled:bg-gray-400 transition-colors"
+          className="w-full sm:w-auto px-6 py-2 bg-gold text-obsidian rounded-lg font-medium hover:bg-gold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold disabled:bg-obsidian-raised transition-colors"
         >
           {loading ? 'Submitting...' : 'Submit Question'}
         </button>

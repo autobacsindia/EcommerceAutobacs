@@ -365,14 +365,14 @@ function CheckoutPageContent() {
           <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
             <Check className="h-12 w-12 text-green-400" />
           </div>
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Success</p>
-          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-4">Order Placed!</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Success</p>
+          <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Order Placed!</h1>
           <p className="text-ink/70 font-display mb-2">Thank you for your order</p>
           <p className="text-lg font-display font-bold text-gold mb-8">Order ID: #{orderId}</p>
 
           {isGuestOrder && (
             <div className="bg-obsidian border border-gold/30 rounded-sm p-6 mb-8 text-left">
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-3">
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">
                 Claim Your Account
               </h3>
               <p className="text-ink/70 font-display mb-4">
@@ -384,7 +384,7 @@ function CheckoutPageContent() {
                 <li className="flex items-center gap-2"><span className="text-green-400">✓</span> View order history</li>
                 <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Easy returns &amp; support</li>
               </ul>
-              <a href={`/claim-order?orderId=${orderId}`} className="inline-block bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors">
+              <a href={`/claim-order?orderId=${orderId}`} className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors">
                 Claim My Account
               </a>
               <p className="text-xs text-ink-muted font-display mt-3">Or check your email for the magic link</p>
@@ -406,7 +406,7 @@ function CheckoutPageContent() {
           </div>
 
           <div className="flex gap-4 justify-center">
-            <button onClick={() => router.push(`/orders/${orderId}`)} className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
+            <button onClick={() => router.push(`/orders/${orderId}`)} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
               View Order Details
             </button>
             <button onClick={() => { localStorage.removeItem('pendingClaim'); router.push('/products'); }} className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
@@ -430,9 +430,9 @@ function CheckoutPageContent() {
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-4xl mx-auto px-4">
-        <div className="mb-8">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Secure</p>
-          <h1 className="text-3xl font-display font-bold text-ink uppercase tracking-wide">Checkout</h1>
+        <div className="mb-10">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Secure</p>
+          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">Checkout</h1>
         </div>
 
         {/* Progress Steps */}
@@ -444,7 +444,7 @@ function CheckoutPageContent() {
             return (
               <div key={step.id} className="flex items-center">
                 <div className="flex flex-col items-center">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-obsidian' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-400' : 'bg-obsidian-raised border border-hairline text-obsidian-muted'}`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-obsidian' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-400' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
                     <Icon className="h-5 w-5" />
                   </div>
                   <span className={`text-xs mt-2 font-display font-bold uppercase tracking-widest ${isActive ? 'text-gold' : isCompleted ? 'text-green-400' : 'text-ink-muted'}`}>{step.label}</span>
@@ -460,7 +460,7 @@ function CheckoutPageContent() {
         {/* Cart Review */}
         {currentStep === 'cart' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-4">Review Your Cart</h2>
+            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-4">Review Your Cart</h2>
 
             {stockValidationErrors.length > 0 && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-sm p-4">
@@ -491,7 +491,7 @@ function CheckoutPageContent() {
                 <div key={item.product._id} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-sm p-4">
                   <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-sm shrink-0" />
                   <div className="flex-1">
-                    <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm">{item.product.name}</h3>
+                    <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm">{item.product.name}</h3>
                     <p className="text-ink-muted font-display text-xs mt-0.5">Qty: {item.quantity}</p>
                   </div>
                   <p className="font-display font-bold text-gold">₹{(item.product.price * item.quantity).toFixed(2)}</p>
@@ -515,7 +515,7 @@ function CheckoutPageContent() {
                 </div>
               </div>
               <div className="flex justify-between">
-                <span className="font-display font-bold text-ink uppercase tracking-wide">Total</span>
+                <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
                 <span className="text-xl font-display font-bold text-gold">₹{(cart?.total || 0).toFixed(2)}</span>
               </div>
             </div>
@@ -523,7 +523,7 @@ function CheckoutPageContent() {
             <button
               onClick={() => setCurrentStep('address')}
               disabled={stockValidationErrors.length > 0}
-              className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-obsidian-muted disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
             >
               Continue to Shipping
             </button>
@@ -533,11 +533,11 @@ function CheckoutPageContent() {
         {/* Shipping Address */}
         {currentStep === 'address' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-6">Shipping Address</h2>
+            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6">Shipping Address</h2>
 
             {!isAuthenticated && (
               <div className="mb-6 bg-obsidian border border-hairline rounded-sm p-6">
-                <h3 className="font-display font-bold text-ink uppercase tracking-wide mb-4 flex items-center gap-2">
+                <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-4 flex items-center gap-2">
                   <span className="text-xl">📧</span>
                   Contact Information
                 </h3>
@@ -572,7 +572,7 @@ function CheckoutPageContent() {
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="font-display font-bold text-ink uppercase tracking-wide text-sm">{addr.fullName}</p>
+                        <p className="font-display font-light text-ink tracking-[-0.01em] text-sm">{addr.fullName}</p>
                         <p className="text-ink/70 font-display text-sm mt-1">{addr.addressLine1}</p>
                         <p className="text-ink/70 font-display text-sm">{addr.city}, {addr.state} {addr.postalCode}</p>
                         <p className="text-ink-muted font-display text-sm">{addr.phone}</p>
@@ -617,7 +617,7 @@ function CheckoutPageContent() {
                 <button
                   onClick={handleAddressSubmit}
                   disabled={selectedAddressIndex === null}
-                  className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-obsidian-muted disabled:cursor-not-allowed transition-colors"
+                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
                 >
                   Deliver to This Address
                 </button>
@@ -643,11 +643,11 @@ function CheckoutPageContent() {
                 </div>
                 {isAuthenticated && (
                   <div className="flex items-center gap-3 mt-2">
-                    <input type="checkbox" id="saveAddress" checked={shouldSaveAddress} onChange={(e) => setShouldSaveAddress(e.target.checked)} className="h-4 w-4 accent-[#3B9EE8] rounded border-hairline bg-obsidian-raised" />
+                    <input type="checkbox" id="saveAddress" checked={shouldSaveAddress} onChange={(e) => setShouldSaveAddress(e.target.checked)} className="h-4 w-4 accent-gold rounded border-hairline bg-obsidian-raised" />
                     <label htmlFor="saveAddress" className="text-sm text-ink/70 font-display">Save this address for future orders</label>
                   </div>
                 )}
-                <button type="submit" className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors mt-4">
+                <button type="submit" className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors mt-4">
                   Continue to Payment
                 </button>
               </form>
@@ -658,11 +658,11 @@ function CheckoutPageContent() {
         {/* Payment Method */}
         {currentStep === 'payment' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-6">Payment Method</h2>
+            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6">Payment Method</h2>
             <div className="mb-8">
               <PaymentMethodSelector selectedMethod={paymentMethod} onSelect={setPaymentMethod} />
             </div>
-            <button onClick={() => { trackAddPaymentInfo({ method: paymentMethod, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors">
+            <button onClick={() => { trackAddPaymentInfo({ method: paymentMethod, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors">
               Continue to Review
             </button>
           </div>
@@ -671,7 +671,7 @@ function CheckoutPageContent() {
         {/* Review Order */}
         {currentStep === 'review' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink uppercase tracking-wide mb-6">Review Your Order</h2>
+            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6">Review Your Order</h2>
 
             {/* Price-change confirmation banner — shown when server prices differ from CartContext */}
             {priceConfirmationPending && serverValidation && (
@@ -699,7 +699,7 @@ function CheckoutPageContent() {
                         <span className="text-ink/70 font-display">₹{serverValidation.tax.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between border-t border-hairline pt-2">
-                        <span className="font-display font-bold text-ink uppercase tracking-wide text-sm">New Total</span>
+                        <span className="font-display font-light text-ink tracking-[-0.01em] text-sm">New Total</span>
                         <span className="text-lg font-display font-bold text-gold">₹{serverValidation.total.toFixed(2)}</span>
                       </div>
                     </div>

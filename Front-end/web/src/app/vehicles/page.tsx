@@ -46,8 +46,8 @@ export default function VehiclesPage() {
       <div className="min-h-screen bg-obsidian-deep">
         <div className="bg-obsidian border-b border-hairline py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-3">Browse by Vehicle</p>
-            <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">Explore by Vehicle</h1>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-3">Browse by Vehicle</p>
+            <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-4">Explore by Vehicle</h1>
             <p className="text-ink/70 font-display text-lg max-w-3xl mx-auto">
               Find the perfect parts and accessories for your vehicle
             </p>
@@ -77,7 +77,7 @@ export default function VehiclesPage() {
           <p className="text-ink/70 font-display mb-6">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="bg-gold hover:bg-gold text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
           >
             Retry
           </button>
@@ -91,8 +91,8 @@ export default function VehiclesPage() {
       {/* Hero */}
       <div className="bg-obsidian border-b border-hairline py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-3">Browse by Vehicle</p>
-          <h1 className="text-5xl font-display font-bold text-ink uppercase tracking-wide mb-4">Explore by Vehicle</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-3">Browse by Vehicle</p>
+          <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-4">Explore by Vehicle</h1>
           <p className="text-ink/70 font-display text-lg max-w-3xl mx-auto">
             Find the perfect parts and accessories for your vehicle
           </p>
@@ -102,7 +102,7 @@ export default function VehiclesPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-display font-bold text-ink uppercase tracking-wide mb-2">All Vehicles</h2>
+          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">All Vehicles</h2>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Select your vehicle make to browse compatible parts and accessories
           </p>
@@ -139,7 +139,7 @@ export default function VehiclesPage() {
                     />
                   </div>
                   <div className="p-3 text-center bg-obsidian border-t border-hairline">
-                    <h3 className="text-sm font-display font-bold text-ink uppercase tracking-wide group-hover:text-gold transition-colors">
+                    <h3 className="text-sm font-display font-light text-ink tracking-[-0.01em] group-hover:text-gold transition-colors">
                       {vehicle.name}
                     </h3>
                   </div>

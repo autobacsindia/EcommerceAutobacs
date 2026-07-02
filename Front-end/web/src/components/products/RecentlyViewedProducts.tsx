@@ -54,8 +54,8 @@ export default function RecentlyViewedProducts() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-1">Your History</p>
-            <h2 className="text-2xl font-display font-bold text-ink uppercase tracking-wide">Recently Viewed</h2>
+            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-1">Your History</p>
+            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Recently Viewed</h2>
           </div>
           <button
             onClick={clearHistory}
@@ -111,7 +111,7 @@ export default function RecentlyViewedProducts() {
                         toast.error(error.message || 'Failed to add to cart');
                       }
                     }}
-                    className="p-2 bg-obsidian-raised text-obsidian/70 rounded-full hover:bg-gold hover:text-obsidian transition-colors"
+                    className="p-2 bg-obsidian-raised text-ink/70 rounded-full hover:bg-gold hover:text-obsidian transition-colors"
                     title="Add to Cart"
                   >
                     <ShoppingCart className="h-4 w-4" />

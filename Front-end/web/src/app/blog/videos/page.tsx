@@ -114,7 +114,7 @@ function VideosContent() {
           </div>
         ) : videos.length === 0 ? (
           <div className="text-center py-20">
-            <Video className="h-16 w-16 text-gray-200 mx-auto mb-4" />
+            <Video className="h-16 w-16 text-ink/70 mx-auto mb-4" />
             <p className="text-ink-muted">No videos available yet.</p>
           </div>
         ) : (

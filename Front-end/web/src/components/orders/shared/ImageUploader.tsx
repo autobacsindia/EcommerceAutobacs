@@ -157,8 +157,8 @@ export default function ImageUploader({
           onClick={() => fileInputRef.current?.click()}
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
             dragActive
-              ? 'border-gold bg-blue-50'
-              : 'border-hairline hover:border-gray-400 hover:bg-obsidian-deep'
+              ? 'border-gold bg-gold/10'
+              : 'border-hairline hover:border-hairline hover:bg-obsidian-deep'
           }`}
         >
           <input
@@ -261,12 +261,12 @@ export default function ImageUploader({
 
       {/* Help Text */}
       {images.length === 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-gold/10 border border-gold/40 rounded-lg p-4">
           <div className="flex gap-2">
             <ImageIcon className="h-5 w-5 text-gold flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-blue-900 mb-1">Why upload images?</p>
-              <p className="text-sm text-blue-800">
+              <p className="text-sm font-medium text-gold mb-1">Why upload images?</p>
+              <p className="text-sm text-gold">
                 Clear photos help us process your return faster and ensure you get the best resolution.
               </p>
             </div>

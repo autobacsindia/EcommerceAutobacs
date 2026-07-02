@@ -8,8 +8,8 @@ export default function ReturnsPage() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="text-gold font-display font-bold text-sm uppercase tracking-widest mb-2">Policy</p>
-          <h1 className="text-4xl font-display font-bold text-ink uppercase tracking-wide mb-4">Return and Exchange Policy</h1>
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Policy</p>
+          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Return and Exchange Policy</h1>
           <p className="text-ink/70 font-display max-w-3xl mx-auto">
             At Autobacs India, we strive to ensure customer satisfaction. Please read our policy carefully before making a purchase.
           </p>
@@ -23,9 +23,9 @@ export default function ReturnsPage() {
 
             {/* 1. Return Policy */}
             <div>
-              <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">1. Return Policy</h2>
+              <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">1. Return Policy</h2>
 
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">Eligibility for Returns</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">Eligibility for Returns</h3>
               <p className="text-ink/70 font-display leading-relaxed mb-3">
                 You may request a return within <strong className="text-ink">7 calendar days</strong> from the date of receiving your order. To be eligible for a return:
               </p>
@@ -41,7 +41,7 @@ export default function ReturnsPage() {
                 ))}
               </ul>
 
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2 mt-6">Non-Returnable Items</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2 mt-6">Non-Returnable Items</h3>
               <p className="text-ink/70 font-display leading-relaxed mb-3">The following items cannot be returned:</p>
               <ul className="space-y-1.5 mb-4">
                 {[
@@ -55,7 +55,7 @@ export default function ReturnsPage() {
                 ))}
               </ul>
 
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2 mt-6">Refund Policy</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2 mt-6">Refund Policy</h3>
               <p className="text-ink/70 font-display leading-relaxed mb-3">
                 We do not offer direct refunds. Instead, we provide exchanges or store credit for eligible return cases.
               </p>
@@ -75,9 +75,9 @@ export default function ReturnsPage() {
 
             {/* 2. Exchange Policy */}
             <div>
-              <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">2. Exchange Policy</h2>
+              <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">2. Exchange Policy</h2>
 
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-2">Eligibility for Exchange</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">Eligibility for Exchange</h3>
               <p className="text-ink/70 font-display leading-relaxed mb-3">
                 You may request an exchange within <strong className="text-ink">7 days</strong> of receiving your order if:
               </p>
@@ -93,7 +93,7 @@ export default function ReturnsPage() {
                 ))}
               </ul>
 
-              <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-3">Exchange Process</h3>
+              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-3">Exchange Process</h3>
               <ol className="space-y-3">
                 {[
                   { step: '1', label: 'Initiate a Request', desc: 'Contact our customer support at info@autobacsindia.com within 7 days of receiving the product.' },
@@ -104,7 +104,7 @@ export default function ReturnsPage() {
                   <li key={step} className="flex items-start gap-4">
                     <span className="shrink-0 w-7 h-7 rounded-full bg-gold/10 border border-gold/30 text-gold font-display font-bold text-xs flex items-center justify-center">{step}</span>
                     <div>
-                      <span className="font-display font-bold text-ink uppercase tracking-wide text-sm">{label} — </span>
+                      <span className="font-display font-light text-ink tracking-[-0.01em] text-sm">{label} — </span>
                       <span className="text-ink/70 font-display text-sm leading-relaxed">{desc}</span>
                     </div>
                   </li>
@@ -116,7 +116,7 @@ export default function ReturnsPage() {
 
             {/* 3. Unclaimed Products */}
             <div>
-              <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">3. Unclaimed Products Terms</h2>
+              <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">3. Unclaimed Products Terms</h2>
               <p className="text-ink/70 font-display leading-relaxed mb-6">
                 This section outlines the terms and procedures regarding products that remain uncollected by the customer after a purchase, service, repair, or delivery notification.
               </p>
@@ -140,7 +140,7 @@ export default function ReturnsPage() {
                 },
               ].map(({ title, body }) => (
                 <div key={title} className="mb-5">
-                  <h3 className="font-display font-bold text-ink uppercase tracking-wide text-sm mb-1">{title}</h3>
+                  <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-1">{title}</h3>
                   <p className="text-ink/70 font-display leading-relaxed text-sm">{body}</p>
                 </div>
               ))}
@@ -150,7 +150,7 @@ export default function ReturnsPage() {
 
             {/* Shipping and Costs */}
             <div>
-              <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">Shipping and Costs</h2>
+              <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">Shipping and Costs</h2>
               <ul className="space-y-1.5">
                 {[
                   'Customers are responsible for return shipping costs unless the return is due to a defective or incorrect item.',
@@ -168,7 +168,7 @@ export default function ReturnsPage() {
 
             {/* Contact */}
             <div>
-              <h2 className="font-display font-bold text-ink uppercase tracking-wide text-xl mb-4">Contact Us</h2>
+              <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">Contact Us</h2>
               <p className="text-ink/70 font-display leading-relaxed mb-2">
                 For any questions or assistance regarding returns and exchanges, please contact us:
               </p>
