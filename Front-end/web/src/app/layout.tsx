@@ -203,7 +203,27 @@ export default async function RootLayout({
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
-                      <Toaster position="top-right" />
+                      <Toaster
+                        position="top-right"
+                        toastOptions={{
+                          style: {
+                            background: "#181a1a",
+                            color: "#f0ede7",
+                            border: "1px solid #252525",
+                            fontFamily: "var(--font-montserrat), system-ui, sans-serif",
+                            fontSize: "0.875rem",
+                            fontWeight: 500,
+                            borderRadius: "0.5rem",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                          },
+                          success: {
+                            iconTheme: { primary: "#c9a870", secondary: "#181a1a" },
+                          },
+                          error: {
+                            iconTheme: { primary: "#dc2626", secondary: "#f0ede7" },
+                          },
+                        }}
+                      />
                       <Script
                         id="razorpay-checkout"
                         src="https://checkout.razorpay.com/v1/checkout.js"

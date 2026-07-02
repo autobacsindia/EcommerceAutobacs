@@ -3,101 +3,191 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Img from './Img';
-import { ArrowRight, ArrowRightLong } from './icons';
+import { ArrowRight, ArrowRightLong, ChevronLeft, ChevronRight } from './icons';
 import { journal, journalPosts as fallbackJournalPosts, type JournalItem } from './homeContent';
+
+const AUTOPLAY_MS = 6000;
+// Past this drag distance (px) a release advances the carousel; below it, the
+// gesture is treated as a click/tap and navigation is allowed.
+const DRAG_THRESHOLD = 60;
+
+/**
+ * Shortest signed distance from `active` to card `i` on a ring of `n` cards.
+ * Lets the coverflow wrap infinitely in either direction.
+ */
+function ringOffset(i: number, active: number, n: number): number {
+  let d = i - active;
+  if (d > n / 2) d -= n;
+  if (d < -n / 2) d += n;
+  return d;
+}
 
 export default function Journal({ posts }: { posts?: JournalItem[] }) {
   // Live blog posts from the DB; static placeholders if none resolved.
   const items = posts?.length ? posts : fallbackJournalPosts;
-  const cardRefs = useRef<(HTMLAnchorElement | null)[]>([]);
+  const n = items.length;
+
   const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const drag = useRef({ startX: 0, dx: 0, dragging: false, moved: false });
 
-  // Scroll-spy: highlight the index item for the card nearest viewport centre.
+  const go = (dir: 1 | -1) => setActive((a) => (a + dir + n) % n);
+  const jumpTo = (i: number) => setActive(((i % n) + n) % n);
+
+  // Autoplay — paused on hover/focus/drag and when the user prefers reduced
+  // motion. Single card or empty set never autoplays.
   useEffect(() => {
-    const cards = cardRefs.current.filter(Boolean) as HTMLAnchorElement[];
-    if (!cards.length) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            const i = cards.indexOf(e.target as HTMLAnchorElement);
-            if (i >= 0) setActive(i);
-          }
-        });
-      },
-      { rootMargin: '-45% 0px -45% 0px', threshold: 0 }
-    );
-    cards.forEach((c) => obs.observe(c));
-    return () => obs.disconnect();
-  }, [items.length]);
+    if (n <= 1 || paused) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;
+    const id = window.setInterval(() => setActive((a) => (a + 1) % n), AUTOPLAY_MS);
+    return () => window.clearInterval(id);
+  }, [n, paused]);
 
-  const jumpTo = (i: number) => {
-    const card = cardRefs.current[i];
-    if (!card) return;
-    const y = card.getBoundingClientRect().top + window.scrollY - 130;
-    window.scrollTo({ top: y, behavior: 'smooth' });
+  const onPointerDown = (e: React.PointerEvent) => {
+    drag.current = { startX: e.clientX, dx: 0, dragging: true, moved: false };
+    setPaused(true);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d.dragging) return;
+    d.dx = e.clientX - d.startX;
+    if (Math.abs(d.dx) > 6) d.moved = true;
+  };
+  const endDrag = () => {
+    const d = drag.current;
+    if (!d.dragging) return;
+    if (d.dx <= -DRAG_THRESHOLD) go(1);
+    else if (d.dx >= DRAG_THRESHOLD) go(-1);
+    d.dragging = false;
+    setPaused(false);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      go(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      go(1);
+    }
   };
 
   return (
-    <section className="journal">
-      <div className="journal-inner">
-        <div className="journal-left">
+    <section
+      className="journal"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className="journal-head journal-inner">
+        <div className="journal-head-copy">
           <div className="journal-eyebrow reveal">{journal.eyebrow}</div>
           <h2 className="reveal reveal-d1">
-            {journal.titleTop}
-            <br />
-            <em>{journal.titleAccent}</em>
+            {journal.titleTop} <em>{journal.titleAccent}</em>
           </h2>
           <p className="journal-desc reveal reveal-d2">{journal.body}</p>
-          <div className="journal-index reveal reveal-d2">
-            {items.map((p, i) => (
-              <button
+        </div>
+        <Link className="journal-cta reveal reveal-d2" href="/blog">
+          All Articles <ArrowRightLong />
+        </Link>
+      </div>
+
+      <div
+        className="mc reveal"
+        role="group"
+        aria-roledescription="carousel"
+        aria-label="The Garage Journal articles"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onFocus={() => setPaused(true)}
+        onBlur={() => setPaused(false)}
+      >
+        <button
+          type="button"
+          className="mc-arrow mc-prev"
+          aria-label="Previous article"
+          onClick={() => go(-1)}
+        >
+          <ChevronLeft />
+        </button>
+
+        <div
+          className="mc-stage"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerLeave={endDrag}
+          onPointerCancel={endDrag}
+        >
+          {items.map((p, i) => {
+            const off = ringOffset(i, active, n);
+            const visible = Math.abs(off) <= 2;
+            const isCenter = off === 0;
+            return (
+              <Link
+                href={p.href}
+                className={`mc-card${isCenter ? ' is-center' : ''}`}
                 key={p.title}
-                type="button"
-                className={`ji-item${i === active ? ' active' : ''}`}
-                onClick={() => jumpTo(i)}
+                data-off={off}
+                aria-hidden={!isCenter}
+                tabIndex={isCenter ? 0 : -1}
+                style={{ visibility: visible ? 'visible' : 'hidden' }}
+                onClick={(e) => {
+                  // Suppress navigation for drags and for taps on a side card
+                  // (a side tap re-centres it instead of opening the article).
+                  if (drag.current.moved || !isCenter) {
+                    e.preventDefault();
+                    if (!drag.current.moved && !isCenter) jumpTo(i);
+                  }
+                }}
               >
-                <span className="ji-num">{String(i + 1).padStart(2, '0')}</span>
-                <span className="ji-t">{p.title}</span>
-              </button>
-            ))}
-          </div>
-          <Link className="journal-cta" href="/blog">
-            All Articles <ArrowRightLong />
-          </Link>
+                <div className="thumb">
+                  <span className="cat">{p.category}</span>
+                  <Img src={p.image} alt={p.title} draggable={false} />
+                </div>
+                <div className="mc-body">
+                  <div className="journal-meta">
+                    <span>{p.date}</span>
+                    {p.readTime && (
+                      <>
+                        <span className="dot" />
+                        <span>{p.readTime}</span>
+                      </>
+                    )}
+                  </div>
+                  <h3>{p.title}</h3>
+                  <p>{p.excerpt}</p>
+                  <span className="journal-readlink">
+                    Read Article <ArrowRight />
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
 
-        <div className="journal-right">
-          {items.map((p, i) => (
-            <Link
-              href={p.href}
-              className="journal-card reveal"
-              key={p.title}
-              ref={(el) => {
-                cardRefs.current[i] = el;
-              }}
-            >
-              <div className="thumb">
-                <span className="cat">{p.category}</span>
-                <Img src={p.image} alt={p.title} />
-              </div>
-              <div className="journal-meta">
-                <span>{p.date}</span>
-                {p.readTime && (
-                  <>
-                    <span className="dot" />
-                    <span>{p.readTime}</span>
-                  </>
-                )}
-              </div>
-              <h3>{p.title}</h3>
-              <p>{p.excerpt}</p>
-              <span className="journal-readlink">
-                Read Article <ArrowRight />
-              </span>
-            </Link>
-          ))}
-        </div>
+        <button
+          type="button"
+          className="mc-arrow mc-next"
+          aria-label="Next article"
+          onClick={() => go(1)}
+        >
+          <ChevronRight />
+        </button>
+      </div>
+
+      <div className="mc-dots" role="tablist" aria-label="Select article">
+        {items.map((p, i) => (
+          <button
+            key={p.title}
+            type="button"
+            role="tab"
+            aria-selected={i === active}
+            aria-label={`Go to article ${i + 1}`}
+            className={`mc-dot${i === active ? ' active' : ''}`}
+            onClick={() => jumpTo(i)}
+          />
+        ))}
       </div>
     </section>
   );
