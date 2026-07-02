@@ -79,11 +79,16 @@ export const brand = {
     'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&q=80&auto=format&fit=crop',
 };
 
+// Nav destinations. `href` is a real, resolvable route (verified against the
+// live category taxonomy — `exterior`/`interior` are actual top-level hubs at
+// `/categories/<slug>`). "Vehicle Makes" is special-cased in RedesignNav to
+// render the RedesignVehicleMenu dropdown, so its `href` is only a no-JS
+// fallback, not the primary target.
 export const navLinks = [
-  { label: 'Shop', href: '/shop' },
-  { label: 'Exterior', href: '/categories' },
-  { label: 'Interior', href: '/categories' },
-  { label: 'Vehicle Makes', href: '/brands' },
+  { label: 'Shop', href: '/products' },
+  { label: 'Exterior', href: '/categories/exterior' },
+  { label: 'Interior', href: '/categories/interior' },
+  { label: 'Vehicle Makes', href: '/vehicles' },
   { label: 'Offers', href: '/offers' },
   { label: 'Press', href: '/media' },
 ];
@@ -399,14 +404,16 @@ export const footer = {
     "India's premium destination for aftermarket automotive parts and transformation services. Sourced globally, delivered with precision.",
   columns: [
     {
+      // Labels + slugs mirror real, active top-level category hubs (see the live
+      // taxonomy). Every href resolves to /categories/<slug>; no generic dumps.
       title: 'Shop',
       links: [
-        { label: 'Performance', href: '/categories' },
-        { label: 'Wheels & Suspension', href: '/categories' },
-        { label: 'Exterior & Aero', href: '/categories' },
-        { label: 'Engine & Exhaust', href: '/categories' },
-        { label: 'Lighting', href: '/categories' },
-        { label: 'Interior', href: '/categories' },
+        { label: 'Performance', href: '/categories/performance' },
+        { label: 'Suspension', href: '/categories/suspension' },
+        { label: 'Brakes', href: '/categories/brakes' },
+        { label: 'Exterior', href: '/categories/exterior' },
+        { label: 'Interior', href: '/categories/interior' },
+        { label: 'Lighting', href: '/categories/lighting' },
       ],
     },
     {

@@ -65,6 +65,19 @@ export const ScrollArrow = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const Pause = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" {...p}>
+    <rect x="6" y="5" width="4" height="14" rx="1" />
+    <rect x="14" y="5" width="4" height="14" rx="1" />
+  </svg>
+);
+
+export const Play = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" {...p}>
+    <path d="M7 5l12 7-12 7z" />
+  </svg>
+);
+
 export const ChevronLeft = (p: SVGProps<SVGSVGElement>) => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...p}>
     <path d="M11 5l-6 7 6 7" />

@@ -80,10 +80,10 @@ export default function LoginPage() {
       <div className="py-8">
         <Link href="/" className="block mx-auto">
           <Image
-            src="https://res.cloudinary.com/dhwxtl6l8/image/upload/v1775543920/Roavion-Logo_xwqbx9.png"
+            src="https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png"
             alt="Roavion"
-            width={596}
-            height={199}
+            width={775}
+            height={309}
             priority
             className="object-contain h-28 w-auto mx-auto"
           />

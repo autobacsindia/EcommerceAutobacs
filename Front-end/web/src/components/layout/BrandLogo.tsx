@@ -11,7 +11,8 @@ interface BrandLogoProps {
 }
 
 export default function BrandLogo({ variant = 'full', theme = 'dark', className = '' }: BrandLogoProps) {
-  const logoSrc = 'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1775543920/Roavion-Logo_xwqbx9.png';
+  // Match the home hero lockup (see homeContent.ts `brand.logo`).
+  const logoSrc = 'https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png';
   const logoAlt = 'Roavion';
   
   // Use inline style for filter to ensure it works regardless of Tailwind config
@@ -23,8 +24,8 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
         <Image
           src={logoSrc}
           alt={logoAlt}
-          width={475}
-          height={159}
+          width={775}
+          height={309}
           priority
           className="object-contain h-24 w-auto"
           style={imageStyle}
@@ -38,8 +39,8 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
       <Image
         src={logoSrc}
         alt={logoAlt}
-        width={596}
-        height={199}
+        width={775}
+        height={309}
         priority
         className="object-contain h-28 w-auto"
         style={imageStyle}

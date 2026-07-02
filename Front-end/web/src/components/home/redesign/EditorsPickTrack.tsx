@@ -1,0 +1,96 @@
+'use client';
+
+import { useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import Img from './Img';
+import { Diagonal } from './icons';
+import { products as fallbackProducts, type ProductItem } from './homeContent';
+
+/**
+ * Editor's Pick — desktop (≥1025px) variant: a multi-card sliding track with a
+ * progress bar. The phone/tablet variant is EditorsPickCarousel (basic
+ * single-slide carousel); both are CSS `display`-toggled by breakpoint, so the
+ * right one is already in the SSR HTML (no post-hydration layout shift).
+ */
+export default function EditorsPickTrack({ products }: { products?: ProductItem[] }) {
+  // Live featured products from the DB; static placeholders if none resolved.
+  const items = products?.length ? products : fallbackProducts;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const idxRef = useRef(0);
+
+  const slide = useCallback((dir: number) => {
+    const track = trackRef.current;
+    if (!track || !track.children.length) return;
+    const total = track.children.length;
+    const cardW = (track.children[0] as HTMLElement).offsetWidth + 20;
+    const wrapW = (track.parentElement as HTMLElement).offsetWidth;
+    const visible = Math.max(1, Math.floor((wrapW + 20) / cardW));
+    const maxIdx = Math.max(0, total - visible);
+
+    idxRef.current = Math.max(0, Math.min(maxIdx, idxRef.current + dir));
+    track.style.transform = `translateX(-${idxRef.current * cardW}px)`;
+
+    const bar = barRef.current;
+    if (bar) {
+      const barW = Math.min(100, (visible / total) * 100);
+      const leftPct = maxIdx === 0 ? 0 : (idxRef.current / maxIdx) * (100 - barW);
+      bar.style.width = barW + '%';
+      bar.style.left = leftPct + '%';
+    }
+  }, []);
+
+  useEffect(() => {
+    slide(0);
+    const onResize = () => {
+      idxRef.current = 0;
+      slide(0);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [slide]);
+
+  return (
+    <section className="products products-track">
+      <div className="section-header">
+        <h2 className="reveal">Editor&apos;s Pick</h2>
+        <div className="prod-nav">
+          <button type="button" aria-label="Previous" onClick={() => slide(-1)}>
+            &#8592;
+          </button>
+          <button type="button" aria-label="Next" onClick={() => slide(1)}>
+            &#8594;
+          </button>
+        </div>
+      </div>
+
+      <div className="ce-track-wrap">
+        <div className="prod-track reveal reveal-d1" ref={trackRef}>
+          {items.map((p) => (
+            <Link href={p.href} className="ce-card" key={p.name}>
+              <Img src={p.image} alt={p.name} className="ce-bg" />
+              <div className="ce-overlay" />
+              <div className="ce-circle" />
+              <div className="ce-content">
+                <div className="ce-top">
+                  <span className="ce-cat">{p.category}</span>
+                  <div className="ce-iconbtn">
+                    <Diagonal />
+                  </div>
+                </div>
+                <div className="ce-bottom">
+                  <div className="ce-brand">{p.brand}</div>
+                  <div className="ce-name">{p.name}</div>
+                  <div className="ce-price">{p.price}</div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+        <div className="prod-progress">
+          <div className="prod-progress-bar" ref={barRef} />
+        </div>
+      </div>
+    </section>
+  );
+}
