@@ -30,6 +30,19 @@ import {
 // Keep in sync with CACHE_KEY in context/AuthContext.tsx.
 const AUTH_HINT_KEY = 'auth_check';
 
+/** Broadcast a soft "session expired" signal. AuthContext listens and clears
+ * the user + surfaces an inline prompt, so an unrecoverable session does NOT
+ * yank the user off the current page with a full-page redirect to /login. */
+export const SESSION_EXPIRED_EVENT = 'auth:session-expired';
+function emitSessionExpired(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+  } catch {
+    /* CustomEvent unavailable — non-fatal */
+  }
+}
+
 /** True when the client believes it has (or had) an authenticated session. SSR-safe. */
 function hasSessionHint(): boolean {
   if (tokenManager.refreshToken != null) return true; // legacy bearer flow
@@ -196,9 +209,10 @@ class APIClient {
             if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_HINT_KEY);
           } catch { /* storage unavailable — non-fatal */ }
           console.error('Token refresh failed:', refreshError);
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login?reason=refresh_failed';
-          }
+          // Soft-expire: keep the user on the current page and let AuthContext
+          // surface an inline "session expired" prompt instead of a hard
+          // redirect to /login. The request still rejects so callers can react.
+          emitSessionExpired();
           throw refreshError;
         }
       },

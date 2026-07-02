@@ -33,6 +33,7 @@ import {
   resendMagicLink
 } from "../controllers/magicLinkController.js";
 import emailHandler from "../services/emailHandler.js";
+import sessionStore from "../services/sessionStore.js";
 import { 
   generateTokenPair as generateSessionTokenPair,
   storeRefreshToken,
@@ -275,56 +276,70 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
 // @access  Public (but rate limited to prevent abuse)
 router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+  // Hash of the presented token — the key under which a just-rotated successor
+  // may have been cached (see rotateRefreshToken / sessionStore grace window).
+  const presentedHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+  // Apply a token pair to httpOnly cookies + respond. Shared by the normal
+  // rotation path and the grace-replay path so both emit identical responses.
+  const respondWithTokens = (tokens) => {
+    setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
+    // Grace-cached tokens come back through JSON, so refreshTokenExpiry is a
+    // string — normalize to a Date for the cookie's `expires`.
+    setRefreshTokenCookie(res, tokens.refreshToken, new Date(tokens.refreshTokenExpiry));
+    return res.json({
+      success: true,
+      message: 'Token refreshed successfully'
+      // NOTE: Tokens are set as httpOnly cookies, not in the response body.
+    });
+  };
 
   try {
-    // Decode refresh token to get user ID (without verification for now)
-    // We'll validate it against stored tokens
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.headers['user-agent'];
-    
+
     // Find user by refresh token (optimized lookup)
     const user = await findUserByRefreshToken(User, refreshToken);
-    
-    if (!user) {
+
+    // Token not in the active set, or expired. This is the COMMON concurrency
+    // case: a lagging request arrives after another request already rotated
+    // this token away. If the successor is still within the grace window, replay
+    // it so the client stays logged in instead of bouncing to /login.
+    if (!user || !(await validateRefreshToken(user, refreshToken))) {
+      const grace = await sessionStore.getRotationGrace(presentedHash);
+      if (grace) {
+        return respondWithTokens(grace);
+      }
       return res.status(401).json({
         success: false,
         message: 'Invalid or expired refresh token'
       });
     }
 
-    // Verify token is still valid (not expired)
-    if (!validateRefreshToken(user, refreshToken)) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid or expired refresh token'
-      });
-    }
-
-    // Rotate refresh token (revoke old, generate new)
+    // Rotate refresh token (revoke old, generate new; caches the successor for
+    // the grace window internally).
     const tokens = await rotateRefreshToken(user, refreshToken, ipAddress, userAgent);
-    
+
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[Auth] Token refreshed for user: ${user.email}`);
     }
-    
-    // Set BOTH tokens as httpOnly cookies (SECURE - XSS protected)
-    setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
-    setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
-    
-    res.json({
-      success: true,
-      message: 'Token refreshed successfully'
-      // NOTE: Tokens are now set as httpOnly cookies, not in response body
-    });
+
+    return respondWithTokens(tokens);
   } catch (error) {
-    // SECURITY: Handle refresh token reuse detection
+    // SECURITY: Handle refresh token reuse detection. Even here, a concurrent
+    // legitimate request may have produced a grace successor — replay it rather
+    // than force a re-login on a benign race.
     if (error.message === 'REFRESH_TOKEN_REUSE_DETECTED') {
+      const grace = await sessionStore.getRotationGrace(presentedHash);
+      if (grace) {
+        return respondWithTokens(grace);
+      }
       return res.status(401).json({
         success: false,
         message: 'Session revoked due to suspicious activity. Please login again.'
       });
     }
-    
+
     if (process.env.NODE_ENV !== 'test') {
       console.error('[Auth] Token refresh error:', error);
     }

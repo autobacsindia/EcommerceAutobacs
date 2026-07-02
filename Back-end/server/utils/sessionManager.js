@@ -10,6 +10,12 @@ import { signToken } from './jwtSecretManager.js';
 import User from '../models/User.js';
 import { buildCookieOptions } from './cookieOptions.js';
 
+// Grace window (seconds) during which a just-rotated refresh token can be
+// replayed by a concurrent/lagging request and still resolve to its successor,
+// instead of triggering reuse detection. Kept short (theft replays outside this
+// window are still caught). Tunable via env for prod.
+const ROTATION_GRACE_SECONDS = Number(process.env.REFRESH_ROTATION_GRACE_SECONDS) || 30;
+
 /**
  * Generate a secure refresh token
  * @returns {string} - Secure random refresh token
@@ -236,28 +242,38 @@ export const rotateRefreshToken = async (user, oldRefreshToken, ipAddress = null
   // SECURITY CHECK: Verify the old token exists before revoking
   // If it doesn't exist, it was already revoked → TOKEN REUSE ATTACK!
   const tokenExists = user.refreshTokens.some(rt => rt.token === hashedToken);
-  
+
   if (!tokenExists) {
-    // TOKEN REUSE DETECTED!
-    // Someone is trying to use an already-revoked refresh token
+    // The token is not in the active set. Before assuming theft, check whether
+    // it was simply rotated moments ago by a concurrent request (browser fires
+    // the Edge-middleware refresh and in-flight API 401s with the same cookie).
+    // If a successor is still within the grace window, this is a benign race:
+    // hand back the same successor rather than nuking the user's sessions.
+    const grace = await sessionStore.getRotationGrace(hashedToken);
+    if (grace) {
+      return grace;
+    }
+
+    // TOKEN REUSE DETECTED (outside the grace window)!
+    // Someone is trying to use a long-since-revoked refresh token.
     console.error(
       `[SECURITY] Refresh token reuse detected! | User: ${user.email} | IP: ${ipAddress} | ` +
       `UA: ${userAgent}`
     );
-    
+
     // NUCLEAR OPTION: Revoke ALL sessions for this user
     await revokeAllRefreshTokens(user);
-    
+
     // Throw error to be caught by auth route handler
     throw new Error('REFRESH_TOKEN_REUSE_DETECTED');
   }
-  
+
   // Normal rotation: revoke old token, generate new one
   await revokeRefreshToken(user, oldRefreshToken);
-  
+
   // Generate new token pair
   const tokens = generateTokenPair(user, ipAddress, userAgent);
-  
+
   // Store new refresh token
   await storeRefreshToken(
     user,
@@ -266,7 +282,12 @@ export const rotateRefreshToken = async (user, oldRefreshToken, ipAddress = null
     ipAddress,
     userAgent
   );
-  
+
+  // Cache the successor under the OLD token's hash so concurrent/lagging
+  // refresh requests carrying the old token coalesce onto this same result
+  // (idempotent rotation) instead of racing into a 401 / reuse wipe.
+  await sessionStore.storeRotationGrace(hashedToken, tokens, ROTATION_GRACE_SECONDS);
+
   return tokens;
 };
 

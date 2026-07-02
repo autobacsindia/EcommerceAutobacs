@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
+import { SESSION_EXPIRED_EVENT } from '@/lib/api-client';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 
@@ -22,12 +23,17 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  /** True when a session could not be refreshed and expired mid-use. Drives an
+   *  inline "please sign in again" prompt instead of a forced redirect. */
+  sessionExpired: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
   hydrateFromExchange: (rawUser: any) => void;
   clearError: () => void;
+  /** Dismiss the session-expired prompt (e.g. user chose to keep browsing as guest). */
+  dismissSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -102,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // Tracks the AbortController for the current synchronous auth fetch so it can
   // be cancelled on unmount or superseded by the isCheckingAuthRef guard.
@@ -121,6 +128,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       checkAbortRef.current?.abort();
       revalidateAbortRef.current?.abort();
     };
+  }, []);
+
+  // A session that could not be silently refreshed (30-day refresh token
+  // expired or revoked) emits `auth:session-expired` from the api-client rather
+  // than hard-redirecting. Clear local auth state and raise the inline prompt so
+  // the user keeps their place instead of being bounced to /login.
+  useEffect(() => {
+    const onExpired = () => {
+      apiClient.clearAuthToken();
+      setUser(null);
+      setToken(null);
+      clearCache();
+      resetAnalytics();
+      setSessionExpired(true);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
 
   // Fetch fresh auth state from backend, update React state and cache.
@@ -254,6 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userData = normalizeUser(response.user);
         setToken(null);
         setUser(userData);
+        setSessionExpired(false);
         writeCache(userData, userData.sessionVersion);
         identifyUser({ id: userData._id, email: userData.email, name: userData.name });
         trackLogin('email');
@@ -329,6 +354,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => { setError(null); }, []);
 
+  const dismissSessionExpired = useCallback(() => { setSessionExpired(false); }, []);
+
   // Hydrates auth state directly from data returned by the exchange-code endpoint,
   // avoiding an extra GET /me round-trip after social login.
   const hydrateFromExchange = useCallback((rawUser: any) => {
@@ -336,6 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     setToken(null);
     setIsLoading(false);
+    setSessionExpired(false);
     writeCache(userData, userData.sessionVersion);
     // Social (Google) auth completed — tie events to the user and record the login.
     identifyUser({ id: userData._id, email: userData.email, name: userData.name });
@@ -348,12 +376,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     isLoading,
     error,
+    sessionExpired,
     login,
     register,
     logout,
     checkAuth,
     hydrateFromExchange,
     clearError,
+    dismissSessionExpired,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

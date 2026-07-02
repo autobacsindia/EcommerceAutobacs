@@ -16,6 +16,7 @@ import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import { getNavCategories } from "@/lib/navCategories";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
+import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import { SITE_URL } from "@/lib/siteUrl";
 
 const barlowCondensed = Barlow_Condensed({
@@ -201,6 +202,7 @@ export default async function RootLayout({
                       <ConditionalHeader navCategories={navCategories} />
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
+                      <SessionExpiredPrompt />
                       <Toaster position="top-right" />
                       <Script
                         id="razorpay-checkout"

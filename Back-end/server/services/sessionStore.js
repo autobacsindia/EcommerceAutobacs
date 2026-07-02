@@ -444,6 +444,51 @@ class SessionStore {
   }
 
   /**
+   * Refresh-token rotation grace window.
+   *
+   * When a refresh token A is rotated to B, we cache B (the successor token
+   * pair) under A's hash for a short window. This makes /auth/refresh
+   * IDEMPOTENT under concurrency: a lagging or concurrent request that still
+   * carries the just-rotated token A gets the same successor B back, instead of
+   * a 401 or the "reuse detected" session wipe. Replays AFTER the window elapses
+   * are still treated as genuine token theft.
+   *
+   * Keyed purely by the token hash (globally unique 64-byte random), so it can
+   * be looked up even after A has been removed from the user's active token set.
+   *
+   * @param {string} oldTokenHash - sha256 hash of the rotated (old) refresh token
+   * @param {Object} successor - { accessToken, refreshToken, accessTokenExpiry, refreshTokenExpiry }
+   * @param {number} ttl - grace window in seconds
+   */
+  async storeRotationGrace(oldTokenHash, successor, ttl) {
+    if (!this.redis || ttl <= 0) return; // best-effort; dev-without-Redis falls back to prior behavior
+    try {
+      const key = `rotation:grace:${oldTokenHash}`;
+      await this.redis.setex(key, ttl, JSON.stringify(successor));
+    } catch (err) {
+      // Non-fatal: without the grace entry a racing request may 401, but the
+      // primary rotation already succeeded — never block the happy path on this.
+      console.warn('[SessionStore] Failed to store rotation grace:', err.message);
+    }
+  }
+
+  /**
+   * Look up the successor token pair for a just-rotated refresh token.
+   * @param {string} oldTokenHash - sha256 hash of the presented (old) refresh token
+   * @returns {Promise<Object|null>} - cached successor pair, or null if outside the window
+   */
+  async getRotationGrace(oldTokenHash) {
+    if (!this.redis) return null;
+    try {
+      const raw = await this.redis.get(`rotation:grace:${oldTokenHash}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      console.warn('[SessionStore] Failed to read rotation grace:', err.message);
+      return null;
+    }
+  }
+
+  /**
    * Get active session count for a user
    * @param {string} userId - User ID
    * @returns {Promise<number>} - Number of active sessions
