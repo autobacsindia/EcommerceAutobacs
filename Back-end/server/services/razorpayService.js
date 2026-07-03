@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import orderStatusService from './orderStatusService.js';
+import { getNotificationsQueue } from '../queue/queues.js';
 import * as Sentry from '@sentry/node';
 
 class RazorpayService {
@@ -203,6 +204,17 @@ class RazorpayService {
 
         paymentId = paymentRecord._id;
       });
+
+      // ── Order confirmation + invoice email (best-effort, post-commit) ─────────
+      // Enqueued only after the transaction commits so a rolled-back payment never
+      // emails an invoice. A Redis/queue failure must not fail the payment itself.
+      if (process.env.REDIS_URL) {
+        getNotificationsQueue()
+          .add('send-order-invoice', { orderId })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue send-order-invoice for ${orderId}:`, err.message)
+          );
+      }
 
       return {
         success: true,

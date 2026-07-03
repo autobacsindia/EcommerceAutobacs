@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import apiClient from '@/lib/api';
-import { ArrowLeft, Package, MapPin, CreditCard, Truck } from 'lucide-react';
+import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-react';
 
 interface OrderItem {
   product: {
@@ -199,6 +199,17 @@ export default function AdminOrderDetailPage() {
         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
           {getStatusLabel(order.status)}
         </span>
+        {['confirmed', 'processing', 'shipped', 'delivered', 'refunded'].includes(order.status?.toLowerCase()) && (
+          <a
+            href={`/api/v1/orders/${orderId}/invoice`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" />
+            Download Invoice
+          </a>
+        )}
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

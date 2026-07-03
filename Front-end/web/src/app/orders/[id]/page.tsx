@@ -283,10 +283,12 @@ export default function OrderDetailPage() {
               <HelpCircle className="h-4 w-4" />
               Need Help?
             </Link>
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
-              <Download className="h-4 w-4" />
-              Download Invoice
-            </button>
+            {['confirmed', 'processing', 'shipped', 'delivered', 'refunded'].includes(order.status?.toLowerCase()) && (
+              <a href={`/api/v1/orders/${order._id}/invoice`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+                <Download className="h-4 w-4" />
+                Download Invoice
+              </a>
+            )}
           </div>
         </div>
 

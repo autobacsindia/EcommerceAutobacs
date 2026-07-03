@@ -107,6 +107,7 @@
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
+    "pdfkit": "^0.19.1",
     "postmark": "^4.0.7",
     "razorpay": "^2.9.6",
     "sanitize-html": "^2.17.2",

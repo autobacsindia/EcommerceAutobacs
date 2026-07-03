@@ -4,6 +4,10 @@ Operational steps to take the code changes (already merged) to production. Order
 **safe and reversible** — each step is a no-op until its env vars are set, and Railway
 Redis stays as rollback until Step 3 is verified.
 
+> For the ordered go-live "what to actually do" checklist (email/Postmark setup, the
+> keep-default-URLs-now → single-flip-at-cutover model, and the env change table), see
+> [RUNBOOK-cutover-checklist.md](RUNBOOK-cutover-checklist.md). This doc is the infra detail.
+
 **Region rule (applies to every stateful service): pick ONE region and use it everywhere
 — Mumbai `ap-south-1` preferred, Singapore `ap-southeast-1` fallback.** A cross-region
 cache hop defeats the purpose (every `cacheService.get` is a round-trip).

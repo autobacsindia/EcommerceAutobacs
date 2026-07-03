@@ -56,6 +56,9 @@ const UserSchema = new mongoose.Schema({
   verificationToken: String,
   verificationTokenExpire: Date,
   verifiedAt: Date,
+  // One-time guard: set when the welcome email is sent (on first verification).
+  // No default, so `{ $exists: false }` cleanly claims the send exactly once.
+  welcomeEmailSentAt: Date,
   
   // Password reset fields
   resetPasswordToken: String,

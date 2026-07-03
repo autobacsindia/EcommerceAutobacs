@@ -3,6 +3,7 @@ import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
+import { generateInvoicePdf, invoiceNumber } from '../services/invoiceService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -99,6 +100,45 @@ export const getOrderById = async (req, res) => {
   };
 
   res.json({ success: true, order: normalizedOrder });
+};
+
+// @desc    Download the invoice PDF for an order (streamed, auth-gated)
+// @route   GET /orders/:id/invoice
+// @access  Private (order owner or admin) — regenerated on demand from the order,
+//          so no customer PII is ever exposed via a public URL.
+export const downloadInvoice = async (req, res) => {
+  const order = await orderRepository.findById(req.params.id, [{ path: 'user', select: 'name email' }]);
+
+  if (!order) {
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+
+  // Same authorization as getOrderById: owner or admin only.
+  const orderUserId = order.user?._id?.toString();
+  const isOwner = orderUserId && orderUserId === req.user.id;
+  const isAdmin = req.user.role === 'admin';
+
+  if (!isOwner && !isAdmin) {
+    return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
+  }
+
+  // Invoices only exist once payment is confirmed; a pending order has no receipt yet.
+  const INVOICEABLE = ['confirmed', 'processing', 'shipped', 'delivered', 'refunded'];
+  if (!INVOICEABLE.includes(order.status)) {
+    return res.status(409).json({
+      success: false,
+      message: 'Invoice is available only after payment is confirmed'
+    });
+  }
+
+  const user = order.user && typeof order.user === 'object' ? order.user : null;
+  const pdf = await generateInvoicePdf(order, user);
+  const filename = `${invoiceNumber(order)}.pdf`;
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', pdf.length);
+  return res.send(pdf);
 };
 
 // @desc    Create new order from cart

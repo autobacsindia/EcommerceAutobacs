@@ -502,3 +502,185 @@ Autobacs Security Team
 
   return { subject, text, html };
 };
+
+/**
+ * Order Confirmation / Receipt Email Template
+ * The full invoice travels as a PDF attachment; this email is the human-readable
+ * summary. All amounts on the order are already in rupees (pricingService).
+ * @param {Object} params
+ * @param {Object} params.order - Order document
+ * @param {Object} [params.user] - User document (name)
+ * @param {Object} [params.company] - Company info (name, email)
+ * @returns {Object} - { subject, text, html }
+ */
+export const orderConfirmationEmail = ({ order, user = null, company = {} }) => {
+  const inr = (n) =>
+    `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const invNo = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
+  const name = order.shippingAddress?.fullName || user?.name || 'there';
+  const companyName = company.name || 'Autobacs India';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+  const items = order.items || [];
+
+  const subject = `Order confirmed — ${invNo}`;
+
+  const itemsText = items
+    .map((it) => `  • ${it.name || 'Item'} × ${it.quantity} — ${inr((it.price || 0) * (it.quantity || 0))}`)
+    .join('\n');
+
+  const text = `
+Hi ${name},
+
+Thank you for your order with ${companyName}. Your payment has been received and your order is confirmed.
+
+Invoice No: ${invNo}
+
+Items:
+${itemsText}
+
+Subtotal: ${inr(order.subtotal)}
+${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}Shipping: ${inr(order.shippingCost)}
+Total Paid: ${inr(order.totalAmount)}
+
+Your tax invoice is attached to this email as a PDF.
+
+Questions? Contact us at ${supportEmail}.
+
+Best regards,
+${companyName}
+  `.trim();
+
+  const itemRows = items
+    .map(
+      (it) => `
+      <tr>
+        <td style="padding:8px 0;border-bottom:1px solid #eee;">${it.name || 'Item'}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #eee;text-align:center;">${it.quantity}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${inr((it.price || 0) * (it.quantity || 0))}</td>
+      </tr>`
+    )
+    .join('');
+
+  const totalsRow = (label, value, bold = false) => `
+      <tr>
+        <td colspan="2" style="padding:4px 0;text-align:right;${bold ? 'font-weight:bold;' : 'color:#555;'}">${label}</td>
+        <td style="padding:4px 0;text-align:right;${bold ? 'font-weight:bold;' : 'color:#555;'}">${value}</td>
+      </tr>`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Confirmed</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111;padding:24px 30px;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">Order Confirmed ✅</h1>
+    </div>
+    <div style="padding:30px;">
+      <p>Hi ${name},</p>
+      <p>Thank you for your order with <strong>${companyName}</strong>. Your payment has been received and your order is confirmed.</p>
+      <p style="color:#555;">Invoice No: <strong>${invNo}</strong></p>
+
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:8px 0;border-bottom:2px solid #111;">Item</th>
+            <th style="text-align:center;padding:8px 0;border-bottom:2px solid #111;">Qty</th>
+            <th style="text-align:right;padding:8px 0;border-bottom:2px solid #111;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+        <tfoot>
+          ${totalsRow('Subtotal', inr(order.subtotal))}
+          ${order.couponDiscount ? totalsRow(`Coupon${order.couponCode ? ` (${order.couponCode})` : ''}`, `- ${inr(order.couponDiscount)}`) : ''}
+          ${order.karmaDiscount ? totalsRow('Karma points', `- ${inr(order.karmaDiscount)}`) : ''}
+          ${totalsRow('Shipping', inr(order.shippingCost))}
+          ${order.tax ? totalsRow('Tax (incl.)', inr(order.tax)) : ''}
+          ${totalsRow('Total Paid', inr(order.totalAmount), true)}
+        </tfoot>
+      </table>
+
+      <p style="margin-top:24px;background:#f0f9ff;border:1px solid #bae6fd;padding:12px;border-radius:6px;font-size:14px;">
+        📎 Your tax invoice is attached to this email as a PDF.
+      </p>
+      <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  return { subject, text, html };
+};
+
+/**
+ * Welcome Email Template (sent on registration).
+ * @param {Object} params
+ * @param {string} [params.name] - User's name
+ * @returns {Object} - { subject, text, html }
+ */
+export const welcomeEmail = ({ name } = {}) => {
+  const firstName = (name || '').trim().split(' ')[0] || 'there';
+  const subject = 'Welcome to Autobacs India 🎉';
+
+  const text = `
+Hi ${firstName},
+
+Welcome to Autobacs India — we're glad to have you!
+
+Your account is ready. You can now:
+  • Shop genuine car care, accessories and parts
+  • Track your orders in real time
+  • Save your garage and get fitment-matched products
+
+Browse the store: https://autobacsindia.com
+
+If you have any questions, just reply to this email — we're happy to help.
+
+See you on the road,
+The Autobacs India Team
+  `.trim();
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Autobacs India</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111;padding:28px 30px;">
+      <h1 style="color:#fff;margin:0;font-size:24px;">Welcome to Autobacs India 🎉</h1>
+    </div>
+    <div style="padding:30px;">
+      <p>Hi ${firstName},</p>
+      <p>We're glad to have you! Your account is ready to go.</p>
+      <ul style="padding-left:20px;">
+        <li>🛒 Shop genuine car care, accessories and parts</li>
+        <li>📦 Track your orders in real time</li>
+        <li>🚗 Save your garage and get fitment-matched products</li>
+      </ul>
+      <div style="text-align:center;margin:28px 0;">
+        <a href="https://autobacsindia.com" style="display:inline-block;background:#111;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Start Shopping</a>
+      </div>
+      <p style="font-size:13px;color:#999;">Questions? Just reply to this email — we're happy to help.</p>
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} Autobacs India. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  return { subject, text, html };
+};

@@ -64,11 +64,13 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `NODE_ENV` | `development` | `production` | gates validateEnv, cookie flags, logging |
 | `ELASTICSEARCH_NODE` / `_USERNAME` / `_PASSWORD` | dev index (or disabled) | prod ES | dev reindex must not touch prod index |
 | `CLOUDINARY_*` | dev cloud / `dev/` folder | prod | don't pollute prod media |
-| `POSTMARK_SERVER_TOKEN` / `POSTMARK_MESSAGE_STREAM` | sandbox/stream (or disabled) | prod | dev sends must not hit sender reputation |
+| `POSTMARK_SERVER_TOKEN` / `POSTMARK_FROM_EMAIL` / `POSTMARK_MESSAGE_STREAM` | token + `noreply@autobacsindia.com` (or disabled) | prod token/sender | dev sends must not hit sender reputation |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | unset / `development` | prod DSN / `production` | keep dev noise out of prod |
 | `SLACK_WEBHOOK_URL` | **unset locally** | prod webhook | dev 5xx must not page the team |
 | `COOKIE_DOMAIN` / `COOKIE_SAMESITE` | unset / `lax` | `.autobacsindia.com` / set at cutover | cross-subdomain cookies only in prod |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | dev seed creds | prod seed creds (set, run `seed:admin`, remove) | separate admin per DB |
+| `COMPANY_*` (`NAME`/`GSTIN`/`ADDRESS`/`CITY`/`STATE`/`PINCODE`/`PHONE`/`EMAIL`/`LOGO_URL`) | dev placeholders | real legal entity details | printed on the invoice PDF (see `config/company.js`) |
+| `INVOICE_STORE_CLOUDINARY` | `false` | `false`/`true` | optional: archive invoice PDFs to Cloudinary (email always attaches regardless) |
 
 **Frontend** (`.env.local` locally → Vercel in prod):
 
@@ -79,6 +81,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | `rzp_test_*` | matches backend tier | must match backend key |
 | `JWT_SECRET` (server-side, NOT public) | = backend dev `JWT_SECRET` | = backend prod `JWT_SECRET` | edge middleware verifies backend JWTs |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_LOGROCKET_APP_ID` | dev project or unset | prod project | keep dev events out of prod analytics |
+| `NEXT_PUBLIC_ALLOW_WP_IMAGES` | `true` | `true` pre-cutover → `false` after Cloudinary migration | env-gates legacy `autobacsindia.com/wp-content` image allowlist in `next.config.ts` |
 
 ### Bucket B — safe to SHARE (same value both tiers)
 

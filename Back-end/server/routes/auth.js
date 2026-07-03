@@ -53,6 +53,30 @@ const router = express.Router();
 
 const oauthRedis = getRedisClient();
 
+// Send the welcome email exactly once, when an account first becomes verified.
+// The `welcomeEmailSentAt` flag is claimed atomically so concurrent requests (or a
+// double-clicked verify link) never send two. Best-effort and fire-and-forget:
+// never blocks or fails the caller. A failed send does not retry (welcome is
+// non-critical; the user still got their verification/login flow).
+const sendWelcomeOnce = async (user) => {
+  try {
+    const claim = await User.updateOne(
+      { _id: user._id, welcomeEmailSentAt: { $exists: false } },
+      { $set: { welcomeEmailSentAt: new Date() } }
+    );
+    if (claim.modifiedCount !== 1) return; // already sent or claimed elsewhere
+
+    const result = await emailHandler.sendWelcomeEmail(user.email, { name: user.name });
+    if (process.env.NODE_ENV !== 'test' && !result?.success) {
+      console.error(`[Auth] Welcome email NOT sent to ${user.email}: ${result?.error || 'email service unavailable'}`);
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[Auth] Failed to send welcome email:', error);
+    }
+  }
+};
+
 // @route   POST /auth/register
 // @desc    Register a new user
 // @access  Public
@@ -140,7 +164,11 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
     // Continue with registration even if email fails
   }
 
-  res.status(201).json({ 
+  // NOTE: the welcome email is intentionally NOT sent here. It goes out only once the
+  // user verifies their email (see the /verify-email handler and sendWelcomeOnce), so
+  // we never welcome an unconfirmed/typo'd address.
+
+  res.status(201).json({
     success: true,
     message: "User registered successfully. Please check your email to verify your account",
     // NOTE: Tokens are now set as httpOnly cookies, not in response body
@@ -658,6 +686,9 @@ router.get("/verify-email", verifyEmailRateLimit, validateTokenQuery, asyncHandl
 
   console.log(`[Auth] Email verified for user: ${user.email}`);
 
+  // Now that the address is confirmed, send the one-time welcome email (non-blocking).
+  void sendWelcomeOnce(user);
+
   res.json({
     success: true,
     message: 'Email verified successfully',
@@ -795,11 +826,15 @@ const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
       isVerified: !!isVerified
     });
     await user.save();
+    // Social signups are created already-verified by the provider, so welcome them now.
+    if (user.isVerified) void sendWelcomeOnce(user);
   } else {
     let changed = false;
+    let becameVerified = false;
     if (isVerified && !user.isVerified) {
       user.isVerified = true;
       changed = true;
+      becameVerified = true;
     }
     // Migrated WooCommerce account (ADR-005): signing in via a social provider proves
     // email ownership, so lift the forced password-reset gate.
@@ -808,6 +843,8 @@ const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
       changed = true;
     }
     if (changed) await user.save();
+    // Only welcome on the unverified→verified transition, never on normal re-login.
+    if (becameVerified) void sendWelcomeOnce(user);
   }
 
   return user;
@@ -817,6 +854,18 @@ const findOrCreateSocialUser = async ({ name, email, isVerified }) => {
 // (rejects absolute URLs and protocol-relative `//host`) to prevent open-redirect.
 const safeInternalPath = (raw) =>
   typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "";
+
+// Resolve the frontend base URL for OAuth redirects. Production MUST set
+// FRONTEND_URL — there is deliberately no hardcoded host fallback, because a
+// stale host silently redirects users to the wrong site. In dev we fall back to
+// localhost. Returns null when unset in production so callers can fail safe with
+// a 500 instead of redirecting to a wrong host.
+const resolveFrontendUrl = () => {
+  const url = process.env.FRONTEND_URL;
+  if (url) return url;
+  if (process.env.NODE_ENV === "production") return null;
+  return "http://localhost:3000";
+};
 
 const completeSocialLogin = async (req, res, user, provider, redirectPath = "") => {
   const ipAddress = req.headers['cf-connecting-ip'] || req.ip || req.connection?.remoteAddress;
@@ -943,7 +992,11 @@ router.get(
 
     if (!code) {
       // Redirect back to login page with error message instead of JSON response
-      const frontendUrl = process.env.FRONTEND_URL || 'https://ecommerceautobacs-production-8c1b.up.railway.app';
+      const frontendUrl = resolveFrontendUrl();
+      if (!frontendUrl) {
+        console.error("[Auth] FRONTEND_URL not configured — cannot redirect after Google cancel");
+        return res.status(500).json({ success: false, message: "Server configuration error" });
+      }
       return res.redirect(`${frontendUrl}/login?error=google_cancelled&message=Google%20Sign-In%20was%20cancelled`);
     }
 
@@ -1061,7 +1114,11 @@ router.get(
   "/facebook/callback",
   asyncHandler(async (req, res) => {
     const code = req.query.code;
-    const frontendUrl = process.env.FRONTEND_URL || 'https://ecommerceautobacs-production-8c1b.up.railway.app';
+    const frontendUrl = resolveFrontendUrl();
+    if (!frontendUrl) {
+      console.error("[Auth] FRONTEND_URL not configured — cannot handle Facebook callback redirect");
+      return res.status(500).json({ success: false, message: "Server configuration error" });
+    }
 
     if (!code) {
       return res.redirect(`${frontendUrl}/login?error=facebook_cancelled&message=Facebook%20Sign-In%20was%20cancelled`);

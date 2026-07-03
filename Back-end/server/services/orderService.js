@@ -8,7 +8,7 @@ import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import pricingService from './pricingService.js';
 import AppError from '../utils/AppError.js';
-import { getNotificationsQueue, getOrderQueue } from '../queue/queues.js';
+import { getOrderQueue } from '../queue/queues.js';
 
 class OrderService {
   /**
@@ -139,16 +139,12 @@ class OrderService {
     }
 
     // ── Post-order background work (best-effort, transaction already committed) ──
+    // The order confirmation + invoice email is NOT sent here — the order is still
+    // `pending` until payment. It is enqueued on payment success (see
+    // razorpayService.processPaymentSuccess → 'send-order-invoice').
     if (process.env.REDIS_URL) {
       const enqueueErr = (name, err) =>
         console.error(`[Queue] Failed to enqueue ${name}:`, err.message);
-
-      getNotificationsQueue()
-        .add('send-confirmation-email', {
-          orderId: order._id.toString(),
-          userId:  userId.toString()
-        })
-        .catch(err => enqueueErr('send-confirmation-email', err));
 
       getOrderQueue()
         .add('post-order-created', {

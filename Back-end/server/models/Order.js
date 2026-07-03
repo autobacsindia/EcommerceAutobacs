@@ -130,6 +130,12 @@ const OrderSchema = new mongoose.Schema({
     notes: String,
     metadata: mongoose.Schema.Types.Mixed
   }],
+  // Invoice/receipt (generated on payment success — see services/invoiceService.js).
+  // invoiceUrl/invoicePublicId are set only when Cloudinary storage is enabled;
+  // invoiceEmailedAt is the idempotency guard so the invoice email fires once.
+  invoiceUrl: String,
+  invoicePublicId: String,
+  invoiceEmailedAt: Date,
   trackingNumber: String,
   carrier: {
     name: String,

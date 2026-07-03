@@ -28,14 +28,21 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     // Explicit allowlist — prevents open proxy abuse via /_next/image?url=...
-    // TODO: Migrate hardcoded WordPress logos to Cloudinary, then remove autobacsindia.com
+    // The legacy WordPress patterns are env-gated: they only load while the apex
+    // still serves WP assets. After the Cloudinary migration, set
+    // NEXT_PUBLIC_ALLOW_WP_IMAGES=false (or unset) — no code edit needed at cutover,
+    // because these URLs 404 once autobacsindia.com leaves WordPress.
     remotePatterns: [
       // Cloudinary — scoped to your cloud name only (prevents proxying other tenants)
-      { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/dhwxtl6l8/**' },
-      // Legacy WordPress assets — remove after logo migration complete
-      { protocol: 'https', hostname: 'autobacsindia.com', pathname: '/wp-content/uploads/**' },
-      // Cloudflare Images / Polish CDN cache (same domain, different path)
-      { protocol: 'https', hostname: 'autobacsindia.com', pathname: '/cdn-cgi/image/**' },
+      { protocol: 'https' as const, hostname: 'res.cloudinary.com', pathname: '/dhwxtl6l8/**' },
+      ...(process.env.NEXT_PUBLIC_ALLOW_WP_IMAGES === 'true'
+        ? [
+            // Legacy WordPress assets — dropped after logo migration complete
+            { protocol: 'https' as const, hostname: 'autobacsindia.com', pathname: '/wp-content/uploads/**' },
+            // Cloudflare Images / Polish CDN cache (same domain, different path)
+            { protocol: 'https' as const, hostname: 'autobacsindia.com', pathname: '/cdn-cgi/image/**' },
+          ]
+        : []),
     ],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],

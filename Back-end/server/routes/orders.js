@@ -25,6 +25,7 @@ import {
   getOrders,
   getRefunds,
   getOrderById,
+  downloadInvoice,
   createOrder,
   createGuestOrder,
   cancelOrder,
@@ -70,6 +71,11 @@ router.get("/refunds", protect, admin, validateRefundsQuery, asyncHandler(getRef
 // @desc    Get order by ID
 // @access  Private
 router.get("/:id", protect, validateIdParam, asyncHandler(getOrderById));
+
+// @route   GET /orders/:id/invoice
+// @desc    Download the invoice PDF (owner or admin)
+// @access  Private
+router.get("/:id/invoice", protect, validateIdParam, asyncHandler(downloadInvoice));
 
 // @route   POST /orders
 // @desc    Create new order from cart
