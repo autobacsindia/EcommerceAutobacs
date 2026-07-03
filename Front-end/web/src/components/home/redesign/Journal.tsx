@@ -6,93 +6,114 @@ import Img from './Img';
 import { ArrowRightLong } from './icons';
 import { journal, journalPosts as fallbackJournalPosts, type JournalItem } from './homeContent';
 
-const AUTOPLAY_MS = 5000;
+const AUTOPLAY_MS = 3400;
+
+// Card geometry (matches the imported "Scrapbook Carousel" design: 760×500 base).
+const MAX_CARD_W = 620;
+const CARD_RATIO = 500 / 760;
+
+// Per-distance fan geometry, indexed by clamped |offset| (0 = active card).
+// Values are px at the 760px reference width; scaled by `sf` for responsiveness.
+const FAN_TX = [0, 240, 390, 480, 540]; // translateX magnitude
+const FAN_ROT = [0, 52, 68, 78, 84]; // rotateY magnitude (deg)
 
 /**
- * Scrapbook-style journal carousel: a horizontally scroll-snapping row of
- * tilted "pinned photo" cards, each with a 1–2 line title in its bottom caption.
+ * The Garage Journal carousel — a 3D perspective "scrapbook deck": the active
+ * article sits face-on in the centre while neighbours fan back into depth,
+ * rotated on the Y axis. Ported from the Claude Design "Scrapbook Carousel"
+ * and themed to the site (obsidian + gold), driven by live blog posts.
  *
- * Tilt is CSS-only (deterministic `:nth-child` angles) so there's no SSR/client
- * hydration mismatch. Scrolling is native scroll-snap; autoplay just nudges the
- * track to the next card and pauses on hover/focus/reduced-motion.
+ * Interactions: prev/next arrows, ←/→ keys, pointer drag / touch swipe, and
+ * autoplay (paused on hover, focus, drag, and prefers-reduced-motion). Clicking
+ * a side card brings it to centre; clicking the active card opens the article.
+ *
+ * Hydration-safe: initial state is deterministic (activeIndex 0, base card
+ * width); the responsive width is only measured client-side after mount.
  */
 export default function Journal({ posts }: { posts?: JournalItem[] }) {
   // Live blog posts from the DB; static placeholders if none resolved.
   const items = posts?.length ? posts : fallbackJournalPosts;
   const n = items.length;
 
-  const trackRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [cardW, setCardW] = useState(MAX_CARD_W);
+
+  // Pointer drag state. The live delta lives in a ref (read synchronously by the
+  // click handler to distinguish a tap from a swipe); mirrored to state only to
+  // drive the rubber-band transform while dragging.
+  const drag = useRef({ active: false, startX: 0, delta: 0 });
+  const [dragDelta, setDragDelta] = useState(0);
+  const [dragging, setDragging] = useState(false);
 
   const prefersReducedMotion = () =>
     typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // Snap card `i` into view by scrolling the track to its offset.
-  const scrollToCard = useCallback((i: number) => {
-    const track = trackRef.current;
-    const card = track?.children[i] as HTMLElement | undefined;
-    if (!track || !card) return;
-    track.scrollTo({
-      left: card.offsetLeft - track.offsetLeft,
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-    });
-  }, []);
-
-  const go = useCallback(
-    (dir: 1 | -1) => {
-      setActive((a) => {
-        const next = (a + dir + n) % n;
-        scrollToCard(next);
-        return next;
-      });
-    },
-    [n, scrollToCard],
+  const goTo = useCallback(
+    (i: number) => setActive(((i % n) + n) % n),
+    [n],
   );
 
-  // Autoplay — advance one card; paused on hover/focus and reduced motion.
+  // Measure the stage so cards scale down on narrow viewports.
   useEffect(() => {
-    if (n <= 1 || paused || prefersReducedMotion()) return;
-    const id = window.setInterval(() => {
-      setActive((a) => {
-        const next = (a + 1) % n;
-        scrollToCard(next);
-        return next;
-      });
-    }, AUTOPLAY_MS);
-    return () => window.clearInterval(id);
-  }, [n, paused, scrollToCard]);
+    const el = stageRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.offsetWidth || window.innerWidth;
+      setCardW(Math.min(MAX_CARD_W, Math.max(200, w * 0.8)));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  // Keep `active` in sync when the user scrolls/drags the track by hand, so
-  // autoplay resumes from wherever they landed (nearest card to the centre).
-  const onScroll = () => {
-    const track = trackRef.current;
-    if (!track) return;
-    const center = track.scrollLeft + track.clientWidth / 2;
-    let nearest = 0;
-    let best = Infinity;
-    Array.from(track.children).forEach((el, i) => {
-      const c = el as HTMLElement;
-      const cardCenter = c.offsetLeft - track.offsetLeft + c.clientWidth / 2;
-      const d = Math.abs(cardCenter - center);
-      if (d < best) {
-        best = d;
-        nearest = i;
-      }
-    });
-    setActive(nearest);
+  // Autoplay — advance one card; paused on hover/focus/drag and reduced motion.
+  useEffect(() => {
+    if (n <= 1 || paused || dragging || prefersReducedMotion()) return;
+    const id = window.setInterval(() => setActive((a) => (a + 1) % n), AUTOPLAY_MS);
+    return () => window.clearInterval(id);
+  }, [n, paused, dragging]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (n <= 1) return;
+    drag.current = { active: true, startX: e.clientX, delta: 0 };
+    setDragging(true);
+    setDragDelta(0);
+    stageRef.current?.setPointerCapture?.(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current.active) return;
+    drag.current.delta = e.clientX - drag.current.startX;
+    setDragDelta(drag.current.delta);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current.active) return;
+    const d = drag.current.delta;
+    drag.current.active = false;
+    setDragging(false);
+    setDragDelta(0);
+    stageRef.current?.releasePointerCapture?.(e.pointerId);
+    if (d < -55) goTo(active + 1);
+    else if (d > 55) goTo(active - 1);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      go(-1);
+      goTo(active - 1);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      go(1);
+      goTo(active + 1);
     }
   };
+
+  const sf = cardW / 760; // responsive scale factor
+  const cardH = Math.round(cardW * CARD_RATIO);
 
   return (
     <section
@@ -110,51 +131,123 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
         </div>
       </div>
 
-      <div className="sb reveal">
+      <div className="jf reveal">
         <div
-          className="sb-track"
-          ref={trackRef}
+          className="jf-stage"
+          ref={stageRef}
           role="group"
           aria-roledescription="carousel"
           aria-label="The Garage Journal articles"
           tabIndex={0}
           onKeyDown={onKeyDown}
-          onScroll={onScroll}
           onFocus={() => setPaused(true)}
           onBlur={() => setPaused(false)}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         >
-          {items.map((p, i) => (
-            <Link
-              className={`sb-card${i === active ? ' is-active' : ''}`}
-              key={p.title}
-              href={p.href}
-              aria-label={`Read article: ${p.title}`}
-              aria-current={i === active ? 'true' : undefined}
-              draggable={false}
-            >
-              <div className="sb-photo">
-                <Img src={p.image} alt={p.title} draggable={false} />
-                {/* Title-only caption, overlaid at the bottom and revealed on the
-                    focused/active (or hovered) card — clean photos otherwise. */}
-                <div className="sb-cap">
-                  <h3 className="sb-title">{p.title}</h3>
+          {items.map((p, i) => {
+            const offset = i - active;
+            const absOff = Math.abs(offset);
+            const sign = offset >= 0 ? 1 : -1;
+            const isActive = i === active;
+            const clamped = Math.min(absOff, 4);
+
+            const dragShift = dragging
+              ? dragDelta * (isActive ? 0.55 : absOff === 1 ? 0.3 : 0.1)
+              : 0;
+            const tx = sign * FAN_TX[clamped] * sf + dragShift;
+            const rotY = sign * -FAN_ROT[clamped];
+            const opacity = isActive ? 1 : Math.max(0.12, 1 - absOff * 0.28);
+            const zIndex = isActive ? 100 : Math.max(1, 20 - absOff * 3);
+            const transition = dragging
+              ? 'opacity 0.12s ease'
+              : 'transform 0.52s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.52s ease, box-shadow 0.3s ease';
+
+            return (
+              <Link
+                key={p.href}
+                href={p.href}
+                className={`jf-card${isActive ? ' is-active' : ''}`}
+                aria-label={`Read article: ${p.title}`}
+                aria-current={isActive ? 'true' : undefined}
+                aria-hidden={isActive ? undefined : true}
+                tabIndex={isActive ? 0 : -1}
+                draggable={false}
+                style={{
+                  width: cardW,
+                  height: cardH,
+                  transform: `translateX(${tx}px) rotateY(${rotY}deg)`,
+                  opacity,
+                  zIndex,
+                  transition,
+                }}
+                onClick={(e) => {
+                  // A completed drag/swipe should never navigate.
+                  if (Math.abs(drag.current.delta) > 8) {
+                    e.preventDefault();
+                    return;
+                  }
+                  // Side cards recentre instead of opening the article.
+                  if (!isActive) {
+                    e.preventDefault();
+                    goTo(i);
+                  }
+                }}
+              >
+                <div className="jf-photo">
+                  <Img src={p.image} alt={p.title} draggable={false} />
                 </div>
-              </div>
-            </Link>
-          ))}
+                <div className="jf-cap">
+                  <span className="jf-cat">{p.category}</span>
+                  <h3 className="jf-title">{p.title}</h3>
+                </div>
+                {n > 1 ? (
+                  <span className="jf-badge" aria-hidden>
+                    {active + 1} / {n}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
         </div>
 
         {n > 1 ? (
-          <div className="sb-nav">
-            <button type="button" className="sb-btn sb-back" onClick={() => go(-1)}>
-              <ArrowRightLong className="sb-arrow-flip" aria-hidden />
-              <span>Back</span>
+          <>
+            <button
+              type="button"
+              className="jf-arrow jf-prev"
+              onClick={() => goTo(active - 1)}
+              aria-label="Previous article"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path
+                  d="M11.5 3.5L6 9l5.5 5.5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
-            <button type="button" className="sb-btn sb-next" onClick={() => go(1)}>
-              <span>Next</span>
-              <ArrowRightLong aria-hidden />
+            <button
+              type="button"
+              className="jf-arrow jf-next"
+              onClick={() => goTo(active + 1)}
+              aria-label="Next article"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path
+                  d="M6.5 3.5L12 9l-5.5 5.5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
-          </div>
+          </>
         ) : null}
       </div>
 

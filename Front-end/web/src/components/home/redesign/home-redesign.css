@@ -455,81 +455,72 @@
 .hr .journal-cta { display: inline-flex; align-items: center; gap: 12px; border: 1px solid var(--gold); color: var(--gold); background: none; padding: 15px 30px; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; cursor: pointer; transition: all 0.28s; font-family: var(--display-font); flex-shrink: 0; white-space: nowrap; }
 .hr .journal-cta:hover { background: var(--gold); color: var(--bg); }
 
-/* ── Scrapbook carousel (row of tilted "pinned photo" cards) ── */
-.hr .sb { position: relative; max-width: 1340px; margin: 0 auto; }
-/* Horizontal scroll-snap track. Vertical padding leaves room for the cards'
-   tilt + drop shadow so rotated corners aren't clipped by the scroll box. */
-.hr .sb-track {
+/* ── Journal fan carousel (3D perspective "scrapbook deck") ──
+   Active article sits face-on in the centre; neighbours fan back into depth,
+   rotated on the Y axis. Per-card transforms are computed in JS (Journal.tsx);
+   this block is the static chrome, themed with the site tokens. */
+.hr .jf {
+  position: relative;
+  max-width: 1340px;
+  margin: 0 auto;
+  height: clamp(340px, 44vw, 560px);
   display: flex;
-  gap: 30px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  padding: 44px 4px 52px;
-  outline: none;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  touch-action: pan-x;
+  align-items: center;
+  justify-content: center;
 }
-.hr .sb-track::-webkit-scrollbar { display: none; }
-.hr .sb-card {
-  scroll-snap-align: center;
-  flex: 0 0 clamp(258px, 25vw, 330px);
-  display: block;
-  background: var(--bg2);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+/* 3D stage: cards are absolutely positioned and centred; depth via perspective. */
+.hr .jf-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1100px;
+  perspective-origin: 50% 50%;
+  touch-action: pan-y;
+  outline: none;
+}
+.hr .jf-card {
+  position: absolute;
+  border-radius: 14px;
   overflow: hidden;
   text-decoration: none;
   color: inherit;
-  box-shadow: 0 26px 60px -34px rgba(0, 0, 0, 0.85);
-  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.42s;
-  will-change: transform;
+  background: var(--bg2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+  user-select: none;
+  -webkit-user-select: none;
 }
-/* Deterministic scrapbook tilt (repeats every 4 cards; CSS-only → no hydration risk). */
-.hr .sb-card:nth-child(4n + 1) { transform: rotate(-2.4deg); }
-.hr .sb-card:nth-child(4n + 2) { transform: rotate(1.6deg); }
-.hr .sb-card:nth-child(4n + 3) { transform: rotate(2.6deg); }
-.hr .sb-card:nth-child(4n + 4) { transform: rotate(-1.4deg); }
-.hr .sb-card:hover {
-  transform: rotate(0deg) translateY(-8px) scale(1.02);
-  box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.9);
-  z-index: 2;
+.hr .jf-card.is-active {
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.55), 0 8px 24px rgba(0, 0, 0, 0.4);
+  cursor: grab;
 }
-.hr .sb-card:focus-visible {
-  transform: rotate(0deg) translateY(-8px);
-  box-shadow: 0 0 0 2px var(--gold), 0 40px 80px -30px rgba(0, 0, 0, 0.9);
-  z-index: 2;
-  outline: none;
-}
-.hr .sb-photo { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: #12100f; }
-.hr .sb-photo img { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none; }
-/* Title-only caption overlaid at the bottom of the photo. Hidden by default;
-   revealed only on the focused/active card (or hover) so photos stay clean. */
-.hr .sb-cap {
+.hr .jf-card.is-active:active { cursor: grabbing; }
+.hr .jf-card:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--gold), 0 32px 80px rgba(0, 0, 0, 0.55); }
+.hr .jf-photo { width: 100%; height: 100%; background: #12100f; }
+.hr .jf-photo img { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none; }
+/* Caption overlaid at the bottom of the photo; only shown on the active card. */
+.hr .jf-cap {
   position: absolute;
   inset: auto 0 0 0;
-  padding: 22px 20px 20px;
-  background: linear-gradient(to top, rgba(10, 9, 8, 0.92) 8%, rgba(10, 9, 8, 0.55) 55%, transparent);
+  padding: 30px 30px 26px;
+  background: linear-gradient(to top, rgba(10, 9, 8, 0.92) 8%, rgba(10, 9, 8, 0.5) 55%, transparent);
   opacity: 0;
   transform: translateY(10px);
-  transition: opacity 0.42s, transform 0.42s;
+  transition: opacity 0.5s, transform 0.5s;
   pointer-events: none;
 }
-.hr .sb-card.is-active .sb-cap,
-.hr .sb-card:hover .sb-cap,
-.hr .sb-card:focus-visible .sb-cap {
-  opacity: 1;
-  transform: translateY(0);
-}
-/* 1–2 line title clamped at the bottom of the card. */
-.hr .sb-title {
+.hr .jf-card.is-active .jf-cap { opacity: 1; transform: translateY(0); }
+.hr .jf-cat { display: block; font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+.hr .jf-title {
   margin: 0;
   font-family: var(--display-font);
-  font-size: 16px;
+  font-size: clamp(18px, 1.7vw, 24px);
   font-weight: 300;
-  line-height: 1.4;
+  line-height: 1.32;
   color: var(--text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -537,20 +528,52 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* Back / Next controls under the track. */
-.hr .sb-nav { display: flex; align-items: center; justify-content: center; gap: 30px; margin-top: 6px; }
-.hr .sb-btn { display: inline-flex; align-items: center; gap: 10px; background: none; border: none; cursor: pointer; padding: 6px 2px; font-family: var(--display-font); font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(240, 237, 231, 0.6); transition: color 0.25s, gap 0.25s; }
-.hr .sb-btn:hover { color: var(--text); }
-.hr .sb-btn svg { color: var(--gold); }
-.hr .sb-btn .sb-arrow-flip { transform: scaleX(-1); }
-.hr .sb-back:hover { gap: 14px; }
-.hr .sb-next:hover { gap: 14px; }
+/* Position counter — top-right of the active card. */
+.hr .jf-badge {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  background: rgba(14, 11, 8, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: var(--display-font);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
+}
+.hr .jf-card.is-active .jf-badge { opacity: 1; }
+/* Prev / next circular arrows, over the stage edges. */
+.hr .jf-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(14, 11, 8, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  transition: background 0.25s, border-color 0.25s, color 0.25s;
+}
+.hr .jf-arrow:hover { background: var(--gold); border-color: var(--gold); color: var(--bg); }
+.hr .jf-prev { left: 28px; }
+.hr .jf-next { right: 28px; }
 /* "All Articles" CTA, centred at the bottom of the section. */
 .hr .journal-foot { display: flex; justify-content: center; margin-top: 40px; }
 @media (prefers-reduced-motion: reduce) {
-  .hr .sb-card { transition: none; }
-  .hr .sb-cap { transition: none; }
-  .hr .sb-track { scroll-behavior: auto; }
+  .hr .jf-card { transition: none !important; }
+  .hr .jf-cap { transition: none; }
 }
 
 /* ── FOOTER ── */
@@ -670,16 +693,13 @@
   /* JOURNAL scrapbook — mobile: near-full-width peeking cards, gentler tilt so
      rotated corners don't clip or trigger phantom horizontal scroll. */
   .hr .journal { padding: 72px 22px; }
-  .hr .sb-track { gap: 16px; padding: 28px 0 36px; }
-  .hr .sb-card { flex-basis: min(78vw, 340px); }
-  .hr .sb-card:nth-child(4n + 1) { transform: rotate(-1deg); }
-  .hr .sb-card:nth-child(4n + 2) { transform: rotate(0.8deg); }
-  .hr .sb-card:nth-child(4n + 3) { transform: rotate(1deg); }
-  .hr .sb-card:nth-child(4n + 4) { transform: rotate(-0.8deg); }
-  /* Touch has no hover — the active (centred) card carries the reveal. */
-  .hr .sb-cap { padding: 18px 16px 16px; }
-  .hr .sb-title { font-size: 15px; }
-  .hr .sb-btn { font-size: 10px; letter-spacing: 0.2em; }
+  /* Fan carousel: shrink the arrows and tuck them to the edges on small screens;
+     the centred (active) card carries the caption reveal — touch has no hover. */
+  .hr .jf { height: clamp(280px, 74vw, 420px); }
+  .hr .jf-arrow { width: 40px; height: 40px; }
+  .hr .jf-prev { left: 8px; }
+  .hr .jf-next { right: 8px; }
+  .hr .jf-cap { padding: 20px 18px 18px; }
 
   /* FOOTER */
   .hr .footer { padding: 64px 22px 32px; }
