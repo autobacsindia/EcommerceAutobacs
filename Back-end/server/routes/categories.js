@@ -60,21 +60,23 @@ router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL)
 // NOTE: declared before "/:id" so the literal path is matched first, and left
 // uncached so admins always see the current state after create/update/delete.
 router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
-  const [categories, counts] = await Promise.all([
+  const [categories, grouped] = await Promise.all([
     categoryRepository.find({})
       .populate('parent', 'name slug')
       .sort({ order: 1, name: 1 })
       .lean(),
-    productRepository.countActiveByCategory(),
+    productRepository.distinctActiveIdsByCategory(),
   ]);
 
-  // Direct (products tagged exactly with this category) counts.
-  const directCount = new Map(counts.map((c) => [String(c._id), c.count]));
+  // Direct distinct product id sets per category (products tagged exactly here).
+  const directIds = new Map(grouped.map((c) => [String(c._id), new Set(c.ids.map(String))]));
 
-  // Roll direct counts up the tree so a parent's badge reflects what
-  // "View products" shows (the whole subtree, since the search filter expands
-  // a category to all its descendants). One aggregation + an O(N) in-memory
-  // rollup using the parent pointers we already loaded.
+  // Roll counts up the tree so a parent's badge reflects what "View products"
+  // shows (the whole subtree, since the search filter expands a category to all
+  // its descendants). We UNION product id sets rather than summing counts, so a
+  // product tagged with both a hub and a descendant is counted once — matching
+  // the storefront facet (SearchService.getFacets) and the distinct listing
+  // total. O(N) in-memory over the parent pointers we already loaded.
   const childrenOf = new Map();
   for (const c of categories) {
     const parentId = c.parent?._id ? String(c.parent._id) : (c.parent ? String(c.parent) : null);
@@ -85,21 +87,23 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
 
   const subtreeMemo = new Map();
   const inProgress = new Set();
-  const subtreeCount = (id) => {
+  const subtreeIds = (id) => {
     if (subtreeMemo.has(id)) return subtreeMemo.get(id);
-    if (inProgress.has(id)) return 0; // guard against any pre-existing cycle
+    if (inProgress.has(id)) return new Set(); // guard against any pre-existing cycle
     inProgress.add(id);
-    let total = directCount.get(id) || 0;
-    for (const childId of (childrenOf.get(id) || [])) total += subtreeCount(childId);
+    const union = new Set(directIds.get(id) || []);
+    for (const childId of (childrenOf.get(id) || [])) {
+      for (const pid of subtreeIds(childId)) union.add(pid);
+    }
     inProgress.delete(id);
-    subtreeMemo.set(id, total);
-    return total;
+    subtreeMemo.set(id, union);
+    return union;
   };
 
   const withCounts = categories.map((c) => ({
     ...c,
-    productCount: directCount.get(String(c._id)) || 0,
-    totalProductCount: subtreeCount(String(c._id)),
+    productCount: directIds.get(String(c._id))?.size || 0,
+    totalProductCount: subtreeIds(String(c._id)).size,
   }));
 
   res.set('Cache-Control', 'private, no-store');

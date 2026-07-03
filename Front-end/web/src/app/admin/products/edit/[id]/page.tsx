@@ -12,12 +12,10 @@ import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoScorePanel from '@/components/ui/SeoScorePanel';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
+import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 import { generateSlug } from '@/lib/utils';
 
-interface Category {
-  _id: string;
-  name: string;
-}
+type Category = CategoryOption;
 
 interface Vehicle {
   _id: string;
@@ -74,8 +72,6 @@ export default function EditProductPage() {
   
   // Category Multi-select state
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [categorySearch, setCategorySearch] = useState('');
-  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
 
   // Tags state
   const [tagsInput, setTagsInput] = useState('');
@@ -750,86 +746,13 @@ export default function EditProductPage() {
           <div>
             <h2 className="text-xl font-semibold mb-4">Organization</h2>
             
-            <div className="mb-4 relative" style={{ zIndex: isCategoryDropdownOpen ? 50 : 1 }}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categories
-              </label>
-              <div 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer bg-white min-h-10.5 flex items-center flex-wrap gap-1"
-                onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
-              >
-                {selectedCategories.length > 0 
-                  ? (
-                    <div className="flex flex-wrap gap-1">
-                      {selectedCategories.map(catId => {
-                        const cat = categories.find(c => c._id === catId);
-                        return (
-                          <span key={catId} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
-                            {cat ? (cat.name === 'Suspension' ? 'SUSPENSION' : cat.name) : catId}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedCategories(prev => prev.filter(id => id !== catId));
-                              }}
-                              className="ml-1 hover:text-blue-900"
-                            >
-                              &times;
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )
-                  : <span className="text-gray-500">Select categories</span>}
-              </div>
-              
-              {isCategoryDropdownOpen && (
-                <div className="absolute z-100 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-2xl max-h-60 overflow-y-auto p-2">
-                  <input
-                    type="text"
-                    placeholder="Search categories..."
-                    className="w-full px-2 py-1 mb-2 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    value={categorySearch}
-                    onChange={(e) => setCategorySearch(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    autoFocus
-                  />
-                  {categories.length === 0 ? (
-                    <div className="p-2 text-gray-500 text-center text-sm">Loading categories...</div>
-                  ) : (
-                    <>
-                      {categories
-                        .filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                        .map(category => (
-                        <div 
-                          key={category._id} 
-                          className="flex items-center p-2 hover:bg-gray-100 cursor-pointer rounded"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (selectedCategories.includes(category._id)) {
-                              setSelectedCategories(prev => prev.filter(id => id !== category._id));
-                            } else {
-                              setSelectedCategories(prev => [...prev, category._id]);
-                            }
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.includes(category._id)}
-                            readOnly
-                            className="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                          />
-                          <span className="text-gray-900">{category.name === 'Suspension' ? 'SUSPENSION' : category.name}</span>
-                        </div>
-                      ))}
-                      {categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
-                        <div className="p-2 text-gray-500 text-center text-sm">No matching categories found</div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+            <div className="mb-4">
+              <CategoryMultiSelect
+                categories={categories}
+                selected={selectedCategories}
+                onChange={setSelectedCategories}
+                loading={categories.length === 0}
+              />
             </div>
 
             <div className="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">

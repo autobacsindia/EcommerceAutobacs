@@ -308,6 +308,28 @@ describe('Categories API', () => {
       expect(childRow.productCount).toBe(1);
       expect(childRow.totalProductCount).toBe(1);
     });
+
+    it('counts a product tagged with BOTH a parent and its child only once in the subtree', async () => {
+      // Regression: a summed rollup double-counted multi-tagged products (the
+      // storefront read 132 vs the listing's 120). The distinct union must count
+      // this product once → parent subtree = 1, not 2.
+      const child = await Category.create({ name: 'Dedup Child', slug: 'dedup-child', parent: categoryId });
+      await Product.create({
+        name: 'P-both', description: 'd', price: 10, slug: 'p-both',
+        categories: [categoryId, child._id], // tagged with hub AND its descendant
+      });
+
+      const res = await agent.get(`${BASE}/categories/admin/all`).expect(200);
+      const byId = new Map(res.body.categories.map((c) => [String(c._id), c]));
+
+      const parent = byId.get(String(categoryId));
+      const childRow = byId.get(String(child._id));
+
+      expect(parent.productCount).toBe(1);       // direct on the parent
+      expect(childRow.productCount).toBe(1);      // direct on the child
+      expect(parent.totalProductCount).toBe(1);   // union, NOT 1 + 1
+      expect(childRow.totalProductCount).toBe(1);
+    });
   });
 
   describe('Category integrity rules', () => {

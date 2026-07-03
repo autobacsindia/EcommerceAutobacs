@@ -203,7 +203,7 @@ describe('SearchService Unit Tests', () => {
       categoryMappingService.buildChildIndex.mockReturnValue(new Map());
       Product.aggregate
         .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'Auxbeam', count: 12 }, { _id: 'BMC', count: 3 }]) })
-        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'cat1', count: 44 }]) });
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([{ _id: 'cat1', ids: ['p1', 'p2', 'p3'] }]) });
 
       const facets = await SearchService.getFacets({ category: 'lighting' });
 
@@ -211,12 +211,12 @@ describe('SearchService Unit Tests', () => {
         { name: 'Auxbeam', count: 12 },
         { name: 'BMC', count: 3 },
       ]);
-      expect(facets.categories).toEqual([{ categoryId: 'cat1', count: 44 }]);
+      expect(facets.categories).toEqual([{ categoryId: 'cat1', count: 3 }]);
     });
 
-    it('getFacets rolls direct category counts up the tree so a hub reflects its subtree', async () => {
+    it('getFacets rolls direct category id sets up the tree so a hub reflects its subtree', async () => {
       // Tree: hub -> [subA, subB]. Products are tagged on the leaves only, so
-      // the hub has NO direct count — its badge must equal subA + subB.
+      // the hub has NO direct products — its badge must equal |subA ∪ subB|.
       categoryMappingService.findCategory.mockReturnValue(null);
       categoryMappingService.buildChildIndex.mockReturnValue(new Map([
         ['hub', [{ _id: 'subA' }, { _id: 'subB' }]],
@@ -224,16 +224,41 @@ describe('SearchService Unit Tests', () => {
       Product.aggregate
         .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([]) })
         .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([
-          { _id: 'subA', count: 30 },
-          { _id: 'subB', count: 14 },
+          { _id: 'subA', ids: ['p1', 'p2', 'p3'] },
+          { _id: 'subB', ids: ['p4', 'p5'] },
         ]) });
 
       const facets = await SearchService.getFacets({});
 
       expect(facets.categories).toEqual([
-        { categoryId: 'hub', count: 44 },
-        { categoryId: 'subA', count: 30 },
-        { categoryId: 'subB', count: 14 },
+        { categoryId: 'hub', count: 5 },
+        { categoryId: 'subA', count: 3 },
+        { categoryId: 'subB', count: 2 },
+      ]);
+    });
+
+    it('getFacets counts a product ONCE when it is tagged with multiple categories in the subtree', async () => {
+      // Regression: p1 is tagged with both the hub and subA (and p2 with subA
+      // and subB). A sum-based rollup reported 132 vs the listing's 120; the
+      // distinct union must count each product once → hub badge = |{p1,p2,p3}| = 3.
+      categoryMappingService.findCategory.mockReturnValue(null);
+      categoryMappingService.buildChildIndex.mockReturnValue(new Map([
+        ['hub', [{ _id: 'subA' }, { _id: 'subB' }]],
+      ]));
+      Product.aggregate
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({ option: jest.fn().mockResolvedValue([
+          { _id: 'hub', ids: ['p1'] },
+          { _id: 'subA', ids: ['p1', 'p2'] },
+          { _id: 'subB', ids: ['p2', 'p3'] },
+        ]) });
+
+      const facets = await SearchService.getFacets({});
+
+      expect(facets.categories).toEqual([
+        { categoryId: 'hub', count: 3 },
+        { categoryId: 'subA', count: 2 },
+        { categoryId: 'subB', count: 2 },
       ]);
     });
 

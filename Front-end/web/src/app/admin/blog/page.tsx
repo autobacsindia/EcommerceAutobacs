@@ -8,6 +8,7 @@ import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
+import RichTextEditor from '@/components/ui/RichTextEditor';
 
 type Tab = 'posts' | 'gallery' | 'videos' | 'comments';
 
@@ -165,6 +166,12 @@ export default function AdminBlogPage() {
 
   async function savePost(e: React.FormEvent) {
     e.preventDefault();
+    // The rich-text editor has no native `required`; guard against empty content
+    // (TipTap emits `<p></p>` for an empty document).
+    if (!postForm.content.replace(/<[^>]*>/g, '').trim()) {
+      alert('Please write some content for the post.');
+      return;
+    }
     setPostSaving(true);
     try {
       const payload = {
@@ -760,15 +767,17 @@ export default function AdminBlogPage() {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Content * (HTML supported)</label>
-                  <textarea
-                    required
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Content *</label>
+                  <RichTextEditor
+                    variant="light"
                     value={postForm.content}
-                    onChange={e => setPostForm(f => ({ ...f, content: e.target.value }))}
-                    rows={10}
-                    placeholder="<p>Post content here...</p>"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none resize-y"
+                    onChange={html => setPostForm(f => ({ ...f, content: html }))}
+                    placeholder="Write your post here…"
+                    minHeight="260px"
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Use the toolbar to add headings, bold, lists and links — no coding needed.
+                  </p>
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm font-medium text-gray-700 block mb-1">Tags (comma-separated)</label>

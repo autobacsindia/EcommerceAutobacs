@@ -250,16 +250,19 @@ class ProductRepository {
   }
 
   /**
-   * Count active products grouped by category id. A product can belong to
-   * multiple categories, so each membership is counted once. Returns
-   * [{ _id: categoryId, count }]. Matches the active-only listing semantics so
-   * the per-category badge equals what "View products" actually shows.
+   * Active product ids grouped by category id. Returns
+   * [{ _id: categoryId, ids: [productId, …] }] — the DISTINCT set of products
+   * tagged with each category (a product tagged with N categories appears in N
+   * groups, once each). Callers union these sets up the category tree so a
+   * subtree total counts each product ONCE even when it's tagged with both a
+   * hub and a descendant; a plain $sum would double-count those and inflate the
+   * badge above the listing's distinct total. Mirrors SearchService.getFacets.
    */
-  async countActiveByCategory() {
+  async distinctActiveIdsByCategory() {
     return Product.aggregate([
       { $match: { isActive: true, categories: { $exists: true, $ne: [] } } },
       { $unwind: '$categories' },
-      { $group: { _id: '$categories', count: { $sum: 1 } } }
+      { $group: { _id: '$categories', ids: { $addToSet: '$_id' } } }
     ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
   }
 
