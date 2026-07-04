@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import apiClient from '@/lib/api';
+import toast from 'react-hot-toast';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-react';
+import { CUSTOMER_NOTIFIED_STATUSES } from '@/lib/constants';
+import ConfirmStatusChangeModal from '@/components/orders/ConfirmStatusChangeModal';
 
 interface OrderItem {
   product: {
@@ -56,6 +59,7 @@ export default function AdminOrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (orderId) {
@@ -77,22 +81,20 @@ export default function AdminOrderDetailPage() {
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!order) return;
-    
-    if (!confirm(`Are you sure you want to change the order status to "${newStatus}"?`)) return;
-    
+  // Runs after the admin confirms in the modal. Throws on failure so the modal
+  // shows the error inline; resolves (and closes the modal) on success.
+  const confirmStatusChange = async (note?: string) => {
+    if (!order || !pendingStatus) return;
+    setUpdating(true);
     try {
-      setUpdating(true);
-      await apiClient.put(`/orders/${orderId}/status`, { 
-        status: newStatus,
-        reason: 'admin_update'
+      await apiClient.put(`/orders/${orderId}/status`, {
+        status: pendingStatus,
+        reason: 'admin_update',
+        notes: note || undefined,
       });
-      setOrder({ ...order, status: newStatus });
-      alert('Order status updated successfully');
-    } catch (err: any) {
-      console.error('Status update failed:', err);
-      alert(err.message || 'Failed to update order status');
+      setOrder({ ...order, status: pendingStatus });
+      setPendingStatus(null);
+      toast.success(`Order status updated to ${pendingStatus}`);
     } finally {
       setUpdating(false);
     }
@@ -332,17 +334,20 @@ export default function AdminOrderDetailPage() {
                 </label>
                 <select
                   value={order.status}
-                  onChange={(e) => handleStatusChange(e.target.value)}
+                  onChange={(e) => setPendingStatus(e.target.value)}
                   disabled={updating}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="pending">Pending</option>
-                  <option value="confirmed">Confirmed</option>
+                  {/* Current status shown but not re-selectable */}
+                  <option value={order.status} disabled>
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (current)
+                  </option>
+                  {/* Payment-driven statuses (pending/confirmed/failed) are set by checkout + the
+                      Razorpay webhook only — never offered as manual options. */}
                   <option value="processing">Processing</option>
                   <option value="shipped">Shipped</option>
                   <option value="delivered">Delivered</option>
                   <option value="cancelled">Cancelled</option>
-                  <option value="failed">Failed</option>
                   <option value="refunded">Refunded</option>
                 </select>
               </div>
@@ -392,6 +397,17 @@ export default function AdminOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {pendingStatus && order && (
+        <ConfirmStatusChangeModal
+          orderNumber={order.orderNumber}
+          currentStatus={order.status}
+          newStatus={pendingStatus}
+          notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingStatus)}
+          onConfirm={confirmStatusChange}
+          onClose={() => setPendingStatus(null)}
+        />
+      )}
     </div>
   );
 }

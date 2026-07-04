@@ -4,13 +4,15 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS, ORDER_STATUS_COLORS } from '@/lib/constants';
+import toast from 'react-hot-toast';
+import { API_ENDPOINTS, ORDER_STATUS_COLORS, CUSTOMER_NOTIFIED_STATUSES } from '@/lib/constants';
 import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import OrderFiltersPanel, { OrderFilters } from '@/components/orders/OrderFiltersPanel';
 import BulkActionsBar from '@/components/orders/BulkActionsBar';
+import ConfirmStatusChangeModal from '@/components/orders/ConfirmStatusChangeModal';
 
-// Mirror of orderStatusService STATUS_TRANSITIONS — admins can force any transition
+// Mirror of orderStatusService STATUS_TRANSITIONS.
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   pending:    ['confirmed', 'cancelled', 'failed'],
   confirmed:  ['processing', 'cancelled'],
@@ -19,16 +21,19 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   delivered:  ['refunded'],
   cancelled:  [],
   refunded:   [],
-  returned:   [],
   failed:     [],
 };
 
 const ALL_STATUSES = Object.keys(STATUS_TRANSITIONS) as string[];
 
-/** Statuses an admin can move to from currentStatus (all statuses for admin = any force-move) */
+// Payment-driven statuses — set only by checkout + the Razorpay webhook, never by an admin.
+// Mirrors SYSTEM_OWNED_STATUSES in the backend orderStatusService.
+const SYSTEM_OWNED = ['pending', 'confirmed', 'failed'];
+
+/** Statuses an admin can manually move an order to (fulfillment/exception states only). */
 function getAdminNextStatuses(currentStatus: string): string[] {
-  // Admins bypass transition rules — show all except the current one
-  return ALL_STATUSES.filter(s => s !== currentStatus);
+  // Admins can force any fulfillment transition, but never a payment-driven status.
+  return ALL_STATUSES.filter(s => s !== currentStatus && !SYSTEM_OWNED.includes(s));
 }
 
 interface Order {
@@ -72,7 +77,19 @@ function AdminOrdersPageInner() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [pageSize, setPageSize] = useState(20);
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
-  
+  const [pendingChange, setPendingChange] = useState<{
+    orderId: string;
+    orderNumber: string;
+    from: string;
+    to: string;
+  } | null>(null);
+  const [pendingBulk, setPendingBulk] = useState<{
+    status: string;
+    reason: string;
+    notes: string;
+    count: number;
+  } | null>(null);
+
   // Initialize filters from URL params
   const [filters, setFilters] = useState<OrderFilters>(() => ({
     search: searchParams.get('search') || '',
@@ -132,20 +149,32 @@ function AdminOrdersPageInner() {
     }
   };
 
-  const handleStatusChange = async (orderId: string, newStatus: string) => {
-    try {
-      await apiClient.put(API_ENDPOINTS.ORDER_UPDATE_STATUS(orderId), { 
-        status: newStatus,
-        reason: 'admin_update',
-        notes: 'Status updated from admin panel'
-      });
-      
-      setOrders(orders.map(order =>
-        order._id === orderId ? { ...order, status: newStatus } : order
-      ));
-    } catch (err: any) {
-      alert(err.message || 'Failed to update status');
-    }
+  // Open the confirmation modal instead of firing the API immediately.
+  const requestStatusChange = (order: Order, newStatus: string) => {
+    setPendingChange({
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      from: order.status,
+      to: newStatus,
+    });
+  };
+
+  // Runs the update after the admin confirms in the modal. Throws on failure so the
+  // modal surfaces the error inline; resolves (and closes the modal) on success.
+  const confirmStatusChange = async (note?: string) => {
+    if (!pendingChange) return;
+    const { orderId, to } = pendingChange;
+    await apiClient.put(API_ENDPOINTS.ORDER_UPDATE_STATUS(orderId), {
+      status: to,
+      reason: 'admin_update',
+      notes: note || 'Status updated from admin panel',
+    });
+
+    setOrders(orders.map(order =>
+      order._id === orderId ? { ...order, status: to } : order
+    ));
+    setPendingChange(null);
+    toast.success(`Order status updated to ${to}`);
   };
 
   const handleFiltersChange = (newFilters: OrderFilters) => {
@@ -217,35 +246,35 @@ function AdminOrdersPageInner() {
     setSelectedOrders([]);
   };
 
+  // Open the confirmation modal instead of applying the bulk update immediately.
   const handleBulkStatusUpdate = async (status: string, reason: string, notes: string) => {
-    try {
-      const response = await apiClient.post(API_ENDPOINTS.ORDER_BULK_STATUS, {
-        orderIds: selectedOrders,
-        status,
-        reason,
-        notes,
-      }) as any;
-      
-      const { successful, failed } = response.results || { successful: [], failed: [] };
-      
-      // Show results
-      if (failed.length === 0) {
-        alert(`Successfully updated ${successful.length} order(s)`);
-      } else {
-        alert(
-          `Updated ${successful.length} order(s).\n` +
-          `Failed to update ${failed.length} order(s):\n` +
-          failed.map((f: any) => `- ${f.orderId}: ${f.error}`).join('\n')
-        );
-      }
-      
-      // Refresh and clear selection
-      await fetchOrders();
-      setSelectedOrders([]);
-    } catch (error: any) {
-      console.error('Bulk update failed:', error);
-      alert(error.message || 'Bulk update failed');
+    setPendingBulk({ status, reason, notes, count: selectedOrders.length });
+  };
+
+  // Applies the bulk update once confirmed. Throws on hard failure so the modal shows
+  // the error inline; resolves (closing the modal) on success or partial success.
+  const confirmBulkStatusUpdate = async (note?: string) => {
+    if (!pendingBulk) return;
+    const { status, reason } = pendingBulk;
+    const response = await apiClient.post(API_ENDPOINTS.ORDER_BULK_STATUS, {
+      orderIds: selectedOrders,
+      status,
+      reason,
+      notes: note || pendingBulk.notes,
+    }) as any;
+
+    const { successful, failed } = response.results || { successful: [], failed: [] };
+
+    if (failed.length === 0) {
+      toast.success(`Updated ${successful.length} order(s) to ${status}`);
+    } else {
+      toast.error(`Updated ${successful.length}, failed ${failed.length}. See console for details.`);
+      console.warn('Bulk update failures:', failed);
     }
+
+    await fetchOrders();
+    setSelectedOrders([]);
+    setPendingBulk(null);
   };
 
   const handleBulkDelete = async () => {
@@ -465,7 +494,7 @@ function AdminOrdersPageInner() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
                       value={order.status}
-                      onChange={(e) => handleStatusChange(order._id, e.target.value)}
+                      onChange={(e) => requestStatusChange(order, e.target.value)}
                       className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
                     >
                       {/* Current status — always shown as selected, disabled so user must pick a different one */}
@@ -543,6 +572,27 @@ function AdminOrdersPageInner() {
         onExportSelected={handleExportSelected}
         onBulkDelete={handleBulkDelete}
       />
+
+      {pendingChange && (
+        <ConfirmStatusChangeModal
+          orderNumber={pendingChange.orderNumber}
+          currentStatus={pendingChange.from}
+          newStatus={pendingChange.to}
+          notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingChange.to)}
+          onConfirm={confirmStatusChange}
+          onClose={() => setPendingChange(null)}
+        />
+      )}
+
+      {pendingBulk && (
+        <ConfirmStatusChangeModal
+          newStatus={pendingBulk.status}
+          count={pendingBulk.count}
+          notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingBulk.status)}
+          onConfirm={confirmBulkStatusUpdate}
+          onClose={() => setPendingBulk(null)}
+        />
+      )}
     </div>
   );
 }

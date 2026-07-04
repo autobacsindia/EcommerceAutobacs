@@ -29,6 +29,11 @@ jest.mock('lucide-react', () => ({
   Filter: () => <span>FilterIcon</span>,
   CheckSquare: () => <span>CheckSquareIcon</span>,
   Square: () => <span>SquareIcon</span>,
+  // Icons used by ConfirmStatusChangeModal
+  X: () => <span>XIcon</span>,
+  AlertCircle: () => <span>AlertCircleIcon</span>,
+  ArrowRight: () => <span>ArrowRightIcon</span>,
+  Mail: () => <span>MailIcon</span>,
 }));
 
 // Mock Child Components
@@ -112,27 +117,35 @@ describe('AdminOrdersPage', () => {
     });
   });
 
-  it('updates status when changed', async () => {
+  it('confirms via modal before updating status, and warns about the customer email', async () => {
     render(<AdminOrdersPage />);
 
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
 
-    // Find the row containing ORD-001
+    // Find the row containing ORD-001 and its status dropdown
     const row = screen.getByText(/ORD-001/).closest('tr');
     expect(row).toBeInTheDocument();
-    
-    // Find select within that row
     const statusSelect = within(row!).getByRole('combobox');
-    
-    fireEvent.change(statusSelect, { target: { value: 'confirmed' } });
-    
+
+    // Selecting a new status opens the confirmation modal — it must NOT fire the API yet.
+    fireEvent.change(statusSelect, { target: { value: 'shipped' } });
+    expect(apiClient.put).not.toHaveBeenCalled();
+
+    // 'shipped' is a customer-notified status → the modal warns about the email.
     await waitFor(() => {
-        expect(apiClient.put).toHaveBeenCalledWith(
-            expect.stringContaining('/o1'),
-            expect.objectContaining({ status: 'confirmed' })
-        );
+      expect(screen.getByText(/customer will be emailed/i)).toBeInTheDocument();
+    });
+
+    // Confirm — now the API fires with the chosen status.
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+
+    await waitFor(() => {
+      expect(apiClient.put).toHaveBeenCalledWith(
+        expect.stringContaining('/o1'),
+        expect.objectContaining({ status: 'shipped' })
+      );
     });
   });
 

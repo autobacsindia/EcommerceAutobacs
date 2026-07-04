@@ -238,6 +238,7 @@ export interface OrderItem {
 
 export interface Order {
   _id: string;
+  orderNumber?: string;
   user: string;
   items: OrderItem[];
   shippingAddress: {
@@ -256,7 +257,7 @@ export interface Order {
   tax: number;
   discount: number;
   totalAmount: number;
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded' | 'failed';
   trackingNumber?: string;
   estimatedDelivery?: string;
   deliveredAt?: string;

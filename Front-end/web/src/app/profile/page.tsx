@@ -9,6 +9,7 @@ import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
 import KarmaCard from '@/components/profile/KarmaCard';
+import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 
 const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm p-2 focus:outline-none focus:border-gold font-display text-sm';
 const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1';
@@ -175,6 +176,8 @@ export default function ProfilePage() {
         </div>
 
         <KarmaCard />
+
+        <RecentOrdersCard />
 
         <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
           {/* Avatar + name/email */}

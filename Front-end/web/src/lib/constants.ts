@@ -140,28 +140,39 @@ export const API_ENDPOINTS = {
 // Order Status
 export const ORDER_STATUS = {
   PENDING: 'pending',
+  CONFIRMED: 'confirmed',
   PROCESSING: 'processing',
   SHIPPED: 'shipped',
   DELIVERED: 'delivered',
   CANCELLED: 'cancelled',
+  REFUNDED: 'refunded',
   FAILED: 'failed',
 } as const;
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   [ORDER_STATUS.PENDING]: 'Pending',
+  [ORDER_STATUS.CONFIRMED]: 'Confirmed',
   [ORDER_STATUS.PROCESSING]: 'Processing',
   [ORDER_STATUS.SHIPPED]: 'Shipped',
   [ORDER_STATUS.DELIVERED]: 'Delivered',
   [ORDER_STATUS.CANCELLED]: 'Cancelled',
+  [ORDER_STATUS.REFUNDED]: 'Refunded',
   [ORDER_STATUS.FAILED]: 'Failed',
 };
 
+// Statuses whose change emails the customer (mirrors backend NOTIFY_STATUSES in
+// orderStatusService.js). Used by the admin confirm dialog to warn that a status
+// change will notify the customer. `confirmed` is excluded — the invoice email covers it.
+export const CUSTOMER_NOTIFIED_STATUSES = ['shipped', 'delivered', 'cancelled', 'refunded'];
+
 export const ORDER_STATUS_COLORS: Record<string, string> = {
   [ORDER_STATUS.PENDING]: 'bg-yellow-100 text-yellow-800',
+  [ORDER_STATUS.CONFIRMED]: 'bg-emerald-100 text-emerald-800',
   [ORDER_STATUS.PROCESSING]: 'bg-blue-100 text-blue-800',
   [ORDER_STATUS.SHIPPED]: 'bg-purple-100 text-purple-800',
   [ORDER_STATUS.DELIVERED]: 'bg-green-100 text-green-800',
   [ORDER_STATUS.CANCELLED]: 'bg-red-100 text-red-800',
+  [ORDER_STATUS.REFUNDED]: 'bg-orange-100 text-orange-800',
   [ORDER_STATUS.FAILED]: 'bg-red-100 text-red-800',
 };
 
