@@ -6,8 +6,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import QuestionForm from '@/components/products/QuestionForm';
-import QuestionList from '@/components/products/QuestionList';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 import { trackProductView } from '@/lib/analytics';
@@ -62,7 +60,6 @@ const headingCls = 'text-[clamp(26px,3vw,40px)] font-light leading-tight text-in
 
 export function ProductDetailPageClient({ product }: { product: Product | null }) {
   const { isAuthenticated, user } = useAuth();
-  const [showQuestionForm, setShowQuestionForm] = useState(false);
 
   const stripHtml = (html: string) => (html ? html.replace(/<[^>]*>/g, '') : '');
 
@@ -237,30 +234,6 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             </div>
           </section>
         )}
-
-        {/* Q&A */}
-        <section id="qa" className={sectionCls}>
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
-              <Eyebrow className="mb-4">Ask us</Eyebrow>
-              <h2 className={headingCls}>Questions &amp; Answers</h2>
-            </div>
-            {!showQuestionForm && (
-              <button
-                onClick={() => setShowQuestionForm(true)}
-                className="shrink-0 font-display text-[11px] uppercase tracking-[0.18em] text-gold hover:opacity-80"
-              >
-                Ask a question
-              </button>
-            )}
-          </div>
-          {showQuestionForm && (
-            <div className="mb-8">
-              <QuestionForm productId={product._id} onSuccess={() => { /* keep success message visible */ }} />
-            </div>
-          )}
-          <QuestionList productId={product._id} />
-        </section>
 
         {/* Reviews */}
         <section id="reviews" className={sectionCls}>

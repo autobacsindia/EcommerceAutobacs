@@ -1,44 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { MapPin, Phone, Mail, Clock, Send, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { ContactService } from '@/lib/services';
+
+const SUPPORT_EMAIL = 'support@autobacsindia.com';
+const SUPPORT_PHONE_DISPLAY = '+91 98952 57905';
+const SUPPORT_PHONE_TEL = '+919895257905';
+const SUPPORT_WHATSAPP = 'https://wa.me/919895257905';
+
+// lucide-react has no WhatsApp glyph; brand mark inlined.
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.002-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
 
 function ContactPageInner() {
   const searchParams = useSearchParams();
-  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
-  const [submitting, setSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  useEffect(() => {
-    const orderId = searchParams.get('orderId');
-    const subjectParam = searchParams.get('subject');
-    if (orderId) setFormData(prev => ({ ...prev, subject: `Assistance with Order #${orderId}` }));
-    else if (subjectParam) setFormData(prev => ({ ...prev, subject: subjectParam }));
-  }, [searchParams]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setSubmitStatus(null);
-    try {
-      await ContactService.submit(formData);
-      setSubmitStatus({ type: 'success', message: 'Thank you for your message! We will get back to you soon.' });
-      setFormData({ name: '', email: '', subject: '', message: '' });
-    } catch (error: any) {
-      setSubmitStatus({ type: 'error', message: error.message || 'Something went wrong. Please try again later.' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  // Deep-link support: /contact?orderId=123 (or ?subject=...) prefills the email subject.
+  const orderId = searchParams.get('orderId');
+  const subjectParam = searchParams.get('subject');
+  const emailSubject = orderId
+    ? `Assistance with Order #${orderId}`
+    : subjectParam || 'Support request';
+  const mailtoHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(emailSubject)}`;
 
   const contactInfo = [
     {
@@ -48,13 +37,13 @@ function ContactPageInner() {
     },
     {
       icon: <Phone className="h-5 w-5 text-gold" />,
-      title: 'Phone Numbers',
-      details: ['+91 9895257905', '+91 9895502139']
+      title: 'Phone',
+      details: [SUPPORT_PHONE_DISPLAY]
     },
     {
       icon: <Mail className="h-5 w-5 text-gold" />,
       title: 'Email',
-      details: ['support@autobacsindia.com', 'sales@autobacsindia.com']
+      details: [SUPPORT_EMAIL]
     },
     {
       icon: <Clock className="h-5 w-5 text-gold" />,
@@ -62,8 +51,6 @@ function ContactPageInner() {
       details: ['Monday - Saturday: 10:00 AM - 6:00 PM', 'Sunday: Closed']
     }
   ];
-
-  const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors disabled:opacity-50';
 
   return (
     <div className="min-h-screen bg-obsidian-deep">
@@ -112,46 +99,58 @@ function ContactPageInner() {
               </div>
             </div>
 
-            {/* Contact Form */}
+            {/* Direct support (replaces the old message form) */}
             <div>
-              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-6">Send Us a Message</h2>
+              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-6">Talk to Support</h2>
+              <div className="bg-obsidian border border-hairline rounded-sm p-6 sm:p-8 space-y-5">
+                <p className="text-ink/70 font-display text-sm">
+                  Reach our customer support team directly. Email us or give us a call and we&apos;ll
+                  help you with orders, products, or anything else — we typically respond within one business day.
+                </p>
 
-              {submitStatus && (
-                <div className={`mb-6 p-4 rounded-sm flex items-start gap-3 ${submitStatus.type === 'success' ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
-                  {submitStatus.type === 'success' ? (
-                    <CheckCircle className="h-5 w-5 text-green-400 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
-                  )}
-                  <p className={`text-sm font-display ${submitStatus.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>{submitStatus.message}</p>
-                </div>
-              )}
+                <a
+                  href={mailtoHref}
+                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
+                >
+                  <Mail className="h-6 w-6 text-gold shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-1">Email us</p>
+                    <p className="text-ink font-display text-sm truncate">{SUPPORT_EMAIL}</p>
+                  </div>
+                  <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
+                </a>
 
-              <form onSubmit={handleSubmit} className="bg-obsidian border border-hairline rounded-sm p-6 space-y-4">
-                <div>
-                  <label htmlFor="name" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Full Name</label>
-                  <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} required disabled={submitting} className={inputClass} placeholder="Your name" />
+                <a
+                  href={`tel:${SUPPORT_PHONE_TEL}`}
+                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
+                >
+                  <Phone className="h-6 w-6 text-gold shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-1">Call us</p>
+                    <p className="text-ink font-display text-sm">{SUPPORT_PHONE_DISPLAY}</p>
+                  </div>
+                  <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
+                </a>
+
+                <a
+                  href={SUPPORT_WHATSAPP}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
+                >
+                  <WhatsAppIcon className="h-6 w-6 text-gold shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-1">WhatsApp</p>
+                    <p className="text-ink font-display text-sm">{SUPPORT_PHONE_DISPLAY}</p>
+                  </div>
+                  <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
+                </a>
+
+                <div className="flex items-center gap-2 pt-1 text-ink-muted font-display text-xs">
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span>Mon&ndash;Sat, 10:00 AM &ndash; 6:00 PM IST</span>
                 </div>
-                <div>
-                  <label htmlFor="email" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Email Address</label>
-                  <input type="email" id="email" name="email" value={formData.email} onChange={handleChange} required disabled={submitting} className={inputClass} placeholder="your.email@example.com" />
-                </div>
-                <div>
-                  <label htmlFor="subject" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Subject</label>
-                  <input type="text" id="subject" name="subject" value={formData.subject} onChange={handleChange} required disabled={submitting} className={inputClass} placeholder="How can we help?" />
-                </div>
-                <div>
-                  <label htmlFor="message" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Message</label>
-                  <textarea id="message" name="message" value={formData.message} onChange={handleChange} required disabled={submitting} rows={5} className={inputClass + ' resize-none'} placeholder="Please describe your inquiry..." />
-                </div>
-                <button type="submit" disabled={submitting} className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 px-4 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                  {submitting ? (
-                    <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" />Sending...</>
-                  ) : (
-                    <><Send className="h-4 w-4" />Send Message</>
-                  )}
-                </button>
-              </form>
+              </div>
             </div>
           </div>
         </div>

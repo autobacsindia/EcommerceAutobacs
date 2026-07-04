@@ -177,6 +177,14 @@
   .hr .hero .center-img .hero-seq-fallback { display: none; }
 }
 .hr .hero .floor-glow { position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%); width: 520px; max-width: 80vw; height: 60px; background: radial-gradient(ellipse, rgba(201, 168, 112, 0.09) 0%, transparent 70%); pointer-events: none; }
+
+/* "Consult a specialist" CTA — pinned bottom-right on md/lg; overridden to a
+   centered static block below the hero image on small screens (<=768px). */
+.hr .hero .hero-consult-wrap { position: absolute; right: 52px; bottom: 52px; z-index: 6; }
+.hr .hero .hero-consult { display: inline-flex; align-items: center; gap: 12px; padding: 14px 24px; border: 1px solid rgba(201, 168, 112, 0.4); border-radius: 999px; background: rgba(201, 168, 112, 0.06); backdrop-filter: blur(6px); font-size: 11px; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); cursor: pointer; opacity: 0; animation: hr-fadeUp 0.7s ease 1.3s forwards; transition: border-color 0.25s, background 0.25s, transform 0.25s; }
+.hr .hero .hero-consult:hover { border-color: var(--gold); background: rgba(201, 168, 112, 0.14); transform: translateY(-2px); }
+.hr .hero .hero-consult .hero-consult-arrow { transition: transform 0.25s; }
+.hr .hero .hero-consult:hover .hero-consult-arrow { transform: translateX(4px); }
 .hr .hero .bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 72px; display: flex; align-items: center; padding: 0 52px; border-top: 1px solid var(--line); opacity: 0; animation: hr-fadeIn 0.7s ease 1.35s forwards; }
 .hr .hero .bottom-bar .tagline-s { font-size: 12px; font-weight: 300; color: var(--muted); letter-spacing: 0.06em; }
 .hr .hero .explore { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; cursor: pointer; }
@@ -654,6 +662,8 @@
   .hr .hero .tagline { max-width: 320px; margin: 18px auto 0; }
   .hr .hero .center-img { position: static; transform: none; margin: 32px auto 8px; display: flex; justify-content: center; }
   .hr .hero .center-img img { width: 100%; max-width: 460px; }
+  .hr .hero .hero-consult-wrap { position: static; right: auto; bottom: auto; text-align: center; margin: 22px 0 4px; }
+  .hr .hero .hero-consult { padding: 15px 26px; }
   .hr .hero .floor-glow { bottom: 22%; }
   .hr .hero .bottom-bar { position: static; height: auto; flex-direction: column; align-items: center; gap: 18px; padding: 26px 0 4px; text-align: center; }
   .hr .hero .explore { position: static; transform: none; }
@@ -716,7 +726,8 @@
   .hr .hero .headline,
   .hr .hero .tagline,
   .hr .hero .center-img,
-  .hr .hero .bottom-bar { animation: none !important; opacity: 1 !important; }
+  .hr .hero .bottom-bar,
+  .hr .hero .hero-consult { animation: none !important; opacity: 1 !important; }
   .hr .hero .counter-bar div { animation: none; width: 100%; }
   /* No scroll-scrubbed canvas for reduced-motion users — show the static image
      even on desktop, and the JS effect bails out so no frames are fetched. Also

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import Link from 'next/link';
 import HeroSequence from './HeroSequence';
 import { hero } from './homeContent';
 
@@ -54,6 +55,14 @@ export default function Hero() {
         <div ref={parallaxRef} style={{ transition: 'transform 0.9s cubic-bezier(0.16,1,0.3,1)' }}>
           <HeroSequence sectionRef={pinRef} />
         </div>
+      </div>
+
+      {/* Bottom-right on md/lg (absolute); flows below the hero image on small screens (static). */}
+      <div className="hero-consult-wrap">
+        <Link href="/consultation" className="hero-consult">
+          <span>Consult a specialist</span>
+          <span className="hero-consult-arrow" aria-hidden="true">→</span>
+        </Link>
       </div>
     </section>
     </div>
