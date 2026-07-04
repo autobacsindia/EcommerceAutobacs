@@ -26,6 +26,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/brands', label: 'Brands', icon: '🏷️' },
       { href: '/admin/categories', label: 'Categories', icon: '📂' },
       { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
+      { href: '/admin/coupons', label: 'Coupons', icon: '🎟️' },
+      { href: '/admin/loyalty', label: 'Karma Points', icon: '✨' },
     ],
   },
   {
@@ -34,8 +36,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/orders', label: 'Orders', icon: '📦' },
       { href: '/admin/returns', label: 'Returns', icon: '↩️' },
       { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
-      { href: '/admin/coupons', label: 'Coupons', icon: '🎟️' },
-      { href: '/admin/loyalty', label: 'Karma Points', icon: '✨' },
     ],
   },
   {
@@ -45,10 +45,11 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Customers',
+    title: 'Sales',
     items: [
       { href: '/admin/users', label: 'Users', icon: '👥' },
       { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
+      { href: '/admin/consultation', label: 'Consultancy', icon: '🎯' },
     ],
   },
   {
@@ -57,7 +58,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/blog', label: 'Blog', icon: '📝' },
       { href: '/admin/media', label: 'Media', icon: '🖼️' },
       { href: '/admin/seo', label: 'Pages SEO', icon: '🌐' },
-      { href: '/admin/consultation', label: 'Consultations', icon: '🎯' },
     ],
   },
   {

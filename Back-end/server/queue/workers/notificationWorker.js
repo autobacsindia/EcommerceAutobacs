@@ -6,6 +6,8 @@
  *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
+ *   send-admin-review-alert       { reviewId }       — notify support inbox of a new customer review
+ *   send-admin-consultation-alert { consultationId } — notify support inbox of a new consultation request
  */
 
 import { Worker } from 'bullmq';
@@ -14,6 +16,7 @@ import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
+import { emailAdminReviewAlert, emailAdminConsultationAlert } from '../../services/adminNotificationService.js';
 import * as Sentry from '@sentry/node';
 
 const handlers = {
@@ -35,6 +38,16 @@ const handlers = {
   'send-magic-link-email': async (job) => {
     const { email, token, orderId } = job.data;
     await emailHandler.sendMagicLinkEmail(email, token, orderId);
+  },
+
+  'send-admin-review-alert': async (job) => {
+    const { reviewId } = job.data;
+    await emailAdminReviewAlert(reviewId);
+  },
+
+  'send-admin-consultation-alert': async (job) => {
+    const { consultationId } = job.data;
+    await emailAdminConsultationAlert(consultationId);
   },
 };
 

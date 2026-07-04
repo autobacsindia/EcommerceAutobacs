@@ -59,6 +59,24 @@ export function getSearchSyncQueue() {
   return searchSyncQueue;
 }
 
+/**
+ * Fire-and-forget enqueue onto the notifications queue. Best-effort by design:
+ * a Redis/queue outage must never break the originating HTTP request, so a
+ * missing queue Redis is a silent no-op and enqueue errors are logged and
+ * swallowed. Use for non-critical alerts (e.g. admin notifications), NOT for
+ * work that must not be lost.
+ */
+export function enqueueNotification(jobName, data) {
+  if (!process.env.REDIS_URL && !process.env.QUEUE_REDIS_URL) return;
+  try {
+    getNotificationsQueue()
+      .add(jobName, data)
+      .catch((err) => console.error(`[Queue] Failed to enqueue ${jobName}:`, err.message));
+  } catch (err) {
+    console.error(`[Queue] Failed to enqueue ${jobName}:`, err.message);
+  }
+}
+
 export async function closeQueues() {
   await Promise.all([
     notificationsQueue?.close(),

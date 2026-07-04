@@ -17,6 +17,7 @@ import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import Gallery from '@/components/products/redesign/Gallery';
 import BuyBox from '@/components/products/redesign/BuyBox';
+import ConsultSpecialistBanner from '@/components/products/ConsultSpecialistBanner';
 
 async function getProduct(slugOrId: string): Promise<Product | null> {
   try {
@@ -176,6 +177,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             <BuyBox product={product} />
           </Reveal>
         </div>
+
+        {/* Consult a specialist */}
+        <Reveal y={20}>
+          <ConsultSpecialistBanner productSlug={product.slug} className="mt-12" />
+        </Reveal>
 
         {/* Vehicle compatibility */}
         {product.compatibleVehicles && product.compatibleVehicles.length > 0 && (

@@ -13,6 +13,7 @@ import {
 } from "../middleware/validationMiddleware.js";
 import { cleanHTML } from "../utils/htmlSanitizer.js";
 import { reviewSubmitRateLimit } from "../middleware/rateLimitMiddleware.js";
+import { enqueueNotification } from "../queue/queues.js";
 
 const router = express.Router();
 
@@ -299,6 +300,9 @@ router.post("/products/:productId", protect, reviewSubmitRateLimit, validateRevi
 
   // Populate user info for response
   await savedReview.populate("user", "name");
+
+  // Notify the support inbox of the new (pending) review — best-effort, async.
+  enqueueNotification("send-admin-review-alert", { reviewId: savedReview._id.toString() });
 
   res.status(201).json({
     success: true,

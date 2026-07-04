@@ -2,6 +2,7 @@ import express from "express";
 import consultationRepository from "../repositories/consultationRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { enqueueNotification } from "../queue/queues.js";
 
 const router = express.Router();
 
@@ -34,6 +35,9 @@ router.post("/", asyncHandler(async (req, res) => {
     preferredTime: preferredTime || "",
     notes: notes || "",
   });
+
+  // Notify the support inbox of the new consultation lead — best-effort, async.
+  enqueueNotification("send-admin-consultation-alert", { consultationId: consultation._id.toString() });
 
   res.status(201).json({ success: true, data: consultation });
 }));
