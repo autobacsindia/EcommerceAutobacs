@@ -3,6 +3,7 @@ import { getRedisClient } from './redisClient.js';
 import importJobRepository from '../repositories/importJobRepository.js';
 import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
+import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
 
 class CronService {
   constructor() {
@@ -47,6 +48,7 @@ class CronService {
 
     this.scheduleWordPressSync();
     this.scheduleSaleExpiry();
+    this.scheduleLeadSweeps();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -86,6 +88,50 @@ class CronService {
       }
     } catch (error) {
       console.error('[CronService] Failed to schedule sale-expiry sweep:', error.message);
+    }
+  }
+
+  /**
+   * Schedule the Sales-CRM reconciliation sweeps: a frequent one (abandoned
+   * checkouts + stale follow-up flagging) and a daily one (dormant users). Both
+   * are lock-guarded so overlapping replicas don't double-run, and idempotent
+   * regardless. Schedules are env-tunable; each sweep is best-effort.
+   */
+  scheduleLeadSweeps() {
+    const frequent = process.env.LEAD_SWEEP_CRON || '15 * * * *';       // hourly at :15
+    const daily = process.env.LEAD_DORMANT_SWEEP_CRON || '30 3 * * *';  // 03:30 daily
+    const tz = process.env.WP_SYNC_TZ || 'Asia/Kolkata';
+
+    if (cron.validate(frequent)) {
+      const task = cron.schedule(frequent, () =>
+        this.withDistributedLock('cron:lock:leadSweepFrequent', 55, () =>
+          runFrequentSweeps().catch(err =>
+            console.error('[CronService] Lead frequent sweep failed:', err.message)
+          )
+        ),
+        { scheduled: true, timezone: tz }
+      );
+      this.scheduledTasks.push({ name: 'leadSweepFrequent', task, schedule: frequent, description: 'CRM: abandoned checkouts + stale follow-ups' });
+    } else {
+      console.error(`[CronService] Invalid LEAD_SWEEP_CRON "${frequent}" — frequent lead sweep NOT scheduled`);
+    }
+
+    if (cron.validate(daily)) {
+      const task = cron.schedule(daily, () =>
+        this.withDistributedLock('cron:lock:leadSweepDaily', 3600, () =>
+          runDailySweeps().catch(err =>
+            console.error('[CronService] Lead daily sweep failed:', err.message)
+          )
+        ),
+        { scheduled: true, timezone: tz }
+      );
+      this.scheduledTasks.push({ name: 'leadSweepDaily', task, schedule: daily, description: 'CRM: dormant-user leads' });
+    } else {
+      console.error(`[CronService] Invalid LEAD_DORMANT_SWEEP_CRON "${daily}" — daily lead sweep NOT scheduled`);
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Lead sweeps scheduled: frequent "${frequent}", daily "${daily}"`);
     }
   }
 

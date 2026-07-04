@@ -11,7 +11,10 @@ const OrderSchema = new mongoose.Schema({
   // WooCommerce migration linkage (ADR-005). Historical orders are flagged so they feed
   // analytics but stay out of live fulfilment queues.
   wpId: { type: Number, index: { unique: true, sparse: true } },
-  source: { type: String, enum: ["web", "woocommerce"], default: "web", index: true },
+  // "offline" = deal closed by the sales team off-platform, entered by an admin.
+  // The buyer becomes a real customer (order in their history) and sets a password
+  // on first login. See orderController.createOfflineOrder.
+  source: { type: String, enum: ["web", "woocommerce", "offline"], default: "web", index: true },
   legacyStatus: String,
 
   items: [

@@ -3,6 +3,7 @@ import consultationRepository from "../repositories/consultationRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { enqueueNotification } from "../queue/queues.js";
+import leadSyncService from "../services/leadSyncService.js";
 
 const router = express.Router();
 
@@ -38,6 +39,9 @@ router.post("/", asyncHandler(async (req, res) => {
 
   // Notify the support inbox of the new consultation lead — best-effort, async.
   enqueueNotification("send-admin-consultation-alert", { consultationId: consultation._id.toString() });
+
+  // Surface the consultation in the Sales CRM as a warm lead (best-effort).
+  await leadSyncService.safeSync(() => leadSyncService.upsertFromConsultation(consultation));
 
   res.status(201).json({ success: true, data: consultation });
 }));
@@ -109,6 +113,10 @@ router.patch("/admin/:id/status", protect, admin, asyncHandler(async (req, res) 
   if (!consultation) {
     return res.status(404).json({ success: false, message: "Consultation not found" });
   }
+
+  // Mirror the change onto the linked CRM lead (bidirectional sync, loop-guarded).
+  await leadSyncService.safeSync(() => leadSyncService.syncFromConsultationStatus(req.params.id, status));
+
   res.json({ success: true, data: consultation });
 }));
 

@@ -28,6 +28,7 @@ import {
   downloadInvoice,
   createOrder,
   createGuestOrder,
+  createOfflineOrder,
   cancelOrder,
   markPaymentFailed,
   deleteOrder,
@@ -86,6 +87,11 @@ router.post("/", protect, validateOrder, asyncHandler(createOrder));
 // @desc    Create guest order (no authentication required)
 // @access  Public
 router.post("/guest", checkoutRateLimit, validateOrder, asyncHandler(createGuestOrder));
+
+// @route   POST /orders/admin/offline
+// @desc    Create an offline order for a closed sales deal (Admin only)
+// @access  Private/Admin
+router.post("/admin/offline", protect, admin, asyncHandler(createOfflineOrder));
 
 // @route   PUT /orders/:id/cancel
 // @desc    Cancel an order with validation and refund initiation

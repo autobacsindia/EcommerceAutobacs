@@ -1,0 +1,95 @@
+import mongoose from "mongoose";
+import { SOURCE_TYPES, LEAD_STATUSES } from "../config/leadConstants.js";
+
+/**
+ * Lead — the Sales CRM's single source of truth for a prospect.
+ *
+ * Person-centric: one document per identity (email preferred, else phone),
+ * deduped via `identityKey`. A person can surface through several signals
+ * (a consultation AND an abandoned checkout), collected in `sources[]`. The
+ * source tables (Consultation, Order, Cart, User) keep their own native state;
+ * leadSyncService is the ONLY writer that maps them onto this document, so
+ * status mirroring can't loop or drift.
+ *
+ * Sources considered (per product decision): consultancy queries, dormant
+ * registered users, and orders/carts that stalled BEFORE payment
+ * (payment_pending, payment_failed, cart_abandoned). Admin-cancelled orders are
+ * deliberately excluded — a cancellation is an admin action, not a live prospect.
+ */
+
+const LeadSourceSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: SOURCE_TYPES, required: true },
+    ref: { type: mongoose.Schema.Types.ObjectId, refPath: "sources.refModel" },
+    refModel: { type: String, enum: ["Consultation", "Order", "Cart", "User"] },
+    capturedAt: { type: Date, default: Date.now },
+    // Small denormalized detail for list display without a join (cart total,
+    // vehicle/makeModel, item count). Kept intentionally tiny.
+    snapshot: { type: mongoose.Schema.Types.Mixed, default: {} },
+  },
+  { _id: false }
+);
+
+const LeadActivitySchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ["note", "call", "email", "sms", "status_change", "claim", "assignment", "conversion"],
+      required: true,
+    },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    at: { type: Date, default: Date.now },
+    notes: { type: String, default: "" },
+    meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+  },
+  { _id: true }
+);
+
+const LeadSchema = new mongoose.Schema(
+  {
+    // ── Identity (dedup) ──────────────────────────────────────────────────────
+    name: { type: String, trim: true, default: "" },
+    email: { type: String, trim: true, lowercase: true, default: null },
+    phone: { type: String, trim: true, default: null },
+    // Canonical dedup key: `email:<addr>` or `phone:<digits>`. Unique so upserts
+    // collapse repeat signals from the same person onto one lead.
+    identityKey: { type: String, required: true, unique: true },
+
+    // ── Sources / signals ─────────────────────────────────────────────────────
+    sources: { type: [LeadSourceSchema], default: [] },
+    primarySource: { type: String, enum: SOURCE_TYPES }, // strongest/most-recent, for list badge + filter
+
+    // ── CRM state (source of truth) ───────────────────────────────────────────
+    status: { type: String, enum: LEAD_STATUSES, default: "new", index: true },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null }, // null = unclaimed pool
+    assignedAt: { type: Date, default: null },
+    contactedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    lastContactedAt: { type: Date, default: null },
+    nextFollowUpAt: { type: Date, default: null },
+    lostReason: { type: String, default: "" },
+
+    // ── Tags ──────────────────────────────────────────────────────────────────
+    hasPurchased: { type: Boolean, default: false }, // "already bought before"
+    linkedUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
+    // ── Activity log ──────────────────────────────────────────────────────────
+    activities: { type: [LeadActivitySchema], default: [] },
+
+    // ── Conversion ────────────────────────────────────────────────────────────
+    convertedOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
+    convertedAt: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
+
+// List filters + worklist queries.
+LeadSchema.index({ email: 1 }, { sparse: true });
+LeadSchema.index({ phone: 1 }, { sparse: true });
+LeadSchema.index({ assignedTo: 1, status: 1 }); // "my queue", pool
+LeadSchema.index({ status: 1, createdAt: -1 }); // list default sort within a status
+LeadSchema.index({ primarySource: 1 });
+LeadSchema.index({ hasPurchased: 1 });
+LeadSchema.index({ nextFollowUpAt: 1 }, { sparse: true }); // follow-up sweep
+LeadSchema.index({ "sources.ref": 1 }); // reverse lookup from a source doc
+
+export default mongoose.model("Lead", LeadSchema);

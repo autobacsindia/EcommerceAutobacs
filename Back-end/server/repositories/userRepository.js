@@ -47,6 +47,26 @@ class UserRepository extends BaseRepository {
   async incrementKarma(userId, delta, session = null) {
     return User.findByIdAndUpdate(userId, { $inc: { karmaPoints: delta } }, { new: true, session });
   }
+
+  /**
+   * Denormalize a completed purchase onto the user (drives the CRM "customer"
+   * tag). Sets `firstPurchaseAt` only on the first ever purchase, flips
+   * `hasPurchased`, and increments the paid-order counter. Called once per order
+   * at its first paid transition, so no double-count guard is needed.
+   */
+  async markPurchased(userId, when = new Date(), session = null) {
+    if (!userId) return null;
+    await User.updateOne(
+      { _id: userId, firstPurchaseAt: null },
+      { $set: { firstPurchaseAt: when } },
+      session ? { session } : {}
+    );
+    return User.findByIdAndUpdate(
+      userId,
+      { $set: { hasPurchased: true }, $inc: { paidOrderCount: 1 } },
+      { new: true, ...(session && { session }) }
+    );
+  }
 }
 
 export default new UserRepository();

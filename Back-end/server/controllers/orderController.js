@@ -3,6 +3,7 @@ import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
+import leadSyncService from '../services/leadSyncService.js';
 import { generateInvoicePdf, invoiceNumber } from '../services/invoiceService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import crypto from 'crypto';
@@ -279,6 +280,180 @@ export const createGuestOrder = async (req, res) => {
     res.status(error.statusCode || (typeof error.status === 'number' ? error.status : 500)).json({
       success: false,
       message: error.message || 'Failed to create guest order'
+    });
+  }
+};
+
+// @desc    Create an offline order (deal closed by the sales team off-platform)
+// @route   POST /orders/admin/offline
+// @access  Private/Admin
+//
+// Full customer treatment: find-or-create the buyer by email, attach the order to
+// their history (source: 'offline'), and — for a new account — email a set-password
+// (magic) link so they can log in and see it. The order is created `pending` then
+// driven through the normal status machinery (confirmed → optional delivered) so it
+// reuses every side-effect: purchase tag, lead conversion, karma earn, invoice/emails.
+export const createOfflineOrder = async (req, res) => {
+  const {
+    email,
+    phone,
+    name,
+    items,
+    shippingAddress = {},
+    shippingCost = 0,
+    discount = 0,
+    status = 'confirmed',
+    notes,
+    leadId,
+  } = req.body;
+
+  if (!email || !phone) {
+    return res.status(400).json({ success: false, message: 'Customer email and phone are required' });
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ success: false, message: 'At least one order item is required' });
+  }
+  const invalidItem = items.find(
+    (i) => !i.product || !(Number(i.quantity) > 0) || !(Number(i.price) >= 0)
+  );
+  if (invalidItem) {
+    return res.status(400).json({ success: false, message: 'Each item needs a product, quantity > 0, and price >= 0' });
+  }
+  // Offline orders are only ever created in a paid state (the deal is done).
+  if (!['confirmed', 'delivered'].includes(status)) {
+    return res.status(400).json({ success: false, message: "Offline order status must be 'confirmed' or 'delivered'" });
+  }
+
+  try {
+    // ── Find or create the customer ──────────────────────────────────────────
+    const normEmail = email.toLowerCase();
+    let user = await userRepository.findByEmail(normEmail);
+    let isNewUser = false;
+
+    if (!user) {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPassword, await bcrypt.genSalt(10));
+      user = await userRepository.create({
+        name: name || shippingAddress.fullName || 'Offline Customer',
+        email: normEmail,
+        phone,
+        passwordHash,
+        isVerified: false,
+        // First login forces a password set — exactly the guest/WP-claim flow.
+        mustResetPassword: true,
+      });
+      isNewUser = true;
+    }
+
+    // ── Build the order (amounts in rupees, matching the rest of the system) ──
+    const lineItems = items.map((i) => ({
+      product: i.product,
+      quantity: Number(i.quantity),
+      price: Number(i.price),
+      name: i.name || '',
+      image: i.image || '',
+    }));
+    const subtotal = lineItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    const totalAmount = Math.max(0, subtotal + Number(shippingCost || 0) - Number(discount || 0));
+
+    const address = {
+      fullName: shippingAddress.fullName || name || user.name,
+      phone: shippingAddress.phone || phone,
+      addressLine1: shippingAddress.addressLine1 || 'Offline sale',
+      addressLine2: shippingAddress.addressLine2 || '',
+      city: shippingAddress.city || 'N/A',
+      state: shippingAddress.state || 'N/A',
+      postalCode: shippingAddress.postalCode || '000000',
+      country: shippingAddress.country || 'India',
+    };
+
+    let order = await orderRepository.create({
+      user: user._id,
+      source: 'offline',
+      items: lineItems,
+      shippingAddress: address,
+      subtotal,
+      shippingCost: Number(shippingCost || 0),
+      discount: Number(discount || 0),
+      totalAmount,
+      status: 'pending',
+      guestEmail: normEmail,
+      statusHistory: [
+        {
+          status: 'pending',
+          timestamp: new Date(),
+          updatedBy: req.user.id,
+          reason: 'manual_confirmation',
+          notes: notes || 'Offline order created by admin',
+        },
+      ],
+    });
+
+    // Drive through the normal status machinery so all side-effects fire (purchase
+    // tag + lead conversion on confirm; karma earn + emails on delivery). Admin
+    // bypass lets us set the final state directly.
+    await orderStatusService.updateOrderStatus(order._id.toString(), 'confirmed', {
+      userId: req.user.id,
+      isAdmin: true,
+      reason: 'manual_confirmation',
+      notes: 'Offline sale confirmed',
+    });
+    if (status === 'delivered') {
+      await orderStatusService.updateOrderStatus(order._id.toString(), 'delivered', {
+        userId: req.user.id,
+        isAdmin: true,
+        reason: 'customer_received',
+        notes: 'Offline sale delivered',
+      });
+    }
+    order = await orderRepository.findById(order._id);
+
+    // Explicitly convert the originating lead when the rep closed a specific one
+    // (its identity may differ from the order's, e.g. consultation had phone-only).
+    if (leadId) {
+      await leadSyncService.safeSync(() =>
+        leadSyncService.applyLeadStatus(leadId, 'won', {
+          actorId: req.user.id,
+          notes: 'Closed via offline order',
+          convertedOrder: order._id,
+        })
+      );
+    }
+
+    // ── Emails (best-effort, idempotent) ─────────────────────────────────────
+    if (process.env.REDIS_URL) {
+      const queue = getNotificationsQueue();
+      // Invoice/receipt for the paid order.
+      queue
+        .add('send-order-invoice', { orderId: order._id.toString() })
+        .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
+
+      // New buyer: send a set-password (magic) link so they can claim their account.
+      if (isNewUser) {
+        user.magicLinkToken = crypto.randomBytes(32).toString('hex');
+        user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await userRepository.save(user);
+        queue
+          .add('send-magic-link-email', {
+            email: normEmail,
+            token: user.magicLinkToken,
+            orderId: order._id.toString(),
+          })
+          .catch((err) => console.error('[Queue] Failed to enqueue send-magic-link-email:', err.message));
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Offline order created',
+      order,
+      customer: { id: user._id, email: user.email, isNewUser },
+    });
+  } catch (err) {
+    console.error('[OFFLINE_ORDER_ERROR]', err);
+    res.status(err.statusCode || (typeof err.status === 'number' ? err.status : 500)).json({
+      success: false,
+      message: err.message || 'Failed to create offline order',
     });
   }
 };

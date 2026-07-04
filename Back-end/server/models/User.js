@@ -132,7 +132,14 @@ const UserSchema = new mongoose.Schema({
   }],
   
   // Phone number field (optional, for OTP/guest checkout)
-  phone: String
+  phone: String,
+
+  // Purchase denormalization (drives the CRM "already a customer" tag + dormant
+  // filtering). Updated when an order first reaches a paid status; source of
+  // truth remains the Order collection. `paidOrderCount === 0` ⇒ dormant lead.
+  hasPurchased: { type: Boolean, default: false, index: true },
+  firstPurchaseAt: { type: Date, default: null },
+  paidOrderCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Always strip sensitive fields from any JSON serialization of a User document.

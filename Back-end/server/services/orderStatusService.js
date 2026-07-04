@@ -4,6 +4,8 @@
  */
 
 import orderRepository from '../repositories/orderRepository.js';
+import userRepository from '../repositories/userRepository.js';
+import leadSyncService from './leadSyncService.js';
 import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
 
 const LOYALTY_JOB_BY_STATUS = {
@@ -227,6 +229,11 @@ class OrderStatusService {
       // shipped/delivered/cancelled/refunded, plus a delayed review-request on delivery.
       this._enqueueStatusNotification(order._id.toString(), newStatus);
 
+      // CRM side-effects: tag the customer on first payment, and move the lead
+      // pipeline (convert on paid, detach on admin-cancel). Best-effort, awaited
+      // so it's deterministic for callers/tests but never fatal.
+      await this._syncCrmOnStatus(order, newStatus);
+
       return {
         success: true,
         order,
@@ -274,6 +281,28 @@ class OrderStatusService {
       queue
         .add('send-review-request', { orderId }, { delay: REVIEW_REQUEST_DELAY_MS })
         .catch(err => console.error(`[OrderStatus] Failed to enqueue send-review-request:`, err.message));
+    }
+  }
+
+  /**
+   * Sync CRM state off an order status change. `confirmed` is the first paid
+   * transition (Razorpay webhook / manual confirm), so that's where we stamp the
+   * customer's purchase denorm. The lead pipeline is refreshed for the states
+   * that carry a signal — paid ⇒ convert, cancelled ⇒ detach, failed ⇒ refresh.
+   * Admin-cancelled orders are handled by upsertFromOrder as a detach, never a
+   * new lead. Wrapped so a CRM hiccup can never fail an order update.
+   * @private
+   */
+  async _syncCrmOnStatus(order, newStatus) {
+    try {
+      if (newStatus === 'confirmed' && order.user) {
+        await userRepository.markPurchased(order.user);
+      }
+      if (['confirmed', 'delivered', 'failed', 'cancelled'].includes(newStatus)) {
+        await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
+      }
+    } catch (err) {
+      console.error('[OrderStatus] CRM sync failed:', err?.message);
     }
   }
 
