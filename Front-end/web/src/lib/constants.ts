@@ -176,6 +176,22 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   [ORDER_STATUS.FAILED]: 'bg-red-100 text-red-800',
 };
 
+// Payment axis (Order.paymentStatus) — the "did we get paid?" dimension, kept
+// separate from the fulfillment status above. Drives the admin "Payment" column.
+export const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Awaiting',
+  paid: 'Paid',
+  failed: 'Failed',
+  refunded: 'Refunded',
+};
+
+export const PAYMENT_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  paid: 'bg-green-100 text-green-800',
+  failed: 'bg-red-100 text-red-800',
+  refunded: 'bg-orange-100 text-orange-800',
+};
+
 // User Roles
 export const USER_ROLES = {
   CUSTOMER: 'customer',

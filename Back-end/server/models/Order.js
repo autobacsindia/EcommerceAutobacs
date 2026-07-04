@@ -92,7 +92,19 @@ const OrderSchema = new mongoose.Schema({
     enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded", "failed"],
     default: "pending"
   },
-  
+
+  // Denormalized PAYMENT state — the "did we get paid?" axis, kept separate from
+  // `status` (the fulfillment axis). Source of truth is the Payment doc + the
+  // Razorpay webhook; this mirror is maintained centrally in orderStatusService
+  // and drives the admin "Payment" column. (Phase 1 of the payment/fulfillment
+  // split — Phase 2 will slim `status` down to fulfillment-only stages.)
+  paymentStatus: {
+    type: String,
+    enum: ["pending", "paid", "failed", "refunded"],
+    default: "pending",
+    index: true
+  },
+
   // Contact email for guest orders — allows confirmation emails, support, and admin visibility
   // Not required for authenticated orders (user.email is the source of truth)
   guestEmail: {

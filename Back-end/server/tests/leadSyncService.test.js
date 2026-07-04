@@ -195,6 +195,10 @@ describe('order status hook — CRM side-effects', () => {
     expect(refreshedUser.paidOrderCount).toBe(1);
     expect(refreshedUser.firstPurchaseAt).toBeTruthy();
 
+    // Payment axis is denormalized in step with the fulfillment status.
+    const paidOrder = await Order.findById(pending._id);
+    expect(paidOrder.paymentStatus).toBe('paid');
+
     const lead = await Lead.findOne({ email: 'hook@x.com' });
     expect(lead.status).toBe('won');
     expect(lead.hasPurchased).toBe(true);

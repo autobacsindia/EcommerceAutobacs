@@ -18,6 +18,19 @@ const LOYALTY_JOB_BY_STATUS = {
 // (pending/confirmed/processing/failed) intentionally stay silent.
 const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled', 'refunded']);
 
+// Denormalized payment axis derived from a fulfillment-status change. `cancelled`
+// is deliberately absent — a cancel can happen before OR after payment, so we
+// leave paymentStatus untouched (a refund flips it later). `pending` maps to
+// 'pending' via the schema default, so it's absent here too.
+const PAYMENT_STATUS_BY_ORDER_STATUS = {
+  confirmed: 'paid',
+  processing: 'paid',
+  shipped: 'paid',
+  delivered: 'paid',
+  failed: 'failed',
+  refunded: 'refunded',
+};
+
 // Delay before the post-delivery review-request email fires. Env-configurable so
 // prod can tune it (and tests/QA can shrink it). Defaults to 24 hours.
 const REVIEW_REQUEST_DELAY_MS = Number(process.env.REVIEW_REQUEST_DELAY_MS) || 86_400_000;
@@ -182,6 +195,10 @@ class OrderStatusService {
 
       // Update status
       order.status = newStatus;
+
+      // Keep the denormalized payment axis in step (Phase 1 of the two-axis split).
+      const mappedPayment = PAYMENT_STATUS_BY_ORDER_STATUS[newStatus];
+      if (mappedPayment) order.paymentStatus = mappedPayment;
 
       // Add to status history (will be handled by pre-save middleware, but we add details here)
       const historyEntry = {

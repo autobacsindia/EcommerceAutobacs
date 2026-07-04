@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
-import { API_ENDPOINTS, ORDER_STATUS_COLORS, CUSTOMER_NOTIFIED_STATUSES } from '@/lib/constants';
+import { API_ENDPOINTS, ORDER_STATUS_COLORS, CUSTOMER_NOTIFIED_STATUSES, PAYMENT_STATUS_COLORS, PAYMENT_STATUS_LABELS } from '@/lib/constants';
 import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import OrderFiltersPanel, { OrderFilters } from '@/components/orders/OrderFiltersPanel';
@@ -41,6 +41,7 @@ interface Order {
   orderNumber: string;
   createdAt: string;
   status: string;
+  paymentStatus?: string;
   totalAmount: number;
   user: {
     _id: string;
@@ -440,6 +441,9 @@ function AdminOrdersPageInner() {
                   <SortIcon field="totalAmount" />
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Payment
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                   <SortIcon field="status" />
                 </th>
@@ -490,6 +494,15 @@ function AdminOrdersPageInner() {
                     <div className="text-sm font-medium text-gray-900">
                       ₹{order.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {order.paymentStatus ? (
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATUS_COLORS[order.paymentStatus] || 'bg-gray-100 text-gray-800'}`}>
+                        {PAYMENT_STATUS_LABELS[order.paymentStatus] || order.paymentStatus}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
