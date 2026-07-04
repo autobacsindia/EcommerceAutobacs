@@ -38,8 +38,18 @@ export default function AdminLeadsPage() {
   const [status, setStatus] = useState<LeadStatus | ''>('');
   const [source, setSource] = useState<LeadSourceType | ''>('');
   const [hasPurchased, setHasPurchased] = useState<'' | 'true' | 'false'>('');
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
+  const [followUpDue, setFollowUpDue] = useState(false);
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'recent_contact' | 'follow_up'>('newest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+
+  function clearFilters() {
+    setStatus(''); setSource(''); setHasPurchased('');
+    setCreatedFrom(''); setCreatedTo(''); setFollowUpDue(false);
+    setSort('newest'); setSearch('');
+  }
 
   const [selected, setSelected] = useState<string[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -52,6 +62,10 @@ export default function AdminLeadsPage() {
       if (status) params.set('status', status);
       if (source) params.set('source', source);
       if (hasPurchased) params.set('hasPurchased', hasPurchased);
+      if (createdFrom) params.set('createdFrom', createdFrom);
+      if (createdTo) params.set('createdTo', createdTo);
+      if (followUpDue) params.set('followUpDue', 'true');
+      params.set('sort', sort);
       if (search.trim()) params.set('search', search.trim());
       params.set('page', String(page));
 
@@ -66,7 +80,7 @@ export default function AdminLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [assignment, status, source, hasPurchased, search, page]);
+  }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, sort, search, page]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -81,7 +95,7 @@ export default function AdminLeadsPage() {
   useEffect(() => { loadStats(); }, [loadStats]);
 
   // Reset to page 1 whenever a filter changes.
-  useEffect(() => { setPage(1); }, [assignment, status, source, hasPurchased]);
+  useEffect(() => { setPage(1); }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, sort]);
 
   async function claim(id: string) {
     setBusyId(id);
@@ -174,6 +188,29 @@ export default function AdminLeadsPage() {
           <option value="true">Existing customers</option>
           <option value="false">Never bought</option>
         </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="recent_contact">Recently contacted</option>
+          <option value="follow_up">Follow-up date</option>
+        </select>
+
+        {/* Second row: date range + follow-up-due + clear */}
+        <div className="flex w-full flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            Created
+            <input type="date" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
+            <span className="text-gray-400">to</span>
+            <input type="date" value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={followUpDue} onChange={(e) => setFollowUpDue(e.target.checked)} />
+            Follow-up due
+          </label>
+          <button onClick={clearFilters} className="ml-auto rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+            Clear filters
+          </button>
+        </div>
       </div>
 
       {/* Bulk bar */}

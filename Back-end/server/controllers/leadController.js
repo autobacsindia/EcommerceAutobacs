@@ -14,8 +14,16 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 /** Build the Mongo query for the list from validated query params. */
+// Whitelisted sort orders (label → Mongo sort). Prevents arbitrary sort injection.
+const SORT_OPTIONS = {
+  newest: { createdAt: -1 },
+  oldest: { createdAt: 1 },
+  recent_contact: { lastContactedAt: -1 },
+  follow_up: { nextFollowUpAt: 1 },
+};
+
 function buildListQuery(req) {
-  const { status, source, assignment, hasPurchased, search } = req.query;
+  const { status, source, assignment, hasPurchased, search, createdFrom, createdTo, followUpDue } = req.query;
   const query = {};
 
   if (status && LEAD_STATUSES.includes(status)) query.status = status;
@@ -26,6 +34,20 @@ function buildListQuery(req) {
 
   if (hasPurchased === 'true') query.hasPurchased = true;
   else if (hasPurchased === 'false') query.hasPurchased = false;
+
+  // Created-date range (either bound optional). Invalid dates are ignored.
+  const from = createdFrom ? new Date(createdFrom) : null;
+  const to = createdTo ? new Date(createdTo) : null;
+  const range = {};
+  if (from && !isNaN(from)) range.$gte = from;
+  if (to && !isNaN(to)) {
+    to.setHours(23, 59, 59, 999); // inclusive end-of-day
+    range.$lte = to;
+  }
+  if (Object.keys(range).length) query.createdAt = range;
+
+  // Leads flagged for follow-up whose date has arrived (from the stale-lead sweep).
+  if (followUpDue === 'true') query.nextFollowUpAt = { $ne: null, $lte: new Date() };
 
   if (search) {
     const rx = { $regex: search.trim(), $options: 'i' };
@@ -42,12 +64,13 @@ export const listLeads = async (req, res) => {
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit) || DEFAULT_LIMIT));
   const skip = (page - 1) * limit;
   const query = buildListQuery(req);
+  const sort = SORT_OPTIONS[req.query.sort] || SORT_OPTIONS.newest;
 
   const [leads, total] = await Promise.all([
     leadRepository.find(query, {
       skip,
       limit,
-      sort: { createdAt: -1 },
+      sort,
       populate: [{ path: 'assignedTo', select: 'name email' }],
     }),
     leadRepository.count(query),
