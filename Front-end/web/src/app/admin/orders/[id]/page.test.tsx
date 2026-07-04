@@ -16,6 +16,12 @@ jest.mock('lucide-react', () => ({
   MapPin: () => <span data-testid="icon-map-pin">MapPin</span>,
   CreditCard: () => <span data-testid="icon-credit-card">CreditCard</span>,
   Truck: () => <span data-testid="icon-truck">Truck</span>,
+  Download: () => <span data-testid="icon-download">Download</span>,
+  // Icons used by ConfirmStatusChangeModal
+  X: () => <span>XIcon</span>,
+  AlertCircle: () => <span>AlertCircleIcon</span>,
+  ArrowRight: () => <span>ArrowRightIcon</span>,
+  Mail: () => <span>MailIcon</span>,
 }));
 
 describe('AdminOrderDetailPage', () => {
@@ -92,32 +98,32 @@ describe('AdminOrderDetailPage', () => {
     });
   });
 
-  it('handles status update', async () => {
+  it('confirms via modal before updating status', async () => {
     render(<AdminOrderDetailPage />);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
 
     const select = screen.getByRole('combobox');
+    // Selecting a status opens the confirmation modal — it must NOT fire the API yet.
     fireEvent.change(select, { target: { value: 'shipped' } });
+    expect(apiClient.put).not.toHaveBeenCalled();
 
-    expect(window.confirm).toHaveBeenCalled();
-    
+    // Confirm in the modal → the API fires with the chosen status.
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+
     await waitFor(() => {
-      expect(apiClient.put).toHaveBeenCalledWith('/orders/order123/status', {
-        status: 'shipped',
-        reason: 'admin_update'
-      });
+      expect(apiClient.put).toHaveBeenCalledWith(
+        '/orders/order123/status',
+        expect.objectContaining({ status: 'shipped', reason: 'admin_update' })
+      );
     });
-    
-    expect(window.alert).toHaveBeenCalledWith('Order status updated successfully');
   });
 
-  it('handles status update cancellation', async () => {
-    window.confirm = jest.fn().mockReturnValue(false);
+  it('does not update status when the modal is cancelled', async () => {
     render(<AdminOrderDetailPage />);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
     });
@@ -125,7 +131,9 @@ describe('AdminOrderDetailPage', () => {
     const select = screen.getByRole('combobox');
     fireEvent.change(select, { target: { value: 'shipped' } });
 
-    expect(window.confirm).toHaveBeenCalled();
+    // Dismiss the modal via its Cancel button → no API call.
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+
     expect(apiClient.put).not.toHaveBeenCalled();
   });
   
