@@ -52,4 +52,30 @@ describe('_enqueueStatusNotification', () => {
       expect(mockNotificationsAdd).not.toHaveBeenCalled();
     }
   );
+
+  test('delivered ALSO enqueues a delayed send-review-request job', () => {
+    service._enqueueStatusNotification('order123', 'delivered');
+
+    expect(mockNotificationsAdd).toHaveBeenCalledWith('send-order-status-email', {
+      orderId: 'order123',
+      status: 'delivered',
+    });
+    expect(mockNotificationsAdd).toHaveBeenCalledWith(
+      'send-review-request',
+      { orderId: 'order123' },
+      expect.objectContaining({ delay: expect.any(Number) })
+    );
+  });
+
+  test.each(['shipped', 'cancelled', 'refunded'])(
+    'non-delivered status %s does NOT enqueue a review request',
+    (status) => {
+      service._enqueueStatusNotification('order123', status);
+      expect(mockNotificationsAdd).not.toHaveBeenCalledWith(
+        'send-review-request',
+        expect.anything(),
+        expect.anything()
+      );
+    }
+  );
 });

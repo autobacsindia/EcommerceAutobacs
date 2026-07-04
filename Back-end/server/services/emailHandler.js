@@ -421,6 +421,44 @@ class EmailHandler {
   }
 
   /**
+   * Send a fulfillment status-change email (shipped / delivered / cancelled / refunded).
+   * The order + user are pre-loaded by orderStatusEmailService, so this stays
+   * provider-only (no DB access). The delivered variant lists the order's products.
+   * @param {Object} params
+   * @param {string} params.to - Recipient email
+   * @param {Object} params.order - Order document (Mongoose doc or lean)
+   * @param {string} params.status - New status (shipped|delivered|cancelled|refunded)
+   * @param {Object} [params.user] - User document (name)
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async sendOrderStatusUpdate({ to, order, status, user = null }) {
+    const { orderStatusEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = orderStatusEmail({ order, user, status, company: companyInfo });
+
+    return this.sendEmail({ to, subject, text, html });
+  }
+
+  /**
+   * Send the post-delivery review-request email with a CTA per purchased product.
+   * The order, user and reviewable product list are pre-built by reviewRequestService,
+   * so this stays provider-only (no DB access).
+   * @param {Object} params
+   * @param {string} params.to - Recipient email
+   * @param {Object} params.order - Order document (for the order reference)
+   * @param {Object} [params.user] - User document (name)
+   * @param {Array<{name: string, slug: string, image: string}>} params.products - Reviewable products
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async sendReviewRequest({ to, order, user = null, products }) {
+    const { reviewRequestEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = reviewRequestEmail({ order, user, products, company: companyInfo });
+
+    return this.sendEmail({ to, subject, text, html });
+  }
+
+  /**
    * Send the welcome email on registration.
    * Sent from a friendlier sender (POSTMARK_WELCOME_FROM_EMAIL, e.g. hi@autobacsindia.com)
    * than the default transactional noreply@ — falls back to the default sender if unset.

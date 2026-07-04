@@ -2,20 +2,34 @@
  * Notification Worker — processes email and SMS jobs asynchronously.
  *
  * Job names:
- *   send-order-invoice    { orderId }   — generate + email the invoice/receipt (idempotent)
- *   send-magic-link-email { email, token, orderId }
+ *   send-order-invoice       { orderId }          — generate + email the invoice/receipt (idempotent)
+ *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
+ *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
+ *   send-magic-link-email    { email, token, orderId }
  */
 
 import { Worker } from 'bullmq';
 import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
+import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
+import { emailReviewRequest } from '../../services/reviewRequestService.js';
 import * as Sentry from '@sentry/node';
 
 const handlers = {
   'send-order-invoice': async (job) => {
     const { orderId } = job.data;
     await emailOrderInvoice(orderId);
+  },
+
+  'send-order-status-email': async (job) => {
+    const { orderId, status } = job.data;
+    await emailOrderStatusUpdate(orderId, status);
+  },
+
+  'send-review-request': async (job) => {
+    const { orderId } = job.data;
+    await emailReviewRequest(orderId);
   },
 
   'send-magic-link-email': async (job) => {

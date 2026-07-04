@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import { PenLine } from 'lucide-react';
@@ -29,6 +29,7 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const reviewDeepLinkHandled = useRef(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,6 +53,17 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
 
     fetchData();
   }, [productId]);
+
+  // Deep-link from the post-delivery review-request email (…/products/<slug>?review=1):
+  // once data has loaded, scroll to the reviews section and — for signed-in users —
+  // open the write-review form. Guests just land on the section and can click the CTA.
+  useEffect(() => {
+    if (loading || reviewDeepLinkHandled.current || typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('review') !== '1') return;
+    reviewDeepLinkHandled.current = true;
+    document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (isAuthenticated) setShowForm(true);
+  }, [loading, isAuthenticated]);
 
   // Show the CTA to everyone; logged-out users are sent to login and returned
   // to this product's review section afterwards.

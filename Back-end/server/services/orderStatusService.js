@@ -4,13 +4,21 @@
  */
 
 import orderRepository from '../repositories/orderRepository.js';
-import { getOrderQueue } from '../queue/queues.js';
+import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
 
 const LOYALTY_JOB_BY_STATUS = {
   delivered: 'post-order-delivered',
   cancelled: 'post-order-cancelled',
   refunded:  'post-order-refunded'
 };
+
+// Fulfillment milestones that warrant a customer email. Payment-driven statuses
+// (pending/confirmed/processing/failed) intentionally stay silent.
+const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled', 'refunded']);
+
+// Delay before the post-delivery review-request email fires. Env-configurable so
+// prod can tune it (and tests/QA can shrink it). Defaults to 24 hours.
+const REVIEW_REQUEST_DELAY_MS = Number(process.env.REVIEW_REQUEST_DELAY_MS) || 86_400_000;
 
 /**
  * Define valid status transition rules
@@ -215,6 +223,10 @@ class OrderStatusService {
       //   release the coupon, and (refund) claw back earned karma.
       this._enqueueLoyaltyEffect(order._id.toString(), newStatus);
 
+      // Customer-facing emails run in the background too: a status-change email for
+      // shipped/delivered/cancelled/refunded, plus a delayed review-request on delivery.
+      this._enqueueStatusNotification(order._id.toString(), newStatus);
+
       return {
         success: true,
         order,
@@ -240,6 +252,29 @@ class OrderStatusService {
     getOrderQueue()
       .add(jobName, { orderId })
       .catch(err => console.error(`[OrderStatus] Failed to enqueue ${jobName}:`, err.message));
+  }
+
+  /**
+   * Enqueue the customer-facing status-change email (and, on delivery, the delayed
+   * review-request email). Best-effort and idempotent — the worker re-reads order
+   * state and both jobs guard on Order.notifiedStatuses / reviewRequestedAt, so a
+   * retry is harmless. Silently skips when Redis isn't configured.
+   * @private
+   */
+  _enqueueStatusNotification(orderId, newStatus) {
+    if (!CUSTOMER_NOTIFIED_STATUSES.has(newStatus) || !process.env.REDIS_URL) return;
+
+    const queue = getNotificationsQueue();
+    queue
+      .add('send-order-status-email', { orderId, status: newStatus })
+      .catch(err => console.error(`[OrderStatus] Failed to enqueue send-order-status-email:`, err.message));
+
+    // A day after delivery, ask the customer to review what they bought.
+    if (newStatus === 'delivered') {
+      queue
+        .add('send-review-request', { orderId }, { delay: REVIEW_REQUEST_DELAY_MS })
+        .catch(err => console.error(`[OrderStatus] Failed to enqueue send-review-request:`, err.message));
+    }
   }
 
   /**

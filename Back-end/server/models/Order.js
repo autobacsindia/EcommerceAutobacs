@@ -136,6 +136,15 @@ const OrderSchema = new mongoose.Schema({
   invoiceUrl: String,
   invoicePublicId: String,
   invoiceEmailedAt: Date,
+  // Fulfillment-status emails already sent to the customer. Idempotency guard so a
+  // BullMQ retry of send-order-status-email never double-notifies (see services/orderStatusEmailService.js).
+  notifiedStatuses: {
+    type: [String],
+    default: []
+  },
+  // Set once the +1-day post-delivery review-request email is sent, so the delayed
+  // send-review-request job is idempotent (see services/reviewRequestService.js).
+  reviewRequestedAt: Date,
   trackingNumber: String,
   carrier: {
     name: String,

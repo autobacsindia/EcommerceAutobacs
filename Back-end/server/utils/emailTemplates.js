@@ -684,3 +684,201 @@ The Autobacs India Team
 
   return { subject, text, html };
 };
+
+// Per-status copy for the fulfillment status-change email. Keeps orderStatusEmail
+// declarative — subject/heading/blurb only; the delivered variant also lists items.
+const STATUS_COPY = {
+  shipped: {
+    subject: (ref) => `Your order is on its way — ${ref}`,
+    heading: 'Your order has shipped 🚚',
+    blurb: 'Good news! Your order is on its way. You can track it from your account.',
+  },
+  delivered: {
+    subject: (ref) => `Delivered — ${ref}`,
+    heading: 'Your order has been delivered ✅',
+    blurb: "Your order has been delivered. We hope you love it! Here's what arrived:",
+  },
+  cancelled: {
+    subject: (ref) => `Your order was cancelled — ${ref}`,
+    heading: 'Your order was cancelled',
+    blurb: 'Your order has been cancelled. Any eligible refund will be processed to your original payment method.',
+  },
+  refunded: {
+    subject: (ref) => `Refund processed — ${ref}`,
+    heading: 'Your refund has been processed 💳',
+    blurb: 'Your refund has been processed. It may take a few business days to reflect in your account, depending on your bank.',
+  },
+};
+
+/**
+ * Fulfillment status-change email (shipped / delivered / cancelled / refunded).
+ * The delivered variant lists the order's line items (name, qty, thumbnail).
+ * @param {Object} params
+ * @param {Object} params.order - Order document
+ * @param {Object} [params.user] - User document (name)
+ * @param {string} params.status - New status
+ * @param {Object} [params.company] - Company info (name, email)
+ * @returns {Object} - { subject, text, html }
+ */
+export const orderStatusEmail = ({ order, user = null, status, company = {} }) => {
+  const copy = STATUS_COPY[status] || {
+    subject: (ref) => `Order update — ${ref}`,
+    heading: 'Your order status has been updated',
+    blurb: `Your order status is now: ${status}.`,
+  };
+  const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
+  const name = order.shippingAddress?.fullName || user?.name || 'there';
+  const companyName = company.name || 'Autobacs India';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+  const items = order.items || [];
+  const showItems = status === 'delivered' && items.length > 0;
+
+  const subject = copy.subject(ref);
+
+  const itemsText = showItems
+    ? '\n\nItems:\n' + items.map((it) => `  • ${it.name || 'Item'} × ${it.quantity}`).join('\n')
+    : '';
+
+  const text = `
+Hi ${name},
+
+${copy.blurb}
+
+Order: ${ref}${itemsText}
+
+Questions? Contact us at ${supportEmail}.
+
+Best regards,
+${companyName}
+  `.trim();
+
+  const itemRows = showItems
+    ? items
+        .map(
+          (it) => `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;width:56px;">
+          ${it.image ? `<img src="${it.image}" alt="" width="48" height="48" style="border-radius:6px;object-fit:cover;display:block;">` : ''}
+        </td>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;">${it.name || 'Item'}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;color:#555;">× ${it.quantity}</td>
+      </tr>`
+        )
+        .join('')
+    : '';
+
+  const itemsTable = showItems
+    ? `<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;"><tbody>${itemRows}</tbody></table>`
+    : '';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${copy.heading}</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111;padding:24px 30px;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">${copy.heading}</h1>
+    </div>
+    <div style="padding:30px;">
+      <p>Hi ${name},</p>
+      <p>${copy.blurb}</p>
+      <p style="color:#555;">Order: <strong>${ref}</strong></p>
+      ${itemsTable}
+      <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  return { subject, text, html };
+};
+
+/**
+ * Post-delivery review-request email — one CTA per purchased product.
+ * @param {Object} params
+ * @param {Object} params.order - Order document (for the order reference)
+ * @param {Object} [params.user] - User document (name)
+ * @param {Array<{name: string, slug: string, image: string}>} params.products - Reviewable products
+ * @param {Object} [params.company] - Company info (name, email)
+ * @returns {Object} - { subject, text, html }
+ */
+export const reviewRequestEmail = ({ order, user = null, products = [], company = {} }) => {
+  const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
+  const name = order.shippingAddress?.fullName || user?.name || 'there';
+  const companyName = company.name || 'Autobacs India';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const reviewUrl = (slug) => `${frontendUrl}/products/${slug}?review=1`;
+
+  const subject = 'How did we do? Share your review 🌟';
+
+  const text = `
+Hi ${name},
+
+Thanks for shopping with ${companyName} (order ${ref}). We'd love to hear what you think — your review helps other drivers choose with confidence.
+
+${products.map((p) => `  • ${p.name}: ${reviewUrl(p.slug)}`).join('\n')}
+
+It only takes a minute. Thank you!
+
+Questions? Contact us at ${supportEmail}.
+
+Best regards,
+${companyName}
+  `.trim();
+
+  const productRows = products
+    .map(
+      (p) => `
+      <tr>
+        <td style="padding:12px 0;border-bottom:1px solid #eee;width:64px;">
+          ${p.image ? `<img src="${p.image}" alt="" width="56" height="56" style="border-radius:6px;object-fit:cover;display:block;">` : ''}
+        </td>
+        <td style="padding:12px 0;border-bottom:1px solid #eee;font-size:14px;">${p.name}</td>
+        <td style="padding:12px 0;border-bottom:1px solid #eee;text-align:right;">
+          <a href="${reviewUrl(p.slug)}" style="display:inline-block;background:#111;color:#fff;padding:8px 16px;text-decoration:none;border-radius:6px;font-size:13px;font-weight:bold;white-space:nowrap;">Write a review</a>
+        </td>
+      </tr>`
+    )
+    .join('');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share your review</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111;padding:24px 30px;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">How did we do? 🌟</h1>
+    </div>
+    <div style="padding:30px;">
+      <p>Hi ${name},</p>
+      <p>Thanks for shopping with <strong>${companyName}</strong> (order ${ref}). We'd love to hear what you think — your review helps other drivers choose with confidence.</p>
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+        <tbody>${productRows}</tbody>
+      </table>
+      <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  return { subject, text, html };
+};
