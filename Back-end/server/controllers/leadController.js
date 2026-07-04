@@ -94,14 +94,17 @@ export const listLeads = async (req, res) => {
 // @route   GET /leads/stats
 // @access  Private/Admin
 export const getLeadStats = async (req, res) => {
-  const [byStatus, unassigned, mine, total] = await Promise.all([
+  const due = { nextFollowUpAt: { $ne: null, $lte: new Date() } };
+  const [byStatus, unassigned, mine, total, followUpDue, followUpDueMine] = await Promise.all([
     leadRepository.statusCounts({}),
     leadRepository.count({ assignedTo: null, status: { $in: ['new', 'contacted', 'qualified'] } }),
     leadRepository.count({ assignedTo: req.user.id, status: { $in: ['new', 'contacted', 'qualified'] } }),
     leadRepository.count({}),
+    leadRepository.count(due),
+    leadRepository.count({ ...due, assignedTo: req.user.id }),
   ]);
 
-  res.json({ success: true, stats: { byStatus, unassigned, mine, total } });
+  res.json({ success: true, stats: { byStatus, unassigned, mine, total, followUpDue, followUpDueMine } });
 };
 
 // @desc    Lead detail (sources + existing-customer order history)

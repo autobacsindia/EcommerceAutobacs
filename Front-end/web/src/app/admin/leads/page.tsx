@@ -20,7 +20,14 @@ interface LeadsResponse {
 }
 interface StatsResponse {
   success: boolean;
-  stats: { byStatus: Record<string, number>; unassigned: number; mine: number; total: number };
+  stats: {
+    byStatus: Record<string, number>;
+    unassigned: number;
+    mine: number;
+    total: number;
+    followUpDue: number;
+    followUpDueMine: number;
+  };
 }
 
 const SOURCE_OPTIONS: LeadSourceType[] = [
@@ -206,6 +213,12 @@ export default function AdminLeadsPage() {
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={followUpDue} onChange={(e) => setFollowUpDue(e.target.checked)} />
             Follow-up due
+            {(() => {
+              const due = stats ? (assignment === 'mine' ? stats.followUpDueMine : stats.followUpDue) : 0;
+              return due > 0 ? (
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{due}</span>
+              ) : null;
+            })()}
           </label>
           <button onClick={clearFilters} className="ml-auto rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
             Clear filters
