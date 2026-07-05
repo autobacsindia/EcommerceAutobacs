@@ -11,24 +11,24 @@ import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
 const LOYALTY_JOB_BY_STATUS = {
   delivered: 'post-order-delivered',
   cancelled: 'post-order-cancelled',
-  refunded:  'post-order-refunded'
+  returned:  'post-order-refunded'   // a completed return reverses earned karma
 };
 
-// Fulfillment milestones that warrant a customer email. Payment-driven statuses
-// (pending/confirmed/processing/failed) intentionally stay silent.
-const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled', 'refunded']);
+// Fulfillment milestones that warrant a customer email. `processing` (the paid,
+// pre-ship state) intentionally stays silent.
+const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled', 'returned']);
 
-// Denormalized payment axis derived from a fulfillment-status change. `cancelled`
-// is deliberately absent — a cancel can happen before OR after payment, so we
-// leave paymentStatus untouched (a refund flips it later). `pending` maps to
-// 'pending' via the schema default, so it's absent here too.
+// Denormalized payment axis inferred from a fulfillment transition (mainly for the
+// offline-order path, which sets fulfillment directly). Reaching any post-payment
+// stage implies `paid`; a completed `returned` implies a refund. `cancelled` is
+// deliberately absent — a cancel can precede OR follow payment, so we leave
+// paymentStatus untouched. Online orders set paymentStatus straight from the
+// Razorpay webhook, independent of this map.
 const PAYMENT_STATUS_BY_ORDER_STATUS = {
-  confirmed: 'paid',
   processing: 'paid',
   shipped: 'paid',
   delivered: 'paid',
-  failed: 'failed',
-  refunded: 'refunded',
+  returned: 'refunded',
 };
 
 // Delay before the post-delivery review-request email fires. Env-configurable so
@@ -40,14 +40,12 @@ const REVIEW_REQUEST_DELAY_MS = Number(process.env.REVIEW_REQUEST_DELAY_MS) || 8
  * Each status maps to an array of allowed next statuses
  */
 const STATUS_TRANSITIONS = {
-  'pending': ['confirmed', 'cancelled', 'failed'],
-  'confirmed': ['processing', 'cancelled'],
+  'awaiting_payment': ['processing', 'cancelled'], // → processing on payment capture
   'processing': ['shipped', 'cancelled'],
-  'shipped': ['delivered'],
-  'delivered': ['refunded'],
-  'cancelled': [], // Terminal state
-  'refunded': [],   // Terminal state
-  'failed': []      // Terminal state
+  'shipped': ['delivered'],           // no cancel after shipped — reverse via return
+  'delivered': ['returned'],
+  'returned': [],   // Terminal state
+  'cancelled': []   // Terminal state
 };
 
 /**
@@ -55,21 +53,18 @@ const STATUS_TRANSITIONS = {
  */
 const ADMIN_ONLY_TRANSITIONS = {
   'processing': ['cancelled'], // Only admin can cancel after processing starts
-  'shipped': [], // Shipped orders cannot be cancelled
-  'delivered': ['refunded'] // Only admin can initiate refund
+  'delivered': ['returned']    // Only admin marks a delivered order returned
 };
 
 /**
  * Define status transition reasons/categories
  */
 const TRANSITION_REASONS = {
-  'confirmed': ['payment_verified', 'inventory_available', 'manual_confirmation'],
-  'processing': ['warehouse_assigned', 'items_picked', 'packing_started'],
+  'processing': ['payment_verified', 'warehouse_assigned', 'items_picked', 'packing_started', 'manual_confirmation'],
   'shipped': ['handed_to_carrier', 'label_created', 'in_transit'],
   'delivered': ['customer_received', 'left_at_door', 'signed_for'],
-  'cancelled': ['customer_request', 'out_of_stock', 'payment_failed', 'fraud_suspected', 'duplicate_order'],
-  'refunded': ['return_completed', 'damaged_item', 'quality_issue', 'order_cancelled'],
-  'failed': ['payment_failed', 'gateway_error', 'timeout']
+  'cancelled': ['customer_request', 'out_of_stock', 'fraud_suspected', 'duplicate_order'],
+  'returned': ['return_completed', 'damaged_item', 'quality_issue', 'order_cancelled']
 };
 
 class OrderStatusService {
@@ -312,10 +307,12 @@ class OrderStatusService {
    */
   async _syncCrmOnStatus(order, newStatus) {
     try {
-      if (newStatus === 'confirmed' && order.user) {
+      // `processing` is the first paid fulfillment stage (payment captured), so
+      // that's where we stamp the customer's purchase denorm.
+      if (newStatus === 'processing' && order.user) {
         await userRepository.markPurchased(order.user);
       }
-      if (['confirmed', 'delivered', 'failed', 'cancelled'].includes(newStatus)) {
+      if (['processing', 'delivered', 'cancelled', 'returned'].includes(newStatus)) {
         await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
       }
     } catch (err) {
@@ -337,21 +334,19 @@ class OrderStatusService {
     const now = new Date();
 
     switch (newStatus) {
-      case 'confirmed':
-        order.fulfillmentMetrics.confirmedAt = now;
-        break;
-      
       case 'processing':
+        // First paid stage — also stamps the confirmation baseline for metrics.
         order.fulfillmentMetrics.processingStartedAt = now;
+        order.fulfillmentMetrics.confirmedAt = order.fulfillmentMetrics.confirmedAt || now;
         break;
-      
+
       case 'shipped':
         order.fulfillmentMetrics.shippedAt = now;
-        
-        // Calculate time to ship (from confirmation to shipping)
-        if (order.fulfillmentMetrics.confirmedAt) {
-          const confirmedTime = new Date(order.fulfillmentMetrics.confirmedAt);
-          const timeToShipMs = now - confirmedTime;
+
+        // Calculate time to ship (from processing start to shipping)
+        if (order.fulfillmentMetrics.processingStartedAt) {
+          const startTime = new Date(order.fulfillmentMetrics.processingStartedAt);
+          const timeToShipMs = now - startTime;
           order.fulfillmentMetrics.timeToShip = Math.round(timeToShipMs / (1000 * 60 * 60)); // hours
         }
         break;
@@ -437,7 +432,7 @@ class OrderStatusService {
    * @returns {Object} - { canCancel: boolean, reason: string }
    */
   canCustomerCancel(order) {
-    const cancellableStatuses = ['pending', 'confirmed'];
+    const cancellableStatuses = ['awaiting_payment', 'processing'];
     
     if (!cancellableStatuses.includes(order.status)) {
       return {

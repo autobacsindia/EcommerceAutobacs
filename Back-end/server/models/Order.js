@@ -87,10 +87,15 @@ const OrderSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  // FULFILLMENT status only (the "where is the parcel?" axis). Payment lives on
+  // paymentStatus below. `awaiting_payment` is the internal pre-payment state for a
+  // just-created order (rendered as "—" in admin — not a real stage); it flips to
+  // `processing` the moment payment is captured. Legacy values (pending/confirmed/
+  // failed/refunded) were migrated out — see scripts/migrate-order-status-phase2.js.
   status: {
     type: String,
-    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded", "failed"],
-    default: "pending"
+    enum: ["awaiting_payment", "processing", "shipped", "delivered", "returned", "cancelled"],
+    default: "awaiting_payment"
   },
 
   // Denormalized PAYMENT state — the "did we get paid?" axis, kept separate from
@@ -98,9 +103,13 @@ const OrderSchema = new mongoose.Schema({
   // Razorpay webhook; this mirror is maintained centrally in orderStatusService
   // and drives the admin "Payment" column. (Phase 1 of the payment/fulfillment
   // split — Phase 2 will slim `status` down to fulfillment-only stages.)
+  // `cancelled` = the CUSTOMER cancelled the payment (dismissed the Razorpay
+  // popup) — distinct from a `status: cancelled` admin order-cancellation. The
+  // order stays `awaiting_payment` (retry still possible) and becomes a
+  // "payment cancelled" lead.
   paymentStatus: {
     type: String,
-    enum: ["pending", "paid", "failed", "refunded"],
+    enum: ["pending", "paid", "failed", "refunded", "cancelled"],
     default: "pending",
     index: true
   },

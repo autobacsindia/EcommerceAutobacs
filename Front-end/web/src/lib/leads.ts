@@ -10,6 +10,7 @@ export type LeadSourceType =
   | 'consultation'
   | 'payment_pending'
   | 'payment_failed'
+  | 'payment_cancelled'
   | 'cart_abandoned'
   | 'dormant_user';
 
@@ -75,6 +76,7 @@ export const LEAD_SOURCE_LABELS: Record<LeadSourceType, string> = {
   consultation: 'Consultancy',
   payment_pending: 'Left at checkout',
   payment_failed: 'Payment failed',
+  payment_cancelled: 'Payment cancelled',
   cart_abandoned: 'Abandoned cart',
   dormant_user: 'Never purchased',
 };
@@ -83,6 +85,7 @@ export const LEAD_SOURCE_COLORS: Record<LeadSourceType, string> = {
   consultation: 'bg-teal-100 text-teal-800',
   payment_pending: 'bg-orange-100 text-orange-800',
   payment_failed: 'bg-red-100 text-red-800',
+  payment_cancelled: 'bg-rose-100 text-rose-800',
   cart_abandoned: 'bg-yellow-100 text-yellow-800',
   dormant_user: 'bg-slate-100 text-slate-700',
 };

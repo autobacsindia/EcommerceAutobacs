@@ -123,9 +123,9 @@ export const downloadInvoice = async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
   }
 
-  // Invoices only exist once payment is confirmed; a pending order has no receipt yet.
-  const INVOICEABLE = ['confirmed', 'processing', 'shipped', 'delivered', 'refunded'];
-  if (!INVOICEABLE.includes(order.status)) {
+  // Invoices only exist once money has changed hands — gate on the PAYMENT axis,
+  // not fulfillment (an order can be paid but not yet shipped).
+  if (order.paymentStatus !== 'paid' && order.paymentStatus !== 'refunded') {
     return res.status(409).json({
       success: false,
       message: 'Invoice is available only after payment is confirmed'
@@ -302,7 +302,7 @@ export const createOfflineOrder = async (req, res) => {
     shippingAddress = {},
     shippingCost = 0,
     discount = 0,
-    status = 'confirmed',
+    status = 'processing', // 'processing' (paid) or 'delivered'
     notes,
     leadId,
   } = req.body;
@@ -320,8 +320,8 @@ export const createOfflineOrder = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Each item needs a product, quantity > 0, and price >= 0' });
   }
   // Offline orders are only ever created in a paid state (the deal is done).
-  if (!['confirmed', 'delivered'].includes(status)) {
-    return res.status(400).json({ success: false, message: "Offline order status must be 'confirmed' or 'delivered'" });
+  if (!['processing', 'delivered'].includes(status)) {
+    return res.status(400).json({ success: false, message: "Offline order status must be 'processing' or 'delivered'" });
   }
 
   try {
@@ -376,11 +376,11 @@ export const createOfflineOrder = async (req, res) => {
       shippingCost: Number(shippingCost || 0),
       discount: Number(discount || 0),
       totalAmount,
-      status: 'pending',
+      status: 'awaiting_payment',
       guestEmail: normEmail,
       statusHistory: [
         {
-          status: 'pending',
+          status: 'awaiting_payment',
           timestamp: new Date(),
           updatedBy: req.user.id,
           reason: 'manual_confirmation',
@@ -392,11 +392,11 @@ export const createOfflineOrder = async (req, res) => {
     // Drive through the normal status machinery so all side-effects fire (purchase
     // tag + lead conversion on confirm; karma earn + emails on delivery). Admin
     // bypass lets us set the final state directly.
-    await orderStatusService.updateOrderStatus(order._id.toString(), 'confirmed', {
+    await orderStatusService.updateOrderStatus(order._id.toString(), 'processing', {
       userId: req.user.id,
       isAdmin: true,
       reason: 'manual_confirmation',
-      notes: 'Offline sale confirmed',
+      notes: 'Offline sale confirmed (paid)',
     });
     if (status === 'delivered') {
       await orderStatusService.updateOrderStatus(order._id.toString(), 'delivered', {
@@ -465,7 +465,8 @@ export const cancelOrder = async (req, res) => {
   const order = req.order; // Attached by validateCancellation middleware
   const { reason, notes } = req.body;
 
-  const needsRefund = order.payment && ['confirmed', 'processing'].includes(order.status);
+  // A cancel needs a refund only when money was actually captured (payment axis).
+  const needsRefund = order.payment && order.paymentStatus === 'paid';
 
   const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'cancelled', {
     userId: req.user.id,
@@ -528,26 +529,70 @@ export const markPaymentFailed = async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 
-  if (order.status !== 'pending') {
+  // Payment failure is a PAYMENT-axis fact now — it doesn't move fulfillment
+  // (the order stays awaiting_payment so the customer can retry).
+  if (order.status !== 'awaiting_payment' || order.paymentStatus === 'paid') {
     return res.status(400).json({
       success: false,
-      message: `Cannot mark order as failed. Current status: ${order.status}`
+      message: `Cannot mark payment failed. Order status: ${order.status}, payment: ${order.paymentStatus}`
     });
   }
 
-  const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'failed', {
-    userId: req.user.id,
-    isAdmin: req.user.role === 'admin',
+  order.paymentStatus = 'failed';
+  order.statusHistory.push({
+    status: order.status,
+    timestamp: new Date(),
+    updatedBy: req.user.id,
     reason: reason || 'payment_failed',
     notes: `Payment failed reported by client. ${errorDescription ? 'Error: ' + errorDescription : ''}`,
     metadata: { paymentId, errorDescription }
   });
+  await orderRepository.save(order);
 
-  if (!result.success) {
-    return res.status(400).json({ success: false, message: result.message });
+  // Surface as a payment-failed lead (best-effort).
+  await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
+
+  res.json({ success: true, message: 'Payment marked as failed', order });
+};
+
+// @desc    Mark that the customer cancelled the payment (dismissed the popup)
+// @route   PUT /orders/:id/payment-cancelled
+// @access  Private
+//
+// Payment-axis event ONLY — the order stays `awaiting_payment` so the customer can
+// still retry, and it surfaces as a distinct "payment cancelled" lead. This is
+// deliberately NOT the admin order-cancel path (which sets status=cancelled).
+export const cancelPayment = async (req, res) => {
+  const order = await orderRepository.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized' });
+  }
+  // Only meaningful before payment succeeds; a paid/shipped order can't be "payment cancelled".
+  if (order.status !== 'awaiting_payment' || order.paymentStatus === 'paid') {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot cancel payment. Order status: ${order.status}, payment: ${order.paymentStatus}`
+    });
   }
 
-  res.json({ success: true, message: 'Order marked as failed', order: result.order });
+  order.paymentStatus = 'cancelled';
+  order.statusHistory.push({
+    status: order.status,
+    timestamp: new Date(),
+    updatedBy: req.user.id,
+    reason: 'payment_cancelled',
+    notes: 'Payment cancelled by the customer (popup dismissed)'
+  });
+  await orderRepository.save(order);
+
+  // Surface as a "payment cancelled" lead (best-effort).
+  await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
+
+  res.json({ success: true, message: 'Payment cancelled', order });
 };
 
 // @desc    Delete an order (Only cancelled or failed orders)
@@ -564,11 +609,12 @@ export const deleteOrder = async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized to delete this order' });
   }
 
-  const deletableStatuses = ['cancelled', 'failed'];
-  if (!deletableStatuses.includes(order.status)) {
+  // Deletable = cancelled, or an unpaid order whose payment failed.
+  const isDeletable = order.status === 'cancelled' || order.paymentStatus === 'failed';
+  if (!isDeletable) {
     return res.status(400).json({
       success: false,
-      message: `Cannot delete order with status '${order.status}'. Only cancelled or failed orders can be deleted.`
+      message: `Cannot delete order (status '${order.status}', payment '${order.paymentStatus}'). Only cancelled or payment-failed orders can be deleted.`
     });
   }
 
@@ -660,7 +706,6 @@ export const bulkDeleteOrders = async (req, res) => {
   }
 
   const results      = { successful: [], failed: [] };
-  const deletable    = ['cancelled', 'failed'];
 
   await Promise.all(orderIds.map(async (orderId) => {
     try {
@@ -671,10 +716,11 @@ export const bulkDeleteOrders = async (req, res) => {
         return;
       }
 
-      if (!deletable.includes(order.status)) {
+      const isDeletable = order.status === 'cancelled' || order.paymentStatus === 'failed';
+      if (!isDeletable) {
         results.failed.push({
           orderId,
-          error: `Cannot delete order with status '${order.status}'. Only cancelled or failed orders can be deleted.`
+          error: `Cannot delete order (status '${order.status}', payment '${order.paymentStatus}'). Only cancelled or payment-failed orders can be deleted.`
         });
         return;
       }
@@ -1068,10 +1114,10 @@ export const updateReturnStatus = async (req, res) => {
     };
 
     if (refundAmount >= order.totalAmount) {
-      await orderStatusService.updateOrderStatus(order._id, 'refunded', {
+      await orderStatusService.updateOrderStatus(order._id, 'returned', {
         userId: req.user.id,
         isAdmin: true,
-        reason: 'return_approved',
+        reason: 'return_completed',
         notes: 'Return request approved and refunded'
       });
       const updatedOrder = await orderRepository.findById(req.params.id);

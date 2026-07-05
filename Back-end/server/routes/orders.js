@@ -30,6 +30,7 @@ import {
   createGuestOrder,
   createOfflineOrder,
   cancelOrder,
+  cancelPayment,
   markPaymentFailed,
   deleteOrder,
   updateOrderStatus,
@@ -102,6 +103,11 @@ router.put("/:id/cancel", protect, validateOrderCancellation, validateCancellati
 // @desc    Mark order as failed due to payment failure
 // @access  Private
 router.put("/:id/payment-failed", protect, validatePaymentFailed, asyncHandler(markPaymentFailed));
+
+// @route   PUT /orders/:id/payment-cancelled
+// @desc    Customer cancelled the payment (popup dismissed) — payment-axis only
+// @access  Private
+router.put("/:id/payment-cancelled", protect, validateIdParam, asyncHandler(cancelPayment));
 
 // @route   DELETE /orders/:id
 // @desc    Delete an order (Only cancelled or failed orders)

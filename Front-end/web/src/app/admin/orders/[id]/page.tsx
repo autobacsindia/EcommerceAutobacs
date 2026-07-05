@@ -23,6 +23,7 @@ interface Order {
   orderNumber: string;
   createdAt: string;
   status: string;
+  paymentStatus?: string;
   items: OrderItem[];
   shippingAddress: {
     fullName: string;
@@ -201,7 +202,7 @@ export default function AdminOrderDetailPage() {
         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
           {getStatusLabel(order.status)}
         </span>
-        {['confirmed', 'processing', 'shipped', 'delivered', 'refunded'].includes(order.status?.toLowerCase()) && (
+        {['paid', 'refunded'].includes(order.paymentStatus || '') && (
           <a
             href={`/api/v1/orders/${orderId}/invoice`}
             target="_blank"
@@ -342,13 +343,13 @@ export default function AdminOrderDetailPage() {
                   <option value={order.status} disabled>
                     {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (current)
                   </option>
-                  {/* Payment-driven statuses (pending/confirmed/failed) are set by checkout + the
-                      Razorpay webhook only — never offered as manual options. */}
+                  {/* Fulfillment stages only. Payment (awaiting/paid/failed/refunded)
+                      is driven by checkout + the Razorpay webhook, shown separately. */}
                   <option value="processing">Processing</option>
                   <option value="shipped">Shipped</option>
                   <option value="delivered">Delivered</option>
+                  <option value="returned">Returned</option>
                   <option value="cancelled">Cancelled</option>
-                  <option value="refunded">Refunded</option>
                 </select>
               </div>
               

@@ -35,7 +35,8 @@ function seedOrder(overrides = {}) {
     shippingAddress: ADDRESS,
     subtotal: 500,
     totalAmount: 500,
-    status: 'pending',
+    status: 'awaiting_payment',
+    paymentStatus: 'pending',
     guestEmail: 'buyer@example.com',
     ...overrides,
   });
@@ -66,8 +67,8 @@ describe('leadSyncService — source ingestion & dedup', () => {
   });
 
   it('merges multiple signals from the same identity into one lead', async () => {
-    const pending = await seedOrder({ status: 'pending', guestEmail: 'same@x.com' });
-    const failed = await seedOrder({ status: 'failed', guestEmail: 'same@x.com' });
+    const pending = await seedOrder({ paymentStatus: 'pending', guestEmail: 'same@x.com' });
+    const failed = await seedOrder({ paymentStatus: 'failed', guestEmail: 'same@x.com' });
 
     await leadSyncService.upsertFromOrder(pending);
     const lead = await leadSyncService.upsertFromOrder(failed);
@@ -114,7 +115,7 @@ describe('leadSyncService — Consultation ↔ Lead status mirror', () => {
 
 describe('leadSyncService — order pipeline', () => {
   it('detaches an order source and loses a now-empty lead on cancellation', async () => {
-    const order = await seedOrder({ status: 'pending', guestEmail: 'cancelme@x.com' });
+    const order = await seedOrder({ paymentStatus: 'pending', guestEmail: 'cancelme@x.com' });
     await leadSyncService.upsertFromOrder(order);
 
     order.status = 'cancelled';
@@ -126,18 +127,27 @@ describe('leadSyncService — order pipeline', () => {
   });
 
   it('converts the identity’s lead when an order is paid', async () => {
-    const pending = await seedOrder({ status: 'pending', guestEmail: 'convert@x.com' });
+    const pending = await seedOrder({ paymentStatus: 'pending', guestEmail: 'convert@x.com' });
     await leadSyncService.upsertFromOrder(pending);
 
-    const paid = await seedOrder({ status: 'confirmed', guestEmail: 'convert@x.com' });
+    const paid = await seedOrder({ status: 'processing', paymentStatus: 'paid', guestEmail: 'convert@x.com' });
     const lead = await leadSyncService.upsertFromOrder(paid);
 
     expect(lead.status).toBe('won');
     expect(lead.hasPurchased).toBe(true);
   });
 
+  it('creates a payment_cancelled lead when the customer cancels the popup', async () => {
+    // Popup-cancel keeps the order awaiting_payment but flags paymentStatus.
+    const order = await seedOrder({ status: 'awaiting_payment', paymentStatus: 'cancelled', guestEmail: 'popup@x.com' });
+    const lead = await leadSyncService.upsertFromOrder(order);
+
+    expect(lead.primarySource).toBe('payment_cancelled');
+    expect(lead.status).toBe('new');
+  });
+
   it('does NOT create a lead for a paid order with no prior signal', async () => {
-    const paid = await seedOrder({ status: 'delivered', guestEmail: 'fresh@x.com' });
+    const paid = await seedOrder({ status: 'delivered', paymentStatus: 'paid', guestEmail: 'fresh@x.com' });
     const lead = await leadSyncService.upsertFromOrder(paid);
     expect(lead).toBeNull();
     expect(await Lead.countDocuments()).toBe(0);
@@ -146,7 +156,7 @@ describe('leadSyncService — order pipeline', () => {
 
 describe('leadSyncService — claim & activity', () => {
   it('self-claim is race-safe: exactly one of two concurrent claims wins', async () => {
-    const order = await seedOrder({ status: 'failed', guestEmail: 'claim@x.com' });
+    const order = await seedOrder({ paymentStatus: 'failed', guestEmail: 'claim@x.com' });
     const lead = await leadSyncService.upsertFromOrder(order);
 
     const a = new mongoose.Types.ObjectId();
@@ -163,7 +173,7 @@ describe('leadSyncService — claim & activity', () => {
   });
 
   it('logging a call bumps a new lead to contacted and stamps lastContactedAt', async () => {
-    const order = await seedOrder({ status: 'failed', guestEmail: 'activity@x.com' });
+    const order = await seedOrder({ paymentStatus: 'failed', guestEmail: 'activity@x.com' });
     const lead = await leadSyncService.upsertFromOrder(order);
     const actor = new mongoose.Types.ObjectId();
 
@@ -177,13 +187,13 @@ describe('leadSyncService — claim & activity', () => {
 });
 
 describe('order status hook — CRM side-effects', () => {
-  it('confirming an order tags the buyer and converts their lead', async () => {
+  it('paying an order (→processing) tags the buyer and converts their lead', async () => {
     const user = await User.create({ name: 'Buyer', email: 'hook@x.com', passwordHash: 'x' });
     // A prior signal exists so there is a lead to convert.
-    const pending = await seedOrder({ user: user._id, status: 'pending', guestEmail: 'hook@x.com' });
+    const pending = await seedOrder({ user: user._id, paymentStatus: 'pending', guestEmail: 'hook@x.com' });
     await leadSyncService.upsertFromOrder(pending);
 
-    const result = await orderStatusService.updateOrderStatus(pending._id.toString(), 'confirmed', {
+    const result = await orderStatusService.updateOrderStatus(pending._id.toString(), 'processing', {
       userId: user._id,
       isAdmin: true,
       reason: 'manual_confirmation',

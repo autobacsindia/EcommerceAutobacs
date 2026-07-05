@@ -138,42 +138,39 @@ export const API_ENDPOINTS = {
 };
 
 // Order Status
+// FULFILLMENT status only (the "where is the parcel?" axis). Payment lives in
+// PAYMENT_STATUS_* below. `awaiting_payment` is the pre-payment state (shown as
+// "—" in the orders list). Mirrors backend Order.status (Phase 2 two-axis split).
 export const ORDER_STATUS = {
-  PENDING: 'pending',
-  CONFIRMED: 'confirmed',
+  AWAITING_PAYMENT: 'awaiting_payment',
   PROCESSING: 'processing',
   SHIPPED: 'shipped',
   DELIVERED: 'delivered',
+  RETURNED: 'returned',
   CANCELLED: 'cancelled',
-  REFUNDED: 'refunded',
-  FAILED: 'failed',
 } as const;
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
-  [ORDER_STATUS.PENDING]: 'Pending',
-  [ORDER_STATUS.CONFIRMED]: 'Confirmed',
+  [ORDER_STATUS.AWAITING_PAYMENT]: 'Awaiting payment',
   [ORDER_STATUS.PROCESSING]: 'Processing',
   [ORDER_STATUS.SHIPPED]: 'Shipped',
   [ORDER_STATUS.DELIVERED]: 'Delivered',
+  [ORDER_STATUS.RETURNED]: 'Returned',
   [ORDER_STATUS.CANCELLED]: 'Cancelled',
-  [ORDER_STATUS.REFUNDED]: 'Refunded',
-  [ORDER_STATUS.FAILED]: 'Failed',
 };
 
-// Statuses whose change emails the customer (mirrors backend NOTIFY_STATUSES in
-// orderStatusService.js). Used by the admin confirm dialog to warn that a status
-// change will notify the customer. `confirmed` is excluded — the invoice email covers it.
-export const CUSTOMER_NOTIFIED_STATUSES = ['shipped', 'delivered', 'cancelled', 'refunded'];
+// Statuses whose change emails the customer (mirrors backend
+// CUSTOMER_NOTIFIED_STATUSES in orderStatusService.js). `processing` is excluded —
+// the invoice email covers the payment moment.
+export const CUSTOMER_NOTIFIED_STATUSES = ['shipped', 'delivered', 'cancelled', 'returned'];
 
 export const ORDER_STATUS_COLORS: Record<string, string> = {
-  [ORDER_STATUS.PENDING]: 'bg-yellow-100 text-yellow-800',
-  [ORDER_STATUS.CONFIRMED]: 'bg-emerald-100 text-emerald-800',
+  [ORDER_STATUS.AWAITING_PAYMENT]: 'bg-gray-100 text-gray-600',
   [ORDER_STATUS.PROCESSING]: 'bg-blue-100 text-blue-800',
   [ORDER_STATUS.SHIPPED]: 'bg-purple-100 text-purple-800',
   [ORDER_STATUS.DELIVERED]: 'bg-green-100 text-green-800',
+  [ORDER_STATUS.RETURNED]: 'bg-orange-100 text-orange-800',
   [ORDER_STATUS.CANCELLED]: 'bg-red-100 text-red-800',
-  [ORDER_STATUS.REFUNDED]: 'bg-orange-100 text-orange-800',
-  [ORDER_STATUS.FAILED]: 'bg-red-100 text-red-800',
 };
 
 // Payment axis (Order.paymentStatus) — the "did we get paid?" dimension, kept
@@ -182,6 +179,7 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   pending: 'Awaiting',
   paid: 'Paid',
   failed: 'Failed',
+  cancelled: 'Cancelled', // customer cancelled the payment popup
   refunded: 'Refunded',
 };
 
@@ -189,6 +187,7 @@ export const PAYMENT_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
   paid: 'bg-green-100 text-green-800',
   failed: 'bg-red-100 text-red-800',
+  cancelled: 'bg-rose-100 text-rose-800',
   refunded: 'bg-orange-100 text-orange-800',
 };
 

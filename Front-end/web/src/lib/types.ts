@@ -257,7 +257,10 @@ export interface Order {
   tax: number;
   discount: number;
   totalAmount: number;
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded' | 'failed';
+  // Fulfillment axis (Phase 2). Legacy values kept in the union so historical
+  // orders + existing comparisons stay valid; payment lives in paymentStatus.
+  status: 'awaiting_payment' | 'processing' | 'shipped' | 'delivered' | 'returned' | 'cancelled' | 'pending' | 'confirmed' | 'refunded' | 'failed';
+  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
   trackingNumber?: string;
   estimatedDelivery?: string;
   deliveredAt?: string;

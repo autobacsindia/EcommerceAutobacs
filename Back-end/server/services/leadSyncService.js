@@ -21,9 +21,6 @@ import {
   CONSULTATION_TO_LEAD,
 } from '../config/leadConstants.js';
 
-// Order statuses that count as a completed purchase (drives conversion + tag).
-const PAID_STATUSES = new Set(['confirmed', 'processing', 'shipped', 'delivered', 'refunded']);
-
 class LeadSyncService {
   /** Run a sync operation without ever throwing into the caller's flow. */
   async safeSync(fn) {
@@ -162,16 +159,25 @@ class LeadSyncService {
       }
     }
 
+    // Read the PAYMENT axis (paymentStatus), not fulfillment — payment success/
+    // failure/abandonment are payment facts now (post two-axis split).
     if (doc.status === 'cancelled') {
       return this._detachSource(doc._id, { lostReason: 'order_cancelled' });
     }
 
-    if (PAID_STATUSES.has(doc.status)) {
+    if (doc.paymentStatus === 'paid') {
       return this._markConvertedByIdentity({ email, phone }, doc._id, doc.user);
     }
 
-    const type = doc.status === 'failed' ? 'payment_failed' : doc.status === 'pending' ? 'payment_pending' : null;
-    if (!type) return null; // other transient states carry no lead signal
+    const type =
+      doc.paymentStatus === 'failed'
+        ? 'payment_failed'
+        : doc.paymentStatus === 'cancelled'
+          ? 'payment_cancelled' // customer dismissed the payment popup
+          : doc.paymentStatus === 'pending' && doc.status === 'awaiting_payment'
+            ? 'payment_pending' // created, never paid → "left at checkout"
+            : null;
+    if (!type) return null; // other states carry no lead signal
 
     return this._upsertSource(
       { name, email, phone },

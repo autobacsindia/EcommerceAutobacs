@@ -126,8 +126,11 @@ export function getStatusBadgeColor(status: string): string {
     case 'cancelled':
     case 'failed':
       return 'bg-red-100 text-red-800';
+    case 'returned':
     case 'refunded':
       return 'bg-purple-100 text-purple-800';
+    case 'awaiting_payment':
+      return 'bg-gray-100 text-gray-600';
     default:
       return 'bg-gray-100 text-gray-800';
   }

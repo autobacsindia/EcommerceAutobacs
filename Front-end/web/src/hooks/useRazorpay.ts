@@ -219,21 +219,18 @@ export const useRazorpay = ({
             toast('Payment cancelled', { icon: 'ℹ️' });
 
             try {
-              await apiClient.put(`/orders/${orderId}/cancel`, {
-                reason: 'customer_request',
-                notes: 'Payment cancelled by user'
-              });
+              // Payment-axis cancel (NOT an order cancellation): the order stays
+              // awaiting_payment so the customer can retry, and it surfaces as a
+              // distinct "payment cancelled" sales lead.
+              await apiClient.put(`/orders/${orderId}/payment-cancelled`, {});
               // Redirect to order details page where they can retry or see status
               router.push(`/orders/${orderId}`);
             } catch (error: any) {
-              const errorMessage = error.message || '';
-              // Ignore if order is already in a terminal state
-              if (!errorMessage.includes('Current status: failed') && 
-                  !errorMessage.includes('failed') && 
-                  !errorMessage.includes('cannot be cancelled')) {
-                 console.error('Failed to cancel order:', error);
+              // Best-effort — a paid/terminal order will 400 here; ignore and redirect.
+              const errorMessage = error?.message || '';
+              if (!errorMessage.includes('Cannot cancel payment')) {
+                console.error('Failed to record payment cancellation:', error);
               }
-              // Even if error, redirect to order details
               router.push(`/orders/${orderId}`);
             }
             

@@ -7,20 +7,23 @@ interface TimelineProgressProps {
 }
 
 const statusSteps = [
-  { status: 'pending', label: 'Order Placed', value: 0, color: 'bg-red-500', ringColor: 'ring-red-200' },
-  { status: 'confirmed', label: 'Confirmed', value: 20, color: 'bg-orange-500', ringColor: 'ring-orange-200' },
-  { status: 'processing', label: 'Processing', value: 40, color: 'bg-yellow-500', ringColor: 'ring-yellow-200' },
-  { status: 'shipped', label: 'Shipped', value: 60, color: 'bg-green-400', ringColor: 'ring-green-200' },
+  { status: 'awaiting_payment', label: 'Order Placed', value: 0, color: 'bg-red-500', ringColor: 'ring-red-200' },
+  { status: 'processing', label: 'Confirmed', value: 33, color: 'bg-yellow-500', ringColor: 'ring-yellow-200' },
+  { status: 'shipped', label: 'Shipped', value: 66, color: 'bg-green-400', ringColor: 'ring-green-200' },
   { status: 'delivered', label: 'Delivered', value: 100, color: 'bg-green-600', ringColor: 'ring-green-300' }
 ];
 
 export function TimelineProgress({ currentStatus }: TimelineProgressProps) {
-  // Find current step
-  const currentStep = statusSteps.find(step => step.status === currentStatus);
+  // Map any legacy statuses onto the new pipeline before locating the step.
+  const normalized =
+    currentStatus === 'pending' ? 'awaiting_payment'
+    : currentStatus === 'confirmed' ? 'processing'
+    : currentStatus;
+  const currentStep = statusSteps.find(step => step.status === normalized);
   const progress = currentStep?.value || 0;
-  
-  // Handle cancelled/refunded status
-  const isCancelled = currentStatus === 'cancelled' || currentStatus === 'refunded' || currentStatus === 'failed';
+
+  // Cancelled / returned (or legacy refunded/failed) render as a stopped bar.
+  const isCancelled = normalized === 'cancelled' || normalized === 'returned' || normalized === 'refunded' || normalized === 'failed';
 
   return (
     <div className="w-full">

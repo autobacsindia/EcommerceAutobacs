@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import orderStatusService from './orderStatusService.js';
+import leadSyncService from './leadSyncService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import * as Sentry from '@sentry/node';
 
@@ -187,19 +188,25 @@ class RazorpayService {
         );
 
         order.payment = paymentRecord._id;
+        // Payment axis is authoritative here — set it directly (idempotent on retry).
+        order.paymentStatus = 'paid';
         await orderRepository.save(order, session);
 
-        const result = await orderStatusService.updateOrderStatus(orderId, 'confirmed', {
-          userId: null,
-          isAdmin: true,
-          reason: 'payment_verified',
-          notes: `Payment received via Razorpay. Payment ID: ${paymentData.id}`,
-          metadata: { gatewayId: paymentData.id, transactionId: paymentData.id },
-          session
-        });
-
-        if (!result.success) {
-          throw new Error(`Failed to update order status: ${result.message}`);
+        // Advance fulfillment into `processing` only from the pre-payment state.
+        // On a webhook retry the order is already processing → skip the transition
+        // (paymentStatus above is already correct), so this stays idempotent.
+        if (order.status === 'awaiting_payment') {
+          const result = await orderStatusService.updateOrderStatus(orderId, 'processing', {
+            userId: null,
+            isAdmin: true,
+            reason: 'payment_verified',
+            notes: `Payment received via Razorpay. Payment ID: ${paymentData.id}`,
+            metadata: { gatewayId: paymentData.id, transactionId: paymentData.id },
+            session
+          });
+          if (!result.success) {
+            throw new Error(`Failed to update order status: ${result.message}`);
+          }
         }
 
         paymentId = paymentRecord._id;
@@ -380,19 +387,15 @@ class RazorpayService {
       if (orderId) {
         const order = await orderRepository.findById(orderId);
         if (order) {
-          // Only update if status is pending (don't overwrite other terminal states)
-          if (order.status === 'pending') {
-            await orderStatusService.updateOrderStatus(orderId, 'failed', {
-              userId: null, // System update
-              isAdmin: true,
-              reason: 'payment_failed',
-              notes: `Payment failed via Razorpay. Reason: ${paymentEntity.error_description || paymentEntity.error_reason || 'Unknown'}`,
-              metadata: {
-                gatewayId: paymentEntity.id,
-                failureReason: paymentEntity.error_description
-              }
-            });
-            console.log(`Order ${orderId} marked as failed due to payment failure`);
+          // Payment failure now lives purely on the PAYMENT axis — it does NOT
+          // change fulfillment status (the order stays `awaiting_payment`, so the
+          // customer can retry). Only flip an order that hasn't already paid.
+          if (order.status === 'awaiting_payment' && order.paymentStatus !== 'paid') {
+            order.paymentStatus = 'failed';
+            await orderRepository.save(order);
+            // Surface it to the Sales CRM as a payment-failed lead (best-effort).
+            await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
+            console.log(`Order ${orderId} paymentStatus set to failed`);
           }
         }
       }

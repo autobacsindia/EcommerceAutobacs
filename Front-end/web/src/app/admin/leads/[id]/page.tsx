@@ -250,7 +250,7 @@ function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void })
   const [term, setTerm] = useState('');
   const [hits, setHits] = useState<ProductHit[]>([]);
   const [items, setItems] = useState<OfflineLineItem[]>([]);
-  const [status, setStatus] = useState<'confirmed' | 'delivered'>('confirmed');
+  const [status, setStatus] = useState<'processing' | 'delivered'>('processing');
   const [email, setEmail] = useState(lead.email || '');
   const [phone, setPhone] = useState(lead.phone || '');
   const [submitting, setSubmitting] = useState(false);
@@ -393,8 +393,8 @@ function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void })
           <div className="flex items-center justify-between border-t border-gray-100 pt-3">
             <div className="flex items-center gap-3 text-sm">
               <label className="text-gray-600">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as 'confirmed' | 'delivered')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
-                <option value="confirmed">Confirmed (paid)</option>
+              <select value={status} onChange={(e) => setStatus(e.target.value as 'processing' | 'delivered')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
+                <option value="processing">Confirmed (paid)</option>
                 <option value="delivered">Delivered</option>
               </select>
             </div>

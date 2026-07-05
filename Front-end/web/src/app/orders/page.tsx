@@ -189,14 +189,12 @@ export default function OrdersPage() {
             <div className="flex gap-2">
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectClass}>
                 <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
+                <option value="awaiting_payment">Awaiting payment</option>
                 <option value="processing">Processing</option>
                 <option value="shipped">Shipped</option>
                 <option value="delivered">Delivered</option>
+                <option value="returned">Returned</option>
                 <option value="cancelled">Cancelled</option>
-                <option value="refunded">Refunded</option>
-                <option value="failed">Failed</option>
               </select>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className={selectClass}>
                 <option value="date-desc">Newest First</option>

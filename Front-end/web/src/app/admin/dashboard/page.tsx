@@ -215,7 +215,8 @@ export default function AdminDashboardPage() {
       case 'critical':
         return 'text-red-600 bg-red-100';
       
-      // Order Statuses
+      // Order Statuses (fulfillment axis; legacy values kept for old data)
+      case 'awaiting_payment':
       case 'pending':
         return 'text-yellow-600 bg-yellow-100';
       case 'confirmed':
@@ -225,6 +226,7 @@ export default function AdminDashboardPage() {
         return 'text-purple-600 bg-purple-100';
       case 'delivered':
         return 'text-green-600 bg-green-100';
+      case 'returned':
       case 'cancelled':
       case 'refunded':
         return 'text-red-600 bg-red-100';

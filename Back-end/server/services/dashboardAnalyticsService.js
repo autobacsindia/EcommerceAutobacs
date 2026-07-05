@@ -183,10 +183,10 @@ class DashboardAnalyticsService {
         breakdown[item._id] = item.count;
       });
 
-      // Get pending orders count (orders older than 1 hour)
+      // Get stale unpaid orders count (awaiting payment older than 1 hour)
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const pendingOldOrders = await Order.countDocuments({
-        status: 'pending',
+        status: 'awaiting_payment',
         createdAt: { $lt: oneHourAgo }
       });
 

@@ -151,24 +151,26 @@ export default function OrderDetailPage() {
 
   const canRetryPayment = (order: OrderDetail) => {
     const orderStatus = order.status.toLowerCase();
-    if (['delivered', 'cancelled', 'refunded', 'shipped'].includes(orderStatus)) return false;
+    if (['delivered', 'cancelled', 'returned', 'shipped'].includes(orderStatus)) return false;
     if (order.payment && typeof order.payment === 'object') {
       if (order.payment.paymentMethod === 'cod') return false;
       const paymentStatus = order.payment.status ? order.payment.status.toLowerCase() : 'pending';
       return ['failed', 'pending'].includes(paymentStatus);
     }
-    if (['confirmed', 'processing'].includes(orderStatus)) return false;
+    if (['processing'].includes(orderStatus)) return false; // already paid
     return true;
   };
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
+      awaiting_payment: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
       pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
       confirmed: 'bg-gold/10 text-gold border-gold/30',
       processing: 'bg-gold/10 text-gold border-gold/40/30',
       shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
       delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
       cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
+      returned: 'bg-obsidian-raised text-ink/70 border-hairline',
       refunded: 'bg-obsidian-raised text-ink/70 border-hairline',
     };
     return colors[status.toLowerCase()] || 'bg-obsidian-raised text-ink/70 border-hairline';
@@ -176,25 +178,27 @@ export default function OrderDetailPage() {
 
   const getStatusIcon = (status: string) => {
     const icons: Record<string, any> = {
+      awaiting_payment: <Clock className="h-4 w-4" />,
       pending: <Clock className="h-4 w-4" />,
       confirmed: <CheckCircle className="h-4 w-4" />,
       processing: <Package className="h-4 w-4" />,
       shipped: <Truck className="h-4 w-4" />,
       delivered: <CheckCircle className="h-4 w-4" />,
       cancelled: <XCircle className="h-4 w-4" />,
+      returned: <RotateCcw className="h-4 w-4" />,
       refunded: <RotateCcw className="h-4 w-4" />,
     };
     return icons[status.toLowerCase()] || <AlertCircle className="h-4 w-4" />;
   };
 
-  const canCancelOrder = (status: string) => ['pending', 'confirmed'].includes(status.toLowerCase());
+  const canCancelOrder = (status: string) => ['awaiting_payment', 'processing'].includes(status.toLowerCase());
   const canReturnOrder = (order: OrderDetail) => {
     if (order.status.toLowerCase() !== 'delivered') return false;
     const deliveredDate = order.deliveredAt || order.fulfillmentMetrics?.deliveredAt;
     if (!deliveredDate) return false;
     return (new Date().getTime() - new Date(deliveredDate).getTime()) / (1000 * 60 * 60 * 24) <= 7;
   };
-  const canDeleteOrder = (status: string) => ['cancelled', 'failed'].includes(status.toLowerCase());
+  const canDeleteOrder = (status: string) => ['cancelled'].includes(status.toLowerCase());
 
   if (authLoading || loading) return <OrderDetailSkeleton />;
   if (!isAuthenticated) return null;
@@ -283,7 +287,7 @@ export default function OrderDetailPage() {
               <HelpCircle className="h-4 w-4" />
               Need Help?
             </Link>
-            {['confirmed', 'processing', 'shipped', 'delivered', 'refunded'].includes(order.status?.toLowerCase()) && (
+            {['paid', 'refunded'].includes((order as { paymentStatus?: string }).paymentStatus || '') && (
               <a href={`/api/v1/orders/${order._id}/invoice`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <Download className="h-4 w-4" />
                 Download Invoice

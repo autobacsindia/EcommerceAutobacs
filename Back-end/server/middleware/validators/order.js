@@ -46,8 +46,8 @@ export const validateOrderStatusUpdate = [
   body('status')
     .notEmpty()
     .withMessage('Status is required')
-    .isIn(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'failed', 'refunded', 'returned'])
-    .withMessage('Invalid order status. Must be one of: pending, confirmed, processing, shipped, delivered, cancelled, failed, refunded, returned'),
+    .isIn(['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'])
+    .withMessage('Invalid order status. Must be one of: awaiting_payment, processing, shipped, delivered, returned, cancelled'),
   body('reason')
     .optional()
     .trim(),
@@ -80,7 +80,7 @@ export const validateBulkStatusUpdate = [
   body('status')
     .notEmpty()
     .withMessage('Status is required')
-    .isIn(['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'failed', 'refunded', 'returned'])
+    .isIn(['processing', 'shipped', 'delivered', 'returned', 'cancelled'])
     .withMessage('Invalid order status'),
   validateRequest
 ];

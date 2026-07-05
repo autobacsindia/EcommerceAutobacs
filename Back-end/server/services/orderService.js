@@ -118,7 +118,7 @@ class OrderService {
             karmaDiscount: quote.karmaDiscount,
             karmaPointsUsed: quote.karmaPointsUsed,
             totalAmount: quote.totalAmount,
-            status: 'pending',
+            status: 'awaiting_payment',
             ...(paymentMethod && { paymentMethod }),
             ...(orderData.sessionId && { sessionId: orderData.sessionId })
           },

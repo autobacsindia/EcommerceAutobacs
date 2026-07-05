@@ -76,8 +76,9 @@ async function run() {
     (c) => leadSyncService.upsertFromConsultation(c)
   );
 
+  // Pre-payment prospects: never paid (awaiting), payment failed, or payment cancelled.
   report.orders = await eachSync(
-    Order.find({ status: { $in: ['pending', 'failed'] } }).cursor({ batchSize: BATCH }),
+    Order.find({ paymentStatus: { $in: ['pending', 'failed', 'cancelled'] }, status: { $ne: 'cancelled' } }).cursor({ batchSize: BATCH }),
     (o) => leadSyncService.upsertFromOrder(o)
   );
 

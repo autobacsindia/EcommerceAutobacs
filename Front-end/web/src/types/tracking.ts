@@ -18,13 +18,17 @@ export type EventStatus =
   | 'returned'
   | 'exception';
 
-export type OrderStatus = 
-  | 'pending'
-  | 'confirmed'
+// Fulfillment axis (Phase 2). Legacy values retained for historical orders and
+// existing comparisons; the payment axis lives separately in paymentStatus.
+export type OrderStatus =
+  | 'awaiting_payment'
   | 'processing'
   | 'shipped'
   | 'delivered'
+  | 'returned'
   | 'cancelled'
+  | 'pending'
+  | 'confirmed'
   | 'refunded'
   | 'failed';
 

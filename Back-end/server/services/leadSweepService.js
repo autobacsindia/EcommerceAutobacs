@@ -43,7 +43,7 @@ const SWEEP_BATCH = Number(process.env.LEAD_SWEEP_BATCH) || 500;
 /** Orders stuck in `pending` past the threshold → payment_pending leads. */
 export async function sweepAbandonedOrders() {
   const orders = await orderRepository.find(
-    { status: 'pending', createdAt: { $lt: abandonedCutoff() } },
+    { status: 'awaiting_payment', paymentStatus: 'pending', createdAt: { $lt: abandonedCutoff() } },
     { limit: SWEEP_BATCH, sort: { createdAt: 1 } }
   );
   let synced = 0;

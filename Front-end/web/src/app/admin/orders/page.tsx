@@ -5,30 +5,28 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
-import { API_ENDPOINTS, ORDER_STATUS_COLORS, CUSTOMER_NOTIFIED_STATUSES, PAYMENT_STATUS_COLORS, PAYMENT_STATUS_LABELS } from '@/lib/constants';
+import { API_ENDPOINTS, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, CUSTOMER_NOTIFIED_STATUSES, PAYMENT_STATUS_COLORS, PAYMENT_STATUS_LABELS } from '@/lib/constants';
 import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import OrderFiltersPanel, { OrderFilters } from '@/components/orders/OrderFiltersPanel';
 import BulkActionsBar from '@/components/orders/BulkActionsBar';
 import ConfirmStatusChangeModal from '@/components/orders/ConfirmStatusChangeModal';
 
-// Mirror of orderStatusService STATUS_TRANSITIONS.
+// Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
-  pending:    ['confirmed', 'cancelled', 'failed'],
-  confirmed:  ['processing', 'cancelled'],
-  processing: ['shipped', 'cancelled'],
-  shipped:    ['delivered'],
-  delivered:  ['refunded'],
-  cancelled:  [],
-  refunded:   [],
-  failed:     [],
+  awaiting_payment: ['processing', 'cancelled'],
+  processing:       ['shipped', 'cancelled'],
+  shipped:          ['delivered'],
+  delivered:        ['returned'],
+  returned:         [],
+  cancelled:        [],
 };
 
 const ALL_STATUSES = Object.keys(STATUS_TRANSITIONS) as string[];
 
-// Payment-driven statuses — set only by checkout + the Razorpay webhook, never by an admin.
-// Mirrors SYSTEM_OWNED_STATUSES in the backend orderStatusService.
-const SYSTEM_OWNED = ['pending', 'confirmed', 'failed'];
+// Pre-payment state — the order isn't a real fulfillment stage yet and an admin
+// never picks it manually (payment moves it to processing).
+const SYSTEM_OWNED = ['awaiting_payment'];
 
 /** Statuses an admin can manually move an order to (fulfillment/exception states only). */
 function getAdminNextStatuses(currentStatus: string): string[] {
@@ -505,21 +503,26 @@ function AdminOrdersPageInner() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={order.status}
-                      onChange={(e) => requestStatusChange(order, e.target.value)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
-                    >
-                      {/* Current status — always shown as selected, disabled so user must pick a different one */}
-                      <option value={order.status} disabled>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (current)
-                      </option>
-                      {getAdminNextStatuses(order.status).map(s => (
-                        <option key={s} value={s}>
-                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                    {order.status === 'awaiting_payment' ? (
+                      // Fulfillment hasn't started — the Payment column tells the story.
+                      <span className="text-gray-400">—</span>
+                    ) : (
+                      <select
+                        value={order.status}
+                        onChange={(e) => requestStatusChange(order, e.target.value)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
+                      >
+                        {/* Current status — always shown as selected, disabled so user must pick a different one */}
+                        <option value={order.status} disabled>
+                          {(ORDER_STATUS_LABELS[order.status] || order.status)} (current)
                         </option>
-                      ))}
-                    </select>
+                        {getAdminNextStatuses(order.status).map(s => (
+                          <option key={s} value={s}>
+                            {ORDER_STATUS_LABELS[s] || s}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <Link 

@@ -6,17 +6,19 @@
 
 export const SOURCE_TYPES = [
   'consultation',
-  'payment_pending', // Order created, awaiting payment ("left at checkout")
-  'payment_failed',  // Order payment attempt failed
-  'cart_abandoned',  // Cart with items, no order placed
-  'dormant_user',    // Registered account, never placed a paid order
+  'payment_pending',   // Order created, awaiting payment ("left at checkout")
+  'payment_failed',    // Order payment attempt failed
+  'payment_cancelled', // Customer cancelled the payment popup (vs admin order-cancel)
+  'cart_abandoned',    // Cart with items, no order placed
+  'dormant_user',      // Registered account, never placed a paid order
 ];
 
 export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'won', 'lost'];
 
 // Badge priority when a person has several signals — highest wins `primarySource`.
 export const SOURCE_PRIORITY = {
-  payment_failed: 5,
+  payment_failed: 6,
+  payment_cancelled: 5,
   payment_pending: 4,
   consultation: 3,
   cart_abandoned: 2,
