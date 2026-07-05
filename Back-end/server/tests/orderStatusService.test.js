@@ -4,6 +4,9 @@
  * Pure logic — no DB, no mocks, no I/O.
  * Tests the STATUS_TRANSITIONS table, admin-only gating, and
  * the getValidNextStatuses() helper exhaustively.
+ *
+ * Fulfillment-only state machine (Phase 2):
+ *   awaiting_payment → processing → shipped → delivered → returned  (+ admin cancelled)
  */
 
 import {
@@ -57,8 +60,8 @@ describe('validateTransition — valid moves (admin)', () => {
 // ── 2. Invalid transitions ────────────────────────────────────────────────────
 
 describe('validateTransition — invalid moves', () => {
-  test('pending → shipped (skips confirmed/processing) returns invalid', () => {
-    const result = svc.validateTransition('pending', 'shipped', false);
+  test('awaiting_payment → delivered (skips processing/shipped) returns invalid', () => {
+    const result = svc.validateTransition('awaiting_payment', 'delivered', false);
     expect(result.valid).toBe(false);
     expect(result.message).toMatch(/Cannot transition/i);
   });
@@ -68,24 +71,24 @@ describe('validateTransition — invalid moves', () => {
     expect(result.valid).toBe(false);
   });
 
-  test('confirmed → refunded (non-adjacent skip) returns invalid', () => {
-    const result = svc.validateTransition('confirmed', 'refunded', false);
+  test('processing → delivered (skips shipped) returns invalid', () => {
+    const result = svc.validateTransition('processing', 'delivered', false);
     expect(result.valid).toBe(false);
   });
 
-  test('pending → pending (self-loop) returns invalid', () => {
-    const result = svc.validateTransition('pending', 'pending', false);
+  test('processing → processing (self-loop) returns invalid', () => {
+    const result = svc.validateTransition('processing', 'processing', false);
     expect(result.valid).toBe(false);
   });
 
   test('unknown current status returns invalid with descriptive message', () => {
-    const result = svc.validateTransition('nonexistent_status', 'confirmed', false);
+    const result = svc.validateTransition('nonexistent_status', 'processing', false);
     expect(result.valid).toBe(false);
     expect(result.message).toMatch(/Invalid current status/i);
   });
 
   test('valid current status → unknown new status returns invalid', () => {
-    const result = svc.validateTransition('pending', 'unknown_target', false);
+    const result = svc.validateTransition('awaiting_payment', 'unknown_target', false);
     expect(result.valid).toBe(false);
   });
 });
@@ -132,15 +135,15 @@ describe('validateTransition — admin-only gating', () => {
     expect(result.valid).toBe(true);
   });
 
-  test('customer cannot initiate refund from delivered', () => {
-    // delivered → refunded is admin-only
-    const result = svc.validateTransition('delivered', 'refunded', false);
+  test('customer cannot mark a delivered order returned', () => {
+    // delivered → returned is admin-only
+    const result = svc.validateTransition('delivered', 'returned', false);
     expect(result.valid).toBe(false);
     expect(result.message).toMatch(/Admin permission required/i);
   });
 
-  test('admin CAN initiate refund from delivered', () => {
-    const result = svc.validateTransition('delivered', 'refunded', true);
+  test('admin CAN mark a delivered order returned', () => {
+    const result = svc.validateTransition('delivered', 'returned', true);
     expect(result.valid).toBe(true);
   });
 });
@@ -148,9 +151,9 @@ describe('validateTransition — admin-only gating', () => {
 // ── 5. getValidNextStatuses ───────────────────────────────────────────────────
 
 describe('getValidNextStatuses', () => {
-  test('pending — customer sees confirmed, cancelled, failed', () => {
-    const statuses = svc.getValidNextStatuses('pending', false);
-    expect(statuses).toEqual(expect.arrayContaining(['confirmed', 'cancelled', 'failed']));
+  test('awaiting_payment — customer sees processing and cancelled', () => {
+    const statuses = svc.getValidNextStatuses('awaiting_payment', false);
+    expect(statuses).toEqual(expect.arrayContaining(['processing', 'cancelled']));
   });
 
   test('processing — customer does NOT see cancelled (admin-only)', () => {
@@ -163,14 +166,14 @@ describe('getValidNextStatuses', () => {
     expect(statuses).toContain('cancelled');
   });
 
-  test('delivered — customer does NOT see refunded (admin-only)', () => {
+  test('delivered — customer does NOT see returned (admin-only)', () => {
     const statuses = svc.getValidNextStatuses('delivered', false);
-    expect(statuses).not.toContain('refunded');
+    expect(statuses).not.toContain('returned');
   });
 
-  test('delivered — admin sees refunded', () => {
+  test('delivered — admin sees returned', () => {
     const statuses = svc.getValidNextStatuses('delivered', true);
-    expect(statuses).toContain('refunded');
+    expect(statuses).toContain('returned');
   });
 
   test('unknown status — returns empty array gracefully', () => {

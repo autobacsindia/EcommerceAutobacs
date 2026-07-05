@@ -33,7 +33,8 @@ const makeRes = () => {
 
 const paidOrder = (over = {}) => ({
   _id: 'abcdef1234567890',
-  status: 'confirmed',
+  status: 'processing',
+  paymentStatus: 'paid', // invoices are gated on the payment axis now
   user: { _id: 'user-1', name: 'Buyer', email: 'buyer@example.com' },
   ...over,
 });
@@ -61,8 +62,8 @@ describe('orderController.downloadInvoice', () => {
     expect(mockInvoiceSvc.generateInvoicePdf).not.toHaveBeenCalled();
   });
 
-  test('409 when the order is still pending (no invoice yet)', async () => {
-    mockOrderRepo.findById.mockResolvedValue(paidOrder({ status: 'pending' }));
+  test('409 when the order is still unpaid (no invoice yet)', async () => {
+    mockOrderRepo.findById.mockResolvedValue(paidOrder({ status: 'awaiting_payment', paymentStatus: 'pending' }));
     const res = makeRes();
     await downloadInvoice({ params: { id: 'x' }, user: { id: 'user-1', role: 'user' } }, res);
     expect(res.statusCode).toBe(409);
