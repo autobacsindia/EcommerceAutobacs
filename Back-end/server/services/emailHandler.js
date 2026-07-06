@@ -362,7 +362,7 @@ class EmailHandler {
             </div>
 
             <p style="margin-top: 30px; font-size: 14px; color: #999;">
-              Questions? Reply to this email or contact us at support@autobacsindia.com
+              Questions? Contact us at support@autobacsindia.com
             </p>
           </div>
 

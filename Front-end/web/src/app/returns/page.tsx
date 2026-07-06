@@ -96,7 +96,7 @@ export default function ReturnsPage() {
               <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-3">Exchange Process</h3>
               <ol className="space-y-3">
                 {[
-                  { step: '1', label: 'Initiate a Request', desc: 'Contact our customer support at info@autobacsindia.com within 7 days of receiving the product.' },
+                  { step: '1', label: 'Initiate a Request', desc: 'Contact our customer support at support@autobacsindia.com within 7 days of receiving the product.' },
                   { step: '2', label: 'Verification', desc: 'Our team will assess the request and provide return instructions if the exchange is approved.' },
                   { step: '3', label: 'Return the Item', desc: 'Send the item back in its original condition and packaging. Shipping costs for returning items may be covered by us if the fault is from our side.' },
                   { step: '4', label: 'Receive the Replacement', desc: 'Once we receive and inspect the returned item, we will ship the replacement product.' },
@@ -174,8 +174,8 @@ export default function ReturnsPage() {
               </p>
               <p className="text-ink/70 font-display">
                 Email:{' '}
-                <a href="mailto:info@autobacsindia.com" className="text-gold hover:text-ink transition-colors">
-                  info@autobacsindia.com
+                <a href="mailto:support@autobacsindia.com" className="text-gold hover:text-ink transition-colors">
+                  support@autobacsindia.com
                 </a>
               </p>
               <p className="text-ink-muted font-display text-sm mt-6">

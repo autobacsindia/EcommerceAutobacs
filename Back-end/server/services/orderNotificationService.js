@@ -474,7 +474,7 @@ Reason: ${reason || 'Does not meet return policy requirements'}
 
 If you believe this is an error or have questions about this decision, please contact our customer service team. We're here to help!
 
-Contact us: support@autobacs.com
+Contact us: support@autobacsindia.com
 
 Best regards,
 Autobacs Customer Service

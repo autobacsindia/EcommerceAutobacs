@@ -21,8 +21,8 @@ import companyInfo from '../config/company.js';
  * first, then the singular ADMIN_NOTIFICATION_EMAIL, then falls back to the
  * support inbox (COMPANY_EMAIL). Trimmed + de-duped; empty entries dropped.
  *
- * To add a recipient (e.g. sales@), just extend the env var — no code change:
- *   ADMIN_NOTIFICATION_EMAILS=support@autobacsindia.com,sales@autobacsindia.com
+ * To add another internal recipient, just extend the env var — no code change:
+ *   ADMIN_NOTIFICATION_EMAILS=support@autobacsindia.com,ops@autobacsindia.com
  */
 const adminRecipients = () => {
   const raw =

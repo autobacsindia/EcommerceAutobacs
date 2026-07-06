@@ -825,7 +825,7 @@ app.get('/privacy', (req, res) => {
       <h2>Data Security</h2>
       <p>We implement appropriate security measures to protect your personal information.</p>
       <h2>Contact Us</h2>
-      <p>For privacy-related questions, contact us at info@autobacsindia.com</p>
+      <p>For privacy-related questions, contact us at support@autobacsindia.com</p>
     </body>
     </html>
   `);
@@ -848,7 +848,7 @@ app.get('/terms', (req, res) => {
       <h2>Limitation of Liability</h2>
       <p>Autobacs India shall not be liable for any indirect, incidental, or consequential damages.</p>
       <h2>Contact Us</h2>
-      <p>For questions about these terms, contact us at info@autobacsindia.com</p>
+      <p>For questions about these terms, contact us at support@autobacsindia.com</p>
     </body>
     </html>
   `);
