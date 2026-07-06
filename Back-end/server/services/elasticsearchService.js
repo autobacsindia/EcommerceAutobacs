@@ -548,19 +548,34 @@ class ElasticsearchService {
       // Add text search if query provided
       const safeQ = q ? this.sanitizeQuery(q) : null;
       if (safeQ) {
+        // Precision-first matching. The set of RETURNED docs is decided by the
+        // required `must` clause; everything else only ranks.
+        //
+        //  - `operator: 'and'`   → every typed word must be present, so a
+        //    multi-word query can't OR-explode into the whole catalog.
+        //  - `prefix_length: 2`  → the first two chars of a token must be exact,
+        //    so short fuzzy tokens (e.g. "led") stop matching unrelated words
+        //    ("red"/"bed") that share an edit distance of 1.
+        //  - `description` is DELIBERATELY excluded from the required match.
+        //    Long, SEO-stuffed descriptions share common words across nearly
+        //    every product, so requiring/fuzzy-matching them returned almost the
+        //    entire list for any query. It survives only as a `should` boost for
+        //    ranking (same precision philosophy as the Mongo fallback path).
         searchBody.query.function_score.query.bool.must.push({
           multi_match: {
             query: safeQ,
             fields: [
               'name^3',
               'brand^2',
+              'sku^2',
               'vehicle_models.text^3',
               'vehicle_makes.text^2',
-              'tags^1.5',
-              'description^0.5'
+              'tags^1.5'
             ],
             type: 'best_fields',
-            fuzziness: 'AUTO'
+            operator: 'and',
+            fuzziness: 'AUTO',
+            prefix_length: 2
           }
         });
         // Boost products whose vehicle_model matches the query term
@@ -568,8 +583,10 @@ class ElasticsearchService {
           filter: { match: { 'vehicle_models.text': safeQ } },
           weight: 2.0
         });
-        // Optional prefix boosting for partial/typeahead matches
+        // Ranking-only signals (do NOT widen the match set): description recall
+        // plus prefix boosts for partial/typeahead matches.
         searchBody.query.function_score.query.bool.should = [
+          { match: { description: { query: safeQ, boost: 0.5 } } },
           { match_phrase_prefix: { 'vehicle_models.text': { query: safeQ, boost: 2.0 } } },
           { match_phrase_prefix: { name: { query: safeQ, boost: 1.0 } } }
         ];
