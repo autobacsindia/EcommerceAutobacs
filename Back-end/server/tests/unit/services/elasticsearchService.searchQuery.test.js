@@ -67,6 +67,9 @@ describe('ElasticsearchService.searchProducts query shape', () => {
     expect(multi.multi_match.operator).toBe('and');
     // First two chars must be exact — stops "led"→"red"/"bed" fuzzy noise.
     expect(multi.multi_match.prefix_length).toBe(2);
+    // AUTO:5,8 keeps short tokens (<5 chars) exact so "thor" can't fuzzy-match
+    // "thar"; typo tolerance stays for longer words.
+    expect(multi.multi_match.fuzziness).toBe('AUTO:5,8');
     // description must NOT be part of the required match set.
     expect(multi.multi_match.fields.some((f) => f.startsWith('description'))).toBe(false);
     // high-signal fields stay in the match set.

@@ -608,7 +608,15 @@ class ElasticsearchService {
               ],
               type: 'best_fields',
               operator: 'and',
-              fuzziness: 'AUTO',
+              // AUTO:5,8 = 0 edits under 5 chars, 1 edit for 5-7, 2 for 8+.
+              // Plain AUTO allows 1 edit at 3-5 chars, which collides short
+              // brand/model tokens that differ by one letter: "thor" (brand)
+              // fuzzy-matched "thar" (Mahindra Thar) and returned 131 vehicle
+              // products instead of the ~4 THOR items. Requiring an exact match
+              // under 5 chars fixes that while keeping typo tolerance on the
+              // longer words where mistakes actually happen (profendor->profender,
+              // suspensiom->suspension).
+              fuzziness: 'AUTO:5,8',
               prefix_length: 2
             }
           },
@@ -807,7 +815,9 @@ class ElasticsearchService {
                 'vehicle_makes.text^2',
                 'tags^1.5'
               ],
-              fuzziness: 'AUTO',
+              // Match the results query (AUTO:5,8): short brand/model tokens are
+              // exact so autocomplete for "thor" doesn't surface Thar products.
+              fuzziness: 'AUTO:5,8',
               operator: 'and'
             }
           },
@@ -824,7 +834,7 @@ class ElasticsearchService {
             multi_match: {
               query: safeQuery,
               fields: ['categories.name^3'], // Higher boost for categories
-              fuzziness: 'AUTO',
+              fuzziness: 'AUTO:5,8',
               operator: 'and'
             }
           },
