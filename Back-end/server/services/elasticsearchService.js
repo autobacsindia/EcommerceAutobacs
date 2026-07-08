@@ -1,5 +1,6 @@
 import { Client } from '@elastic/elasticsearch';
 import Product from '../models/Product.js';
+import { expand as expandSynonyms } from '../config/searchSynonyms.js';
 
 class ElasticsearchService {
   constructor() {
@@ -505,7 +506,11 @@ class ElasticsearchService {
         },
         aggs: {
           categories: {
-            terms: { field: 'category.name.keyword' }
+            // Products are indexed under `categories` (plural) and filtered on
+            // `categories.name.keyword`; the facet MUST use the same field or its
+            // buckets come back empty (the old `category.name.keyword` never
+            // existed on the document).
+            terms: { field: 'categories.name.keyword' }
           },
           brands: {
             terms: { field: 'brand.keyword' }
@@ -548,35 +553,77 @@ class ElasticsearchService {
       // Add text search if query provided
       const safeQ = q ? this.sanitizeQuery(q) : null;
       if (safeQ) {
-        // Precision-first matching. The set of RETURNED docs is decided by the
-        // required `must` clause; everything else only ranks.
+        // Precision-first matching that mirrors the MongoDB fallback path so the
+        // two engines return the same intuitive result set. The set of RETURNED
+        // docs is decided by a single required `bool` (with minimum_should_match:
+        // 1); the outer `should` below only RANKS.
         //
-        //  - `operator: 'and'`   → every typed word must be present, so a
-        //    multi-word query can't OR-explode into the whole catalog.
-        //  - `prefix_length: 2`  → the first two chars of a token must be exact,
-        //    so short fuzzy tokens (e.g. "led") stop matching unrelated words
-        //    ("red"/"bed") that share an edit distance of 1.
-        //  - `description` is DELIBERATELY excluded from the required match.
-        //    Long, SEO-stuffed descriptions share common words across nearly
-        //    every product, so requiring/fuzzy-matching them returned almost the
-        //    entire list for any query. It survives only as a `should` boost for
-        //    ranking (same precision philosophy as the Mongo fallback path).
-        searchBody.query.function_score.query.bool.must.push({
-          multi_match: {
-            query: safeQ,
-            fields: [
-              'name^3',
-              'brand^2',
-              'sku^2',
-              'vehicle_models.text^3',
-              'vehicle_makes.text^2',
-              'tags^1.5'
-            ],
-            type: 'best_fields',
-            operator: 'and',
-            fuzziness: 'AUTO',
-            prefix_length: 2
+        // A product qualifies if it satisfies ANY of these precise recall lanes:
+        //
+        //  1. LITERAL term matches high-signal product fields
+        //     (name/brand/sku/tags/vehicle). `operator:'and'` requires every typed
+        //     word (no OR-explosion into the whole catalog); `prefix_length:2`
+        //     keeps the first two chars exact so short fuzzy tokens (e.g. "led")
+        //     stop matching unrelated words ("red"/"bed").
+        //  2. CATEGORY recall — the product sits in a category whose NAME matches
+        //     the query or a synonym. This is what makes a broad query like
+        //     "lights" return everything in the Lights category, not just products
+        //     with "lights" literally in the name (matches the Mongo category
+        //     branch).
+        //  3. SYNONYM terms match the NAME only. Matching fuzzy synonyms against
+        //     SEO-stuffed tags/descriptions over-recalls (e.g. "lights" dragging in
+        //     a bumper tagged "fog light bumper"), so synonyms are name-scoped —
+        //     category-name recall carries the rest.
+        //
+        // `description` is DELIBERATELY excluded from every recall lane: long,
+        // SEO-stuffed descriptions share common words across nearly the whole
+        // catalog, so requiring/fuzzy-matching them returned almost everything for
+        // any query. It survives only as a `should` ranking boost.
+        const terms = expandSynonyms(safeQ);
+        const [literal, ...synonyms] = terms.length ? terms : [safeQ];
+
+        const recall = [
+          {
+            multi_match: {
+              query: literal,
+              fields: [
+                'name^3',
+                'brand^2',
+                'sku^2',
+                'vehicle_models.text^3',
+                'vehicle_makes.text^2',
+                'tags^1.5'
+              ],
+              type: 'best_fields',
+              operator: 'and',
+              fuzziness: 'AUTO',
+              prefix_length: 2
+            }
+          },
+          // Category-name recall — LITERAL query only, all words required
+          // (`operator:'and'`). This pulls in a category's members when the user
+          // types the category's name ("lights" → everything in Lights), without
+          // the broad category-level synonyms over-recalling: e.g. "floor mat"
+          // expands to interior/cabin/seat-cover, and ORing those against category
+          // names would drag in every interior product (steering wheels, covers).
+          // Synonyms still contribute via the name-only lanes below.
+          {
+            match: {
+              'categories.name': {
+                query: literal,
+                operator: 'and',
+                boost: 2.0
+              }
+            }
           }
+        ];
+        // Synonyms match the NAME only (precision — parity with the Mongo path).
+        for (const s of synonyms) {
+          recall.push({ match: { name: { query: s, operator: 'and' } } });
+        }
+
+        searchBody.query.function_score.query.bool.must.push({
+          bool: { should: recall, minimum_should_match: 1 }
         });
         // Boost products whose vehicle_model matches the query term
         searchBody.query.function_score.functions.push({
@@ -884,35 +931,33 @@ class ElasticsearchService {
         }
       });
 
-      // Extract spelling corrections
-      const corrections = [];
+      // Extract spelling corrections. The name and brand phrase-suggesters often
+      // emit the SAME token (e.g. "profender"), so dedupe by the suggested text
+      // (case-insensitive), keeping the highest-confidence occurrence, and drop
+      // any suggestion that just echoes the query. A Map preserves first-seen
+      // order while letting a later, higher-scoring duplicate win.
+      const correctionMap = new Map();
+      const collectCorrections = (options = []) => {
+        for (const option of options) {
+          if (!option.text) continue;
+          const key = option.text.toLowerCase();
+          if (key === safeQuery.toLowerCase()) continue; // echoes the query
+          const existing = correctionMap.get(key);
+          if (!existing || option.score > existing.confidence) {
+            correctionMap.set(key, {
+              original: query,
+              suggested: option.text,
+              confidence: option.score,
+            });
+          }
+        }
+      };
       if (correctionResult.suggest) {
-        // Process name suggestions
-        if (correctionResult.suggest.name_suggest && correctionResult.suggest.name_suggest.length > 0) {
-          correctionResult.suggest.name_suggest[0].options.forEach(option => {
-            if (option.text && option.text.toLowerCase() !== safeQuery.toLowerCase()) {
-              corrections.push({
-                original: query,
-                suggested: option.text,
-                confidence: option.score
-              });
-            }
-          });
-        }
-        
-        // Process brand suggestions
-        if (correctionResult.suggest.brand_suggest && correctionResult.suggest.brand_suggest.length > 0) {
-          correctionResult.suggest.brand_suggest[0].options.forEach(option => {
-            if (option.text && option.text.toLowerCase() !== safeQuery.toLowerCase()) {
-              corrections.push({
-                original: query,
-                suggested: option.text,
-                confidence: option.score
-              });
-            }
-          });
-        }
+        collectCorrections(correctionResult.suggest.name_suggest?.[0]?.options);
+        collectCorrections(correctionResult.suggest.brand_suggest?.[0]?.options);
       }
+      const corrections = Array.from(correctionMap.values())
+        .sort((a, b) => b.confidence - a.confidence);
 
       // Limit to requested number of suggestions
       return {
