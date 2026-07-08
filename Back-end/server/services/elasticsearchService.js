@@ -306,9 +306,15 @@ class ElasticsearchService {
   }
 
   /**
-   * Index a single product
+   * Index a single product.
+   * @param {Object} product
+   * @param {{refresh?: boolean|'wait_for'}} [opts] - Pass `refresh: 'wait_for'`
+   *   (used by the search-sync worker) so the call resolves only once the doc is
+   *   visible to search — the caller can then safely bust the product cache
+   *   without re-caching a result that predates this write. Left `false` for
+   *   bulk reindex (`indexAllProducts`), which refreshes once at the end.
    */
-  async indexProduct(product) {
+  async indexProduct(product, { refresh = false } = {}) {
     if (!this.enabled || !this.client) {
       return;
     }
@@ -369,7 +375,8 @@ class ElasticsearchService {
       await this.client.index({
         index: this.indexName,
         id: product._id.toString(),
-        document: body
+        document: body,
+        ...(refresh ? { refresh } : {})
       });
     } catch (error) {
       console.error('Error indexing product:', error);
@@ -405,13 +412,18 @@ class ElasticsearchService {
   }
 
   /**
-   * Delete a product from the index
+   * Delete a product from the index.
+   * @param {string} productId
+   * @param {{refresh?: boolean|'wait_for'}} [opts] - See indexProduct: the worker
+   *   passes `refresh: 'wait_for'` so the removal is visible before the cache is
+   *   busted.
    */
-  async deleteProduct(productId) {
+  async deleteProduct(productId, { refresh = false } = {}) {
     try {
       await this.client.delete({
         index: this.indexName,
-        id: productId.toString()
+        id: productId.toString(),
+        ...(refresh ? { refresh } : {})
       });
     } catch (error) {
       // Ignore if product doesn't exist

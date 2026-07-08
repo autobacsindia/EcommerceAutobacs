@@ -15,7 +15,23 @@ import { Worker } from 'bullmq';
 import { createConnection } from '../connection.js';
 import * as Sentry from '@sentry/node';
 import elasticsearchService from '../../services/elasticsearchService.js';
+import cacheService from '../../services/cacheService.js';
 import Product from '../../models/Product.js';
+
+// Bust the cached product listings/search responses that Redis serves. The
+// mutation controller already fires this once, but that races the async ES
+// index: a search during the worker's lag re-caches a result that predates this
+// write for the full TTL. Re-invalidating HERE — after ES is refreshed and the
+// doc is visible to search — guarantees the next search rebuilds from fresh ES.
+// `*products*` covers the manual list cache (`v*:products:list:*`), facets, and
+// the route/public listing caches (their keys carry the `/products` path).
+async function invalidateProductCaches() {
+  try {
+    await cacheService.invalidatePattern('products');
+  } catch (err) {
+    console.warn('[SearchSync] Cache invalidation failed:', err.message);
+  }
+}
 
 const handlers = {
   'es-sync-product': async (job) => {
@@ -27,13 +43,18 @@ const handlers = {
       .populate('categories', 'name slug')
       .populate('compatibleVehicles', 'make model');
 
+    // `refresh: 'wait_for'` makes ES resolve only once the change is searchable,
+    // so the cache bust below can't re-cache a pre-index result.
     if (!product || product.deletedAt !== null) {
-      await elasticsearchService.deleteProduct(productId);
+      await elasticsearchService.deleteProduct(productId, { refresh: 'wait_for' });
       console.log(`[SearchSync] Removed from index: ${productId}`);
     } else {
-      await elasticsearchService.indexProduct(product);
+      await elasticsearchService.indexProduct(product, { refresh: 'wait_for' });
       console.log(`[SearchSync] Indexed product: ${productId} (${product.name})`);
     }
+
+    // Only now — with ES authoritative — drop the stale cached listings.
+    await invalidateProductCaches();
   },
 };
 
