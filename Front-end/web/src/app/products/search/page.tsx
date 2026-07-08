@@ -14,8 +14,14 @@ const PAGE_SIZE = 12;
 async function getProducts(searchParams: any) {
   const queryParams = new URLSearchParams();
 
+  // Accept the search term under either `q` (RedesignNav / standard, shareable
+  // URLs) or `search` (SearchSuggestions, "did you mean", legacy links). The
+  // backend expects `search`, so normalize to it here. Without this, a
+  // `?q=storm` URL sent no term and the API returned the entire catalog.
+  const term = searchParams.q ?? searchParams.search;
+
   if (searchParams.category) queryParams.append('category', searchParams.category);
-  if (searchParams.search)   queryParams.append('search', searchParams.search);
+  if (term)                  queryParams.append('search', term);
   if (searchParams.page)     queryParams.append('page', searchParams.page);
   if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
   if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
@@ -84,7 +90,7 @@ function SearchPageInner() {
   const pageRef = useRef(1);
 
   const currentSort = searchParams.get('sort') || 'relevance';
-  const searchTerm  = searchParams.get('search') || '';
+  const searchTerm  = searchParams.get('q') || searchParams.get('search') || '';
 
   // Reset and fetch page 1 whenever the query/filters/sort changes
   useEffect(() => {
@@ -110,7 +116,7 @@ function SearchPageInner() {
 
         trackViewItemList({
           listType: 'search',
-          listName: resolved.search || resolved.brand || resolved.category,
+          listName: resolved.q || resolved.search || resolved.brand || resolved.category,
           itemCount: fetched.length,
         });
 
@@ -177,7 +183,10 @@ function SearchPageInner() {
 
   const handleCorrectionClick = (correctedTerm: string) => {
     const currentParams = new URLSearchParams(searchParams.toString());
-    currentParams.set('search', correctedTerm);
+    // Write the term under the canonical `q` and clear any legacy `search` so the
+    // two can't disagree (the page reads `q` first).
+    currentParams.set('q', correctedTerm);
+    currentParams.delete('search');
     router.push(`/products/search?${currentParams.toString()}`);
   };
 

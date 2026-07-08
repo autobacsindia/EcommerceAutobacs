@@ -83,6 +83,33 @@ describe('SearchPage', () => {
     });
   });
 
+  it('reads the term from the `q` param (RedesignNav) and sends it as `search`', async () => {
+    // Regression: RedesignNav pushes /products/search?q=storm, but the page only
+    // read `search`, so it fetched the whole catalog. It must normalize q → search.
+    mockSearchParams.delete('search');
+    mockSearchParams.set('q', 'storm');
+
+    const calls: string[] = [];
+    (apiClient.get as jest.Mock).mockImplementation((url) => {
+      calls.push(url);
+      if (url.includes('/products/suggestions')) {
+        return Promise.resolve({ success: true, corrections: [] });
+      }
+      return Promise.resolve({ products: [], total: 0, hasNext: false });
+    });
+
+    render(<SearchPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Results for/i)).toBeInTheDocument();
+    });
+    // The catalog fetch must carry the term as `search=storm`, never term-less.
+    const listCall = calls.find((u) => u.startsWith('/products?'));
+    expect(listCall).toBeDefined();
+    expect(listCall).toContain('search=storm');
+    mockSearchParams.delete('q');
+  });
+
   it('displays "Did you mean?" suggestions when there are no results', async () => {
     mockSearchParams.set('search', 'tesst');
     
