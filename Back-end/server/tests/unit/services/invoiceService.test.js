@@ -1,7 +1,12 @@
 import { jest } from '@jest/globals';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
-const mockOrderRepo = { findById: jest.fn(), save: jest.fn().mockResolvedValue(true) };
+const mockOrderRepo = {
+  findById: jest.fn(),
+  save: jest.fn().mockResolvedValue(true),
+  // BE-2: atomic send-slot claim; default to winning the claim.
+  claimInvoiceEmail: jest.fn().mockResolvedValue(true),
+};
 const mockEmailHandler = { sendOrderConfirmation: jest.fn() };
 const mockCloudinary = { uploader: { upload_stream: jest.fn() } };
 
@@ -59,6 +64,7 @@ describe('invoiceService.emailOrderInvoice', () => {
     jest.clearAllMocks();
     delete process.env.INVOICE_STORE_CLOUDINARY;
     mockOrderRepo.save.mockResolvedValue(true);
+    mockOrderRepo.claimInvoiceEmail.mockResolvedValue(true); // win the claim by default (BE-2)
     mockEmailHandler.sendOrderConfirmation.mockResolvedValue({ success: true });
   });
 
@@ -124,6 +130,7 @@ describe('invoiceService.emailOrderInvoice', () => {
     mockEmailHandler.sendOrderConfirmation.mockResolvedValue({ success: false, error: 'boom' });
 
     await expect(emailOrderInvoice('abcdef1234567890')).rejects.toThrow(/Invoice email failed/);
-    expect(orderDoc.invoiceEmailedAt).toBeUndefined();
+    // BE-2: the atomic claim is RELEASED (set null) on failure so BullMQ can retry.
+    expect(orderDoc.invoiceEmailedAt).toBeNull();
   });
 });

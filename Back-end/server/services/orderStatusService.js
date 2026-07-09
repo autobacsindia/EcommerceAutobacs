@@ -371,6 +371,17 @@ class OrderStatusService {
           await userRepository.markPurchased(order.user, { amountPaise });
         }
       }
+      // Reverse net LTV + paid-count when the money goes back: a paid order that is
+      // cancelled, or a completed return/refund. The once-only guard only fires for
+      // orders that were actually counted, so unpaid cancels and retried jobs are
+      // no-ops. Mirrors the `processing` increment above. (PAY-2 / ADR-006)
+      if (['cancelled', 'returned'].includes(newStatus) && order.user) {
+        const firstReversal = await orderRepository.markPurchaseReversedOnce(order._id);
+        if (firstReversal) {
+          const amountPaise = Math.round((order.totalAmount || 0) * 100);
+          await userRepository.reversePurchase(order.user, { amountPaise });
+        }
+      }
       if (['processing', 'delivered', 'cancelled', 'returned'].includes(newStatus)) {
         await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
       }

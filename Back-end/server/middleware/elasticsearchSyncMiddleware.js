@@ -1,4 +1,5 @@
 import elasticsearchService from '../services/elasticsearchService.js';
+import Sentry from '../config/sentry.js';
 
 /**
  * Middleware to sync product changes to Elasticsearch
@@ -20,10 +21,13 @@ class ElasticsearchSyncMiddleware {
           await elasticsearchService.indexProduct(product);
         }
       } catch (error) {
+        // Fire-and-forget: surface the failure so ES↔Mongo drift is visible, not
+        // just logged. Backstop remains the manual `reindex-products`. (BE-1)
         console.error('[ES] Failed to sync product to Elasticsearch:', {
           productId: product?._id,
           error: error.message,
         });
+        Sentry.captureException(error, { tags: { area: 'es-sync', op: 'index' }, extra: { productId: String(product?._id) } });
       }
     })();
     
@@ -53,6 +57,7 @@ class ElasticsearchSyncMiddleware {
           productId,
           error: error.message,
         });
+        Sentry.captureException(error, { tags: { area: 'es-sync', op: 'delete' }, extra: { productId: String(productId) } });
       }
     })();
 

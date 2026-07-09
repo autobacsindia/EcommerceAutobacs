@@ -207,38 +207,49 @@ export const emailOrderInvoice = async (orderId) => {
     return { status: 'no-recipient' };
   }
 
-  const pdf = await generateInvoicePdf(order, user);
+  // Atomically claim the send slot BEFORE doing any work, so two concurrent jobs
+  // can't both pass the null-check above and double-send. Loser skips. (BE-2)
+  const claimed = await orderRepository.claimInvoiceEmail(orderId);
+  if (!claimed) return { status: 'skipped' };
+  // Keep the in-memory doc in sync with the DB claim so the success-path save below
+  // doesn't overwrite the stamped timestamp with null.
+  order.invoiceEmailedAt = new Date();
 
-  const stored = await uploadInvoicePdf(pdf, order);
-  if (stored) {
-    order.invoiceUrl = stored.url;
-    order.invoicePublicId = stored.publicId;
-  }
+  try {
+    const pdf = await generateInvoicePdf(order, user);
 
-  const result = await emailHandler.sendOrderConfirmation({
-    to,
-    order,
-    user,
-    attachments: [
-      {
-        Name: `${invoiceNumber(order)}.pdf`,
-        Content: pdf.toString('base64'),
-        ContentType: 'application/pdf',
-      },
-    ],
-  });
+    const stored = await uploadInvoicePdf(pdf, order);
+    if (stored) {
+      order.invoiceUrl = stored.url;
+      order.invoicePublicId = stored.publicId;
+    }
 
-  // Only mark as emailed when the provider actually accepted it, so a transient
-  // failure lets BullMQ retry rather than silently dropping the invoice.
-  if (result?.success) {
-    order.invoiceEmailedAt = new Date();
-    await orderRepository.save(order);
+    const result = await emailHandler.sendOrderConfirmation({
+      to,
+      order,
+      user,
+      attachments: [
+        {
+          Name: `${invoiceNumber(order)}.pdf`,
+          Content: pdf.toString('base64'),
+          ContentType: 'application/pdf',
+        },
+      ],
+    });
+
+    if (!result?.success) {
+      throw new Error(`Invoice email failed for order ${orderId}: ${result?.error || 'unknown error'}`);
+    }
+
+    await orderRepository.save(order); // persists invoiceUrl; claim keeps invoiceEmailedAt set
     return { status: 'sent' };
+  } catch (err) {
+    // Release the claim so BullMQ can retry rather than silently dropping the invoice.
+    // Persist any Cloudinary URL we obtained on the way (same object, null timestamp).
+    order.invoiceEmailedAt = null;
+    await orderRepository.save(order).catch(() => {});
+    throw err;
   }
-
-  // Persist any Cloudinary URL we obtained even if the email failed this attempt.
-  if (stored) await orderRepository.save(order);
-  throw new Error(`Invoice email failed for order ${orderId}: ${result?.error || 'unknown error'}`);
 };
 
 export default { generateInvoicePdf, uploadInvoicePdf, emailOrderInvoice, invoiceNumber };

@@ -102,6 +102,38 @@ class OrderRepository extends BaseRepository {
     );
     return res.modifiedCount === 1;
   }
+
+  /**
+   * Atomically flag this order's purchase as REVERSED. Returns true ONLY on the
+   * first flip, and ONLY for an order that was actually counted — so the caller
+   * runs the net-LTV / paid-count reversal exactly once, and never for an order
+   * that never contributed (unpaid cancel, retried refund job). Mirror of
+   * markPurchaseCountedOnce. (PAY-2 / ADR-006)
+   */
+  async markPurchaseReversedOnce(orderId, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, purchaseCounted: true, purchaseReversed: { $ne: true } },
+      { $set: { purchaseReversed: true } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Atomically claim the invoice-email slot: stamp invoiceEmailedAt only if it was
+   * still unset. Returns true for the single winning caller, false if the invoice
+   * was already sent or is being sent by a concurrent job. Replaces the old
+   * read-then-write check that could double-send under concurrent BullMQ delivery.
+   * On send failure the caller releases the claim (invoiceEmailedAt = null). (BE-2)
+   */
+  async claimInvoiceEmail(orderId, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, invoiceEmailedAt: null },
+      { $set: { invoiceEmailedAt: new Date() } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
 }
 
 export default new OrderRepository();

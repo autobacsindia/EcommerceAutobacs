@@ -11,10 +11,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 //   curl -X POST https://<host>/api/revalidate/home            # all home sections
 //   curl -X POST "https://<host>/api/revalidate/home?tag=home:categories"  # one section
 //
-// Security: if REVALIDATE_SECRET is set (env), callers must pass it as
-// `?secret=` or the `x-revalidate-secret` header. If it's unset the route is
-// open (matches the existing revalidate/warehouses helper) — set the env var in
-// prod to lock it down.
+// Security: callers must pass REVALIDATE_SECRET as `?secret=` or the
+// `x-revalidate-secret` header. FAIL CLOSED in production — if the env var is
+// unset there, the route denies all callers (prevents an unauthenticated
+// cache-stampede DoS). Outside production it stays open for local convenience. (FE-1)
 
 const HOME_TAGS = [
   'home:categories',
@@ -26,7 +26,10 @@ const HOME_TAGS = [
 
 function authorize(req: NextRequest): boolean {
   const expected = process.env.REVALIDATE_SECRET;
-  if (!expected) return true; // not configured -> open
+  if (!expected) {
+    // Fail closed in prod (deny); open only in non-prod for local convenience.
+    return process.env.NODE_ENV !== 'production';
+  }
   const provided =
     req.nextUrl.searchParams.get('secret') ?? req.headers.get('x-revalidate-secret');
   return provided === expected;

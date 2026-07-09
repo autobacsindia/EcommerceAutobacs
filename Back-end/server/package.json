@@ -30,6 +30,7 @@
     "backfill-crm-leads": "node --import=dotenv/config scripts/backfill-crm-leads.js",
     "backfill-payment-status": "node --import=dotenv/config scripts/backfill-payment-status.js",
     "backfill-normalize-emails": "node --import=dotenv/config scripts/backfill-normalize-emails.js",
+    "reconcile-user-ltv": "node --import=dotenv/config scripts/reconcile-user-ltv.js",
     "migrate-order-status-phase2": "node --import=dotenv/config scripts/migrate-order-status-phase2.js",
     "sync-wordpress": "node --import=dotenv/config scripts/run-wordpress-sync.js",
     "sync-prices": "node --import=dotenv/config scripts/sync-prices-from-woocommerce.js",

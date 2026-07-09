@@ -1,4 +1,5 @@
 import cacheService from '../services/cacheService.js';
+import Sentry from '../config/sentry.js';
 import crypto from 'crypto';
 
 /**
@@ -113,6 +114,9 @@ export const invalidateCache = (...patterns) => {
       console.log(`[Cache] Invalidated ${total} key(s) for patterns:`, patterns);
     })
     .catch((err) => {
+      // Fire-and-forget: a failed invalidation means stale cache served until TTL —
+      // surface it instead of only logging. (BE-1)
       console.warn(`[Cache] Invalidation failed for patterns: ${patterns.join(', ')}`, err);
+      Sentry.captureException(err, { tags: { area: 'cache-invalidation' }, extra: { patterns } });
     });
 };

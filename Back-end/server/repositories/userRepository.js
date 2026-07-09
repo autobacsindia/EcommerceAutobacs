@@ -80,6 +80,37 @@ class UserRepository extends BaseRepository {
       { new: true, ...(session && { session }) }
     );
   }
+
+  /**
+   * Reverse a counted purchase on refund/return: subtract this order's value from
+   * net LTV and decrement the paid-order count. Both floor at 0 so a refund can
+   * never drive the denorm negative (e.g. a legacy order counted before this guard
+   * existed). Single atomic aggregation-pipeline update — no read-then-write race.
+   * Caller must gate with orderRepository.markPurchaseReversedOnce so this runs
+   * exactly once per order. (PAY-2 / ADR-006)
+   *
+   * @param {string} userId
+   * @param {{ amountPaise?: number }} [opts] integer paise removed from LTV
+   * @param {import('mongoose').ClientSession|null} [session]
+   */
+  async reversePurchase(userId, { amountPaise = 0 } = {}, session = null) {
+    if (!userId) return null;
+    const dec = Math.max(0, Math.round(amountPaise));
+    return User.findByIdAndUpdate(
+      userId,
+      [
+        {
+          $set: {
+            totalSpentPaise: { $max: [0, { $subtract: [{ $ifNull: ['$totalSpentPaise', 0] }, dec] }] },
+            paidOrderCount: { $max: [0, { $subtract: [{ $ifNull: ['$paidOrderCount', 0] }, 1] }] },
+          },
+        },
+        // hasPurchased reflects the post-decrement count (evaluated after the stage above).
+        { $set: { hasPurchased: { $gt: ['$paidOrderCount', 0] } } },
+      ],
+      { new: true, ...(session && { session }) }
+    );
+  }
 }
 
 export default new UserRepository();

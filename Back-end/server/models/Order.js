@@ -84,6 +84,7 @@ const OrderSchema = new mongoose.Schema({
   karmaPointsUsed: { type: Number, default: 0 },     // points spent on this order
   karmaAwarded: { type: Boolean, default: false },   // earn-on-delivery idempotency flag
   purchaseCounted: { type: Boolean, default: false }, // once-only guard for the CRM purchase denorm + net LTV (markPurchased)
+  purchaseReversed: { type: Boolean, default: false }, // once-only guard for the refund/return LTV reversal (reversePurchase) — PAY-2 / ADR-006
   totalAmount: {
     type: Number,
     required: true
