@@ -33,7 +33,16 @@ const mongooseOptions = {
   maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE) || 10,
   minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE) || 2,
   heartbeatFrequencyMS: 10000,
-  autoIndex: true,      // ensure Mongoose schema indexes (e.g. slug unique) are always synced to DB
+  // autoIndex builds every schema index at connect. In prod that risks a FOREGROUND
+  // index build (latency/lock spike) the first time a NEW index is deployed on a large
+  // collection. Default OFF in prod — existing indexes are already built and critical
+  // ones are re-ensured by the explicit createIndex safety-net below. NEW prod indexes
+  // must be built via a background migration, not autoIndex. Override with
+  // MONGO_AUTOINDEX=true if you knowingly want connect-time syncing. (DB-2)
+  autoIndex:
+    process.env.MONGO_AUTOINDEX != null
+      ? process.env.MONGO_AUTOINDEX === 'true'
+      : process.env.NODE_ENV !== 'production',
 };
 
 // Enhanced connection retry logic with SSL error handling
