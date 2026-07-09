@@ -7,6 +7,7 @@ import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
+import { cleanArticleHTML } from "../utils/htmlSanitizer.js";
 
 const router = express.Router();
 
@@ -198,6 +199,9 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
   // slugs are left as-is so broken links are visible rather than silently hidden.
   const articleObj = article.toObject();
   articleObj.content = await resolveWpProductLinks(articleObj.content);
+  // Sanitize + unwrap WP image links server-side so the frontend can render the
+  // body in SSR (SEO) instead of sanitizing client-side after mount. (FE-3)
+  articleObj.content = cleanArticleHTML(articleObj.content);
 
   const payload = { success: true, data: articleObj, related };
   cacheSet(cacheKey, payload);

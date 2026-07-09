@@ -54,16 +54,6 @@ function readingTime(html: string): number {
   return Math.max(1, Math.ceil(words / 200));
 }
 
-// Remove <a> wrappers around <img> elements when the href is a WordPress CDN URL.
-// These are broken dependencies left over from the WordPress migration.
-function stripWpImageLinks(html: string): string {
-  return html.replace(
-    /<a\b[^>]*\bhref="https?:\/\/autobacsindia\.com\/wp-content\/[^"]*"[^>]*>\s*(<img\b[^>]*\/?>)\s*<\/a>/gi,
-    '$1',
-  );
-}
-
-
 // ── Bottom share bar (mobile / inline) ───────────────────────────────────────
 
 function ShareBar({ title }: { title: string }) {
@@ -135,14 +125,10 @@ export default function ArticleDetailClient({ article, related }: Props) {
   const colorBadge = article.type === 'news' ? 'bg-gold/10 text-gold' : 'bg-green-100 text-green-700';
   const minutes = readingTime(article.content ?? '');
 
-  // Sanitize client-side only — importing dompurify (browser-only, no jsdom)
-  // avoids the isomorphic-dompurify ENOENT crash during Next.js SSR.
-  const [safeContent, setSafeContent] = useState('');
-  useEffect(() => {
-    import('dompurify').then(({ default: DOMPurify }) => {
-      setSafeContent(stripWpImageLinks(DOMPurify.sanitize(article.content ?? '')));
-    });
-  }, [article.content]);
+  // Content is sanitized + WP-image-link-unwrapped server-side (backend
+  // cleanArticleHTML), so we render it directly — visible in SSR HTML for SEO,
+  // and hydration-safe because it's a fixed string, not client-derived state. (FE-3)
+  const safeContent = article.content ?? '';
 
   return (
     <>

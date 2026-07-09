@@ -127,5 +127,9 @@
     "mongodb-memory-server": "^11.0.1",
     "nodemon": "^3.0.1",
     "supertest": "^7.2.2"
+  },
+  "_overridesNote": "DEP-2: force patched transitive versions inside the artillery (dev-only load-test) tree — clears the protobufjs ACE 'critical' from the audit report without dropping load testing.",
+  "overrides": {
+    "protobufjs": "^7.6.5"
   }
 }
