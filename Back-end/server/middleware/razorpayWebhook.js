@@ -87,11 +87,10 @@ router.post("/", asyncHandler(async (req, res) => {
         console.error('[Webhook] MongoDB fallback also unavailable:', mongoError.message);
         return res.status(503).end();
       }
-    } finally {
-      if (redisClient) {
-        redisClient.quit().catch(() => {});
-      }
     }
+    // NOTE: getRedisClient() returns the app-wide singleton — do NOT quit() it here.
+    // Quitting closed the shared connection (cache/sessions/rate-limit) on every
+    // webhook and ioredis does not auto-reconnect after a manual quit. (PAY-1)
     
     // SECURITY STEP 3: Timestamp validation (10-minute window with clock skew tolerance)
     const eventTime = createdAt * 1000; // Convert to milliseconds

@@ -444,13 +444,11 @@ export default function EditProductPage() {
         'X-XSRF-TOKEN': csrfToken,
       };
 
-      // Try to get token from apiClient or localStorage (fallback for older sessions)
-      const authToken = apiClient.getAuthToken() || localStorage.getItem('authToken');
+      // Auth rides httpOnly cookies via credentials:'include'; optional bearer from
+      // apiClient. No localStorage token — never store a JWT there (FE-2, XSS-stealable).
+      const authToken = apiClient.getAuthToken();
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
-        console.log('Adding Authorization header');
-      } else {
-        console.log('Using httpOnly cookies for authentication');
       }
 
       const res = await fetch(

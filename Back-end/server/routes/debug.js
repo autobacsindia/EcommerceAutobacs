@@ -8,22 +8,16 @@ const router = express.Router();
  * @access  Public (for debugging only - should be removed or protected in prod)
  */
 router.get('/env', (req, res) => {
-  const wpSiteUrl = process.env.WORDPRESS_SITE_URL;
-  const wpApiKey = process.env.WORDPRESS_API_KEY;
-  const wpApiSecret = process.env.WORDPRESS_API_SECRET;
-  
+  // SEC-2: expose only booleans — no key prefixes/lengths (a format/length oracle),
+  // no site URL. This route is also mounted only when NODE_ENV !== 'production'.
   res.json({
     success: true,
     env: {
       NODE_ENV: process.env.NODE_ENV,
       FRONTEND_URL: process.env.FRONTEND_URL,
-      WORDPRESS_SITE_URL: wpSiteUrl,
-      WORDPRESS_API_KEY_SET: !!wpApiKey,
-      WORDPRESS_API_KEY_PREFIX: wpApiKey ? wpApiKey.substring(0, 3) : null,
-      WORDPRESS_API_KEY_LENGTH: wpApiKey ? wpApiKey.length : 0,
-      WORDPRESS_API_SECRET_SET: !!wpApiSecret,
-      WORDPRESS_API_SECRET_PREFIX: wpApiSecret ? wpApiSecret.substring(0, 3) : null,
-      WORDPRESS_API_SECRET_LENGTH: wpApiSecret ? wpApiSecret.length : 0,
+      WORDPRESS_SITE_URL_SET: !!process.env.WORDPRESS_SITE_URL,
+      WORDPRESS_API_KEY_SET: !!process.env.WORDPRESS_API_KEY,
+      WORDPRESS_API_SECRET_SET: !!process.env.WORDPRESS_API_SECRET,
     },
     headers: {
       origin: req.headers.origin,

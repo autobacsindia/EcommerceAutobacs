@@ -1,0 +1,70 @@
+# Security — secret scanning + dependency audit (audit CI-1 / June S2+S3)
+#
+# Runs on every push and PR (no path filter — a leaked secret or a vulnerable dep
+# can enter via any file). Add these jobs to branch-protection required checks.
+#
+# npm audit is gated at `critical` on PRODUCTION deps for now (green today).
+# TODO: raise to `--audit-level=high` once DEP-1c (cloudinary v1→v2, breaking) and
+# the frontend build-tool highs (serialize-javascript via next) are resolved.
+
+name: Security
+
+on:
+  push:
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans the whole commit history, not just the tip
+
+      - name: Run gitleaks
+        run: |
+          VERSION=8.21.2
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          # --redact: never print the matched secret. Non-zero exit fails the job.
+          ./gitleaks detect --source . --no-banner --redact --exit-code 1
+
+  audit-backend:
+    name: Dependency audit (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Back-end/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Back-end/server/package-lock.json
+      - run: npm ci
+      - name: npm audit (prod deps, fail on critical)
+        run: npm audit --omit=dev --audit-level=critical
+
+  audit-frontend:
+    name: Dependency audit (frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Front-end/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: Front-end/web/package-lock.json
+      - run: npm ci
+      - name: npm audit (prod deps, fail on critical)
+        run: npm audit --omit=dev --audit-level=critical

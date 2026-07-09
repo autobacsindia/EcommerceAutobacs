@@ -88,6 +88,30 @@ describe('razorpayWebhook', () => {
     expect(res.status).toBe(200);
   });
 
+  it('does NOT quit the shared Redis client after a webhook (PAY-1 regression)', async () => {
+    // getRedisClient() returns the app-wide ioredis singleton. Quitting it here
+    // (as the old `finally` block did) closed cache/sessions/rate-limit for the
+    // whole process on the first live webhook. This guards against reintroducing it.
+    const quit = jest.fn().mockResolvedValue('OK');
+    mockRedis.mockImplementation(() => ({
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+      quit,
+    }));
+    mockHandleWebhook.mockResolvedValue({ message: 'processed' });
+
+    const body = makePayload();
+
+    const res = await request(makeApp())
+      .post('/api/v1/razorpay/webhook')
+      .set('Content-Type', 'application/json')
+      .set('x-razorpay-signature', sign(body))
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(quit).not.toHaveBeenCalled();
+  });
+
   it('rejects a request with an invalid signature', async () => {
     const body = makePayload();
 

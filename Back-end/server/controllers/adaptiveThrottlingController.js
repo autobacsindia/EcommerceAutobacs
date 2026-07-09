@@ -10,7 +10,8 @@ export const getAllProfiles = async (req, res) => {
   try {
     const profiles = await adaptiveThrottlingProfileRepository.find()
       .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(500); // bounded read (BE-3) — profile set is small; guards against unbounded growth
     
     res.json({
       success: true,

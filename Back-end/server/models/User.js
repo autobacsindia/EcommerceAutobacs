@@ -39,7 +39,9 @@ const AddressSchema = new mongoose.Schema({
 
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
+  // lowercase+trim: schema-level safety net so email uniqueness can't be bypassed
+  // by case/whitespace variants at any call site (auth, offline order, social, imports). (DB-1)
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   // Not required for users migrated from WooCommerce (phpass hashes can't move to bcrypt);
   // those users are forced through password reset on first login (see mustResetPassword).
   passwordHash: { type: String, required: function () { return !this.migratedFromWp; } },

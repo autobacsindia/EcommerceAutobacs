@@ -18,6 +18,10 @@ const requiredEnvVars = [
 const productionOnlyVars = [
   'FRONTEND_URL',
   'RAZORPAY_WEBHOOK_SECRET',
+  // Peppers password-reset / email-verification token hashes (utils/tokenUtils.js).
+  // hashToken() throws in prod when unset — validate at boot so a missing/misnamed
+  // var is a loud deploy failure, not a silent 500 on the first reset attempt. (SEC-3)
+  'RESET_TOKEN_SECRET',
 ];
 
 /**
@@ -102,6 +106,7 @@ export function logEnvironmentInfo() {
     COOKIE_SAMESITE: process.env.COOKIE_SAMESITE || 'default',
     FRONTEND_URL: process.env.FRONTEND_URL || 'Not set',
     RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET ? '✓ Set' : '✗ Missing',
+    RESET_TOKEN_SECRET: process.env.RESET_TOKEN_SECRET ? '✓ Set' : '✗ Missing',
     SENTRY_DSN: process.env.SENTRY_DSN ? '✓ Set' : '✗ Not configured',
   });
 

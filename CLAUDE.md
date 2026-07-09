@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Autobacs India e-commerce. Monorepo, two apps. Both deploy to Railway via `deploy.yml` on push to `main` (test-gated).
+Autobacs India e-commerce. Monorepo, two apps. Both deploy on push to `main` via **platform auto-deploy** (Railway backend, Vercel frontend). There is **no `deploy.yml`** — the deploy gate is GitHub **branch protection** requiring the CI checks below, so unvetted commits can't reach `main` and therefore can't deploy. (Gating only holds if branch protection is actually enforced.)
 
 ## Layout
 
@@ -50,7 +50,7 @@ Rules: `noindex` (SeoPanel/PageSeo) drops a page from both `<head>` robots and `
 
 - `ci-frontend.yml` — lint → test → build. Triggers on `Front-end/web/**`.
 - `ci.yml` — backend jest + 60% line-coverage floor. Triggers on `Back-end/server/**`.
-- `deploy.yml` — Railway deploy on `main`, per-service, gated on that service's tests.
+- Deploy: **platform auto-deploy** on `main` push (Railway + Vercel git integrations). No GitHub Actions deploy workflow. Gating = branch protection requiring the two CI checks above. Note: both CI jobs currently run a **curated test subset**, not the full suites.
 
 ## House rules
 

@@ -128,8 +128,9 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
 // @route   GET /api/returns/my-returns
 // @access  Private
 export const getMyReturns = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10 } = req.query;
-  const skip = (Number(page) - 1) * Number(limit);
+  const { page = 1 } = req.query;
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10)); // cap page size (BE-4)
+  const skip = (Number(page) - 1) * limit;
 
   const total = await returnRequestRepository.countDocuments({ user: req.user._id });
 
@@ -138,7 +139,7 @@ export const getMyReturns = asyncHandler(async (req, res) => {
     .populate("items.product", "name image price")
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(Number(limit));
+    .limit(limit);
 
   res.json({
     success: true,

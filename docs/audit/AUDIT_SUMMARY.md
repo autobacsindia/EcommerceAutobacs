@@ -1,5 +1,10 @@
 # Audit Summary
 
+> ⚠️ **SUPERSEDED (2026-07-09):** A full re-audit after 121 commits lives in
+> **[09-CONSOLIDATED-2026-07.md](09-CONSOLIDATED-2026-07.md)** (phases `01`–`08`).
+> Current standing: **2 P1 (both latent, block go-live), 8 P2, 16 P3; no prod-reachable critical.**
+> The findings below are the June baseline; several are resolved/reassigned in the refresh.
+
 _Last updated: 2026-06-15 · Auditor: Claude Code · Status: PHASE 1–2 COMPLETE; roadmap awaiting sign-off_
 
 > **Stack reality check:** Backend = **MongoDB/Mongoose + Express** on Railway (NOT SQL). Frontend = **Next.js 15 + React 19** on Railway. The prompt's Prisma+Neon and Vercel assumptions are evaluated — not assumed — in the ADRs.

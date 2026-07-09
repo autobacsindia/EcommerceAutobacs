@@ -20,8 +20,16 @@ export const generateToken = (length = 32) => {
  * @returns {string} - Hashed token
  */
 export const hashToken = (token) => {
-  // Add pepper (server-side secret) for additional security
-  const pepper = process.env.RESET_TOKEN_SECRET || 'default-pepper-change-in-production';
+  // Add pepper (server-side secret) for additional security. (SEC-3)
+  // Fail closed in production: never silently fall back to a repo-known default pepper.
+  const pepper = process.env.RESET_TOKEN_SECRET;
+  if (!pepper) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RESET_TOKEN_SECRET must be set in production');
+    }
+    // Dev/test only: deterministic non-secret pepper so local flows still work.
+    return crypto.createHash('sha256').update(token + 'dev-only-pepper').digest('hex');
+  }
   return crypto.createHash('sha256').update(token + pepper).digest('hex');
 };
 
