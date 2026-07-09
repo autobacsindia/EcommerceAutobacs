@@ -6,7 +6,8 @@ import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-react';
 import { CUSTOMER_NOTIFIED_STATUSES } from '@/lib/constants';
-import ConfirmStatusChangeModal from '@/components/orders/ConfirmStatusChangeModal';
+import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
+import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 
 // Fulfillment stages an admin can move to (mirrors the list page + backend rules).
 const ALL_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
@@ -58,6 +59,15 @@ interface Order {
   discount: number;
   totalAmount: number;
   trackingNumber?: string;
+  carrier?: {
+    name?: string;
+    code?: string;
+    trackingUrl?: string;
+  };
+  shippingSlip?: {
+    url?: string;
+    uploadedAt?: string;
+  };
   estimatedDelivery?: string;
   deliveredAt?: string;
   cancelledAt?: string;
@@ -102,18 +112,15 @@ export default function AdminOrderDetailPage() {
 
   // Runs after the admin confirms in the modal. Throws on failure so the modal
   // shows the error inline; resolves (and closes the modal) on success.
-  const confirmStatusChange = async (note?: string) => {
+  const confirmStatusChange = async ({ note, shipping }: ConfirmStatusPayload) => {
     if (!order || !pendingStatus) return;
     setUpdating(true);
     try {
-      await apiClient.put(`/orders/${orderId}/status`, {
-        status: pendingStatus,
-        reason: 'admin_update',
-        notes: note || undefined,
-      });
-      setOrder({ ...order, status: pendingStatus });
+      await updateOrderStatus(orderId, { status: pendingStatus, note, shipping });
       setPendingStatus(null);
       toast.success(`Order status updated to ${pendingStatus}`);
+      // Refetch so tracking number, carrier link and slip surface in the panel.
+      await fetchOrder();
     } finally {
       setUpdating(false);
     }
@@ -327,9 +334,42 @@ export default function AdminOrderDetailPage() {
                 <div>
                   <p className="text-sm text-gray-500">Tracking Number</p>
                   <p className="font-medium">{order.trackingNumber}</p>
+                  {order.carrier?.name && (
+                    <p className="text-gray-600 text-sm">
+                      via {order.carrier.name}
+                      {order.carrier.trackingUrl && (
+                        <>
+                          {' · '}
+                          <a
+                            href={order.carrier.trackingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            Track
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
               )}
-              
+
+              {order.shippingSlip?.url && (
+                <div>
+                  <p className="text-sm text-gray-500">Shipping Slip</p>
+                  <a
+                    href={order.shippingSlip.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-blue-600 hover:underline font-medium"
+                  >
+                    <Download className="h-4 w-4" />
+                    View slip (PDF)
+                  </a>
+                </div>
+              )}
+
               {order.estimatedDelivery && (
                 <div>
                   <p className="text-sm text-gray-500">Estimated Delivery</p>

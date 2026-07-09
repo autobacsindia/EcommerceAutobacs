@@ -1,8 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { X, AlertCircle, ArrowRight, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, AlertCircle, ArrowRight, Mail, Paperclip } from 'lucide-react';
 import { ORDER_STATUS_COLORS } from '@/lib/constants';
+import apiClient from '@/lib/api';
+import type { ShippingInput } from '@/lib/orderStatusUpdate';
+
+interface Carrier {
+  name: string;
+  code: string;
+  estimatedDeliveryDays?: number;
+}
+
+/** Payload handed back to the caller on confirm. */
+export interface ConfirmStatusPayload {
+  note?: string;
+  shipping?: ShippingInput;
+}
 
 interface ConfirmStatusChangeModalProps {
   /** Order number for display. Omitted/undefined in bulk mode. */
@@ -14,11 +28,12 @@ interface ConfirmStatusChangeModalProps {
   /** When set (>1), renders bulk copy for N orders. */
   count?: number;
   /** Runs the actual update. Resolve to close; reject to show an inline error. */
-  onConfirm: (note?: string) => Promise<void>;
+  onConfirm: (payload: ConfirmStatusPayload) => Promise<void>;
   onClose: () => void;
 }
 
 const label = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
+const MAX_SLIP_BYTES = 5 * 1024 * 1024; // mirror backend MAX_PDF_SIZE
 
 function StatusChip({ status }: { status: string }) {
   return (
@@ -46,12 +61,67 @@ export default function ConfirmStatusChangeModal({
   const [error, setError] = useState<string | null>(null);
 
   const isBulk = typeof count === 'number' && count > 1;
+  // Shipping details are only captured for a single order moving to `shipped`.
+  const isShipping = !isBulk && newStatus === 'shipped';
+
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [carrierCode, setCarrierCode] = useState('');
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (!isShipping) return;
+    let cancelled = false;
+    apiClient
+      .get<{ carriers: Carrier[] }>('/orders/tracking/carriers')
+      .then((res) => {
+        if (!cancelled) setCarriers(res.carriers || []);
+      })
+      .catch(() => {
+        /* dropdown stays empty; the admin sees a "couldn't load carriers" hint */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isShipping]);
+
+  const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const file = e.target.files?.[0] || null;
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        setError('The shipping slip must be a PDF file.');
+        e.target.value = '';
+        return;
+      }
+      if (file.size > MAX_SLIP_BYTES) {
+        setError('The shipping slip must be 5 MB or smaller.');
+        e.target.value = '';
+        return;
+      }
+    }
+    setSlipFile(file);
+  };
 
   const handleConfirm = async () => {
     setError(null);
+
+    let shipping: ShippingInput | undefined;
+    if (isShipping) {
+      if (!trackingNumber.trim()) {
+        setError('Enter a tracking number to mark this order as shipped.');
+        return;
+      }
+      if (!carrierCode) {
+        setError('Select a carrier to mark this order as shipped.');
+        return;
+      }
+      shipping = { trackingNumber: trackingNumber.trim(), carrierCode, slipFile };
+    }
+
     setIsSubmitting(true);
     try {
-      await onConfirm(note.trim() || undefined);
+      await onConfirm({ note: note.trim() || undefined, shipping });
       // On success the parent unmounts this modal; nothing more to do.
     } catch (err: any) {
       setError(err?.message || 'Failed to update status. Please try again.');
@@ -97,6 +167,68 @@ export default function ConfirmStatusChangeModal({
             )}
           </div>
 
+          {/* Shipping details (tracking + carrier + optional slip) */}
+          {isShipping && (
+            <div className="mb-6 space-y-4">
+              <div>
+                <label htmlFor="tracking-number" className="block text-sm font-medium text-ink/80 mb-2">
+                  Tracking number <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="tracking-number"
+                  type="text"
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder="e.g. 123456789012"
+                  disabled={isSubmitting}
+                  className="w-full px-4 py-3 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg focus:outline-none focus:ring-2 focus:ring-gold"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="carrier" className="block text-sm font-medium text-ink/80 mb-2">
+                  Carrier <span className="text-red-400">*</span>
+                </label>
+                <select
+                  id="carrier"
+                  value={carrierCode}
+                  onChange={(e) => setCarrierCode(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full px-4 py-3 bg-obsidian-raised border border-hairline text-ink rounded-lg focus:outline-none focus:ring-2 focus:ring-gold"
+                >
+                  <option value="" disabled>
+                    {carriers.length ? 'Select a carrier…' : 'Loading carriers…'}
+                  </option>
+                  {carriers.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="slip" className="block text-sm font-medium text-ink/80 mb-2">
+                  Shipping slip (PDF, optional)
+                </label>
+                <input
+                  id="slip"
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleSlipChange}
+                  disabled={isSubmitting}
+                  className="block w-full text-sm text-ink-muted file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-obsidian-raised file:text-ink hover:file:bg-obsidian-deep"
+                />
+                {slipFile && (
+                  <p className="mt-2 text-xs text-ink-muted flex items-center gap-1.5">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    {slipFile.name} — attached to the customer email
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Customer email warning */}
           {notifiesCustomer && (
             <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6 flex gap-3">
@@ -104,7 +236,10 @@ export default function ConfirmStatusChangeModal({
               <p className="text-sm text-gold">
                 {isBulk
                   ? `The customer for each of these ${count} orders will be emailed about this update.`
-                  : 'The customer will be emailed about this update.'}
+                  : isShipping
+                    ? 'The customer will be emailed the tracking details' +
+                      (slipFile ? ' and the shipping slip.' : '.')
+                    : 'The customer will be emailed about this update.'}
               </p>
             </div>
           )}

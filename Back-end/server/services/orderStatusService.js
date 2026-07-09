@@ -171,6 +171,11 @@ class OrderStatusService {
       // Who initiated a cancellation ('admin' | 'customer' | 'system'). Ignored for
       // non-cancel transitions. Defaults from isAdmin when a cancel omits it.
       cancelledBy,
+      // Fulfillment/tracking payload for a `shipped` transition. Ignored otherwise.
+      // { trackingNumber, carrier: {name,code,trackingUrl}, estimatedDelivery,
+      //   shippingSlip: {url,publicId,uploadedAt} }. Persisted BEFORE the status
+      // email is enqueued so the worker sees the tracking info + slip.
+      shipping,
       session = null
     } = options;
 
@@ -254,6 +259,17 @@ class OrderStatusService {
               status: 'pending',
               notes: `Auto-flagged on cancellation (${order.cancelledBy}). Reason: ${reason || 'n/a'}`
             };
+          }
+          break;
+        case 'shipped':
+          // Persist tracking + carrier + optional slip here (before save) so the
+          // status email enqueued below always sees them. Fixes the old race where
+          // the controller set trackingNumber only AFTER the email was queued.
+          if (shipping) {
+            if (shipping.trackingNumber) order.trackingNumber = shipping.trackingNumber;
+            if (shipping.carrier) order.carrier = shipping.carrier;
+            if (shipping.estimatedDelivery) order.estimatedDelivery = shipping.estimatedDelivery;
+            if (shipping.shippingSlip) order.shippingSlip = shipping.shippingSlip;
           }
           break;
         case 'delivered':

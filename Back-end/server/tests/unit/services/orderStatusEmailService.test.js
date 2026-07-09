@@ -78,4 +78,41 @@ describe('emailOrderStatusUpdate', () => {
     expect(order.notifiedStatuses).not.toContain('cancelled');
     expect(mockSave).not.toHaveBeenCalled();
   });
+
+  test('attaches the shipping slip PDF on a shipped email', async () => {
+    const order = makeOrder({ shippingSlip: { url: 'https://cdn.example/slip.pdf' } });
+    mockFindById.mockResolvedValue(order);
+    mockSendStatus.mockResolvedValue({ success: true });
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({ ok: true, arrayBuffer: async () => Buffer.from('%PDF-1.4 fake').buffer });
+
+    const result = await emailOrderStatusUpdate('order123', 'shipped');
+
+    expect(result).toEqual({ status: 'sent' });
+    // Called with a bounded AbortSignal so a stalled fetch can't hang the worker.
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://cdn.example/slip.pdf',
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    const arg = mockSendStatus.mock.calls[0][0];
+    expect(arg.attachments).toHaveLength(1);
+    expect(arg.attachments[0]).toEqual(
+      expect.objectContaining({ ContentType: 'application/pdf', Content: expect.any(String) })
+    );
+    fetchSpy.mockRestore();
+  });
+
+  test('still sends the shipped email (no attachment) if the slip download fails', async () => {
+    const order = makeOrder({ shippingSlip: { url: 'https://cdn.example/gone.pdf' } });
+    mockFindById.mockResolvedValue(order);
+    mockSendStatus.mockResolvedValue({ success: true });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 404 });
+
+    const result = await emailOrderStatusUpdate('order123', 'shipped');
+
+    expect(result).toEqual({ status: 'sent' });
+    expect(mockSendStatus.mock.calls[0][0].attachments).toBeUndefined();
+    fetchSpy.mockRestore();
+  });
 });

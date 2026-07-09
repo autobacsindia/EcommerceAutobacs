@@ -429,14 +429,15 @@ class EmailHandler {
    * @param {Object} params.order - Order document (Mongoose doc or lean)
    * @param {string} params.status - New status (shipped|delivered|cancelled|refunded)
    * @param {Object} [params.user] - User document (name)
+   * @param {Array<Object>} [params.attachments] - Postmark attachments (e.g. shipping slip PDF)
    * @returns {Promise<Object>} - Result with success status
    */
-  async sendOrderStatusUpdate({ to, order, status, user = null }) {
+  async sendOrderStatusUpdate({ to, order, status, user = null, attachments }) {
     const { orderStatusEmail } = await import('../utils/emailTemplates.js');
     const { companyInfo } = await import('../config/company.js');
     const { subject, text, html } = orderStatusEmail({ order, user, status, company: companyInfo });
 
-    return this.sendEmail({ to, subject, text, html });
+    return this.sendEmail({ to, subject, text, html, attachments });
   }
 
   /**

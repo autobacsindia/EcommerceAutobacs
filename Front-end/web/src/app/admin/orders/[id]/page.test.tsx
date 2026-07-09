@@ -22,6 +22,7 @@ jest.mock('lucide-react', () => ({
   AlertCircle: () => <span>AlertCircleIcon</span>,
   ArrowRight: () => <span>ArrowRightIcon</span>,
   Mail: () => <span>MailIcon</span>,
+  Paperclip: () => <span>PaperclipIcon</span>,
 }));
 
 describe('AdminOrderDetailPage', () => {
@@ -71,7 +72,12 @@ describe('AdminOrderDetailPage', () => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
     (useParams as jest.Mock).mockReturnValue({ id: 'order123' });
-    (apiClient.get as jest.Mock).mockResolvedValue({ order: mockOrder });
+    (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+        return Promise.resolve({ carriers: [{ name: 'Delhivery', code: 'DELHIVERY' }] });
+      }
+      return Promise.resolve({ order: mockOrder });
+    });
     (apiClient.put as jest.Mock).mockResolvedValue({ success: true });
     window.confirm = jest.fn().mockReturnValue(true);
     window.alert = jest.fn();
@@ -110,13 +116,27 @@ describe('AdminOrderDetailPage', () => {
     fireEvent.change(select, { target: { value: 'shipped' } });
     expect(apiClient.put).not.toHaveBeenCalled();
 
-    // Confirm in the modal → the API fires with the chosen status.
+    // Shipping requires a tracking number + carrier before it will submit.
+    fireEvent.change(screen.getByPlaceholderText(/123456789012/), {
+      target: { value: 'TRK123456789' },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Delhivery' })).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText(/carrier/i), { target: { value: 'DELHIVERY' } });
+
+    // Confirm in the modal → the API fires with the chosen status + tracking details.
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
 
     await waitFor(() => {
       expect(apiClient.put).toHaveBeenCalledWith(
         '/orders/order123/status',
-        expect.objectContaining({ status: 'shipped', reason: 'admin_update' })
+        expect.objectContaining({
+          status: 'shipped',
+          reason: 'admin_update',
+          trackingNumber: 'TRK123456789',
+          carrierCode: 'DELHIVERY',
+        })
       );
     });
   });

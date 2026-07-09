@@ -6,7 +6,7 @@
  * No HTTP server, no DB.
  */
 
-import { validateUploadedFiles } from '../middleware/uploadMiddleware.js';
+import { validateUploadedFiles, validatePdfUpload } from '../middleware/uploadMiddleware.js';
 import { jest } from '@jest/globals';
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
@@ -330,5 +330,44 @@ describe('validateUploadedFiles — req.file (single-upload path)', () => {
       res, next
     );
     expect(res._status).toBe(400);
+  });
+});
+
+// ── validatePdfUpload (shipping slips) ─────────────────────────────────────────
+
+describe('validatePdfUpload', () => {
+  /** Minimal PDF: %PDF-1.4 header + padding */
+  const makePdfBuffer = () => Buffer.concat([Buffer.from('%PDF-1.4'), Buffer.alloc(16)]);
+
+  test('no file → passes through (slip is optional)', () => {
+    const next = makeNext();
+    const res = makeRes();
+    validatePdfUpload({ file: undefined }, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res._status).toBe(200);
+  });
+
+  test('valid PDF header → calls next', () => {
+    const next = makeNext();
+    const res = makeRes();
+    validatePdfUpload({ file: makeFile(makePdfBuffer(), 'application/pdf', 'slip.pdf') }, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('empty file → 400', () => {
+    const next = makeNext();
+    const res = makeRes();
+    validatePdfUpload({ file: makeFile(Buffer.alloc(0), 'application/pdf', 'slip.pdf') }, res, next);
+    expect(res._status).toBe(400);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('non-PDF content (spoofed extension) → 400', () => {
+    const next = makeNext();
+    const res = makeRes();
+    // JPEG bytes claiming to be a PDF
+    validatePdfUpload({ file: makeFile(makeJpegBuffer(), 'application/pdf', 'slip.pdf') }, res, next);
+    expect(res._status).toBe(400);
+    expect(next).not.toHaveBeenCalled();
   });
 });

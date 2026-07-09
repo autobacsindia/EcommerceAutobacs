@@ -14,6 +14,20 @@ import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 
 /**
+ * Download a URL into a Buffer (used to fetch the Cloudinary-hosted shipping slip
+ * for email attachment). Uses global fetch (Node ≥ 18). Throws on non-2xx.
+ * @param {string} url
+ * @returns {Promise<Buffer>}
+ */
+const downloadToBuffer = async (url) => {
+  // Bounded: a stalled Cloudinary connection must not hang the notification worker
+  // (Node fetch has no default timeout). AbortSignal.timeout → fetch rejects at 10s.
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
+  return Buffer.from(await res.arrayBuffer());
+};
+
+/**
  * Send the status-update email for an order, once per status.
  * Idempotent via Order.notifiedStatuses so BullMQ retries never double-send.
  * @param {string} orderId
@@ -34,7 +48,25 @@ export const emailOrderStatusUpdate = async (orderId, status) => {
     return { status: 'no-recipient' };
   }
 
-  const result = await emailHandler.sendOrderStatusUpdate({ to, order, status, user });
+  // For a shipped order with an uploaded courier slip, attach the PDF. Best-effort:
+  // if the download fails we still send the (tracking-only) email rather than block
+  // the notification — a missing attachment shouldn't strand the customer.
+  let attachments;
+  if (status === 'shipped' && order.shippingSlip?.url) {
+    try {
+      const buffer = await downloadToBuffer(order.shippingSlip.url);
+      const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
+      attachments = [{
+        Name: `shipping-slip-${ref}.pdf`,
+        Content: buffer.toString('base64'),
+        ContentType: 'application/pdf',
+      }];
+    } catch (err) {
+      console.error(`[StatusEmail] Failed to attach slip for order ${orderId}: ${err.message}`);
+    }
+  }
+
+  const result = await emailHandler.sendOrderStatusUpdate({ to, order, status, user, attachments });
 
   // Only mark as notified when the provider actually accepted it, so a transient
   // failure lets BullMQ retry rather than silently dropping the notification.

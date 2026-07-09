@@ -176,6 +176,14 @@ const OrderSchema = new mongoose.Schema({
     code: String,
     trackingUrl: String
   },
+  // Optional courier shipping slip (PDF) uploaded by an admin when the order ships.
+  // Stored on Cloudinary (resource_type 'raw'); the notification worker downloads
+  // the URL and attaches the PDF to the customer's "order shipped" email.
+  shippingSlip: {
+    url: String,
+    publicId: String,
+    uploadedAt: Date
+  },
   trackingEvents: [{
     timestamp: {
       type: Date,

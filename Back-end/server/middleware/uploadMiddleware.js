@@ -282,6 +282,67 @@ export const validateUploadedFiles = (req, res, next) => {
   next();
 };
 
+// ── PDF upload (shipping slips, documents) ─────────────────────────────────
+
+/** 5 MB — courier slips are small; keeps memory + email attachment size sane */
+const MAX_PDF_SIZE = 5 * 1024 * 1024;
+
+/** %PDF- magic bytes: 25 50 44 46 2D */
+const PDF_MAGIC = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d]);
+
+const pdfFileFilter = (req, file, cb) => {
+  if (file.mimetype !== 'application/pdf') {
+    return cb(
+      new multer.MulterError(
+        'LIMIT_UNEXPECTED_FILE',
+        `Invalid file type "${file.mimetype}". Only PDF files are allowed.`
+      ),
+      false
+    );
+  }
+  cb(null, true);
+};
+
+const pdfUpload = multer({
+  storage,
+  fileFilter: pdfFileFilter,
+  limits: { fileSize: MAX_PDF_SIZE, files: 1 },
+});
+
+/**
+ * Single PDF upload (memory buffer). The field is OPTIONAL at the multer level —
+ * a request with no file passes through untouched. Pair with validatePdfUpload.
+ * @param {string} [fieldName='slip']
+ */
+export const uploadPdfSingle = (fieldName = 'slip') => pdfUpload.single(fieldName);
+
+/**
+ * validatePdfUpload — place AFTER uploadPdfSingle, BEFORE the controller.
+ * Rejects empty files and content whose leading bytes aren't a real PDF header
+ * (prevents a renamed non-PDF slipping through the MIME check). No file → pass.
+ */
+export const validatePdfUpload = (req, res, next) => {
+  if (!req.file) return next();
+
+  const { buffer, originalname } = req.file;
+  if (!buffer || buffer.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: `File "${originalname}" is empty and cannot be uploaded.`,
+    });
+  }
+
+  if (buffer.length < PDF_MAGIC.length || !buffer.slice(0, PDF_MAGIC.length).equals(PDF_MAGIC)) {
+    console.warn(`[Upload] PDF magic-byte mismatch: "${originalname}" is not a valid PDF.`);
+    return res.status(400).json({
+      success: false,
+      message: `File "${originalname}" is not a valid PDF document.`,
+    });
+  }
+
+  next();
+};
+
 // ── Exported middleware factories ──────────────────────────────────────────
 
 /**

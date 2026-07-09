@@ -5,6 +5,7 @@ import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { generateInvoicePdf, invoiceNumber } from '../services/invoiceService.js';
+import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -607,10 +608,64 @@ export const deleteOrder = async (req, res) => {
 // @route   PUT /orders/:id/status
 // @access  Private/Admin
 export const updateOrderStatus = async (req, res) => {
-  const { status, reason, notes, trackingNumber, estimatedDelivery, metadata } = req.body;
+  const { status, reason, notes, trackingNumber, carrierCode, estimatedDelivery, metadata } = req.body;
 
   if (!status) {
     return res.status(400).json({ success: false, message: 'Status is required' });
+  }
+
+  // Assemble the shipping payload for a `shipped` transition. The validator has
+  // already guaranteed trackingNumber + carrierCode are present for this status.
+  // The optional PDF slip (req.file, PDF-validated by middleware) is pushed to
+  // Cloudinary here and its URL threaded through to the order + shipped email.
+  let shipping;
+  if (status === 'shipped') {
+    const carrier = orderTrackingService.getCarrier(carrierCode);
+    if (!carrier) {
+      return res.status(400).json({ success: false, message: `Unknown carrier code: ${carrierCode}` });
+    }
+
+    const trimmedTracking = String(trackingNumber).trim();
+
+    let shippingSlip;
+    if (req.file) {
+      // Guard against orphaned Cloudinary uploads: only store the slip once we
+      // know the transition is legal (the service re-validates too, but that runs
+      // after the upload). Cheap extra read, paid only for shipped-with-a-slip.
+      const existing = await orderRepository.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+      const check = orderStatusService.validateTransition(existing.status, 'shipped', true);
+      if (!check.valid) {
+        return res.status(400).json({ success: false, message: check.message });
+      }
+
+      const uploaded = await uploadRawToCloudinary(req.file.buffer, {
+        folder: process.env.SHIPPING_SLIP_CLOUDINARY_FOLDER || 'shipping-slips',
+        publicId: `slip-${req.params.id}.pdf`,
+      });
+      shippingSlip = { url: uploaded.secure_url, publicId: uploaded.public_id, uploadedAt: new Date() };
+    }
+
+    // ETA: honour an explicit date, else derive from the carrier's SLA so the
+    // customer email always carries an estimate.
+    let eta = estimatedDelivery ? new Date(estimatedDelivery) : null;
+    if (!eta && carrier.estimatedDeliveryDays) {
+      eta = new Date();
+      eta.setDate(eta.getDate() + carrier.estimatedDeliveryDays);
+    }
+
+    shipping = {
+      trackingNumber: trimmedTracking,
+      carrier: {
+        name: carrier.name,
+        code: carrier.code,
+        trackingUrl: carrier.trackingUrl + trimmedTracking,
+      },
+      estimatedDelivery: eta || undefined,
+      shippingSlip,
+    };
   }
 
   const result = await orderStatusService.updateOrderStatus(req.params.id, status, {
@@ -619,19 +674,21 @@ export const updateOrderStatus = async (req, res) => {
     cancelledBy: 'admin', // only consumed when status === 'cancelled'
     reason,
     notes,
-    metadata
+    metadata,
+    shipping,
   });
 
   if (!result.success) {
+    // The slip was uploaded before the service re-validated (needed so the URL is
+    // in the shipping payload). If the transition was rejected here — e.g. a
+    // concurrent status change since the pre-check — don't leave it orphaned. (raw resource)
+    if (shipping?.shippingSlip?.publicId) {
+      await deleteFromCloudinary(shipping.shippingSlip.publicId, 'raw').catch(() => {});
+    }
     return res.status(400).json({ success: false, message: result.message });
   }
 
-  const order = result.order;
-  if (trackingNumber) order.trackingNumber = trackingNumber;
-  if (estimatedDelivery) order.estimatedDelivery = estimatedDelivery;
-  await orderRepository.save(order);
-
-  res.json({ success: true, message: result.message, order });
+  res.json({ success: true, message: result.message, order: result.order });
 };
 
 // @desc    Bulk update order status (Admin only)

@@ -18,6 +18,7 @@ import {
   validateAdminOrderQuery
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { uploadPdfSingle, validatePdfUpload, handleMulterError } from "../middleware/uploadMiddleware.js";
 import { checkoutRateLimit } from "../middleware/rateLimitMiddleware.js";
 import { validateCancellation } from "../middleware/orderStatusMiddleware.js";
 import { checkoutSessionKeepAlive, attachTokenRefreshInfo } from "../middleware/sessionKeepAlive.js";
@@ -117,7 +118,18 @@ router.delete("/:id", protect, validateIdParam, asyncHandler(deleteOrder));
 // @route   PUT /orders/:id/status
 // @desc    Update order status with validation (Admin only)
 // @access  Private/Admin
-router.put("/:id/status", protect, admin, validateOrderStatusUpdate, asyncHandler(updateOrderStatus));
+// Accepts an optional `slip` PDF (multipart) when shipping; multer passes plain
+// JSON requests through untouched, so non-shipped updates are unaffected.
+router.put(
+  "/:id/status",
+  protect,
+  admin,
+  uploadPdfSingle('slip'),
+  handleMulterError,
+  validatePdfUpload,
+  validateOrderStatusUpdate,
+  asyncHandler(updateOrderStatus)
+);
 
 // @route   POST /orders/bulk/status
 // @desc    Bulk update order status (Admin only)

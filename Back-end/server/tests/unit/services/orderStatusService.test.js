@@ -180,6 +180,36 @@ describe('OrderStatusService Unit Tests', () => {
       expect(mockSave).toHaveBeenCalled();
     });
 
+    it('persists tracking, carrier and shipping slip on a shipped transition', async () => {
+      mockOrderModel.findById.mockResolvedValue(mockOrderInstance);
+      mockOrderInstance.status = 'processing';
+
+      const shipping = {
+        trackingNumber: 'TRK999',
+        carrier: { name: 'Delhivery', code: 'DELHIVERY', trackingUrl: 'https://d.example/TRK999' },
+        estimatedDelivery: new Date('2026-07-15T00:00:00Z'),
+        shippingSlip: {
+          url: 'https://cdn.example/slip.pdf',
+          publicId: 'shipping-slips/slip-order123.pdf',
+          uploadedAt: new Date(),
+        },
+      };
+
+      const result = await service.updateOrderStatus('order123', 'shipped', {
+        userId: 'admin123',
+        isAdmin: true,
+        reason: 'admin_update',
+        shipping,
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockOrderInstance.trackingNumber).toBe('TRK999');
+      expect(mockOrderInstance.carrier).toEqual(shipping.carrier);
+      expect(mockOrderInstance.shippingSlip).toEqual(shipping.shippingSlip);
+      expect(mockOrderInstance.estimatedDelivery).toEqual(shipping.estimatedDelivery);
+      expect(mockSave).toHaveBeenCalled();
+    });
+
     it('should update metrics when status changes to shipped', async () => {
       mockOrderModel.findById.mockResolvedValue(mockOrderInstance);
       mockOrderInstance.status = 'processing';

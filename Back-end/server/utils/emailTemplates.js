@@ -733,10 +733,40 @@ export const orderStatusEmail = ({ order, user = null, status, company = {} }) =
   const items = order.items || [];
   const showItems = status === 'delivered' && items.length > 0;
 
+  // Escape HTML metacharacters before interpolating into the HTML body — the
+  // tracking number is admin free-text and would otherwise break out of the
+  // `href="..."` attribute or inject markup into the customer's email. (email XSS)
+  const esc = (s) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
+  // Shipped emails carry a tracking block (number, carrier, ETA, tracking link)
+  // plus a note when the courier slip PDF is attached.
+  const showTracking = status === 'shipped' && !!order.trackingNumber;
+  const carrierName = order.carrier?.name;
+  const trackingUrl = order.carrier?.trackingUrl;
+  const etaText = order.estimatedDelivery
+    ? new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
+    : null;
+  const hasSlip = status === 'shipped' && !!order.shippingSlip?.url;
+
   const subject = copy.subject(ref);
 
   const itemsText = showItems
     ? '\n\nItems:\n' + items.map((it) => `  • ${it.name || 'Item'} × ${it.quantity}`).join('\n')
+    : '';
+
+  const trackingText = showTracking
+    ? '\n\nTracking details:' +
+      `\n  • Tracking number: ${order.trackingNumber}` +
+      (carrierName ? `\n  • Carrier: ${carrierName}` : '') +
+      (etaText ? `\n  • Estimated delivery: ${etaText}` : '') +
+      (trackingUrl ? `\n  • Track your package: ${trackingUrl}` : '') +
+      (hasSlip ? '\n\nYour shipping slip is attached to this email.' : '')
     : '';
 
   const text = `
@@ -744,7 +774,7 @@ Hi ${name},
 
 ${copy.blurb}
 
-Order: ${ref}${itemsText}
+Order: ${ref}${trackingText}${itemsText}
 
 Questions? Contact us at ${supportEmail}.
 
@@ -771,6 +801,18 @@ ${companyName}
     ? `<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;"><tbody>${itemRows}</tbody></table>`
     : '';
 
+  const trackingBlock = showTracking
+    ? `
+      <div style="margin-top:20px;padding:16px 20px;background:#f7f7f7;border-radius:8px;border:1px solid #eee;">
+        <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">Tracking details</p>
+        <p style="margin:4px 0;font-size:14px;">Tracking number: <strong>${esc(order.trackingNumber)}</strong></p>
+        ${carrierName ? `<p style="margin:4px 0;font-size:14px;">Carrier: <strong>${esc(carrierName)}</strong></p>` : ''}
+        ${etaText ? `<p style="margin:4px 0;font-size:14px;">Estimated delivery: <strong>${esc(etaText)}</strong></p>` : ''}
+        ${trackingUrl ? `<p style="margin:16px 0 4px;"><a href="${esc(trackingUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">Track your package</a></p>` : ''}
+        ${hasSlip ? `<p style="margin:12px 0 0;font-size:13px;color:#666;">📎 Your shipping slip is attached to this email.</p>` : ''}
+      </div>`
+    : '';
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -788,6 +830,7 @@ ${companyName}
       <p>Hi ${name},</p>
       <p>${copy.blurb}</p>
       <p style="color:#555;">Order: <strong>${ref}</strong></p>
+      ${trackingBlock}
       ${itemsTable}
       <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
     </div>

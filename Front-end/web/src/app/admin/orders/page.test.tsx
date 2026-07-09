@@ -34,6 +34,7 @@ jest.mock('lucide-react', () => ({
   AlertCircle: () => <span>AlertCircleIcon</span>,
   ArrowRight: () => <span>ArrowRightIcon</span>,
   Mail: () => <span>MailIcon</span>,
+  Paperclip: () => <span>PaperclipIcon</span>,
 }));
 
 // Mock Child Components
@@ -101,7 +102,14 @@ describe('AdminOrdersPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (apiClient.get as jest.Mock).mockResolvedValue(mockOrders);
+    // Carriers endpoint feeds the shipping modal's dropdown; everything else
+    // returns the orders list.
+    (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+        return Promise.resolve({ carriers: [{ name: 'Delhivery', code: 'DELHIVERY' }] });
+      }
+      return Promise.resolve(mockOrders);
+    });
     // Mock put for status update
     (apiClient.put as jest.Mock).mockResolvedValue({ success: true });
   });
@@ -138,13 +146,26 @@ describe('AdminOrdersPage', () => {
       expect(screen.getByText(/customer will be emailed/i)).toBeInTheDocument();
     });
 
-    // Confirm — now the API fires with the chosen status.
+    // Shipping requires a tracking number + carrier before it will submit.
+    fireEvent.change(screen.getByPlaceholderText(/123456789012/), {
+      target: { value: 'TRK123456789' },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Delhivery' })).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText(/carrier/i), { target: { value: 'DELHIVERY' } });
+
+    // Confirm — now the API fires with the chosen status + tracking details.
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
 
     await waitFor(() => {
       expect(apiClient.put).toHaveBeenCalledWith(
         expect.stringContaining('/o1'),
-        expect.objectContaining({ status: 'shipped' })
+        expect.objectContaining({
+          status: 'shipped',
+          trackingNumber: 'TRK123456789',
+          carrierCode: 'DELHIVERY',
+        })
       );
     });
   });

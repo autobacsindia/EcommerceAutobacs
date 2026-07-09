@@ -54,6 +54,19 @@ export const validateOrderStatusUpdate = [
   body('notes')
     .optional()
     .trim(),
+  // Tracking is mandatory to move an order to `shipped`; ignored for other
+  // transitions. carrierCode must match a supported carrier so the email can
+  // build a real "track your package" link.
+  body('trackingNumber')
+    .if(body('status').equals('shipped'))
+    .trim()
+    .notEmpty()
+    .withMessage('Tracking number is required to mark an order as shipped'),
+  body('carrierCode')
+    .if(body('status').equals('shipped'))
+    .trim()
+    .notEmpty()
+    .withMessage('Carrier is required to mark an order as shipped'),
   validateRequest
 ];
 

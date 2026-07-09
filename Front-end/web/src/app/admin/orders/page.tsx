@@ -10,7 +10,8 @@ import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import OrderFiltersPanel, { OrderFilters } from '@/components/orders/OrderFiltersPanel';
 import BulkActionsBar from '@/components/orders/BulkActionsBar';
-import ConfirmStatusChangeModal from '@/components/orders/ConfirmStatusChangeModal';
+import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
+import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -169,13 +170,13 @@ function AdminOrdersPageInner() {
 
   // Runs the update after the admin confirms in the modal. Throws on failure so the
   // modal surfaces the error inline; resolves (and closes the modal) on success.
-  const confirmStatusChange = async (note?: string) => {
+  const confirmStatusChange = async ({ note, shipping }: ConfirmStatusPayload) => {
     if (!pendingChange) return;
     const { orderId, to } = pendingChange;
-    await apiClient.put(API_ENDPOINTS.ORDER_UPDATE_STATUS(orderId), {
+    await updateOrderStatus(orderId, {
       status: to,
-      reason: 'admin_update',
-      notes: note || 'Status updated from admin panel',
+      note: note || 'Status updated from admin panel',
+      shipping,
     });
 
     setOrders(orders.map(order =>
@@ -261,7 +262,7 @@ function AdminOrdersPageInner() {
 
   // Applies the bulk update once confirmed. Throws on hard failure so the modal shows
   // the error inline; resolves (closing the modal) on success or partial success.
-  const confirmBulkStatusUpdate = async (note?: string) => {
+  const confirmBulkStatusUpdate = async ({ note }: ConfirmStatusPayload) => {
     if (!pendingBulk) return;
     const { status, reason } = pendingBulk;
     const response = await apiClient.post(API_ENDPOINTS.ORDER_BULK_STATUS, {

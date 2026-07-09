@@ -74,6 +74,50 @@ export const uploadToCloudinary = (buffer, options = {}) => {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// uploadRawToCloudinary
+// ────────────────────────────────────────────────────────────────────────────
+/**
+ * Upload a single NON-image buffer (PDF, etc.) to Cloudinary as a raw resource.
+ * Unlike uploadToCloudinary this applies no image transformation / format
+ * allowlist. Used for artefacts like courier shipping slips and invoices.
+ *
+ * @param {Buffer} buffer
+ * @param {object} options
+ * @param {string} options.folder      Cloudinary folder path
+ * @param {string} [options.publicId]  Explicit public_id (include the extension,
+ *                                      e.g. `slip-123.pdf`, so the delivery URL
+ *                                      keeps a .pdf suffix). Overwrites on match.
+ * @returns {Promise<{ secure_url: string, public_id: string }>}
+ */
+export const uploadRawToCloudinary = (buffer, options = {}) => {
+  const { folder = 'general', publicId } = options;
+
+  return new Promise((resolve, reject) => {
+    const uploadOptions = { folder, resource_type: 'raw' };
+    if (publicId) {
+      uploadOptions.public_id = publicId;
+      uploadOptions.overwrite = true;
+    }
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error) {
+          console.error(`[Cloudinary] Raw upload failed — folder: ${folder} | error: ${error.message}`);
+          return reject(new AppError(`Cloudinary upload failed: ${error.message}`, 500));
+        }
+        console.log(
+          `[Cloudinary] Uploaded (raw): ${result.public_id} | ${result.bytes} bytes | ${result.secure_url}`
+        );
+        resolve({ secure_url: result.secure_url, public_id: result.public_id });
+      }
+    );
+
+    uploadStream.end(buffer);
+  });
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // deleteFromCloudinary
 // ────────────────────────────────────────────────────────────────────────────
 /**

@@ -34,6 +34,7 @@ const mockOrderTrackingService = {
   getTrackingHistory: jest.fn(),
   addTrackingEvent: jest.fn(),
   trackByNumber: jest.fn(),
+  getCarrier: jest.fn(),
   getSupportedCarriers: jest.fn(),
   simulateTracking: jest.fn(),
   getTrackingStatistics: jest.fn(),
@@ -317,35 +318,58 @@ describe('OrderController Unit Tests', () => {
   });
 
   describe('updateOrderStatus', () => {
-    it('should update status successfully (Admin)', async () => {
+    it('should update status successfully (Admin) and pass tracking to the service', async () => {
       req.user.role = 'admin';
       req.params.id = 'order-id';
-      req.body = { status: 'shipped', trackingNumber: '12345' };
+      // No slip file → JSON path, no Cloudinary upload.
+      req.body = { status: 'shipped', trackingNumber: '12345', carrierCode: 'DELHIVERY' };
 
-      const mockServiceResult = {
+      mockOrderTrackingService.getCarrier.mockReturnValue({
+        name: 'Delhivery',
+        code: 'DELHIVERY',
+        trackingUrl: 'https://d.example/',
+        estimatedDeliveryDays: 2,
+      });
+
+      const resultOrder = { _id: 'order-id', status: 'shipped', trackingNumber: '12345' };
+      mockOrderStatusService.updateOrderStatus.mockResolvedValue({
         success: true,
-        order: { 
-          _id: 'order-id', 
-          status: 'shipped',
-          save: jest.fn().mockResolvedValue(true) 
-        },
-        message: 'Status updated'
-      };
-
-      mockOrderStatusService.updateOrderStatus.mockResolvedValue(mockServiceResult);
+        order: resultOrder,
+        message: 'Status updated',
+      });
 
       await updateOrderStatus(req, res);
 
+      // Tracking + carrier are threaded to the service (which persists them before
+      // the email is enqueued) — the controller no longer mutates the order itself.
       expect(mockOrderStatusService.updateOrderStatus).toHaveBeenCalledWith(
         'order-id',
         'shipped',
-        expect.objectContaining({ isAdmin: true })
+        expect.objectContaining({
+          isAdmin: true,
+          shipping: expect.objectContaining({
+            trackingNumber: '12345',
+            carrier: expect.objectContaining({ code: 'DELHIVERY', trackingUrl: 'https://d.example/12345' }),
+          }),
+        })
       );
 
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
-        order: expect.objectContaining({ trackingNumber: '12345' })
+        order: resultOrder,
       }));
+    });
+
+    it('rejects an unknown carrier code', async () => {
+      req.user.role = 'admin';
+      req.params.id = 'order-id';
+      req.body = { status: 'shipped', trackingNumber: '12345', carrierCode: 'NOPE' };
+      mockOrderTrackingService.getCarrier.mockReturnValue(null);
+
+      await updateOrderStatus(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(mockOrderStatusService.updateOrderStatus).not.toHaveBeenCalled();
     });
   });
 
