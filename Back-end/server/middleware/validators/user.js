@@ -24,6 +24,14 @@ export const validateUserUpdate = [
     .optional()
     .isBoolean()
     .withMessage('isActive must be a boolean'),
+  body('isSalesRep')
+    .optional()
+    .isBoolean()
+    .withMessage('isSalesRep must be a boolean'),
+  body('salesTarget')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('salesTarget must be a non-negative integer'),
   validateRequest
 ];
 

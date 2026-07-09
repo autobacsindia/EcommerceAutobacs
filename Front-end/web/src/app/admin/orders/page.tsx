@@ -28,10 +28,19 @@ const ALL_STATUSES = Object.keys(STATUS_TRANSITIONS) as string[];
 // never picks it manually (payment moves it to processing).
 const SYSTEM_OWNED = ['awaiting_payment'];
 
+// A cancel is only valid BEFORE delivery — once delivered/returned it's a
+// return/refund, never a cancellation (mirrors the backend hard rule).
+const CANCEL_BLOCKED_FROM = ['delivered', 'returned', 'cancelled'];
+
 /** Statuses an admin can manually move an order to (fulfillment/exception states only). */
 function getAdminNextStatuses(currentStatus: string): string[] {
-  // Admins can force any fulfillment transition, but never a payment-driven status.
-  return ALL_STATUSES.filter(s => s !== currentStatus && !SYSTEM_OWNED.includes(s));
+  // Admins can force any fulfillment transition, but never a payment-driven status,
+  // and never a cancel once the order is delivered.
+  return ALL_STATUSES.filter(s => {
+    if (s === currentStatus || SYSTEM_OWNED.includes(s)) return false;
+    if (s === 'cancelled' && CANCEL_BLOCKED_FROM.includes(currentStatus)) return false;
+    return true;
+  });
 }
 
 interface Order {

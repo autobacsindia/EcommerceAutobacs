@@ -257,6 +257,21 @@ function enqueueSync(productId) {
     .catch(err => console.error('[SearchSync] Failed to enqueue sync for', id, ':', err.message));
 }
 
+// Public helper for bulk writes that BYPASS the document hooks below.
+// `Product.updateMany()` fires Mongoose's `updateMany` middleware — which this
+// schema does NOT hook — so callers that bulk-mutate products (brand rename /
+// mapping, vehicle-fitment mapping) must enqueue sync explicitly or ES silently
+// goes stale. Capture the affected _ids BEFORE the updateMany (the filters there
+// match on the field being mutated, so a post-update query returns nothing) and
+// pass them here afterwards. Reuses enqueueSync so the env guard + per-id job
+// dedup stay in one place.
+export function enqueueProductSync(ids) {
+  if (!ids) return;
+  for (const id of Array.isArray(ids) ? ids : [ids]) {
+    if (id != null) enqueueSync(id);
+  }
+}
+
 // Fires after doc.save() — covers creates and full-document updates (including
 // soft-deletes: controller sets deletedAt then calls save()).
 ProductSchema.post('save', function (doc) {

@@ -1,29 +1,26 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import Product from '../models/Product.js';
+import Product, { enqueueProductSync } from '../models/Product.js';
 import { sanitizeProductDescriptions } from './htmlSanitizer.js';
 import { categorizeProducts } from './productCategorizer.js';
 
-// Load environment variables
-dotenv.config();
-
 /**
- * Clean up WordPress imported products by removing HTML tags and categorizing them
+ * Clean up WordPress imported products by removing HTML tags and categorizing them.
+ *
+ * IMPORTANT: this assumes an active Mongoose connection ALREADY exists and does
+ * NOT open or close one. It runs both from the live server (admin route
+ * POST /products/cleanup/wordpress, which shares the app's connection) and from
+ * the CLI runner below. Managing the global connection here would tear down the
+ * app's shared connection mid-request. For standalone use, call
+ * runCleanupWordPressProductsCli(), which owns connection setup/teardown.
+ *
  * @param {number} batchSize - Number of products to process in each batch
  * @returns {Object} Cleanup summary
  */
 async function cleanupWordPressProducts(batchSize = 50) {
   try {
     console.log('Starting WordPress product cleanup...');
-    
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 20000,
-    });
-    
-    console.log('✓ Connected to MongoDB');
-    
+
     // Find products that need cleanup (likely have HTML in descriptions)
     // We'll look for products with HTML tags in their descriptions
     const productsNeedingCleanup = await Product.find({
@@ -34,7 +31,6 @@ async function cleanupWordPressProducts(batchSize = 50) {
     
     if (productsNeedingCleanup.length === 0) {
       console.log('No products need cleanup');
-      await mongoose.connection.close();
       return { success: true, message: 'No products need cleanup', processed: 0 };
     }
     
@@ -71,6 +67,15 @@ async function cleanupWordPressProducts(batchSize = 50) {
           const result = await Product.bulkWrite(bulkOps);
           updatedCount += result.modifiedCount;
           processedCount += batch.length;
+
+          // bulkWrite bypasses ALL Mongoose middleware (no save/updateMany hook
+          // fires), so the schema's Elasticsearch-sync hooks never run for these
+          // description/category edits. Re-index the affected products explicitly.
+          // Every op filters by a known _id (the update never touches _id), so we
+          // already hold the affected ids — no re-query needed. Enqueuing the full
+          // batch (vs only result.modifiedCount) is safe: no-op edits re-index to
+          // identical data and jobs dedup on productId.
+          enqueueProductSync(bulkOps.map(op => op.updateOne.filter._id));
         }
         
         console.log(`Batch ${Math.floor(i/batchSize) + 1} completed. Updated ${bulkOps.length} products.`);
@@ -82,10 +87,6 @@ async function cleanupWordPressProducts(batchSize = 50) {
         errorCount += batch.length;
       }
     }
-    
-    // Close connection
-    await mongoose.connection.close();
-    console.log('✓ Disconnected from MongoDB');
     
     const summary = {
       success: true,
@@ -99,17 +100,43 @@ async function cleanupWordPressProducts(batchSize = 50) {
     return summary;
   } catch (error) {
     console.error('Error during WordPress product cleanup:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Standalone CLI runner: owns the Mongoose connection lifecycle
+ * (connect → cleanup → close). NEVER call this from the running server — the
+ * close() step would drop the app's shared connection. The live server uses
+ * cleanupWordPressProducts() directly, reusing the app's existing connection.
+ *
+ * @param {number} batchSize
+ * @returns {Object} Cleanup summary
+ */
+async function runCleanupWordPressProductsCli(batchSize = 50) {
+  dotenv.config();
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 20000,
+    });
+    console.log('✓ Connected to MongoDB');
+    return await cleanupWordPressProducts(batchSize);
+  } finally {
+    // cleanupWordPressProducts never throws (it returns {success:false}), so a
+    // connection opened above is always closed here — even on connect failure,
+    // where readyState !== 1 makes this a safe no-op.
     if (mongoose.connection.readyState === 1) {
       await mongoose.connection.close();
+      console.log('✓ Disconnected from MongoDB');
     }
-    return { success: false, error: error.message };
   }
 }
 
 // CLI entry point - check if this file is being run directly
 if (process.argv[1] && process.argv[1].endsWith('wordpressProductCleanup.js')) {
   const batchSize = process.argv[2] ? parseInt(process.argv[2]) : 50;
-  cleanupWordPressProducts(batchSize)
+  runCleanupWordPressProductsCli(batchSize)
     .then(result => {
       console.log('Cleanup completed:', result);
       process.exit(result.success ? 0 : 1);
@@ -120,5 +147,5 @@ if (process.argv[1] && process.argv[1].endsWith('wordpressProductCleanup.js')) {
     });
 }
 
-export { cleanupWordPressProducts };
-export default { cleanupWordPressProducts };
+export { cleanupWordPressProducts, runCleanupWordPressProductsCli };
+export default { cleanupWordPressProducts, runCleanupWordPressProductsCli };

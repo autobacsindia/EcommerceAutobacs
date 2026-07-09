@@ -5,9 +5,12 @@
  * leadSyncService so the Consultation mirror stays consistent.
  */
 
+import mongoose from 'mongoose';
 import leadRepository from '../repositories/leadRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
+import userRepository from '../repositories/userRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
+import { isSalesRep } from '../utils/salesReps.js';
 import { LEAD_STATUSES, SOURCE_TYPES } from '../config/leadConstants.js';
 
 const DEFAULT_LIMIT = 20;
@@ -23,7 +26,10 @@ const SORT_OPTIONS = {
 };
 
 function buildListQuery(req) {
-  const { status, source, assignment, hasPurchased, search, createdFrom, createdTo, followUpDue } = req.query;
+  const {
+    status, source, assignment, hasPurchased, search, createdFrom, createdTo, followUpDue,
+    rep, reopened, neverContacted, lostReason,
+  } = req.query;
   const query = {};
 
   if (status && LEAD_STATUSES.includes(status)) query.status = status;
@@ -31,9 +37,18 @@ function buildListQuery(req) {
 
   if (assignment === 'mine') query.assignedTo = req.user.id;
   else if (assignment === 'unassigned') query.assignedTo = null;
+  // Manager slice: a specific rep's queue (only when not already scoped to
+  // mine/unassigned). Ignore a malformed id rather than throwing a CastError.
+  else if (rep && mongoose.isValidObjectId(rep)) query.assignedTo = rep;
 
   if (hasPurchased === 'true') query.hasPurchased = true;
   else if (hasPurchased === 'false') query.hasPurchased = false;
+
+  // Segments (pure Lead fields — cheap + indexed).
+  if (reopened === 'true') query.reopenCount = { $gt: 0 };
+  if (neverContacted === 'true') query.lastContactedAt = null;
+  // typeof guard: a repeated query param arrives as an array; .trim() would 500.
+  if (typeof lostReason === 'string' && lostReason.trim()) query.lostReason = { $regex: lostReason.trim(), $options: 'i' };
 
   // Created-date range (either bound optional). Invalid dates are ignored.
   const from = createdFrom ? new Date(createdFrom) : null;
@@ -49,7 +64,7 @@ function buildListQuery(req) {
   // Leads flagged for follow-up whose date has arrived (from the stale-lead sweep).
   if (followUpDue === 'true') query.nextFollowUpAt = { $ne: null, $lte: new Date() };
 
-  if (search) {
+  if (typeof search === 'string' && search.trim()) {
     const rx = { $regex: search.trim(), $options: 'i' };
     query.$or = [{ name: rx }, { email: rx }, { phone: rx }];
   }
@@ -107,6 +122,14 @@ export const getLeadStats = async (req, res) => {
   res.json({ success: true, stats: { byStatus, unassigned, mine, total, followUpDue, followUpDueMine } });
 };
 
+// @desc    Assignable sales reps (for the assign dropdown + rep filter)
+// @route   GET /leads/reps
+// @access  Private/Admin
+export const listReps = async (req, res) => {
+  const reps = await userRepository.findSalesReps();
+  res.json({ success: true, reps });
+};
+
 // @desc    Lead detail (sources + existing-customer order history)
 // @route   GET /leads/:id
 // @access  Private/Admin
@@ -114,7 +137,7 @@ export const getLeadById = async (req, res) => {
   const lead = await leadRepository.findById(req.params.id, [
     { path: 'assignedTo', select: 'name email' },
     { path: 'contactedBy', select: 'name email' },
-    { path: 'linkedUser', select: 'name email phone hasPurchased paidOrderCount firstPurchaseAt' },
+    { path: 'linkedUser', select: 'name email phone hasPurchased paidOrderCount firstPurchaseAt lastOrderAt totalSpentPaise' },
     { path: 'sources.ref' },
     { path: 'activities.by', select: 'name email' },
     { path: 'convertedOrder', select: 'orderNumber totalAmount status createdAt' },
@@ -138,6 +161,10 @@ export const getLeadById = async (req, res) => {
 // @route   POST /leads/:id/claim
 // @access  Private/Admin
 export const claimLead = async (req, res) => {
+  // Ownership requires rep status — same invariant as assignLead (single seam).
+  if (!isSalesRep(req.user)) {
+    return res.status(403).json({ success: false, message: 'Only sales reps can claim leads. Ask an admin to enable your rep access.' });
+  }
   const lead = await leadSyncService.claimLead(req.params.id, req.user.id);
   if (!lead) {
     return res.status(409).json({ success: false, message: 'Lead is already claimed by someone else' });
@@ -162,6 +189,16 @@ export const releaseLead = async (req, res) => {
 // @access  Private/Admin
 export const assignLead = async (req, res) => {
   const { assignTo } = req.body; // userId or null to unassign
+  // Only a flagged sales rep can own a lead (single seam: utils/salesReps.js).
+  if (assignTo) {
+    if (!mongoose.isValidObjectId(assignTo)) {
+      return res.status(400).json({ success: false, message: 'Invalid assignee' });
+    }
+    const target = await userRepository.findById(assignTo);
+    if (!target || !isSalesRep(target)) {
+      return res.status(400).json({ success: false, message: 'Assignee must be a sales rep' });
+    }
+  }
   const lead = await leadRepository.update(req.params.id, {
     $set: { assignedTo: assignTo || null, assignedAt: assignTo ? new Date() : null },
     $push: {
@@ -225,6 +262,9 @@ export const addActivity = async (req, res) => {
 // @route   POST /leads/bulk/claim
 // @access  Private/Admin
 export const bulkClaim = async (req, res) => {
+  if (!isSalesRep(req.user)) {
+    return res.status(403).json({ success: false, message: 'Only sales reps can claim leads. Ask an admin to enable your rep access.' });
+  }
   const { leadIds } = req.body;
   if (!Array.isArray(leadIds) || leadIds.length === 0) {
     return res.status(400).json({ success: false, message: 'No lead IDs provided' });

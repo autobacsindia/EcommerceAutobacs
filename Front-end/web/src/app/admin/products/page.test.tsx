@@ -22,6 +22,7 @@ jest.mock('lucide-react', () => ({
   X: () => <span data-testid="icon-x">X</span>,
   Package: () => <span data-testid="icon-package">Package</span>,
   ChevronUp: () => <span data-testid="icon-chevron-up">ChevronUp</span>,
+  Upload: () => <span data-testid="icon-upload">Upload</span>,
 }));
 
 describe('AdminProductsPage', () => {

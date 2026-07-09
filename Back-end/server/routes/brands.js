@@ -1,6 +1,6 @@
 import express from "express";
 import brandRepository from "../repositories/brandRepository.js";
-import Product from "../models/Product.js";
+import Product, { enqueueProductSync } from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { 
@@ -199,10 +199,13 @@ router.put(
       }
 
       const oldBrandName = brand.name;
-      await Product.updateMany(
-        { brand: { $regex: new RegExp(`^${oldBrandName}$`, 'i') } },
-        { $set: { brand: name } }
-      );
+      const renameFilter = { brand: { $regex: new RegExp(`^${oldBrandName}$`, 'i') } };
+      // Capture affected ids BEFORE the write — the filter matches on the old
+      // brand name, which this updateMany overwrites, so a post-update query
+      // would return nothing.
+      const renamed = await Product.find(renameFilter, '_id').setOptions({ includeDeleted: true }).lean();
+      await Product.updateMany(renameFilter, { $set: { brand: name } });
+      enqueueProductSync(renamed.map(d => d._id));
       brand.name = name;
       brand.slug = generateSlug(name);
     }
@@ -329,6 +332,9 @@ router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandl
     { _id: { $in: productIds } },
     { $set: { brand: brand.name } }
   );
+
+  // Re-index the mapped products in ES (updateMany bypasses the doc hooks).
+  enqueueProductSync(productIds);
 
   invalidateCache('brands', 'products');
 

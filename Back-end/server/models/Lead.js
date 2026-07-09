@@ -30,6 +30,39 @@ const LeadSourceSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// A source as archived inside a closed cycle. Deliberately NOT the live
+// LeadSourceSchema: no `refPath` (we never populate archived sources), just a
+// flat snapshot for historical display.
+const ArchivedSourceSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: SOURCE_TYPES },
+    ref: { type: mongoose.Schema.Types.ObjectId },
+    refModel: { type: String },
+    snapshot: { type: mongoose.Schema.Types.Mixed, default: {} },
+    capturedAt: { type: Date },
+  },
+  { _id: false }
+);
+
+// A completed sales cycle, archived when a closed (won/lost) lead is reopened by
+// a fresh signal. Preserves outcome, attribution, and timing so the leaderboard
+// and history survive the reopen. See ADR-006.
+const LeadCycleSchema = new mongoose.Schema(
+  {
+    startedAt: { type: Date },
+    closedAt: { type: Date, default: Date.now },
+    outcome: { type: String, enum: LEAD_STATUSES }, // 'won' | 'lost' in practice
+    sources: { type: [ArchivedSourceSchema], default: [] },
+    primarySource: { type: String, enum: SOURCE_TYPES },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    contactedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    convertedOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
+    convertedAt: { type: Date, default: null },
+    lostReason: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const LeadActivitySchema = new mongoose.Schema(
   {
     type: {
@@ -78,6 +111,14 @@ const LeadSchema = new mongoose.Schema(
     // ── Conversion ────────────────────────────────────────────────────────────
     convertedOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
     convertedAt: { type: Date, default: null },
+
+    // ── Cycle lifecycle (reopen-with-history) ─────────────────────────────────
+    // The person is permanent; a *cycle* opens, closes (won/lost), and can reopen
+    // when a fresh workable signal arrives. `cycles[]` archives the closed ones so
+    // status/attribution/history survive a reopen. See ADR-006 + leadSyncService.
+    cycleStartedAt: { type: Date, default: Date.now },
+    reopenCount: { type: Number, default: 0 },
+    cycles: { type: [LeadCycleSchema], default: [] },
   },
   { timestamps: true }
 );
@@ -89,6 +130,7 @@ LeadSchema.index({ assignedTo: 1, status: 1 }); // "my queue", pool
 LeadSchema.index({ status: 1, createdAt: -1 }); // list default sort within a status
 LeadSchema.index({ primarySource: 1 });
 LeadSchema.index({ hasPurchased: 1 });
+LeadSchema.index({ reopenCount: 1 }); // "reopened / returning" segment filter
 LeadSchema.index({ nextFollowUpAt: 1 }, { sparse: true }); // follow-up sweep
 LeadSchema.index({ "sources.ref": 1 }); // reverse lookup from a source doc
 

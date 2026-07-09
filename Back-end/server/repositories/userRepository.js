@@ -48,13 +48,23 @@ class UserRepository extends BaseRepository {
     return User.findByIdAndUpdate(userId, { $inc: { karmaPoints: delta } }, { new: true, session });
   }
 
+  /** Assignable sales reps for the CRM assign dropdown + reporting. */
+  async findSalesReps() {
+    return User.find({ isSalesRep: true }).select('name email salesTarget').sort({ name: 1 }).lean();
+  }
+
   /**
    * Denormalize a completed purchase onto the user (drives the CRM "customer"
-   * tag). Sets `firstPurchaseAt` only on the first ever purchase, flips
-   * `hasPurchased`, and increments the paid-order counter. Called once per order
-   * at its first paid transition, so no double-count guard is needed.
+   * tag + lifetime value). Sets `firstPurchaseAt` only on the first ever
+   * purchase, flips `hasPurchased`, stamps `lastOrderAt`, increments the
+   * paid-order counter, and adds this order's value to net LTV. Called once per
+   * order at its first paid transition, so no double-count guard is needed.
+   *
+   * @param {string} userId
+   * @param {{ amountPaise?: number, when?: Date }} [opts] integer paise for LTV
+   * @param {import('mongoose').ClientSession|null} [session]
    */
-  async markPurchased(userId, when = new Date(), session = null) {
+  async markPurchased(userId, { amountPaise = 0, when = new Date() } = {}, session = null) {
     if (!userId) return null;
     await User.updateOne(
       { _id: userId, firstPurchaseAt: null },
@@ -63,7 +73,10 @@ class UserRepository extends BaseRepository {
     );
     return User.findByIdAndUpdate(
       userId,
-      { $set: { hasPurchased: true }, $inc: { paidOrderCount: 1 } },
+      {
+        $set: { hasPurchased: true, lastOrderAt: when },
+        $inc: { paidOrderCount: 1, totalSpentPaise: Math.max(0, Math.round(amountPaise)) },
+      },
       { new: true, ...(session && { session }) }
     );
   }

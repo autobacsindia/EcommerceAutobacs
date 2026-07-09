@@ -8,6 +8,23 @@ import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-
 import { CUSTOMER_NOTIFIED_STATUSES } from '@/lib/constants';
 import ConfirmStatusChangeModal from '@/components/orders/ConfirmStatusChangeModal';
 
+// Fulfillment stages an admin can move to (mirrors the list page + backend rules).
+const ALL_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
+const SYSTEM_OWNED = ['awaiting_payment']; // payment-driven, never picked manually
+const CANCEL_BLOCKED_FROM = ['delivered', 'returned', 'cancelled']; // cancel only before delivery
+
+function getAdminNextStatuses(currentStatus: string): string[] {
+  return ALL_STATUSES.filter(s => {
+    if (s === currentStatus || SYSTEM_OWNED.includes(s)) return false;
+    if (s === 'cancelled' && CANCEL_BLOCKED_FROM.includes(currentStatus)) return false;
+    return true;
+  });
+}
+
+// Fulfillment only starts once the gateway confirms payment. Until then the
+// order sits in awaiting_payment and the status control stays locked.
+const AWAITING_PAYMENT = 'awaiting_payment';
+
 interface OrderItem {
   product: {
     _id: string;
@@ -45,6 +62,7 @@ interface Order {
   deliveredAt?: string;
   cancelledAt?: string;
   cancellationReason?: string;
+  cancelledBy?: 'admin' | 'customer' | 'system';
   user: {
     _id: string;
     name: string;
@@ -333,30 +351,43 @@ export default function AdminOrderDetailPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Update Status
                 </label>
-                <select
-                  value={order.status}
-                  onChange={(e) => setPendingStatus(e.target.value)}
-                  disabled={updating}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {/* Current status shown but not re-selectable */}
-                  <option value={order.status} disabled>
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (current)
-                  </option>
-                  {/* Fulfillment stages only. Payment (awaiting/paid/failed/refunded)
-                      is driven by checkout + the Razorpay webhook, shown separately. */}
-                  <option value="processing">Processing</option>
-                  <option value="shipped">Shipped</option>
-                  <option value="delivered">Delivered</option>
-                  <option value="returned">Returned</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+                {order.status === AWAITING_PAYMENT ? (
+                  // Fulfillment is locked until the gateway confirms payment. Payment
+                  // is never set by hand — it's driven by checkout + the Razorpay webhook.
+                  <div className="px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+                    Awaiting payment. Fulfillment unlocks automatically once payment
+                    succeeds — payment status can’t be set manually.
+                  </div>
+                ) : (
+                  <select
+                    value={order.status}
+                    onChange={(e) => setPendingStatus(e.target.value)}
+                    disabled={updating}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {/* Current status shown but not re-selectable */}
+                    <option value={order.status} disabled>
+                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)} (current)
+                    </option>
+                    {/* Fulfillment stages only, gated by valid transitions. Payment
+                        (paid/failed/refunded) is webhook-driven, shown separately. */}
+                    {getAdminNextStatuses(order.status).map((s) => (
+                      <option key={s} value={s}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-              
-              {order.status === 'cancelled' && order.cancellationReason && (
+
+              {order.status === 'cancelled' && (
                 <div className="mt-4 p-3 bg-red-50 rounded-md">
-                  <p className="text-sm font-medium text-red-800">Cancellation Reason</p>
-                  <p className="text-sm text-red-700">{order.cancellationReason}</p>
+                  <p className="text-sm font-medium text-red-800">
+                    Cancelled{order.cancelledBy ? ` by ${order.cancelledBy === 'customer' ? 'Customer' : order.cancelledBy === 'admin' ? 'Admin' : 'System'}` : ''}
+                  </p>
+                  {order.cancellationReason && (
+                    <p className="text-sm text-red-700 mt-1">Reason: {order.cancellationReason}</p>
+                  )}
                 </div>
               )}
             </div>

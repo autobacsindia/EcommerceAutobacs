@@ -11,6 +11,7 @@ import apiClient from '@/lib/api';
 export interface ConsultationSubmission {
   name: string;
   whatsapp: string;
+  email: string;
   city: string;
   vehicleNumber?: string;
   makeModel: string;
@@ -27,6 +28,7 @@ export interface Consultation {
   _id: string;
   name: string;
   whatsapp: string;
+  email: string;
   city: string;
   vehicleNumber: string;
   makeModel: string;

@@ -9,7 +9,7 @@ import {
 import apiClient from '@/lib/api';
 import {
   Lead, LeadStatus, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
-  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS,
+  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, VIP_MIN_SPENT_PAISE, SalesRep,
 } from '@/lib/leads';
 
 interface OrderHistoryItem {
@@ -34,6 +34,8 @@ export default function LeadDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [reps, setReps] = useState<SalesRep[]>([]);
+
   // activity form
   const [activityType, setActivityType] = useState<'call' | 'note' | 'email'>('call');
   const [activityNotes, setActivityNotes] = useState('');
@@ -51,6 +53,25 @@ export default function LeadDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    apiClient.get<{ success: boolean; reps: SalesRep[] }>('/leads/reps')
+      .then((r) => { if (r.success) setReps(r.reps); })
+      .catch((e) => console.error('[Lead] reps failed', e));
+  }, []);
+
+  async function assignRep(repId: string) {
+    setSaving(true);
+    try {
+      await apiClient.post(`/leads/${id}/assign`, { assignTo: repId || null });
+      await load();
+    } catch (e) {
+      console.error('[Lead] assign failed', e);
+      alert('Could not assign — the selected user may not be a sales rep.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function changeStatus(next: LeadStatus) {
     setSaving(true);
@@ -103,12 +124,23 @@ export default function LeadDetailPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-5">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold text-gray-900">{lead.name || 'Unknown lead'}</h1>
-            {lead.hasPurchased && (
-              <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                <ShoppingBag className="h-3 w-3" /> Existing customer
+            {(() => {
+              const badge = customerBadge(lead);
+              return badge ? (
+                <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                  <ShoppingBag className="h-3 w-3" /> {badge.label}
+                </span>
+              ) : null;
+            })()}
+            {(lead.linkedUser?.totalSpentPaise ?? 0) >= VIP_MIN_SPENT_PAISE && (
+              <span className="inline-flex items-center rounded bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
+                ★ VIP
               </span>
+            )}
+            {(lead.reopenCount ?? 0) > 0 && (
+              <span className="text-xs text-gray-400">Cycle #{(lead.reopenCount ?? 0) + 1}</span>
             )}
           </div>
           <div className="mt-2 flex flex-col gap-1 text-sm text-gray-600">
@@ -123,13 +155,28 @@ export default function LeadDetailPage() {
           <span className="text-xs text-gray-500">
             {lead.assignedTo ? `Owner: ${lead.assignedTo.name || lead.assignedTo.email}` : 'Unclaimed (pool)'}
           </span>
-          <button
-            onClick={claimToggle}
-            disabled={saving}
-            className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {lead.assignedTo ? <><UserMinus className="h-3 w-3" /> Release</> : <><UserPlus className="h-3 w-3" /> Claim</>}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={claimToggle}
+              disabled={saving}
+              className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {lead.assignedTo ? <><UserMinus className="h-3 w-3" /> Release</> : <><UserPlus className="h-3 w-3" /> Claim</>}
+            </button>
+            {/* Manager override: assign directly to a specific rep. */}
+            <select
+              value={lead.assignedTo?._id || ''}
+              onChange={(e) => assignRep(e.target.value)}
+              disabled={saving}
+              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
+              title="Assign to a sales rep"
+            >
+              <option value="">— assign to rep —</option>
+              {reps.map((r) => (
+                <option key={r._id} value={r._id}>{r.name || r.email}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -223,6 +270,41 @@ export default function LeadDetailPage() {
             </ul>
           </section>
 
+          {lead.linkedUser && (lead.linkedUser.paidOrderCount ?? 0) > 0 && (
+            <section className="rounded-lg border border-gray-200 bg-white p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-900">Customer value</h2>
+                <Link href={`/admin/users?search=${encodeURIComponent(lead.linkedUser.email || lead.linkedUser.phone || '')}`} className="text-xs text-blue-600 hover:underline">
+                  View account
+                </Link>
+              </div>
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <dt className="text-gray-500">Total spent</dt>
+                  <dd className="font-semibold text-gray-900">
+                    ₹{((lead.linkedUser.totalSpentPaise ?? 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-gray-500">Paid orders</dt>
+                  <dd className="text-gray-700">{lead.linkedUser.paidOrderCount ?? 0}</dd>
+                </div>
+                {lead.linkedUser.firstPurchaseAt && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-gray-500">First order</dt>
+                    <dd className="text-gray-700">{new Date(lead.linkedUser.firstPurchaseAt).toLocaleDateString()}</dd>
+                  </div>
+                )}
+                {lead.linkedUser.lastOrderAt && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-gray-500">Last order</dt>
+                    <dd className="text-gray-700">{new Date(lead.linkedUser.lastOrderAt).toLocaleDateString()}</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
+
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Order history</h2>
             {orderHistory.length === 0 ? (
@@ -238,6 +320,32 @@ export default function LeadDetailPage() {
               </ul>
             )}
           </section>
+
+          {(lead.cycles?.length ?? 0) > 0 && (
+            <section className="rounded-lg border border-gray-200 bg-white p-5">
+              <h2 className="mb-3 text-sm font-semibold text-gray-900">Previous cycles</h2>
+              <ul className="space-y-3 text-sm">
+                {lead.cycles!.map((c, i) => (
+                  <li key={i} className="border-l-2 border-gray-200 pl-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${c.outcome ? LEAD_STATUS_COLORS[c.outcome] : 'bg-gray-100 text-gray-600'}`}>
+                        {c.outcome ? LEAD_STATUS_LABELS[c.outcome] : '—'}
+                      </span>
+                      {c.primarySource && (
+                        <span className="text-xs text-gray-500">{LEAD_SOURCE_LABELS[c.primarySource]}</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {c.startedAt ? new Date(c.startedAt).toLocaleDateString() : '?'}
+                      {' → '}
+                      {c.closedAt ? new Date(c.closedAt).toLocaleDateString() : '?'}
+                      {c.lostReason ? ` · ${c.lostReason}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       </div>
     </div>

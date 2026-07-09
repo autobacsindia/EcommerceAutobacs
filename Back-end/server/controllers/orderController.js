@@ -464,13 +464,12 @@ export const createOfflineOrder = async (req, res) => {
 export const cancelOrder = async (req, res) => {
   const order = req.order; // Attached by validateCancellation middleware
   const { reason, notes } = req.body;
-
-  // A cancel needs a refund only when money was actually captured (payment axis).
-  const needsRefund = order.payment && order.paymentStatus === 'paid';
+  const isAdmin = req.user.role === 'admin';
 
   const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'cancelled', {
     userId: req.user.id,
-    isAdmin: req.user.role === 'admin',
+    isAdmin,
+    cancelledBy: isAdmin ? 'admin' : 'customer',
     reason: reason || 'customer_request',
     notes
   });
@@ -482,35 +481,16 @@ export const cancelOrder = async (req, res) => {
   // Stock is a coarse status (no per-unit quantity), so cancellation has no
   // stock to restore. Admins manage availability status directly.
 
-  let refundInitiated = false;
-  if (needsRefund) {
-    result.order.refundDetails = {
-      requestedAt: new Date(),
-      amount: order.totalAmount,
-      refundType: 'full',
-      refundMethod: 'original_payment',
-      itemsRefunded: order.items.map(item => ({
-        product: item.product,
-        quantity: item.quantity,
-        amount: item.price * item.quantity
-      })),
-      status: 'pending',
-      notes: `Automatic refund for cancelled order. Reason: ${reason || 'customer_request'}`
-    };
-
-    result.order.cancelledAt       = new Date();
-    result.order.cancellationReason = reason || 'customer_request';
-    await orderRepository.save(result.order);
-    refundInitiated = true;
-  }
+  // The service flags a pending refund when money was captured (payment axis).
+  const refundInitiated = result.order.refundDetails?.status === 'pending';
 
   res.json({
     success: true,
     message: 'Order cancelled successfully',
     order: result.order,
     refundInitiated,
-    refundAmount: needsRefund ? order.totalAmount : 0,
-    refundTimeline: needsRefund ? '3-5 business days' : null
+    refundAmount: refundInitiated ? order.totalAmount : 0,
+    refundTimeline: refundInitiated ? '3-5 business days' : null
   });
 };
 
@@ -636,6 +616,7 @@ export const updateOrderStatus = async (req, res) => {
   const result = await orderStatusService.updateOrderStatus(req.params.id, status, {
     userId: req.user.id,
     isAdmin: true,
+    cancelledBy: 'admin', // only consumed when status === 'cancelled'
     reason,
     notes,
     metadata
@@ -674,6 +655,7 @@ export const bulkUpdateStatus = async (req, res) => {
       const result = await orderStatusService.updateOrderStatus(orderId, status, {
         userId: req.user.id,
         isAdmin: true,
+        cancelledBy: 'admin', // only consumed when status === 'cancelled'
         reason: reason || 'bulk_admin_update',
         notes: notes || 'Bulk status update from admin panel'
       });

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
-import { Plus, Trash2, Search, Eye, X } from 'lucide-react';
+import { Plus, Trash2, Search, Eye, X, BadgeCheck } from 'lucide-react';
 import Link from 'next/link';
 
 interface Address {
@@ -17,6 +17,7 @@ interface User {
   email: string;
   role: 'customer' | 'admin';
   isActive: boolean;
+  isSalesRep?: boolean;
   createdAt: string;
   addresses?: Address[];
 }
@@ -27,6 +28,13 @@ export default function AdminUsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Seed the search box from a `?search=` deep link (e.g. from a lead's "View
+  // account"). Read via window to avoid the useSearchParams Suspense requirement.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('search');
+    if (q) setSearchTerm(q);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -41,6 +49,16 @@ export default function AdminUsersPage() {
       console.error('Failed to fetch users:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleRep = async (user: User) => {
+    const next = !user.isSalesRep;
+    try {
+      await apiClient.put(`/users/${user._id}`, { isSalesRep: next });
+      setUsers((prev) => prev.map((u) => (u._id === user._id ? { ...u, isSalesRep: next } : u)));
+    } catch (err: any) {
+      alert(err.message || 'Failed to update sales-rep status');
     }
   };
 
@@ -153,12 +171,17 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs rounded-full ${
-                    user.role === 'admin' 
-                      ? 'bg-purple-100 text-purple-800' 
+                    user.role === 'admin'
+                      ? 'bg-purple-100 text-purple-800'
                       : 'bg-blue-100 text-blue-800'
                   }`}>
                     {user.role}
                   </span>
+                  {user.isSalesRep && (
+                    <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-800">
+                      <BadgeCheck className="h-3 w-3" /> Rep
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs rounded-full ${
@@ -174,12 +197,19 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex gap-2">
-                    <button 
+                    <button
                       onClick={() => setSelectedUser(user)}
                       className="text-blue-600 hover:text-blue-900"
                       title="View Details"
                     >
                       <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => toggleRep(user)}
+                      className={user.isSalesRep ? 'text-emerald-600 hover:text-emerald-900' : 'text-gray-400 hover:text-gray-600'}
+                      title={user.isSalesRep ? 'Remove as sales rep' : 'Make sales rep'}
+                    >
+                      <BadgeCheck className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(user._id)}

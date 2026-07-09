@@ -87,6 +87,21 @@ class OrderRepository extends BaseRepository {
   async markKarmaAwarded(orderId, session = null) {
     return Order.updateOne({ _id: orderId }, { karmaAwarded: true }, session ? { session } : {});
   }
+
+  /**
+   * Atomically flag this order's purchase as counted. Returns true ONLY on the
+   * first successful flip, so the caller runs the CRM purchase denorm + net-LTV
+   * increment exactly once per order — even if the order re-enters `processing`
+   * (admin backward transition, webhook retry). Compare-and-set is race-safe.
+   */
+  async markPurchaseCountedOnce(orderId, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, purchaseCounted: { $ne: true } },
+      { $set: { purchaseCounted: true } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
 }
 
 export default new OrderRepository();

@@ -1,6 +1,6 @@
 import express from "express";
 import vehicleRepository from "../repositories/vehicleRepository.js";
-import Product from "../models/Product.js";
+import Product, { enqueueProductSync } from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import {
@@ -402,6 +402,11 @@ router.post("/:id/products/map", protect, admin, validateVehicleProductMap, asyn
       $addToSet: { compatibleVehicles: vehicle._id }
     }
   );
+
+  // Re-index the mapped products in ES so fitment filters stay accurate
+  // (updateMany bypasses the doc hooks). productIds is the exact candidate set;
+  // any already-mapped ones re-index to identical data (deduped, harmless).
+  enqueueProductSync(productIds);
 
   res.json({
     success: true,

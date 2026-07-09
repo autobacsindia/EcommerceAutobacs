@@ -83,6 +83,7 @@ const OrderSchema = new mongoose.Schema({
   karmaDiscount: { type: Number, default: 0 },      // rupee discount from redeemed karma
   karmaPointsUsed: { type: Number, default: 0 },     // points spent on this order
   karmaAwarded: { type: Boolean, default: false },   // earn-on-delivery idempotency flag
+  purchaseCounted: { type: Boolean, default: false }, // once-only guard for the CRM purchase denorm + net LTV (markPurchased)
   totalAmount: {
     type: Number,
     required: true
@@ -190,6 +191,13 @@ const OrderSchema = new mongoose.Schema({
   deliveredAt: Date,
   cancelledAt: Date,
   cancellationReason: String,
+  // WHO initiated the cancellation — drives the admin "Cancelled by …" label and
+  // lets the CRM/analytics tell an admin cancel apart from a customer self-cancel.
+  // `system` is reserved for automated/expiry cancels. Only set when status=cancelled.
+  cancelledBy: {
+    type: String,
+    enum: ["admin", "customer", "system"]
+  },
   fulfillmentMetrics: {
     confirmedAt: Date,
     processingStartedAt: Date,

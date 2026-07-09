@@ -89,10 +89,10 @@ router.get("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res
 // @desc    Update user role/status
 // @access  Private/Admin
 router.put("/:id", protect, admin, validateUserUpdate, asyncHandler(async (req, res) => {
-  const { name, email, role, isActive } = req.body;
-  
+  const { name, email, role, isActive, isSalesRep, salesTarget } = req.body;
+
   const user = await User.findById(req.params.id);
-  
+
   if (!user) {
     return res.status(404).json({
       success: false,
@@ -105,14 +105,19 @@ router.put("/:id", protect, admin, validateUserUpdate, asyncHandler(async (req, 
     name: user.name,
     email: user.email,
     role: user.role,
-    isActive: user.isActive
+    isActive: user.isActive,
+    isSalesRep: user.isSalesRep,
+    salesTarget: user.salesTarget
   };
-  
+
   // Update user fields
   if (name) user.name = name;
   if (email) user.email = email.toLowerCase();
   if (role) user.role = role;
   if (typeof isActive !== 'undefined') user.isActive = isActive;
+  // Sales CRM staffing (not session-sensitive — no version bump needed).
+  if (typeof isSalesRep !== 'undefined') user.isSalesRep = isSalesRep;
+  if (typeof salesTarget !== 'undefined') user.salesTarget = salesTarget;
 
   const updatedUser = await user.save();
 
@@ -135,10 +140,10 @@ router.put("/:id", protect, admin, validateUserUpdate, asyncHandler(async (req, 
     user._id,
     {
       previous: previousState,
-      updated: { name, email, role, isActive }
+      updated: { name, email, role, isActive, isSalesRep, salesTarget }
     }
   );
-  
+
   res.json({
     success: true,
     message: 'User updated successfully',
@@ -147,7 +152,9 @@ router.put("/:id", protect, admin, validateUserUpdate, asyncHandler(async (req, 
       name: updatedUser.name,
       email: updatedUser.email,
       role: updatedUser.role,
-      isActive: updatedUser.isActive
+      isActive: updatedUser.isActive,
+      isSalesRep: updatedUser.isSalesRep,
+      salesTarget: updatedUser.salesTarget
     }
   });
 }));

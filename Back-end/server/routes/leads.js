@@ -4,6 +4,7 @@ import { protect, admin } from '../middleware/authMiddleware.js';
 import {
   listLeads,
   getLeadStats,
+  listReps,
   getLeadById,
   claimLead,
   releaseLead,
@@ -21,6 +22,7 @@ router.use(protect, admin);
 
 router.get('/', asyncHandler(listLeads));
 router.get('/stats', asyncHandler(getLeadStats));
+router.get('/reps', asyncHandler(listReps));
 
 // Bulk actions before the /:id routes so "bulk" isn't captured as an id.
 router.post('/bulk/claim', asyncHandler(bulkClaim));

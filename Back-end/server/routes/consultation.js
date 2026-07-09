@@ -12,20 +12,30 @@ const router = express.Router();
 // POST /api/v1/consultation
 router.post("/", asyncHandler(async (req, res) => {
   const {
-    name, whatsapp, city, vehicleNumber, makeModel,
+    name, whatsapp, email, city, vehicleNumber, makeModel,
     upgrades, usage, drivingStyle, mode,
     preferredDate, preferredTime, notes,
   } = req.body;
 
-  if (!name || !whatsapp || !city || !makeModel) {
+  if (!name || !whatsapp || !email || !city || !makeModel) {
     return res.status(400).json({
       success: false,
-      message: "Name, WhatsApp number, city, and vehicle make/model are required.",
+      message: "Name, WhatsApp number, email, city, and vehicle make/model are required.",
+    });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  // Lightweight shape check — a malformed email would seed a junk CRM identity key.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return res.status(400).json({
+      success: false,
+      message: "Please enter a valid email address.",
     });
   }
 
   const consultation = await consultationRepository.create({
     name, whatsapp, city,
+    email: normalizedEmail,
     vehicleNumber: vehicleNumber || "",
     makeModel,
     upgrades: Array.isArray(upgrades) ? upgrades : [],
@@ -61,6 +71,7 @@ router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
     query.$or = [
       { name: { $regex: search, $options: "i" } },
       { whatsapp: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
       { makeModel: { $regex: search, $options: "i" } },
       { city: { $regex: search, $options: "i" } },
     ];

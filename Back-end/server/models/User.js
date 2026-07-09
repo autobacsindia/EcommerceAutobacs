@@ -139,7 +139,21 @@ const UserSchema = new mongoose.Schema({
   // truth remains the Order collection. `paidOrderCount === 0` ⇒ dormant lead.
   hasPurchased: { type: Boolean, default: false, index: true },
   firstPurchaseAt: { type: Date, default: null },
-  paidOrderCount: { type: Number, default: 0 }
+  lastOrderAt: { type: Date, default: null },
+  paidOrderCount: { type: Number, default: 0 },
+
+  // Sales CRM staffing. `isSalesRep` = this account can own / be assigned leads
+  // and appears in the leaderboard. Reps operate as admins for now (no separate
+  // role); this flag is the single seam that a future sales/ops role split
+  // widens — always gate assignability via utils/salesReps.js isSalesRep(). See
+  // ADR-006. `salesTarget` = monthly conversion target (count) for reporting.
+  isSalesRep: { type: Boolean, default: false, index: true },
+  salesTarget: { type: Number, default: 0 },
+  // Net lifetime value in PAISE (integer — avoids float drift; Order.totalAmount
+  // is in rupees, so store Math.round(totalAmount * 100)). Incremented at each
+  // first-paid transition; will be DECREMENTED once refunds/returns are wired
+  // (net LTV), with a reconcile job to correct drift. See ADR-006.
+  totalSpentPaise: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Always strip sensitive fields from any JSON serialization of a User document.

@@ -1,3 +1,4 @@
+hase 3
 # Runbook — Go-live cutover checklist (WooCommerce → Vercel/Railway)
 
 Plain-language, step-by-step guide to move `autobacsindia.com` from WooCommerce

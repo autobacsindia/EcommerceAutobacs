@@ -160,10 +160,6 @@ function AdminProductsPageInner() {
     }
   };
 
-  if (loading) {
-    return <div className="p-6">Loading...</div>;
-  }
-
   return (
     <div className="p-4 md:p-6 w-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -247,7 +243,14 @@ function AdminProductsPageInner() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {products.map((product) => (
+              {loading && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-500">
+                    Loading...
+                  </td>
+                </tr>
+              )}
+              {!loading && products.map((product) => (
                 <tr key={product._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>{product.name}</div>
@@ -346,7 +349,7 @@ function AdminProductsPageInner() {
         </div>
       </div>
 
-      {products.length === 0 && (
+      {!loading && products.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           No products found
         </div>

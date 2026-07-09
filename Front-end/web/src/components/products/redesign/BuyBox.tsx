@@ -12,6 +12,7 @@ import { useCurrency } from '@/context/CurrencyContext';
 import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
 import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
+import EmiOptions from '@/components/products/redesign/EmiOptions';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 const MAX_QTY = 99;
@@ -170,6 +171,9 @@ export default function BuyBox({ product }: { product: BuyBoxProduct }) {
           <span className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Sold out</span>
         )}
       </div>
+
+      {/* EMI / affordability options (Razorpay) — mirrors the WooCommerce widget */}
+      <EmiOptions price={product.price} className="mt-7" />
 
       {/* CTAs */}
       <div className="mt-7 flex flex-col gap-3">

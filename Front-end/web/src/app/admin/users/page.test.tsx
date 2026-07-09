@@ -13,6 +13,7 @@ jest.mock('lucide-react', () => ({
   Search: () => <span data-testid="icon-search">Search</span>,
   Eye: () => <span data-testid="icon-eye">Eye</span>,
   X: () => <span data-testid="icon-x">IconClose</span>,
+  BadgeCheck: () => <span data-testid="icon-badge">Rep</span>,
 }));
 
 describe('AdminUsersPage', () => {

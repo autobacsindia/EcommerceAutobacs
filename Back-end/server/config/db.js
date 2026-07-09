@@ -250,6 +250,21 @@ async function ensureCriticalIndexes() {
       { background: true }
     );
     console.log('✓ Warehouse operational index confirmed');
+
+    // MONEY-CRITICAL: Payment gatewayPaymentId unique — the serialization point that
+    // makes payment processing idempotent under concurrent/duplicate Razorpay webhooks.
+    // Partial on $type:string so legacy/null gatewayPaymentId docs are excluded.
+    // NOTE: if pre-existing duplicates exist this build fails — run
+    // scripts/fix-payment-gateway-index.js first to dedupe, then this confirms it.
+    await db.collection('payments').createIndex(
+      { gatewayPaymentId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { gatewayPaymentId: { $type: 'string' } },
+        background: true
+      }
+    );
+    console.log('✓ Payment gatewayPaymentId unique index confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);

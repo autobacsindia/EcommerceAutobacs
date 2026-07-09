@@ -8,7 +8,7 @@ import {
 import apiClient from '@/lib/api';
 import {
   Lead, LeadStatus, LeadSourceType, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
-  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS,
+  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep,
 } from '@/lib/leads';
 
 type Assignment = 'all' | 'mine' | 'unassigned';
@@ -31,7 +31,7 @@ interface StatsResponse {
 }
 
 const SOURCE_OPTIONS: LeadSourceType[] = [
-  'consultation', 'payment_pending', 'payment_failed', 'payment_cancelled', 'cart_abandoned', 'dormant_user',
+  'consultation', 'payment_pending', 'payment_failed', 'payment_cancelled', 'order_cancelled', 'cart_abandoned', 'dormant_user',
 ];
 
 export default function AdminLeadsPage() {
@@ -48,14 +48,26 @@ export default function AdminLeadsPage() {
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [followUpDue, setFollowUpDue] = useState(false);
+  const [rep, setRep] = useState('');
+  const [reopened, setReopened] = useState(false);
+  const [neverContacted, setNeverContacted] = useState(false);
   const [sort, setSort] = useState<'newest' | 'oldest' | 'recent_contact' | 'follow_up'>('newest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [reps, setReps] = useState<SalesRep[]>([]);
 
   function clearFilters() {
     setStatus(''); setSource(''); setHasPurchased('');
     setCreatedFrom(''); setCreatedTo(''); setFollowUpDue(false);
+    setRep(''); setReopened(false); setNeverContacted(false);
     setSort('newest'); setSearch('');
+  }
+
+  // One-click "Returning customers" preset = existing customer + reopened cycle.
+  const returningActive = hasPurchased === 'true' && reopened;
+  function toggleReturning() {
+    if (returningActive) { setHasPurchased(''); setReopened(false); }
+    else { setHasPurchased('true'); setReopened(true); }
   }
 
   const [selected, setSelected] = useState<string[]>([]);
@@ -72,6 +84,9 @@ export default function AdminLeadsPage() {
       if (createdFrom) params.set('createdFrom', createdFrom);
       if (createdTo) params.set('createdTo', createdTo);
       if (followUpDue) params.set('followUpDue', 'true');
+      if (rep) params.set('rep', rep);
+      if (reopened) params.set('reopened', 'true');
+      if (neverContacted) params.set('neverContacted', 'true');
       params.set('sort', sort);
       if (search.trim()) params.set('search', search.trim());
       params.set('page', String(page));
@@ -87,7 +102,7 @@ export default function AdminLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, sort, search, page]);
+  }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort, search, page]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -101,8 +116,14 @@ export default function AdminLeadsPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadStats(); }, [loadStats]);
 
+  useEffect(() => {
+    apiClient.get<{ success: boolean; reps: SalesRep[] }>('/leads/reps')
+      .then((r) => { if (r.success) setReps(r.reps); })
+      .catch((e) => console.error('[Leads] reps failed', e));
+  }, []);
+
   // Reset to page 1 whenever a filter changes.
-  useEffect(() => { setPage(1); }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, sort]);
+  useEffect(() => { setPage(1); }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort]);
 
   async function claim(id: string) {
     setBusyId(id);
@@ -201,6 +222,15 @@ export default function AdminLeadsPage() {
           <option value="recent_contact">Recently contacted</option>
           <option value="follow_up">Follow-up date</option>
         </select>
+        {/* Manager slice by rep — forces the "All" tab so it isn't overridden. */}
+        <select
+          value={rep}
+          onChange={(e) => { setRep(e.target.value); if (e.target.value) setAssignment('all'); }}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        >
+          <option value="">All reps</option>
+          {reps.map((r) => <option key={r._id} value={r._id}>{r.name || r.email}</option>)}
+        </select>
 
         {/* Second row: date range + follow-up-due + clear */}
         <div className="flex w-full flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
@@ -220,6 +250,25 @@ export default function AdminLeadsPage() {
               ) : null;
             })()}
           </label>
+          {/* Segment presets */}
+          <div className="flex items-center gap-2">
+            {([
+              ['Returning', returningActive, toggleReturning] as const,
+              ['Reopened', reopened, () => setReopened((v) => !v)] as const,
+              ['Never contacted', neverContacted, () => setNeverContacted((v) => !v)] as const,
+            ]).map(([label, active, onClick]) => (
+              <button
+                key={label}
+                onClick={onClick}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <button onClick={clearFilters} className="ml-auto rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
             Clear filters
           </button>
@@ -267,11 +316,14 @@ export default function AdminLeadsPage() {
                       {lead.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{lead.email}</span>}
                       {lead.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{lead.phone}</span>}
                     </div>
-                    {lead.hasPurchased && (
-                      <span className="mt-1 inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-800">
-                        <ShoppingBag className="h-3 w-3" /> Customer
-                      </span>
-                    )}
+                    {(() => {
+                      const badge = customerBadge(lead);
+                      return badge ? (
+                        <span className={`mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${badge.className}`}>
+                          <ShoppingBag className="h-3 w-3" /> {badge.label}
+                        </span>
+                      ) : null;
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     {lead.primarySource && (

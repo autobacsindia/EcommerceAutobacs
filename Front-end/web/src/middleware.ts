@@ -132,6 +132,8 @@ function buildCsp(nonce: string): string {
     "'strict-dynamic'",
     ...(isDev ? ["'unsafe-eval'"] : []),
     'https://checkout.razorpay.com',
+    // Affordability/EMI widget on the PDP (RazorpayAffordabilitySuite).
+    'https://cdn.razorpay.com',
     'https://maps.googleapis.com',
   ].join(' ');
 
@@ -146,13 +148,15 @@ function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     // images.unsplash.com = temporary home-redesign placeholder imagery; safe to
     // remove once all artwork is hosted on Cloudinary (res.cloudinary.com).
-    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com",
+    // cdn.razorpay.com serves the EMI widget's bank/lender logos.
+    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
-    "connect-src 'self' https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com",
-    // Razorpay renders its payment UI inside an iframe
-    "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+    "connect-src 'self' https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com",
+    // Razorpay renders its payment UI (checkout) and the EMI affordability
+    // widget's "View plans" modal inside iframes.
+    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

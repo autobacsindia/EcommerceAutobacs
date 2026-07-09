@@ -38,6 +38,8 @@ jest.unstable_mockModule('../models/Product.js', async () => {
   return {
     __esModule: true,
     default: mockModel,
+    // Named export used by the cleanup util to re-index bulkWrite'd products in ES.
+    enqueueProductSync: jest.fn(),
     ...mockModel
   };
 });
@@ -75,7 +77,8 @@ jest.unstable_mockModule('dotenv', async () => {
 });
 
 // Dynamic import after mocks
-const { cleanupWordPressProducts } = await import('../utils/wordpressProductCleanup.js');
+const { cleanupWordPressProducts, runCleanupWordPressProductsCli } =
+  await import('../utils/wordpressProductCleanup.js');
 
 describe('WordPress Product Cleanup Integration', () => {
   beforeEach(async () => {
@@ -97,9 +100,14 @@ describe('WordPress Product Cleanup Integration', () => {
   test('should clean up products successfully', async () => {
     // Reset mocks for this test if needed, but default mocks are fine
     const result = await cleanupWordPressProducts(10);
-    
+
     expect(result.success).toBe(true);
     expect(result.processed).toBe(2);
+
+    // bulkWrite bypasses Mongoose hooks, so the util must enqueue ES re-index
+    // for every affected product id explicitly.
+    const { enqueueProductSync } = await import('../models/Product.js');
+    expect(enqueueProductSync).toHaveBeenCalledWith(['1', '2']);
   });
 
   test('should handle empty product list', async () => {
@@ -114,6 +122,29 @@ describe('WordPress Product Cleanup Integration', () => {
     expect(result.success).toBe(true);
     expect(result.processed).toBe(0);
     expect(result.message).toBe('No products need cleanup');
+  });
+
+  // Regression guard: the worker runs inside the live server on the app's shared
+  // Mongoose connection. It must NEVER open or close that connection, or an admin
+  // hitting POST /products/cleanup/wordpress would drop the whole app's DB link.
+  test('cleanupWordPressProducts does NOT touch the shared Mongoose connection', async () => {
+    const mongoose = (await import('mongoose')).default;
+
+    await cleanupWordPressProducts(10);
+
+    expect(mongoose.connect).not.toHaveBeenCalled();
+    expect(mongoose.connection.close).not.toHaveBeenCalled();
+  });
+
+  // The CLI runner is the ONLY place that owns the connection lifecycle.
+  test('runCleanupWordPressProductsCli connects, runs cleanup, then closes', async () => {
+    const mongoose = (await import('mongoose')).default;
+
+    const result = await runCleanupWordPressProductsCli(10);
+
+    expect(result.success).toBe(true);
+    expect(mongoose.connect).toHaveBeenCalledTimes(1);
+    expect(mongoose.connection.close).toHaveBeenCalledTimes(1);
   });
 
   test('should handle errors gracefully', async () => {

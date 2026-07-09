@@ -84,6 +84,16 @@ class OrderStatusService {
       };
     }
 
+    // Hard rules that even an admin cannot bypass. A cancel is only valid BEFORE
+    // delivery — once delivered, the money-back path is a return/refund, never a
+    // cancellation. (Terminal states are also un-cancellable.)
+    if (newStatus === 'cancelled' && ['delivered', 'returned', 'cancelled'].includes(currentStatus)) {
+      return {
+        valid: false,
+        message: `Cannot cancel an order in '${currentStatus}' state. Use the return/refund flow instead.`
+      };
+    }
+
     // Check if new status is in allowed transitions
     const allowedStatuses = STATUS_TRANSITIONS[currentStatus];
     // Admins can bypass transition rules
@@ -158,6 +168,9 @@ class OrderStatusService {
       reason,
       notes,
       metadata = {},
+      // Who initiated a cancellation ('admin' | 'customer' | 'system'). Ignored for
+      // non-cancel transitions. Defaults from isAdmin when a cancel omits it.
+      cancelledBy,
       session = null
     } = options;
 
@@ -220,6 +233,27 @@ class OrderStatusService {
           order.cancelledAt = new Date();
           if (reason) {
             order.cancellationReason = reason;
+          }
+          order.cancelledBy = cancelledBy || (isAdmin ? 'admin' : 'customer');
+
+          // Money already captured → flag a pending refund for manual processing.
+          // We only RECORD the intent here (the Razorpay refund + post-delivery
+          // return flow are a separate workstream). Idempotent: never overwrite an
+          // existing refund record.
+          if (order.paymentStatus === 'paid' && !order.refundDetails?.requestedAt) {
+            order.refundDetails = {
+              requestedAt: new Date(),
+              amount: order.totalAmount,
+              refundType: 'full',
+              refundMethod: 'original_payment',
+              itemsRefunded: (order.items || []).map(item => ({
+                product: item.product,
+                quantity: item.quantity,
+                amount: item.price * item.quantity
+              })),
+              status: 'pending',
+              notes: `Auto-flagged on cancellation (${order.cancelledBy}). Reason: ${reason || 'n/a'}`
+            };
           }
           break;
         case 'delivered':
@@ -310,7 +344,16 @@ class OrderStatusService {
       // `processing` is the first paid fulfillment stage (payment captured), so
       // that's where we stamp the customer's purchase denorm.
       if (newStatus === 'processing' && order.user) {
-        await userRepository.markPurchased(order.user);
+        // Guard against double-counting: an order can re-enter `processing`
+        // (admin backward transition, webhook retry) and markPurchased's $inc is
+        // unconditional. Flip a once-only flag atomically first; only the first
+        // caller records the purchase + net LTV. Order.totalAmount is rupees →
+        // store integer paise (refunds decrement later, per ADR-006).
+        const firstCount = await orderRepository.markPurchaseCountedOnce(order._id);
+        if (firstCount) {
+          const amountPaise = Math.round((order.totalAmount || 0) * 100);
+          await userRepository.markPurchased(order.user, { amountPaise });
+        }
       }
       if (['processing', 'delivered', 'cancelled', 'returned'].includes(newStatus)) {
         await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));

@@ -259,10 +259,21 @@ export default function OrderDetailPage() {
                 Retry Payment
               </button>
             )}
-            {canCancelOrder(order.status) && (
+            {canCancelOrder(order.status) ? (
               <button onClick={() => setShowCancelDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <XCircle className="h-4 w-4" />
                 Cancel Order
+              </button>
+            ) : order.status.toLowerCase() === 'shipped' && (
+              // Once it's on its way we can't cancel — the customer would use a return
+              // after delivery instead. Show the disabled control so the "why" is clear.
+              <button
+                disabled
+                title="This order has already shipped and can no longer be cancelled."
+                className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink-muted rounded-sm font-display font-bold uppercase tracking-widest text-sm cursor-not-allowed opacity-60"
+              >
+                <XCircle className="h-4 w-4" />
+                Already Shipped — Can’t Cancel
               </button>
             )}
             {order.trackingNumber && (

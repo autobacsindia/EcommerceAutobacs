@@ -163,11 +163,36 @@ class RazorpayService {
 
     try {
       let paymentId;
+      // Tracks whether THIS delivery created the payment vs. adopted a row a concurrent
+      // delivery already committed. Only the creator fires post-commit side-effects
+      // (invoice email), so duplicate webhooks never double-send.
+      let createdHere = false;
 
       await session.withTransaction(async () => {
+        // Reset per-attempt: withTransaction re-runs this callback on a WriteConflict.
+        createdHere = false;
+
         const order = await orderRepository.findById(orderId, [], session);
         if (!order) {
           throw new Error('Order not found');
+        }
+
+        // ── IDEMPOTENCY GUARD (in-transaction) ────────────────────────────────
+        // A concurrent/duplicate webhook may already have recorded this capture.
+        // Under snapshot isolation this read alone can't see an uncommitted sibling
+        // txn — the UNIQUE index on gatewayPaymentId is the real serialization point:
+        // the losing insert surfaces as a retryable WriteConflict, withTransaction
+        // retries, and THIS read then sees the committed row and bails. Belt + braces.
+        const existing = await paymentRepository.findByGatewayPaymentId(paymentData.id, session);
+        if (existing) {
+          paymentId = existing._id;
+          // Self-heal the order axis if a prior partial run left it unlinked/unpaid.
+          if (String(order.payment) !== String(existing._id) || order.paymentStatus !== 'paid') {
+            order.payment = existing._id;
+            order.paymentStatus = 'paid';
+            await orderRepository.save(order, session);
+          }
+          return;
         }
 
         const paymentRecord = await paymentRepository.createPayment(
@@ -210,12 +235,15 @@ class RazorpayService {
         }
 
         paymentId = paymentRecord._id;
+        createdHere = true;
       });
 
       // ── Order confirmation + invoice email (best-effort, post-commit) ─────────
       // Enqueued only after the transaction commits so a rolled-back payment never
-      // emails an invoice. A Redis/queue failure must not fail the payment itself.
-      if (process.env.REDIS_URL) {
+      // emails an invoice, and only by the delivery that actually created the payment
+      // so duplicate webhooks don't double-enqueue. A Redis/queue failure must not
+      // fail the payment itself.
+      if (createdHere && process.env.REDIS_URL) {
         getNotificationsQueue()
           .add('send-order-invoice', { orderId })
           .catch((err) =>
@@ -225,11 +253,33 @@ class RazorpayService {
 
       return {
         success: true,
-        message: 'Payment processed successfully',
+        message: createdHere ? 'Payment processed successfully' : 'Payment already processed',
         orderId,
-        paymentId
+        paymentId,
+        alreadyProcessed: !createdHere
       };
     } catch (error) {
+      // A concurrent delivery may have won the race and the unique index rejected our
+      // insert (WriteConflict retries exhausted, or a non-transient duplicate key). If a
+      // payment row now exists for this capture, the end state is correct — report an
+      // idempotent success instead of paging on-call with a critical alert.
+      const isDuplicate =
+        error?.code === 11000 || /writeconflict|duplicate key/i.test(error?.message || '');
+      if (isDuplicate) {
+        try {
+          const existing = await paymentRepository.findByGatewayPaymentId(paymentData.id);
+          if (existing) {
+            return {
+              success: true,
+              message: 'Payment already processed (concurrent delivery)',
+              orderId,
+              paymentId: existing._id,
+              alreadyProcessed: true
+            };
+          }
+        } catch { /* fall through to error handling below */ }
+      }
+
       if (process.env.SENTRY_DSN) {
         Sentry.withScope((scope) => {
           scope.setContext('payment_processing', { orderId, paymentId: paymentData.id, userId });
@@ -258,8 +308,12 @@ class RazorpayService {
       'upi': 'upi',
       'emi': 'emi'
     };
-    
-    return methodMap[razorpayMethod] || razorpayMethod;
+
+    // Unknown/new gateway methods (cardless_emi, paylater, bank_transfer, …) map to the
+    // `other` enum value rather than the raw string — passing an out-of-enum value would
+    // throw Mongoose validation inside the payment transaction and strand captured money
+    // in an unrecorded state. The raw method is still preserved in paymentDetails.razorpay.
+    return methodMap[razorpayMethod] || 'other';
   }
 
   /**

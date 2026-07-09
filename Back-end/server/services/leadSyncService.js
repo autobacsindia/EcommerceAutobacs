@@ -17,6 +17,8 @@ import userRepository from '../repositories/userRepository.js';
 import { normalizeEmail, normalizePhone, buildIdentityKey } from '../utils/identity.js';
 import {
   SOURCE_PRIORITY,
+  REOPEN_SOURCE_TYPES,
+  TERMINAL_LEAD_STATUSES,
   LEAD_TO_CONSULTATION,
   CONSULTATION_TO_LEAD,
 } from '../config/leadConstants.js';
@@ -37,6 +39,57 @@ class LeadSyncService {
       (best, s) => (SOURCE_PRIORITY[s.type] > SOURCE_PRIORITY[best] ? s.type : best),
       sources[0]?.type
     );
+  }
+
+  /**
+   * Archive the current (won/lost) cycle into `cycles[]` and reset the lead to a
+   * fresh `new` cycle back in the pool. Preserves the PERMANENT person facts
+   * (identity, hasPurchased, linkedUser) and the full audit trail (cycles[] +
+   * activity log); clears only the working state of the closed cycle. The caller
+   * pushes the triggering source onto the now-empty `sources[]`. See ADR-006.
+   */
+  _closeCycleAndReset(lead, triggerType) {
+    const now = new Date();
+    const outcome = lead.status; // 'won' | 'lost'
+    lead.cycles.push({
+      startedAt: lead.cycleStartedAt || lead.createdAt,
+      closedAt: lead.convertedAt || now,
+      outcome,
+      sources: lead.sources.map((s) => ({
+        type: s.type,
+        ref: s.ref,
+        refModel: s.refModel,
+        snapshot: s.snapshot,
+        capturedAt: s.capturedAt,
+      })),
+      primarySource: lead.primarySource,
+      assignedTo: lead.assignedTo,
+      contactedBy: lead.contactedBy,
+      convertedOrder: lead.convertedOrder,
+      convertedAt: lead.convertedAt,
+      lostReason: lead.lostReason,
+    });
+
+    // Reset the working state for the new cycle (identity + customer facts kept).
+    lead.sources = [];
+    lead.status = 'new';
+    lead.assignedTo = null;
+    lead.assignedAt = null;
+    lead.contactedBy = null;
+    lead.lastContactedAt = null;
+    lead.nextFollowUpAt = null;
+    lead.lostReason = '';
+    lead.convertedOrder = null;
+    lead.convertedAt = null;
+    lead.cycleStartedAt = now;
+    lead.reopenCount = (lead.reopenCount || 0) + 1;
+
+    lead.activities.push({
+      type: 'status_change',
+      at: now,
+      notes: `Reopened — new ${triggerType} signal after cycle closed as ${outcome}`,
+      meta: { reopen: true, previousOutcome: outcome, trigger: triggerType },
+    });
   }
 
   /**
@@ -77,7 +130,28 @@ class LeadSyncService {
 
     // Merge the source (dedup by ref). Refresh snapshot/capturedAt if already present.
     const refId = source.ref ? source.ref.toString() : null;
-    const existing = refId ? lead.sources.find((s) => s.ref?.toString() === refId) : null;
+    let existing = refId ? lead.sources.find((s) => s.ref?.toString() === refId) : null;
+
+    // A genuinely NEW signal = a new ref, OR a known ref whose TYPE is PROGRESSING
+    // (e.g. the same order going payment_pending → order_cancelled). A same-type
+    // re-sync (webhook retry) is not new. Using type-progression — not just a new
+    // ref — keeps reopen behaviour consistent: cancelling a won order re-engages
+    // the lead whether or not a prior payment_pending signal happened to be stored.
+    const isNewSignal = !existing || existing.type !== source.type;
+
+    // Reopen-with-history: a genuinely new, workable signal landing on a CLOSED
+    // (won/lost) lead starts a fresh cycle. Guards:
+    //   • isNewSignal          — a plain re-sync (same ref + same type) refreshes.
+    //   • REOPEN_SOURCE_TYPES  — passive `dormant_user` sweeps are excluded, so a
+    //                            time-based signal can't resurrect a closed decision.
+    //   • terminal status      — active leads just append; only won/lost reopen.
+    // The paid-order path never reaches here (it goes through
+    // _markConvertedByIdentity), so a conversion can't reopen itself.
+    if (isNewSignal && TERMINAL_LEAD_STATUSES.includes(lead.status) && REOPEN_SOURCE_TYPES.includes(source.type)) {
+      this._closeCycleAndReset(lead, source.type);
+      existing = null; // sources were cleared — fall through to push the new one
+    }
+
     if (existing) {
       existing.type = source.type;
       existing.snapshot = source.snapshot || existing.snapshot;
@@ -97,32 +171,17 @@ class LeadSyncService {
     return lead;
   }
 
-  /** Remove a source that references `refId`; returns the updated lead or null. */
-  async _detachSource(refId, { lostReason } = {}) {
-    const id = refId.toString();
-    const lead = await leadRepository.findOne({ 'sources.ref': refId });
-    if (!lead) return null;
-
-    lead.sources = lead.sources.filter((s) => s.ref?.toString() !== id);
-    // A lead with no remaining pre-purchase signal and no conversion is dead —
-    // mark it lost rather than leaving an empty husk in the pipeline.
-    if (lead.sources.length === 0 && lead.status !== 'won') {
-      lead.status = 'lost';
-      if (lostReason) lead.lostReason = lostReason;
-      lead.activities.push({ type: 'status_change', at: new Date(), notes: `Auto-lost: ${lostReason || 'source removed'}` });
-    } else {
-      lead.primarySource = this._highestPrioritySource(lead.sources);
-    }
-    await leadRepository.save(lead);
-    return lead;
-  }
-
   // ── Source ingestors ────────────────────────────────────────────────────────
 
-  /** Consultation submitted/updated → warm lead (phone-only identity). */
+  /**
+   * Consultation submitted/updated → warm lead. Email is captured on the form and
+   * is the canonical identity key, so the lead dedups onto the same person's
+   * account/order lead automatically (no phone-based stitching needed); the phone
+   * is still carried for backfill/contact and as a fallback for legacy rows.
+   */
   async upsertFromConsultation(consultation) {
     return this._upsertSource(
-      { name: consultation.name, phone: consultation.whatsapp },
+      { name: consultation.name, email: consultation.email, phone: consultation.whatsapp },
       {
         type: 'consultation',
         ref: consultation._id,
@@ -142,7 +201,9 @@ class LeadSyncService {
    *  - pending  → payment_pending signal ("left at checkout")
    *  - failed   → payment_failed signal
    *  - paid     → conversion (mark won, tag as customer) — never creates a lead
-   *  - cancelled→ detach (admin action, not a lost prospect) — never creates a lead
+   *  - cancelled→ order_cancelled re-engagement signal (admin OR customer cancel).
+   *               The same order ref that carried payment_pending is upgraded in
+   *               place to order_cancelled, so the person stays workable in the CRM.
    */
   async upsertFromOrder(order) {
     const doc = order;
@@ -159,12 +220,30 @@ class LeadSyncService {
       }
     }
 
-    // Read the PAYMENT axis (paymentStatus), not fulfillment — payment success/
-    // failure/abandonment are payment facts now (post two-axis split).
+    // A cancelled order is a re-engagement target, not a dead end — surface it as
+    // an `order_cancelled` lead so sales can follow up and try to re-close. This
+    // holds whether the money was captured (cancel-with-refund) or not.
     if (doc.status === 'cancelled') {
-      return this._detachSource(doc._id, { lostReason: 'order_cancelled' });
+      return this._upsertSource(
+        { name, email, phone },
+        {
+          type: 'order_cancelled',
+          ref: doc._id,
+          refModel: 'Order',
+          snapshot: {
+            total: doc.totalAmount,
+            itemCount: doc.items?.length || 0,
+            orderNumber: doc.orderNumber,
+            cancelledBy: doc.cancelledBy || null,
+            wasPaid: doc.paymentStatus === 'paid' || doc.paymentStatus === 'refunded',
+          },
+        },
+        { linkedUser: doc.user || null }
+      );
     }
 
+    // Read the PAYMENT axis (paymentStatus), not fulfillment — payment success/
+    // failure/abandonment are payment facts now (post two-axis split).
     if (doc.paymentStatus === 'paid') {
       return this._markConvertedByIdentity({ email, phone }, doc._id, doc.user);
     }

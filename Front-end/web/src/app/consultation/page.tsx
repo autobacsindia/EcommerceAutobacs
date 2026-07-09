@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   ChevronRight, ChevronLeft, CheckCircle, Zap, Wrench, Shield,
-  HeadphonesIcon, Car, Phone, MapPin, User, MessageSquare,
+  HeadphonesIcon, Car, Phone, Mail, MapPin, User, MessageSquare,
   Calendar, Clock, ArrowRight, Star, Flame, Check,
 } from 'lucide-react';
 import apiClient from '@/lib/api';
@@ -13,6 +13,7 @@ import apiClient from '@/lib/api';
 interface FormData {
   name: string;
   whatsapp: string;
+  email: string;
   city: string;
   vehicleNumber: string;
   makeModel: string;
@@ -26,7 +27,7 @@ interface FormData {
 }
 
 const EMPTY: FormData = {
-  name: '', whatsapp: '', city: '',
+  name: '', whatsapp: '', email: '', city: '',
   vehicleNumber: '', makeModel: '',
   upgrades: [],
   usage: '', drivingStyle: '',
@@ -76,6 +77,13 @@ function validateWhatsApp(value: string): string {
   return '';
 }
 
+function validateEmail(value: string): string {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+    return 'Enter a valid email address (e.g. you@example.com).';
+  }
+  return '';
+}
+
 const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-3 focus:outline-none focus:border-gold font-display text-sm transition-colors';
 
 export default function ConsultationPage() {
@@ -85,6 +93,7 @@ export default function ConsultationPage() {
   const [submitted, setSubmitted]   = useState(false);
   const [error, setError]     = useState('');
   const [whatsappError, setWhatsappError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const formRef = useRef<HTMLDivElement>(null);
 
   function scrollToForm() {
@@ -104,12 +113,15 @@ export default function ConsultationPage() {
 
   function nextStep() {
     if (step === 0) {
-      if (!form.name || !form.whatsapp || !form.city) {
-        setError('Please fill in your name, WhatsApp number, and city.'); return;
+      if (!form.name || !form.whatsapp || !form.email || !form.city) {
+        setError('Please fill in your name, WhatsApp number, email, and city.'); return;
       }
       const waErr = validateWhatsApp(form.whatsapp);
       if (waErr) { setWhatsappError(waErr); setError(waErr); return; }
       setWhatsappError('');
+      const emErr = validateEmail(form.email);
+      if (emErr) { setEmailError(emErr); setError(emErr); return; }
+      setEmailError('');
     }
     if (step === 1 && !form.makeModel) {
       setError('Please enter your vehicle make & model.'); return;
@@ -122,6 +134,7 @@ export default function ConsultationPage() {
   function prevStep() {
     setError('');
     setWhatsappError('');
+    setEmailError('');
     setStep(s => Math.max(s - 1, 0));
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
@@ -342,6 +355,35 @@ export default function ConsultationPage() {
                   <p className="text-green-400 font-display text-xs mt-1.5">✓ Valid Indian mobile number</p>
                 )}
                 <p className="text-ink-muted font-display text-xs mt-1">Accepted: 10-digit number, or with +91 / 91 prefix</p>
+              </div>
+              <div>
+                <label className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1.5">
+                  <Mail className="inline h-3.5 w-3.5 mr-1" />Email <span className="text-gold">*</span>
+                </label>
+                <input
+                  value={form.email}
+                  onChange={e => {
+                    set('email', e.target.value);
+                    setEmailError(e.target.value ? validateEmail(e.target.value) : '');
+                  }}
+                  placeholder="e.g. you@example.com"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  className={`${inputClass} ${
+                    emailError
+                      ? 'border-red-500 focus:border-red-400'
+                      : form.email && !emailError
+                      ? 'border-green-500 focus:border-green-400'
+                      : ''
+                  }`}
+                />
+                {emailError && (
+                  <p className="text-red-400 font-display text-xs mt-1.5 flex items-center gap-1">
+                    <span>⚠</span> {emailError}
+                  </p>
+                )}
+                <p className="text-ink-muted font-display text-xs mt-1">We&apos;ll send your build plan and updates here.</p>
               </div>
               <div>
                 <label className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1.5">

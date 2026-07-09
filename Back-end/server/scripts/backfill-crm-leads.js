@@ -20,12 +20,12 @@ import dotenv from 'dotenv';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Consultation from '../models/Consultation.js';
+import Lead from '../models/Lead.js';
 import leadSyncService from '../services/leadSyncService.js';
 
 dotenv.config();
 
 const APPLY = process.argv.includes('--apply');
-const PAID = ['confirmed', 'processing', 'shipped', 'delivered', 'refunded'];
 const DORMANCY_DAYS = Number(process.env.LEAD_DORMANCY_DAYS) || 30;
 const BATCH = 500;
 
@@ -36,19 +36,47 @@ async function connect() {
   console.log('[backfill-crm] connected');
 }
 
-/** Recompute User.hasPurchased/firstPurchaseAt/paidOrderCount from paid orders. */
+/**
+ * Recompute the User purchase denorm from paid orders — hasPurchased,
+ * firstPurchaseAt, lastOrderAt, paidOrderCount, and net LTV (totalSpentPaise).
+ * Uses the canonical payment signal (`paymentStatus: 'paid'`), not the legacy
+ * fulfillment `status`, so it matches the live markPurchased hook. Refunded
+ * orders are excluded ⇒ net LTV (refund decrement is wired separately, ADR-006).
+ * Fully recompute-from-source, so re-running is idempotent (set, not $inc).
+ */
 async function backfillPurchaseDenorm() {
   const rows = await Order.aggregate([
-    { $match: { status: { $in: PAID }, user: { $ne: null } } },
-    { $group: { _id: '$user', count: { $sum: 1 }, first: { $min: '$createdAt' } } },
+    { $match: { paymentStatus: 'paid', user: { $ne: null } } },
+    {
+      $group: {
+        _id: '$user',
+        count: { $sum: 1 },
+        first: { $min: '$createdAt' },
+        last: { $max: '$createdAt' },
+        // Order.totalAmount is rupees; store integer paise to match runtime.
+        spentPaise: { $sum: { $round: [{ $multiply: ['$totalAmount', 100] }, 0] } },
+      },
+    },
   ]);
   console.log(`[backfill-crm] users with paid orders: ${rows.length}`);
   if (!APPLY) return rows.length;
 
+  // Mark every already-paid order as counted so the runtime once-guard
+  // (markPurchaseCountedOnce) never re-counts a historical order into net LTV.
+  await Order.updateMany({ paymentStatus: 'paid' }, { $set: { purchaseCounted: true } });
+
   for (const r of rows) {
     await User.updateOne(
       { _id: r._id },
-      { $set: { hasPurchased: true, firstPurchaseAt: r.first, paidOrderCount: r.count } }
+      {
+        $set: {
+          hasPurchased: true,
+          firstPurchaseAt: r.first,
+          lastOrderAt: r.last,
+          paidOrderCount: r.count,
+          totalSpentPaise: r.spentPaise,
+        },
+      }
     );
   }
   return rows.length;
@@ -65,11 +93,28 @@ async function eachSync(cursor, fn) {
   return synced;
 }
 
+/**
+ * Legacy leads predate the cycle model — stamp cycleStartedAt = createdAt so
+ * cycle-age reporting is correct. Idempotent: only touches docs missing the
+ * field (new leads get it from the schema default).
+ */
+async function backfillCycleStart() {
+  const count = await Lead.countDocuments({ cycleStartedAt: { $exists: false } });
+  console.log(`[backfill-crm] leads missing cycleStartedAt: ${count}`);
+  if (!APPLY || count === 0) return count;
+  await Lead.updateMany(
+    { cycleStartedAt: { $exists: false } },
+    [{ $set: { cycleStartedAt: '$createdAt' } }]
+  );
+  return count;
+}
+
 async function run() {
   await connect();
   const report = {};
 
   report.purchaseDenorm = await backfillPurchaseDenorm();
+  report.cycleStartedAt = await backfillCycleStart();
 
   report.consultations = await eachSync(
     Consultation.find().cursor({ batchSize: BATCH }),
