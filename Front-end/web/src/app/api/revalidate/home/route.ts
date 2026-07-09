@@ -24,15 +24,36 @@ const HOME_TAGS = [
   'home:brands',
 ] as const;
 
+// The admin UI triggers this from the site's own pages (revalidateHome.ts) with no
+// secret — a browser can't safely hold one. So allow EITHER a same-origin request
+// (the admin flow; browsers can't forge the Origin header cross-site) OR an explicit
+// secret (external/trusted callers like a backend cron). Everything else is denied in
+// production — closing the unauthenticated cross-origin cache-stampede vector. (FE-1)
+function isSameOrigin(req: NextRequest): boolean {
+  const allowed = new Set([req.nextUrl.origin]);
+  if (process.env.NEXT_PUBLIC_APP_URL) allowed.add(process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, ''));
+  const origin = req.headers.get('origin');
+  if (origin && allowed.has(origin.replace(/\/$/, ''))) return true;
+  // Fallback: some browsers omit Origin on same-origin POST — check the Referer host.
+  const referer = req.headers.get('referer');
+  if (referer) {
+    try {
+      if (allowed.has(new URL(referer).origin)) return true;
+    } catch { /* malformed referer → not same-origin */ }
+  }
+  return false;
+}
+
 function authorize(req: NextRequest): boolean {
   const expected = process.env.REVALIDATE_SECRET;
-  if (!expected) {
-    // Fail closed in prod (deny); open only in non-prod for local convenience.
-    return process.env.NODE_ENV !== 'production';
+  if (expected) {
+    const provided =
+      req.nextUrl.searchParams.get('secret') ?? req.headers.get('x-revalidate-secret');
+    if (provided === expected) return true;
   }
-  const provided =
-    req.nextUrl.searchParams.get('secret') ?? req.headers.get('x-revalidate-secret');
-  return provided === expected;
+  if (isSameOrigin(req)) return true;
+  // No secret match and not same-origin: deny in prod, allow in dev for convenience.
+  return process.env.NODE_ENV !== 'production';
 }
 
 function handle(req: NextRequest) {
