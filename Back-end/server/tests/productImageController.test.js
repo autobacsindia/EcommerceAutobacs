@@ -58,12 +58,18 @@ const mockUploadMany   = jest.fn();
 const mockDeleteMany   = jest.fn();
 const mockUploadSingle = jest.fn();
 const mockDeleteSingle = jest.fn();
+const mockUploadRaw    = jest.fn();
 
+// Mock the WHOLE module — every export the app imports must be listed, else the
+// import fails at link time. orderController (loaded via app.js) imports
+// uploadRawToCloudinary + deleteFromCloudinary for the shipping-slip feature.
 jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => ({
   uploadToCloudinary:       (...args) => mockUploadSingle(...args),
+  uploadRawToCloudinary:    (...args) => mockUploadRaw(...args),
   uploadManyToCloudinary:   (...args) => mockUploadMany(...args),
   deleteFromCloudinary:     (...args) => mockDeleteSingle(...args),
   deleteManyFromCloudinary: (...args) => mockDeleteMany(...args),
+  buildOptimizedUrl:        (publicId) => `https://mock.cloudinary/${publicId}`,
 }));
 
 // ── Dynamic imports AFTER mock registration ───────────────────────────────────
