@@ -198,6 +198,8 @@ router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayO
       const serverSessionToken = crypto.randomBytes(32).toString('hex');
 
       // Store in Redis: razorpayOrderId -> serverSessionToken (30 min expiry)
+      // NOTE: getRedisClient() returns the app-wide ioredis singleton — never quit() it
+      // from a request handler; that tears down Redis for every other request.
       const redisClient = getRedisClient();
       try {
         // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
@@ -245,13 +247,9 @@ router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayO
           success: false,
           message: 'Session verification unavailable. Please try again.'
         });
-      } finally {
-        if (redisClient) {
-          redisClient.quit().catch(() => {});
-        }
       }
     }
-    
+
     res.json({
       success: true,
       data: razorpayOrder

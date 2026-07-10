@@ -173,9 +173,16 @@ export const useRazorpay = ({
         throw new Error('Failed to create Razorpay order');
       }
 
+      // Prefer the key the backend signed this order with; the build-time env var
+      // is only a fallback for older backends.
+      const razorpayKey = razorpayResponse.data.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        throw new Error('Payment gateway is not configured. Please contact support.');
+      }
+
       // 2. Configure Razorpay options
       const options: RazorpayOptions = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
+        key: razorpayKey,
         amount: razorpayResponse.data.amount,
         currency: razorpayResponse.data.currency,
         name: 'Autobacs India',

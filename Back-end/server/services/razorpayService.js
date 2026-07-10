@@ -69,6 +69,10 @@ class RazorpayService {
       
       return {
         success: true,
+        // key_id is public by design (it ships to the browser in the checkout
+        // options). Returning it here keeps the checkout key and the secret that
+        // signs the order in lockstep, instead of the frontend baking in its own.
+        keyId: this.key_id,
         orderId: razorpayOrder.id,
         amount: razorpayOrder.amount,
         currency: razorpayOrder.currency,
