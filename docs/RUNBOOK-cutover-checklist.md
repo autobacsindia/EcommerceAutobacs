@@ -121,7 +121,7 @@ log in → cart → test Razorpay order. Cookies run `SameSite=none` (two differ
 
 ### 3a. Cloudflare + DNS
 1. Add the zone in Cloudflare; let it import Hostinger's records; **diff and fix** — make
-   sure MX/SPF/DKIM/DMARC/Return-Path (the Step 0 email records) all came across. A
+   sure MX/SPF/DKIM/DMARC/Return-Path (the[text](vscode-webview://1c033tgps7p8tb6ljdn1aucms2eiinli5me2hcvjj53gigtb59cg/docs/SMOKE-TEST-runbook.md) Step 0 email records) all came across. A
    missing email record = silent mail failure.
 2. Change nameservers at Hostinger → Cloudflare.
 3. Records:
