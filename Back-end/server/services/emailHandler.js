@@ -146,11 +146,29 @@ class EmailHandler {
     const senderEmail = fromEmail && this.isValidEmail(fromEmail) ? fromEmail : this.fromEmail;
     const senderName = fromName !== undefined ? fromName : this.fromName;
 
+    // Recipient redirect. Non-prod environments run against a restored copy of the
+    // production database, where every order and user carries a real customer address —
+    // marking a restored order delivered would mail that customer for real. When
+    // EMAIL_REDIRECT_TO is set, every message is rerouted to it regardless of `to`, so
+    // no real address can be reached. Unset in production, where this is a no-op.
+    // Fails closed: a set-but-invalid value refuses the send rather than delivering to `to`.
+    const redirectTo = process.env.EMAIL_REDIRECT_TO;
+    if (redirectTo && !this.isValidEmail(redirectTo)) {
+      this.error(`[EmailHandler] EMAIL_REDIRECT_TO is set but not a valid email (${redirectTo}); refusing to send`);
+      return {
+        success: false,
+        error: 'Invalid EMAIL_REDIRECT_TO',
+        provider: 'postmark',
+        retryable: false
+      };
+    }
+    const recipient = redirectTo || to;
+
     // Prepare Postmark message
     const msg = {
       From: senderName ? `${senderName} <${senderEmail}>` : senderEmail,
-      To: to,
-      Subject: subject,
+      To: recipient,
+      Subject: redirectTo ? `[test → ${to}] ${subject}` : subject,
       TextBody: text,
       ...(html && { HtmlBody: html }),
       ...(Array.isArray(attachments) && attachments.length > 0 && { Attachments: attachments }),
@@ -166,14 +184,15 @@ class EmailHandler {
 
         const messageId = response?.MessageID;
 
-        this.log(`[EmailHandler] ✓ Email sent to ${to} | Subject: ${subject} | MessageID: ${messageId}`);
+        this.log(`[EmailHandler] ✓ Email sent to ${recipient}${redirectTo ? ` (redirected from ${to})` : ''} | Subject: ${subject} | MessageID: ${messageId}`);
 
         return {
           success: true,
           provider: 'postmark',
           messageId,
           attempt,
-          recipient: to
+          recipient,
+          ...(redirectTo && { redirectedFrom: to })
         };
 
       } catch (error) {
@@ -182,7 +201,7 @@ class EmailHandler {
         // Check if error is retryable
         const isRetryable = this.isRetryableError(error);
 
-        this.error(`[EmailHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${to}:`, error.message);
+        this.error(`[EmailHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${recipient}:`, error.message);
 
         if (!isRetryable || attempt >= this.retryAttempts) {
           // Don't retry if error is not retryable or max attempts reached
