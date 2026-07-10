@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { getSearchSyncQueue } from '../queue/queues.js';
 import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
 import SeoSchema from './shared/seoSchema.js';
+import { slugify, generateUniqueSlug } from '../utils/slug.js';
 
 const ProductSchema = new mongoose.Schema({
   name: { 
@@ -213,6 +214,25 @@ ProductSchema.index({ deletedAt: 1 }, { sparse: true });
 // Sparse index drives the sale-expiry sweep (cronService) — only products with
 // an active sale window carry a saleEndsAt, so the scan stays tiny.
 ProductSchema.index({ saleEndsAt: 1 }, { sparse: true });
+
+// Derive `slug` from `name` when the caller didn't supply one. `slug` is required
+// and unique, but nothing upstream guarantees it: the admin create form never sends
+// one, so every create used to die on a ValidationError. Server-side derivation also
+// covers API clients, import scripts and the WooCommerce sync.
+//
+// Only runs when slug is absent — an explicitly supplied slug (admin edit form,
+// WooCommerce's own slug) is normalized but never renamed, so URLs stay stable.
+ProductSchema.pre('validate', async function () {
+  if (this.slug) {
+    this.slug = slugify(this.slug);
+    return;
+  }
+  // No name either — let the `name` required-validator produce the error.
+  const base = slugify(this.name);
+  if (!base) return;
+
+  this.slug = await generateUniqueSlug(this.constructor, base, { excludeId: this._id });
+});
 
 // Automatically exclude soft-deleted products from all find queries.
 // Pass { includeDeleted: true } via .setOptions() to bypass (admin use only).

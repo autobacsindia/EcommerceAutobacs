@@ -162,10 +162,52 @@ function truncateLog(value, maxLength = 2000) {
   return str.slice(0, maxLength) + '...[TRUNCATED]';
 }
 
+/**
+ * Map raw driver/Mongoose errors onto our HTTP contract.
+ *
+ * These arrive with no `statusCode`, so without this they all defaulted to 500:
+ * the client saw an opaque "Something went wrong", and every bad admin form
+ * submit tripped the 5xx P1 alert. They are client errors, not server faults.
+ *
+ * Mutates `err` in place (it is per-request and about to be discarded) so the
+ * rest of the handler — logging, getSafeMessage, the `errors` map — sees a
+ * consistent shape.
+ */
+function normalizeKnownError(err) {
+  if (typeof err?.statusCode === 'number') return; // caller already decided
+
+  // Schema validation: `err.errors` is forwarded to the client as `errors`.
+  if (err?.name === 'ValidationError' && err.errors) {
+    err.statusCode = 400;
+    err.isOperational = true;
+    err.message = 'Validation Error'; // whitelisted; per-field detail rides in `errors`
+    return;
+  }
+
+  // Malformed ObjectId / uncastable value in a query or payload.
+  if (err?.name === 'CastError') {
+    err.statusCode = 400;
+    err.isOperational = true;
+    err.message = 'Validation Error';
+    return;
+  }
+
+  // Unique-index violation. `keyPattern`/`keyValue` name the field(s); we echo the
+  // field name only, never the attempted value (could be PII, e.g. a user email).
+  if (err?.code === 11000) {
+    const fields = Object.keys(err.keyPattern || err.keyValue || {});
+    err.statusCode = 409;
+    err.isOperational = true;
+    err.message = `Duplicate value: ${fields.join(', ') || 'field'} already exists`;
+  }
+}
+
 export const errorHandler = (err, req, res, next) => {
   try {
     // Generate unique error ID for support tracking
     const errorId = crypto.randomUUID();
+
+    normalizeKnownError(err);
 
     const statusCode = (typeof err.statusCode === 'number' ? err.statusCode : null)
       || (typeof err.status === 'number' ? err.status : null)
@@ -229,14 +271,20 @@ export const errorHandler = (err, req, res, next) => {
 
     // P1 alert: fire for every 5xx in production (deduplicated by error name in alerting.js)
     if (isServerError) {
-      sendP1Alert({
-        title: err.name || 'ServerError',
-        errorId,
-        url: req.originalUrl,
-        method: req.method,
-        statusCode,
-        message: errMsg,
-      }).catch(() => {}); // non-blocking, never throws
+      // Guarded: if sendP1Alert ever throws synchronously or returns a non-promise,
+      // a bare `.catch()` would blow up the last-resort error handler and downgrade
+      // *every* 5xx to a bare "Internal server error" with no errorId and no logging.
+      try {
+        const alert = sendP1Alert({
+          title: err.name || 'ServerError',
+          errorId,
+          url: req.originalUrl,
+          method: req.method,
+          statusCode,
+          message: errMsg,
+        });
+        if (alert && typeof alert.catch === 'function') alert.catch(() => {}); // non-blocking
+      } catch (_) { /* never let alerting crash error handling */ }
     }
 
     const safeMessage = getSafeMessage(err, isOperational);
