@@ -274,6 +274,20 @@ async function ensureCriticalIndexes() {
       }
     );
     console.log('✓ Payment gatewayPaymentId unique index confirmed');
+
+    // MONEY-CRITICAL: CouponUserUsage (coupon, user) unique — the ONLY thing enforcing
+    // a coupon's per-user usage limit. couponUserUsageRepository.incrementGuarded relies
+    // on this index throwing E11000 when an at-cap doc already exists; without it the
+    // guarded upsert silently inserts a second counter doc and the per-user cap can be
+    // redeemed an unbounded number of times. autoIndex is off in production, so this
+    // safety net is what actually creates it there.
+    // NOTE: if pre-existing duplicate {coupon,user} docs exist this build fails —
+    // dedupe (keep the max count) before this can succeed.
+    await db.collection('couponuserusages').createIndex(
+      { coupon: 1, user: 1 },
+      { unique: true, background: true }
+    );
+    console.log('✓ CouponUserUsage per-user unique index confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);

@@ -6,8 +6,10 @@
  *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
- *   send-admin-review-alert       { reviewId }       — notify support inbox of a new customer review
- *   send-admin-consultation-alert { consultationId } — notify support inbox of a new consultation request
+ *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
+ *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
+ *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
+ *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer cancellation
  */
 
 import { Worker } from 'bullmq';
@@ -16,7 +18,12 @@ import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
-import { emailAdminReviewAlert, emailAdminConsultationAlert } from '../../services/adminNotificationService.js';
+import {
+  emailAdminReviewAlert,
+  emailAdminConsultationAlert,
+  emailAdminOrderPlacedAlert,
+  emailAdminOrderCancelledAlert,
+} from '../../services/adminNotificationService.js';
 import * as Sentry from '@sentry/node';
 
 const handlers = {
@@ -48,6 +55,16 @@ const handlers = {
   'send-admin-consultation-alert': async (job) => {
     const { consultationId } = job.data;
     await emailAdminConsultationAlert(consultationId);
+  },
+
+  'send-admin-order-placed-alert': async (job) => {
+    const { orderId } = job.data;
+    await emailAdminOrderPlacedAlert(orderId);
+  },
+
+  'send-admin-order-cancelled-alert': async (job) => {
+    const { orderId } = job.data;
+    await emailAdminOrderCancelledAlert(orderId);
   },
 };
 

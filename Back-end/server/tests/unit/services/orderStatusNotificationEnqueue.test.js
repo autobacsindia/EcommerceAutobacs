@@ -79,3 +79,31 @@ describe('_enqueueStatusNotification', () => {
     }
   );
 });
+
+describe('_enqueueAdminOrderAlert', () => {
+  const order = (over = {}) => ({ _id: 'order123', ...over });
+
+  test('a customer self-cancel alerts the support inbox', () => {
+    service._enqueueAdminOrderAlert(order({ cancelledBy: 'customer' }), 'cancelled');
+
+    expect(mockNotificationsAdd).toHaveBeenCalledWith('send-admin-order-cancelled-alert', {
+      orderId: 'order123',
+    });
+  });
+
+  test.each(['admin', 'system', undefined])(
+    'a %s-initiated cancel does NOT alert support',
+    (cancelledBy) => {
+      service._enqueueAdminOrderAlert(order({ cancelledBy }), 'cancelled');
+      expect(mockNotificationsAdd).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each(['shipped', 'delivered', 'processing', 'returned'])(
+    'non-cancelled status %s does NOT alert support',
+    (status) => {
+      service._enqueueAdminOrderAlert(order({ cancelledBy: 'customer' }), status);
+      expect(mockNotificationsAdd).not.toHaveBeenCalled();
+    }
+  );
+});

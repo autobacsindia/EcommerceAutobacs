@@ -24,6 +24,8 @@ interface Cart {
   _id: string;
   items: CartItem[];
   total: number;
+  /** Coupon code the shopper applied. The discount itself is always priced server-side. */
+  couponCode: string | null;
 }
 
 interface CartContextType {
@@ -36,6 +38,8 @@ interface CartContextType {
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
+  applyCoupon: (code: string) => Promise<void>;
+  removeCoupon: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -80,7 +84,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.totalPrice || response.cart.total || 0
+          total: response.cart.totalPrice || response.cart.total || 0,
+          couponCode: response.cart.couponCode ?? null
         };
         setCart(cartData);
       } else {
@@ -183,7 +188,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.totalPrice || response.cart.total || 0
+          total: response.cart.totalPrice || response.cart.total || 0,
+          couponCode: response.cart.couponCode ?? null
         };
 
         setCart(cartData);
@@ -241,7 +247,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.totalPrice || response.cart.total || 0
+          total: response.cart.totalPrice || response.cart.total || 0,
+          couponCode: response.cart.couponCode ?? null
         };
         
         setCart(cartData);
@@ -278,7 +285,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             },
             quantity: item.quantity
           })),
-          total: response.cart.totalPrice || response.cart.total || 0
+          total: response.cart.totalPrice || response.cart.total || 0,
+          couponCode: response.cart.couponCode ?? null
         };
         
         setCart(cartData);
@@ -311,6 +319,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
   
+  // Coupon lives on the cart so it survives the trip to checkout. The server validates
+  // the code against the cart before storing it, and rejects with a buyer-facing reason
+  // (expired, min cart value, login required, …) which we surface to the caller.
+  const applyCoupon = async (code: string) => {
+    setError(null);
+    const response: any = await apiClient.put(API_ENDPOINTS.CART_COUPON, { code });
+    if (response.success) await refreshCart();
+  };
+
+  const removeCoupon = async () => {
+    setError(null);
+    const response: any = await apiClient.delete(API_ENDPOINTS.CART_COUPON);
+    if (response.success) await refreshCart();
+  };
+
   // Calculate item count consistently
   const itemCount = cart?.items?.reduce((count, item) => count + item.quantity, 0) || 0;
   
@@ -325,6 +348,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     updateQuantity,
     clearCart,
     refreshCart,
+    applyCoupon,
+    removeCoupon,
   };
   
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

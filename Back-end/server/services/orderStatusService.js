@@ -291,6 +291,9 @@ class OrderStatusService {
       // shipped/delivered/cancelled/refunded, plus a delayed review-request on delivery.
       this._enqueueStatusNotification(order._id.toString(), newStatus);
 
+      // Internal alert to the support inbox when a customer cancels on their own.
+      this._enqueueAdminOrderAlert(order, newStatus);
+
       // CRM side-effects: tag the customer on first payment, and move the lead
       // pipeline (convert on paid, detach on admin-cancel). Best-effort, awaited
       // so it's deterministic for callers/tests but never fatal.
@@ -344,6 +347,26 @@ class OrderStatusService {
         .add('send-review-request', { orderId }, { delay: REVIEW_REQUEST_DELAY_MS })
         .catch(err => console.error(`[OrderStatus] Failed to enqueue send-review-request:`, err.message));
     }
+  }
+
+  /**
+   * Enqueue the internal support-inbox alert for a customer self-cancellation.
+   *
+   * Only `cancelledBy: 'customer'` alerts: an admin cancelling from the admin panel
+   * already knows they did it, and a `system` cancel (expiry/automation) is not a
+   * support work item. The worker re-checks both conditions off the persisted order,
+   * so this filter is an optimisation, not the only guard.
+   *
+   * Best-effort — the alert must never fail the status transition. Silently skips
+   * when Redis isn't configured.
+   * @private
+   */
+  _enqueueAdminOrderAlert(order, newStatus) {
+    if (newStatus !== 'cancelled' || order.cancelledBy !== 'customer' || !process.env.REDIS_URL) return;
+
+    getNotificationsQueue()
+      .add('send-admin-order-cancelled-alert', { orderId: order._id.toString() })
+      .catch(err => console.error(`[OrderStatus] Failed to enqueue send-admin-order-cancelled-alert:`, err.message));
   }
 
   /**

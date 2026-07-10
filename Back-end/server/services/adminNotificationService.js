@@ -2,19 +2,24 @@
  * Admin notification service.
  *
  * Alerts the store's support inbox when a customer submits a review or a
- * consultation request, so the team can action new UGC / leads without polling
- * the admin dashboard.
+ * consultation request, pays for an order, or cancels one — so the team can
+ * action new UGC / leads / fulfilment work without polling the admin dashboard.
  *
- * Enqueued from the review / consultation routes and processed by the
- * notification worker (send-admin-review-alert / send-admin-consultation-alert).
- * DB access + rendering live here; the raw send is provider-only in
- * emailHandler.sendEmail — mirrors reviewRequestService / orderStatusEmailService.
+ * Enqueued from the review / consultation routes, razorpayService (payment
+ * captured) and orderStatusService (cancellation), then processed by the
+ * notification worker (send-admin-*-alert). DB access + rendering live here;
+ * the raw send is provider-only in emailHandler.sendEmail — mirrors
+ * reviewRequestService / orderStatusEmailService.
  */
 
 import reviewRepository from '../repositories/reviewRepository.js';
 import consultationRepository from '../repositories/consultationRepository.js';
+import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
+// Same customer-facing reference the invoice PDF prints, so an alert and the
+// customer's invoice always name the order identically.
+import { invoiceNumber as orderRef } from './invoiceService.js';
 
 /**
  * Internal alert recipients. Reads ADMIN_NOTIFICATION_EMAILS (comma-separated)
@@ -43,8 +48,40 @@ const escapeHtml = (s = '') =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-/** Minimal branded HTML shell + a key/value table shared by both alert types. */
-const renderEmail = (heading, intro, rows, ctaLabel, ctaHref) => {
+/**
+ * Rupee formatting. Order amounts are already stored in rupees by pricingService
+ * (see invoiceService) — this only formats, it never converts.
+ */
+const inr = (n) =>
+  `₹${Number(n || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+/** `Wiper Blade × 2` lines for an order's items, one per line. */
+const itemLines = (order) =>
+  (order.items || []).map((it) => `${it.name || 'Item'} × ${it.quantity || 0}`);
+
+/** Snapshot of the person who placed the order (user doc wins, address is the fallback). */
+const orderCustomer = (order) => {
+  const user = order.user && typeof order.user === 'object' ? order.user : null;
+  const addr = order.shippingAddress || {};
+  return {
+    name: user?.name || addr.fullName || 'Customer',
+    email: user?.email || order.guestEmail || '',
+    phone: addr.phone || '',
+  };
+};
+
+/** Deep-link into the admin order detail screen. */
+const adminOrderLink = (order) => `${appUrl()}/admin/orders/${order._id}`;
+
+/**
+ * Minimal branded HTML shell + a key/value table shared by every alert type.
+ * `bannerHtml` (optional) renders above the table — used to make an actionable
+ * alert (e.g. a refund owed) impossible to miss.
+ */
+const renderEmail = (heading, intro, rows, ctaLabel, ctaHref, bannerHtml = '') => {
   const cells = rows
     .filter(([, v]) => v != null && String(v).trim() !== '')
     .map(
@@ -62,6 +99,7 @@ const renderEmail = (heading, intro, rows, ctaLabel, ctaHref) => {
         <p style="margin:0 0 4px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#b08d3f;">${escapeHtml(companyInfo.name)} · Admin alert</p>
         <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;color:#111827;">${escapeHtml(heading)}</h1>
         <p style="margin:0 0 20px;font-size:14px;color:#374151;">${escapeHtml(intro)}</p>
+        ${bannerHtml}
         <table style="width:100%;border-collapse:collapse;">${cells}</table>
         <a href="${escapeHtml(ctaHref)}" style="display:inline-block;margin-top:24px;background:#111827;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:6px;">${escapeHtml(ctaLabel)}</a>
       </div>
@@ -206,4 +244,159 @@ export const emailAdminConsultationAlert = async (consultationId) => {
   return sendToAdmins({ subject, text, html }, `consultation ${consultationId}`);
 };
 
-export default { emailAdminReviewAlert, emailAdminConsultationAlert };
+/**
+ * Notify the support inbox that an order was paid for and is ready to fulfil.
+ *
+ * Enqueued from razorpayService.processPaymentSuccess *after* the payment
+ * transaction commits, and only by the delivery that created the payment — so a
+ * duplicate Razorpay webhook never double-alerts. Deliberately NOT fired on order
+ * creation: an unpaid order is an abandoned checkout, and already surfaces as a
+ * `payment_pending` lead in the CRM.
+ *
+ * @param {string} orderId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
+ */
+export const emailAdminOrderPlacedAlert = async (orderId) => {
+  const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
+  if (!order) return { status: 'not-found' };
+
+  const ref = orderRef(order);
+  const customer = orderCustomer(order);
+  const addr = order.shippingAddress || {};
+  const items = itemLines(order);
+  const shipTo = [addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ');
+  const adminLink = adminOrderLink(order);
+
+  const subject = `New paid order ${ref} — ${inr(order.totalAmount)}`;
+  const intro = 'Payment was captured. This order is ready to fulfil.';
+
+  const text = [
+    intro,
+    '',
+    `Order   : ${ref}`,
+    `Total   : ${inr(order.totalAmount)}`,
+    `Customer: ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
+    customer.phone ? `Phone   : ${customer.phone}` : null,
+    shipTo ? `Ship to : ${shipTo}` : null,
+    '',
+    'Items:',
+    ...items.map((l) => `  - ${l}`),
+    '',
+    `Manage: ${adminLink}`,
+  ]
+    .filter((v) => v !== null)
+    .join('\n');
+
+  const html = renderEmail(
+    subject,
+    intro,
+    [
+      ['Order', escapeHtml(ref)],
+      ['Total', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`],
+      ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
+      ['Phone', escapeHtml(customer.phone)],
+      ['Ship to', escapeHtml(shipTo)],
+      ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
+    ],
+    'Open order',
+    adminLink
+  );
+
+  return sendToAdmins({ subject, text, html }, `order-placed ${orderId}`);
+};
+
+/**
+ * Notify the support inbox that a CUSTOMER cancelled their own order.
+ *
+ * Enqueued from orderStatusService on a `cancelled` transition. Admin- and
+ * system-initiated cancels are filtered out at the enqueue site — emailing
+ * support about an action support just took is self-noise — and re-checked here
+ * so a stale or hand-queued job can't bypass that rule.
+ *
+ * When the money was already captured, cancelling auto-writes a pending
+ * `refundDetails` record for manual processing; that is surfaced in the subject
+ * line and as a banner, because it is a work item rather than an FYI.
+ *
+ * @param {string} orderId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'skipped-not-cancelled'|'skipped-not-customer'}>}
+ */
+export const emailAdminOrderCancelledAlert = async (orderId) => {
+  const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
+  if (!order) return { status: 'not-found' };
+  if (order.status !== 'cancelled') return { status: 'skipped-not-cancelled' };
+  if (order.cancelledBy !== 'customer') return { status: 'skipped-not-customer' };
+
+  const ref = orderRef(order);
+  const customer = orderCustomer(order);
+  const items = itemLines(order);
+  const adminLink = adminOrderLink(order);
+  const cancelledAt = order.cancelledAt ? new Date(order.cancelledAt) : new Date();
+
+  // A pending refund record is written on cancel whenever the order was already
+  // paid — that, not paymentStatus, is what the team has to action.
+  const refund =
+    order.refundDetails?.status === 'pending' && order.refundDetails?.amount > 0
+      ? order.refundDetails
+      : null;
+
+  const subject = refund
+    ? `Order cancelled — REFUND DUE ${inr(refund.amount)} — ${ref}`
+    : `Order cancelled by customer — ${ref}`;
+  const intro = refund
+    ? 'The customer cancelled a paid order. A refund is pending and needs to be processed.'
+    : 'The customer cancelled their order. No payment was captured, so nothing to refund.';
+
+  const text = [
+    intro,
+    '',
+    refund ? `** REFUND DUE: ${inr(refund.amount)} (${refund.refundMethod || 'original_payment'}) **` : null,
+    refund ? '' : null,
+    `Order      : ${ref}`,
+    `Order total: ${inr(order.totalAmount)}`,
+    `Customer   : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
+    customer.phone ? `Phone      : ${customer.phone}` : null,
+    `Cancelled  : ${cancelledAt.toLocaleString('en-IN')}`,
+    order.cancellationReason ? `Reason     : ${order.cancellationReason}` : null,
+    '',
+    'Items:',
+    ...items.map((l) => `  - ${l}`),
+    '',
+    `Manage: ${adminLink}`,
+  ]
+    .filter((v) => v !== null)
+    .join('\n');
+
+  const banner = refund
+    ? `<div style="margin:0 0 20px;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;">
+         <p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;letter-spacing:.04em;">REFUND DUE — ${escapeHtml(inr(refund.amount))}</p>
+         <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">Method: ${escapeHtml(refund.refundMethod || 'original_payment')} · Status: pending manual processing</p>
+       </div>`
+    : '';
+
+  const html = renderEmail(
+    subject,
+    intro,
+    [
+      ['Order', escapeHtml(ref)],
+      ['Order total', escapeHtml(inr(order.totalAmount))],
+      ['Refund due', refund ? `<strong style="color:#b91c1c;">${escapeHtml(inr(refund.amount))}</strong>` : 'None — order was unpaid'],
+      ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
+      ['Phone', escapeHtml(customer.phone)],
+      ['Cancelled', escapeHtml(cancelledAt.toLocaleString('en-IN'))],
+      ['Reason', escapeHtml(order.cancellationReason || '')],
+      ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
+    ],
+    refund ? 'Process refund' : 'Open order',
+    adminLink,
+    banner
+  );
+
+  return sendToAdmins({ subject, text, html }, `order-cancelled ${orderId}`);
+};
+
+export default {
+  emailAdminReviewAlert,
+  emailAdminConsultationAlert,
+  emailAdminOrderPlacedAlert,
+  emailAdminOrderCancelledAlert,
+};

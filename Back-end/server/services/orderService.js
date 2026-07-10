@@ -31,11 +31,18 @@ class OrderService {
     const coupon = await couponRepository.incrementUsageGuarded(code, now, session);
     if (!coupon) throw new AppError('This coupon has reached its usage limit', 400);
 
-    // Per-user limit (only enforced when set): guarded upsert; a duplicate-key from
-    // the unique {coupon,user} index means the user is already at the cap.
-    if (coupon.usageLimitPerUser != null) {
+    // Per-user cap: guarded upsert; a duplicate-key from the unique {coupon,user}
+    // index means the user is already at the cap.
+    //
+    // firstOrderOnly implies a cap of 1. _evaluateCoupon's prior-order count runs on a
+    // snapshot read and so cannot serialize two concurrent checkouts by the same user —
+    // neither transaction sees the other's uncommitted order, and they conflict on no
+    // shared document. Routing firstOrderOnly through this counter gives them one, so
+    // the loser aborts instead of both earning the discount.
+    const perUserCap = coupon.usageLimitPerUser ?? (coupon.firstOrderOnly ? 1 : null);
+    if (perUserCap != null) {
       try {
-        await couponUserUsageRepository.incrementGuarded(coupon._id, userId, coupon.usageLimitPerUser, session);
+        await couponUserUsageRepository.incrementGuarded(coupon._id, userId, perUserCap, session);
       } catch (err) {
         if (err?.code === 11000) throw new AppError('You have already used this coupon', 400);
         throw err;

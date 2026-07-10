@@ -2,6 +2,7 @@ import express from "express";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
+import pricingService from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
 
@@ -235,6 +236,13 @@ router.post("/merge", asyncHandler(async (req, res) => {
     }
   }
 
+  // Carry a guest-applied coupon across login, but never clobber one the user already
+  // has. It is only a code — the merged cart is re-quoted, and a coupon the guest could
+  // hold but this user cannot (firstOrderOnly, per-user cap) simply errors at quote time.
+  if (guestCart?.couponCode && !userCart.couponCode) {
+    userCart.couponCode = guestCart.couponCode;
+  }
+
   await userCart.save();
 
   // Consume the guest cart only after the merged user cart is safely persisted.
@@ -390,6 +398,7 @@ router.delete("/clear", asyncHandler(async (req, res) => {
   }
 
   cart.items = [];
+  cart.couponCode = null;
   await cart.save();
 
   res.json({
@@ -397,6 +406,66 @@ router.delete("/clear", asyncHandler(async (req, res) => {
     message: 'Cart cleared',
     cart
   });
+}));
+
+/**
+ * Resolve the caller's cart (authenticated user or guest session), or null.
+ */
+async function findCallerCart(req) {
+  if (req.user && req.user.id) return Cart.findOne({ user: req.user.id });
+  const sessionId = req.headers['x-session-id'] || req.sessionID;
+  if (!sessionId) return null;
+  return Cart.findOne({ sessionId });
+}
+
+// @route   PUT /cart/coupon
+// @desc    Validate a coupon against the current cart and remember it on the cart.
+//          Stores the CODE only — never a discount amount. The authoritative maths is
+//          re-run by pricingService at quote time and again at order creation, so a code
+//          persisted here can never by itself change what the buyer is charged.
+// @access  Public (optional auth)
+router.put("/coupon", asyncHandler(async (req, res) => {
+  const code = String(req.body?.code || '').trim().toUpperCase();
+  if (!code) {
+    return res.status(400).json({ success: false, message: 'Coupon code is required' });
+  }
+
+  const cart = await findCallerCart(req);
+  if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+  if (!cart.items.length) {
+    return res.status(400).json({ success: false, message: 'Add items to your cart before applying a coupon' });
+  }
+
+  // Guests have no identity, so coupons gated on firstOrderOnly / usageLimitPerUser
+  // are rejected here with REASON.LOGIN rather than appearing to apply and then
+  // failing at order creation.
+  const quote = await pricingService.computeQuote({
+    items: cart.items.map((i) => ({ product: i.product, quantity: i.quantity })),
+    couponCode: code,
+    userId: req.user?.id || null
+  });
+
+  if (quote.couponError) {
+    return res.status(400).json({ success: false, message: quote.couponError });
+  }
+
+  cart.couponCode = code;
+  await cart.save();
+
+  res.json({ success: true, message: `${code} applied`, cart, quote });
+}));
+
+// @route   DELETE /cart/coupon
+// @desc    Remove the coupon remembered on the cart.
+// @access  Public (optional auth)
+router.delete("/coupon", asyncHandler(async (req, res) => {
+  const cart = await findCallerCart(req);
+  if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+
+  cart.couponCode = null;
+  await cart.save();
+
+  res.json({ success: true, message: 'Coupon removed', cart });
 }));
 
 // @route   GET /cart/validate

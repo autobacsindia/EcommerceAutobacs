@@ -41,6 +41,7 @@ export const API_ENDPOINTS = {
   CART_REMOVE: (productId: string) => `/cart/remove/${productId}`,
   CART_CLEAR: '/cart/clear',
   CART_MERGE: '/cart/merge',
+  CART_COUPON: '/cart/coupon',
   CART_VALIDATE: '/cart/validate',
   CART_VALIDATE_CHECKOUT: '/cart/validate-checkout',
   

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
+import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
 
 export default function CartPage() {
   return (
@@ -25,7 +26,56 @@ export default function CartPage() {
 }
 
 function CartPageContent() {
-  const { cart, removeFromCart, updateQuantity, clearCart, isLoading, refreshCart } = useCart();
+  const { cart, removeFromCart, updateQuantity, clearCart, isLoading, refreshCart, applyCoupon, removeCoupon } = useCart();
+
+  const [couponInput, setCouponInput] = useState('');
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+  // Public (visibility: 'public') coupons only. Hidden ones still work when typed.
+  const [availableCoupons, setAvailableCoupons] = useState<{ code: string; description?: string }[]>([]);
+
+  useEffect(() => {
+    apiClient.get<{ success: boolean; coupons: { code: string; description?: string }[] }>(API_ENDPOINTS.COUPONS_AVAILABLE)
+      .then((r) => setAvailableCoupons(r.coupons || []))
+      .catch(() => setAvailableCoupons([]));
+  }, []);
+
+  // The server prices the cart; this mirrors it for display only. Order creation
+  // re-computes from scratch, so nothing here can influence what the buyer is charged.
+  const quoteItems = useMemo(
+    () => (cart?.items || []).map((i) => ({ product: i.product._id, quantity: i.quantity })),
+    [cart?.items]
+  );
+  const { quote } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
+
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code || couponBusy) return;
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      await applyCoupon(code);
+      setCouponInput('');
+      toast.success(`${code} applied`);
+    } catch (err: any) {
+      setCouponError(err?.message || 'Could not apply this coupon');
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    if (couponBusy) return;
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      await removeCoupon();
+    } catch (err: any) {
+      setCouponError(err?.message || 'Could not remove this coupon');
+    } finally {
+      setCouponBusy(false);
+    }
+  };
   const { isAuthenticated } = useAuth();
   const { formatPrice } = useCurrency();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
@@ -275,21 +325,24 @@ function CartPageContent() {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Subtotal</span>
-                  <span>{formatPrice((cart.total || 0) / 1.18)}</span>
+                  <span>{formatPrice(quote ? quote.subtotal : cart.total || 0)}</span>
                 </div>
-                <div className="flex justify-between text-ink/70 font-display text-sm">
-                  <span>Shipping</span>
-                  <span className="text-ink-muted">Calculated at checkout</span>
-                </div>
+                {quote && quote.couponDiscount > 0 && (
+                  <div className="flex justify-between text-gold font-display text-sm">
+                    <span>Discount ({quote.appliedCoupon?.code})</span>
+                    <span>−{formatPrice(quote.couponDiscount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Tax (18% GST)</span>
-                  <span>{formatPrice((cart.total || 0) - ((cart.total || 0) / 1.18))}</span>
+                  <span>{formatPrice(quote ? quote.tax : 0)}</span>
                 </div>
                 <div className="border-t border-hairline pt-3 flex justify-between">
                   <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
-                  <span className="text-xl font-display font-bold text-gold">{formatPrice(cart.total || 0)}</span>
+                  <span className="text-xl font-display font-bold text-gold">
+                    {formatPrice(quote ? quote.totalAmount : cart.total || 0)}
+                  </span>
                 </div>
-                <p className="text-xs text-ink-muted font-display">* Final tax calculated at checkout</p>
               </div>
 
               <Link
@@ -307,16 +360,62 @@ function CartPageContent() {
               {/* Promo code */}
               <div className="mt-6 pt-6 border-t border-hairline">
                 <p className="text-sm font-display font-bold text-ink/70 uppercase tracking-widest mb-2">Have a promo code?</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Enter code"
-                    className="flex-1 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-gold font-display"
-                  />
-                  <button className="bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian px-4 py-2 rounded-sm text-sm font-display font-bold uppercase tracking-widest transition-colors">
-                    Apply
-                  </button>
-                </div>
+
+                {cart.couponCode ? (
+                  <div className="flex items-center justify-between gap-2 bg-obsidian-raised border border-gold/40 rounded-sm px-3 py-2">
+                    <span className="text-sm font-display font-bold text-gold">{cart.couponCode} applied</span>
+                    <button
+                      onClick={handleRemoveCoupon}
+                      disabled={couponBusy}
+                      className="text-ink-muted hover:text-red-400 transition-colors disabled:opacity-50"
+                      title="Remove coupon"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCoupon(); }}
+                      placeholder="Enter code"
+                      className="flex-1 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-gold font-display"
+                    />
+                    <button
+                      onClick={handleApplyCoupon}
+                      disabled={!couponInput.trim() || couponBusy}
+                      className="bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian px-4 py-2 rounded-sm text-sm font-display font-bold uppercase tracking-widest transition-colors disabled:opacity-50 disabled:hover:bg-obsidian-raised disabled:hover:text-ink/70"
+                    >
+                      {couponBusy ? '…' : 'Apply'}
+                    </button>
+                  </div>
+                )}
+
+                {!cart.couponCode && availableCoupons.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {availableCoupons.map((c) => (
+                      <button
+                        key={c.code}
+                        onClick={() => setCouponInput(c.code)}
+                        title={c.description || ''}
+                        className="text-xs font-display font-bold uppercase tracking-wide text-gold border border-gold/30 hover:border-gold rounded-sm px-2 py-1 transition-colors"
+                      >
+                        {c.code}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {couponError && (
+                  <p className="text-red-400 text-xs font-display mt-1.5">{couponError}</p>
+                )}
+                {/* A coupon valid at apply time can lapse (expiry, stock, cart edits). The
+                    checkout re-quotes and order creation hard-fails on a now-invalid code. */}
+                {cart.couponCode && quote?.couponError && (
+                  <p className="text-red-400 text-xs font-display mt-1.5">{quote.couponError}</p>
+                )}
               </div>
             </div>
           </div>

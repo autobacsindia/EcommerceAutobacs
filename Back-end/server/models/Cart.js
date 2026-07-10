@@ -45,6 +45,15 @@ const CartSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Coupon the shopper applied on the cart page. A carrier only — never a discount
+  // amount. Every read re-prices through pricingService, and order creation re-validates
+  // and re-computes from scratch, so a stale/now-invalid code here can never mis-charge.
+  couponCode: {
+    type: String,
+    default: null,
+    uppercase: true,
+    trim: true
+  },
   // Track recent cart changes for user transparency
   recentChanges: [{
     type: {

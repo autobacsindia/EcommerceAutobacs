@@ -1,15 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Tag, X, Sparkles, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { Tag, Sparkles, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { useCart } from '@/context/CartContext';
 import { useCheckoutQuote, type CheckoutQuote, type QuoteItem } from '@/hooks/useCheckoutQuote';
 
-interface AvailableCoupon {
-  code: string; description?: string; type: string; value: number;
-  maxDiscountAmount?: number | null; minCartValue?: number;
-}
 interface KarmaInfo {
   balance: number;
   config: { enabled: boolean; pointValueInRupees: number; redeemMaxPercent: number; minRedeemPoints: number };
@@ -32,20 +30,18 @@ const money = (n: number) => `₹${(n ?? 0).toFixed(2)}`;
  * authoritatively at creation, so these values are display + intent only.
  */
 export default function CheckoutSummary({ items, isAuthenticated, shippingCost = 0, onChange }: Props) {
-  const [couponInput, setCouponInput] = useState('');
-  const [appliedCode, setAppliedCode] = useState<string>('');
   const [redeemPoints, setRedeemPoints] = useState(0);
-
-  const [available, setAvailable] = useState<AvailableCoupon[]>([]);
   const [karma, setKarma] = useState<KarmaInfo | null>(null);
+
+  // Coupons are applied on the cart page and travel here on the cart document — a single
+  // place to enter one, so the cart total the buyer agreed to is the total they are charged.
+  const { cart } = useCart();
+  const appliedCode = cart?.couponCode || '';
 
   const { quote, loading } = useCheckoutQuote(items, appliedCode || undefined, redeemPoints, shippingCost);
 
-  // Discover public coupons + (if signed in) the karma balance/config.
+  // Karma balance/config (coupon discovery now lives on the cart page).
   useEffect(() => {
-    apiClient.get<{ success: boolean; coupons: AvailableCoupon[] }>(API_ENDPOINTS.COUPONS_AVAILABLE)
-      .then(r => setAvailable(r.coupons || []))
-      .catch(() => setAvailable([]));
     if (isAuthenticated) {
       apiClient.get<{ success: boolean } & KarmaInfo>(API_ENDPOINTS.LOYALTY_ME)
         .then(r => setKarma({ balance: r.balance, config: r.config }))
@@ -65,67 +61,36 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quote?.maxRedeemablePoints]);
 
-  const applyCoupon = () => setAppliedCode(couponInput.trim().toUpperCase());
-  const removeCoupon = () => { setAppliedCode(''); setCouponInput(''); };
-
   const karmaEnabled = isAuthenticated && karma?.config?.enabled && (karma?.balance ?? 0) > 0;
   const maxRedeem = quote?.maxRedeemablePoints ?? 0;
 
   return (
     <div className="space-y-5">
-      {/* ── Coupon ──────────────────────────────────────────────────────────── */}
-      <div>
-        <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-2 flex items-center gap-2">
-          <Tag className="h-3.5 w-3.5" /> Coupon
-        </h3>
+      {/* ── Coupon (applied on the cart page; read-only here) ────────────────── */}
+      {appliedCode && (
+        <div>
+          <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-2 flex items-center gap-2">
+            <Tag className="h-3.5 w-3.5" /> Coupon
+          </h3>
 
-        {quote?.appliedCoupon ? (
-          <div className="flex items-center justify-between bg-green-500/10 border border-green-500/30 rounded-sm px-3 py-2">
-            <span className="text-green-400 font-display font-bold text-sm uppercase tracking-wide">
-              {quote.appliedCoupon.code} applied
-            </span>
-            <button onClick={removeCoupon} className="text-ink-muted hover:text-red-400 transition-colors" title="Remove coupon">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <input
-              value={couponInput}
-              onChange={(e) => setCouponInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') applyCoupon(); }}
-              placeholder="Enter code"
-              className="flex-1 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 text-sm font-display uppercase tracking-wide focus:outline-none focus:border-gold transition-colors"
-            />
-            <button
-              onClick={applyCoupon}
-              disabled={!couponInput.trim()}
-              className="px-4 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest text-sm rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
-            >
-              Apply
-            </button>
-          </div>
-        )}
-
-        {appliedCode && quote?.couponError && (
-          <p className="text-red-400 text-xs font-display mt-1.5">{quote.couponError}</p>
-        )}
-
-        {!quote?.appliedCoupon && available.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {available.map((c) => (
-              <button
-                key={c.code}
-                onClick={() => { setCouponInput(c.code); setAppliedCode(c.code); }}
-                className="text-xs font-display font-bold uppercase tracking-wide text-gold border border-gold/30 hover:border-gold rounded-sm px-2 py-1 transition-colors"
-                title={c.description || ''}
-              >
-                {c.code}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          {quote?.appliedCoupon ? (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-sm px-3 py-2">
+              <span className="text-green-400 font-display font-bold text-sm uppercase tracking-wide">
+                {quote.appliedCoupon.code} applied
+              </span>
+            </div>
+          ) : quote?.couponError ? (
+            // Valid when applied on the cart, no longer valid now. Order creation would
+            // hard-fail, so say so here and send them back rather than fail at payment.
+            <div className="bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
+              <p className="text-red-400 text-xs font-display">{quote.couponError}</p>
+              <Link href="/cart" className="text-gold text-xs font-display font-bold uppercase tracking-wide hover:underline">
+                Edit coupon in cart →
+              </Link>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* ── Karma points ────────────────────────────────────────────────────── */}
       {karmaEnabled && (

@@ -18,6 +18,7 @@ import User from '../models/User.js';
 import Order from '../models/Order.js';
 import Coupon from '../models/Coupon.js';
 import CouponRedemption from '../models/CouponRedemption.js';
+import CouponUserUsage from '../models/CouponUserUsage.js';
 import LoyaltyConfig from '../models/LoyaltyConfig.js';
 import KarmaLedger from '../models/KarmaLedger.js';
 
@@ -130,6 +131,44 @@ describe('Concurrency guards', () => {
 
     const coupon = await Coupon.findOne({ code: 'ONCE' });
     expect(coupon.usedCount).toBe(1); // never oversold
+  });
+
+  // Both of these depend on the unique {coupon,user} index: the guarded upsert only
+  // fails closed because the insert it falls through to violates that index. Build it
+  // explicitly rather than racing mongoose's background autoIndex.
+  it('a usageLimitPerUser=1 coupon cannot be redeemed twice by the same user', async () => {
+    await CouponUserUsage.init();
+    const product = await seedProduct(1000);
+    const user = await seedUser(0);
+    await Coupon.create({ code: 'PERUSER', type: 'fixed', value: 100, isActive: true, usageLimitPerUser: 1 });
+
+    await orderService.createOrder(user._id, [{ product: product._id, quantity: 1 }], ADDRESS, { couponCode: 'PERUSER' });
+    await expect(orderService.createOrder(
+      user._id, [{ product: product._id, quantity: 1 }], ADDRESS, { couponCode: 'PERUSER' },
+    )).rejects.toThrow(/already used/i);
+
+    const usage = await CouponUserUsage.findOne({ user: user._id });
+    expect(usage.count).toBe(1);
+  });
+
+  it('a firstOrderOnly coupon survives two CONCURRENT orders by the same user', async () => {
+    await CouponUserUsage.init();
+    const product = await seedProduct(1000);
+    const user = await seedUser(0);
+    await Coupon.create({ code: 'FIRST', type: 'fixed', value: 100, isActive: true, firstOrderOnly: true });
+
+    // Both quotes read zero prior orders on their own snapshot; only the guarded
+    // per-user counter can serialize them. Before that guard existed, both committed
+    // and the user banked the first-order discount twice.
+    const results = await Promise.allSettled([
+      orderService.createOrder(user._id, [{ product: product._id, quantity: 1 }], ADDRESS, { couponCode: 'FIRST' }),
+      orderService.createOrder(user._id, [{ product: product._id, quantity: 1 }], ADDRESS, { couponCode: 'FIRST' }),
+    ]);
+
+    expect(results.filter(r => r.status === 'fulfilled').length).toBe(1);
+    expect(await CouponRedemption.countDocuments({ code: 'FIRST' })).toBe(1);
+    const coupon = await Coupon.findOne({ code: 'FIRST' });
+    expect(coupon.usedCount).toBe(1);
   });
 
   it('guarded karma debit prevents concurrent overdraw', async () => {

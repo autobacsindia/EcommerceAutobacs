@@ -8,6 +8,7 @@ import { jest } from '@jest/globals';
 
 const mockReviewFindById = jest.fn();
 const mockConsultFindById = jest.fn();
+const mockOrderFindById = jest.fn();
 const mockSendEmail = jest.fn();
 
 /** Fake Mongoose query: chainable .populate(), awaitable to `result`. */
@@ -22,6 +23,13 @@ jest.unstable_mockModule('../../../repositories/reviewRepository.js', () => ({
 jest.unstable_mockModule('../../../repositories/consultationRepository.js', () => ({
   default: { findById: mockConsultFindById },
 }));
+jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({
+  default: { findById: mockOrderFindById },
+}));
+// Stubbed so the suite doesn't pull in pdfkit/cloudinary just for the order ref.
+jest.unstable_mockModule('../../../services/invoiceService.js', () => ({
+  invoiceNumber: (order) => `AB-${order._id.toString().slice(-8).toUpperCase()}`,
+}));
 jest.unstable_mockModule('../../../services/emailHandler.js', () => ({
   default: { sendEmail: mockSendEmail },
 }));
@@ -29,9 +37,12 @@ jest.unstable_mockModule('../../../config/company.js', () => ({
   default: { name: 'Autobacs India', email: 'support@autobacsindia.com' },
 }));
 
-const { emailAdminReviewAlert, emailAdminConsultationAlert } = await import(
-  '../../../services/adminNotificationService.js'
-);
+const {
+  emailAdminReviewAlert,
+  emailAdminConsultationAlert,
+  emailAdminOrderPlacedAlert,
+  emailAdminOrderCancelledAlert,
+} = await import('../../../services/adminNotificationService.js');
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -150,6 +161,123 @@ describe('emailAdminConsultationAlert', () => {
   test('returns not-found when the consultation is missing', async () => {
     mockConsultFindById.mockResolvedValue(null);
     expect(await emailAdminConsultationAlert('missing')).toEqual({ status: 'not-found' });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
+
+/** Order fixture. `_id` is long enough for the AB-xxxxxxxx reference slice. */
+const makeOrder = (over = {}) => ({
+  _id: '64b7f1c2a9e4d3b100ff01ab',
+  totalAmount: 12499.5,
+  status: 'processing',
+  paymentStatus: 'paid',
+  items: [
+    { name: 'Brake Pads', quantity: 2 },
+    { name: 'Wiper Blade', quantity: 1 },
+  ],
+  shippingAddress: {
+    fullName: 'Asha Menon',
+    phone: '+91 98952 57905',
+    city: 'Kochi',
+    state: 'Kerala',
+    postalCode: '682001',
+  },
+  user: { _id: 'u1', name: 'Asha', email: 'asha@example.com' },
+  ...over,
+});
+
+describe('emailAdminOrderPlacedAlert', () => {
+  test('alerts the support inbox with the order ref, total and items', async () => {
+    mockOrderFindById.mockResolvedValue(makeOrder());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    expect(await emailAdminOrderPlacedAlert('o1')).toEqual({ status: 'sent' });
+
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.to).toBe('support@autobacsindia.com');
+    expect(arg.subject).toContain('AB-00FF01AB');
+    expect(arg.subject).toContain('12,499.50');
+    expect(arg.text).toContain('asha@example.com');
+    expect(arg.text).toContain('Brake Pads × 2');
+    expect(arg.text).toContain('Kochi, Kerala, 682001');
+    expect(arg.html).toContain('/admin/orders/64b7f1c2a9e4d3b100ff01ab');
+  });
+
+  test('falls back to the shipping address when there is no user doc', async () => {
+    mockOrderFindById.mockResolvedValue(makeOrder({ user: null, guestEmail: 'guest@example.com' }));
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminOrderPlacedAlert('o1');
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.text).toContain('Asha Menon');
+    expect(arg.text).toContain('guest@example.com');
+  });
+
+  test('returns not-found when the order is missing', async () => {
+    mockOrderFindById.mockResolvedValue(null);
+    expect(await emailAdminOrderPlacedAlert('missing')).toEqual({ status: 'not-found' });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('emailAdminOrderCancelledAlert', () => {
+  const cancelled = (over = {}) =>
+    makeOrder({
+      status: 'cancelled',
+      cancelledBy: 'customer',
+      cancelledAt: new Date('2026-07-10T09:30:00Z'),
+      cancellationReason: 'customer_request',
+      ...over,
+    });
+
+  test('flags the pending refund in the subject and body when the order was paid', async () => {
+    mockOrderFindById.mockResolvedValue(
+      cancelled({
+        refundDetails: { status: 'pending', amount: 12499.5, refundMethod: 'original_payment' },
+      })
+    );
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    expect(await emailAdminOrderCancelledAlert('o1')).toEqual({ status: 'sent' });
+
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.to).toBe('support@autobacsindia.com');
+    expect(arg.subject).toContain('REFUND DUE');
+    expect(arg.subject).toContain('12,499.50');
+    expect(arg.subject).toContain('AB-00FF01AB');
+    expect(arg.text).toContain('REFUND DUE: ₹12,499.50');
+    expect(arg.text).toContain('customer_request');
+    expect(arg.html).toContain('Process refund');
+  });
+
+  test('says nothing to refund when no payment was captured', async () => {
+    mockOrderFindById.mockResolvedValue(cancelled({ paymentStatus: 'pending', refundDetails: undefined }));
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminOrderCancelledAlert('o1');
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.subject).not.toContain('REFUND DUE');
+    expect(arg.subject).toContain('Order cancelled by customer');
+    expect(arg.html).toContain('None — order was unpaid');
+  });
+
+  test.each(['admin', 'system'])('does not alert on a %s-initiated cancel', async (by) => {
+    mockOrderFindById.mockResolvedValue(cancelled({ cancelledBy: by }));
+
+    expect(await emailAdminOrderCancelledAlert('o1')).toEqual({ status: 'skipped-not-customer' });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  test('does not alert when the order is not actually cancelled', async () => {
+    mockOrderFindById.mockResolvedValue(makeOrder({ cancelledBy: 'customer' }));
+
+    expect(await emailAdminOrderCancelledAlert('o1')).toEqual({ status: 'skipped-not-cancelled' });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  test('returns not-found when the order is missing', async () => {
+    mockOrderFindById.mockResolvedValue(null);
+    expect(await emailAdminOrderCancelledAlert('missing')).toEqual({ status: 'not-found' });
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });

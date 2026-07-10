@@ -248,10 +248,19 @@ class RazorpayService {
       // so duplicate webhooks don't double-enqueue. A Redis/queue failure must not
       // fail the payment itself.
       if (createdHere && process.env.REDIS_URL) {
-        getNotificationsQueue()
+        const queue = getNotificationsQueue();
+        queue
           .add('send-order-invoice', { orderId })
           .catch((err) =>
             console.error(`[Queue] Failed to enqueue send-order-invoice for ${orderId}:`, err.message)
+          );
+
+        // Tell the support inbox there is a paid order to fulfil. Same
+        // create-once gate as the invoice, so a duplicate webhook can't re-alert.
+        queue
+          .add('send-admin-order-placed-alert', { orderId })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
           );
       }
 
