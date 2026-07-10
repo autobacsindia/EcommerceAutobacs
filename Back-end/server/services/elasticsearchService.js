@@ -61,7 +61,10 @@ class ElasticsearchService {
       this.enabled = false;
     }
     
-    this.indexName = 'products';
+    // Index name is env-driven so a non-prod tier (e.g. staging on `develop`)
+    // can point at the same ES deployment without clobbering the prod `products`
+    // index. Defaults to `products` for backward compatibility.
+    this.indexName = process.env.ELASTICSEARCH_INDEX || 'products';
   }
 
   /**
