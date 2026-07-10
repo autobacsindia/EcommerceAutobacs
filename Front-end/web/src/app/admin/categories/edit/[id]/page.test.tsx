@@ -52,7 +52,7 @@ describe('EditCategoryPage', () => {
     // Mock get all categories (for parent dropdown)
     // and get specific category
     (apiClient.get as jest.Mock).mockImplementation((url) => {
-      if (url === '/categories') {
+      if (url === '/categories/admin/all?counts=false') {
         return Promise.resolve({ data: mockCategories });
       }
       if (url === '/categories/c1') {
@@ -113,7 +113,7 @@ describe('EditCategoryPage', () => {
   it('hides the parent selector when editing a top-level hub', async () => {
     // A category with no parent is a hub: no parent selector, featured is offered.
     (apiClient.get as jest.Mock).mockImplementation((url) => {
-      if (url === '/categories') return Promise.resolve({ data: mockCategories });
+      if (url === '/categories/admin/all?counts=false') return Promise.resolve({ data: mockCategories });
       if (url === '/categories/c1') {
         return Promise.resolve({ category: { ...mockCategory, parent: null } });
       }

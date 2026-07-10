@@ -74,7 +74,11 @@ export default function CreateProductPage() {
 
   const fetchCategories = async () => {
     try {
-      const response = await apiClient.get<{ data?: Category[]; categories?: Category[] }>('/categories');
+      // Admin picker, not the storefront list: /categories is public, Redis-cached,
+      // active-only and capped at 200. Assigning a product needs every category —
+      // including inactive ones and beyond the cap. counts=false skips the
+      // dashboard's product-count aggregation, which a dropdown never shows.
+      const response = await apiClient.get<{ data?: Category[]; categories?: Category[] }>('/categories/admin/all?counts=false');
       setCategories(response.data || response.categories || []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);

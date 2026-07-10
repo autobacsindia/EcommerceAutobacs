@@ -1,6 +1,7 @@
 import cacheService from '../services/cacheService.js';
 import Sentry from '../config/sentry.js';
 import crypto from 'crypto';
+import { routeNamespace } from '../utils/cacheKeys.js';
 
 /**
  * Generate a cache key that includes query params and user context.
@@ -16,7 +17,10 @@ const generateCacheKey = (req) => {
     locale: req.headers['accept-language']?.split(',')[0] || 'default',
   };
 
-  return `route:${crypto
+  // The namespace segment is what makes this key reachable by invalidateCache():
+  // a bare `route:<hash>` can never match the `*categories*` glob callers pass,
+  // so every route-cache invalidation in the app was silently a no-op.
+  return `route:${routeNamespace(req.originalUrl)}:${crypto
     .createHash('md5')
     .update(JSON.stringify(base))
     .digest('hex')}`;

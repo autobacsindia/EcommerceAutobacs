@@ -289,6 +289,34 @@ describe('Categories API', () => {
       expect(slugs).toContain(testCategory.slug);
     });
 
+    it('omits product counts when counts=false, but still returns inactive categories', async () => {
+      // The admin product/parent pickers use this: they need the full tree
+      // (inactive included, no 200-item cap) but never render count badges, so
+      // they skip the distinct-aggregation over every active product.
+      await Category.create({ name: 'Hidden Category', slug: 'hidden-category', isActive: false });
+      await Product.create({ name: 'P-1', description: 'd', price: 10, slug: 'p-1', categories: [categoryId] });
+
+      const res = await agent
+        .get(`${BASE}/categories/admin/all?counts=false`)
+        .expect(200);
+
+      const slugs = res.body.categories.map((c) => c.slug);
+      expect(slugs).toContain('hidden-category');
+
+      for (const c of res.body.categories) {
+        expect(c.productCount).toBeUndefined();
+        expect(c.totalProductCount).toBeUndefined();
+      }
+    });
+
+    it('still includes counts unless counts=false is passed explicitly', async () => {
+      await Product.create({ name: 'P-1', description: 'd', price: 10, slug: 'p-1', categories: [categoryId] });
+
+      const res = await agent.get(`${BASE}/categories/admin/all?counts=true`).expect(200);
+      const parent = res.body.categories.find((c) => String(c._id) === String(categoryId));
+      expect(parent.productCount).toBe(1);
+    });
+
     it('should include direct and subtree product counts', async () => {
       // Parent (testCategory) ← child; products split across both levels.
       const child = await Category.create({ name: 'Child Cat', slug: 'child-cat', parent: categoryId });

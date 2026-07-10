@@ -43,11 +43,22 @@ export const cacheMiddleware = (cacheType = 'default') => {
       },
       
       // Categories / brands — rarely change, but admin edits must surface quickly
-      // in the storefront. Short BROWSER cache so a returning shopper picks up an
-      // added/renamed/removed category within ~1 min; long CDN s-maxage keeps the
-      // edge absorbing load (purge the edge on bulk taxonomy changes at cutover).
+      // in the storefront.
+      //
+      // s-maxage is deliberately SHORT. The origin invalidates its Redis route
+      // cache on every taxonomy write, but nothing can purge a CDN edge from a
+      // Mongo write — so any s-maxage is a window of staleness no code path can
+      // close. It used to be 7200 (2h): an admin renaming a category would have
+      // watched the storefront ignore them for two hours once api.<domain> went
+      // behind Cloudflare. 5 min bounds the damage.
+      //
+      // stale-while-revalidate buys the edge hit-rate back: past the 5 min the
+      // edge serves the stale copy instantly and refreshes in the background, so
+      // shoppers never pay origin latency. CDNs that ignore SWR (Cloudflare
+      // outside Enterprise) just revalidate at s-maxage — correct, slightly less
+      // fast. stale-if-error keeps the taxonomy up if the origin is down.
       'static-data': {
-        'Cache-Control': 'public, max-age=60, s-maxage=7200', // 1 min browser, 2 hours CDN
+        'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600, stale-if-error=86400',
         'Vary': 'Accept-Encoding'
       },
       

@@ -60,13 +60,24 @@ router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL)
 // NOTE: declared before "/:id" so the literal path is matched first, and left
 // uncached so admins always see the current state after create/update/delete.
 router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
+  // Product counts drive the dashboard's badges, but they cost a distinct
+  // aggregation over every active product. Pickers (the product create/edit
+  // category multi-select, the parent-hub dropdown) only need the tree, so they
+  // pass ?counts=false and skip it. Default stays true — the dashboard relies on it.
+  const withProductCounts = req.query.counts !== 'false';
+
   const [categories, grouped] = await Promise.all([
     categoryRepository.find({})
       .populate('parent', 'name slug')
       .sort({ order: 1, name: 1 })
       .lean(),
-    productRepository.distinctActiveIdsByCategory(),
+    withProductCounts ? productRepository.distinctActiveIdsByCategory() : [],
   ]);
+
+  if (!withProductCounts) {
+    res.set('Cache-Control', 'private, no-store');
+    return res.json({ success: true, count: categories.length, categories });
+  }
 
   // Direct distinct product id sets per category (products tagged exactly here).
   const directIds = new Map(grouped.map((c) => [String(c._id), new Set(c.ids.map(String))]));

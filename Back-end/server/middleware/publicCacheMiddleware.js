@@ -1,5 +1,6 @@
 import cacheService from '../services/cacheService.js';
 import crypto from 'crypto';
+import { routeNamespace } from '../utils/cacheKeys.js';
 
 /**
  * Generate a cache key that includes query params and context.
@@ -13,7 +14,9 @@ const generatePublicCacheKey = (req) => {
     locale: req.headers['accept-language']?.split(',')[0] || 'default',
   };
 
-  return `public:${crypto
+  // Namespace segment keeps the key reachable by invalidatePublicCache() — see
+  // the note in cacheMiddleware.js's generateCacheKey.
+  return `public:${routeNamespace(req.originalUrl)}:${crypto
     .createHash('md5')
     .update(JSON.stringify(base))
     .digest('hex')}`;

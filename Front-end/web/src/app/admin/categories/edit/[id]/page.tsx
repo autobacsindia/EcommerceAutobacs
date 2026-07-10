@@ -58,7 +58,9 @@ export default function EditCategoryPage() {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true);
-        const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
+        // Parent-hub picker: must offer inactive hubs too, and must reflect a hub
+        // created seconds ago — the public /categories list is Redis-cached.
+        const response = await apiClient.get('/categories/admin/all?counts=false') as { data?: Category[]; categories?: Category[] };
         setCategories(response.data || response.categories || []);
       } catch (err) {
         console.error('Failed to fetch categories:', err);

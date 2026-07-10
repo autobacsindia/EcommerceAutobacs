@@ -134,7 +134,10 @@ export default function EditProductPage() {
 
   const fetchCategories = async () => {
     try {
-      const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
+      // Admin picker — see the note in the create page. Critically, an inactive
+      // category the product is already tagged with must still appear here, or
+      // saving the form would silently drop it from the product.
+      const response = await apiClient.get('/categories/admin/all?counts=false') as { data?: Category[]; categories?: Category[] };
       const fetchedCategories = response.data || response.categories || [];
       console.log('Fetched categories:', fetchedCategories.length);
       setCategories(fetchedCategories);

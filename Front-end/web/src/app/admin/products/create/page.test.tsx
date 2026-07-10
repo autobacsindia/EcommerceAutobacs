@@ -47,7 +47,7 @@ describe('CreateProductPage', () => {
     
     // Default mocks for API calls
     (apiClient.get as jest.Mock).mockImplementation((url) => {
-      if (url === '/categories') {
+      if (url === '/categories/admin/all?counts=false') {
         return Promise.resolve({ data: mockCategories });
       }
       if (url === '/vehicles') {
