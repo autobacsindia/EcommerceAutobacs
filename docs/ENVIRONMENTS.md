@@ -1,12 +1,35 @@
 # Environments — Dev vs Prod separation
 
-How configuration is split between the **dev** tier (local, run by `npm run dev`) and the
-**prod** tier (Railway for the backend, Vercel for the frontend). Two tiers only — no staging.
+How configuration is split across three tiers: **dev** (local, `npm run dev`), **test/staging**
+(the `develop` branch, deployed), and **prod** (the `main` branch, deployed). Backend runs on
+Railway, frontend on Vercel.
 
 > The live customer site is still WooCommerce/WordPress. The "prod" tier here is the
 > replacement stack; it becomes customer-facing at cutover. See root
 > [CLAUDE.md](../CLAUDE.md) "Migration status" and
 > [RUNBOOK-cdn-redis-vercel.md](RUNBOOK-cdn-redis-vercel.md).
+
+## Deploy tiers & branch → environment
+
+Two long-lived branches, **no feature branches**: commit to `develop`, verify on the test tier,
+then merge `develop` → `main` to release. Both apps auto-deploy on push.
+
+| Branch | Backend (Railway env) | Frontend (Vercel) | Data |
+|---|---|---|---|
+| `develop` | project `bountiful-surprise`, env **test** | **Preview** deployment (per-branch alias) | `autobacstest` cluster, test Redis, ES off |
+| `main` | project `bountiful-surprise`, env **production** | **Production** deployment | prod `cluster0`, Upstash cache + prod Redis queue, ES on |
+
+Verified isolation (as of 2026-07): test and prod use **separate Atlas clusters**, **separate Redis**
+(prod cache = Upstash, all others = per-env Railway Redis — private domains are environment-scoped),
+and email in test is caught by `EMAIL_REDIRECT_TO`. Elasticsearch is the one **shared** deployment;
+it's safe only because test has `ELASTICSEARCH_ENABLED=false`. **If you enable ES in test, you MUST set
+`ELASTICSEARCH_INDEX` (e.g. `products_staging`)** or a test reindex will clobber the prod `products` index.
+
+Gotchas specific to the test tier:
+- `NEXT_PUBLIC_API_URL` is **build-time baked** — the Vercel **Preview** scope must set it to the test
+  backend, or previews silently call prod.
+- The test backend's `FRONTEND_URL` / `FRONTEND_URLS` must list the develop preview URL (for CORS/redirects).
+- Railway's git source for the **test** env must be the `develop` branch (not `main`).
 
 ## The rule
 

@@ -29,7 +29,7 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   4. Update `SENDGRID_API_KEY` in Railway
 
 ### 4. Google Maps API Keys
-- **Current**: `AIzaSyCqmI-sLBZG726AoLN1x0SpBsdMtvJf7Hg`
+- **Current**: `<redacted — rotate/restrict in Google Cloud Console>`
 - **Action**:
   1. Go to Google Cloud Console: https://console.cloud.google.com/
   2. Navigate to APIs & Services > Credentials
