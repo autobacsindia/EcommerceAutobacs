@@ -78,7 +78,7 @@ The system includes automated scheduled imports for handling failed products:
 ### Failed Product Import
 - **Schedule**: Daily at 11:10 AM
 - **Purpose**: Automatically re-attempt import of products that failed in previous import jobs
-- **Documentation**: See [SCHEDULED_IMPORTS.md](SCHEDULED_IMPORTS.md) for detailed information
+- **Implementation**: see `services/` (import/cron) — the source is the reference
 
 ## Project Structure
 
