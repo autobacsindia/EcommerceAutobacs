@@ -20,9 +20,9 @@ export default function ProductCardPriceActions({ productId, price, originalPric
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    toast.success('Added to cart');
     try {
       await addToCart(productId, 1);
-      toast.success('Added to cart');
     } catch (error: any) {
       console.error('Failed to add to cart:', error);
       toast.error(error.message || 'Failed to add to cart');

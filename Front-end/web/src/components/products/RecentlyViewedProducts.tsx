@@ -104,9 +104,9 @@ export default function RecentlyViewedProducts() {
                   <button
                     onClick={async (e) => {
                       e.preventDefault();
+                      toast.success('Added to cart');
                       try {
                         await addToCart(product._id, 1);
-                        toast.success('Added to cart');
                       } catch (error: any) {
                         toast.error(error.message || 'Failed to add to cart');
                       }

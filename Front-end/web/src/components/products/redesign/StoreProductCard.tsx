@@ -72,9 +72,11 @@ export default function StoreProductCard({
     e.preventDefault();
     e.stopPropagation();
     if (outOfStock) return;
+    // Optimistic: the cart badge and this toast fire on tap; addToCart rolls the
+    // count back and the catch surfaces an error toast if the server rejects.
+    toast.success('Added to cart');
     try {
       await addToCart(product._id, 1);
-      toast.success('Added to cart');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add to cart');
     }

@@ -46,9 +46,11 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
 
   const handleAddToCart = async () => {
     setCartLoading(true);
+    // Optimistic: badge + toast fire on tap; rolled back with an error toast on
+    // a server rejection.
+    toast.success(`Added ${quantity} item(s) to cart!`);
     try {
       await addToCart(product._id, quantity);
-      toast.success(`Added ${quantity} item(s) to cart!`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
     } finally {
