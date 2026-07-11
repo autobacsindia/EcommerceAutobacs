@@ -1,0 +1,19 @@
+# gitleaks config — CI scans the WORKING TREE only (`--no-git`).
+# Historical leaks are remediated by ROTATING the affected secrets
+# (see Back-end/server/SECRETS_ROTATION_GUIDE.md), not by scanning old commits.
+title = "autobacs gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret build artifacts and test fixtures"
+paths = [
+  '''node_modules''',
+  '''\.next''',
+  '''coverage''',
+  '''package-lock\.json''',
+  # Hardcoded FAKE values only (ck_test_123, SG.test_key…, rzp_test_…) used to
+  # boot the jest suite. Not real credentials.
+  '''Back-end/server/tests/setupEnv\.js''',
+]
