@@ -222,6 +222,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const removeFromCart = async (productId: string) => {
     // Capture item details before removal for analytics.
     const removed = cart?.items.find(i => i.product._id === productId);
+    const previousCart = cart;
+
+    // Optimistic update: drop the item immediately so the badge/list reflect the
+    // tap before the server round-trip. Rolled back below if the request fails.
+    if (cart) {
+      setCart({
+        ...cart,
+        items: cart.items.filter(item => item.product._id !== productId),
+      });
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -254,6 +265,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCart(cartData);
       }
     } catch (err: any) {
+      // Roll the optimistic removal back to the last known-good cart.
+      setCart(previousCart);
+
       const errorMessage = err.message || 'Failed to remove item from cart';
       setError(errorMessage);
       throw err;
@@ -261,12 +275,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-  
+
   const updateQuantity = async (productId: string, quantity: number) => {
+    const previousCart = cart;
+
+    // Optimistic update: reflect the new quantity immediately. Rolled back below
+    // if the request fails. Guard against non-positive values (the cart UI uses
+    // removeFromCart for zero) so the badge count never goes negative.
+    if (cart && quantity > 0) {
+      setCart({
+        ...cart,
+        items: cart.items.map(item =>
+          item.product._id === productId ? { ...item, quantity } : item
+        ),
+      });
+    }
+
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const response: any = await apiClient.put(API_ENDPOINTS.CART_UPDATE(productId), {
         quantity,
       });
@@ -292,6 +320,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCart(cartData);
       }
     } catch (err: any) {
+      // Roll the optimistic quantity change back to the last known-good cart.
+      setCart(previousCart);
+
       const errorMessage = err.message || 'Failed to update cart';
       setError(errorMessage);
       throw err;
@@ -299,7 +330,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
-  
+
   const clearCart = async () => {
     try {
       setIsLoading(true);

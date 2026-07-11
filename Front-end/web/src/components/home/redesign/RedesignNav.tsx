@@ -9,12 +9,14 @@ import ProfileAvatar from './ProfileAvatar';
 import { Search, Heart, Cart, Menu, Close, UserIcon } from './icons';
 import { brand, navLinks } from './homeContent';
 import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
 
 const VEHICLE_LABEL = 'Vehicle Makes';
 
 export default function RedesignNav() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
+  const { itemCount } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -111,8 +113,18 @@ export default function RedesignNav() {
         <Link href="/wishlist" className="icon-btn nav-wishlist" title="Wishlist" aria-label="Wishlist">
           <Heart />
         </Link>
-        <Link href="/cart" className="icon-btn" title="Cart" aria-label="Cart">
+        <Link
+          href="/cart"
+          className="icon-btn"
+          title="Cart"
+          aria-label={itemCount > 0 ? `Cart, ${itemCount} item${itemCount === 1 ? '' : 's'}` : 'Cart'}
+        >
           <Cart />
+          {itemCount > 0 && (
+            <span className="badge" aria-hidden="true">
+              {itemCount > 99 ? '99+' : itemCount}
+            </span>
+          )}
         </Link>
         <ProfileAvatar className="avatar nav-avatar" />
       </div>

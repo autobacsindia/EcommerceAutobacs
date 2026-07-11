@@ -18,6 +18,7 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/context/CartContext', () => ({
   useCart: jest.fn(() => ({
     addToCart: jest.fn(),
+    itemCount: 0,
   })),
 }));
 
