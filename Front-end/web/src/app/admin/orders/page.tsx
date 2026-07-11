@@ -51,12 +51,41 @@ interface Order {
   status: string;
   paymentStatus?: string;
   totalAmount: number;
+  refundDetails?: {
+    status?: string;
+    amount?: number;
+    transactionId?: string;
+  };
   user: {
     _id: string;
     name: string;
     email: string;
   };
   items: any[];
+}
+
+/**
+ * Refund state for a row, derived from the cancellation refund flow:
+ * cancelled + paid with no terminal refund yet ⇒ "due"; then processing → completed/failed.
+ * Returns null when there's nothing to show (order not a paid cancellation).
+ */
+function getRefundBadge(order: Order): { label: string; className: string } | null {
+  const isPaidCancellation = order.status === 'cancelled' && (order.paymentStatus === 'paid' || order.paymentStatus === 'refunded');
+  const refundStatus = order.refundDetails?.status;
+
+  if (order.paymentStatus === 'refunded' || refundStatus === 'completed') {
+    return { label: 'Refunded ✓', className: 'bg-green-100 text-green-800' };
+  }
+  if (refundStatus === 'processing') {
+    return { label: 'Refunding…', className: 'bg-blue-100 text-blue-800' };
+  }
+  if (refundStatus === 'failed') {
+    return { label: 'Refund failed', className: 'bg-red-100 text-red-800' };
+  }
+  if (isPaidCancellation) {
+    return { label: 'Refund due', className: 'bg-yellow-100 text-yellow-800' };
+  }
+  return null;
 }
 
 interface OrdersResponse {
@@ -456,6 +485,9 @@ function AdminOrdersPageInner() {
                   <SortIcon field="status" />
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Refund
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -534,9 +566,21 @@ function AdminOrdersPageInner() {
                       </select>
                     )}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {(() => {
+                      const badge = getRefundBadge(order);
+                      return badge ? (
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link 
-                      href={`/admin/orders/${order._id}`} 
+                    <Link
+                      href={`/admin/orders/${order._id}`}
                       className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
                     >
                       <Eye className="h-4 w-4" />

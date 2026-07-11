@@ -308,6 +308,64 @@ class RazorpayService {
   }
 
   /**
+   * Issue a refund against a captured Razorpay payment.
+   *
+   * The Refund API executes immediately — there is NO dashboard-approval step. For
+   * `normal` speed the refund lands in the customer's account over ~5-7 days and the
+   * returned `status` is `pending`/`processing`; the terminal `processed`/`failed`
+   * outcome arrives asynchronously via the refund.* webhook. Callers should treat a
+   * successful return here as "refund accepted", not "money delivered".
+   *
+   * @param {string} paymentId - Razorpay payment id (pay_...) to refund
+   * @param {number} amountPaise - Amount to refund in paise (must be ≤ captured amount)
+   * @param {Object} [opts]
+   * @param {string} [opts.orderId] - Internal order id, stamped into refund notes so the
+   *                                  webhook can resolve the order (mirrors payment.notes).
+   * @param {string} [opts.reason] - Free-text reason, stored in refund notes.
+   * @param {string} [opts.speed='normal'] - 'normal' (free) or 'optimum' (instant, fee).
+   * @returns {Promise<{success: boolean, refundId: string, status: string, amount: number}>}
+   */
+  async refundPayment(paymentId, amountPaise, { orderId, reason, speed = 'normal' } = {}) {
+    if (!paymentId || !amountPaise) {
+      throw new Error('paymentId and amount are required');
+    }
+
+    const Razorpay = await import('razorpay');
+    const instance = new Razorpay.default({
+      key_id: this.key_id,
+      key_secret: this.key_secret
+    });
+
+    try {
+      const refund = await instance.payments.refund(paymentId, {
+        amount: amountPaise,
+        speed,
+        notes: {
+          orderId: orderId || '',
+          reason: reason || 'order_cancelled'
+        }
+      });
+
+      return {
+        success: true,
+        refundId: refund.id,
+        status: refund.status, // 'pending' | 'processed' | 'failed'
+        amount: refund.amount
+      };
+    } catch (error) {
+      // Same plain-object error shape the Razorpay SDK throws on order creation.
+      const desc =
+        error?.error?.description ||
+        error?.description ||
+        error?.message ||
+        (typeof error === 'object' ? JSON.stringify(error) : String(error));
+
+      console.error(`[Razorpay] refund failed for payment ${paymentId}:`, desc);
+      throw new Error(`Failed to create Razorpay refund: ${desc}`);
+    }
+  }
+
+  /**
    * Map Razorpay payment method to internal payment method
    * @param {string} razorpayMethod - Razorpay payment method
    * @returns {string} Internal payment method
@@ -354,7 +412,18 @@ class RazorpayService {
           // Order paid - redundant with payment.captured, but handle safely
           console.log('[Webhook] Order paid event (redundant):', payload.order.entity.id);
           break;
-          
+
+        case 'refund.processed':
+          // Terminal success for a normal-speed refund — money has left our balance
+          // and reached the customer. Flip refundDetails → completed.
+          await this.applyRefundWebhook(payload.refund.entity, 'completed');
+          break;
+
+        case 'refund.failed':
+          // Terminal failure — the refund could not be completed at the gateway.
+          await this.applyRefundWebhook(payload.refund.entity, 'failed');
+          break;
+
         default:
           // Should not reach here (filtered by route)
           console.log('[Webhook] Unhandled event type:', eventType);
@@ -473,7 +542,7 @@ class RazorpayService {
       // Capture payment failure handling errors
       if (process.env.SENTRY_DSN) {
         Sentry.withScope((scope) => {
-          scope.setContext('payment_failure_handling', { 
+          scope.setContext('payment_failure_handling', {
             paymentId: paymentEntity?.id,
             orderId: paymentEntity?.notes?.orderId
           });
@@ -482,6 +551,71 @@ class RazorpayService {
         });
       }
     }
+  }
+
+  /**
+   * Apply a terminal refund webhook (refund.processed / refund.failed) to our records.
+   *
+   * Resolves the order via the refund's `notes.orderId` (stamped at initiation), falling
+   * back to a lookup by the stored refund id. Idempotent: replayed webhooks and a refund
+   * that already reached this terminal state are no-ops.
+   *
+   * @param {Object} refundEntity - Razorpay refund entity (payload.refund.entity)
+   * @param {'completed'|'failed'} finalStatus - Terminal refundDetails.status to apply
+   */
+  async applyRefundWebhook(refundEntity, finalStatus) {
+    const refundId = refundEntity.id;
+    const orderId = refundEntity.notes?.orderId;
+
+    let order = null;
+    if (orderId) {
+      order = await orderRepository.findById(orderId);
+    }
+    if (!order) {
+      order = await orderRepository.findOneByRefundId(refundId);
+    }
+
+    if (!order || !order.refundDetails) {
+      console.error(`[Webhook] refund.${finalStatus} for unresolvable order | refundId: ${refundId} | orderId: ${orderId || 'n/a'}`);
+      return;
+    }
+
+    // Guard: only act on OUR refund. A mismatched id means a different/stale refund.
+    if (order.refundDetails.transactionId && order.refundDetails.transactionId !== refundId) {
+      console.warn(`[Webhook] refund id mismatch for order ${order._id} | stored: ${order.refundDetails.transactionId} | webhook: ${refundId}`);
+      return;
+    }
+
+    // Idempotency: already in this terminal state → nothing to do.
+    if (order.refundDetails.status === finalStatus) {
+      return;
+    }
+
+    order.refundDetails.status = finalStatus;
+    order.refundDetails.transactionId = refundId;
+
+    if (finalStatus === 'completed') {
+      order.refundDetails.processedAt = order.refundDetails.processedAt || new Date();
+      // Payment axis: mark the order and its Payment row refunded. amounts are stored in
+      // rupees (see processPaymentSuccess); the webhook amount is paise → divide by 100.
+      order.paymentStatus = 'refunded';
+      if (order.payment) {
+        const payment = await paymentRepository.findById(order.payment);
+        if (payment) {
+          payment.status = 'refunded';
+          payment.refundAmount = (refundEntity.amount || 0) / 100;
+          payment.refundReason = 'order_cancelled';
+          payment.refundedAt = new Date();
+          await paymentRepository.save(payment);
+        }
+      }
+    } else {
+      order.refundDetails.failureReason =
+        refundEntity.error?.description || 'Refund failed at gateway';
+    }
+
+    await orderRepository.save(order);
+    console.log(`[Webhook] refund.${finalStatus} applied to order ${order._id} (refundId ${refundId})`);
   }
 }
 

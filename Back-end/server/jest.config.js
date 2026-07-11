@@ -2,6 +2,10 @@ export default {
   testTimeout: 300000,
   testEnvironment: 'node',
   
+  // Env must be set before any module (e.g. the razorpayService singleton) is imported,
+  // so it runs in setupFiles — ahead of the test framework and the suite's imports.
+  setupFiles: ['<rootDir>/tests/setupEnv.js'],
+
   // Setup files (run before each test file)
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   

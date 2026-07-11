@@ -31,6 +31,7 @@ import {
   createGuestOrder,
   createOfflineOrder,
   cancelOrder,
+  processRefund,
   cancelPayment,
   markPaymentFailed,
   deleteOrder,
@@ -99,6 +100,11 @@ router.post("/admin/offline", protect, admin, asyncHandler(createOfflineOrder));
 // @desc    Cancel an order with validation and refund initiation
 // @access  Private
 router.put("/:id/cancel", protect, validateOrderCancellation, validateCancellation, asyncHandler(cancelOrder));
+
+// @route   POST /orders/:id/refund
+// @desc    Process the Razorpay refund for a cancelled, paid order (admin-triggered)
+// @access  Private/Admin
+router.post("/:id/refund", protect, admin, validateIdParam, asyncHandler(processRefund));
 
 // @route   PUT /orders/:id/payment-failed
 // @desc    Mark order as failed due to payment failure

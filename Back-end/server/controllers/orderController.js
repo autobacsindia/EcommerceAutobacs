@@ -1,6 +1,8 @@
 import orderRepository from '../repositories/orderRepository.js';
+import paymentRepository from '../repositories/paymentRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
+import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
@@ -43,21 +45,26 @@ export const getOrders = async (req, res) => {
 export const getRefunds = async (req, res) => {
   const orders = await orderRepository.findWithRefunds(req.query.status);
 
-  const refunds = orders.map(order => ({
-    _id: order._id,
-    order: {
+  const refunds = orders.map(order => {
+    // Legacy cancelled+paid orders surface here with no refundDetails subdoc — present
+    // them as a pending, full refund of the order total.
+    const rd = order.refundDetails || {};
+    return {
       _id: order._id,
-      orderNumber: order.orderNumber || order._id
-    },
-    user: {
-      name: order.user ? order.user.name : 'Unknown'
-    },
-    amount: order.refundDetails.amount || 0,
-    refundType: order.refundDetails.refundType || '',
-    refundMethod: order.refundDetails.refundMethod || '',
-    status: order.refundDetails.status || 'pending',
-    requestedAt: order.refundDetails.requestedAt || order.updatedAt
-  }));
+      order: {
+        _id: order._id,
+        orderNumber: order.orderNumber || order._id
+      },
+      user: {
+        name: order.user ? order.user.name : 'Unknown'
+      },
+      amount: rd.amount ?? order.totalAmount ?? 0,
+      refundType: rd.refundType || 'full',
+      refundMethod: rd.refundMethod || 'original_payment',
+      status: rd.status || 'pending',
+      requestedAt: rd.requestedAt || order.updatedAt
+    };
+  });
 
   res.json({
     success: true,
@@ -493,6 +500,135 @@ export const cancelOrder = async (req, res) => {
     refundAmount: refundInitiated ? order.totalAmount : 0,
     refundTimeline: refundInitiated ? '3-5 business days' : null
   });
+};
+
+// @desc    Process the refund for a cancelled, paid order via Razorpay (admin-triggered)
+// @route   POST /orders/:id/refund
+// @access  Private/Admin
+export const processRefund = async (req, res) => {
+  const order = await orderRepository.findById(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+
+  // Full-refund-on-cancel only. The return/partial-refund flow is a separate workstream.
+  if (order.status !== 'cancelled') {
+    return res.status(400).json({
+      success: false,
+      message: `Refunds are only processed for cancelled orders (order is '${order.status}').`
+    });
+  }
+
+  // Nothing to move unless money was actually captured. A `refunded` order is already done.
+  if (order.paymentStatus !== 'paid') {
+    return res.status(400).json({
+      success: false,
+      message: order.paymentStatus === 'refunded'
+        ? 'This order has already been refunded.'
+        : 'No captured payment to refund.'
+    });
+  }
+
+  // Reject only a refund that's already running or done. A missing refundDetails is fine —
+  // legacy/imported cancelled+paid orders never got the auto-flag and are still refundable
+  // (the claim below stamps a full-refund record).
+  if (order.refundDetails && ['processing', 'completed'].includes(order.refundDetails.status)) {
+    return res.status(409).json({
+      success: false,
+      message: `Refund is already ${order.refundDetails.status}.`
+    });
+  }
+
+  // Resolve the captured Razorpay payment to refund against.
+  const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+  if (!payment || !payment.gatewayPaymentId) {
+    return res.status(422).json({
+      success: false,
+      message: 'No Razorpay payment id on file for this order — refund manually in the dashboard.'
+    });
+  }
+
+  // Cancellation is always a FULL refund of what was captured. amounts are stored in
+  // rupees; Razorpay wants paise.
+  const amountPaise = Math.round(order.totalAmount * 100);
+
+  // A ₹0 order (e.g. a 100%-off coupon) has nothing to send to the gateway — Razorpay
+  // rejects a zero-amount refund. Treat it as a no-op success instead of claiming the
+  // order and stranding it in a failed state. Checked before the claim so no state moves.
+  if (amountPaise <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Order total is ₹0 — there is nothing to refund.'
+    });
+  }
+
+  // Race-safe claim: only the first caller transitions the order into processing and proceeds.
+  const claimed = await orderRepository.markRefundProcessing(order, req.user.id);
+  if (!claimed) {
+    return res.status(409).json({
+      success: false,
+      message: 'A refund for this order is already being processed.'
+    });
+  }
+
+  try {
+    const result = await razorpayService.refundPayment(payment.gatewayPaymentId, amountPaise, {
+      orderId: order._id.toString(),
+      reason: 'order_cancelled'
+    });
+
+    // `optimum`/instant refunds can come back already `processed`; normal-speed refunds
+    // stay `processing` here and reach `completed` via the refund.processed webhook.
+    const completed = result.status === 'processed';
+
+    // Persist the outcome via a conditional (status==='processing') update — never a
+    // read-modify-write — so a refund.processed webhook that raced this call is not
+    // clobbered (and can't clobber us). No-op if the webhook already completed the order.
+    await orderRepository.recordRefundResult(order._id, { refundId: result.refundId, completed });
+
+    if (completed) {
+      payment.status = 'refunded';
+      payment.refundAmount = amountPaise / 100;
+      payment.refundReason = 'order_cancelled';
+      payment.refundedAt = new Date();
+      await paymentRepository.save(payment);
+    }
+
+    return res.json({
+      success: true,
+      message: completed
+        ? 'Refund completed.'
+        : 'Refund initiated — funds typically settle in 5-7 business days.',
+      refund: {
+        id: result.refundId,
+        status: completed ? 'completed' : 'processing',
+        amount: order.totalAmount
+      }
+    });
+  } catch (err) {
+    // Roll the claim back to `failed` (conditional on still-processing) so an admin can
+    // retry from the same button.
+    await orderRepository.markRefundFailed(order._id, err.message);
+
+    if (process.env.SENTRY_DSN) {
+      Sentry.withScope((scope) => {
+        scope.setContext('refund_processing', {
+          orderId: order._id.toString(),
+          paymentId: payment.gatewayPaymentId,
+          amountPaise
+        });
+        scope.setTag('payment_action', 'process_refund');
+        scope.setTag('severity', 'high');
+        Sentry.captureException(err);
+      });
+    }
+
+    return res.status(502).json({
+      success: false,
+      message: `Refund failed: ${err.message}`
+    });
+  }
 };
 
 // @desc    Mark order as failed due to payment failure
