@@ -54,6 +54,6 @@ Rules: `noindex` (SeoPanel/PageSeo) drops a page from both `<head>` robots and `
 
 ## House rules
 
-- Markdown sprawl: many `*_FIX.md` / `*_SUMMARY.md` files at root and in app dirs are historical notes, not specs. Don't trust them as current; verify against code.
+- Docs are curated (2026-07): `docs/` keeps only the cutover runbooks + `ENVIRONMENTS.md` + the consolidated audit (`docs/audit/09-CONSOLIDATED-2026-07.md`); the old `*_FIX.md`/`*_SUMMARY.md` sprawl and per-phase audit files were removed (recover from git history if needed). Code is the source of truth — verify any doc against it.
 - Secrets never committed. Rotation runbooks in `SECRETS_ROTATION_GUIDE.md`.
 - Don't touch `node_modules/` (untracked).

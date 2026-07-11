@@ -2,7 +2,7 @@
 
 _Auditor: Claude Code · Date: 2026-07-09 · Mode: sequential/gated, findings-only (no product code changed)._
 
-Refreshes the June 2026 audit (`AUDIT_SUMMARY.md`) after **121 commits** added the highest-risk surface (Sales CRM/leads, coupon+karma money engine, payment-status axis, email sequences, ES search, full UI revamp).
+Refreshes the June 2026 audit (the June 2026 baseline audit (in git history)) after **121 commits** added the highest-risk surface (Sales CRM/leads, coupon+karma money engine, payment-status axis, email sequences, ES search, full UI revamp).
 
 ## Headline
 
@@ -12,14 +12,14 @@ Refreshes the June 2026 audit (`AUDIT_SUMMARY.md`) after **121 commits** added t
 
 | Phase | Doc | P0 | P1 | P2 | P3 | Verdict |
 |---|---|----|----|----|----|---------|
-| 0 Baseline | [01](01-phase0-baseline-2026-07.md) | (1 gate) | – | – | – | env isolation gap surfaced |
-| 1 Security | [02](02-phase1-security-2026-07.md) | 0 | 0 | 0 | 3 | strong |
-| 2 Payments/Money | [03](03-phase2-payments-money-2026-07.md) | 0 | 1 | 1 | 1 | strong; 1 latent P1 |
-| 3 Backend | [04](04-phase3-backend-2026-07.md) | 0 | 0 | 0 | 4 | good |
-| 4 Database | [05](05-phase4-database-2026-07.md) | 0 | 0 | 0 | 2 | durable |
-| 5 Frontend | [06](06-phase5-frontend-2026-07.md) | 0 | 0 | 1 | 2 | solid |
-| 6 Infra/Obs | [07](07-phase6-infra-observability-2026-07.md) | 0 | 1 | 2 | 2 | weak deploy gate |
-| 7 Dependencies | [08](08-phase7-dependencies-2026-07.md) | 0 | 0 | 3 | 2 | overstated by raw counts |
+| 0 Baseline | 01 | (1 gate) | – | – | – | env isolation gap surfaced |
+| 1 Security | 02 | 0 | 0 | 0 | 3 | strong |
+| 2 Payments/Money | 03 | 0 | 1 | 1 | 1 | strong; 1 latent P1 |
+| 3 Backend | 04 | 0 | 0 | 0 | 4 | good |
+| 4 Database | 05 | 0 | 0 | 0 | 2 | durable |
+| 5 Frontend | 06 | 0 | 0 | 1 | 2 | solid |
+| 6 Infra/Obs | 07 | 0 | 1 | 2 | 2 | weak deploy gate |
+| 7 Dependencies | 08 | 0 | 0 | 3 | 2 | overstated by raw counts |
 | **Totals** | | **0** | **2** | **8** | **16** | |
 
 ## Prioritized fix backlog
