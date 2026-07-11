@@ -38,12 +38,15 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
     ],
   },
-  {
-    title: 'Inventory',
-    items: [
-      { href: '/admin/warehouses', label: 'Warehouses', icon: '🏭' },
-    ],
-  },
+  // Inventory (Warehouses) — feature is fully implemented (frontend + backend
+  // /api/v1/warehouses, models, tests) but hidden from the admin nav for now.
+  // To re-enable, uncomment this section; the /admin/warehouses route still works.
+  // {
+  //   title: 'Inventory',
+  //   items: [
+  //     { href: '/admin/warehouses', label: 'Warehouses', icon: '🏭' },
+  //   ],
+  // },
   {
     title: 'Sales',
     items: [
