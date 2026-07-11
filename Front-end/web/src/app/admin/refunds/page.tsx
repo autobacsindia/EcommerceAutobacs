@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Search, DollarSign, Eye } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Link from 'next/link';
 
 interface Refund {
@@ -27,10 +28,28 @@ export default function AdminRefundsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRefunds();
   }, [statusFilter]);
+
+  // Admin-triggered Razorpay refund for a cancelled, paid order.
+  const handleProcess = async (refund: Refund) => {
+    if (!window.confirm(`Refund ₹${(refund.amount || 0).toLocaleString()} for order #${refund.order.orderNumber} via Razorpay? This cannot be undone.`)) {
+      return;
+    }
+    setProcessingId(refund._id);
+    try {
+      const res = await apiClient.post<{ message?: string }>(API_ENDPOINTS.REFUND_PROCESS(refund.order._id), {});
+      toast.success(res.message || 'Refund initiated.');
+      await fetchRefunds();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to process refund.');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   const fetchRefunds = async () => {
     try {
@@ -165,13 +184,24 @@ export default function AdminRefundsPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <Link
-                    href={`/admin/orders/${refund.order._id}`}
-                    className="text-blue-600 hover:text-blue-900"
-                    title="View Order"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    {['pending', 'failed'].includes(refund.status) && (
+                      <button
+                        onClick={() => handleProcess(refund)}
+                        disabled={processingId === refund._id}
+                        className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {processingId === refund._id ? 'Processing…' : refund.status === 'failed' ? 'Retry' : 'Process Refund'}
+                      </button>
+                    )}
+                    <Link
+                      href={`/admin/orders/${refund.order._id}`}
+                      className="text-blue-600 hover:text-blue-900"
+                      title="View Order"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}

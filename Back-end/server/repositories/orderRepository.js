@@ -33,14 +33,126 @@ class OrderRepository extends BaseRepository {
       .lean();
   }
 
-  async findWithRefunds(statusFilter, session = null) {
-    const query = { refundDetails: { $exists: true, $ne: null } };
-    if (statusFilter && statusFilter !== 'all') {
-      query['refundDetails.status'] = statusFilter;
+  /**
+   * Resolve an order by the Razorpay refund id we stored at initiation. Fallback path
+   * for the refund webhook when notes.orderId is absent.
+   */
+  async findOneByRefundId(refundId, session = null) {
+    let q = Order.findOne({ 'refundDetails.transactionId': refundId });
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  /**
+   * Atomically claim a cancelled, paid order's refund for processing. Compare-and-set is
+   * the serialization point that makes refund initiation idempotent under a double-click
+   * or concurrent admin requests: only the first caller transitions the order into
+   * `processing` and gets `true`; every racing caller gets `false` and must not call the
+   * gateway.
+   *
+   * The match also accepts an order with NO refundDetails (legacy / WooCommerce-imported
+   * orders cancelled before the auto-flag existed), stamping a full-refund record so those
+   * are refundable too — never a `processing`/`completed` order.
+   *
+   * @param {Object} order - Hydrated order (needs _id + totalAmount for a fresh record)
+   * @param {string} userId - Admin performing the refund
+   */
+  async markRefundProcessing(order, userId, session = null) {
+    const res = await Order.updateOne(
+      {
+        _id: order._id,
+        status: 'cancelled',
+        paymentStatus: 'paid',
+        $or: [
+          { 'refundDetails.status': { $in: ['pending', 'failed'] } },
+          { refundDetails: { $exists: false } },
+          { 'refundDetails.status': { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          'refundDetails.amount': order.refundDetails?.amount ?? order.totalAmount,
+          'refundDetails.refundType': order.refundDetails?.refundType || 'full',
+          'refundDetails.refundMethod': order.refundDetails?.refundMethod || 'original_payment',
+          'refundDetails.requestedAt': order.refundDetails?.requestedAt || new Date(),
+          'refundDetails.status': 'processing',
+          'refundDetails.processedBy': userId,
+          'refundDetails.failureReason': null,
+          // Clear any id/timestamp from a prior attempt so a late webhook for the OLD
+          // refund can't be mis-attributed to this new one (the mismatch guard in
+          // applyRefundWebhook rejects a webhook whose id ≠ the freshly stored one).
+          'refundDetails.transactionId': null,
+          'refundDetails.processedAt': null
+        }
+      },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Record the outcome of a gateway refund call WITHOUT a read-modify-write. Conditioning
+   * the update on `refundDetails.status === 'processing'` makes it a no-op if a concurrent
+   * refund.processed/failed webhook already advanced the order to a terminal state, so the
+   * controller can never clobber the webhook (or vice-versa).
+   *
+   * @param {string} orderId
+   * @param {Object} opts
+   * @param {string} opts.refundId   - Razorpay refund id to stamp
+   * @param {boolean} opts.completed - true when the gateway already returned `processed`
+   *                                   (instant speed); false leaves it `processing` for the
+   *                                   webhook to complete.
+   */
+  async recordRefundResult(orderId, { refundId, completed }, session = null) {
+    const set = { 'refundDetails.transactionId': refundId };
+    if (completed) {
+      set['refundDetails.status'] = 'completed';
+      set['refundDetails.processedAt'] = new Date();
+      set['paymentStatus'] = 'refunded';
     }
+    const res = await Order.updateOne(
+      { _id: orderId, 'refundDetails.status': 'processing' },
+      { $set: set },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Flag an in-flight refund as failed (gateway threw). Conditional on `processing` for the
+   * same anti-clobber reason as recordRefundResult; an admin can retry from the button.
+   */
+  async markRefundFailed(orderId, reason, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, 'refundDetails.status': 'processing' },
+      { $set: { 'refundDetails.status': 'failed', 'refundDetails.failureReason': reason } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  async findWithRefunds(statusFilter, session = null) {
+    // Legacy / WooCommerce-imported orders cancelled while paid never got a refundDetails
+    // subdoc but are still refundable — surface them as effectively 'pending' so they're
+    // actionable from the refunds screen, not just the order detail page.
+    const legacyDue = {
+      status: 'cancelled',
+      paymentStatus: 'paid',
+      'refundDetails.status': { $exists: false }
+    };
+
+    let query;
+    if (statusFilter && statusFilter !== 'all') {
+      query = statusFilter === 'pending'
+        ? { $or: [{ 'refundDetails.status': 'pending' }, legacyDue] }
+        : { 'refundDetails.status': statusFilter };
+    } else {
+      query = { $or: [{ refundDetails: { $exists: true, $ne: null } }, legacyDue] };
+    }
+
     let q = Order.find(query)
       .populate('user', 'name email')
-      .sort({ 'refundDetails.requestedAt': -1 });
+      .sort({ 'refundDetails.requestedAt': -1, createdAt: -1 });
     if (session) q = q.session(session);
     return q;
   }

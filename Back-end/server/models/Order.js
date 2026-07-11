@@ -301,6 +301,9 @@ OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by s
 OrderSchema.index({ trackingNumber: 1 }); // Tracking lookup
 OrderSchema.index({ 'returnRequest.status': 1 }); // Return request queries
 OrderSchema.index({ 'refundDetails.status': 1 }); // Refund status queries
+// Refund-webhook fallback lookup by Razorpay refund id (findOneByRefundId). Sparse: only
+// orders that have actually been refunded carry a transactionId.
+OrderSchema.index({ 'refundDetails.transactionId': 1 }, { sparse: true });
 
 // CRITICAL: Guest order lookup (order confirmation page, guest order tracking)
 // Partial: Only index documents where sessionId exists AND is not null (guest orders only)

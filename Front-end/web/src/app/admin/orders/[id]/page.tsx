@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-react';
-import { CUSTOMER_NOTIFIED_STATUSES } from '@/lib/constants';
+import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 
@@ -73,6 +73,13 @@ interface Order {
   cancelledAt?: string;
   cancellationReason?: string;
   cancelledBy?: 'admin' | 'customer' | 'system';
+  refundDetails?: {
+    status?: string;
+    amount?: number;
+    transactionId?: string;
+    processedAt?: string;
+    failureReason?: string;
+  };
   user: {
     _id: string;
     name: string;
@@ -89,6 +96,7 @@ export default function AdminOrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [refunding, setRefunding] = useState(false);
 
   useEffect(() => {
     if (orderId) {
@@ -123,6 +131,26 @@ export default function AdminOrderDetailPage() {
       await fetchOrder();
     } finally {
       setUpdating(false);
+    }
+  };
+
+  // Admin-triggered Razorpay refund for a cancelled, paid order. The backend calls the
+  // Refund API; funds settle in ~5-7 days and the terminal state arrives via webhook, so
+  // we refetch to reflect processing/completed.
+  const handleProcessRefund = async () => {
+    if (!order) return;
+    if (!window.confirm(`Refund ₹${order.totalAmount.toFixed(2)} to ${order.user?.name || 'the customer'} via Razorpay? This cannot be undone.`)) {
+      return;
+    }
+    setRefunding(true);
+    try {
+      const res = await apiClient.post<{ message?: string }>(API_ENDPOINTS.REFUND_PROCESS(orderId), {});
+      toast.success(res.message || 'Refund initiated.');
+      await fetchOrder();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to process refund.');
+    } finally {
+      setRefunding(false);
     }
   };
 
@@ -428,6 +456,46 @@ export default function AdminOrderDetailPage() {
                   {order.cancellationReason && (
                     <p className="text-sm text-red-700 mt-1">Reason: {order.cancellationReason}</p>
                   )}
+                </div>
+              )}
+
+              {/* Refund control — only for cancelled orders where money was captured. */}
+              {order.status === 'cancelled' && ['paid', 'refunded'].includes(order.paymentStatus || '') && (
+                <div className="mt-4 p-4 border border-gray-200 rounded-md">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-gray-900">Refund</h3>
+                    {(() => {
+                      const s = order.paymentStatus === 'refunded' ? 'completed' : order.refundDetails?.status;
+                      const map: Record<string, { label: string; cls: string }> = {
+                        completed: { label: 'Refunded ✓', cls: 'bg-green-100 text-green-800' },
+                        processing: { label: 'Refunding…', cls: 'bg-blue-100 text-blue-800' },
+                        failed: { label: 'Refund failed', cls: 'bg-red-100 text-red-800' },
+                        pending: { label: 'Refund due', cls: 'bg-yellow-100 text-yellow-800' },
+                      };
+                      const badge = map[s || 'pending'] || map.pending;
+                      return <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.cls}`}>{badge.label}</span>;
+                    })()}
+                  </div>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Full refund of <span className="font-medium">₹{order.totalAmount.toFixed(2)}</span> to the original payment method via Razorpay.
+                  </p>
+                  {order.refundDetails?.transactionId && (
+                    <p className="text-xs text-gray-500 mb-1">Refund ID: {order.refundDetails.transactionId}</p>
+                  )}
+                  {order.refundDetails?.status === 'failed' && order.refundDetails.failureReason && (
+                    <p className="text-xs text-red-600 mb-2">Last attempt: {order.refundDetails.failureReason}</p>
+                  )}
+                  {['pending', 'failed'].includes(order.refundDetails?.status || 'pending') && order.paymentStatus !== 'refunded' ? (
+                    <button
+                      onClick={handleProcessRefund}
+                      disabled={refunding}
+                      className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {refunding ? 'Processing…' : order.refundDetails?.status === 'failed' ? 'Retry Refund' : 'Process Refund'}
+                    </button>
+                  ) : order.refundDetails?.status === 'processing' ? (
+                    <p className="text-xs text-gray-500">Awaiting settlement — updates automatically when Razorpay confirms (~5-7 days).</p>
+                  ) : null}
                 </div>
               )}
             </div>

@@ -116,7 +116,7 @@ router.post("/", asyncHandler(async (req, res) => {
     }
     
     // SECURITY STEP 4: Validate event type (whitelist only)
-    const allowedEvents = ['payment.captured', 'payment.failed', 'order.paid'];
+    const allowedEvents = ['payment.captured', 'payment.failed', 'order.paid', 'refund.processed', 'refund.failed'];
     if (!allowedEvents.includes(eventType)) {
       console.log(`[Webhook] Ignoring unknown event type: ${eventType}`);
       return res.status(200).end(); // Safely ignore
