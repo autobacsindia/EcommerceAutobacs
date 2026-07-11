@@ -4,9 +4,11 @@ import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { SlidersHorizontal, X } from 'lucide-react';
 import apiClient from '@/lib/api';
 import ProductGrid from '@/components/products/ProductGrid';
-import ProductFilters from '@/components/products/ProductFilters';
+import Filters from '@/components/products/redesign/Filters';
+import Eyebrow from '@/components/ui/Eyebrow';
 import Pagination from '@/components/layout/Pagination';
 import Breadcrumb from '@/components/layout/Breadcrumb';
 import { trackViewItemList } from '@/lib/analytics';
@@ -192,7 +194,8 @@ export default function ClientPage({ slug }: { slug: string }) {
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
   const showAll = searchParams.get('showAll') === 'true';
@@ -359,8 +362,10 @@ export default function ClientPage({ slug }: { slug: string }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
-          <aside className="hidden lg:block space-y-6">
-            <ProductFilters />
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <Filters basePath={`/categories/${slug}`} hideCategories />
+            </div>
           </aside>
 
           {/* Products Grid */}
@@ -376,6 +381,12 @@ export default function ClientPage({ slug }: { slug: string }) {
               </p>
 
               <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setDrawerOpen(true)}
+                  className="inline-flex items-center gap-2 border border-hairline px-4 py-2 font-display text-[11px] uppercase tracking-[0.16em] text-ink-muted transition-colors hover:border-gold/50 hover:text-ink lg:hidden"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+                </button>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -447,6 +458,24 @@ export default function ClientPage({ slug }: { slug: string }) {
           </div>
         </div>
       </div>
+
+      {/* Mobile filter drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
+              <Eyebrow as="span">Filters</Eyebrow>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-ink-muted hover:text-ink">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <Filters basePath={`/categories/${slug}`} hideCategories onApplied={() => setDrawerOpen(false)} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

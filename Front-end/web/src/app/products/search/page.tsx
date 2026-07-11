@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import ProductGrid from '@/components/products/ProductGrid';
-import ProductFilters from '@/components/products/ProductFilters';
+import Filters from '@/components/products/redesign/Filters';
+import Eyebrow from '@/components/ui/Eyebrow';
 import apiClient from '@/lib/api';
 import { trackViewItemList } from '@/lib/analytics';
 
@@ -28,6 +30,8 @@ async function getProducts(searchParams: any) {
   if (searchParams.inStock)  queryParams.append('inStock', searchParams.inStock);
   if (searchParams.rating)   queryParams.append('rating', searchParams.rating);
   if (searchParams.brand)    queryParams.append('brand', searchParams.brand);
+  if (searchParams.vehicleMake)  queryParams.append('vehicleMake', searchParams.vehicleMake);
+  if (searchParams.vehicleModel) queryParams.append('vehicleModel', searchParams.vehicleModel);
 
   if (searchParams.sort) {
     switch (searchParams.sort) {
@@ -87,6 +91,7 @@ function SearchPageInner() {
   const [loading, setLoading]       = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [corrections, setCorrections] = useState<any[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const pageRef = useRef(1);
 
   const currentSort = searchParams.get('sort') || 'relevance';
@@ -216,7 +221,9 @@ function SearchPageInner() {
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
           <aside className="hidden lg:block">
-            <ProductFilters />
+            <div className="sticky top-24">
+              <Filters basePath="/products/search" />
+            </div>
           </aside>
 
           {/* Products Grid */}
@@ -258,22 +265,31 @@ function SearchPageInner() {
                 )}
               </p>
 
-              {/* Sort Dropdown */}
-              <div className="flex items-center gap-2">
-                <label htmlFor="sort" className="text-sm text-ink-muted">Sort by:</label>
-                <select
-                  id="sort"
-                  className="border border-hairline rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
-                  value={currentSort}
-                  onChange={handleSortChange}
-                  disabled={loading}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setDrawerOpen(true)}
+                  className="inline-flex items-center gap-2 border border-hairline px-4 py-2 font-display text-[11px] uppercase tracking-[0.16em] text-ink-muted transition-colors hover:border-gold/50 hover:text-ink lg:hidden"
                 >
-                  <option value="relevance">Relevance</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="name_asc">Name: A to Z</option>
-                  <option value="rating_desc">Highest Rated</option>
-                </select>
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+                </button>
+
+                {/* Sort Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label htmlFor="sort" className="text-sm text-ink-muted">Sort by:</label>
+                  <select
+                    id="sort"
+                    className="border border-hairline rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
+                    value={currentSort}
+                    onChange={handleSortChange}
+                    disabled={loading}
+                  >
+                    <option value="relevance">Relevance</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                    <option value="name_asc">Name: A to Z</option>
+                    <option value="rating_desc">Highest Rated</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -339,6 +355,24 @@ function SearchPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Mobile filter drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
+              <Eyebrow as="span">Filters</Eyebrow>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-ink-muted hover:text-ink">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <Filters basePath="/products/search" onApplied={() => setDrawerOpen(false)} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

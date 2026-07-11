@@ -21,10 +21,13 @@ import { cn } from '@/lib/utils';
 export default function StoreProductCard({
   product,
   featured = false,
+  fitmentBadge,
   className,
 }: {
   product: Product;
   featured?: boolean;
+  /** When set (vehicle pages), shows a green "Fits <vehicle>" compatibility pill. */
+  fitmentBadge?: string;
   className?: string;
 }) {
   const router = useRouter();
@@ -95,6 +98,11 @@ export default function StoreProductCard({
 
         {/* Badges */}
         <div className="absolute left-4 top-4 flex flex-col items-start gap-1.5">
+          {fitmentBadge && (
+            <span className="bg-emerald-500 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-obsidian">
+              ✓ Fits {fitmentBadge}
+            </span>
+          )}
           {outOfStock && (
             <span className="bg-obsidian-deep/85 px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-ink-muted backdrop-blur">
               Sold out
@@ -170,7 +178,7 @@ export default function StoreProductCard({
   );
 
   const shell = cn(
-    'group relative flex flex-col overflow-hidden border border-hairline bg-obsidian transition-colors duration-300 hover:border-gold/40',
+    'group relative flex flex-col overflow-hidden border border-hairline bg-obsidian font-display transition-colors duration-300 hover:border-gold/40',
     className
   );
 

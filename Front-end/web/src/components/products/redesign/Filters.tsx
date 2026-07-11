@@ -76,9 +76,17 @@ function CheckRow({
 interface FiltersProps {
   /** Called after a filter is applied — used to close the mobile drawer. */
   onApplied?: () => void;
+  /**
+   * Route that filter changes navigate to. Defaults to `/products`. On a
+   * category or search page, pass the current path (e.g. `/categories/brakes`)
+   * so filtering stays in context instead of bouncing to the global catalog.
+   */
+  basePath?: string;
+  /** Hide the Category group — e.g. on a category page you're already inside one. */
+  hideCategories?: boolean;
 }
 
-export default function Filters({ onApplied }: FiltersProps) {
+export default function Filters({ onApplied, basePath = '/products', hideCategories = false }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatPrice } = useCurrency();
@@ -186,10 +194,11 @@ export default function Filters({ onApplied }: FiltersProps) {
       if (mk) { p.set('vehicleMake', mk); md ? p.set('vehicleModel', md) : p.delete('vehicleModel'); }
       else { p.delete('vehicleMake'); p.delete('vehicleModel'); }
 
-      router.replace(`/products?${p.toString()}`, { scroll: false });
+      const qs = p.toString();
+      router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
       onApplied?.();
     },
-    [searchParams, price, selCats, selBrands, ratings, inStock, make, model, router, onApplied]
+    [searchParams, price, selCats, selBrands, ratings, inStock, make, model, router, onApplied, basePath]
   );
 
   // Debounce only the price slider so dragging stays smooth.
@@ -245,7 +254,7 @@ export default function Filters({ onApplied }: FiltersProps) {
       </Group>
 
       {/* Categories */}
-      {categories.length > 0 && (
+      {!hideCategories && categories.length > 0 && (
         <Group title="Category">
           <div className="max-h-64 overflow-y-auto sf-noscroll">
             {categories.map((c) => (
