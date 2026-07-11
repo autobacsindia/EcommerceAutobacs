@@ -6,6 +6,11 @@ name: Regenerate frontend lock
 
 on:
   workflow_dispatch:
+  # Also runs when this file changes on develop, so it can be triggered without
+  # being registered on the default branch.
+  push:
+    branches: [develop]
+    paths: [".github/workflows/regenerate-lock.yml"]
 
 jobs:
   regen:
