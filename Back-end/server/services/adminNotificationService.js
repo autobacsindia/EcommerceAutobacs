@@ -109,6 +109,17 @@ const renderEmail = (heading, intro, rows, ctaLabel, ctaHref, bannerHtml = '') =
 };
 
 /**
+ * Red, impossible-to-miss banner for an actionable money alert (refund due / refund
+ * failed). `title` and `subtitle` must already be HTML-escaped by the caller — this
+ * only wraps them in the shared styled block.
+ */
+const alertBanner = (title, subtitle) =>
+  `<div style="margin:0 0 20px;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;">
+       <p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;letter-spacing:.04em;">${title}</p>
+       <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">${subtitle}</p>
+     </div>`;
+
+/**
  * Fan the alert out to every admin recipient. Sent when at least one delivery
  * succeeds; skipped-disabled when email is simply off (no Postmark) so BullMQ
  * doesn't retry a config gap forever; throws on a transient/hard failure so the
@@ -371,10 +382,10 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
     .join('\n');
 
   const banner = refund
-    ? `<div style="margin:0 0 20px;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;">
-         <p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;letter-spacing:.04em;">REFUND DUE — ${escapeHtml(inr(refund.amount))}</p>
-         <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">Method: ${escapeHtml(refund.refundMethod || 'original_payment')} · Status: pending manual processing</p>
-       </div>`
+    ? alertBanner(
+        `REFUND DUE — ${escapeHtml(inr(refund.amount))}`,
+        `Method: ${escapeHtml(refund.refundMethod || 'original_payment')} · Status: pending manual processing`
+      )
     : '';
 
   const html = renderEmail(
@@ -413,11 +424,15 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
  * on the genuine transition. A rare duplicate admin alert is harmless.
  *
  * @param {string} orderId
- * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'skipped-not-failed'}>}
  */
 export const emailAdminRefundFailedAlert = async (orderId) => {
   const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
   if (!order) return { status: 'not-found' };
+  // Re-check off the persisted order (mirrors emailAdminOrderCancelledAlert): only alert
+  // when the refund is genuinely in a failed state. A stale/hand-queued job, or a refund
+  // that was retried and has since succeeded, must not raise a false "money owed" alarm.
+  if (order.refundDetails?.status !== 'failed') return { status: 'skipped-not-failed' };
 
   const ref = orderRef(order);
   const customer = orderCustomer(order);
@@ -450,10 +465,7 @@ export const emailAdminRefundFailedAlert = async (orderId) => {
     .filter((v) => v !== null)
     .join('\n');
 
-  const banner = `<div style="margin:0 0 20px;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;">
-       <p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;letter-spacing:.04em;">REFUND FAILED — ${escapeHtml(inr(amount))} STILL OWED</p>
-       <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">${escapeHtml(reason)}</p>
-     </div>`;
+  const banner = alertBanner(`REFUND FAILED — ${escapeHtml(inr(amount))} STILL OWED`, escapeHtml(reason));
 
   const html = renderEmail(
     subject,
