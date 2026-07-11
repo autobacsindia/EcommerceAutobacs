@@ -58,8 +58,8 @@ jest.mock('react-hot-toast', () => ({
   },
 }));
 
-jest.mock('./ProductCard', () => {
-  return function MockProductCard({ product }: { product: any }) {
+jest.mock('./redesign/StoreProductCard', () => {
+  return function MockStoreProductCard({ product }: { product: any }) {
     return (
       <div data-testid="product-card">
         {product.name}

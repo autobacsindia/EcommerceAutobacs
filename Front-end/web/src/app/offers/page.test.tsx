@@ -87,9 +87,9 @@ describe('OffersPage', () => {
       expect(screen.getByText('Offer Product 2')).toBeInTheDocument();
     });
 
-    // Check discount badge for product 1
+    // Check discount badge for product 1 (StoreProductCard renders "-33%")
     // (originalPrice - price) / originalPrice * 100 = (150 - 100) / 150 * 100 = 33%
-    expect(screen.getByText('33% OFF')).toBeInTheDocument();
+    expect(screen.getByText('-33%')).toBeInTheDocument();
   });
 
   it('renders empty state when no offers found', async () => {

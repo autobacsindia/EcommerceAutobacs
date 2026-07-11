@@ -1,8 +1,9 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
+import type { Product as StoreProduct } from '@/lib/types';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
-import ProductCard from './ProductCard';
+import StoreProductCard from './redesign/StoreProductCard';
 
 interface ProductGridImage {
   url: string;
@@ -43,11 +44,12 @@ export default function ProductGrid({ products, loading }: ProductGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
       {products.map((product) => (
-        <ProductCard
+        <StoreProductCard
           key={product._id}
-          product={product as any}
+          product={product as unknown as StoreProduct}
+          featured={product.isFeatured}
         />
       ))}
     </div>
