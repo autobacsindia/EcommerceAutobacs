@@ -50,8 +50,12 @@ jobs:
           cache: "npm"
           cache-dependency-path: Front-end/web/package-lock.json
 
+      # --legacy-peer-deps matches how the lock was generated and how the app is
+      # built/deployed (Dockerfile + Vercel). Plain `npm ci` uses strict peer mode,
+      # which builds a different ideal tree (pulls peer-only deps like @floating-ui/dom
+      # + their Linux wasm runtimes) and then fails EUSAGE against this lock.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run ESLint
         run: npm run lint
@@ -72,8 +76,12 @@ jobs:
           cache: "npm"
           cache-dependency-path: Front-end/web/package-lock.json
 
+      # --legacy-peer-deps matches how the lock was generated and how the app is
+      # built/deployed (Dockerfile + Vercel). Plain `npm ci` uses strict peer mode,
+      # which builds a different ideal tree (pulls peer-only deps like @floating-ui/dom
+      # + their Linux wasm runtimes) and then fails EUSAGE against this lock.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       # Runs the curated, passing suite set (jest.ci.config.js quarantines
       # known-failing suites — see that file). Playwright e2e specs are excluded
@@ -109,8 +117,12 @@ jobs:
           cache: "npm"
           cache-dependency-path: Front-end/web/package-lock.json
 
+      # --legacy-peer-deps matches how the lock was generated and how the app is
+      # built/deployed (Dockerfile + Vercel). Plain `npm ci` uses strict peer mode,
+      # which builds a different ideal tree (pulls peer-only deps like @floating-ui/dom
+      # + their Linux wasm runtimes) and then fails EUSAGE against this lock.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Build
         env:
