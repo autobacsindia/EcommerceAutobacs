@@ -37,9 +37,11 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
 
   const handleAddToCart = async () => {
     setLoading(true);
+    // Optimistic: badge + toast fire on tap; rolled back with an error toast on
+    // a server rejection.
+    toast.success('Added to cart!');
     try {
       await addToCart(product._id, 1);
-      toast.success('Added to cart!');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
     } finally {

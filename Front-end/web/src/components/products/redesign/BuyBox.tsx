@@ -64,9 +64,11 @@ export default function BuyBox({ product }: { product: BuyBoxProduct }) {
 
   const add = async () => {
     setAdding(true);
+    // Optimistic: badge + toast fire on tap; a server rejection rolls the count
+    // back (in addToCart) and the catch surfaces an error toast.
+    toast.success(`Added ${qty} to cart`);
     try {
       await addToCart(product._id, qty);
-      toast.success(`Added ${qty} to cart`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add to cart');
     } finally {

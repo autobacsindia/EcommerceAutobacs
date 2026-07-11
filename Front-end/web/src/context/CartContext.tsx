@@ -20,6 +20,19 @@ interface CartItem {
   quantity: number;
 }
 
+/**
+ * Minimal product fields a caller can hand to `addToCart` so the optimistic
+ * line for a *first* add renders with real name/price/image while the server
+ * confirms. Optional — without it the item still counts instantly via a
+ * lightweight placeholder line that the server response then replaces.
+ */
+export type OptimisticProduct = {
+  name: string;
+  price: number;
+  images: ProductImage[] | string;
+  stock: StockStatus;
+};
+
 interface Cart {
   _id: string;
   items: CartItem[];
@@ -33,7 +46,7 @@ interface CartContextType {
   itemCount: number;
   isLoading: boolean;
   error: string | null;
-  addToCart: (productId: string, quantity?: number) => Promise<void>;
+  addToCart: (productId: string, quantity?: number, snapshot?: OptimisticProduct) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -148,23 +161,43 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(AUTH_LOGIN_EVENT, onLogin);
   }, [refreshCart]);
 
-  const addToCart = async (productId: string, quantity: number = 1) => {
+  const addToCart = async (productId: string, quantity: number = 1, snapshot?: OptimisticProduct) => {
     const previousCart = cart;
 
-    // Optimistic update: immediately increment quantity if item already in cart
-    if (cart) {
-      const existingItem = cart.items.find(item => item.product._id === productId);
+    // Optimistic update: reflect the add immediately so the cart badge responds on
+    // tap instead of after the ~1s server round-trip. This covers the *first* add
+    // of a product (append a line) as well as re-adds of an item already present —
+    // previously only re-adds were optimistic, so a product's first add felt slow.
+    setCart(prev => {
+      const base: Cart = prev ?? { _id: 'optimistic', items: [], total: 0, couponCode: null };
+      const existingItem = base.items.find(item => item.product._id === productId);
       if (existingItem) {
-        setCart({
-          ...cart,
-          items: cart.items.map(item =>
+        return {
+          ...base,
+          items: base.items.map(item =>
             item.product._id === productId
               ? { ...item, quantity: item.quantity + quantity }
               : item
           ),
-        });
+        };
       }
-    }
+      return {
+        ...base,
+        items: [
+          ...base.items,
+          {
+            product: {
+              _id: productId,
+              name: snapshot?.name ?? '',
+              price: snapshot?.price ?? 0,
+              images: snapshot?.images ?? [],
+              stock: snapshot?.stock ?? 'in',
+            },
+            quantity,
+          },
+        ],
+      };
+    });
 
     try {
       setIsLoading(true);

@@ -138,8 +138,8 @@ export default function OrderDetailPage() {
     if (!item.product?._id) { toast.error('Product no longer available'); return; }
     try {
       setAddingToCart(item._id);
-      await addToCart(item.product._id, 1);
       toast.success('Added to cart');
+      await addToCart(item.product._id, 1);
     } catch (err: any) {
       toast.error(err.message || 'Failed to add to cart');
     } finally {

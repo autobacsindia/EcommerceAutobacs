@@ -33,7 +33,8 @@ export default function WishlistPage() {
   };
 
   const handleAddToCart = async (productId: string) => {
-    try { await addToCart(productId, 1); toast.success('Item added to cart'); }
+    toast.success('Item added to cart');
+    try { await addToCart(productId, 1); }
     catch (err: any) { toast.error('Failed to add item to cart'); }
   };
 

@@ -115,9 +115,9 @@ export default function ProductCollection({
 
   const handleAddToCart = async (productId: string, e: React.MouseEvent) => {
     e.preventDefault();
+    toast.success('Added to cart!');
     try {
       await addToCart(productId, 1);
-      toast.success('Added to cart!');
     } catch (error) {
       console.error('Failed to add to cart:', error);
       toast.error('Failed to add to cart');
