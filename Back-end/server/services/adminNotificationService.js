@@ -306,31 +306,34 @@ export const emailAdminOrderPlacedAlert = async (orderId) => {
 };
 
 /**
- * Notify the support inbox that a CUSTOMER cancelled their own order.
+ * Notify the support inbox that an order was cancelled by a customer or an admin.
  *
- * Enqueued from orderStatusService on a `cancelled` transition. Admin- and
- * system-initiated cancels are filtered out at the enqueue site — emailing
- * support about an action support just took is self-noise — and re-checked here
- * so a stale or hand-queued job can't bypass that rule.
+ * Enqueued from orderStatusService on a `cancelled` transition. `system` cancels
+ * (expiry/automation) are filtered out at the enqueue site — they're not a support
+ * work item — and re-checked here so a stale or hand-queued job can't bypass that
+ * rule. Both customer and admin cancels alert: a customer self-cancel may owe a
+ * refund; an admin cancel is an audit record other staff should see.
  *
  * When the money was already captured, cancelling auto-writes a pending
  * `refundDetails` record for manual processing; that is surfaced in the subject
  * line and as a banner, because it is a work item rather than an FYI.
  *
  * @param {string} orderId
- * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'skipped-not-cancelled'|'skipped-not-customer'}>}
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'skipped-not-cancelled'|'skipped-system-cancel'}>}
  */
 export const emailAdminOrderCancelledAlert = async (orderId) => {
   const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
   if (!order) return { status: 'not-found' };
   if (order.status !== 'cancelled') return { status: 'skipped-not-cancelled' };
-  if (order.cancelledBy !== 'customer') return { status: 'skipped-not-customer' };
+  // Mirror the enqueue-site filter: alert on human cancels only, never automation.
+  if (!['customer', 'admin'].includes(order.cancelledBy)) return { status: 'skipped-system-cancel' };
 
   const ref = orderRef(order);
   const customer = orderCustomer(order);
   const items = itemLines(order);
   const adminLink = adminOrderLink(order);
   const cancelledAt = order.cancelledAt ? new Date(order.cancelledAt) : new Date();
+  const actor = order.cancelledBy === 'admin' ? 'admin' : 'customer';
 
   // A pending refund record is written on cancel whenever the order was already
   // paid — that, not paymentStatus, is what the team has to action.
@@ -341,10 +344,10 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
 
   const subject = refund
     ? `Order cancelled — REFUND DUE ${inr(refund.amount)} — ${ref}`
-    : `Order cancelled by customer — ${ref}`;
+    : `Order cancelled by ${actor} — ${ref}`;
   const intro = refund
-    ? 'The customer cancelled a paid order. A refund is pending and needs to be processed.'
-    : 'The customer cancelled their order. No payment was captured, so nothing to refund.';
+    ? `This order was cancelled by ${actor === 'admin' ? 'an admin' : 'the customer'} after payment was captured. A refund is pending and needs to be processed.`
+    : `This order was cancelled by ${actor === 'admin' ? 'an admin' : 'the customer'}. No payment was captured, so nothing to refund.`;
 
   const text = [
     intro,
@@ -355,6 +358,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
     `Order total: ${inr(order.totalAmount)}`,
     `Customer   : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
     customer.phone ? `Phone      : ${customer.phone}` : null,
+    `Cancelled by: ${actor}`,
     `Cancelled  : ${cancelledAt.toLocaleString('en-IN')}`,
     order.cancellationReason ? `Reason     : ${order.cancellationReason}` : null,
     '',
@@ -382,6 +386,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
       ['Refund due', refund ? `<strong style="color:#b91c1c;">${escapeHtml(inr(refund.amount))}</strong>` : 'None — order was unpaid'],
       ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
       ['Phone', escapeHtml(customer.phone)],
+      ['Cancelled by', escapeHtml(actor)],
       ['Cancelled', escapeHtml(cancelledAt.toLocaleString('en-IN'))],
       ['Reason', escapeHtml(order.cancellationReason || '')],
       ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
@@ -394,9 +399,86 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
   return sendToAdmins({ subject, text, html }, `order-cancelled ${orderId}`);
 };
 
+/**
+ * Notify the support inbox that a refund FAILED at the payment gateway.
+ *
+ * Enqueued from razorpayService.applyRefundWebhook on a `refund.failed` webhook.
+ * This is the most actionable alert we send: the money did NOT reach the customer,
+ * the order is stuck in a `failed` refund state, and only a human can retry it
+ * (re-initiate the refund, or arrange a manual/bank payout). Surfaced with a red
+ * banner and a direct link to the order.
+ *
+ * Best-effort/retry-safe: a replayed refund.failed webhook is de-duped upstream
+ * (applyRefundWebhook no-ops once status is already `failed`), so this only fires
+ * on the genuine transition. A rare duplicate admin alert is harmless.
+ *
+ * @param {string} orderId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
+ */
+export const emailAdminRefundFailedAlert = async (orderId) => {
+  const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
+  if (!order) return { status: 'not-found' };
+
+  const ref = orderRef(order);
+  const customer = orderCustomer(order);
+  const adminLink = adminOrderLink(order);
+  const refund = order.refundDetails || {};
+  const amount = refund.amount || order.totalAmount;
+  const method = refund.refundMethod || 'original_payment';
+  const reason = refund.failureReason || 'Unknown gateway error';
+  const refundId = refund.transactionId || '';
+
+  const subject = `⚠ REFUND FAILED — ${inr(amount)} owed — ${ref}`;
+  const intro =
+    'A refund could not be completed at the payment gateway. The customer has NOT been refunded — this order needs a manual retry or an alternative payout.';
+
+  const text = [
+    intro,
+    '',
+    `** REFUND FAILED: ${inr(amount)} (${method}) STILL OWED **`,
+    '',
+    `Order      : ${ref}`,
+    `Amount     : ${inr(amount)}`,
+    `Method     : ${method}`,
+    `Gateway err: ${reason}`,
+    refundId ? `Refund id  : ${refundId}` : null,
+    `Customer   : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
+    customer.phone ? `Phone      : ${customer.phone}` : null,
+    '',
+    `Retry refund: ${adminLink}`,
+  ]
+    .filter((v) => v !== null)
+    .join('\n');
+
+  const banner = `<div style="margin:0 0 20px;padding:14px 16px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;">
+       <p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;letter-spacing:.04em;">REFUND FAILED — ${escapeHtml(inr(amount))} STILL OWED</p>
+       <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">${escapeHtml(reason)}</p>
+     </div>`;
+
+  const html = renderEmail(
+    subject,
+    intro,
+    [
+      ['Order', escapeHtml(ref)],
+      ['Amount owed', `<strong style="color:#b91c1c;">${escapeHtml(inr(amount))}</strong>`],
+      ['Method', escapeHtml(method)],
+      ['Gateway error', escapeHtml(reason)],
+      ['Refund id', escapeHtml(refundId)],
+      ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
+      ['Phone', escapeHtml(customer.phone)],
+    ],
+    'Retry refund',
+    adminLink,
+    banner
+  );
+
+  return sendToAdmins({ subject, text, html }, `refund-failed ${orderId}`);
+};
+
 export default {
   emailAdminReviewAlert,
   emailAdminConsultationAlert,
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
+  emailAdminRefundFailedAlert,
 };

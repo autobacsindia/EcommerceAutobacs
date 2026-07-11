@@ -616,6 +616,31 @@ class RazorpayService {
 
     await orderRepository.save(order);
     console.log(`[Webhook] refund.${finalStatus} applied to order ${order._id} (refundId ${refundId})`);
+
+    // Notifications (best-effort, post-save). Reached only on a genuine terminal
+    // transition — the early returns above de-dupe replayed webhooks — so each fires
+    // at most once per real refund outcome. A Redis/queue failure must never fail the
+    // webhook (Razorpay would retry the whole event and re-apply is idempotent anyway).
+    if (process.env.REDIS_URL) {
+      const queue = getNotificationsQueue();
+      if (finalStatus === 'completed') {
+        // Tell the customer their money is on the way. Reuses the idempotent
+        // status-email path (guarded by Order.notifiedStatuses['refunded']).
+        queue
+          .add('send-order-status-email', { orderId: order._id.toString(), status: 'refunded' })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue refund status email for ${order._id}:`, err.message)
+          );
+      } else {
+        // Refund failed at the gateway — the customer is still owed money and only a
+        // human can resolve it. Alert the support inbox.
+        queue
+          .add('send-admin-refund-failed-alert', { orderId: order._id.toString() })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue send-admin-refund-failed-alert for ${order._id}:`, err.message)
+          );
+      }
+    }
   }
 }
 

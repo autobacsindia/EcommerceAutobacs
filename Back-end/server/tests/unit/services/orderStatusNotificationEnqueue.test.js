@@ -34,7 +34,11 @@ afterAll(() => {
 });
 
 describe('_enqueueStatusNotification', () => {
-  test.each(['shipped', 'delivered', 'cancelled', 'refunded'])(
+  // Core-4 = the fulfillment statuses that email the customer on transition. Note
+  // `refunded` is NOT here: it's a payment-axis outcome delivered via the Razorpay
+  // refund webhook (see razorpayService.applyRefundWebhook / refundWebhook.test.js),
+  // not a fulfillment-status transition.
+  test.each(['shipped', 'delivered', 'cancelled', 'returned'])(
     'enqueues send-order-status-email for Core-4 status %s',
     (status) => {
       service._enqueueStatusNotification('order123', status);
@@ -67,7 +71,7 @@ describe('_enqueueStatusNotification', () => {
     );
   });
 
-  test.each(['shipped', 'cancelled', 'refunded'])(
+  test.each(['shipped', 'cancelled', 'returned'])(
     'non-delivered status %s does NOT enqueue a review request',
     (status) => {
       service._enqueueStatusNotification('order123', status);
@@ -83,15 +87,15 @@ describe('_enqueueStatusNotification', () => {
 describe('_enqueueAdminOrderAlert', () => {
   const order = (over = {}) => ({ _id: 'order123', ...over });
 
-  test('a customer self-cancel alerts the support inbox', () => {
-    service._enqueueAdminOrderAlert(order({ cancelledBy: 'customer' }), 'cancelled');
+  test.each(['customer', 'admin'])('a %s-initiated cancel alerts the support inbox', (cancelledBy) => {
+    service._enqueueAdminOrderAlert(order({ cancelledBy }), 'cancelled');
 
     expect(mockNotificationsAdd).toHaveBeenCalledWith('send-admin-order-cancelled-alert', {
       orderId: 'order123',
     });
   });
 
-  test.each(['admin', 'system', undefined])(
+  test.each(['system', undefined])(
     'a %s-initiated cancel does NOT alert support',
     (cancelledBy) => {
       service._enqueueAdminOrderAlert(order({ cancelledBy }), 'cancelled');

@@ -12,8 +12,17 @@ const mockPaymentRepository = {
   save: jest.fn(),
 };
 
+// Post-save notification enqueue is gated on REDIS_URL and fans out through the
+// notifications queue — mock it so we can assert what gets enqueued on each outcome.
+const mockNotificationsAdd = jest.fn().mockResolvedValue(undefined);
+
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({ default: mockOrderRepository }));
 jest.unstable_mockModule('../../../repositories/paymentRepository.js', () => ({ default: mockPaymentRepository }));
+jest.unstable_mockModule('../../../queue/queues.js', () => ({
+  getNotificationsQueue: () => ({ add: mockNotificationsAdd }),
+  getOrderQueue: () => ({ add: jest.fn().mockResolvedValue(undefined) }),
+  getSearchSyncQueue: () => ({ add: jest.fn().mockResolvedValue(undefined) }),
+}));
 
 const razorpayService = (await import('../../../services/razorpayService.js')).default;
 
@@ -84,5 +93,48 @@ describe('razorpayService.applyRefundWebhook', () => {
     await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 150000, notes: { orderId: 'order-1' } }, 'completed');
 
     expect(mockOrderRepository.save).not.toHaveBeenCalled();
+  });
+
+  describe('notifications (REDIS_URL set)', () => {
+    const OLD_REDIS = process.env.REDIS_URL;
+    // The outer beforeEach runs jest.clearAllMocks(), which strips the resolved-value
+    // implementation — re-apply it so `.add(...).catch(...)` has a promise to chain.
+    beforeEach(() => {
+      mockNotificationsAdd.mockResolvedValue(undefined);
+      process.env.REDIS_URL = 'redis://localhost:6379';
+    });
+    afterEach(() => { if (OLD_REDIS === undefined) delete process.env.REDIS_URL; else process.env.REDIS_URL = OLD_REDIS; });
+
+    it('enqueues the customer refunded email on refund.processed', async () => {
+      mockOrderRepository.findById.mockResolvedValue(makeOrder());
+
+      await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 150000, notes: { orderId: 'order-1' } }, 'completed');
+
+      expect(mockNotificationsAdd).toHaveBeenCalledWith('send-order-status-email', {
+        orderId: 'order-1',
+        status: 'refunded',
+      });
+    });
+
+    it('enqueues the support refund-failed alert on refund.failed', async () => {
+      mockOrderRepository.findById.mockResolvedValue(makeOrder());
+
+      await razorpayService.applyRefundWebhook(
+        { id: 'rfnd_1', amount: 150000, notes: { orderId: 'order-1' }, error: { description: 'insufficient balance' } },
+        'failed'
+      );
+
+      expect(mockNotificationsAdd).toHaveBeenCalledWith('send-admin-refund-failed-alert', {
+        orderId: 'order-1',
+      });
+    });
+
+    it('does not enqueue on a replayed (no-op) webhook', async () => {
+      mockOrderRepository.findById.mockResolvedValue(makeOrder({ refundDetails: { status: 'completed', transactionId: 'rfnd_1' } }));
+
+      await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 150000, notes: { orderId: 'order-1' } }, 'completed');
+
+      expect(mockNotificationsAdd).not.toHaveBeenCalled();
+    });
   });
 });

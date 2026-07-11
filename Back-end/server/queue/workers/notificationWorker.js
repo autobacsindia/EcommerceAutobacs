@@ -9,7 +9,8 @@
  *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
  *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
  *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
- *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer cancellation
+ *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
+ *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
  */
 
 import { Worker } from 'bullmq';
@@ -23,6 +24,7 @@ import {
   emailAdminConsultationAlert,
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
+  emailAdminRefundFailedAlert,
 } from '../../services/adminNotificationService.js';
 import * as Sentry from '@sentry/node';
 
@@ -65,6 +67,11 @@ const handlers = {
   'send-admin-order-cancelled-alert': async (job) => {
     const { orderId } = job.data;
     await emailAdminOrderCancelledAlert(orderId);
+  },
+
+  'send-admin-refund-failed-alert': async (job) => {
+    const { orderId } = job.data;
+    await emailAdminRefundFailedAlert(orderId);
   },
 };
 

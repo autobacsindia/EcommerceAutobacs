@@ -350,19 +350,21 @@ class OrderStatusService {
   }
 
   /**
-   * Enqueue the internal support-inbox alert for a customer self-cancellation.
+   * Enqueue the internal support-inbox alert for an order cancellation.
    *
-   * Only `cancelledBy: 'customer'` alerts: an admin cancelling from the admin panel
-   * already knows they did it, and a `system` cancel (expiry/automation) is not a
-   * support work item. The worker re-checks both conditions off the persisted order,
-   * so this filter is an optimisation, not the only guard.
+   * Alerts on `cancelledBy: 'customer'` OR `'admin'` — support wants a record of
+   * every human cancellation (a customer self-cancel is a possible refund to
+   * process; an admin cancel is an audit trail + refund the acting admin may not
+   * have processed). `system` cancels (expiry/automation) are deliberately excluded
+   * — they're not a support work item and would be pure noise. The worker re-checks
+   * this off the persisted order, so the filter is an optimisation, not the only guard.
    *
    * Best-effort — the alert must never fail the status transition. Silently skips
    * when Redis isn't configured.
    * @private
    */
   _enqueueAdminOrderAlert(order, newStatus) {
-    if (newStatus !== 'cancelled' || order.cancelledBy !== 'customer' || !process.env.REDIS_URL) return;
+    if (newStatus !== 'cancelled' || !['customer', 'admin'].includes(order.cancelledBy) || !process.env.REDIS_URL) return;
 
     getNotificationsQueue()
       .add('send-admin-order-cancelled-alert', { orderId: order._id.toString() })

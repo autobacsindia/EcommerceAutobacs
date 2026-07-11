@@ -42,6 +42,7 @@ const {
   emailAdminConsultationAlert,
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
+  emailAdminRefundFailedAlert,
 } = await import('../../../services/adminNotificationService.js');
 
 beforeEach(() => {
@@ -261,10 +262,20 @@ describe('emailAdminOrderCancelledAlert', () => {
     expect(arg.html).toContain('None — order was unpaid');
   });
 
-  test.each(['admin', 'system'])('does not alert on a %s-initiated cancel', async (by) => {
+  test('alerts on an admin-initiated cancel and names the actor', async () => {
+    mockOrderFindById.mockResolvedValue(cancelled({ cancelledBy: 'admin', refundDetails: undefined }));
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    expect(await emailAdminOrderCancelledAlert('o1')).toEqual({ status: 'sent' });
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.subject).toContain('Order cancelled by admin');
+    expect(arg.text).toContain('Cancelled by: admin');
+  });
+
+  test.each(['system', undefined])('does not alert on a %s-initiated cancel', async (by) => {
     mockOrderFindById.mockResolvedValue(cancelled({ cancelledBy: by }));
 
-    expect(await emailAdminOrderCancelledAlert('o1')).toEqual({ status: 'skipped-not-customer' });
+    expect(await emailAdminOrderCancelledAlert('o1')).toEqual({ status: 'skipped-system-cancel' });
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
@@ -278,6 +289,53 @@ describe('emailAdminOrderCancelledAlert', () => {
   test('returns not-found when the order is missing', async () => {
     mockOrderFindById.mockResolvedValue(null);
     expect(await emailAdminOrderCancelledAlert('missing')).toEqual({ status: 'not-found' });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('emailAdminRefundFailedAlert', () => {
+  const failed = (over = {}) =>
+    makeOrder({
+      paymentStatus: 'paid',
+      refundDetails: {
+        status: 'failed',
+        amount: 12499.5,
+        refundMethod: 'original_payment',
+        failureReason: 'insufficient balance',
+        transactionId: 'rfnd_1',
+      },
+      ...over,
+    });
+
+  test('alerts support with the amount owed, gateway error and a retry link', async () => {
+    mockOrderFindById.mockResolvedValue(failed());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    expect(await emailAdminRefundFailedAlert('o1')).toEqual({ status: 'sent' });
+
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.to).toBe('support@autobacsindia.com');
+    expect(arg.subject).toContain('REFUND FAILED');
+    expect(arg.subject).toContain('12,499.50');
+    expect(arg.text).toContain('insufficient balance');
+    expect(arg.text).toContain('rfnd_1');
+    expect(arg.html).toContain('Retry refund');
+    expect(arg.html).toContain('/admin/orders/64b7f1c2a9e4d3b100ff01ab');
+  });
+
+  test('falls back to the order total and a generic reason when refund details are sparse', async () => {
+    mockOrderFindById.mockResolvedValue(failed({ refundDetails: { status: 'failed' } }));
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminRefundFailedAlert('o1');
+    const arg = mockSendEmail.mock.calls[0][0];
+    expect(arg.subject).toContain('12,499.50'); // order total
+    expect(arg.text).toContain('Unknown gateway error');
+  });
+
+  test('returns not-found when the order is missing', async () => {
+    mockOrderFindById.mockResolvedValue(null);
+    expect(await emailAdminRefundFailedAlert('missing')).toEqual({ status: 'not-found' });
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });
