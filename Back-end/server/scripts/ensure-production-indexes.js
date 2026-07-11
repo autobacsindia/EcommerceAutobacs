@@ -261,6 +261,12 @@ async function ensureProductionIndexes() {
         spec: { source: 1 },
         options: { background: true },
         description: 'Separate historical WooCommerce orders from live web orders (ADR-005)'
+      },
+      {
+        name: 'refundDetails.transactionId',
+        spec: { 'refundDetails.transactionId': 1 },
+        options: { sparse: true, background: true },
+        description: 'Refund webhook fallback lookup by Razorpay refund id (findOneByRefundId)'
       }
     ];
 
