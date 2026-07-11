@@ -708,6 +708,14 @@ const STATUS_COPY = {
     heading: 'Your refund has been processed 💳',
     blurb: 'Your refund has been processed. It may take a few business days to reflect in your account, depending on your bank.',
   },
+  // `returned` is the fulfillment status set when a return is completed (distinct from
+  // `refunded`, the payment-axis outcome delivered via the Razorpay refund webhook). The
+  // return-accepted email; the separate `refunded` email confirms the money movement.
+  returned: {
+    subject: (ref) => `Return completed — ${ref}`,
+    heading: 'Your return is complete ↩️',
+    blurb: 'We\'ve completed your return. Any eligible refund is processed to your original payment method and you\'ll get a separate confirmation once it\'s on its way.',
+  },
 };
 
 /**

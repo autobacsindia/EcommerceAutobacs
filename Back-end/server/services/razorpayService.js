@@ -626,14 +626,18 @@ class RazorpayService {
       if (finalStatus === 'completed') {
         // Tell the customer their money is on the way. Reuses the idempotent
         // status-email path (guarded by Order.notifiedStatuses['refunded']).
+        // NOTE: that guard keys on the status string, so it notifies once per order.
+        // Fine while refunds are full-only; a future partial/multi-refund flow must
+        // switch to per-refund-id idempotency or a second completed refund goes unsent.
         queue
           .add('send-order-status-email', { orderId: order._id.toString(), status: 'refunded' })
           .catch((err) =>
             console.error(`[Queue] Failed to enqueue refund status email for ${order._id}:`, err.message)
           );
-      } else {
+      } else if (finalStatus === 'failed') {
         // Refund failed at the gateway — the customer is still owed money and only a
-        // human can resolve it. Alert the support inbox.
+        // human can resolve it. Alert the support inbox. (Guarded on the explicit
+        // 'failed' status so a future non-terminal finalStatus can't misfire this.)
         queue
           .add('send-admin-refund-failed-alert', { orderId: order._id.toString() })
           .catch((err) =>

@@ -338,4 +338,14 @@ describe('emailAdminRefundFailedAlert', () => {
     expect(await emailAdminRefundFailedAlert('missing')).toEqual({ status: 'not-found' });
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
+
+  test.each(['completed', 'processing', 'pending', undefined])(
+    'does not alert when the refund is not in a failed state (%s) — no false "money owed" alarm',
+    async (refundStatus) => {
+      mockOrderFindById.mockResolvedValue(failed({ refundDetails: { status: refundStatus } }));
+
+      expect(await emailAdminRefundFailedAlert('o1')).toEqual({ status: 'skipped-not-failed' });
+      expect(mockSendEmail).not.toHaveBeenCalled();
+    }
+  );
 });

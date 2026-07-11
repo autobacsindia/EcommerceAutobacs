@@ -16,7 +16,7 @@ const baseOrder = () => ({
 describe('orderStatusEmail', () => {
   const company = { name: 'Autobacs India', email: 'support@autobacsindia.com' };
 
-  test.each(['shipped', 'delivered', 'cancelled', 'refunded'])(
+  test.each(['shipped', 'delivered', 'cancelled', 'refunded', 'returned'])(
     'returns a non-empty subject/text/html for %s',
     (status) => {
       const { subject, text, html } = orderStatusEmail({ order: baseOrder(), status, company });
@@ -27,6 +27,14 @@ describe('orderStatusEmail', () => {
       expect(html).toContain('AB-');
     }
   );
+
+  test('returned email uses tailored copy, not the generic status fallback', () => {
+    const { subject, html } = orderStatusEmail({ order: baseOrder(), status: 'returned', company });
+    expect(subject).toContain('Return completed');
+    expect(html).toContain('Your return is complete');
+    // Must NOT fall through to the generic "status is now: returned" default.
+    expect(html).not.toContain('status is now');
+  });
 
   test('shipped email includes the tracking number and carrier link when present', () => {
     const order = {
@@ -40,24 +48,33 @@ describe('orderStatusEmail', () => {
     expect(text).toContain('TRK123456');
   });
 
-  test('refunded email shows the refund amount', () => {
-    const { html } = orderStatusEmail({ order: baseOrder(), status: 'refunded', company });
-    // ₹2,499.00 formatted
-    expect(html).toMatch(/2,499\.00/);
+  test('refunded email uses tailored refund copy', () => {
+    const { subject, html } = orderStatusEmail({ order: baseOrder(), status: 'refunded', company });
+    expect(subject).toContain('Refund processed');
+    expect(html).toContain('Your refund has been processed');
   });
 
-  test('cancelled email includes the transition reason from statusHistory', () => {
+  test('cancelled email does NOT leak the internal cancellation reason to the customer', () => {
+    // Internal reasons (e.g. 'fraud_suspected', 'out_of_stock') must never be surfaced
+    // in a customer-facing email — the copy stays deliberately generic.
     const order = {
       ...baseOrder(),
-      statusHistory: [{ status: 'cancelled', reason: 'out_of_stock' }],
+      cancellationReason: 'fraud_suspected',
+      statusHistory: [{ status: 'cancelled', reason: 'fraud_suspected' }],
     };
     const { html } = orderStatusEmail({ order, status: 'cancelled', company });
-    expect(html).toContain('out_of_stock');
+    expect(html).toContain('Your order was cancelled');
+    expect(html).not.toContain('fraud_suspected');
   });
 
-  test('throws on an unsupported status (defensive)', () => {
-    expect(() => orderStatusEmail({ order: baseOrder(), status: 'confirmed', company })).toThrow(
-      /unsupported status/i
-    );
+  test('falls back gracefully for an unknown status — never throws in the notification worker', () => {
+    // A throw here would fail the BullMQ job and retry forever on a permanently-bad
+    // status; a generic fallback email is the production-grade behavior.
+    let out;
+    expect(() => {
+      out = orderStatusEmail({ order: baseOrder(), status: 'confirmed', company });
+    }).not.toThrow();
+    expect(out.subject).toBeTruthy();
+    expect(out.html).toContain('<!DOCTYPE html>');
   });
 });
