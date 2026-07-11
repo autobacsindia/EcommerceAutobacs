@@ -65,7 +65,6 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'System',
     items: [
       { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
-      { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
     ],
   },
 ];
