@@ -10,7 +10,6 @@
  * - User Domain: users, profile, cart, wishlist, reviews
  * - Order Domain: orders, returns, payments, razorpay
  * - Admin Domain: dashboard, warehouses, delivery zones, wordpress, media
- * - Location Domain: location services
  * - Contact Domain: contact forms, consultations
  * - Monitoring Domain: rate limits, redis, adaptive throttling, scheduled tasks
  */
@@ -21,7 +20,6 @@ import {
   authenticatedUserRateLimit,
   checkoutRateLimit,
   adminRouteRateLimit,
-  locationRateLimit,
   contactFormRateLimit,
   consultationRateLimit,
   returnsRateLimit
@@ -62,7 +60,6 @@ import mediaRoutes from './media.js';
 import pageSeoRoutes from './pageSeo.js';
 import scheduledTasksRoutes from './scheduledTasks.js';
 
-import locationRoutes from './location.js';
 import contactRoutes from './contact.js';
 import consultationRoutes from './consultation.js';
 
@@ -152,13 +149,6 @@ apiRouter.use('/admin/rate-limits/dashboard', rateLimitDashboardRoutes);
 apiRouter.use('/admin/adaptive-throttling', adaptiveThrottlingRoutes);
 apiRouter.use('/admin/redis', redisMonitorRoutes);
 apiRouter.use('/admin', adminStatsRoutes);
-
-// ============================================================================
-// LOCATION DOMAIN
-// Routes: /location/*
-// Rate Limit: 30 req/15min (Google Maps costs money)
-// ============================================================================
-apiRouter.use('/location', locationRateLimit, locationRoutes);
 
 // ============================================================================
 // CONTACT DOMAIN

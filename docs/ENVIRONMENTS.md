@@ -109,14 +109,12 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 ### Bucket B — safe to SHARE (same value both tiers)
 
 Tuning/config with no data or identity coupling: `JWT_EXPIRE`, `JWT_ADMIN_EXPIRE`,
-rate-limit maxes (`REGISTER_/LOGIN_/FAILED_LOGIN_RATE_LIMIT_MAX`), `GOOGLE_MAPS_REGION`,
-`GOOGLE_MAPS_LANGUAGE`, delivery settings (`WAREHOUSE_PROCESSING_DAYS`, `EXCLUDE_SUNDAYS`,
-`DELIVERY_ESTIMATE_BUFFER`), inventory settings (`STOCK_RESERVATION_TIMEOUT`, `LOW_STOCK_THRESHOLD`,
-`ENABLE_SPLIT_SHIPMENTS`, `STOCK_SYNC_FREQUENCY`), notification retry, `CACHE_VERSION`,
-location params. `GOOGLE_CLIENT_ID/SECRET` and `FACEBOOK_CLIENT_ID/SECRET` can be shared (one app,
-multiple redirect URIs) — only the `*_CALLBACK_URL` / `*_REDIRECT_URI` differ. `GOOGLE_MAPS_*_KEY`
-and `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` can be shared (restrict per env).
-`NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` is prod-only meaningful.
+rate-limit maxes (`REGISTER_/LOGIN_/FAILED_LOGIN_RATE_LIMIT_MAX`), inventory settings
+(`STOCK_RESERVATION_TIMEOUT`, `LOW_STOCK_THRESHOLD`, `ENABLE_SPLIT_SHIPMENTS`,
+`STOCK_SYNC_FREQUENCY`), notification retry, `CACHE_VERSION`. `GOOGLE_CLIENT_ID/SECRET`
+and `FACEBOOK_CLIENT_ID/SECRET` can be shared (one app, multiple redirect URIs) — only the
+`*_CALLBACK_URL` / `*_REDIRECT_URI` differ. `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` is
+prod-only meaningful.
 
 ### Bucket C — HOST-managed, NEVER set manually
 

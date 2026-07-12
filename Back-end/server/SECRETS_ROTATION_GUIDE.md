@@ -28,24 +28,14 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   3. Create new API key
   4. Update `SENDGRID_API_KEY` in Railway
 
-### 4. Google Maps API Keys
-- **Current**: `<redacted — rotate/restrict in Google Cloud Console>`
-- **Action**:
-  1. Go to Google Cloud Console: https://console.cloud.google.com/
-  2. Navigate to APIs & Services > Credentials
-  3. Restrict existing keys or create new ones
-  4. Update `GOOGLE_MAPS_CLIENT_KEY` and `GOOGLE_MAPS_SERVER_KEY` in Railway
-  5. Set HTTP referrer restrictions for client key
-  6. Set IP address restrictions for server key
-
-### 5. Google OAuth Client Secret
+### 4. Google OAuth Client Secret
 - **Current**: `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`
 - **Action**:
   1. Go to Google Cloud Console > APIs & Services > Credentials
   2. Reset OAuth client secret
   3. Update `GOOGLE_CLIENT_SECRET` in Railway
 
-### 6. Facebook App Secret
+### 5. Facebook App Secret
 - **Current**: `0cc97796ff395712e1263bc3c2ea1fb5`
 - **Action**:
   1. Go to Facebook Developers: https://developers.facebook.com/apps/
@@ -53,7 +43,7 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   3. Reset App Secret
   4. Update `FACEBOOK_CLIENT_SECRET` in Railway
 
-### 7. Cloudinary API Secret
+### 6. Cloudinary API Secret
 - **Current**: `Yf-19DBPQx15YDmRdkPq3lnCGBc`
 - **Action**:
   1. Go to Cloudinary: https://cloudinary.com/console
@@ -61,14 +51,14 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   3. Regenerate API Secret
   4. Update `CLOUDINARY_API_SECRET` in Railway
 
-### 8. JWT Secret
+### 7. JWT Secret
 - **Current**: `ac165bfe5778e5f61ab6bab5ff3c5912...`
 - **Action**:
   1. Generate new JWT secret: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
   2. Update `JWT_SECRET` in Railway
   3. **WARNING**: This will invalidate all existing user sessions. Users will need to log in again.
 
-### 9. Razorpay Keys (CRITICAL FOR PRODUCTION)
+### 8. Razorpay Keys (CRITICAL FOR PRODUCTION)
 - **Current**: Using TEST keys (`rzp_test_*`)
 - **Action**:
   1. Go to Razorpay Dashboard: https://dashboard.razorpay.com/app/keys

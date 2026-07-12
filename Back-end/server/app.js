@@ -48,7 +48,6 @@ import {
   checkoutRateLimit,
   returnsRateLimit,
   adminRateLimit,
-  locationRateLimit,
   contactFormRateLimit,
   consultationRateLimit,
   healthCheckRateLimit,

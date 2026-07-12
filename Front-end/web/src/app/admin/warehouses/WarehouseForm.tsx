@@ -16,7 +16,7 @@ const EMPTY_FORM: WarehouseFormData = {
   name: '',
   code: '',
   type: 'warehouse',
-  location: { address: '', city: '', state: '', postalCode: '', country: 'India' },
+  location: { address: '', city: '', state: '', postalCode: '', country: 'India', latitude: '', longitude: '' },
   serviceablePinCodes: [],
   operationalStatus: 'active',
   contactInfo: { phone: '', email: '', manager: '' },
@@ -208,6 +208,40 @@ export default function WarehouseForm({ initialData, warehouseId, mode, onSucces
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Latitude *</label>
+              <input
+                required
+                type="number"
+                step="any"
+                min={-90}
+                max={90}
+                value={form.location.latitude}
+                onChange={e => set('location.latitude', e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                placeholder="28.6139"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Longitude *</label>
+              <input
+                required
+                type="number"
+                step="any"
+                min={-180}
+                max={180}
+                value={form.location.longitude}
+                onChange={e => set('location.longitude', e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                placeholder="77.2090"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            Used for nearest-warehouse routing. Look up coordinates from any map service (right-click a location → copy lat/lng).
+          </p>
         </section>
 
         {/* Contact */}

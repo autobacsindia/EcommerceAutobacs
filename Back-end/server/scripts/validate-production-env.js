@@ -126,18 +126,6 @@ const requiredEnvVars = {
     }
   },
   
-  // Google Services
-  GOOGLE_MAPS_CLIENT_KEY: {
-    description: 'Google Maps client API key',
-    validate: (value) => {
-      if (!value) return 'Required for location services';
-      if (!value.startsWith('AIza')) {
-        return 'Invalid format - should start with AIza';
-      }
-      return null;
-    }
-  },
-  
   // OAuth (optional but recommended)
   GOOGLE_CLIENT_ID: {
     description: 'Google OAuth client ID',

@@ -13,17 +13,22 @@ const mockWarehouse = {
 const mockWarehouseInventory = {
   find: jest.fn(),
   findOne: jest.fn(),
+  findOneAndUpdate: jest.fn(),
   countDocuments: jest.fn(),
   findWarehousesWithStock: jest.fn(),
   getTotalStock: jest.fn(),
   getLowStockItems: jest.fn(),
 };
 
-// Mock Google Maps Service
-const mockGoogleMapsService = {
-  geocodeAddress: jest.fn(),
-  calculateDistance: jest.fn(),
+// Minimal mongoose stub — selectWarehouseForOrder only needs a session whose
+// withTransaction runs the callback (no real replica set in unit tests).
+// jest config uses resetMocks:true, so startSession's implementation is
+// (re)applied in beforeEach rather than in the module factory.
+const mockSession = {
+  withTransaction: async (fn) => { await fn(); },
+  endSession: jest.fn(),
 };
+const mockMongoose = { startSession: jest.fn() };
 
 // Mock Warehouse Instance
 const mockWarehouseInstance = {
@@ -66,6 +71,7 @@ jest.unstable_mockModule('../../../models/WarehouseInventory.js', () => ({
     }
     static find = mockWarehouseInventory.find;
     static findOne = mockWarehouseInventory.findOne;
+    static findOneAndUpdate = mockWarehouseInventory.findOneAndUpdate;
     static countDocuments = mockWarehouseInventory.countDocuments;
     static findWarehousesWithStock = mockWarehouseInventory.findWarehousesWithStock;
     static getTotalStock = mockWarehouseInventory.getTotalStock;
@@ -77,8 +83,8 @@ jest.unstable_mockModule('../../../models/Product.js', () => ({
   default: {}
 }));
 
-jest.unstable_mockModule('../../../services/googleMapsService.js', () => ({
-  default: mockGoogleMapsService
+jest.unstable_mockModule('mongoose', () => ({
+  default: mockMongoose,
 }));
 
 // Import service
@@ -87,7 +93,10 @@ const { default: warehouseService } = await import('../../../services/warehouseS
 describe('WarehouseService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
+    // resetMocks:true wipes implementations between tests — reapply the session stub.
+    mockMongoose.startSession.mockResolvedValue(mockSession);
+
     // Reset chainable mocks
     mockWarehouse.find.mockReturnValue({
       sort: jest.fn().mockReturnThis(),
@@ -107,26 +116,42 @@ describe('WarehouseService', () => {
   });
 
   describe('createWarehouse', () => {
-    test('should create warehouse with geocoding', async () => {
-      mockGoogleMapsService.geocodeAddress.mockResolvedValue({
-        coordinates: { longitude: 10, latitude: 20 }
-      });
-
+    test('should normalise manual lat/lng into GeoJSON coordinates', async () => {
       const warehouseData = {
         name: 'Test Warehouse',
         location: {
           address: '123 Main St',
           city: 'City',
           state: 'State',
-          postalCode: '12345'
+          postalCode: '12345',
+          latitude: 20,
+          longitude: 10
         }
       };
 
       const result = await warehouseService.createWarehouse(warehouseData);
 
-      expect(mockGoogleMapsService.geocodeAddress).toHaveBeenCalled();
+      // [lng, lat] GeoJSON order
+      expect(warehouseData.location.coordinates).toEqual({
+        type: 'Point',
+        coordinates: [10, 20]
+      });
+      expect(warehouseData.location.latitude).toBeUndefined();
+      expect(warehouseData.location.longitude).toBeUndefined();
       expect(mockWarehouseInstance.save).toHaveBeenCalled();
       expect(result).toBeInstanceOf(Object); // Warehouse instance
+    });
+
+    test('should reject when coordinates are missing', async () => {
+      const warehouseData = {
+        name: 'No Coords Warehouse',
+        location: { address: '1 St', city: 'C', state: 'S', postalCode: '00000' }
+      };
+
+      await expect(warehouseService.createWarehouse(warehouseData)).rejects.toThrow(
+        /latitude and longitude are required/i
+      );
+      expect(mockWarehouseInstance.save).not.toHaveBeenCalled();
     });
   });
 
@@ -174,20 +199,23 @@ describe('WarehouseService', () => {
 
   describe('selectWarehouseForOrder', () => {
     test('should select nearest warehouse with stock', async () => {
+      // w1 sits on the delivery point (distance 0), w2 is ~157km away — the
+      // internal haversine must rank w1 first.
       const warehouses = [
-        { ...mockWarehouseInstance, _id: 'w1', servicesPinCode: () => true },
-        { ...mockWarehouseInstance, _id: 'w2', servicesPinCode: () => true }
+        {
+          ...mockWarehouseInstance, _id: 'w2', servicesPinCode: () => true,
+          location: { coordinates: { coordinates: [1, 1] } }
+        },
+        {
+          ...mockWarehouseInstance, _id: 'w1', servicesPinCode: () => true,
+          location: { coordinates: { coordinates: [0, 0] } }
+        }
       ];
       mockWarehouse.find.mockResolvedValue(warehouses);
-      
-      // w1 has stock, w2 has stock. w1 is closer (mock distance)
-      mockWarehouseInventory.findOne
-        .mockResolvedValueOnce({ ...mockInventoryInstance, availableQuantity: 100 }) // w1
-        .mockResolvedValueOnce({ ...mockInventoryInstance, availableQuantity: 100 }); // w2
 
-      mockGoogleMapsService.calculateDistance
-        .mockReturnValueOnce(1000) // w1 distance
-        .mockReturnValueOnce(2000); // w2 distance
+      // Reservation succeeds (atomic findOneAndUpdate returns the updated doc).
+      mockWarehouseInventory.findOneAndUpdate
+        .mockResolvedValue({ ...mockInventoryInstance, reservedQuantity: 1 });
 
       const result = await warehouseService.selectWarehouseForOrder(
         [{ productId: 'p1', quantity: 1 }],
@@ -196,12 +224,13 @@ describe('WarehouseService', () => {
 
       expect(result.available).toBe(true);
       expect(result.warehouse._id).toBe('w1');
-      expect(result.distance).toBe(1000);
+      expect(result.distance).toBe(0);
     });
 
     test('should return unavailable if no warehouse has stock', async () => {
        mockWarehouse.find.mockResolvedValue([mockWarehouseInstance]);
-       mockWarehouseInventory.findOne.mockResolvedValue({ ...mockInventoryInstance, availableQuantity: 0 }); // No stock
+       // Atomic reservation finds nothing with sufficient stock → null.
+       mockWarehouseInventory.findOneAndUpdate.mockResolvedValue(null);
 
        const result = await warehouseService.selectWarehouseForOrder(
         [{ productId: 'p1', quantity: 1 }],

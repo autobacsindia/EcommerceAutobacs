@@ -17,11 +17,21 @@ export default function EditWarehousePage() {
       .getWarehouse(id)
       .then(res => {
         const w = res.warehouse;
+        // GeoJSON stores [longitude, latitude]; the form edits them as separate fields.
+        const [lng, lat] = w.location.coordinates?.coordinates ?? [];
         setInitialData({
           name: w.name,
           code: w.code,
           type: w.type,
-          location: w.location,
+          location: {
+            address: w.location.address,
+            city: w.location.city,
+            state: w.location.state,
+            postalCode: w.location.postalCode,
+            country: w.location.country,
+            latitude: typeof lat === 'number' ? lat : '',
+            longitude: typeof lng === 'number' ? lng : '',
+          },
           serviceablePinCodes: w.serviceablePinCodes,
           operationalStatus: w.operationalStatus,
           contactInfo: w.contactInfo,

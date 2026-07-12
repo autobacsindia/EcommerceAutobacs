@@ -16,7 +16,7 @@ CI order: lint → test → build (build gated on the first two).
 
 - `app/` — routes (App Router). Pages, layouts, `api/` route handlers.
 - `components/` — UI, grouped by domain (checkout, products, orders, layout…).
-- `context/` — React Context state: `AuthContext`, `CartContext`, `WishlistContext`, `LocationContext`, `CurrencyContext`, `RateLimitContext`.
+- `context/` — React Context state: `AuthContext`, `CartContext`, `WishlistContext`, `CurrencyContext`, `RateLimitContext`.
 - `hooks/` — `useAsync`, `useErrorHandler`, `useRazorpay`, `useSSE`.
 - `lib/` — API clients (`api.ts`, `api-client.ts`), cart storage (Dexie), services, error handling, utils.
 - `services/`, `utils/`, `types/`, `providers/`, `styles/`.

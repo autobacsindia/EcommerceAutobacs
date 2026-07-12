@@ -61,7 +61,6 @@ jest.mock('./ClientSearchSuggestions', () => () => <div data-testid="search-sugg
 jest.mock('./SkeletonLoader', () => () => <div data-testid="skeleton-loader">Loading...</div>);
 jest.mock('@/components/ui/Skeleton', () => ({ Skeleton: () => <div data-testid="skeleton" /> }));
 jest.mock('./EnvironmentAwareComponent', () => ({ children }: { children: React.ReactNode }) => <div>{children}</div>);
-jest.mock('@/components/location/LocationDisplay', () => () => <div data-testid="location-display">Location</div>);
 jest.mock('./BrandLogo', () => () => <div data-testid="brand-logo">Logo</div>);
 jest.mock('./CurrencySwitcherDropdown', () => () => <div data-testid="currency-switcher">Currency</div>);
 jest.mock('./MobileMenu', () => () => <div data-testid="mobile-menu">MobileMenu</div>);
