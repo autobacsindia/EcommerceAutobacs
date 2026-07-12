@@ -13,6 +13,7 @@ export default function ConditionalFooter() {
   const pathname = usePathname();
   const hide =
     pathname === '/' ||
+    pathname === '/careers' ||
     pathname === '/login' ||
     pathname === '/register' ||
     pathname?.startsWith('/admin');
