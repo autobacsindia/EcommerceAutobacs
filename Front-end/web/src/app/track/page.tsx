@@ -7,7 +7,6 @@ import Link from 'next/link';
 import trackingService from '@/services/trackingService';
 import { TrackingData } from '@/types/tracking';
 import { TrackingTimeline } from '@/components/tracking/TrackingTimeline';
-import { TrackingMap } from '@/components/tracking/TrackingMap';
 import { getStatusBadgeColor } from '@/utils/trackingHelpers';
 
 function TrackOrderPageInner() {
@@ -248,25 +247,13 @@ function TrackOrderPageInner() {
               )}
             </div>
 
-            {/* Timeline and Map Grid - Responsive Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Tracking Timeline Card */}
-              <div className="bg-obsidian rounded-lg shadow-md p-6">
-                <TrackingTimeline
-                  events={trackingData.events}
-                  currentStatus={trackingData.currentStatus}
-                  estimatedDelivery={trackingData.estimatedDelivery}
-                />
-              </div>
-
-              {/* Tracking Map Card */}
-              <div className="bg-obsidian rounded-lg shadow-md p-6">
-                <TrackingMap
-                  events={trackingData.events}
-                  destination={trackingData.destination}
-                  carrierName={trackingData.carrier.name}
-                />
-              </div>
+            {/* Tracking Timeline */}
+            <div className="bg-obsidian rounded-lg shadow-md p-6">
+              <TrackingTimeline
+                events={trackingData.events}
+                currentStatus={trackingData.currentStatus}
+                estimatedDelivery={trackingData.estimatedDelivery}
+              />
             </div>
           </section>
         )}

@@ -2,7 +2,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SearchSuggestions from './SearchSuggestions';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { useLocation } from '@/context/LocationContext';
 
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
@@ -11,10 +10,6 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/context/AuthContext', () => ({
   useAuth: jest.fn(),
-}));
-
-jest.mock('@/context/LocationContext', () => ({
-  useLocation: jest.fn(),
 }));
 
 const localStorageMock = {
@@ -50,9 +45,6 @@ describe('SearchSuggestions', () => {
     (useAuth as jest.Mock).mockReturnValue({
       user: null,
       isAuthenticated: false,
-    });
-    (useLocation as jest.Mock).mockReturnValue({
-      currentLocation: null,
     });
 
     localStorageMock.getItem.mockClear();
@@ -142,59 +134,6 @@ describe('SearchSuggestions', () => {
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
       'searchHistory_user123_global',
       expect.stringContaining('bull bar')
-    );
-  });
-
-  it('uses location-specific key for history', async () => {
-    (useLocation as jest.Mock).mockReturnValue({
-      currentLocation: {
-        selectedAddress: {
-          postalCode: '100001',
-        },
-      },
-    });
-    
-    render(<SearchSuggestions />);
-    const input = screen.getByPlaceholderText('Search products, brands, categories...');
-    const searchButton = screen.getByRole('button', { name: 'Search' });
-    
-    fireEvent.change(input, { target: { value: 'tire' } });
-    fireEvent.click(searchButton);
-    
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'searchHistory_guest_100001',
-      expect.stringContaining('tire')
-    );
-  });
-
-  it('uses user and location specific key for history', async () => {
-    (useAuth as jest.Mock).mockReturnValue({
-      user: {
-        _id: 'user123',
-        name: 'Test User',
-        email: 'test@example.com',
-        role: 'customer',
-      },
-      isAuthenticated: true,
-    });
-    (useLocation as jest.Mock).mockReturnValue({
-      currentLocation: {
-        selectedAddress: {
-          postalCode: '100001',
-        },
-      },
-    });
-    
-    render(<SearchSuggestions />);
-    const input = screen.getByPlaceholderText('Search products, brands, categories...');
-    const searchButton = screen.getByRole('button', { name: 'Search' });
-    
-    fireEvent.change(input, { target: { value: 'battery' } });
-    fireEvent.click(searchButton);
-    
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'searchHistory_user123_100001',
-      expect.stringContaining('battery')
     );
   });
 

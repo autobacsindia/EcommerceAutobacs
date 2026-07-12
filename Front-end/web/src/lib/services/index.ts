@@ -24,6 +24,5 @@ export {
   markReviewAsHelpful,
   type ReviewSubmissionData 
 } from './reviewService';
-export { default as LocationService } from './locationService';
 export { default as ContactService } from './contactService';
 export { default as ConsultationService } from './consultationService';

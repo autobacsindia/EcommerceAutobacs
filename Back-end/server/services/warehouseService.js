@@ -1,7 +1,56 @@
 import mongoose from "mongoose";
 import warehouseRepository from "../repositories/warehouseRepository.js";
 import warehouseInventoryRepository from "../repositories/warehouseInventoryRepository.js";
-import googleMapsService from "./googleMapsService.js";
+
+/**
+ * Great-circle distance between two lat/lng points, in metres (Haversine).
+ * Pure math — no external geocoding dependency.
+ */
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in metres
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+/**
+ * Normalise a warehouse location payload into GeoJSON coordinates.
+ * Accepts either GeoJSON already ({ type:"Point", coordinates:[lng,lat] }) or
+ * manual numeric { latitude, longitude } fields from the admin form.
+ * Throws when coordinates cannot be resolved (the model requires them).
+ */
+function normalizeLocationCoordinates(location) {
+  if (!location) return;
+
+  // Already GeoJSON — trust it.
+  if (
+    location.coordinates &&
+    Array.isArray(location.coordinates.coordinates) &&
+    location.coordinates.coordinates.length === 2
+  ) {
+    return;
+  }
+
+  const lat = Number(location.latitude);
+  const lng = Number(location.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    location.coordinates = { type: "Point", coordinates: [lng, lat] };
+    delete location.latitude;
+    delete location.longitude;
+    return;
+  }
+
+  throw new Error(
+    "Warehouse latitude and longitude are required. Please enter valid coordinates."
+  );
+}
 
 /**
  * Warehouse Service for managing warehouses and inventory
@@ -14,16 +63,8 @@ class WarehouseService {
    */
   async createWarehouse(warehouseData) {
     try {
-      // Validate and geocode if coordinates not provided
-      if (!warehouseData.location.coordinates) {
-        const address = `${warehouseData.location.address}, ${warehouseData.location.city}, ${warehouseData.location.state} ${warehouseData.location.postalCode}`;
-        const geocoded = await googleMapsService.geocodeAddress(address);
-        
-        warehouseData.location.coordinates = {
-          type: "Point",
-          coordinates: [geocoded.coordinates.longitude, geocoded.coordinates.latitude]
-        };
-      }
+      // Coordinates come from the admin form (manual lat/lng) — normalise to GeoJSON.
+      normalizeLocationCoordinates(warehouseData.location);
 
       const warehouse = warehouseRepository.build(warehouseData);
       await warehouse.save();
@@ -95,15 +136,9 @@ class WarehouseService {
    */
   async updateWarehouse(warehouseId, updateData) {
     try {
-      // If location address changed, re-geocode
-      if (updateData.location && !updateData.location.coordinates) {
-        const address = `${updateData.location.address}, ${updateData.location.city}, ${updateData.location.state} ${updateData.location.postalCode}`;
-        const geocoded = await googleMapsService.geocodeAddress(address);
-        
-        updateData.location.coordinates = {
-          type: "Point",
-          coordinates: [geocoded.coordinates.longitude, geocoded.coordinates.latitude]
-        };
+      // If the location is being updated, normalise manual lat/lng to GeoJSON.
+      if (updateData.location) {
+        normalizeLocationCoordinates(updateData.location);
       }
 
       const warehouse = await warehouseRepository.findByIdAndUpdate(
@@ -303,7 +338,7 @@ class WarehouseService {
         .filter(w => w.serviceablePinCodes.length === 0 || w.servicesPinCode(postalCode))
         .map(w => ({
           warehouse: w,
-          distance: googleMapsService.calculateDistance(
+          distance: haversineMeters(
             coordinates.latitude,
             coordinates.longitude,
             w.location.coordinates.coordinates[1],

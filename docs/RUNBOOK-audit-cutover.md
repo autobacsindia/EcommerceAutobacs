@@ -45,8 +45,6 @@ backlog: [docs/audit/09-CONSOLIDATED-2026-07.md](audit/09-CONSOLIDATED-2026-07.m
       block direct pushes, and require these checks — `Backend CI`, `Frontend CI`,
       and the 3 `security.yml` jobs (`secrets`, `audit-backend`, `audit-frontend`).
       This is the deploy gate the whole CI setup depends on (INFRA-1).
-- [ ] **Restrict `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`** by HTTP referrer to
-      `autobacsindia.com` in Google Cloud Console (public key → billable if unrestricted).
 - [ ] **Provision a dev/staging MongoDB + dev `.env`** — local `.env` currently points
       `MONGO_URI` at the PROD cluster. Required before the testing phase so tests don't
       mutate prod data. (Razorpay is already test-mode, so payments are safe.)

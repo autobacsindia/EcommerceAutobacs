@@ -10,6 +10,10 @@ export interface WarehouseFormData {
     state: string;
     postalCode: string;
     country: string;
+    // Manual coordinates — the backend converts these to GeoJSON. Required
+    // because geospatial warehouse routing depends on them.
+    latitude: number | '';
+    longitude: number | '';
   };
   serviceablePinCodes: string[];
   operationalStatus: 'active' | 'inactive' | 'maintenance';
@@ -32,6 +36,8 @@ export interface WarehouseListItem {
     state: string;
     postalCode: string;
     country: string;
+    // GeoJSON Point — coordinates are [longitude, latitude].
+    coordinates?: { type: 'Point'; coordinates: [number, number] };
   };
   operationalStatus: 'active' | 'inactive' | 'maintenance';
   contactInfo: { phone: string; email: string; manager: string };

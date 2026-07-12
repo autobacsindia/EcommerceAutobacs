@@ -1,5 +1,4 @@
 import BrandLogo from './BrandLogo';
-import LocationDisplay from '@/components/location/LocationDisplay';
 import ClientSearchSuggestions from './ClientSearchSuggestions';
 import HeaderInteractiveBar from './HeaderInteractiveBar';
 import HeaderNav from './HeaderNav';
@@ -13,10 +12,6 @@ export default function Header({ navCategories }: { navCategories: NavCategory[]
         <div className="flex items-center h-16 border-b border-hairline gap-4">
           <div className="shrink-0">
             <BrandLogo variant="full" />
-          </div>
-
-          <div className="hidden lg:block shrink-0">
-            <LocationDisplay compact={true} />
           </div>
 
           <div className="hidden md:block flex-1 max-w-4xl">

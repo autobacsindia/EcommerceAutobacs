@@ -59,9 +59,3 @@ export const consultationRateLimit = rateLimit({
   max: 5,
   message: 'Too many consultation requests. Please wait before trying again.'
 });
-
-export const locationRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: 'Too many location requests. Please try again later or contact support.'
-});

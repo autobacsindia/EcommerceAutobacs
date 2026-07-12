@@ -6,7 +6,6 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
-import { LocationProvider } from "@/context/LocationContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { RateLimitProvider } from "@/context/RateLimitContext";
 import { LogRocketProvider } from "@/providers/LogRocketProvider";
@@ -196,8 +195,7 @@ export default async function RootLayout({
             <CartProvider>
               <WishlistProvider>
                 <RateLimitProvider>
-                  <LocationProvider>
-                    <CurrencyProvider>
+                  <CurrencyProvider>
                       <GlobalLoadingBar />
                       <ConditionalHeader navCategories={navCategories} />
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
@@ -230,8 +228,7 @@ export default async function RootLayout({
                         strategy="lazyOnload"
                         nonce={nonce}
                       />
-                    </CurrencyProvider>
-                  </LocationProvider>
+                  </CurrencyProvider>
                 </RateLimitProvider>
               </WishlistProvider>
             </CartProvider>

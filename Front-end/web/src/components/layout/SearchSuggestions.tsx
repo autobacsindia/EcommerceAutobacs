@@ -6,7 +6,6 @@ import useIsMounted from '@/lib/hooks/useIsMounted';
 import apiClient from '@/lib/api';
 import { Search, Clock, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useLocation } from '@/context/LocationContext';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { trackSearch } from '@/lib/analytics';
 
@@ -35,7 +34,6 @@ export default function SearchSuggestions() {
   const isMounted = useIsMounted();
   const router = useRouter();
   const { user } = useAuth();
-  const { currentLocation } = useLocation();
   const timeoutRef = useRef<NodeJS.Timeout | number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,8 +43,7 @@ export default function SearchSuggestions() {
 
   const storageKey = (() => {
     const userId = user ? user._id : 'guest';
-    const locationCode = currentLocation ? currentLocation.selectedAddress.postalCode : 'global';
-    return `searchHistory_${userId}_${locationCode}`;
+    return `searchHistory_${userId}_global`;
   })();
 
   useEffect(() => {

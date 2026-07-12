@@ -32,7 +32,6 @@ jest.mock('react-hot-toast', () => ({
 
 // Mock child components of Header to simplify testing
 jest.mock('@/components/layout/BrandLogo', () => () => <div data-testid="brand-logo">Logo</div>);
-jest.mock('@/components/location/LocationDisplay', () => () => <div data-testid="location-display">Location</div>);
 jest.mock('@/components/layout/ClientSearchSuggestions', () => () => <div data-testid="search-suggestions">Search</div>);
 jest.mock('@/components/layout/MobileMenu', () => () => <div data-testid="mobile-menu">Menu</div>);
 jest.mock('@/components/layout/CurrencySwitcherDropdown', () => () => <div data-testid="currency-switcher">Currency</div>);

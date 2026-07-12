@@ -141,9 +141,8 @@ both), **migration-only** (needed only where import scripts run).
 ## Backend — shared (same value both)
 
 `JWT_EXPIRE`, `JWT_ADMIN_EXPIRE`, `PORT`, `REGION_ID`, `CACHE_VERSION`,
-all business config (`WAREHOUSE_*`, `STOCK_*`, `DELIVERY_*`, `LOW_STOCK_THRESHOLD`,
-`ENABLE_SPLIT_SHIPMENTS`), rate-limit maxes, `GOOGLE_MAPS_*` (restrict by
-referrer/IP), notification retry tuning. Env-agnostic — keep identical to reduce drift.
+business config (`STOCK_*`, `LOW_STOCK_THRESHOLD`, `ENABLE_SPLIT_SHIPMENTS`),
+rate-limit maxes, notification retry tuning. Env-agnostic — keep identical to reduce drift.
 
 ## Backend — migration-only (set only where import scripts run)
 

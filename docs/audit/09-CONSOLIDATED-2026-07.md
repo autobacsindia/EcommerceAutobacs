@@ -61,7 +61,6 @@ Refreshes the June 2026 audit (the June 2026 baseline audit (in git history)) af
 - [ ] **Verify branch protection** on `main` (INFRA-1 assumed worst-case).
 - [ ] **Provision a dev/staging DB** before test execution (ENV1 — the testing gate).
 - [ ] **Set `REVALIDATE_SECRET`** in Vercel + Railway (FE-1).
-- [ ] **Restrict `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`** by HTTP referrer in Google Cloud.
 - [x] Secrets rotated after historical `.env` exposure (confirmed — June S1 closed).
 
 ## Gate before the TESTING phase (hard prerequisites)
