@@ -329,7 +329,7 @@ class LeadSyncService {
    * difference so it can't ping-pong). Pass `mirror:false` when the change
    * originated FROM the consultation admin, to avoid writing back.
    */
-  async applyLeadStatus(leadId, status, { actorId, notes, lostReason, convertedOrder, meta, mirror = true } = {}) {
+  async applyLeadStatus(leadId, status, { actorId, repId, notes, lostReason, convertedOrder, meta, mirror = true } = {}) {
     const lead = await leadRepository.findById(leadId);
     if (!lead) return null;
     if (lead.status === status && !convertedOrder) return lead; // no-op guard (loop safety)
@@ -348,6 +348,7 @@ class LeadSyncService {
     lead.activities.push({
       type: status === 'won' ? 'conversion' : 'status_change',
       by: actorId,
+      rep: repId || null,
       at: new Date(),
       notes: notes || `Status ${prev} → ${status}`,
       meta: meta || {},
@@ -388,12 +389,12 @@ class LeadSyncService {
   // ── Activity + assignment ────────────────────────────────────────────────────
 
   /** Log an interaction. Calls/notes/emails mark the lead contacted. */
-  async logActivity(leadId, { type, actorId, notes, meta, nextFollowUpAt }) {
+  async logActivity(leadId, { type, actorId, repId, notes, meta, nextFollowUpAt }) {
     const lead = await leadRepository.findById(leadId);
     if (!lead) return null;
 
     const contactMade = ['call', 'note', 'email', 'sms'].includes(type);
-    lead.activities.push({ type, by: actorId, at: new Date(), notes: notes || '', meta: meta || {} });
+    lead.activities.push({ type, by: actorId, rep: repId || null, at: new Date(), notes: notes || '', meta: meta || {} });
     if (contactMade) {
       lead.lastContactedAt = new Date();
       lead.contactedBy = actorId;
@@ -403,17 +404,19 @@ class LeadSyncService {
 
     // A first contact bumps a brand-new lead into "contacted" (mirrors out too).
     if (contactMade && lead.status === 'new') {
-      return this.applyLeadStatus(lead._id, 'contacted', { actorId, notes: 'First contact logged' });
+      return this.applyLeadStatus(lead._id, 'contacted', { actorId, repId, notes: 'First contact logged' });
     }
     return lead;
   }
 
-  claimLead(leadId, adminId) {
-    return leadRepository.claimIfUnassigned(leadId, adminId);
+  /** Atomic claim for a named rep (compare-and-set on the pool). */
+  claimLead(leadId, repId, adminId) {
+    return leadRepository.claimRepIfUnassigned(leadId, repId, adminId);
   }
 
-  releaseLead(leadId, adminId, opts) {
-    return leadRepository.releaseIfOwner(leadId, adminId, opts);
+  /** Release a lead's named owner back to the pool. */
+  releaseLead(leadId, adminId) {
+    return leadRepository.releaseRep(leadId, adminId);
   }
 }
 

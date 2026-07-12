@@ -54,6 +54,7 @@ import loyaltyRoutes from './loyalty.js';
 import dashboardRoutes from './dashboard.js';
 import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
+import salesRepRoutes from './salesReps.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
 import mediaRoutes from './media.js';
@@ -134,6 +135,8 @@ apiRouter.use('/dashboard', adminRouteRateLimit, dashboardRoutes);
 apiRouter.use('/analytics', adminRouteRateLimit, analyticsRoutes);
 // Sales CRM / leads (admin-only; guarded in-route with protect+admin)
 apiRouter.use('/leads', adminRouteRateLimit, leadRoutes);
+// Name-only sales-rep profiles for CRM attribution (admin-only; guarded in-route)
+apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 apiRouter.use('/warehouses', adminRouteRateLimit, warehouseRoutes);
 apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access

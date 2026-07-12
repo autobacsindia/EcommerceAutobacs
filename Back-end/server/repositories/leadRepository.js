@@ -24,39 +24,47 @@ class LeadRepository extends BaseRepository {
   }
 
   /**
-   * Atomic self-claim: assign an UNCLAIMED lead to `adminId`. The `assignedTo: null`
-   * filter makes this compare-and-set — a second concurrent claim matches no
-   * document and returns null. Also logs a `claim` activity in the same write.
+   * Atomic claim for a name-only rep: assign an UNCLAIMED lead to `repId`. The
+   * `assignedRep: null` filter makes this compare-and-set — a second concurrent
+   * claim matches no document and returns null, so two browser tabs (or two
+   * people on the shared admin login) can't both grab the same pool lead. Logs a
+   * `claim` activity crediting the rep, with the operating admin as `by` (audit).
    * @returns the claimed lead, or null if it was already claimed.
    */
-  async claimIfUnassigned(leadId, adminId) {
+  async claimRepIfUnassigned(leadId, repId, adminId) {
     const now = new Date();
     return Lead.findOneAndUpdate(
-      { _id: leadId, assignedTo: null },
+      { _id: leadId, assignedRep: null },
       {
-        $set: { assignedTo: adminId, assignedAt: now },
-        $push: { activities: { type: 'claim', by: adminId, at: now } },
+        $set: { assignedRep: repId, assignedTo: adminId, assignedAt: now },
+        $push: { activities: { type: 'claim', by: adminId, rep: repId, at: now, notes: 'Claimed' } },
       },
       { new: true }
     );
   }
 
   /**
-   * Release a lead back to the shared pool. Guarded on current owner so a rep
-   * can only release their own lead (admins pass force=true to release any).
-   * @returns the released lead, or null if not owned / already unassigned.
+   * Release a lead back to the shared pool (clear the named owner). Admin-guarded
+   * at the route; there is no per-rep login to guard on, so any admin can release.
+   * @returns the released lead, or null if it doesn't exist.
    */
-  async releaseIfOwner(leadId, adminId, { force = false } = {}) {
-    const filter = force ? { _id: leadId } : { _id: leadId, assignedTo: adminId };
+  async releaseRep(leadId, adminId) {
     const now = new Date();
-    return Lead.findOneAndUpdate(
-      filter,
+    // Only clear + log when there is actually an owner to release; the
+    // `assignedRep: { $ne: null }` filter makes a release of an already-pooled
+    // lead a no-op (no spurious "Released to pool" activity).
+    const released = await Lead.findOneAndUpdate(
+      { _id: leadId, assignedRep: { $ne: null } },
       {
-        $set: { assignedTo: null, assignedAt: null },
+        $set: { assignedRep: null, assignedTo: null, assignedAt: null },
         $push: { activities: { type: 'assignment', by: adminId, at: now, notes: 'Released to pool' } },
       },
       { new: true }
     );
+    if (released) return released;
+    // Already unassigned → return current state (idempotent success); null only
+    // when the lead genuinely doesn't exist, so the caller still 404s correctly.
+    return Lead.findById(leadId);
   }
 
   /** Status counts for list tab badges. */

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Search, Eye, UserPlus, Users, RefreshCw, CheckCircle2, Phone, Mail, ShoppingBag,
+  Search, Eye, Users, RefreshCw, CheckCircle2, Phone, Mail, ShoppingBag,
 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import {
@@ -11,7 +11,7 @@ import {
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep,
 } from '@/lib/leads';
 
-type Assignment = 'all' | 'mine' | 'unassigned';
+type Assignment = 'all' | 'unassigned';
 
 interface LeadsResponse {
   success: boolean;
@@ -23,10 +23,8 @@ interface StatsResponse {
   stats: {
     byStatus: Record<string, number>;
     unassigned: number;
-    mine: number;
     total: number;
     followUpDue: number;
-    followUpDueMine: number;
   };
 }
 
@@ -72,6 +70,7 @@ export default function AdminLeadsPage() {
 
   const [selected, setSelected] = useState<string[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [bulkRep, setBulkRep] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,16 +124,37 @@ export default function AdminLeadsPage() {
   // Reset to page 1 whenever a filter changes.
   useEffect(() => { setPage(1); }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort]);
 
-  async function claim(id: string) {
-    setBusyId(id);
+  // Owner cell handler: set/clear the named rep on a lead.
+  //  - unassigned → repId : atomic /claim (race-safe against a second grab)
+  //  - reassign to a different rep : /assign
+  //  - repId '' : /release back to the pool
+  async function setOwner(lead: Lead, repId: string) {
+    setBusyId(lead._id);
     try {
-      const res = await apiClient.post<{ success: boolean }>(`/leads/${id}/claim`, {});
-      if (res.success) { await load(); await loadStats(); }
+      if (!repId) {
+        await apiClient.post(`/leads/${lead._id}/release`, {});
+      } else if (!lead.assignedRep) {
+        await apiClient.post(`/leads/${lead._id}/claim`, { repId });
+      } else {
+        await apiClient.post(`/leads/${lead._id}/assign`, { repId });
+      }
+      await load(); await loadStats();
     } catch {
-      alert('Could not claim — it may have just been claimed by someone else.');
+      alert('Could not update owner — it may have just been claimed by another rep.');
       await load();
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function bulkAssign() {
+    if (selected.length === 0 || !bulkRep) return;
+    try {
+      await apiClient.post('/leads/bulk/claim', { leadIds: selected, repId: bulkRep });
+      setBulkRep('');
+      await load(); await loadStats();
+    } catch (e) {
+      console.error('[Leads] bulk assign failed', e);
     }
   }
 
@@ -161,21 +181,29 @@ export default function AdminLeadsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Sales Leads</h1>
           <p className="text-sm text-gray-500">
             {stats
-              ? `${stats.unassigned} in pool · ${stats.mine} assigned to you · ${stats.total} total`
+              ? `${stats.unassigned} in pool · ${stats.total} total`
               : 'Loading pipeline…'}
           </p>
         </div>
-        <button
-          onClick={() => { load(); loadStats(); }}
-          className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/sales-reps"
+            className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <Users className="h-4 w-4" /> Manage reps
+          </Link>
+          <button
+            onClick={() => { load(); loadStats(); }}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Assignment tabs */}
       <div className="flex gap-2">
-        {(['unassigned', 'mine', 'all'] as Assignment[]).map((a) => (
+        {(['unassigned', 'all'] as Assignment[]).map((a) => (
           <button
             key={a}
             onClick={() => setAssignment(a)}
@@ -184,9 +212,8 @@ export default function AdminLeadsPage() {
             }`}
           >
             {a === 'unassigned' && <Users className="h-4 w-4" />}
-            {a === 'mine' ? 'My queue' : a === 'unassigned' ? 'Pool' : 'All'}
+            {a === 'unassigned' ? 'Pool' : 'All'}
             {a === 'unassigned' && stats ? ` (${stats.unassigned})` : ''}
-            {a === 'mine' && stats ? ` (${stats.mine})` : ''}
           </button>
         ))}
       </div>
@@ -229,7 +256,7 @@ export default function AdminLeadsPage() {
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
         >
           <option value="">All reps</option>
-          {reps.map((r) => <option key={r._id} value={r._id}>{r.name || r.email}</option>)}
+          {reps.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
         </select>
 
         {/* Second row: date range + follow-up-due + clear */}
@@ -243,12 +270,9 @@ export default function AdminLeadsPage() {
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={followUpDue} onChange={(e) => setFollowUpDue(e.target.checked)} />
             Follow-up due
-            {(() => {
-              const due = stats ? (assignment === 'mine' ? stats.followUpDueMine : stats.followUpDue) : 0;
-              return due > 0 ? (
-                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{due}</span>
-              ) : null;
-            })()}
+            {stats && stats.followUpDue > 0 ? (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{stats.followUpDue}</span>
+            ) : null}
           </label>
           {/* Segment presets */}
           <div className="flex items-center gap-2">
@@ -277,8 +301,17 @@ export default function AdminLeadsPage() {
 
       {/* Bulk bar */}
       {selected.length > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
           <span className="font-medium text-blue-900">{selected.length} selected</span>
+          {/* Assign the selection to a rep (skips any already-claimed). */}
+          <div className="flex items-center gap-1">
+            <select value={bulkRep} onChange={(e) => setBulkRep(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-gray-700">
+              <option value="">Assign to rep…</option>
+              {reps.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
+            </select>
+            <button onClick={bulkAssign} disabled={!bulkRep} className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700 disabled:opacity-50">Assign</button>
+          </div>
+          <span className="text-blue-200">|</span>
           <button onClick={() => bulkStatus('contacted')} className="rounded bg-white px-3 py-1 text-gray-700 border border-gray-300 hover:bg-gray-50">Mark contacted</button>
           <button onClick={() => bulkStatus('qualified')} className="rounded bg-white px-3 py-1 text-gray-700 border border-gray-300 hover:bg-gray-50">Mark qualified</button>
           <button onClick={() => bulkStatus('lost')} className="rounded bg-white px-3 py-1 text-gray-700 border border-gray-300 hover:bg-gray-50">Mark lost</button>
@@ -338,21 +371,28 @@ export default function AdminLeadsPage() {
                       {LEAD_STATUS_LABELS[lead.status]}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {lead.assignedTo ? (lead.assignedTo.name || lead.assignedTo.email) : <span className="text-gray-400">— pool —</span>}
+                  <td className="px-4 py-3">
+                    {/* Owner = named rep. Pick to claim/reassign; blank to release. */}
+                    <select
+                      value={lead.assignedRep?._id || ''}
+                      onChange={(e) => setOwner(lead, e.target.value)}
+                      disabled={busyId === lead._id}
+                      className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+                        lead.assignedRep ? 'border-gray-300 text-gray-700' : 'border-dashed border-gray-300 text-gray-400'
+                      }`}
+                      title="Assign to a sales rep"
+                    >
+                      <option value="">— pool —</option>
+                      {/* Keep a since-deactivated owner visible so it doesn't blank out. */}
+                      {lead.assignedRep && !reps.some((r) => r._id === lead.assignedRep!._id) && (
+                        <option value={lead.assignedRep._id}>{lead.assignedRep.name} (inactive)</option>
+                      )}
+                      {reps.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
+                    </select>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{new Date(lead.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      {!lead.assignedTo && (
-                        <button
-                          onClick={() => claim(lead._id)}
-                          disabled={busyId === lead._id}
-                          className="flex items-center gap-1 rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          <UserPlus className="h-3 w-3" /> Claim
-                        </button>
-                      )}
                       <Link href={`/admin/leads/${lead._id}`} className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
                         <Eye className="h-3 w-3" /> Open
                       </Link>
@@ -376,7 +416,8 @@ export default function AdminLeadsPage() {
       </div>
 
       <p className="flex items-center gap-1 text-xs text-gray-400">
-        <CheckCircle2 className="h-3 w-3" /> Claiming is first-come; a lead you claim moves to your queue.
+        <CheckCircle2 className="h-3 w-3" /> Set a lead&apos;s owner from the dropdown. Names come from{' '}
+        <Link href="/admin/sales-reps" className="underline">Sales Reps</Link>.
       </p>
     </div>
   );

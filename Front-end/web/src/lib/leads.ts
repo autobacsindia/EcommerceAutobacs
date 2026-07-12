@@ -27,6 +27,8 @@ export interface LeadActivity {
   _id?: string;
   type: 'note' | 'call' | 'email' | 'sms' | 'status_change' | 'claim' | 'assignment' | 'conversion';
   by?: { _id: string; name?: string; email?: string } | string;
+  // Name-only SalesRep credited for the action (what the timeline displays).
+  rep?: { _id: string; name?: string } | string | null;
   at: string;
   notes?: string;
   meta?: Record<string, unknown>;
@@ -40,6 +42,9 @@ export interface Lead {
   sources: LeadSource[];
   primarySource?: LeadSourceType;
   status: LeadStatus;
+  // Named owner (displayed "who claimed this"). null = unclaimed pool.
+  assignedRep?: { _id: string; name?: string; isActive?: boolean } | null;
+  // The admin who performed the assignment — audit only.
   assignedTo?: { _id: string; name?: string; email?: string } | null;
   assignedAt?: string | null;
   contactedBy?: { _id: string; name?: string; email?: string } | null;
@@ -68,11 +73,12 @@ export interface Lead {
   updatedAt: string;
 }
 
+/** A name-only sales-rep profile (no login). See backend models/SalesRep.js. */
 export interface SalesRep {
   _id: string;
-  name?: string;
-  email?: string;
-  salesTarget?: number;
+  name: string;
+  isActive?: boolean;
+  createdAt?: string;
 }
 
 export interface LeadCycle {

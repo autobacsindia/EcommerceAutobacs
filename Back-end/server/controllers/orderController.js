@@ -6,6 +6,8 @@ import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
+import salesRepRepository from '../repositories/salesRepRepository.js';
+import mongoose from 'mongoose';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -322,10 +324,24 @@ export const createOfflineOrder = async (req, res) => {
     status = 'processing', // 'processing' (paid) or 'delivered'
     notes,
     leadId,
+    repId, // name-only SalesRep credited with closing the deal (optional)
   } = req.body;
 
   if (!email || !phone) {
     return res.status(400).json({ success: false, message: 'Customer email and phone are required' });
+  }
+  // Validate the crediting rep up front (optional field) so a bad id fails fast
+  // BEFORE we create a user/order.
+  let salesRepId = null;
+  if (repId) {
+    if (!mongoose.isValidObjectId(repId)) {
+      return res.status(400).json({ success: false, message: 'Invalid sales rep' });
+    }
+    const rep = await salesRepRepository.findById(repId);
+    if (!rep || !rep.isActive) {
+      return res.status(400).json({ success: false, message: 'Sales rep not found or inactive' });
+    }
+    salesRepId = rep._id;
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ success: false, message: 'At least one order item is required' });
@@ -387,6 +403,7 @@ export const createOfflineOrder = async (req, res) => {
     let order = await orderRepository.create({
       user: user._id,
       source: 'offline',
+      salesRep: salesRepId,
       items: lineItems,
       shippingAddress: address,
       subtotal,
@@ -431,10 +448,21 @@ export const createOfflineOrder = async (req, res) => {
       await leadSyncService.safeSync(() =>
         leadSyncService.applyLeadStatus(leadId, 'won', {
           actorId: req.user.id,
+          repId: salesRepId, // credit the closing rep on the conversion
           notes: 'Closed via offline order',
           convertedOrder: order._id,
         })
       );
+    }
+
+    // New buyer: mint the single-use account-claim (set-password) token NOW. This
+    // is a DB write and must NOT depend on the queue — otherwise a Redis outage at
+    // creation time leaves the buyer with an account they can never claim (random
+    // password + mustResetPassword, no token). The email below is best-effort on top.
+    if (isNewUser) {
+      user.magicLinkToken = crypto.randomBytes(32).toString('hex');
+      user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await userRepository.save(user);
     }
 
     // ── Emails (best-effort, idempotent) ─────────────────────────────────────
@@ -445,11 +473,8 @@ export const createOfflineOrder = async (req, res) => {
         .add('send-order-invoice', { orderId: order._id.toString() })
         .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
 
-      // New buyer: send a set-password (magic) link so they can claim their account.
+      // New buyer: email the set-password (magic) link so they can claim the account.
       if (isNewUser) {
-        user.magicLinkToken = crypto.randomBytes(32).toString('hex');
-        user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await userRepository.save(user);
         queue
           .add('send-magic-link-email', {
             email: normEmail,

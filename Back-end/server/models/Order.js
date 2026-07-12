@@ -15,6 +15,8 @@ const OrderSchema = new mongoose.Schema({
   // The buyer becomes a real customer (order in their history) and sets a password
   // on first login. See orderController.createOfflineOrder.
   source: { type: String, enum: ["web", "woocommerce", "offline"], default: "web", index: true },
+  // For offline deals: the name-only SalesRep credited with closing it. See SalesRep.js.
+  salesRep: { type: mongoose.Schema.Types.ObjectId, ref: "SalesRep", default: null },
   legacyStatus: String,
 
   items: [

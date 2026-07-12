@@ -14,6 +14,7 @@ import User from '../models/User.js';
 import Order from '../models/Order.js';
 import Consultation from '../models/Consultation.js';
 import Lead from '../models/Lead.js';
+import SalesRep from '../models/SalesRep.js';
 import leadSyncService from '../services/leadSyncService.js';
 import orderStatusService from '../services/orderStatusService.js';
 
@@ -179,21 +180,22 @@ describe('leadSyncService — order pipeline', () => {
 });
 
 describe('leadSyncService — claim & activity', () => {
-  it('self-claim is race-safe: exactly one of two concurrent claims wins', async () => {
+  it('claim is race-safe: two concurrent claims (different reps) → exactly one wins', async () => {
     const order = await seedOrder({ paymentStatus: 'failed', guestEmail: 'claim@x.com' });
     const lead = await leadSyncService.upsertFromOrder(order);
 
-    const a = new mongoose.Types.ObjectId();
-    const b = new mongoose.Types.ObjectId();
+    const adminId = new mongoose.Types.ObjectId();
+    const repA = await SalesRep.create({ name: 'Rep A' });
+    const repB = await SalesRep.create({ name: 'Rep B' });
     const [ra, rb] = await Promise.all([
-      leadSyncService.claimLead(lead._id, a),
-      leadSyncService.claimLead(lead._id, b),
+      leadSyncService.claimLead(lead._id, repA._id, adminId),
+      leadSyncService.claimLead(lead._id, repB._id, adminId),
     ]);
 
     const winners = [ra, rb].filter(Boolean);
     expect(winners).toHaveLength(1);
     const finalLead = await Lead.findById(lead._id);
-    expect(finalLead.assignedTo).toBeTruthy();
+    expect(finalLead.assignedRep).toBeTruthy();
   });
 
   it('logging a call bumps a new lead to contacted and stamps lastContactedAt', async () => {
