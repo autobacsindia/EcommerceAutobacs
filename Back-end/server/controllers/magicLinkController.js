@@ -8,7 +8,12 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import Order from "../models/Order.js";
 import emailHandler from "../services/emailHandler.js";
-import { generateTokenPair } from "../utils/sessionManager.js";
+import {
+  generateTokenPair,
+  storeRefreshToken,
+  setAccessTokenCookie,
+  setRefreshTokenCookie,
+} from "../utils/sessionManager.js";
 
 /**
  * @desc    Request magic link for guest order claiming
@@ -123,32 +128,53 @@ export const verifyMagicLink = async (req, res) => {
       });
     }
     
-    // Convert guest to registered user
-    if (user.isGuest) {
-      // Optional: Set password if provided
-      if (password) {
-        const salt = await bcrypt.genSalt(10);
-        user.passwordHash = await bcrypt.hash(password, salt);
+    // Claim the account. This path covers BOTH guest-checkout claims (isGuest)
+    // and accounts provisioned for the buyer by staff — offline orders and
+    // WooCommerce migrations create a real (non-guest) account flagged
+    // `mustResetPassword`. Gating on `isGuest` alone silently dropped the
+    // password for those buyers and left the (still-live) token reusable, so
+    // "set a password for the first time" never actually worked for them.
+    if (password) {
+      // Match the reset-password contract (8–72 chars) so the claim link can't
+      // set a weaker password than the normal reset flow.
+      if (typeof password !== 'string' || password.length < 8 || password.length > 72) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must be between 8 and 72 characters',
+        });
       }
-      
-      user.isGuest = false;
+      const salt = await bcrypt.genSalt(10);
+      user.passwordHash = await bcrypt.hash(password, salt);
+      // A chosen password clears the "must set one" gate; leaving it blank keeps
+      // the account passwordless (magic-link only) by choice.
+      user.mustResetPassword = false;
+    }
+
+    user.isGuest = false;
+    if (!user.isVerified) {
       user.isVerified = true;
       user.verifiedAt = new Date();
-      user.magicLinkToken = undefined;
-      user.magicLinkExpires = undefined;
-      
-      await user.save();
-      
-      console.log('[MAGIC_LINK] Guest converted to registered user:', user.email);
     }
+    // Single-use: consume the token on every successful claim, password or not.
+    user.magicLinkToken = undefined;
+    user.magicLinkExpires = undefined;
+
+    await user.save();
+    console.log('[MAGIC_LINK] Account claimed:', user.email);
     
-    // Generate JWT token
-    const { accessToken, expiresIn } = generateTokenPair(user);
-    
+    // Establish a real session the SAME way login/register do: httpOnly access +
+    // refresh cookies with a server-stored refresh token. The previous code returned
+    // the access token in the JSON body and set no cookie, so the cookie-based
+    // frontend never actually logged the buyer in after they claimed the account.
+    const ipAddress = req.ip || req.connection?.remoteAddress || null;
+    const userAgent = req.headers?.['user-agent'] || null;
+    const tokens = generateTokenPair(user, ipAddress, userAgent);
+    await storeRefreshToken(user, tokens.refreshToken, tokens.refreshTokenExpiry, ipAddress, userAgent);
+    setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
+    setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+
     res.json({
       success: true,
-      accessToken,
-      expiresIn,
       user: {
         id: user._id,
         name: user.name,
