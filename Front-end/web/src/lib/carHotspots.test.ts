@@ -67,25 +67,26 @@ describe('resolveCarHotspots', () => {
     });
   });
 
-  it('every shipped hotspot resolves against the verified live taxonomy (drift guard)', () => {
-    // Live production slugs (verified 2026-06-29). If this fails, the catalog
-    // moved and CAR_HOTSPOTS slugAliases must be updated.
-    const liveSlugs = [
-      'headlight', 'projector-headlights-2', 'front-grill', 'grill', 'front-bumper-grill',
-      'bumper', 'bumper-bar', 'fog-lamp', 'fog-lamps', 'bullbar', 'bash-plate',
-      'bonnet', 'bonnet-hood', 'bonnet-scoop', 'snorkel', 'safari-snorkels',
-      'exhaust', 'air-intake-systems', 'electronic-exhaust-system',
-      'roof-rack', 'roof-rail', 'roof-carrier-2', 'lightbar', 'roof-light-bar', 'bar-light',
-      'mirrors', 'mirror-cover', 'side-steps', 'side-step', 'foot-step',
-      'fender-flares', 'fender-flare', 'flexy-flares', 'door-visor', 'gr-door-beading',
-      'suspension', 'coilovers', 'shock-absorbers', 'brake-kit', 'brake-rotors',
-      'tail-light', 'rear-light', 'spoiler', 'spoilers', 'spoiler-lip',
-      'tonneau-covers', 'tri-fold-cover', 'roller-shutter',
-      'seat-cover', 'seat', 'infotainment-system', 'android-screen', 'android-car-stereo',
-      'steering-wheel', 'steering-trims', 'floor-mats', 'floor-mat',
+  it('every shipped hub hotspot resolves against the live hubs (drift guard)', () => {
+    // Live production HUB slugs (verified 2026-06-29). If this fails, the hub
+    // taxonomy moved and CAR_HOTSPOTS slugAliases must be updated.
+    const liveHubs = [
+      'lighting', 'exterior', 'interior', 'suspension', 'roof-top', 'protection-kit',
+      'body-kits', 'performance', 'accessories', 'audio', 'brakes', 'portable-fridge',
     ].map((slug) => ({ _id: slug, name: slug, slug, isActive: true }));
 
-    const out = resolveCarHotspots(liveSlugs);
+    const out = resolveCarHotspots(liveHubs);
     expect(out).toHaveLength(CAR_HOTSPOTS.length);
+  });
+
+  it('carries chip + anchor3d through resolution', () => {
+    const live = [{ _id: '1', name: 'Accessories', slug: 'accessories', isActive: true }];
+    const defs = [
+      { id: 'accessories', label: 'Accessories', region: 'rear' as const, chip: true,
+        anchor3d: { x: 1, y: 2, z: 3 }, slugAliases: ['accessories'], position: { x: 0, y: 0 } },
+    ];
+    const out = resolveCarHotspots(live, defs);
+    expect(out[0].chip).toBe(true);
+    expect(out[0].anchor3d).toEqual({ x: 1, y: 2, z: 3 });
   });
 });

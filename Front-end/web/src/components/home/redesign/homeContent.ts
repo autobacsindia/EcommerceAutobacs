@@ -184,11 +184,11 @@ export const categories: CategoryItem[] = [
 ];
 
 export const showreel = {
-  eyebrow: 'In Motion',
-  titleTop: 'Feel the',
-  titleAccent: 'Difference.',
-  body: 'Every upgrade, captured in motion. Watch our transformations come alive — from stock to spectacular.',
-  // Optional video. Leave empty to keep the animated placeholder stage.
+  eyebrow: 'Shop by Fitment',
+  titleTop: 'Point at the',
+  titleAccent: 'Build.',
+  body: 'Rotate the truck and tap any part — headlights, roof rack, suspension — to jump straight to those upgrades.',
+  // Optional video. Only used as a fallback if the interactive car can't load.
   video: '',
   poster: '',
 };
