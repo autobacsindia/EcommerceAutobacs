@@ -69,7 +69,7 @@ export default function HomeRedesign({ data }: { data: HomeData }) {
       <Hero />
       <Manifesto />
       <Categories categories={data.categories} />
-      <Showreel />
+      <Showreel hotspots={data.carHotspots} />
       <EditorsPick products={data.products} />
       <Brands brands={data.brands} />
       <Transformation />

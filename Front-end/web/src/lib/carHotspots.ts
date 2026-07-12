@@ -27,15 +27,22 @@ export type CarRegion =
   | 'interior';
 
 export interface CarHotspotDef {
-  /** Stable id (analytics, React key, mesh name for a future glTF upgrade). */
+  /** Stable id (analytics, React key, mesh name in the glTF for raycasting). */
   id: string;
   /** Human label shown in the tooltip / accessible link text. */
   label: string;
   region: CarRegion;
   /** Ordered preference — first alias that matches a live category wins. */
   slugAliases: string[];
-  /** Overlay anchor as % of the artwork box. Tune to the shipped asset. */
+  /** 2D overlay anchor as % of the SVG/static view box (mobile + fallback). */
   position: { x: number; y: number };
+  /** Optional world-space anchor for the 3D (glTF) renderer; set once the model lands. */
+  anchor3d?: { x: number; y: number; z: number };
+  /**
+   * Abstract hubs with no natural point on the vehicle (accessories,
+   * portable-fridge) render as chips beside the car instead of a marker.
+   */
+  chip?: boolean;
 }
 
 export interface ResolvedCarHotspot {
@@ -44,6 +51,8 @@ export interface ResolvedCarHotspot {
   region: CarRegion;
   href: string;
   position: { x: number; y: number };
+  anchor3d?: { x: number; y: number; z: number };
+  chip?: boolean;
 }
 
 interface ApiCategory {
@@ -54,71 +63,52 @@ interface ApiCategory {
 }
 
 /**
- * Curated hotspot set. Each primary alias is a verified live slug; later aliases
- * are graceful fallbacks if the catalog is re-homed. Buyer-intent parts first —
- * ship this set, expand later. Positions assume a 3/4 front-left hero render;
- * realign once the artwork lands.
+ * HUB-LEVEL hotspots: one marker per live category hub, anchored to where that
+ * hub's parts physically sit on the vehicle. Clicking opens `/categories/<hub>`.
+ *
+ * `slugAliases[0]` is the current live hub slug; extra aliases are graceful
+ * fallbacks if a hub is renamed (the resolver drops any hub that no longer
+ * resolves, so this never renders a broken link).
+ *
+ * `position` is the 2D anchor (% of the SVG/static view — the mobile + fallback
+ * renderer). `anchor3d` is filled in later, per the supplied glTF model, for the
+ * 3D renderer. Two hubs have no natural point on the car (`accessories`,
+ * `portable-fridge`) → `chip: true`, rendered as chips beside the vehicle.
+ *
+ * Verified against live hubs 2026-06-29:
+ *   lighting, exterior, interior, suspension, roof-top, protection-kit,
+ *   body-kits, performance, accessories, audio, brakes, portable-fridge.
  */
+// anchor3d in model space (verified against the render): X=width (near-visible
+// side = +1.04), Y=height (ground 0 .. roof 1.89), Z=length (FRONT ≈ -2.4,
+// REAR ≈ +2.9). Tuned 2026-07-12 against the Playwright capture.
 export const CAR_HOTSPOTS: CarHotspotDef[] = [
-  // FRONT
-  { id: 'headlight', label: 'Headlights', region: 'front',
-    slugAliases: ['headlight', 'projector-headlights-2'], position: { x: 24, y: 47 } },
-  { id: 'front-grill', label: 'Front Grille', region: 'front',
-    slugAliases: ['front-grill', 'grill', 'front-bumper-grill'], position: { x: 17, y: 55 } },
-  { id: 'bumper', label: 'Front Bumper', region: 'front',
-    slugAliases: ['bumper', 'bumper-bar'], position: { x: 14, y: 66 } },
-  { id: 'fog-lamp', label: 'Fog Lamps', region: 'front',
-    slugAliases: ['fog-lamp', 'fog-lamps'], position: { x: 19, y: 70 } },
-  { id: 'bullbar', label: 'Bull Bar', region: 'front',
-    slugAliases: ['bullbar', 'bash-plate'], position: { x: 11, y: 72 } },
-
-  // HOOD / ENGINE
-  { id: 'bonnet', label: 'Bonnet / Hood', region: 'hood',
-    slugAliases: ['bonnet', 'bonnet-hood', 'bonnet-scoop'], position: { x: 33, y: 40 } },
-  { id: 'snorkel', label: 'Snorkel', region: 'hood',
-    slugAliases: ['snorkel', 'safari-snorkels'], position: { x: 38, y: 34 } },
-  { id: 'exhaust', label: 'Exhaust & Intake', region: 'hood',
-    slugAliases: ['exhaust', 'air-intake-systems', 'electronic-exhaust-system'], position: { x: 30, y: 78 } },
-
-  // ROOF
-  { id: 'roof-rack', label: 'Roof Rack', region: 'roof',
-    slugAliases: ['roof-rack', 'roof-rail', 'roof-carrier-2'], position: { x: 47, y: 22 } },
-  { id: 'lightbar', label: 'Light Bar', region: 'roof',
-    slugAliases: ['lightbar', 'roof-light-bar', 'bar-light'], position: { x: 40, y: 19 } },
-
-  // SIDE
-  { id: 'mirrors', label: 'Mirrors', region: 'side',
-    slugAliases: ['mirrors', 'mirror-cover'], position: { x: 45, y: 41 } },
-  { id: 'side-steps', label: 'Side Steps', region: 'side',
-    slugAliases: ['side-steps', 'side-step', 'foot-step'], position: { x: 55, y: 73 } },
-  { id: 'fender-flares', label: 'Fender Flares', region: 'side',
-    slugAliases: ['fender-flares', 'fender-flare', 'flexy-flares'], position: { x: 64, y: 62 } },
-  { id: 'door-visor', label: 'Door Visors', region: 'side',
-    slugAliases: ['door-visor', 'gr-door-beading'], position: { x: 52, y: 46 } },
-
-  // WHEEL / UNDERCARRIAGE
+  { id: 'lighting', label: 'Lighting', region: 'front',
+    slugAliases: ['lighting', 'car-lighting'], position: { x: 60.9, y: 41.3 }, anchor3d: { x: 0.55, y: 0.95, z: -2.15 } },
+  { id: 'performance', label: 'Performance', region: 'hood',
+    slugAliases: ['performance'], position: { x: 60.9, y: 36.5 }, anchor3d: { x: 0, y: 1.1, z: -1.7 } },
+  { id: 'exterior', label: 'Exterior', region: 'side',
+    slugAliases: ['exterior'], position: { x: 42.7, y: 36.0 }, anchor3d: { x: 1.05, y: 1.0, z: 0.3 } },
+  { id: 'body-kits', label: 'Body Kits', region: 'front',
+    slugAliases: ['body-kits'], position: { x: 62.3, y: 47.5 }, anchor3d: { x: 0.35, y: 0.55, z: -2.2 } },
+  { id: 'protection-kit', label: 'Protection Kit', region: 'front',
+    slugAliases: ['protection-kit'], position: { x: 65.3, y: 50.0 }, anchor3d: { x: 0, y: 0.35, z: -2.35 } },
+  { id: 'roof-top', label: 'Roof Top', region: 'roof',
+    slugAliases: ['roof-top'], position: { x: 51.1, y: 22.9 }, anchor3d: { x: 0, y: 1.85, z: -0.1 } },
+  { id: 'interior', label: 'Interior', region: 'side',
+    slugAliases: ['interior'], position: { x: 47.5, y: 31.7 }, anchor3d: { x: 0.6, y: 1.3, z: -0.1 } },
+  { id: 'audio', label: 'Audio', region: 'interior',
+    slugAliases: ['audio', 'infotainment-system'], position: { x: 53.0, y: 33.9 }, anchor3d: { x: 0.35, y: 1.2, z: -0.8 } },
   { id: 'suspension', label: 'Suspension', region: 'wheel',
-    slugAliases: ['suspension', 'coilovers', 'shock-absorbers'], position: { x: 70, y: 78 } },
+    slugAliases: ['suspension'], position: { x: 54.0, y: 48.2 }, anchor3d: { x: 1.0, y: 0.5, z: -1.6 } },
   { id: 'brakes', label: 'Brakes', region: 'wheel',
-    slugAliases: ['brake-kit', 'brake-rotors', 'brakes'], position: { x: 67, y: 82 } },
+    slugAliases: ['brakes', 'brake-kit'], position: { x: 37.0, y: 41.3 }, anchor3d: { x: 1.0, y: 0.4, z: 1.7 } },
 
-  // REAR
-  { id: 'tail-light', label: 'Tail Lights', region: 'rear',
-    slugAliases: ['tail-light', 'rear-light'], position: { x: 88, y: 50 } },
-  { id: 'spoiler', label: 'Spoiler', region: 'rear',
-    slugAliases: ['spoiler', 'spoilers', 'spoiler-lip'], position: { x: 84, y: 33 } },
-  { id: 'tonneau', label: 'Bed / Tonneau Cover', region: 'rear',
-    slugAliases: ['tonneau-covers', 'tri-fold-cover', 'roller-shutter'], position: { x: 78, y: 40 } },
-
-  // INTERIOR (second-layer / "step inside")
-  { id: 'seat-cover', label: 'Seat Covers', region: 'interior',
-    slugAliases: ['seat-cover', 'seat'], position: { x: 60, y: 50 } },
-  { id: 'infotainment', label: 'Infotainment', region: 'interior',
-    slugAliases: ['infotainment-system', 'android-screen', 'android-car-stereo'], position: { x: 48, y: 53 } },
-  { id: 'steering', label: 'Steering Wheel', region: 'interior',
-    slugAliases: ['steering-wheel', 'steering-trims'], position: { x: 50, y: 58 } },
-  { id: 'floor-mats', label: 'Floor Mats', region: 'interior',
-    slugAliases: ['floor-mats', 'floor-mat'], position: { x: 55, y: 72 } },
+  // Abstract hubs — no natural point on the vehicle → chips beside the car.
+  { id: 'accessories', label: 'Accessories', region: 'rear', chip: true,
+    slugAliases: ['accessories'], position: { x: 0, y: 0 } },
+  { id: 'portable-fridge', label: 'Portable Fridge', region: 'rear', chip: true,
+    slugAliases: ['portable-fridge'], position: { x: 0, y: 0 } },
 ];
 
 const normalize = (s: string) =>
@@ -160,6 +150,8 @@ export function resolveCarHotspots(
         region: def.region,
         href: `/categories/${match.slug}`,
         position: def.position,
+        anchor3d: def.anchor3d,
+        chip: def.chip,
       });
     }
   }
@@ -167,9 +159,26 @@ export function resolveCarHotspots(
 }
 
 /**
+ * Static fallback: resolve the hotspots against the config's own (verified,
+ * drift-guarded) hub slugs. Used when the live categories API is unreachable or
+ * returns nothing, so the explorer still renders against stable `/categories/<hub>`
+ * routes rather than disappearing. Mirrors the static fallbacks the other home
+ * sections use (homeContent.ts).
+ */
+export const FALLBACK_CAR_HOTSPOTS: ResolvedCarHotspot[] = resolveCarHotspots(
+  CAR_HOTSPOTS.map((h) => ({
+    _id: h.id,
+    name: h.label,
+    slug: h.slugAliases[0],
+    isActive: true,
+  })),
+);
+
+/**
  * Server-side: fetch active categories and resolve the car explorer hotspots.
- * Cached 10 min (categories change rarely). Returns [] on failure so the section
- * can self-hide rather than render a broken explorer.
+ * Cached 10 min (categories change rarely). Falls back to FALLBACK_CAR_HOTSPOTS
+ * (stable hub slugs) when the fetch fails or returns nothing, so the section
+ * always renders.
  */
 export async function getCarHotspots(): Promise<ResolvedCarHotspot[]> {
   try {
@@ -177,8 +186,9 @@ export async function getCarHotspots(): Promise<ResolvedCarHotspot[]> {
       '/categories?limit=400',
       { next: { revalidate: 600 } }
     );
-    return resolveCarHotspots(data?.categories ?? []);
+    const resolved = resolveCarHotspots(data?.categories ?? []);
+    return resolved.length ? resolved : FALLBACK_CAR_HOTSPOTS;
   } catch {
-    return [];
+    return FALLBACK_CAR_HOTSPOTS;
   }
 }

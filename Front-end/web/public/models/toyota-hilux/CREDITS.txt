@@ -1,0 +1,21 @@
+3D model attribution (REQUIRED — CC-BY-4.0)
+===========================================
+
+hilux.glb is optimized from:
+
+  "2022 Toyota Hilux" (https://sketchfab.com/3d-models/2022-toyota-hilux-82bd37c5065040098fb0b86e07fcb959)
+  by BHP3D (https://sketchfab.com/BHP3D)
+  licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+CC-BY-4.0 permits commercial use and modification, on the condition that the
+author is credited. This credit MUST remain visible to end users somewhere in
+the product (e.g. the interactive-car section's credit line, or a site
+/licenses page). Do not remove it.
+
+Optimization applied (glTF-Transform v4.4.1): packed to .glb, dedup/join/weld/
+prune, Draco geometry compression, textures resized to 1024px and re-encoded to
+WebP. No mesh decimation (full geometry fidelity). 41.6 MB -> 3.87 MB.
+
+NOTE (non-licensing): the model depicts a badge-accurate Toyota Hilux. Toyota
+trademarks / trade dress are separate from this asset license; using a
+recognizable branded vehicle commercially is a business/legal decision.

@@ -21,6 +21,7 @@
 
 import { serverFetch } from '@/lib/server-api';
 import { formatPriceINR } from '@/utils/priceFormatter';
+import { getCarHotspots, type ResolvedCarHotspot } from '@/lib/carHotspots';
 import {
   products as fallbackProducts,
   categories as fallbackCategories,
@@ -39,6 +40,7 @@ export interface HomeData {
   testimonials: TestimonialItem[];
   journalPosts: JournalItem[];
   brands: string[];
+  carHotspots: ResolvedCarHotspot[];
 }
 
 // How many items to pull into each section. Categories are capped at the hub
@@ -234,13 +236,16 @@ async function withFallback<T>(
  * throws) — each section independently degrades to its static fallback.
  */
 export async function getHomeData(): Promise<HomeData> {
-  const [products, categories, testimonials, journalPosts, brands] = await Promise.all([
+  const [products, categories, testimonials, journalPosts, brands, carHotspots] = await Promise.all([
     withFallback(fetchProducts, fallbackProducts, 'products'),
     withFallback(fetchCategories, fallbackCategories, 'categories'),
     withFallback(fetchTestimonials, fallbackTestimonials, 'testimonials'),
     withFallback(fetchJournal, fallbackJournalPosts, 'journal'),
     withFallback(fetchBrands, fallbackBrands, 'brands'),
+    // getCarHotspots already resolves resiliently (returns [] on failure) and the
+    // Showreel self-falls-back to its placeholder stage when the list is empty.
+    getCarHotspots().catch(() => [] as ResolvedCarHotspot[]),
   ]);
 
-  return { products, categories, testimonials, journalPosts, brands };
+  return { products, categories, testimonials, journalPosts, brands, carHotspots };
 }
