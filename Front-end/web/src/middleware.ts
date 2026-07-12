@@ -158,7 +158,11 @@ function buildCsp(nonce: string): string {
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
-    "connect-src 'self' https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com",
+    // Careers page (/careers) uploads applicant videos/PDFs straight to Google
+    // Drive and talks to a Google Apps Script web app: script.google.com issues
+    // the token and 302-redirects its JSON response to script.googleusercontent.com;
+    // www.googleapis.com receives the resumable Drive uploads + permission calls.
+    "connect-src 'self' https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://script.google.com https://script.googleusercontent.com https://www.googleapis.com",
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes.
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",

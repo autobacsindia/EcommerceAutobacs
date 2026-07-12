@@ -12,6 +12,7 @@ import type { NavCategory } from '@/lib/navCategories';
  *
  * Suppressed on:
  *  - `/`                → the home page ships its own nav inside HomeRedesign
+ *  - `/careers`         → standalone recruiting landing ships its own header
  *  - `/login`, `/register` → minimal auth chrome
  *  - `/admin/*`         → admin has its own light-theme shell
  *
@@ -22,6 +23,7 @@ export default function ConditionalHeader({ navCategories: _navCategories }: { n
   const pathname = usePathname();
   const hide =
     pathname === '/' ||
+    pathname === '/careers' ||
     pathname === '/login' ||
     pathname === '/register' ||
     pathname?.startsWith('/admin');
