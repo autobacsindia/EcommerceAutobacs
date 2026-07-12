@@ -34,8 +34,11 @@ if [ "$BACKEND" = 0 ] && [ "$FRONTEND" = 0 ]; then
 fi
 
 if [ "$BACKEND" = 1 ]; then
-  echo "── pre-push: backend lint + tests ──────────────────────────────"
+  echo "── pre-push: backend lockfile + lint + tests ───────────────────"
   cd "$ROOT/Back-end/server"
+  # Fail fast if package-lock is out of sync with package.json — CI (and the
+  # deploy build) run `npm ci`, which refuses an out-of-sync lock. Mirrors ci.yml.
+  npm ci --dry-run >/dev/null || { echo "pre-push: ✗ backend package-lock out of sync — run 'npm install' in Back-end/server and commit the lock."; exit 1; }
   npm run lint
   NODE_ENV=test \
   JWT_SECRET=ci-test-jwt-secret-not-for-production \
@@ -52,8 +55,13 @@ if [ "$BACKEND" = 1 ]; then
 fi
 
 if [ "$FRONTEND" = 1 ]; then
-  echo "── pre-push: frontend lint + tests ─────────────────────────────"
+  echo "── pre-push: frontend lockfile + lint + tests ──────────────────"
   cd "$ROOT/Front-end/web"
+  # Fail fast if package-lock is out of sync with package.json — CI (and the
+  # Vercel/Railway build) run `npm ci --legacy-peer-deps` and refuse an
+  # out-of-sync lock. Mirrors ci-frontend.yml. This is the exact break that
+  # slipped through when the 3D deps were added without regenerating the lock.
+  npm ci --dry-run --legacy-peer-deps >/dev/null || { echo "pre-push: ✗ frontend package-lock out of sync — run 'npm install' in Front-end/web and commit the lock."; exit 1; }
   npm run lint
   NODE_ENV=test NEXT_PUBLIC_API_URL=http://localhost:5000 \
     npm run test:ci -- --forceExit --passWithNoTests

@@ -126,10 +126,15 @@ function buildCsp(nonce: string): string {
   //                      so Razorpay can load its own sub-scripts. Domain
   //                      allow-lists below are a fallback for browsers without it.
   //   'unsafe-eval'    — dev only, for React Fast Refresh (HMR).
+  //   'wasm-unsafe-eval' — allows WebAssembly.instantiate (the Draco glTF
+  //                      decoder that powers the home 3D car) WITHOUT permitting
+  //                      general eval(); required in prod where 'unsafe-eval' is
+  //                      stripped. Without it the .glb never decodes → blank canvas.
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
+    "'wasm-unsafe-eval'",
     ...(isDev ? ["'unsafe-eval'"] : []),
     'https://checkout.razorpay.com',
     // Affordability/EMI widget on the PDP (RazorpayAffordabilitySuite).
