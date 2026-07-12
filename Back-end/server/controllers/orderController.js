@@ -6,7 +6,7 @@ import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
-import { generateInvoicePdf, invoiceNumber } from '../services/invoiceService.js';
+import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import crypto from 'crypto';
@@ -141,8 +141,17 @@ export const downloadInvoice = async (req, res) => {
   }
 
   const user = order.user && typeof order.user === 'object' ? order.user : null;
+
+  // Lazily issue an invoice number for paid orders that never went through the
+  // payment-success email flow (legacy/backfilled orders). The normal path
+  // assigns it there; this is the fallback so a downloaded PDF always has one.
+  if (order.invoiceNo == null) {
+    await assignInvoiceNumber(order);
+    await orderRepository.save(order);
+  }
+
   const pdf = await generateInvoicePdf(order, user);
-  const filename = `${invoiceNumber(order)}.pdf`;
+  const filename = invoiceFileName(order);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

@@ -18,7 +18,11 @@ export const companyInfo = {
   pincode: process.env.COMPANY_PINCODE || '',
   phone: process.env.COMPANY_PHONE || '',
   email: process.env.COMPANY_EMAIL || 'support@autobacsindia.com',
-  logoUrl: process.env.COMPANY_LOGO_URL || '',
+  // Roavion primary logo (same asset as the storefront navbar). pdfkit needs a
+  // PNG/JPEG, so invoiceService normalises Cloudinary URLs to f_png before fetch.
+  logoUrl:
+    process.env.COMPANY_LOGO_URL ||
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png',
 };
 
 /** Single-line postal address built from the parts that are set. */

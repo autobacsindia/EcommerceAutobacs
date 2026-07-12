@@ -2,6 +2,7 @@
  * Email Templates for Authentication
  * HTML and text templates for password reset and email verification
  */
+import { formatInvoiceNumber } from './invoiceFormat.js';
 
 /**
  * Password Reset Email Template
@@ -516,7 +517,8 @@ Autobacs Security Team
 export const orderConfirmationEmail = ({ order, user = null, company = {} }) => {
   const inr = (n) =>
     `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const invNo = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
+  // Same sequential number the attached PDF shows (falls back to AB-<id> if unassigned).
+  const invNo = formatInvoiceNumber(order);
   const name = order.shippingAddress?.fullName || user?.name || 'there';
   const companyName = company.name || 'Autobacs India';
   const supportEmail = company.email || 'support@autobacsindia.com';
