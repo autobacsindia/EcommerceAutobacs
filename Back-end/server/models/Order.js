@@ -157,8 +157,11 @@ const OrderSchema = new mongoose.Schema({
     metadata: mongoose.Schema.Types.Mixed
   }],
   // Invoice/receipt (generated on payment success — see services/invoiceService.js).
+  // invoiceNo is the monotonic, human-facing invoice number (assigned once at
+  // issuance from the "invoice" Counter, then stable for the life of the order);
   // invoiceUrl/invoicePublicId are set only when Cloudinary storage is enabled;
   // invoiceEmailedAt is the idempotency guard so the invoice email fires once.
+  invoiceNo: { type: Number, index: { unique: true, sparse: true } },
   invoiceUrl: String,
   invoicePublicId: String,
   invoiceEmailedAt: Date,

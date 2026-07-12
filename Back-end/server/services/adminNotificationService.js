@@ -19,7 +19,11 @@ import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
 // Same customer-facing reference the invoice PDF prints, so an alert and the
 // customer's invoice always name the order identically.
-import { invoiceNumber as orderRef } from './invoiceService.js';
+// Order reference for admin alerts. Uses the stable order number (WooCommerce
+// number or _id suffix), NOT the invoice number — the invoice number is
+// sequential and only assigned once the invoice is issued, so it must not double
+// as an order reference here.
+import { orderNumber as orderRef } from './invoiceService.js';
 
 /**
  * Internal alert recipients. Reads ADMIN_NOTIFICATION_EMAILS (comma-separated)

@@ -28,7 +28,8 @@ jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({
 }));
 // Stubbed so the suite doesn't pull in pdfkit/cloudinary just for the order ref.
 jest.unstable_mockModule('../../../services/invoiceService.js', () => ({
-  invoiceNumber: (order) => `AB-${order._id.toString().slice(-8).toUpperCase()}`,
+  orderNumber: (order) =>
+    order.wpId ? `#${order.wpId}` : `#${order._id.toString().slice(-8).toUpperCase()}`,
 }));
 jest.unstable_mockModule('../../../services/emailHandler.js', () => ({
   default: { sendEmail: mockSendEmail },
@@ -166,7 +167,7 @@ describe('emailAdminConsultationAlert', () => {
   });
 });
 
-/** Order fixture. `_id` is long enough for the AB-xxxxxxxx reference slice. */
+/** Order fixture. `_id` is long enough for the #xxxxxxxx order-number slice. */
 const makeOrder = (over = {}) => ({
   _id: '64b7f1c2a9e4d3b100ff01ab',
   totalAmount: 12499.5,
@@ -196,7 +197,7 @@ describe('emailAdminOrderPlacedAlert', () => {
 
     const arg = mockSendEmail.mock.calls[0][0];
     expect(arg.to).toBe('support@autobacsindia.com');
-    expect(arg.subject).toContain('AB-00FF01AB');
+    expect(arg.subject).toContain('#00FF01AB');
     expect(arg.subject).toContain('12,499.50');
     expect(arg.text).toContain('asha@example.com');
     expect(arg.text).toContain('Brake Pads × 2');
@@ -245,7 +246,7 @@ describe('emailAdminOrderCancelledAlert', () => {
     expect(arg.to).toBe('support@autobacsindia.com');
     expect(arg.subject).toContain('REFUND DUE');
     expect(arg.subject).toContain('12,499.50');
-    expect(arg.subject).toContain('AB-00FF01AB');
+    expect(arg.subject).toContain('#00FF01AB');
     expect(arg.text).toContain('REFUND DUE: ₹12,499.50');
     expect(arg.text).toContain('customer_request');
     expect(arg.html).toContain('Process refund');
