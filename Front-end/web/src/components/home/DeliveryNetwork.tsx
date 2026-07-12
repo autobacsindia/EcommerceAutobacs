@@ -1,4 +1,4 @@
-import { MapPin, Warehouse, Store, Network } from 'lucide-react';
+import { MapPin, Warehouse, Store, Network, type LucideIcon } from 'lucide-react';
 
 interface PublicWarehouse {
   id: string;
@@ -10,7 +10,7 @@ interface PublicWarehouse {
   operationalStatus: string;
 }
 
-const TYPE_META: Record<string, { label: string; Icon: React.ElementType; color: string }> = {
+const TYPE_META: Record<string, { label: string; Icon: LucideIcon; color: string }> = {
   warehouse: { label: 'Warehouse', Icon: Warehouse, color: 'text-gold' },
   hub:       { label: 'Hub',       Icon: Network,   color: 'text-gold' },
   store:     { label: 'Store',     Icon: Store,     color: 'text-emerald-400' },
