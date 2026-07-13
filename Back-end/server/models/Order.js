@@ -17,6 +17,10 @@ const OrderSchema = new mongoose.Schema({
   source: { type: String, enum: ["web", "woocommerce", "offline"], default: "web", index: true },
   // For offline deals: the name-only SalesRep credited with closing it. See SalesRep.js.
   salesRep: { type: mongoose.Schema.Types.ObjectId, ref: "SalesRep", default: null },
+  // Razorpay Payment Link (offline "collect payment" flow): the order sits in
+  // awaiting_payment until the customer pays the link, then the webhook confirms it.
+  paymentLinkId: { type: String, default: null, index: true },
+  paymentLinkUrl: { type: String, default: null },
   legacyStatus: String,
 
   items: [

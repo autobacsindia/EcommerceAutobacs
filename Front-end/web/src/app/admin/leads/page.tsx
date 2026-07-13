@@ -74,7 +74,7 @@ export default function AdminLeadsPage() {
   const [bulkRep, setBulkRep] = useState('');
   // Standalone offline order (for a customer not in the pipeline — e.g. a Meta lead).
   const [offlineOpen, setOfflineOpen] = useState(false);
-  const [offlineDone, setOfflineDone] = useState<string | null>(null);
+  const [offlineDone, setOfflineDone] = useState<{ ref: string; link?: string | null } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,7 +224,11 @@ export default function AdminLeadsPage() {
             </p>
             {offlineDone ? (
               <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700">
-                <p>Offline order <b>{offlineDone}</b> created. The customer will get an invoice and a set-password link by email.</p>
+                {offlineDone.link ? (
+                  <p>Payment link sent for order <b>{offlineDone.ref}</b>. It becomes a confirmed order once the customer pays. <a href={offlineDone.link} target="_blank" rel="noreferrer" className="underline">Open link</a></p>
+                ) : (
+                  <p>Offline order <b>{offlineDone.ref}</b> created. The customer will get an invoice and a set-password link by email.</p>
+                )}
                 <div className="mt-3 flex gap-2">
                   <button onClick={() => setOfflineDone(null)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">Create another</button>
                   <button onClick={() => { setOfflineOpen(false); setOfflineDone(null); }} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Done</button>
@@ -235,7 +239,7 @@ export default function AdminLeadsPage() {
                 reps={reps}
                 requireRep
                 submitLabel="Create order"
-                onCreated={(ref) => setOfflineDone(ref)}
+                onCreated={(ref, paymentLink) => setOfflineDone({ ref, link: paymentLink?.shortUrl })}
                 onCancel={() => setOfflineOpen(false)}
               />
             )}

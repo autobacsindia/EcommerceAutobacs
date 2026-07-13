@@ -16,7 +16,7 @@ export interface OfflineOrderFormProps {
   /** Standalone sales require picking the crediting rep. */
   requireRep?: boolean;
   submitLabel?: string;
-  onCreated: (orderRef: string) => void;
+  onCreated: (orderRef: string, paymentLink?: { shortUrl: string } | null) => void;
   onCancel?: () => void;
 }
 
@@ -44,6 +44,8 @@ export default function OfflineOrderForm({
   const [hits, setHits] = useState<ProductHit[]>([]);
   const [items, setItems] = useState<OfflineLineItem[]>([]);
   const [status, setStatus] = useState<'processing' | 'delivered'>('processing');
+  // 'paid' = settled offline (mark it done) · 'link' = send a Razorpay payment link.
+  const [paymentMode, setPaymentMode] = useState<'paid' | 'link'>('paid');
   const [repId, setRepId] = useState(defaults?.repId || '');
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,19 +78,21 @@ export default function OfflineOrderForm({
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const res = await apiClient.post<{ success: boolean; order: { orderNumber?: string; _id: string } }>(
+      const res = await apiClient.post<{ success: boolean; order: { orderNumber?: string; _id: string }; paymentLink?: { shortUrl: string } | null }>(
         '/orders/admin/offline',
         {
           name: name || undefined,
           email, phone,
           items: items.map((i) => ({ product: i.product, name: i.name, price: i.price, quantity: i.quantity })),
           shippingAddress: { ...addr, fullName: addr.fullName || name, phone },
-          status,
+          paymentMode,
+          // status only applies when marking it already-paid
+          status: paymentMode === 'paid' ? status : undefined,
           leadId: leadId || undefined,
           repId: repId || undefined,
         }
       );
-      if (res.success) onCreated(res.order.orderNumber || res.order._id);
+      if (res.success) onCreated(res.order.orderNumber || res.order._id, res.paymentLink);
     } catch (e: unknown) {
       const msg = (e as { rawData?: { message?: string } })?.rawData?.message;
       alert(msg || 'Failed to create offline order.');
@@ -201,14 +205,44 @@ export default function OfflineOrderForm({
         </table>
       )}
 
-      {/* Status + rep + total */}
+      {/* Payment mode */}
+      <div className="border-t border-gray-100 pt-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
+        <div className="flex flex-wrap gap-2">
+          {([
+            ['paid', 'Already paid', 'Settled offline (cash/UPI) — mark it done now'],
+            ['link', 'Send payment link', 'Razorpay link sent to the customer; confirms when they pay'],
+          ] as const).map(([mode, label, hint]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setPaymentMode(mode)}
+              title={hint}
+              className={`rounded-lg border px-3 py-1.5 text-sm ${
+                paymentMode === mode ? 'border-green-600 bg-green-50 text-green-700 font-medium' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {paymentMode === 'link' && (
+          <p className="mt-2 text-xs text-gray-500">The order is created as <b>awaiting payment</b>. Razorpay texts + emails the link; it becomes a confirmed order the moment the customer pays.</p>
+        )}
+      </div>
+
+      {/* Status (only when already paid) + rep + total */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="text-gray-600">Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as 'processing' | 'delivered')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
-            <option value="processing">Confirmed (paid)</option>
-            <option value="delivered">Delivered</option>
-          </select>
+          {paymentMode === 'paid' && (
+            <>
+              <label className="text-gray-600">Status</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value as 'processing' | 'delivered')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
+                <option value="processing">Confirmed (paid)</option>
+                <option value="delivered">Delivered</option>
+              </select>
+            </>
+          )}
           <label className="text-gray-600">{leadId ? 'Closed by' : 'Sold by'}{requireRep && <span className="text-red-500"> *</span>}</label>
           <select value={repId} onChange={(e) => setRepId(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
             <option value="">— none —</option>
@@ -223,7 +257,7 @@ export default function OfflineOrderForm({
           <button onClick={onCancel} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
         )}
         <button onClick={submit} disabled={!canSubmit} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-          {submitting ? 'Creating…' : submitLabel}
+          {submitting ? 'Creating…' : paymentMode === 'link' ? 'Create & send payment link' : submitLabel}
         </button>
       </div>
     </div>

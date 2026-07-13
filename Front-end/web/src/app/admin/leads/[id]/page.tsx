@@ -387,7 +387,7 @@ export default function LeadDetailPage() {
 /** Close a deal by creating an offline order for this lead's customer. */
 function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[]; onClosed: () => void }) {
   const [open, setOpen] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ ref: string; link?: string | null } | null>(null);
 
   if (lead.status === 'won' && !open) {
     return (
@@ -414,7 +414,15 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
         )}
       </div>
 
-      {done && <p className="mt-3 rounded bg-green-50 p-2 text-sm text-green-700">Offline order {done} created. The customer will get an invoice + set-password link.</p>}
+      {done && (
+        <div className="mt-3 rounded bg-green-50 p-2 text-sm text-green-700">
+          {done.link ? (
+            <>Payment link sent for order {done.ref}. It becomes a confirmed order — and this lead turns Won — once the customer pays. <a href={done.link} target="_blank" rel="noreferrer" className="underline">Open link</a></>
+          ) : (
+            <>Offline order {done.ref} created. The customer will get an invoice + set-password link.</>
+          )}
+        </div>
+      )}
 
       {open && (
         <div className="mt-4">
@@ -423,7 +431,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
             leadId={lead._id}
             defaults={{ name: lead.name, email: lead.email || '', phone: lead.phone || '', repId: lead.assignedRep?._id }}
             submitLabel="Create order & close"
-            onCreated={(ref) => { setDone(ref); setOpen(false); onClosed(); }}
+            onCreated={(ref, paymentLink) => { setDone({ ref, link: paymentLink?.shortUrl }); setOpen(false); onClosed(); }}
             onCancel={() => setOpen(false)}
           />
         </div>

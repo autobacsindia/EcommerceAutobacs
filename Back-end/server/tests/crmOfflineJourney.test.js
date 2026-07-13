@@ -38,6 +38,17 @@ jest.unstable_mockModule('../queue/queues.js', () => ({
   closeQueues: () => Promise.resolve(),
 }));
 
+// Stub the Razorpay payment-link creation (no real API call); capture the calls.
+const paymentLinks = [];
+jest.unstable_mockModule('../services/razorpayService.js', () => ({
+  default: {
+    createPaymentLink: async (order, customer) => {
+      paymentLinks.push({ order, customer });
+      return { id: 'plink_test_123', shortUrl: 'https://rzp.io/i/testlink' };
+    },
+  },
+}));
+
 const { default: User } = await import('../models/User.js');
 const { default: Order } = await import('../models/Order.js');
 const { default: Lead } = await import('../models/Lead.js');
@@ -216,6 +227,53 @@ describe('CRM — offline deal → account → set password → order history', 
 
     // A direct sale does not spin up a CRM lead.
     expect(await Lead.findOne({ email: 'meta.lead@example.com' })).toBeNull();
+  });
+
+  it('LINK mode: creates an awaiting-payment order + Razorpay link, does NOT convert the lead yet', async () => {
+    const admin = await makeRep();
+    const closingRep = await SalesRep.create({ name: 'Link Rep' });
+    const lead = await leadSyncService.upsertFromOrder(
+      await seedPendingOrder({ email: 'linkbuyer@example.com', phone: '9811122233', name: 'Link Buyer' })
+    );
+    paymentLinks.length = 0;
+    enqueued.length = 0;
+
+    const req = {
+      user: { id: admin._id.toString(), role: 'admin' },
+      body: {
+        email: 'linkbuyer@example.com', phone: '9811122233', name: 'Link Buyer',
+        items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 2500, name: 'Speaker' }],
+        shippingAddress: OFF_ADDR,
+        paymentMode: 'link',
+        leadId: lead._id.toString(),
+        repId: closingRep._id.toString(),
+      },
+    };
+    const res = makeRes();
+    await createOfflineOrder(req, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.paymentLink?.shortUrl).toBe('https://rzp.io/i/testlink');
+    // A link was requested for the order total.
+    expect(paymentLinks).toHaveLength(1);
+    expect(paymentLinks[0].order.totalAmount).toBe(2500);
+
+    const order = await orderRepository.findById(res.body.order._id);
+    expect(order.status).toBe('awaiting_payment');       // NOT processing yet
+    expect(order.paymentStatus).not.toBe('paid');         // not paid until the webhook
+    expect(order.paymentLinkId).toBe('plink_test_123');
+    expect(order.paymentLinkUrl).toBe('https://rzp.io/i/testlink');
+    expect(order.salesRep?.toString()).toBe(closingRep._id.toString());
+
+    // Lead stays open — it converts to won only when the link is paid.
+    expect((await leadRepository.findById(lead._id)).status).not.toBe('won');
+
+    // New buyer account + set-password link issued; invoice is deferred to payment.
+    const user = await User.findOne({ email: 'linkbuyer@example.com' });
+    expect(user.mustResetPassword).toBe(true);
+    expect(user.magicLinkToken).toBeTruthy();
+    expect(enqueued.some((j) => j.name === 'send-magic-link-email')).toBe(true);
+    expect(enqueued.some((j) => j.name === 'send-order-invoice')).toBe(false);
   });
 
   it('rejects an offline order with no / incomplete delivery address (400, nothing created)', async () => {

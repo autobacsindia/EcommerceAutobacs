@@ -93,6 +93,57 @@ class RazorpayService {
   }
 
   /**
+   * Create a Razorpay Payment Link for an existing (awaiting_payment) order.
+   * Razorpay delivers the link to the customer over SMS + email itself. When the
+   * customer pays, the `payment_link.paid` webhook resolves this order via the
+   * link's `notes.orderId` / `reference_id` and drives it to paid → processing.
+   *
+   * @param {Object} order - our Order (needs _id, totalAmount, orderNumber)
+   * @param {{name?:string, email?:string, phone?:string}} customer
+   * @returns {Promise<{id:string, shortUrl:string}>}
+   */
+  async createPaymentLink(order, { name, email, phone } = {}) {
+    const amount = Math.round((order.totalAmount || 0) * 100); // paise
+    if (!amount || amount < 100) {
+      throw new Error('Payment link amount must be at least ₹1');
+    }
+    if (!email && !phone) {
+      throw new Error('A phone or email is required to send a payment link');
+    }
+    try {
+      const Razorpay = await import('razorpay');
+      const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+
+      const link = await instance.paymentLink.create({
+        amount,
+        currency: 'INR',
+        accept_partial: false,
+        description: `Autobacs India — order ${order.orderNumber || order._id}`,
+        reference_id: order._id.toString(), // unique per order
+        customer: {
+          ...(name ? { name } : {}),
+          ...(email ? { email } : {}),
+          ...(phone ? { contact: phone } : {}),
+        },
+        notify: { sms: !!phone, email: !!email }, // Razorpay sends it
+        reminder_enable: true,
+        notes: { orderId: order._id.toString() }, // how the webhook finds us
+        expire_by: Math.floor(Date.now() / 1000) + 48 * 60 * 60, // 48h
+      });
+
+      return { id: link.id, shortUrl: link.short_url };
+    } catch (error) {
+      const desc =
+        error?.error?.description ||
+        error?.description ||
+        error?.message ||
+        (typeof error === 'object' ? JSON.stringify(error) : String(error));
+      console.error('[Razorpay] payment link creation failed:', desc);
+      throw new Error(`Failed to create payment link: ${desc}`);
+    }
+  }
+
+  /**
    * Verify Razorpay payment signature
    * @param {Object} paymentData - Payment verification data
    * @param {string} paymentData.razorpay_order_id - Razorpay order ID
@@ -403,6 +454,11 @@ class RazorpayService {
           await this.handlePaymentCaptured(payload);
           break;
           
+        case 'payment_link.paid':
+          // A Razorpay Payment Link (offline "collect payment" flow) was paid.
+          await this.handlePaymentLinkPaid(payload);
+          break;
+
         case 'payment.failed':
           // Payment failed - update payment record
           await this.handlePaymentFailure(payload.payment.entity);
@@ -501,6 +557,54 @@ class RazorpayService {
     
     // Process payment (same as frontend verification)
     console.log(`[Webhook] Processing payment for order: ${orderId}`);
+    await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString());
+  }
+
+  /**
+   * Handle payment_link.paid — the offline "collect payment" flow. Resolves our
+   * order from the payment LINK entity (its `notes.orderId` / `reference_id`),
+   * since a payment made via a link may not carry those on the payment entity.
+   * Reuses the same amount/currency/idempotency guards and success path.
+   * @param {Object} payload - webhook payload (payment_link.entity + payment.entity)
+   */
+  async handlePaymentLinkPaid(payload) {
+    const link = payload.payment_link?.entity;
+    const paymentEntity = payload.payment?.entity;
+    if (!paymentEntity) {
+      throw new Error('Missing payment entity in payment_link.paid');
+    }
+
+    const orderId = link?.notes?.orderId || link?.reference_id || paymentEntity.notes?.orderId;
+    if (!orderId) {
+      console.error('[SECURITY] payment_link.paid missing orderId (notes/reference)');
+      throw new Error('Missing orderId in payment link');
+    }
+
+    const order = await orderRepository.findById(orderId);
+    if (!order) {
+      console.error(`[SECURITY] payment_link.paid for non-existent order: ${orderId}`);
+      throw new Error('Order not found');
+    }
+
+    // Same integrity checks as a captured payment.
+    if (paymentEntity.amount !== order.totalAmount * 100) {
+      console.error(`[SECURITY] Payment-link amount mismatch! Order ${orderId}: expected ${order.totalAmount * 100}, got ${paymentEntity.amount}`);
+      throw new Error('Amount mismatch');
+    }
+    if (paymentEntity.currency !== 'INR') {
+      throw new Error('Currency mismatch');
+    }
+
+    // Idempotency (duplicate webhook / link.paid + payment.captured overlap).
+    const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
+    if (existingPayment && existingPayment.status === 'completed') {
+      console.log(`[Webhook] Payment link already processed for order: ${orderId}`);
+      return;
+    }
+
+    // Ensure downstream code that reads notes.orderId still works.
+    paymentEntity.notes = { ...(paymentEntity.notes || {}), orderId };
+    console.log(`[Webhook] Processing payment-link payment for order: ${orderId}`);
     await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString());
   }
 
