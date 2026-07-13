@@ -63,8 +63,13 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
               </>
             ) : (
               <>
-                <Link href="/login" className="text-sm text-ink hover:text-gold transition-colors">
-                  Login
+                <Link
+                  href="/login"
+                  aria-label="Sign in"
+                  className="flex items-center space-x-1 text-sm text-ink hover:text-gold transition-colors"
+                >
+                  <User className="h-5 w-5" />
+                  <span className="hidden lg:inline">Login</span>
                 </Link>
                 <Link
                   href="/register"
