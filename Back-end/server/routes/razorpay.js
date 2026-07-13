@@ -39,48 +39,6 @@ function getUserAgent(req) {
   return req.get('user-agent') || 'unknown';
 }
 
-/**
- * Razorpay Webhook Signature Verification Middleware
- * MUST run before rate limiting to prevent attackers from burning rate limits with invalid requests
- */
-const verifyRazorpaySignature = (req, res, next) => {
-  const signature = req.headers['x-razorpay-signature'];
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  
-  if (!signature) {
-    console.error('[SECURITY] Razorpay webhook missing signature');
-    return res.status(400).end();
-  }
-  
-  if (!webhookSecret) {
-    console.error('[CONFIG] RAZORPAY_WEBHOOK_SECRET not configured');
-    return res.status(500).end();
-  }
-  
-  // Compute expected signature using RAW body (Buffer, not JSON.stringify)
-  const expectedSignature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(req.body) // req.body is raw Buffer from express.raw()
-    .digest('hex');
-  
-  // TIMING-SAFE comparison (prevents timing attacks)
-  // IMPORTANT: Check length first to avoid timingSafeEqual crash
-  if (
-    !signature ||
-    signature.length !== expectedSignature.length ||
-    !crypto.timingSafeEqual(
-      Buffer.from(expectedSignature),
-      Buffer.from(signature)
-    )
-  ) {
-    console.error('[SECURITY] Invalid Razorpay webhook signature');
-    return res.status(400).end();
-  }
-  
-  // Signature valid - continue to rate limiting and handler
-  next();
-};
-
 // RATE LIMITING: /create-order - Identity-based (prevent API quota exhaustion)
 const createOrderLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
@@ -129,18 +87,6 @@ const verifyOrderRateLimit = rateLimit({
   message: {
     success: false,
     message: 'Too many verification attempts for this order'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// RATE LIMITING: /webhook - Burst protection (NOT strict limiting)
-const webhookBurstLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 events per minute (high threshold for Razorpay retries)
-  message: {
-    success: false,
-    message: 'Webhook rate limit exceeded'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -504,103 +450,6 @@ router.post("/verify-payment",
       success: false,
       message: error.message
     });
-  }
-}));
-
-// @route   POST /razorpay/webhook
-// @desc    Handle Razorpay webhook events (SECURED)
-// @access  Public (secured by HMAC-SHA256 signature verification)
-// SECURITY: Signature FIRST, then burst protection, then handler
-router.post("/webhook", 
-  express.raw({ type: 'application/json' }), 
-  verifyRazorpaySignature,   // SIGNATURE FIRST (prevents rate limit burning)
-  webhookBurstLimiter,       // THEN rate limiting (only valid signatures)
-  asyncHandler(async (req, res) => {
-  try {
-    // WEBHOOK SECURITY: IP allowlist (soft validation - log mismatches, don't block)
-    const clientIP = getClientIP(req);
-    const allowedWebhookIPs = process.env.RAZORPAY_WEBHOOK_IPS?.split(',').map(ip => ip.trim()) || [];
-    
-    if (allowedWebhookIPs.length > 0 && !allowedWebhookIPs.includes(clientIP)) {
-      console.warn(
-        '[SECURITY] Webhook from unknown IP | IP:', clientIP,
-        '| Allowed IPs:', allowedWebhookIPs.join(', ')
-      );
-      // Don't block - signature verification is the real protection
-      // Log for monitoring (could indicate misconfiguration or attack)
-    }
-    
-    // Parse webhook data (signature already verified)
-    const webhookData = JSON.parse(req.body.toString());
-    const eventId = webhookData.id;
-    const eventType = webhookData.event;
-    const createdAt = webhookData.created_at; // Unix timestamp
-    
-    // SECURITY STEP 2: Replay protection - Check event ID
-    try {
-      // REDIS KEY VALIDATION: Prevent namespace exhaustion attacks
-      if (!eventId || !eventId.startsWith('evt_')) {
-        console.error('[SECURITY] Invalid Razorpay event ID format:', eventId);
-        return res.status(400).end();
-      }
-
-      const redisClient = getRedisClient();
-      if (redisClient) {
-        const eventExists = await redisClient.get(`razorpay:event:${eventId}`);
-        if (eventExists) {
-          console.log(`[Webhook] Duplicate event ignored: ${eventId}`);
-          return res.status(200).end(); // Already processed
-        }
-        // Mark event as processed (24h TTL)
-        await redisClient.set(`razorpay:event:${eventId}`, '1', 'EX', 86400);
-      }
-    } catch (redisError) {
-      console.warn('[Webhook] Redis unavailable, skipping replay protection:', redisError.message);
-    }
-    
-    // SECURITY STEP 3: Timestamp validation (10-minute window with clock skew tolerance)
-    // NOTE: Ensure server has NTP sync enabled (critical for production)
-    // Railway/Heroku/AWS handle this automatically
-    const eventTime = createdAt * 1000; // Convert to milliseconds
-    const now = Date.now();
-    const tolerance = 10 * 60 * 1000; // 10 minutes
-    
-    // Reject future events (clock skew or manipulation)
-    if (eventTime > now + tolerance) {
-      console.error(
-        `[SECURITY] Razorpay webhook from future | Event: ${eventId} | ` +
-        `Event time: ${new Date(eventTime).toISOString()} | Server time: ${new Date(now).toISOString()}`
-      );
-      return res.status(400).end();
-    }
-    
-    // Warn on old events but allow if not seen before (replay protection handles this)
-    if (now - eventTime > tolerance) {
-      console.warn(
-        `[SECURITY] Old Razorpay webhook | Event: ${eventId} | ` +
-        `Age: ${Math.round((now - eventTime) / 1000)}s`
-      );
-      // Allow if event ID not seen before (already checked in Layer 2)
-    }
-    
-    // SECURITY STEP 4: Validate event type (whitelist only)
-    const allowedEvents = ['payment.captured', 'payment.failed', 'order.paid', 'payment_link.paid'];
-    if (!allowedEvents.includes(eventType)) {
-      console.log(`[Webhook] Ignoring unknown event type: ${eventType}`);
-      return res.status(200).end(); // Safely ignore
-    }
-    
-    // Process webhook event (with DB validation)
-    const result = await razorpayService.handleWebhook(webhookData, eventType);
-    
-    res.status(200).json({
-      success: true,
-      message: result.message || 'Webhook processed successfully'
-    });
-    
-  } catch (error) {
-    console.error('[Webhook] Processing error:', error.message);
-    res.status(500).end();
   }
 }));
 
