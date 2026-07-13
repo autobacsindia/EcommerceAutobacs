@@ -1,7 +1,15 @@
+import type { FC, SVGProps } from 'react';
 import Link from 'next/link';
 import Img from './Img';
-import { Instagram, YouTube, LinkedIn } from './icons';
+import { Facebook, Instagram, YouTube, LinkedIn } from './icons';
 import { brand, footer } from './homeContent';
+
+const SOCIAL_ICONS: Record<string, FC<SVGProps<SVGSVGElement>>> = {
+  Facebook,
+  Instagram,
+  YouTube,
+  LinkedIn,
+};
 
 export default function RedesignFooter() {
   return (
@@ -42,15 +50,20 @@ export default function RedesignFooter() {
       <div className="footer-bottom">
         <p>{footer.copyright}</p>
         <div className="social-links">
-          <a href="#" aria-label="Instagram">
-            <Instagram />
-          </a>
-          <a href="#" aria-label="YouTube">
-            <YouTube />
-          </a>
-          <a href="#" aria-label="LinkedIn">
-            <LinkedIn />
-          </a>
+          {footer.social.map((s) => {
+            const Icon = SOCIAL_ICONS[s.label];
+            return (
+              <a
+                key={s.label}
+                href={s.href}
+                aria-label={s.label}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Icon />
+              </a>
+            );
+          })}
         </div>
       </div>
     </footer>

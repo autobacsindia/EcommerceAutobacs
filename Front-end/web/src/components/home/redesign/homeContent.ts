@@ -438,4 +438,10 @@ export const footer = {
     },
   ],
   copyright: `© ${new Date().getFullYear()} Autobacs India Pvt. Ltd. All rights reserved.`,
+  social: [
+    { label: 'Facebook', href: 'https://www.facebook.com/autobacsindia' },
+    { label: 'Instagram', href: 'https://www.instagram.com/autobacsindia' },
+    { label: 'YouTube', href: 'https://www.youtube.com/@AutobacsIndia' },
+    { label: 'LinkedIn', href: 'https://www.linkedin.com/company/roavion/' },
+  ],
 };
