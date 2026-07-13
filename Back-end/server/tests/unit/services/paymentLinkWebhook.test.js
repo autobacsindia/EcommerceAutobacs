@@ -43,6 +43,12 @@ describe('handlePaymentLinkPaid', () => {
     expect(spy.mock.calls[0][1].notes.orderId).toBe(order._id.toString()); // orderId stamped on the payment
   });
 
+  it('does not false-mismatch a fractional-rupee total (rounded to paise)', async () => {
+    const order = await seedAwaitingOrder(999.10); // ₹999.10 → the link charges Math.round(*100)=99910
+    await razorpayService.handlePaymentLinkPaid(linkPayload(order, { amount: 99910 }));
+    expect(spy).toHaveBeenCalledTimes(1); // 99910 === Math.round(999.10*100), not the unrounded 99910.0000001
+  });
+
   it('throws on an amount mismatch and does not process', async () => {
     const order = await seedAwaitingOrder(2500);
     await expect(
@@ -63,5 +69,14 @@ describe('handlePaymentLinkPaid', () => {
       razorpayService.handlePaymentLinkPaid(linkPayload(ghost))
     ).rejects.toThrow(/Order not found/);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('handlePaymentCaptured — link payments (no orderId)', () => {
+  it('ignores a captured payment with no orderId instead of throwing (link payments 500ed before)', async () => {
+    await expect(
+      razorpayService.handlePaymentCaptured({ payment: { entity: { id: 'pay_nolink', amount: 100, currency: 'INR', notes: {} } } })
+    ).resolves.toBeUndefined();
+    expect(spy).not.toHaveBeenCalled(); // handled by payment_link.paid, not here
   });
 });

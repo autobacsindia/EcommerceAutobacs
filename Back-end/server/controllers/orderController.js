@@ -421,6 +421,9 @@ export const createOfflineOrder = async (req, res) => {
       user: user._id,
       source: 'offline',
       salesRep: salesRepId,
+      // Link flow converts the chosen lead on payment (deferred), so remember it —
+      // identity-based conversion alone can miss a phone-only/consultation lead.
+      crmLeadId: paymentMode === 'link' ? (leadId || null) : null,
       items: lineItems,
       shippingAddress: address,
       subtotal,
@@ -446,7 +449,16 @@ export const createOfflineOrder = async (req, res) => {
       // Collect via Razorpay: the order stays `awaiting_payment`. Razorpay sends
       // the link to the customer (SMS + email); the `payment_link.paid` webhook
       // then drives it paid → processing and converts the lead — no manual mark.
-      const link = await razorpayService.createPaymentLink(order, { name: address.fullName, email: normEmail, phone });
+      let link;
+      try {
+        link = await razorpayService.createPaymentLink(order, { name: address.fullName, email: normEmail, phone });
+      } catch (linkErr) {
+        // Roll back so a Razorpay failure doesn't strand an unpayable order — and,
+        // for a brand-new buyer, an account they can never claim.
+        await orderRepository.delete(order._id).catch(() => {});
+        if (isNewUser) await userRepository.delete(user._id).catch(() => {});
+        return res.status(502).json({ success: false, message: `Could not create payment link: ${linkErr.message}` });
+      }
       order.paymentLinkId = link.id;
       order.paymentLinkUrl = link.shortUrl;
       await orderRepository.save(order);
@@ -496,7 +508,10 @@ export const createOfflineOrder = async (req, res) => {
     if (isNewUser) {
       magicRawToken = crypto.randomBytes(32).toString('hex');
       user.magicLinkToken = hashToken(magicRawToken);
-      user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      // 7 days: the set-password link is emailed at creation but for a link-flow
+      // order the customer may not pay (and want to log in) until up to 48h later,
+      // so a 24h token would be dead on arrival. Generous but still expiring.
+      user.magicLinkExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await userRepository.save(user);
     }
 

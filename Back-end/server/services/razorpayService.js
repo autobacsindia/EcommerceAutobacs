@@ -506,55 +506,59 @@ class RazorpayService {
   }
   
   /**
+   * Shared webhook payment integrity guard. Validates the captured amount
+   * (rounded to paise — a floating rupee total must NOT false-mismatch against a
+   * link created with Math.round) and the currency against our order, and reports
+   * whether this gateway payment was already processed (idempotency). Throws on a
+   * real amount/currency mismatch.
+   * @returns {Promise<{alreadyProcessed: boolean}>}
+   */
+  async _validatePaymentAgainstOrder(order, paymentEntity) {
+    const expected = Math.round((order.totalAmount || 0) * 100); // paise
+    if (paymentEntity.amount !== expected) {
+      console.error(`[SECURITY] Amount mismatch! | Order: ${order._id} | Expected: ${expected} paise | Got: ${paymentEntity.amount} paise`);
+      throw new Error('Amount mismatch');
+    }
+    if (paymentEntity.currency !== 'INR') {
+      console.error(`[SECURITY] Currency mismatch! | Order: ${order._id} | Expected: INR | Got: ${paymentEntity.currency}`);
+      throw new Error('Currency mismatch');
+    }
+    // order.payment is an ObjectId reference — query the Payment collection by the
+    // gateway payment id for the real processed status.
+    const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
+    return { alreadyProcessed: !!(existingPayment && existingPayment.status === 'completed') };
+  }
+
+  /**
    * Handle payment.captured event (with full DB validation)
    * @param {Object} payload - Webhook payload
    */
   async handlePaymentCaptured(payload) {
     const paymentEntity = payload.payment.entity;
     const orderId = paymentEntity.notes?.orderId;
-    
+
+    // A payment made through a Payment Link carries no orderId on the payment
+    // entity — the parallel `payment_link.paid` event resolves those. Ignore
+    // gracefully (200) instead of throwing, so a link payment's payment.captured
+    // doesn't 500 the webhook on every offline link sale.
     if (!orderId) {
-      console.error('[SECURITY] Webhook payment missing orderId in notes');
-      throw new Error('Missing orderId in payment notes');
+      console.warn('[Webhook] payment.captured has no orderId in notes — ignoring (payment_link.paid handles link payments)');
+      return;
     }
-    
+
     // SECURITY: Find order in DB
     const order = await orderRepository.findById(orderId);
     if (!order) {
       console.error(`[SECURITY] Webhook payment for non-existent order: ${orderId}`);
       throw new Error('Order not found');
     }
-    
-    // SECURITY: Validate amount (prevent amount manipulation)
-    const webhookAmount = paymentEntity.amount; // in paise
-    const orderAmount = order.totalAmount * 100; // convert to paise
-    
-    if (webhookAmount !== orderAmount) {
-      console.error(
-        `[SECURITY] Amount mismatch! | Order: ${orderId} | ` +
-        `Expected: ${orderAmount} paise | Got: ${webhookAmount} paise`
-      );
-      throw new Error('Amount mismatch');
-    }
-    
-    // SECURITY: Validate currency
-    if (paymentEntity.currency !== 'INR') {
-      console.error(
-        `[SECURITY] Currency mismatch! | Order: ${orderId} | ` +
-        `Expected: INR | Got: ${paymentEntity.currency}`
-      );
-      throw new Error('Currency mismatch');
-    }
-    
-    // SECURITY: Check if already processed (idempotency).
-    // order.payment is an ObjectId reference — it has no .status field.
-    // Query the Payment collection directly using the gateway payment ID instead.
-    const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
-    if (existingPayment && existingPayment.status === 'completed') {
+
+    const { alreadyProcessed } = await this._validatePaymentAgainstOrder(order, paymentEntity);
+    if (alreadyProcessed) {
       console.log(`[Webhook] Payment already processed for order: ${orderId}`);
       return;
     }
-    
+
     // Process payment (same as frontend verification)
     console.log(`[Webhook] Processing payment for order: ${orderId}`);
     await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString());
@@ -586,18 +590,9 @@ class RazorpayService {
       throw new Error('Order not found');
     }
 
-    // Same integrity checks as a captured payment.
-    if (paymentEntity.amount !== order.totalAmount * 100) {
-      console.error(`[SECURITY] Payment-link amount mismatch! Order ${orderId}: expected ${order.totalAmount * 100}, got ${paymentEntity.amount}`);
-      throw new Error('Amount mismatch');
-    }
-    if (paymentEntity.currency !== 'INR') {
-      throw new Error('Currency mismatch');
-    }
-
-    // Idempotency (duplicate webhook / link.paid + payment.captured overlap).
-    const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
-    if (existingPayment && existingPayment.status === 'completed') {
+    // Same amount (rounded)/currency/idempotency guards as a captured payment.
+    const { alreadyProcessed } = await this._validatePaymentAgainstOrder(order, paymentEntity);
+    if (alreadyProcessed) {
       console.log(`[Webhook] Payment link already processed for order: ${orderId}`);
       return;
     }

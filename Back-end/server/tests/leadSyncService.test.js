@@ -198,6 +198,22 @@ describe('leadSyncService — claim & activity', () => {
     expect(finalLead.assignedRep).toBeTruthy();
   });
 
+  it('converts the explicit crmLeadId on a paid offline-link order (identity may differ)', async () => {
+    const rep = await SalesRep.create({ name: 'Link Rep' });
+    // A phone-only lead — the order uses a different email, so identity conversion
+    // alone would miss it; crmLeadId closes exactly this lead.
+    const lead = await Lead.create({ identityKey: 'phone:9990001111', phone: '9990001111', name: 'Phone Only', status: 'contacted' });
+    const order = await seedOrder({
+      paymentStatus: 'paid', status: 'processing', guestEmail: 'someoneelse@x.com',
+      crmLeadId: lead._id, salesRep: rep._id,
+    });
+    await leadSyncService.upsertFromOrder(order);
+
+    const converted = await Lead.findById(lead._id);
+    expect(converted.status).toBe('won');
+    expect(converted.activities.some((a) => a.type === 'conversion' && a.rep?.toString() === rep._id.toString())).toBe(true);
+  });
+
   it('logging a call bumps a new lead to contacted and stamps lastContactedAt', async () => {
     const order = await seedOrder({ paymentStatus: 'failed', guestEmail: 'activity@x.com' });
     const lead = await leadSyncService.upsertFromOrder(order);

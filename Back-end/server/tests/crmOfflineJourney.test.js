@@ -40,9 +40,11 @@ jest.unstable_mockModule('../queue/queues.js', () => ({
 
 // Stub the Razorpay payment-link creation (no real API call); capture the calls.
 const paymentLinks = [];
+let failLink = false; // flip to simulate a Razorpay failure
 jest.unstable_mockModule('../services/razorpayService.js', () => ({
   default: {
     createPaymentLink: async (order, customer) => {
+      if (failLink) throw new Error('Razorpay unavailable');
       paymentLinks.push({ order, customer });
       return { id: 'plink_test_123', shortUrl: 'https://rzp.io/i/testlink' };
     },
@@ -264,6 +266,8 @@ describe('CRM — offline deal → account → set password → order history', 
     expect(order.paymentLinkId).toBe('plink_test_123');
     expect(order.paymentLinkUrl).toBe('https://rzp.io/i/testlink');
     expect(order.salesRep?.toString()).toBe(closingRep._id.toString());
+    // The chosen lead is remembered on the order so it converts on payment.
+    expect(order.crmLeadId?.toString()).toBe(lead._id.toString());
 
     // Lead stays open — it converts to won only when the link is paid.
     expect((await leadRepository.findById(lead._id)).status).not.toBe('won');
@@ -272,8 +276,34 @@ describe('CRM — offline deal → account → set password → order history', 
     const user = await User.findOne({ email: 'linkbuyer@example.com' });
     expect(user.mustResetPassword).toBe(true);
     expect(user.magicLinkToken).toBeTruthy();
+    // Token outlives the 48h payment link (customer may pay + claim later).
+    expect(user.magicLinkExpires.getTime()).toBeGreaterThan(Date.now() + 24 * 60 * 60 * 1000);
     expect(enqueued.some((j) => j.name === 'send-magic-link-email')).toBe(true);
     expect(enqueued.some((j) => j.name === 'send-order-invoice')).toBe(false);
+  });
+
+  it('LINK mode: rolls back the order + new account if the Razorpay link fails', async () => {
+    const admin = await makeRep();
+    failLink = true;
+    try {
+      const req = {
+        user: { id: admin._id.toString(), role: 'admin' },
+        body: {
+          email: 'rollback@example.com', phone: '9800000009', name: 'Rollback',
+          items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 700, name: 'Y' }],
+          shippingAddress: OFF_ADDR,
+          paymentMode: 'link',
+        },
+      };
+      const res = makeRes();
+      await createOfflineOrder(req, res);
+      expect(res.statusCode).toBe(502);
+      // Nothing left behind — no unpayable order, no unclaimable account.
+      expect(await User.findOne({ email: 'rollback@example.com' })).toBeNull();
+      expect(await Order.findOne({ guestEmail: 'rollback@example.com' })).toBeNull();
+    } finally {
+      failLink = false;
+    }
   });
 
   it('rejects an offline order with no / incomplete delivery address (400, nothing created)', async () => {
