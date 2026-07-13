@@ -1,31 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Phone, Mail, ShoppingBag, UserMinus, Search, Plus, Trash2, Check,
+  ArrowLeft, Phone, Mail, ShoppingBag, UserMinus, Check,
 } from 'lucide-react';
 import apiClient from '@/lib/api';
+import OfflineOrderForm from '@/components/admin/OfflineOrderForm';
+import JourneyTimeline from '@/components/admin/leads/JourneyTimeline';
+import { buildJourney } from '@/lib/leadJourney';
 import {
-  Lead, LeadStatus, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
+  Lead, LeadStatus, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, VIP_MIN_SPENT_PAISE, SalesRep,
+  cancelAttribution, type OrderHistoryItem,
 } from '@/lib/leads';
 
-interface OrderHistoryItem {
-  _id: string;
-  orderNumber?: string;
-  totalAmount: number;
-  status: string;
-  createdAt: string;
-}
 interface LeadDetailResponse {
   success: boolean;
   lead: Lead;
   orderHistory: OrderHistoryItem[];
 }
-interface ProductHit { _id: string; name: string; price: number }
-interface OfflineLineItem { product: string; name: string; price: number; quantity: number }
 
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +34,12 @@ export default function LeadDetailPage() {
   // activity form
   const [activityType, setActivityType] = useState<'call' | 'note' | 'email'>('call');
   const [activityNotes, setActivityNotes] = useState('');
+
+  // Merged cycle-grouped timeline (activities + signals + orders).
+  const journey = useMemo(
+    () => (lead ? buildJourney(lead, orderHistory) : []),
+    [lead, orderHistory],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -184,58 +185,12 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left: status + activity + close deal */}
-        <div className="space-y-6 lg:col-span-2">
-          {/* Status control */}
-          <section className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Status</h2>
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                // Manual status rules, mirrored from the API: forward-only through
-                // the active stages; won/lost are terminal (only a new customer
-                // signal reopens them); won is order-backed, never set by hand.
-                const RANK: Record<string, number> = { new: 0, contacted: 1, qualified: 2 };
-                const terminal = lead.status === 'won' || lead.status === 'lost';
-                return LEAD_STATUSES.map((s) => {
-                  const isCurrent = lead.status === s;
-                  let locked = false;
-                  let reason: string | undefined;
-                  if (isCurrent) {
-                    locked = true;
-                  } else if (s === 'won') {
-                    locked = true; reason = 'Set automatically when an order is placed or an offline order is created';
-                  } else if (terminal) {
-                    locked = true; reason = 'This lead is closed — a new signal from the customer reopens it';
-                  } else if (s !== 'lost' && RANK[s] <= RANK[lead.status]) {
-                    locked = true; reason = 'Leads move forward only';
-                  }
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => changeStatus(s)}
-                      disabled={saving || locked}
-                      title={reason}
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        isCurrent ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                    >
-                      {LEAD_STATUS_LABELS[s]}
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-            <p className="mt-2 text-xs text-gray-400">
-              {lead.status === 'won' || lead.status === 'lost'
-                ? 'This lead is closed and locked. If the customer comes back, a new signal reopens it automatically.'
-                : 'Leads move forward only. Won is set automatically by a paid online order or an offline order — never by hand.'}
-            </p>
-            {lead.sources.some((s) => s.type === 'consultation') && (
-              <p className="mt-1 text-xs text-gray-400">Status changes mirror to the linked consultancy record.</p>
-            )}
-          </section>
+      {/* Pipeline roadmap — the whole lifecycle at a glance */}
+      <StatusPipeline lead={lead} saving={saving} onChange={changeStatus} />
 
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Left: actions */}
+        <div className="space-y-6 lg:col-span-2">
           {/* Log contact */}
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Log a contact</h2>
@@ -261,46 +216,34 @@ export default function LeadDetailPage() {
 
           {/* Close deal */}
           <CloseDealForm lead={lead} reps={reps} onClosed={load} />
-
-          {/* Activity timeline */}
-          <section className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Activity</h2>
-            {lead.activities.length === 0 ? (
-              <p className="text-sm text-gray-400">No activity yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {[...lead.activities].reverse().map((a, i) => (
-                  <li key={a._id || i} className="flex gap-3 text-sm">
-                    <span className="mt-0.5 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 capitalize">{a.type.replace('_', ' ')}</span>
-                    <div>
-                      <p className="text-gray-700">{a.notes}</p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(a.at).toLocaleString()}
-                        {a.rep && typeof a.rep === 'object' && a.rep.name
-                          ? ` · ${a.rep.name}`
-                          : a.by && typeof a.by === 'object' && a.by.name ? ` · ${a.by.name}` : ''}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </div>
 
-        {/* Right: sources + order history */}
+        {/* Right: at a glance — what's open now + lifetime value */}
         <div className="space-y-6">
           <section className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Signals</h2>
-            <ul className="space-y-2">
-              {lead.sources.map((s, i) => (
-                <li key={i} className="flex items-center justify-between">
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[s.type]}`}>{LEAD_SOURCE_LABELS[s.type]}</span>
-                  {s.capturedAt && <span className="text-xs text-gray-400">{new Date(s.capturedAt).toLocaleDateString()}</span>}
-                </li>
-              ))}
-              {lead.sources.length === 0 && <li className="text-sm text-gray-400">No active signals.</li>}
-            </ul>
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">Open signals</h2>
+            {lead.sources.length === 0 ? (
+              <p className="text-sm text-gray-400">No active signals.</p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {lead.sources.map((s, i) => {
+                  // Cancelled-order signals carry who cancelled + whether it was paid.
+                  const cancel = s.type === 'order_cancelled'
+                    ? cancelAttribution(s.snapshot as { cancelledBy?: string | null; wasPaid?: boolean } | undefined)
+                    : null;
+                  return (
+                    <li key={i} className="flex items-center gap-1">
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[s.type]}`}>{LEAD_SOURCE_LABELS[s.type]}</span>
+                      {cancel?.by && <span className="text-xs text-gray-500">{cancel.by}</span>}
+                      {cancel?.wasPaid && (
+                        <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">was paid</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <p className="mt-2 text-xs text-gray-400">The full history is in the Journey below.</p>
           </section>
 
           {lead.linkedUser && (lead.linkedUser.paidOrderCount ?? 0) > 0 && (
@@ -338,124 +281,134 @@ export default function LeadDetailPage() {
             </section>
           )}
 
-          <section className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">Order history</h2>
-            {orderHistory.length === 0 ? (
-              <p className="text-sm text-gray-400">No orders on this account.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {orderHistory.map((o) => (
-                  <li key={o._id} className="flex items-center justify-between">
-                    <Link href={`/admin/orders/${o._id}`} className="text-blue-600 hover:underline">{o.orderNumber || o._id.slice(-6)}</Link>
-                    <span className="text-gray-500">₹{o.totalAmount?.toLocaleString()} · {o.status}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {(lead.cycles?.length ?? 0) > 0 && (
-            <section className="rounded-lg border border-gray-200 bg-white p-5">
-              <h2 className="mb-3 text-sm font-semibold text-gray-900">Previous cycles</h2>
-              <ul className="space-y-3 text-sm">
-                {lead.cycles!.map((c, i) => (
-                  <li key={i} className="border-l-2 border-gray-200 pl-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${c.outcome ? LEAD_STATUS_COLORS[c.outcome] : 'bg-gray-100 text-gray-600'}`}>
-                        {c.outcome ? LEAD_STATUS_LABELS[c.outcome] : '—'}
-                      </span>
-                      {c.primarySource && (
-                        <span className="text-xs text-gray-500">{LEAD_SOURCE_LABELS[c.primarySource]}</span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {c.startedAt ? new Date(c.startedAt).toLocaleDateString() : '?'}
-                      {' → '}
-                      {c.closedAt ? new Date(c.closedAt).toLocaleDateString() : '?'}
-                      {c.lostReason ? ` · ${c.lostReason}` : ''}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
         </div>
       </div>
+
+      {/* Journey — activities, signals and orders as one cycle-grouped rail */}
+      <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-4 text-sm font-semibold text-gray-900">Journey</h2>
+        <JourneyTimeline groups={journey} />
+      </section>
     </div>
+  );
+}
+
+// Manual status rules, mirrored from the API: forward-only through the active
+// stages; won/lost are terminal (only a new customer signal reopens them); won
+// is order-backed, never set by hand.
+const PROGRESSION: LeadStatus[] = ['new', 'contacted', 'qualified'];
+const STATUS_RANK: Record<string, number> = { new: 0, contacted: 1, qualified: 2 };
+
+/**
+ * The lead lifecycle as a left-to-right roadmap: New → Contacted → Qualified →
+ * outcome. Stages advance forward-only; Won lands automatically on an order and
+ * is never clickable; Lost is a manual close via the button below the rail.
+ */
+function StatusPipeline({ lead, saving, onChange }: {
+  lead: Lead; saving: boolean; onChange: (s: LeadStatus) => void;
+}) {
+  const isWon = lead.status === 'won';
+  const isLost = lead.status === 'lost';
+  const terminal = isWon || isLost;
+  const currentRank = STATUS_RANK[lead.status] ?? -1;
+
+  // Why a stage can't be clicked (null = allowed). Same rules as the API.
+  const lockReason = (s: LeadStatus): string | null => {
+    if (lead.status === s) return null;
+    if (s === 'won') return 'Set automatically when an order is placed or an offline order is created';
+    if (terminal) return 'This lead is closed — a new signal from the customer reopens it';
+    if (s !== 'lost' && STATUS_RANK[s] <= currentRank) return 'Leads move forward only';
+    return null;
+  };
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-5">
+      <h2 className="mb-4 text-sm font-semibold text-gray-900">Pipeline</h2>
+      {/* Nodes are shrink-0; connectors flex-1 so stages spread evenly. */}
+      <div className="flex items-center overflow-x-auto">
+        {PROGRESSION.map((s, i) => {
+          const rank = STATUS_RANK[s];
+          const done = isWon || (!isLost && rank < currentRank);
+          const current = lead.status === s;
+          const clickable = !saving && !current && lockReason(s) === null;
+          const passed = isWon || rank < currentRank; // connector leaving this node
+          return (
+            <Fragment key={s}>
+              <button
+                onClick={() => clickable && onChange(s)}
+                disabled={!clickable}
+                title={lockReason(s) || undefined}
+                className={`flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-3 text-xs font-medium transition ${
+                  current ? 'bg-blue-50 ring-2 ring-blue-400' : ''
+                } ${clickable ? 'cursor-pointer hover:bg-gray-100' : 'cursor-default'}`}
+              >
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${
+                    done ? 'bg-green-600 text-white'
+                      : current ? 'bg-blue-600 text-white'
+                      : isLost ? 'bg-gray-200 text-gray-400'
+                      : 'border border-gray-300 text-gray-400'
+                  }`}
+                >
+                  {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                </span>
+                <span className={current ? 'text-blue-800' : done ? 'text-gray-700' : 'text-gray-400'}>
+                  {LEAD_STATUS_LABELS[s]}
+                </span>
+              </button>
+              <div className={`mx-1 h-0.5 min-w-4 flex-1 ${passed ? 'bg-green-500' : 'bg-gray-200'}`} />
+            </Fragment>
+          );
+        })}
+        {/* Outcome node */}
+        <div
+          title={terminal ? undefined : 'Set automatically when an order is placed'}
+          className={`flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-3 text-xs font-medium ${
+            isWon ? 'bg-green-50' : isLost ? 'bg-gray-100' : ''
+          }`}
+        >
+          <span
+            className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${
+              isWon ? 'bg-green-600 text-white'
+                : isLost ? 'bg-gray-400 text-white'
+                : 'border border-dashed border-gray-300 text-gray-400'
+            }`}
+          >
+            {isWon ? <Check className="h-3.5 w-3.5" /> : isLost ? '×' : '★'}
+          </span>
+          <span className={isWon ? 'text-green-800' : isLost ? 'text-gray-600' : 'text-gray-400'}>
+            {isWon ? 'Won' : isLost ? 'Lost' : 'Outcome'}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-xs text-gray-400">
+          {terminal
+            ? 'This lead is closed and locked. A new signal from the customer reopens it automatically.'
+            : 'Stages move forward only. Won is set automatically by a paid or offline order — never by hand.'}
+        </p>
+        {!terminal && (
+          <button
+            onClick={() => onChange('lost')}
+            disabled={saving}
+            className="shrink-0 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Mark as lost
+          </button>
+        )}
+      </div>
+      {lead.sources.some((s) => s.type === 'consultation') && (
+        <p className="mt-1 text-xs text-gray-400">Status changes mirror to the linked consultancy record.</p>
+      )}
+    </section>
   );
 }
 
 /** Close a deal by creating an offline order for this lead's customer. */
 function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[]; onClosed: () => void }) {
   const [open, setOpen] = useState(false);
-  const [term, setTerm] = useState('');
-  const [hits, setHits] = useState<ProductHit[]>([]);
-  const [items, setItems] = useState<OfflineLineItem[]>([]);
-  const [status, setStatus] = useState<'processing' | 'delivered'>('processing');
-  const [email, setEmail] = useState(lead.email || '');
-  const [phone, setPhone] = useState(lead.phone || '');
-  // Delivery address — required so the order actually ships somewhere.
-  const [addr, setAddr] = useState({
-    fullName: lead.name || '', addressLine1: '', addressLine2: '',
-    city: '', state: '', postalCode: '', country: 'India',
-  });
-  const setAddrField = (k: keyof typeof addr, v: string) => setAddr((p) => ({ ...p, [k]: v }));
-  const addressComplete = !!(addr.addressLine1.trim() && addr.city.trim() && addr.state.trim() && /^\d{6}$/.test(addr.postalCode.trim()));
-  // Default the crediting rep to the lead's current owner.
-  const [repId, setRepId] = useState(lead.assignedRep?._id || '');
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
-
-  async function searchProducts() {
-    if (!term.trim()) return;
-    try {
-      const res = await apiClient.get<{ products: ProductHit[] }>(`/products?search=${encodeURIComponent(term.trim())}&limit=8`);
-      setHits(res.products || []);
-    } catch (e) {
-      console.error('[CloseDeal] search failed', e);
-    }
-  }
-
-  function addItem(p: ProductHit) {
-    if (items.some((i) => i.product === p._id)) return;
-    setItems((prev) => [...prev, { product: p._id, name: p.name, price: p.price, quantity: 1 }]);
-    setHits([]);
-    setTerm('');
-  }
-
-  function updateItem(idx: number, patch: Partial<OfflineLineItem>) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
-  }
-
-  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-
-  async function submit() {
-    if (!email || !phone || items.length === 0 || !addressComplete) return;
-    setSubmitting(true);
-    try {
-      const res = await apiClient.post<{ success: boolean; order: { orderNumber?: string; _id: string } }>(
-        '/orders/admin/offline',
-        {
-          email, phone, name: lead.name,
-          items: items.map((i) => ({ product: i.product, name: i.name, price: i.price, quantity: i.quantity })),
-          shippingAddress: { ...addr, phone },
-          status,
-          leadId: lead._id,
-          repId: repId || undefined,
-        }
-      );
-      if (res.success) {
-        setDone(res.order.orderNumber || res.order._id);
-        setItems([]);
-        onClosed();
-      }
-    } catch (e) {
-      console.error('[CloseDeal] submit failed', e);
-      alert('Failed to create offline order.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const [done, setDone] = useState<{ ref: string; link?: string | null } | null>(null);
 
   if (lead.status === 'won' && !open) {
     return (
@@ -474,7 +427,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
         <h2 className="text-sm font-semibold text-gray-900">Close deal → offline order</h2>
         {!open && (
           <button
-            onClick={() => { setRepId(lead.assignedRep?._id || ''); setOpen(true); }}
+            onClick={() => setOpen(true)}
             className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
           >
             Create offline order
@@ -482,129 +435,26 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
         )}
       </div>
 
-      {done && <p className="mt-3 rounded bg-green-50 p-2 text-sm text-green-700">Offline order {done} created. The customer will get an invoice + set-password link.</p>}
+      {done && (
+        <div className="mt-3 rounded bg-green-50 p-2 text-sm text-green-700">
+          {done.link ? (
+            <>Payment link sent for order {done.ref}. It becomes a confirmed order — and this lead turns Won — once the customer pays. <a href={done.link} target="_blank" rel="noreferrer" className="underline">Open link</a></>
+          ) : (
+            <>Offline order {done.ref} created. The customer will get an invoice + set-password link.</>
+          )}
+        </div>
+      )}
 
       {open && (
-        <div className="mt-4 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="mb-1 block text-gray-600">Customer email</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-gray-600">Customer phone</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-            </label>
-          </div>
-
-          {/* Delivery address */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery address</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-sm sm:col-span-2">
-                <span className="mb-1 block text-gray-600">Recipient name</span>
-                <input value={addr.fullName} onChange={(e) => setAddrField('fullName', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-              <label className="text-sm sm:col-span-2">
-                <span className="mb-1 block text-gray-600">Address line 1 <span className="text-red-500">*</span></span>
-                <input value={addr.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)} placeholder="House / flat no., street" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-              <label className="text-sm sm:col-span-2">
-                <span className="mb-1 block text-gray-600">Address line 2</span>
-                <input value={addr.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)} placeholder="Area, landmark (optional)" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-gray-600">City <span className="text-red-500">*</span></span>
-                <input value={addr.city} onChange={(e) => setAddrField('city', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-gray-600">State <span className="text-red-500">*</span></span>
-                <input value={addr.state} onChange={(e) => setAddrField('state', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-gray-600">PIN code <span className="text-red-500">*</span></span>
-                <input value={addr.postalCode} onChange={(e) => setAddrField('postalCode', e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="6 digits" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block text-gray-600">Country</span>
-                <input value={addr.country} onChange={(e) => setAddrField('country', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              </label>
-            </div>
-            {!addressComplete && (
-              <p className="mt-2 text-xs text-amber-600">Address line 1, city, state and a 6-digit PIN are required so the order can be delivered.</p>
-            )}
-          </div>
-
-          {/* Product search */}
-          <div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <input
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchProducts(); } }}
-                  placeholder="Search products to add…"
-                  className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm"
-                />
-              </div>
-              <button onClick={searchProducts} className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">Search</button>
-            </div>
-            {hits.length > 0 && (
-              <ul className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-200">
-                {hits.map((p) => (
-                  <li key={p._id}>
-                    <button onClick={() => addItem(p)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
-                      <span>{p.name}</span>
-                      <span className="flex items-center gap-2 text-gray-500">₹{p.price?.toLocaleString()} <Plus className="h-4 w-4" /></span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Line items */}
-          {items.length > 0 && (
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-gray-500">
-                <tr><th className="py-1">Product</th><th className="py-1 w-20">Qty</th><th className="py-1 w-28">Unit ₹</th><th className="py-1 w-8"></th></tr>
-              </thead>
-              <tbody>
-                {items.map((it, idx) => (
-                  <tr key={it.product} className="border-t border-gray-100">
-                    <td className="py-2">{it.name}</td>
-                    <td className="py-2"><input type="number" min={1} value={it.quantity} onChange={(e) => updateItem(idx, { quantity: Math.max(1, Number(e.target.value)) })} className="w-16 rounded border border-gray-300 px-2 py-1" /></td>
-                    <td className="py-2"><input type="number" min={0} value={it.price} onChange={(e) => updateItem(idx, { price: Math.max(0, Number(e.target.value)) })} className="w-24 rounded border border-gray-300 px-2 py-1" /></td>
-                    <td className="py-2"><button onClick={() => setItems((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <label className="text-gray-600">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as 'processing' | 'delivered')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
-                <option value="processing">Confirmed (paid)</option>
-                <option value="delivered">Delivered</option>
-              </select>
-              <label className="text-gray-600">Closed by</label>
-              <select value={repId} onChange={(e) => setRepId(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
-                <option value="">— none —</option>
-                {reps.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
-              </select>
-            </div>
-            <div className="text-sm font-semibold text-gray-900">Total: ₹{total.toLocaleString()}</div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={submitting || !email || !phone || items.length === 0 || !addressComplete} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
-              {submitting ? 'Creating…' : 'Create order & close'}
-            </button>
-          </div>
+        <div className="mt-4">
+          <OfflineOrderForm
+            reps={reps}
+            leadId={lead._id}
+            defaults={{ name: lead.name, email: lead.email || '', phone: lead.phone || '', repId: lead.assignedRep?._id }}
+            submitLabel="Create order & close"
+            onCreated={(ref, paymentLink) => { setDone({ ref, link: paymentLink?.shortUrl }); setOpen(false); onClosed(); }}
+            onCancel={() => setOpen(false)}
+          />
         </div>
       )}
     </section>

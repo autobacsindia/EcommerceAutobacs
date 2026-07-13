@@ -321,14 +321,18 @@ export const createOfflineOrder = async (req, res) => {
     shippingAddress = {},
     shippingCost = 0,
     discount = 0,
-    status = 'processing', // 'processing' (paid) or 'delivered'
+    status = 'processing', // 'processing' (paid) or 'delivered' — only for paymentMode 'paid'
     notes,
     leadId,
     repId, // name-only SalesRep credited with closing the deal (optional)
+    paymentMode = 'paid', // 'paid' = settled offline (mark processing) | 'link' = collect via Razorpay
   } = req.body;
 
   if (!email || !phone) {
     return res.status(400).json({ success: false, message: 'Customer email and phone are required' });
+  }
+  if (!['paid', 'link'].includes(paymentMode)) {
+    return res.status(400).json({ success: false, message: "paymentMode must be 'paid' or 'link'" });
   }
   // Validate the crediting rep up front (optional field) so a bad id fails fast
   // BEFORE we create a user/order. Shared with the lead controller.
@@ -417,6 +421,9 @@ export const createOfflineOrder = async (req, res) => {
       user: user._id,
       source: 'offline',
       salesRep: salesRepId,
+      // Link flow converts the chosen lead on payment (deferred), so remember it —
+      // identity-based conversion alone can miss a phone-only/consultation lead.
+      crmLeadId: paymentMode === 'link' ? (leadId || null) : null,
       items: lineItems,
       shippingAddress: address,
       subtotal,
@@ -436,36 +443,60 @@ export const createOfflineOrder = async (req, res) => {
       ],
     });
 
-    // Drive through the normal status machinery so all side-effects fire (purchase
-    // tag + lead conversion on confirm; karma earn + emails on delivery). Admin
-    // bypass lets us set the final state directly.
-    await orderStatusService.updateOrderStatus(order._id.toString(), 'processing', {
-      userId: req.user.id,
-      isAdmin: true,
-      reason: 'manual_confirmation',
-      notes: 'Offline sale confirmed (paid)',
-    });
-    if (status === 'delivered') {
-      await orderStatusService.updateOrderStatus(order._id.toString(), 'delivered', {
+    // ── Settle the order ──────────────────────────────────────────────────────
+    let paymentLink = null;
+    if (paymentMode === 'link') {
+      // Collect via Razorpay: the order stays `awaiting_payment`. Razorpay sends
+      // the link to the customer (SMS + email); the `payment_link.paid` webhook
+      // then drives it paid → processing and converts the lead — no manual mark.
+      let link;
+      try {
+        link = await razorpayService.createPaymentLink(order, { name: address.fullName, email: normEmail, phone });
+      } catch (linkErr) {
+        // Roll back so a Razorpay failure doesn't strand an unpayable order — and,
+        // for a brand-new buyer, an account they can never claim.
+        await orderRepository.delete(order._id).catch(() => {});
+        if (isNewUser) await userRepository.delete(user._id).catch(() => {});
+        return res.status(502).json({ success: false, message: `Could not create payment link: ${linkErr.message}` });
+      }
+      order.paymentLinkId = link.id;
+      order.paymentLinkUrl = link.shortUrl;
+      await orderRepository.save(order);
+      order = await orderRepository.findById(order._id);
+      paymentLink = link;
+    } else {
+      // Already paid offline → drive through the normal status machinery so all
+      // side-effects fire (purchase tag + lead conversion on confirm; karma earn +
+      // emails on delivery). Admin bypass lets us set the final state directly.
+      await orderStatusService.updateOrderStatus(order._id.toString(), 'processing', {
         userId: req.user.id,
         isAdmin: true,
-        reason: 'customer_received',
-        notes: 'Offline sale delivered',
+        reason: 'manual_confirmation',
+        notes: 'Offline sale confirmed (paid)',
       });
-    }
-    order = await orderRepository.findById(order._id);
+      if (status === 'delivered') {
+        await orderStatusService.updateOrderStatus(order._id.toString(), 'delivered', {
+          userId: req.user.id,
+          isAdmin: true,
+          reason: 'customer_received',
+          notes: 'Offline sale delivered',
+        });
+      }
+      order = await orderRepository.findById(order._id);
 
-    // Explicitly convert the originating lead when the rep closed a specific one
-    // (its identity may differ from the order's, e.g. consultation had phone-only).
-    if (leadId) {
-      await leadSyncService.safeSync(() =>
-        leadSyncService.applyLeadStatus(leadId, 'won', {
-          actorId: req.user.id,
-          repId: salesRepId, // credit the closing rep on the conversion
-          notes: 'Closed via offline order',
-          convertedOrder: order._id,
-        })
-      );
+      // Explicitly convert the originating lead when the rep closed a specific one
+      // (its identity may differ from the order's, e.g. consultation had phone-only).
+      // For the link flow this happens later, on payment, via the webhook.
+      if (leadId) {
+        await leadSyncService.safeSync(() =>
+          leadSyncService.applyLeadStatus(leadId, 'won', {
+            actorId: req.user.id,
+            repId: salesRepId, // credit the closing rep on the conversion
+            notes: 'Closed via offline order',
+            convertedOrder: order._id,
+          })
+        );
+      }
     }
 
     // New buyer: mint the single-use account-claim (set-password) token NOW. This
@@ -477,17 +508,23 @@ export const createOfflineOrder = async (req, res) => {
     if (isNewUser) {
       magicRawToken = crypto.randomBytes(32).toString('hex');
       user.magicLinkToken = hashToken(magicRawToken);
-      user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      // 7 days: the set-password link is emailed at creation but for a link-flow
+      // order the customer may not pay (and want to log in) until up to 48h later,
+      // so a 24h token would be dead on arrival. Generous but still expiring.
+      user.magicLinkExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await userRepository.save(user);
     }
 
     // ── Emails (best-effort, idempotent) ─────────────────────────────────────
     if (process.env.REDIS_URL) {
       const queue = getNotificationsQueue();
-      // Invoice/receipt for the paid order.
-      queue
-        .add('send-order-invoice', { orderId: order._id.toString() })
-        .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
+      // Invoice only for an already-paid order. The link flow invoices on payment
+      // success (processPaymentSuccess), so we don't send a receipt before payment.
+      if (paymentMode !== 'link') {
+        queue
+          .add('send-order-invoice', { orderId: order._id.toString() })
+          .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
+      }
 
       // New buyer: email the set-password (magic) link so they can claim the account.
       if (isNewUser) {
@@ -503,9 +540,10 @@ export const createOfflineOrder = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Offline order created',
+      message: paymentMode === 'link' ? 'Offline order created — payment link sent' : 'Offline order created',
       order,
       customer: { id: user._id, email: user.email, isNewUser },
+      paymentLink, // { id, shortUrl } for the link flow, else null
     });
   } catch (err) {
     console.error('[OFFLINE_ORDER_ERROR]', err);

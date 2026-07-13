@@ -180,6 +180,9 @@ export const getLeadById = async (req, res) => {
     { path: 'activities.by', select: 'name email' },
     { path: 'activities.rep', select: 'name' },
     { path: 'convertedOrder', select: 'orderNumber totalAmount status createdAt' },
+    // Cycle headers on the Journey timeline show who won it + the closing order.
+    { path: 'cycles.assignedRep', select: 'name' },
+    { path: 'cycles.convertedOrder', select: 'orderNumber' },
   ]);
 
   if (!lead) {

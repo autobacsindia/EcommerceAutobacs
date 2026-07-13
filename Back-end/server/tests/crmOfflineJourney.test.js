@@ -38,6 +38,19 @@ jest.unstable_mockModule('../queue/queues.js', () => ({
   closeQueues: () => Promise.resolve(),
 }));
 
+// Stub the Razorpay payment-link creation (no real API call); capture the calls.
+const paymentLinks = [];
+let failLink = false; // flip to simulate a Razorpay failure
+jest.unstable_mockModule('../services/razorpayService.js', () => ({
+  default: {
+    createPaymentLink: async (order, customer) => {
+      if (failLink) throw new Error('Razorpay unavailable');
+      paymentLinks.push({ order, customer });
+      return { id: 'plink_test_123', shortUrl: 'https://rzp.io/i/testlink' };
+    },
+  },
+}));
+
 const { default: User } = await import('../models/User.js');
 const { default: Order } = await import('../models/Order.js');
 const { default: Lead } = await import('../models/Lead.js');
@@ -183,6 +196,114 @@ describe('CRM — offline deal → account → set password → order history', 
     expect(closedLead.status).toBe('won');
     expect(closedLead.hasPurchased).toBe(true);
     expect(closedLead.activities.some((x) => x.type === 'conversion' && x.rep?.toString() === closingRep._id.toString())).toBe(true);
+  });
+
+  it('creates a STANDALONE offline order (no lead) → account + paid order + set-password token, no lead', async () => {
+    const admin = await makeRep();
+    const closingRep = await SalesRep.create({ name: 'Standalone Rep' });
+    enqueued.length = 0;
+    const req = {
+      user: { id: admin._id.toString(), role: 'admin' },
+      body: {
+        email: 'meta.lead@example.com', phone: '9700000123', name: 'Meta Lead',
+        items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 800, name: 'Cover' }],
+        shippingAddress: OFF_ADDR,
+        status: 'processing',
+        repId: closingRep._id.toString(),
+        // no leadId — this buyer is not in the CRM pipeline
+      },
+    };
+    const res = makeRes();
+    await createOfflineOrder(req, res);
+
+    expect(res.statusCode).toBe(201);
+    const user = await User.findOne({ email: 'meta.lead@example.com' });
+    expect(user).toBeTruthy();
+    expect(user.mustResetPassword).toBe(true);                 // first-time password set
+    expect(user.magicLinkToken).toBeTruthy();                   // set-password link issued
+    expect(enqueued.some((j) => j.name === 'send-magic-link-email')).toBe(true);
+
+    const order = await orderRepository.findById(res.body.order._id);
+    expect(order.paymentStatus).toBe('paid');
+    expect(order.salesRep?.toString()).toBe(closingRep._id.toString()); // credited to the rep
+
+    // A direct sale does not spin up a CRM lead.
+    expect(await Lead.findOne({ email: 'meta.lead@example.com' })).toBeNull();
+  });
+
+  it('LINK mode: creates an awaiting-payment order + Razorpay link, does NOT convert the lead yet', async () => {
+    const admin = await makeRep();
+    const closingRep = await SalesRep.create({ name: 'Link Rep' });
+    const lead = await leadSyncService.upsertFromOrder(
+      await seedPendingOrder({ email: 'linkbuyer@example.com', phone: '9811122233', name: 'Link Buyer' })
+    );
+    paymentLinks.length = 0;
+    enqueued.length = 0;
+
+    const req = {
+      user: { id: admin._id.toString(), role: 'admin' },
+      body: {
+        email: 'linkbuyer@example.com', phone: '9811122233', name: 'Link Buyer',
+        items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 2500, name: 'Speaker' }],
+        shippingAddress: OFF_ADDR,
+        paymentMode: 'link',
+        leadId: lead._id.toString(),
+        repId: closingRep._id.toString(),
+      },
+    };
+    const res = makeRes();
+    await createOfflineOrder(req, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.paymentLink?.shortUrl).toBe('https://rzp.io/i/testlink');
+    // A link was requested for the order total.
+    expect(paymentLinks).toHaveLength(1);
+    expect(paymentLinks[0].order.totalAmount).toBe(2500);
+
+    const order = await orderRepository.findById(res.body.order._id);
+    expect(order.status).toBe('awaiting_payment');       // NOT processing yet
+    expect(order.paymentStatus).not.toBe('paid');         // not paid until the webhook
+    expect(order.paymentLinkId).toBe('plink_test_123');
+    expect(order.paymentLinkUrl).toBe('https://rzp.io/i/testlink');
+    expect(order.salesRep?.toString()).toBe(closingRep._id.toString());
+    // The chosen lead is remembered on the order so it converts on payment.
+    expect(order.crmLeadId?.toString()).toBe(lead._id.toString());
+
+    // Lead stays open — it converts to won only when the link is paid.
+    expect((await leadRepository.findById(lead._id)).status).not.toBe('won');
+
+    // New buyer account + set-password link issued; invoice is deferred to payment.
+    const user = await User.findOne({ email: 'linkbuyer@example.com' });
+    expect(user.mustResetPassword).toBe(true);
+    expect(user.magicLinkToken).toBeTruthy();
+    // Token outlives the 48h payment link (customer may pay + claim later).
+    expect(user.magicLinkExpires.getTime()).toBeGreaterThan(Date.now() + 24 * 60 * 60 * 1000);
+    expect(enqueued.some((j) => j.name === 'send-magic-link-email')).toBe(true);
+    expect(enqueued.some((j) => j.name === 'send-order-invoice')).toBe(false);
+  });
+
+  it('LINK mode: rolls back the order + new account if the Razorpay link fails', async () => {
+    const admin = await makeRep();
+    failLink = true;
+    try {
+      const req = {
+        user: { id: admin._id.toString(), role: 'admin' },
+        body: {
+          email: 'rollback@example.com', phone: '9800000009', name: 'Rollback',
+          items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 700, name: 'Y' }],
+          shippingAddress: OFF_ADDR,
+          paymentMode: 'link',
+        },
+      };
+      const res = makeRes();
+      await createOfflineOrder(req, res);
+      expect(res.statusCode).toBe(502);
+      // Nothing left behind — no unpayable order, no unclaimable account.
+      expect(await User.findOne({ email: 'rollback@example.com' })).toBeNull();
+      expect(await Order.findOne({ guestEmail: 'rollback@example.com' })).toBeNull();
+    } finally {
+      failLink = false;
+    }
   });
 
   it('rejects an offline order with no / incomplete delivery address (400, nothing created)', async () => {

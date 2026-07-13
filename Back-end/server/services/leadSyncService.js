@@ -249,6 +249,18 @@ class LeadSyncService {
     // Read the PAYMENT axis (paymentStatus), not fulfillment — payment success/
     // failure/abandonment are payment facts now (post two-axis split).
     if (doc.paymentStatus === 'paid') {
+      // Offline link flow deferred conversion of a specific lead to payment time.
+      // Convert it explicitly (its identity may not match the order's), crediting
+      // the closing rep — separate from the identity-based conversion below.
+      if (doc.crmLeadId) {
+        await this.safeSync(() =>
+          this.applyLeadStatus(doc.crmLeadId, 'won', {
+            repId: doc.salesRep || null,
+            notes: 'Closed via offline payment link',
+            convertedOrder: doc._id,
+          })
+        );
+      }
       return this._markConvertedByIdentity({ email, phone }, doc._id, doc.user);
     }
 
