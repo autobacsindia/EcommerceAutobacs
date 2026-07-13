@@ -351,6 +351,17 @@ export const createOfflineOrder = async (req, res) => {
   if (!['processing', 'delivered'].includes(status)) {
     return res.status(400).json({ success: false, message: "Offline order status must be 'processing' or 'delivered'" });
   }
+  // A real delivery address is required. Offline orders were previously created
+  // with placeholder values ('N/A' / '000000'), so nothing could actually ship.
+  const missingAddr = ['addressLine1', 'city', 'state', 'postalCode']
+    .filter((k) => !String(shippingAddress[k] || '').trim());
+  if (missingAddr.length) {
+    return res.status(400).json({ success: false, message: `Delivery address incomplete — please fill: ${missingAddr.join(', ')}` });
+  }
+  const postalCode = String(shippingAddress.postalCode).trim();
+  if (!/^\d{6}$/.test(postalCode)) {
+    return res.status(400).json({ success: false, message: 'Postal code must be a valid 6-digit PIN code' });
+  }
 
   try {
     // ── Find or create the customer ──────────────────────────────────────────
@@ -385,14 +396,14 @@ export const createOfflineOrder = async (req, res) => {
     const totalAmount = Math.max(0, subtotal + Number(shippingCost || 0) - Number(discount || 0));
 
     const address = {
-      fullName: shippingAddress.fullName || name || user.name,
-      phone: shippingAddress.phone || phone,
-      addressLine1: shippingAddress.addressLine1 || 'Offline sale',
-      addressLine2: shippingAddress.addressLine2 || '',
-      city: shippingAddress.city || 'N/A',
-      state: shippingAddress.state || 'N/A',
-      postalCode: shippingAddress.postalCode || '000000',
-      country: shippingAddress.country || 'India',
+      fullName: (shippingAddress.fullName || name || user.name || '').trim(),
+      phone: String(shippingAddress.phone || phone).trim(),
+      addressLine1: String(shippingAddress.addressLine1).trim(),
+      addressLine2: String(shippingAddress.addressLine2 || '').trim(),
+      city: String(shippingAddress.city).trim(),
+      state: String(shippingAddress.state).trim(),
+      postalCode,
+      country: String(shippingAddress.country || 'India').trim(),
     };
 
     let order = await orderRepository.create({

@@ -394,6 +394,13 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
   const [status, setStatus] = useState<'processing' | 'delivered'>('processing');
   const [email, setEmail] = useState(lead.email || '');
   const [phone, setPhone] = useState(lead.phone || '');
+  // Delivery address — required so the order actually ships somewhere.
+  const [addr, setAddr] = useState({
+    fullName: lead.name || '', addressLine1: '', addressLine2: '',
+    city: '', state: '', postalCode: '', country: 'India',
+  });
+  const setAddrField = (k: keyof typeof addr, v: string) => setAddr((p) => ({ ...p, [k]: v }));
+  const addressComplete = !!(addr.addressLine1.trim() && addr.city.trim() && addr.state.trim() && /^\d{6}$/.test(addr.postalCode.trim()));
   // Default the crediting rep to the lead's current owner.
   const [repId, setRepId] = useState(lead.assignedRep?._id || '');
   const [submitting, setSubmitting] = useState(false);
@@ -423,7 +430,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
   async function submit() {
-    if (!email || !phone || items.length === 0) return;
+    if (!email || !phone || items.length === 0 || !addressComplete) return;
     setSubmitting(true);
     try {
       const res = await apiClient.post<{ success: boolean; order: { orderNumber?: string; _id: string } }>(
@@ -431,6 +438,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
         {
           email, phone, name: lead.name,
           items: items.map((i) => ({ product: i.product, name: i.name, price: i.price, quantity: i.quantity })),
+          shippingAddress: { ...addr, phone },
           status,
           leadId: lead._id,
           repId: repId || undefined,
@@ -487,6 +495,44 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
               <span className="mb-1 block text-gray-600">Customer phone</span>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             </label>
+          </div>
+
+          {/* Delivery address */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery address</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-gray-600">Recipient name</span>
+                <input value={addr.fullName} onChange={(e) => setAddrField('fullName', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-gray-600">Address line 1 <span className="text-red-500">*</span></span>
+                <input value={addr.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)} placeholder="House / flat no., street" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-gray-600">Address line 2</span>
+                <input value={addr.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)} placeholder="Area, landmark (optional)" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">City <span className="text-red-500">*</span></span>
+                <input value={addr.city} onChange={(e) => setAddrField('city', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">State <span className="text-red-500">*</span></span>
+                <input value={addr.state} onChange={(e) => setAddrField('state', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">PIN code <span className="text-red-500">*</span></span>
+                <input value={addr.postalCode} onChange={(e) => setAddrField('postalCode', e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="6 digits" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">Country</span>
+                <input value={addr.country} onChange={(e) => setAddrField('country', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+            </div>
+            {!addressComplete && (
+              <p className="mt-2 text-xs text-amber-600">Address line 1, city, state and a 6-digit PIN are required so the order can be delivered.</p>
+            )}
           </div>
 
           {/* Product search */}
@@ -555,7 +601,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
 
           <div className="flex justify-end gap-2">
             <button onClick={() => setOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={submitting || !email || !phone || items.length === 0} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+            <button onClick={submit} disabled={submitting || !email || !phone || items.length === 0 || !addressComplete} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
               {submitting ? 'Creating…' : 'Create order & close'}
             </button>
           </div>
