@@ -4,6 +4,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateIdParam, validateUserUpdate } from "../middleware/validationMiddleware.js";
 import auditLogger from "../services/auditLogger.js";
+import { escapeRegex, phoneSearchPattern } from "../utils/identity.js";
 
 const router = express.Router();
 
@@ -20,10 +21,22 @@ router.get("/", protect, admin, asyncHandler(async (req, res) => {
 
   const filter = {};
   if (req.query.search) {
-    filter.$or = [
-      { name: { $regex: req.query.search, $options: 'i' } },
-      { email: { $regex: req.query.search, $options: 'i' } }
+    // Escape the raw term before it reaches $regex (injection / ReDoS guard).
+    const search = String(req.query.search).trim();
+    const safe = escapeRegex(search);
+    const or = [
+      { name: { $regex: safe, $options: 'i' } },
+      { email: { $regex: safe, $options: 'i' } }
     ];
+    // A phone-like query also matches the account phone and any address phone,
+    // tolerant of separators/prefixes (+91, spaces, leading 0). `addresses` is
+    // dropped from the projection below but can still be filtered on server-side.
+    const phonePattern = phoneSearchPattern(search);
+    if (phonePattern) {
+      or.push({ phone: { $regex: phonePattern } });
+      or.push({ 'addresses.phone': { $regex: phonePattern } });
+    }
+    filter.$or = or;
   }
   if (req.query.role) {
     filter.role = req.query.role;

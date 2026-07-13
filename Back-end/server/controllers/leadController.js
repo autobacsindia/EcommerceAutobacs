@@ -11,6 +11,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
+import { escapeRegex, phoneSearchPattern } from '../utils/identity.js';
 import { LEAD_STATUSES, SOURCE_TYPES } from '../config/leadConstants.js';
 
 const DEFAULT_LIMIT = 20;
@@ -95,8 +96,16 @@ function buildListQuery(req) {
   if (followUpDue === 'true') query.nextFollowUpAt = { $ne: null, $lte: new Date() };
 
   if (typeof search === 'string' && search.trim()) {
-    const rx = { $regex: search.trim(), $options: 'i' };
-    query.$or = [{ name: rx }, { email: rx }, { phone: rx }];
+    const term = search.trim();
+    // Escape before $regex (injection / ReDoS guard).
+    const rx = { $regex: escapeRegex(term), $options: 'i' };
+    const or = [{ name: rx }, { email: rx }];
+    // `Lead.phone` is stored normalized (last-10 digits), so a formatted query
+    // (+91, spaces, leading 0) won't match a raw regex — normalize it and match
+    // separator-tolerantly. Falls back to a literal phone regex for partials.
+    const phonePattern = phoneSearchPattern(term);
+    or.push({ phone: { $regex: phonePattern || escapeRegex(term) } });
+    query.$or = or;
   }
   return query;
 }
