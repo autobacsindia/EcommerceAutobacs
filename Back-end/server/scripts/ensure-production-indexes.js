@@ -389,6 +389,81 @@ async function ensureProductionIndexes() {
       }
     }
 
+    // ── CouponUserUsage Collection Indexes ──────────────────────────────────
+    // SECURITY: the unique {coupon,user} index is the SOLE enforcement point for a
+    // coupon's per-user usage limit and for firstOrderOnly. Without it the guarded
+    // upsert in orderService._applyCoupon can insert duplicate counter docs under
+    // concurrency, silently bypassing the cap. Model declares this index, but prod
+    // Mongoose runs with autoIndex off — so it must be created here explicitly.
+    // NOTE: if duplicate {coupon,user} docs already exist the build fails (code 11000);
+    // run scripts/check-coupon-user-index.js first and dedupe before re-running.
+    console.log('\nChecking CouponUserUsage collection indexes...');
+    const couponUsageCol = db.collection('couponuserusages');
+
+    const couponUsageIndexes = [
+      {
+        name: 'coupon_user_unique',
+        spec: { coupon: 1, user: 1 },
+        options: { unique: true, background: true },
+        description: 'Per-user coupon cap enforcement (TOCTOU-safe guarded upsert)'
+      }
+    ];
+
+    for (const idx of couponUsageIndexes) {
+      try {
+        await couponUsageCol.createIndex(idx.spec, idx.options);
+        results.created.push(`CouponUserUsage.${idx.name} - ${idx.description}`);
+        console.log(`  ✓ Created: ${idx.name}`);
+      } catch (err) {
+        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+          results.existing.push(`CouponUserUsage.${idx.name}`);
+          console.log(`  ⊘ Already exists: ${idx.name}`);
+        } else {
+          results.errors.push(`CouponUserUsage.${idx.name}: ${err.message}`);
+          console.error(`  ✗ Error: ${idx.name} - ${err.message}`);
+        }
+      }
+    }
+
+    // ── WebhookEvent Collection Indexes ─────────────────────────────────────
+    // SECURITY: the unique eventId index is the durable (Mongo) fallback for Razorpay
+    // webhook replay protection — when Redis is unavailable, razorpayWebhook relies on
+    // an E11000 from insertOne() to reject a duplicate payment event. Without the index,
+    // a replayed webhook could be processed twice. The TTL index bounds table growth.
+    console.log('\nChecking WebhookEvent collection indexes...');
+    const webhookEventCol = db.collection('webhookevents');
+
+    const webhookEventIndexes = [
+      {
+        name: 'eventId_unique',
+        spec: { eventId: 1 },
+        options: { unique: true, background: true },
+        description: 'Razorpay webhook replay protection (durable Mongo fallback)'
+      },
+      {
+        name: 'processedAt_ttl',
+        spec: { processedAt: 1 },
+        options: { expireAfterSeconds: 86400, background: true },
+        description: 'Auto-expire processed webhook records after 24h'
+      }
+    ];
+
+    for (const idx of webhookEventIndexes) {
+      try {
+        await webhookEventCol.createIndex(idx.spec, idx.options);
+        results.created.push(`WebhookEvent.${idx.name} - ${idx.description}`);
+        console.log(`  ✓ Created: ${idx.name}`);
+      } catch (err) {
+        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+          results.existing.push(`WebhookEvent.${idx.name}`);
+          console.log(`  ⊘ Already exists: ${idx.name}`);
+        } else {
+          results.errors.push(`WebhookEvent.${idx.name}: ${err.message}`);
+          console.error(`  ✗ Error: ${idx.name} - ${err.message}`);
+        }
+      }
+    }
+
     // ── Summary ─────────────────────────────────────────────────────────────
     console.log('\n=== Migration Summary ===');
     console.log(`✓ Created: ${results.created.length} indexes`);

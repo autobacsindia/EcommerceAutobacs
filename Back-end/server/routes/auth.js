@@ -616,6 +616,13 @@ router.post("/reset-password", resetPasswordRateLimit, validateResetPassword, as
     { $inc: { sessionVersion: 1 } }
   );
 
+  // CRITICAL: Revoke every refresh token (Mongo + Redis). Bumping sessionVersion
+  // only invalidates existing *access* tokens; the refresh path does not re-check
+  // sessionVersion, so a stolen refresh token would otherwise survive the reset and
+  // mint fresh access tokens. Password reset is the primary account-recovery lever
+  // after compromise — it must evict all existing sessions.
+  await revokeAllRefreshTokens(user);
+
   // Log security event
   console.log(`[Auth] Password reset successful for user: ${user.email} | Session invalidated`);
   const emailTemplate = passwordChangedEmail({ name: user.name });
