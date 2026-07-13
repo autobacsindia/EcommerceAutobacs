@@ -48,7 +48,7 @@ export default function EditorsPickCarousel({ products }: { products?: ProductIt
   return (
     <section className="products products-basic">
       <div className="section-header">
-        <h2 className="reveal">Editor&apos;s Pick</h2>
+        <h2 className="reveal">Driver&apos;s Choice</h2>
       </div>
 
       <div className="bc">
@@ -97,7 +97,7 @@ export default function EditorsPickCarousel({ products }: { products?: ProductIt
         </button>
       </div>
 
-      <div className="bc-dots" role="tablist" aria-label="Editor's Pick slides">
+      <div className="bc-dots" role="tablist" aria-label="Driver's Choice slides">
         {items.map((p, i) => (
           <button
             type="button"

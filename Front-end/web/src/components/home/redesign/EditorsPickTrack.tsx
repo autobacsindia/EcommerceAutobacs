@@ -53,7 +53,7 @@ export default function EditorsPickTrack({ products }: { products?: ProductItem[
   return (
     <section className="products products-track">
       <div className="section-header">
-        <h2 className="reveal">Editor&apos;s Pick</h2>
+        <h2 className="reveal">Driver&apos;s Choice</h2>
         <div className="prod-nav">
           <button type="button" aria-label="Previous" onClick={() => slide(-1)}>
             &#8592;

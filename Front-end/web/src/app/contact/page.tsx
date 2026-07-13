@@ -91,12 +91,6 @@ function ContactPageInner() {
                   </div>
                 ))}
               </div>
-              <div className="mt-10">
-                <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-4">Our Location</h3>
-                <div className="bg-obsidian-raised border-2 border-dashed border-hairline rounded-sm w-full h-64 flex items-center justify-center">
-                  <span className="text-ink-muted font-display text-sm">Interactive Map Placeholder</span>
-                </div>
-              </div>
             </div>
 
             {/* Direct support (replaces the old message form) */}
