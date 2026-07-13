@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Phone, Mail, ShoppingBag, UserPlus, UserMinus, Search, Plus, Trash2, Check,
+  ArrowLeft, Phone, Mail, ShoppingBag, UserMinus, Search, Plus, Trash2, Check,
 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import {
@@ -60,14 +60,22 @@ export default function LeadDetailPage() {
       .catch((e) => console.error('[Lead] reps failed', e));
   }, []);
 
-  async function assignRep(repId: string) {
+  // Set the named owner: release when blank, atomic claim from the pool, else reassign.
+  async function setOwner(repId: string) {
     setSaving(true);
     try {
-      await apiClient.post(`/leads/${id}/assign`, { assignTo: repId || null });
+      if (!repId) {
+        await apiClient.post(`/leads/${id}/release`, {});
+      } else if (!lead?.assignedRep) {
+        await apiClient.post(`/leads/${id}/claim`, { repId });
+      } else {
+        await apiClient.post(`/leads/${id}/assign`, { repId });
+      }
       await load();
     } catch (e) {
-      console.error('[Lead] assign failed', e);
-      alert('Could not assign — the selected user may not be a sales rep.');
+      console.error('[Lead] set owner failed', e);
+      alert('Could not update owner — it may have just been claimed by another rep.');
+      await load();
     } finally {
       setSaving(false);
     }
@@ -76,23 +84,11 @@ export default function LeadDetailPage() {
   async function changeStatus(next: LeadStatus) {
     setSaving(true);
     try {
-      await apiClient.patch(`/leads/${id}/status`, { status: next });
+      // Credit the current owner (if any) with the change.
+      await apiClient.patch(`/leads/${id}/status`, { status: next, repId: lead?.assignedRep?._id });
       await load();
     } catch (e) {
       console.error('[Lead] status failed', e);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function claimToggle() {
-    setSaving(true);
-    try {
-      if (lead?.assignedTo) await apiClient.post(`/leads/${id}/release`, {});
-      else await apiClient.post(`/leads/${id}/claim`, {});
-      await load();
-    } catch (e) {
-      console.error('[Lead] claim/release failed', e);
     } finally {
       setSaving(false);
     }
@@ -102,7 +98,7 @@ export default function LeadDetailPage() {
     if (!activityNotes.trim()) return;
     setSaving(true);
     try {
-      await apiClient.post(`/leads/${id}/activity`, { type: activityType, notes: activityNotes.trim() });
+      await apiClient.post(`/leads/${id}/activity`, { type: activityType, notes: activityNotes.trim(), repId: lead?.assignedRep?._id });
       setActivityNotes('');
       await load();
     } catch (e) {
@@ -153,29 +149,37 @@ export default function LeadDetailPage() {
             {LEAD_STATUS_LABELS[lead.status]}
           </span>
           <span className="text-xs text-gray-500">
-            {lead.assignedTo ? `Owner: ${lead.assignedTo.name || lead.assignedTo.email}` : 'Unclaimed (pool)'}
+            {lead.assignedRep ? `Owner: ${lead.assignedRep.name}` : 'Unclaimed (pool)'}
           </span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={claimToggle}
-              disabled={saving}
-              className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {lead.assignedTo ? <><UserMinus className="h-3 w-3" /> Release</> : <><UserPlus className="h-3 w-3" /> Claim</>}
-            </button>
-            {/* Manager override: assign directly to a specific rep. */}
+            {/* Owner = named rep. Pick to claim/reassign; blank to release. */}
             <select
-              value={lead.assignedTo?._id || ''}
-              onChange={(e) => assignRep(e.target.value)}
+              value={lead.assignedRep?._id || ''}
+              onChange={(e) => setOwner(e.target.value)}
               disabled={saving}
               className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
               title="Assign to a sales rep"
             >
-              <option value="">— assign to rep —</option>
+              <option value="">— pool —</option>
+              {lead.assignedRep && !reps.some((r) => r._id === lead.assignedRep!._id) && (
+                <option value={lead.assignedRep._id}>{lead.assignedRep.name} (inactive)</option>
+              )}
               {reps.map((r) => (
-                <option key={r._id} value={r._id}>{r.name || r.email}</option>
+                <option key={r._id} value={r._id}>{r.name}</option>
               ))}
             </select>
+            {lead.assignedRep && (
+              <button
+                onClick={() => setOwner('')}
+                disabled={saving}
+                className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <UserMinus className="h-3 w-3" /> Release
+              </button>
+            )}
+            <Link href="/admin/sales-reps" className="text-xs text-blue-600 hover:underline" title="Manage rep names">
+              Manage
+            </Link>
           </div>
         </div>
       </div>
@@ -229,7 +233,7 @@ export default function LeadDetailPage() {
           </section>
 
           {/* Close deal */}
-          <CloseDealForm lead={lead} onClosed={load} />
+          <CloseDealForm lead={lead} reps={reps} onClosed={load} />
 
           {/* Activity timeline */}
           <section className="rounded-lg border border-gray-200 bg-white p-5">
@@ -245,7 +249,9 @@ export default function LeadDetailPage() {
                       <p className="text-gray-700">{a.notes}</p>
                       <p className="text-xs text-gray-400">
                         {new Date(a.at).toLocaleString()}
-                        {a.by && typeof a.by === 'object' && a.by.name ? ` · ${a.by.name}` : ''}
+                        {a.rep && typeof a.rep === 'object' && a.rep.name
+                          ? ` · ${a.rep.name}`
+                          : a.by && typeof a.by === 'object' && a.by.name ? ` · ${a.by.name}` : ''}
                       </p>
                     </div>
                   </li>
@@ -353,7 +359,7 @@ export default function LeadDetailPage() {
 }
 
 /** Close a deal by creating an offline order for this lead's customer. */
-function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void }) {
+function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[]; onClosed: () => void }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState('');
   const [hits, setHits] = useState<ProductHit[]>([]);
@@ -361,6 +367,8 @@ function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void })
   const [status, setStatus] = useState<'processing' | 'delivered'>('processing');
   const [email, setEmail] = useState(lead.email || '');
   const [phone, setPhone] = useState(lead.phone || '');
+  // Default the crediting rep to the lead's current owner.
+  const [repId, setRepId] = useState(lead.assignedRep?._id || '');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
@@ -398,6 +406,7 @@ function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void })
           items: items.map((i) => ({ product: i.product, name: i.name, price: i.price, quantity: i.quantity })),
           status,
           leadId: lead._id,
+          repId: repId || undefined,
         }
       );
       if (res.success) {
@@ -429,7 +438,10 @@ function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void })
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900">Close deal → offline order</h2>
         {!open && (
-          <button onClick={() => setOpen(true)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+          <button
+            onClick={() => { setRepId(lead.assignedRep?._id || ''); setOpen(true); }}
+            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+          >
             Create offline order
           </button>
         )}
@@ -498,12 +510,17 @@ function CloseDealForm({ lead, onClosed }: { lead: Lead; onClosed: () => void })
             </table>
           )}
 
-          <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-            <div className="flex items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <label className="text-gray-600">Status</label>
               <select value={status} onChange={(e) => setStatus(e.target.value as 'processing' | 'delivered')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
                 <option value="processing">Confirmed (paid)</option>
                 <option value="delivered">Delivered</option>
+              </select>
+              <label className="text-gray-600">Closed by</label>
+              <select value={repId} onChange={(e) => setRepId(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
+                <option value="">— none —</option>
+                {reps.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
               </select>
             </div>
             <div className="text-sm font-semibold text-gray-900">Total: ₹{total.toLocaleString()}</div>

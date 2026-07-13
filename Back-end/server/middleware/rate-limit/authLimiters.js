@@ -51,6 +51,24 @@ export const resetPasswordRateLimit = rateLimit({
   keyGenerator: (req) => `rate_limit:reset_password:${clientIp(req)}`
 });
 
+// Magic-link (account-claim) request: throttles enumeration + email spam.
+// Mirrors forgotPassword — a claim link grants login, so treat it like a reset.
+export const magicLinkRequestRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  message: 'Too many account-claim requests. Please try again later',
+  keyGenerator: (req) => `rate_limit:magic_link_request:${clientIp(req)}:${req.body?.email || req.body?.phone || 'unknown'}`
+});
+
+// Magic-link verify: throttles token guessing (defence in depth on top of the
+// 256-bit token). Keyed by IP so one host can't grind tokens across accounts.
+export const magicLinkVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many account-claim attempts. Please try again later',
+  keyGenerator: (req) => `rate_limit:magic_link_verify:${clientIp(req)}`
+});
+
 export const resendVerificationRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 3,

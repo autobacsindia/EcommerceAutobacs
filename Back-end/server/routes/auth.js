@@ -22,7 +22,9 @@ import {
   resetPasswordRateLimit,
   resendVerificationRateLimit,
   verifyEmailRateLimit,
-  refreshTokenRateLimit
+  refreshTokenRateLimit,
+  magicLinkRequestRateLimit,
+  magicLinkVerifyRateLimit
 } from "../middleware/rateLimitMiddleware.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { generateTokenPair as generateCryptoTokenPair, hashToken } from "../utils/tokenUtils.js";
@@ -1323,16 +1325,16 @@ router.post(
 // @route   POST /auth/magic-link/request
 // @desc    Request magic link for guest order claiming
 // @access  Public
-router.post("/magic-link/request", asyncHandler(requestMagicLink));
+router.post("/magic-link/request", magicLinkRequestRateLimit, asyncHandler(requestMagicLink));
 
 // @route   POST /auth/magic-link/verify
 // @desc    Verify magic link and claim account
 // @access  Public
-router.post("/magic-link/verify", asyncHandler(verifyMagicLink));
+router.post("/magic-link/verify", magicLinkVerifyRateLimit, asyncHandler(verifyMagicLink));
 
 // @route   POST /auth/magic-link/resend
 // @desc    Resend magic link
 // @access  Public
-router.post("/magic-link/resend", asyncHandler(resendMagicLink));
+router.post("/magic-link/resend", magicLinkRequestRateLimit, asyncHandler(resendMagicLink));
 
 export default router;

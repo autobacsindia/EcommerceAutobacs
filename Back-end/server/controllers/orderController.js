@@ -6,6 +6,8 @@ import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
+import { resolveRep } from '../utils/salesRepResolver.js';
+import { hashToken } from '../utils/tokenUtils.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -322,10 +324,19 @@ export const createOfflineOrder = async (req, res) => {
     status = 'processing', // 'processing' (paid) or 'delivered'
     notes,
     leadId,
+    repId, // name-only SalesRep credited with closing the deal (optional)
   } = req.body;
 
   if (!email || !phone) {
     return res.status(400).json({ success: false, message: 'Customer email and phone are required' });
+  }
+  // Validate the crediting rep up front (optional field) so a bad id fails fast
+  // BEFORE we create a user/order. Shared with the lead controller.
+  let salesRepId = null;
+  if (repId) {
+    const { rep, error } = await resolveRep(repId);
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+    salesRepId = rep._id;
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ success: false, message: 'At least one order item is required' });
@@ -387,6 +398,7 @@ export const createOfflineOrder = async (req, res) => {
     let order = await orderRepository.create({
       user: user._id,
       source: 'offline',
+      salesRep: salesRepId,
       items: lineItems,
       shippingAddress: address,
       subtotal,
@@ -431,10 +443,24 @@ export const createOfflineOrder = async (req, res) => {
       await leadSyncService.safeSync(() =>
         leadSyncService.applyLeadStatus(leadId, 'won', {
           actorId: req.user.id,
+          repId: salesRepId, // credit the closing rep on the conversion
           notes: 'Closed via offline order',
           convertedOrder: order._id,
         })
       );
+    }
+
+    // New buyer: mint the single-use account-claim (set-password) token NOW. This
+    // is a DB write and must NOT depend on the queue — otherwise a Redis outage at
+    // creation time leaves the buyer with an account they can never claim (random
+    // password + mustResetPassword, no token). Email the RAW token; store only its
+    // hash at rest (like the reset-password flow). The email below is best-effort.
+    let magicRawToken = null;
+    if (isNewUser) {
+      magicRawToken = crypto.randomBytes(32).toString('hex');
+      user.magicLinkToken = hashToken(magicRawToken);
+      user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await userRepository.save(user);
     }
 
     // ── Emails (best-effort, idempotent) ─────────────────────────────────────
@@ -445,15 +471,12 @@ export const createOfflineOrder = async (req, res) => {
         .add('send-order-invoice', { orderId: order._id.toString() })
         .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
 
-      // New buyer: send a set-password (magic) link so they can claim their account.
+      // New buyer: email the set-password (magic) link so they can claim the account.
       if (isNewUser) {
-        user.magicLinkToken = crypto.randomBytes(32).toString('hex');
-        user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await userRepository.save(user);
         queue
           .add('send-magic-link-email', {
             email: normEmail,
-            token: user.magicLinkToken,
+            token: magicRawToken,
             orderId: order._id.toString(),
           })
           .catch((err) => console.error('[Queue] Failed to enqueue send-magic-link-email:', err.message));

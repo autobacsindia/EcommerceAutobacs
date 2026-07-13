@@ -70,7 +70,11 @@ const LeadActivitySchema = new mongoose.Schema(
       enum: ["note", "call", "email", "sms", "status_change", "claim", "assignment", "conversion"],
       required: true,
     },
+    // `by` = the User (shared admin console operator) who performed the action —
+    // audit trail. `rep` = the name-only SalesRep profile credited for it, which
+    // is what the CRM actually displays ("Rahul logged a call"). See SalesRep.js.
     by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    rep: { type: mongoose.Schema.Types.ObjectId, ref: "SalesRep", default: null },
     at: { type: Date, default: Date.now },
     notes: { type: String, default: "" },
     meta: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -94,7 +98,12 @@ const LeadSchema = new mongoose.Schema(
 
     // ── CRM state (source of truth) ───────────────────────────────────────────
     status: { type: String, enum: LEAD_STATUSES, default: "new", index: true },
-    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null }, // null = unclaimed pool
+    // Named owner (the displayed "who claimed this"). null = unclaimed pool.
+    // This is the source of truth for ownership under name-only reps.
+    assignedRep: { type: mongoose.Schema.Types.ObjectId, ref: "SalesRep", default: null },
+    // `assignedTo` = the User who performed the assignment (shared admin operator),
+    // kept for audit only; ownership display + filtering use `assignedRep`.
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     assignedAt: { type: Date, default: null },
     contactedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     lastContactedAt: { type: Date, default: null },
@@ -126,7 +135,8 @@ const LeadSchema = new mongoose.Schema(
 // List filters + worklist queries.
 LeadSchema.index({ email: 1 }, { sparse: true });
 LeadSchema.index({ phone: 1 }, { sparse: true });
-LeadSchema.index({ assignedTo: 1, status: 1 }); // "my queue", pool
+LeadSchema.index({ assignedRep: 1, status: 1 }); // rep queue, pool
+LeadSchema.index({ assignedTo: 1, status: 1 }); // audit-side queries
 LeadSchema.index({ status: 1, createdAt: -1 }); // list default sort within a status
 LeadSchema.index({ primarySource: 1 });
 LeadSchema.index({ hasPurchased: 1 });

@@ -8,13 +8,14 @@
 import mongoose from 'mongoose';
 import leadRepository from '../repositories/leadRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
-import userRepository from '../repositories/userRepository.js';
+import salesRepRepository from '../repositories/salesRepRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
-import { isSalesRep } from '../utils/salesReps.js';
+import { resolveRep } from '../utils/salesRepResolver.js';
 import { LEAD_STATUSES, SOURCE_TYPES } from '../config/leadConstants.js';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const MAX_BULK = 200; // cap fan-out on bulk actions
 
 /** Build the Mongo query for the list from validated query params. */
 // Whitelisted sort orders (label → Mongo sort). Prevents arbitrary sort injection.
@@ -35,11 +36,10 @@ function buildListQuery(req) {
   if (status && LEAD_STATUSES.includes(status)) query.status = status;
   if (source && SOURCE_TYPES.includes(source)) query['sources.type'] = source;
 
-  if (assignment === 'mine') query.assignedTo = req.user.id;
-  else if (assignment === 'unassigned') query.assignedTo = null;
-  // Manager slice: a specific rep's queue (only when not already scoped to
-  // mine/unassigned). Ignore a malformed id rather than throwing a CastError.
-  else if (rep && mongoose.isValidObjectId(rep)) query.assignedTo = rep;
+  // Ownership is a named SalesRep profile now (no per-user login).
+  if (assignment === 'unassigned') query.assignedRep = null;
+  // A specific rep's queue. Ignore a malformed id rather than throwing a CastError.
+  else if (rep && mongoose.isValidObjectId(rep)) query.assignedRep = rep;
 
   if (hasPurchased === 'true') query.hasPurchased = true;
   else if (hasPurchased === 'false') query.hasPurchased = false;
@@ -86,7 +86,7 @@ export const listLeads = async (req, res) => {
       skip,
       limit,
       sort,
-      populate: [{ path: 'assignedTo', select: 'name email' }],
+      populate: [{ path: 'assignedRep', select: 'name isActive' }],
     }),
     leadRepository.count(query),
   ]);
@@ -110,23 +110,21 @@ export const listLeads = async (req, res) => {
 // @access  Private/Admin
 export const getLeadStats = async (req, res) => {
   const due = { nextFollowUpAt: { $ne: null, $lte: new Date() } };
-  const [byStatus, unassigned, mine, total, followUpDue, followUpDueMine] = await Promise.all([
+  const [byStatus, unassigned, total, followUpDue] = await Promise.all([
     leadRepository.statusCounts({}),
-    leadRepository.count({ assignedTo: null, status: { $in: ['new', 'contacted', 'qualified'] } }),
-    leadRepository.count({ assignedTo: req.user.id, status: { $in: ['new', 'contacted', 'qualified'] } }),
+    leadRepository.count({ assignedRep: null, status: { $in: ['new', 'contacted', 'qualified'] } }),
     leadRepository.count({}),
     leadRepository.count(due),
-    leadRepository.count({ ...due, assignedTo: req.user.id }),
   ]);
 
-  res.json({ success: true, stats: { byStatus, unassigned, mine, total, followUpDue, followUpDueMine } });
+  res.json({ success: true, stats: { byStatus, unassigned, total, followUpDue } });
 };
 
 // @desc    Assignable sales reps (for the assign dropdown + rep filter)
 // @route   GET /leads/reps
 // @access  Private/Admin
 export const listReps = async (req, res) => {
-  const reps = await userRepository.findSalesReps();
+  const reps = await salesRepRepository.findActive();
   res.json({ success: true, reps });
 };
 
@@ -135,11 +133,13 @@ export const listReps = async (req, res) => {
 // @access  Private/Admin
 export const getLeadById = async (req, res) => {
   const lead = await leadRepository.findById(req.params.id, [
+    { path: 'assignedRep', select: 'name isActive' },
     { path: 'assignedTo', select: 'name email' },
     { path: 'contactedBy', select: 'name email' },
     { path: 'linkedUser', select: 'name email phone hasPurchased paidOrderCount firstPurchaseAt lastOrderAt totalSpentPaise' },
     { path: 'sources.ref' },
     { path: 'activities.by', select: 'name email' },
+    { path: 'activities.rep', select: 'name' },
     { path: 'convertedOrder', select: 'orderNumber totalAmount status createdAt' },
   ]);
 
@@ -157,17 +157,16 @@ export const getLeadById = async (req, res) => {
   res.json({ success: true, lead, orderHistory });
 };
 
-// @desc    Self-claim an unassigned lead (atomic)
-// @route   POST /leads/:id/claim
+// @desc    Claim an unassigned lead FOR a named rep (atomic)
+// @route   POST /leads/:id/claim   body: { repId }
 // @access  Private/Admin
 export const claimLead = async (req, res) => {
-  // Ownership requires rep status — same invariant as assignLead (single seam).
-  if (!isSalesRep(req.user)) {
-    return res.status(403).json({ success: false, message: 'Only sales reps can claim leads. Ask an admin to enable your rep access.' });
-  }
-  const lead = await leadSyncService.claimLead(req.params.id, req.user.id);
+  const { rep, error } = await resolveRep(req.body.repId);
+  if (error) return res.status(error.status).json({ success: false, message: error.message });
+
+  const lead = await leadSyncService.claimLead(req.params.id, rep._id, req.user.id);
   if (!lead) {
-    return res.status(409).json({ success: false, message: 'Lead is already claimed by someone else' });
+    return res.status(409).json({ success: false, message: 'Lead is already claimed by another rep' });
   }
   res.json({ success: true, lead });
 };
@@ -176,38 +175,38 @@ export const claimLead = async (req, res) => {
 // @route   POST /leads/:id/release
 // @access  Private/Admin
 export const releaseLead = async (req, res) => {
-  // Admins can force-release any lead; a rep can only release their own.
-  const lead = await leadSyncService.releaseLead(req.params.id, req.user.id, { force: true });
+  const lead = await leadSyncService.releaseLead(req.params.id, req.user.id);
   if (!lead) {
     return res.status(404).json({ success: false, message: 'Lead not found' });
   }
   res.json({ success: true, lead });
 };
 
-// @desc    Assign a lead to a specific rep (manager override)
-// @route   POST /leads/:id/assign
+// @desc    Assign/reassign a lead to a specific rep (or unassign with repId=null)
+// @route   POST /leads/:id/assign   body: { repId | null }
 // @access  Private/Admin
 export const assignLead = async (req, res) => {
-  const { assignTo } = req.body; // userId or null to unassign
-  // Only a flagged sales rep can own a lead (single seam: utils/salesReps.js).
-  if (assignTo) {
-    if (!mongoose.isValidObjectId(assignTo)) {
-      return res.status(400).json({ success: false, message: 'Invalid assignee' });
-    }
-    const target = await userRepository.findById(assignTo);
-    if (!target || !isSalesRep(target)) {
-      return res.status(400).json({ success: false, message: 'Assignee must be a sales rep' });
-    }
+  const { repId } = req.body; // SalesRep id, or null/'' to unassign
+  let assignRep = null;
+  if (repId) {
+    const { rep, error } = await resolveRep(repId);
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+    assignRep = rep._id;
   }
   const lead = await leadRepository.update(req.params.id, {
-    $set: { assignedTo: assignTo || null, assignedAt: assignTo ? new Date() : null },
+    $set: {
+      assignedRep: assignRep,
+      assignedTo: assignRep ? req.user.id : null,
+      assignedAt: assignRep ? new Date() : null,
+    },
     $push: {
       activities: {
         type: 'assignment',
         by: req.user.id,
+        rep: assignRep,
         at: new Date(),
-        notes: assignTo ? 'Reassigned by admin' : 'Unassigned by admin',
-        meta: { assignTo: assignTo || null },
+        notes: assignRep ? 'Reassigned by admin' : 'Unassigned by admin',
+        meta: { repId: assignRep },
       },
     },
   });
@@ -221,12 +220,19 @@ export const assignLead = async (req, res) => {
 // @route   PATCH /leads/:id/status
 // @access  Private/Admin
 export const updateLeadStatus = async (req, res) => {
-  const { status, notes, lostReason } = req.body;
+  const { status, notes, lostReason, repId } = req.body;
   if (!LEAD_STATUSES.includes(status)) {
     return res.status(400).json({ success: false, message: 'Invalid status value' });
   }
+  // repId (which rep made the change) is optional; validate only if supplied.
+  if (repId) {
+    // Crediting an action on an already-owned lead — allow a since-deactivated owner.
+    const { error } = await resolveRep(repId, { requireActive: false });
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+  }
   const lead = await leadSyncService.applyLeadStatus(req.params.id, status, {
     actorId: req.user.id,
+    repId: repId || null,
     notes,
     lostReason,
   });
@@ -240,14 +246,20 @@ export const updateLeadStatus = async (req, res) => {
 // @route   POST /leads/:id/activity
 // @access  Private/Admin
 export const addActivity = async (req, res) => {
-  const { type, notes, meta, nextFollowUpAt } = req.body;
+  const { type, notes, meta, nextFollowUpAt, repId } = req.body;
   const allowed = ['note', 'call', 'email', 'sms'];
   if (!allowed.includes(type)) {
     return res.status(400).json({ success: false, message: `Activity type must be one of: ${allowed.join(', ')}` });
   }
+  if (repId) {
+    // Crediting an action on an already-owned lead — allow a since-deactivated owner.
+    const { error } = await resolveRep(repId, { requireActive: false });
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+  }
   const lead = await leadSyncService.logActivity(req.params.id, {
     type,
     actorId: req.user.id,
+    repId: repId || null,
     notes,
     meta,
     nextFollowUpAt,
@@ -262,17 +274,20 @@ export const addActivity = async (req, res) => {
 // @route   POST /leads/bulk/claim
 // @access  Private/Admin
 export const bulkClaim = async (req, res) => {
-  if (!isSalesRep(req.user)) {
-    return res.status(403).json({ success: false, message: 'Only sales reps can claim leads. Ask an admin to enable your rep access.' });
-  }
-  const { leadIds } = req.body;
+  const { leadIds, repId } = req.body;
   if (!Array.isArray(leadIds) || leadIds.length === 0) {
     return res.status(400).json({ success: false, message: 'No lead IDs provided' });
   }
+  if (leadIds.length > MAX_BULK) {
+    return res.status(400).json({ success: false, message: `Cannot process more than ${MAX_BULK} leads at once` });
+  }
+  const { rep, error } = await resolveRep(repId);
+  if (error) return res.status(error.status).json({ success: false, message: error.message });
+
   const results = { claimed: [], skipped: [] };
   await Promise.all(
     leadIds.map(async (id) => {
-      const lead = await leadSyncService.claimLead(id, req.user.id);
+      const lead = await leadSyncService.claimLead(id, rep._id, req.user.id);
       if (lead) results.claimed.push(id);
       else results.skipped.push(id);
     })
@@ -284,17 +299,25 @@ export const bulkClaim = async (req, res) => {
 // @route   POST /leads/bulk/status
 // @access  Private/Admin
 export const bulkStatus = async (req, res) => {
-  const { leadIds, status, notes } = req.body;
+  const { leadIds, status, notes, repId } = req.body;
   if (!Array.isArray(leadIds) || leadIds.length === 0) {
     return res.status(400).json({ success: false, message: 'No lead IDs provided' });
+  }
+  if (leadIds.length > MAX_BULK) {
+    return res.status(400).json({ success: false, message: `Cannot process more than ${MAX_BULK} leads at once` });
   }
   if (!LEAD_STATUSES.includes(status)) {
     return res.status(400).json({ success: false, message: 'Invalid status value' });
   }
+  if (repId) {
+    // Crediting an action on an already-owned lead — allow a since-deactivated owner.
+    const { error } = await resolveRep(repId, { requireActive: false });
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
+  }
   const results = { successful: [], failed: [] };
   await Promise.all(
     leadIds.map(async (id) => {
-      const lead = await leadSyncService.applyLeadStatus(id, status, { actorId: req.user.id, notes });
+      const lead = await leadSyncService.applyLeadStatus(id, status, { actorId: req.user.id, repId: repId || null, notes });
       if (lead) results.successful.push(id);
       else results.failed.push(id);
     })
