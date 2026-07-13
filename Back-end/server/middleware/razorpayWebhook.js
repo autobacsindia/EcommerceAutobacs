@@ -55,8 +55,21 @@ router.post("/", asyncHandler(async (req, res) => {
     
     // Parse webhook data (after signature verified)
     const webhookData = JSON.parse(req.body.toString());
-    const eventId = webhookData.id; // Razorpay event ID (not payment ID or order ID)
     const eventType = webhookData.event;
+    // Razorpay delivers the unique event ID in the `x-razorpay-event-id` HEADER —
+    // the webhook BODY has no top-level `id`. Using webhookData.id made eventId
+    // `undefined`, so every event collided on `razorpay:event:undefined` and was
+    // dropped as a duplicate after the first (orders stuck at awaiting_payment).
+    // Fall back to a deterministic per-event key derived from the entity so replay
+    // protection stays unique even if the header is ever absent.
+    const entity =
+      webhookData.payload?.payment?.entity ||
+      webhookData.payload?.order?.entity ||
+      webhookData.payload?.refund?.entity ||
+      webhookData.payload?.payment_link?.entity;
+    const eventId =
+      req.headers['x-razorpay-event-id'] ||
+      (entity?.id ? `${eventType}:${entity.id}` : `${eventType}:${webhookData.created_at}`);
     const createdAt = webhookData.created_at; // Unix timestamp
     
     // SECURITY STEP 2: Replay protection - Check event ID
