@@ -9,7 +9,7 @@
  * stay one flat, append-only stream — so activities are attributed to a cycle by
  * timestamp, while archived signals already belong to their cycle.
  */
-import type { Lead, LeadSource, LeadSourceType, LeadStatus, OrderHistoryItem } from './leads';
+import type { Lead, LeadCycle, LeadSource, LeadSourceType, LeadStatus, OrderHistoryItem } from './leads';
 
 export type JourneyEvent =
   | { kind: 'signal'; at: number; sourceType: LeadSourceType; snapshot?: Record<string, unknown> }
@@ -62,9 +62,7 @@ function signalEvent(s: LeadSource): JourneyEvent {
 }
 
 /** Internal cycle window: an ordered slice of the timeline that owns events. */
-interface Win extends JourneyGroup {
-  convertedOrderId?: string;
-}
+type Win = JourneyGroup;
 
 /**
  * Build the cycle-grouped journey, newest cycle first and newest event first
@@ -83,7 +81,6 @@ export function buildJourney(lead: Lead, orderHistory: OrderHistoryItem[] = []):
     rep: repName(c.assignedRep),
     lostReason: c.lostReason,
     primarySource: c.primarySource,
-    convertedOrderId: refId(c.convertedOrder),
     events: [],
   }));
 
@@ -98,11 +95,30 @@ export function buildJourney(lead: Lead, orderHistory: OrderHistoryItem[] = []):
     rep: repName(lead.assignedRep),
     lostReason: lead.lostReason,
     primarySource: lead.primarySource,
-    convertedOrderId: refId(lead.convertedOrder),
     events: [],
   });
 
   const current = windows[windows.length - 1];
+  const byCycleNo = new Map<number, Win>(windows.map((w) => [w.cycleNo, w]));
+
+  // Authoritative order→cycle links: which cycle referenced an order as a
+  // signal (payment_*/order_cancelled carry refModel 'Order') or as its
+  // conversion. Walk oldest→newest so the *latest* cycle that touched an order
+  // wins — a won order later cancelled belongs to the reopen cycle, not the
+  // Won one it once closed. Falls back to timestamp for orders the CRM never
+  // referenced (a purchase with no lead signal).
+  const orderCycle = new Map<string, number>();
+  const linkOrders = (sources: LeadSource[] | undefined, converted: LeadCycle['convertedOrder'], cycleNo: number) => {
+    (sources ?? []).forEach((s) => {
+      if (s.refModel !== 'Order') return;
+      const id = refId(s.ref as { _id: string } | string | null | undefined);
+      if (id) orderCycle.set(id, cycleNo);
+    });
+    const cid = refId(converted ?? null);
+    if (cid) orderCycle.set(cid, cycleNo);
+  };
+  archived.forEach((c, i) => linkOrders(c.sources, c.convertedOrder, i + 1));
+  linkOrders(lead.sources, lead.convertedOrder, current.cycleNo);
 
   // Pick the cycle a timestamp falls into: the latest window that opened at or
   // before it. Events before the first cycle fall into the earliest window.
@@ -126,11 +142,12 @@ export function buildJourney(lead: Lead, orderHistory: OrderHistoryItem[] = []):
     assign(at).events.push({ kind: 'activity', at, activityType: a.type, notes: a.notes, actor: actorOf(a) });
   });
 
-  // Orders: anchor a cycle's closing order authoritatively; otherwise by date.
+  // Orders: place by the cycle that referenced them; else by date.
   orderHistory.forEach((o) => {
     const at = ts(o.createdAt);
-    const anchored = windows.find((w) => w.convertedOrderId && w.convertedOrderId === o._id);
-    (anchored ?? assign(at)).events.push({
+    const linked = orderCycle.get(o._id);
+    const win = (linked != null ? byCycleNo.get(linked) : undefined) ?? assign(at);
+    win.events.push({
       kind: 'order',
       at,
       orderId: o._id,
@@ -146,6 +163,5 @@ export function buildJourney(lead: Lead, orderHistory: OrderHistoryItem[] = []):
   windows.forEach((w) => w.events.sort((a, b) => b.at - a.at));
   windows.reverse();
 
-  // Strip the internal anchor field.
-  return windows.map(({ convertedOrderId: _drop, ...group }) => group);
+  return windows;
 }

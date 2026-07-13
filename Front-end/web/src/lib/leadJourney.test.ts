@@ -96,6 +96,34 @@ describe('buildJourney', () => {
     expect(current.events.some((e) => e.kind === 'order')).toBe(false);
   });
 
+  it('moves a won-then-cancelled order to the cycle that cancelled it, not the Won header', () => {
+    const lead = makeLead({
+      status: 'contacted',
+      reopenCount: 1,
+      cycleStartedAt: '2026-02-01T00:00:00Z',
+      // The cancellation that reopened the lead references the same order.
+      sources: [{ type: 'order_cancelled', refModel: 'Order', ref: 'o1', capturedAt: '2026-02-02T00:00:00Z', snapshot: { cancelledBy: 'customer' } }],
+      cycles: [{
+        startedAt: '2026-01-01T00:00:00Z',
+        closedAt: '2026-01-20T00:00:00Z',
+        outcome: 'won',
+        convertedOrder: { _id: 'o1' },
+      }],
+    });
+    const orders: OrderHistoryItem[] = [
+      { _id: 'o1', orderNumber: 'A1', totalAmount: 100, status: 'cancelled', paymentStatus: 'paid', cancelledBy: 'customer', createdAt: '2026-01-10T00:00:00Z' },
+    ];
+
+    const [c2, c1] = buildJourney(lead, orders);
+
+    expect(c1.cycleNo).toBe(1);
+    expect(c1.outcome).toBe('won');
+    // Latest referencing cycle wins → the cancelled order shows under the reopen,
+    // never as a "cancelled" row beneath the green Won header.
+    expect(c1.events.some((e) => e.kind === 'order')).toBe(false);
+    expect(c2.events.some((e) => e.kind === 'order' && e.orderId === 'o1')).toBe(true);
+  });
+
   it('buckets an event predating all cycles into the earliest cycle', () => {
     const lead = makeLead({
       reopenCount: 1,
