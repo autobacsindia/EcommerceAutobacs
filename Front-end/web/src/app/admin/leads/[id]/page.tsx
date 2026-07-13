@@ -191,21 +191,31 @@ export default function LeadDetailPage() {
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Status</h2>
             <div className="flex flex-wrap gap-2">
-              {LEAD_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => changeStatus(s)}
-                  disabled={saving || lead.status === s}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    lead.status === s ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  } disabled:cursor-default`}
-                >
-                  {LEAD_STATUS_LABELS[s]}
-                </button>
-              ))}
+              {LEAD_STATUSES.map((s) => {
+                // Won is set only by a real order (online payment or an offline
+                // order) — never by hand — so it can't be picked manually.
+                const isCurrent = lead.status === s;
+                const wonLocked = s === 'won' && !isCurrent;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => changeStatus(s)}
+                    disabled={saving || isCurrent || wonLocked}
+                    title={wonLocked ? 'Set automatically when an order is placed or an offline order is created' : undefined}
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${
+                      isCurrent ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {LEAD_STATUS_LABELS[s]}
+                  </button>
+                );
+              })}
             </div>
+            <p className="mt-2 text-xs text-gray-400">
+              Won is set automatically when an order is placed (online) or you create an offline order — it can&apos;t be set by hand.
+            </p>
             {lead.sources.some((s) => s.type === 'consultation') && (
-              <p className="mt-2 text-xs text-gray-400">Status changes mirror to the linked consultancy record.</p>
+              <p className="mt-1 text-xs text-gray-400">Status changes mirror to the linked consultancy record.</p>
             )}
           </section>
 
