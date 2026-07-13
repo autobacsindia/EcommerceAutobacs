@@ -191,28 +191,45 @@ export default function LeadDetailPage() {
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Status</h2>
             <div className="flex flex-wrap gap-2">
-              {LEAD_STATUSES.map((s) => {
-                // Won is set only by a real order (online payment or an offline
-                // order) — never by hand — so it can't be picked manually.
-                const isCurrent = lead.status === s;
-                const wonLocked = s === 'won' && !isCurrent;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => changeStatus(s)}
-                    disabled={saving || isCurrent || wonLocked}
-                    title={wonLocked ? 'Set automatically when an order is placed or an offline order is created' : undefined}
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      isCurrent ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
-                  >
-                    {LEAD_STATUS_LABELS[s]}
-                  </button>
-                );
-              })}
+              {(() => {
+                // Manual status rules, mirrored from the API: forward-only through
+                // the active stages; won/lost are terminal (only a new customer
+                // signal reopens them); won is order-backed, never set by hand.
+                const RANK: Record<string, number> = { new: 0, contacted: 1, qualified: 2 };
+                const terminal = lead.status === 'won' || lead.status === 'lost';
+                return LEAD_STATUSES.map((s) => {
+                  const isCurrent = lead.status === s;
+                  let locked = false;
+                  let reason: string | undefined;
+                  if (isCurrent) {
+                    locked = true;
+                  } else if (s === 'won') {
+                    locked = true; reason = 'Set automatically when an order is placed or an offline order is created';
+                  } else if (terminal) {
+                    locked = true; reason = 'This lead is closed — a new signal from the customer reopens it';
+                  } else if (s !== 'lost' && RANK[s] <= RANK[lead.status]) {
+                    locked = true; reason = 'Leads move forward only';
+                  }
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => changeStatus(s)}
+                      disabled={saving || locked}
+                      title={reason}
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${
+                        isCurrent ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {LEAD_STATUS_LABELS[s]}
+                    </button>
+                  );
+                });
+              })()}
             </div>
             <p className="mt-2 text-xs text-gray-400">
-              Won is set automatically when an order is placed (online) or you create an offline order — it can&apos;t be set by hand.
+              {lead.status === 'won' || lead.status === 'lost'
+                ? 'This lead is closed and locked. If the customer comes back, a new signal reopens it automatically.'
+                : 'Leads move forward only. Won is set automatically by a paid online order or an offline order — never by hand.'}
             </p>
             {lead.sources.some((s) => s.type === 'consultation') && (
               <p className="mt-1 text-xs text-gray-400">Status changes mirror to the linked consultancy record.</p>

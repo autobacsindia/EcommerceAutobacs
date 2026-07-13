@@ -24,6 +24,29 @@ const MAX_BULK = 200; // cap fan-out on bulk actions
 const WON_MANUAL_BLOCK_MSG =
   'A lead is marked Won only by a paid online order or an offline order — it cannot be set manually.';
 
+// Order of the active (workable) stages. The pipeline moves FORWARD only.
+const ACTIVE_RANK = { new: 0, contacted: 1, qualified: 2 };
+
+/**
+ * Rules for a MANUAL (rep-driven) status change. `won` is handled separately
+ * (order-backed only). Returns an error message, or null if allowed.
+ *   • won / lost are terminal — a closed lead is never edited by hand; only a
+ *     fresh customer signal reopens it (leadSyncService reopen-with-history).
+ *   • active stages move forward only (no contacted → new).
+ *   • a live lead can always be marked lost.
+ */
+function manualTransitionError(from, to) {
+  if (from === to) return null; // no-op; the service short-circuits it anyway
+  if (from === 'won' || from === 'lost') {
+    return `This lead is closed (${from}) and can't be changed by hand — a new signal from the customer reopens it automatically.`;
+  }
+  if (to === 'lost') return null; // a live lead can always be marked lost
+  if (ACTIVE_RANK[to] <= ACTIVE_RANK[from]) {
+    return `Leads move forward only — a ${from} lead can't go back to ${to}.`;
+  }
+  return null;
+}
+
 /** Build the Mongo query for the list from validated query params. */
 // Whitelisted sort orders (label → Mongo sort). Prevents arbitrary sort injection.
 const SORT_OPTIONS = {
@@ -234,6 +257,15 @@ export const updateLeadStatus = async (req, res) => {
   if (status === 'won') {
     return res.status(400).json({ success: false, message: WON_MANUAL_BLOCK_MSG });
   }
+  // Enforce the manual transition rules (forward-only; won/lost are terminal).
+  const currentLead = await leadRepository.findById(req.params.id);
+  if (!currentLead) {
+    return res.status(404).json({ success: false, message: 'Lead not found' });
+  }
+  const transitionErr = manualTransitionError(currentLead.status, status);
+  if (transitionErr) {
+    return res.status(400).json({ success: false, message: transitionErr });
+  }
   // repId (which rep made the change) is optional; validate only if supplied.
   if (repId) {
     // Crediting an action on an already-owned lead — allow a since-deactivated owner.
@@ -327,9 +359,17 @@ export const bulkStatus = async (req, res) => {
     const { error } = await resolveRep(repId, { requireActive: false });
     if (error) return res.status(error.status).json({ success: false, message: error.message });
   }
-  const results = { successful: [], failed: [] };
+  // Batch-load current statuses so each lead is checked against the same manual
+  // transition rules (forward-only; won/lost terminal) — violators are skipped.
+  const docs = await leadRepository.find({ _id: { $in: leadIds } }, { select: 'status', limit: MAX_BULK });
+  const statusById = new Map(docs.map((d) => [d._id.toString(), d.status]));
+
+  const results = { successful: [], failed: [], blocked: [] };
   await Promise.all(
     leadIds.map(async (id) => {
+      const from = statusById.get(id);
+      if (!from) { results.failed.push(id); return; }
+      if (manualTransitionError(from, status)) { results.blocked.push(id); return; }
       const lead = await leadSyncService.applyLeadStatus(id, status, { actorId: req.user.id, repId: repId || null, notes });
       if (lead) results.successful.push(id);
       else results.failed.push(id);
