@@ -17,6 +17,13 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_BULK = 200; // cap fan-out on bulk actions
 
+// A lead becomes `won` ONLY through a real order — a paid online order or an
+// admin offline order, both of which convert via leadSyncService directly. The
+// manual status endpoints reject `won` so reps can't create a hollow win (a Won
+// lead with no order behind it, no customer tag, no LTV).
+const WON_MANUAL_BLOCK_MSG =
+  'A lead is marked Won only by a paid online order or an offline order — it cannot be set manually.';
+
 /** Build the Mongo query for the list from validated query params. */
 // Whitelisted sort orders (label → Mongo sort). Prevents arbitrary sort injection.
 const SORT_OPTIONS = {
@@ -224,6 +231,9 @@ export const updateLeadStatus = async (req, res) => {
   if (!LEAD_STATUSES.includes(status)) {
     return res.status(400).json({ success: false, message: 'Invalid status value' });
   }
+  if (status === 'won') {
+    return res.status(400).json({ success: false, message: WON_MANUAL_BLOCK_MSG });
+  }
   // repId (which rep made the change) is optional; validate only if supplied.
   if (repId) {
     // Crediting an action on an already-owned lead — allow a since-deactivated owner.
@@ -308,6 +318,9 @@ export const bulkStatus = async (req, res) => {
   }
   if (!LEAD_STATUSES.includes(status)) {
     return res.status(400).json({ success: false, message: 'Invalid status value' });
+  }
+  if (status === 'won') {
+    return res.status(400).json({ success: false, message: WON_MANUAL_BLOCK_MSG });
   }
   if (repId) {
     // Crediting an action on an already-owned lead — allow a since-deactivated owner.

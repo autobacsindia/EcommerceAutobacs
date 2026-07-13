@@ -63,6 +63,7 @@ class LeadSyncService {
         capturedAt: s.capturedAt,
       })),
       primarySource: lead.primarySource,
+      assignedRep: lead.assignedRep, // credited rep at close — preserves who won it
       assignedTo: lead.assignedTo,
       contactedBy: lead.contactedBy,
       convertedOrder: lead.convertedOrder,
@@ -71,8 +72,11 @@ class LeadSyncService {
     });
 
     // Reset the working state for the new cycle (identity + customer facts kept).
+    // Ownership clears too, so the reopened lead genuinely returns to the shared
+    // pool (assignedRep null) rather than staying stuck under the previous rep.
     lead.sources = [];
     lead.status = 'new';
+    lead.assignedRep = null;
     lead.assignedTo = null;
     lead.assignedAt = null;
     lead.contactedBy = null;
@@ -313,6 +317,7 @@ class LeadSyncService {
 
     if (lead.status !== 'won') {
       return this.applyLeadStatus(lead._id, 'won', {
+        repId: lead.assignedRep || null, // credit the owner-at-close on the conversion (matches offline)
         notes: 'Auto-converted: order paid',
         meta: { orderId },
         convertedOrder: orderId,

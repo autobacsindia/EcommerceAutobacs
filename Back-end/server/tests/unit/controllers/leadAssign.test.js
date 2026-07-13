@@ -9,7 +9,7 @@ import mongoose from 'mongoose';
 import { connect, closeDatabase, clearDatabase } from '../../db-handler.js';
 import SalesRep from '../../../models/SalesRep.js';
 import Lead from '../../../models/Lead.js';
-import { assignLead, listReps, claimLead, bulkClaim, updateLeadStatus, addActivity, releaseLead } from '../../../controllers/leadController.js';
+import { assignLead, listReps, claimLead, bulkClaim, updateLeadStatus, addActivity, releaseLead, bulkStatus } from '../../../controllers/leadController.js';
 import { createSalesRep, listSalesReps, updateSalesRep } from '../../../controllers/salesRepController.js';
 
 const ADMIN_ID = new mongoose.Types.ObjectId().toString();
@@ -143,6 +143,31 @@ describe('leadController — credit an action to a since-deactivated owner', () 
     const res = mockRes();
     await updateLeadStatus({ params: { id: lead._id.toString() }, body: { status: 'contacted', repId: new mongoose.Types.ObjectId().toString() }, user: { id: ADMIN_ID } }, res);
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('leadController — Won is order-backed only (no hollow wins)', () => {
+  it('updateLeadStatus rejects a manual Won (400), lead stays put', async () => {
+    const lead = await seedLead(); // status: new
+    const res = mockRes();
+    await updateLeadStatus({ params: { id: lead._id.toString() }, body: { status: 'won' }, user: { id: ADMIN_ID } }, res);
+    expect(res.statusCode).toBe(400);
+    expect((await Lead.findById(lead._id)).status).toBe('new');
+  });
+
+  it('bulkStatus rejects Won (400)', async () => {
+    const lead = await seedLead();
+    const res = mockRes();
+    await bulkStatus({ body: { leadIds: [lead._id.toString()], status: 'won' }, user: { id: ADMIN_ID } }, res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('still allows a manual Lost / Qualified', async () => {
+    const lead = await seedLead();
+    const res = mockRes();
+    await updateLeadStatus({ params: { id: lead._id.toString() }, body: { status: 'qualified' }, user: { id: ADMIN_ID } }, res);
+    expect(res.body.success).toBe(true);
+    expect((await Lead.findById(lead._id)).status).toBe('qualified');
   });
 });
 

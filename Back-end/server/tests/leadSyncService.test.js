@@ -262,12 +262,19 @@ describe('order status hook — CRM side-effects', () => {
 
 describe('leadSyncService — cycle reopen (reopen-with-history)', () => {
   it('reopens a WON lead into a fresh cycle when a new workable signal arrives', async () => {
-    // Win a lead: prior pending signal, then the order pays.
+    const adminId = new mongoose.Types.ObjectId();
+    const rep = await SalesRep.create({ name: 'Neha' });
+
+    // Win a lead: prior pending signal → a rep claims it → the order pays online.
     const pending = await seedOrder({ paymentStatus: 'pending', guestEmail: 'return@x.com' });
-    await leadSyncService.upsertFromOrder(pending);
+    const lead = await leadSyncService.upsertFromOrder(pending);
+    await leadSyncService.claimLead(lead._id, rep._id, adminId); // rep now owns it
     const paid = await seedOrder({ status: 'processing', paymentStatus: 'paid', guestEmail: 'return@x.com' });
     const won = await leadSyncService.upsertFromOrder(paid);
     expect(won.status).toBe('won');
+    // Owner-at-close is credited on the online conversion (matches offline).
+    expect(won.assignedRep.toString()).toBe(rep._id.toString());
+    expect(won.activities.some((a) => a.type === 'conversion' && a.rep?.toString() === rep._id.toString())).toBe(true);
 
     // Later: the same person submits a NEW consultation.
     const c = await seedConsultation({ email: 'return@x.com', whatsapp: '+91 90000 11111' });
@@ -275,10 +282,12 @@ describe('leadSyncService — cycle reopen (reopen-with-history)', () => {
 
     expect(reopened._id.toString()).toBe(won._id.toString()); // same person
     expect(reopened.status).toBe('new');       // fresh cycle
-    expect(reopened.assignedTo).toBeNull();     // back to the pool
+    expect(reopened.assignedTo).toBeNull();     // audit owner cleared
+    expect(reopened.assignedRep).toBeNull();    // back to the shared pool (the bug fix)
     expect(reopened.reopenCount).toBe(1);
     expect(reopened.cycles).toHaveLength(1);
     expect(reopened.cycles[0].outcome).toBe('won');
+    expect(reopened.cycles[0].assignedRep.toString()).toBe(rep._id.toString()); // credit preserved in history
     expect(reopened.hasPurchased).toBe(true);   // permanent fact preserved
     expect(reopened.sources).toHaveLength(1);   // only the NEW signal is live
     expect(reopened.sources[0].type).toBe('consultation');
