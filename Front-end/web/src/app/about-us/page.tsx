@@ -193,9 +193,9 @@ export default function AboutUsPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
             {brands.map((brand, index) => (
-              <div key={index} className="flex items-center justify-center p-4 bg-obsidian border border-hairline rounded-sm hover:border-gold hover:shadow-md transition-all">
+              <div key={index} className="flex items-center justify-center p-4 bg-white border border-hairline rounded-sm hover:border-gold hover:shadow-[0_0_20px_rgba(197,160,89,0.35)] transition-all">
                 <div className="relative h-14 w-full flex items-center justify-center">
-                  <Image src={brand.logo} alt={brand.name} fill className="object-contain grayscale hover:grayscale-0 transition-all" />
+                  <Image src={brand.logo} alt={brand.name} fill className="object-contain transition-transform hover:scale-105" />
                 </div>
               </div>
             ))}
