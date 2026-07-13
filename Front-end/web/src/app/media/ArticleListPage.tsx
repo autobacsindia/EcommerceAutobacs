@@ -81,7 +81,9 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   function updateParam(key: string, value: string) {
     const p = new URLSearchParams(searchParams.toString());
     if (value) p.set(key, value); else p.delete(key);
-    p.delete('page');
+    // Changing a filter (search/category) resets to page 1 — but don't clobber
+    // an explicit page change, or pagination never advances.
+    if (key !== 'page') p.delete('page');
     router.push(`?${p.toString()}`);
   }
 
@@ -91,12 +93,12 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   }
 
   const Icon = type === 'news' ? Newspaper : BookOpen;
-  const color = type === 'news' ? 'blue' : 'green';
+  // Obsidian + gold across the board — no per-type green theme.
   const colorClasses = {
-    badge: type === 'news' ? 'bg-gold/10 text-gold' : 'bg-green-100 text-green-700',
-    btn: type === 'news' ? 'bg-gold hover:opacity-90' : 'bg-green-600 hover:bg-green-700',
-    active: type === 'news' ? 'bg-gold text-obsidian' : 'bg-green-600 text-obsidian',
-    hover: type === 'news' ? 'hover:text-gold' : 'hover:text-green-600',
+    badge: 'bg-gold/10 text-gold',
+    btn: 'bg-gold hover:opacity-90',
+    active: 'bg-gold text-obsidian',
+    hover: 'hover:text-gold',
   };
 
   const title = type === 'news' ? 'News' : 'Blog';
@@ -106,14 +108,14 @@ function ArticleListContent({ type }: ArticleListPageProps) {
 
   return (
     <div>
-      {/* Header */}
-      <div className={`bg-linear-to-r ${type === 'news' ? 'from-gold to-gold' : 'from-green-700 to-green-900'} text-ink py-14 px-4`}>
+      {/* Header — plain obsidian (no colored banner) */}
+      <div className="bg-obsidian border-b border-hairline text-ink py-14 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
-            <Icon className="h-8 w-8 opacity-80" />
+            <Icon className="h-8 w-8 text-gold opacity-90" />
             <h1 className="text-4xl font-bold">{title}</h1>
           </div>
-          <p className="text-ink/80 text-lg">{desc}</p>
+          <p className="text-ink-muted text-lg">{desc}</p>
         </div>
       </div>
 
