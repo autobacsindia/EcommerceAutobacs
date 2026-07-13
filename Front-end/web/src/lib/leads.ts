@@ -86,10 +86,25 @@ export interface LeadCycle {
   closedAt?: string;
   outcome?: LeadStatus;
   primarySource?: LeadSourceType;
-  convertedOrder?: string | null;
+  // Populated on the lead-detail GET so the Journey can name who won a cycle
+  // and link its closing order; raw ObjectId on other reads.
+  assignedRep?: { _id: string; name?: string } | string | null;
+  convertedOrder?: { _id: string; orderNumber?: string } | string | null;
   convertedAt?: string | null;
   lostReason?: string;
   sources?: LeadSource[];
+}
+
+/** A recent order on the lead's linked account (from orderRepository.findByUser). */
+export interface OrderHistoryItem {
+  _id: string;
+  orderNumber?: string;
+  totalAmount: number;
+  status: string;
+  // Payment axis + who cancelled — already on the lean order doc the API returns.
+  paymentStatus?: string;
+  cancelledBy?: string | null;
+  createdAt: string;
 }
 
 export const LEAD_STATUSES: LeadStatus[] = ['new', 'contacted', 'qualified', 'won', 'lost'];
@@ -119,6 +134,29 @@ export const LEAD_SOURCE_LABELS: Record<LeadSourceType, string> = {
   cart_abandoned: 'Abandoned cart',
   dormant_user: 'Never purchased',
 };
+
+/** Who initiated an order cancellation — mirrors Order.cancelledBy on the backend. */
+export type CancelledByType = 'admin' | 'customer' | 'system';
+
+export const CANCELLED_BY_LABELS: Record<CancelledByType, string> = {
+  admin: 'by admin',
+  customer: 'by customer',
+  system: 'automatically',
+};
+
+/**
+ * Read cancel attribution off an `order_cancelled` signal snapshot (or an order
+ * history row). Returns the "by admin / by customer / automatically" suffix and
+ * whether money had been captured, so both the Signals list and the Order
+ * history rows can say who cancelled and whether a refund was in play.
+ */
+export function cancelAttribution(
+  src: { cancelledBy?: string | null; wasPaid?: boolean } | undefined | null
+): { by: string; wasPaid: boolean } | null {
+  if (!src) return null;
+  const key = src.cancelledBy as CancelledByType | null | undefined;
+  return { by: key ? (CANCELLED_BY_LABELS[key] ?? '') : '', wasPaid: src.wasPaid === true };
+}
 
 export const LEAD_SOURCE_COLORS: Record<LeadSourceType, string> = {
   consultation: 'bg-teal-100 text-teal-800',
