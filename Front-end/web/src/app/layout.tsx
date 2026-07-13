@@ -16,6 +16,7 @@ import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import { getNavCategories } from "@/lib/navCategories";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
+import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
 
 const barlowCondensed = Barlow_Condensed({
@@ -201,6 +202,7 @@ export default async function RootLayout({
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
+                      <HelpWidget />
                       <Toaster
                         position="top-right"
                         toastOptions={{
