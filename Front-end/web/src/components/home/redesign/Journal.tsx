@@ -42,8 +42,10 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
 
   // Pointer drag state. The live delta lives in a ref (read synchronously by the
   // click handler to distinguish a tap from a swipe); mirrored to state only to
-  // drive the rubber-band transform while dragging.
-  const drag = useRef({ active: false, startX: 0, delta: 0 });
+  // drive the rubber-band transform while dragging. `captured` tracks whether we
+  // have taken pointer capture yet — we defer it until the pointer actually moves
+  // (see onPointerMove) so a plain tap's `click` still reaches the card's <Link>.
+  const drag = useRef({ active: false, startX: 0, delta: 0, pointerId: -1, captured: false });
   const [dragDelta, setDragDelta] = useState(0);
   const [dragging, setDragging] = useState(false);
 
@@ -77,29 +79,44 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
     return () => window.clearInterval(id);
   }, [n, paused, dragging]);
 
+  // Movement past this many px promotes a press into a drag (takes pointer
+  // capture, starts the rubber-band). Below it, the gesture stays a tap so the
+  // browser still fires a real `click` on the card's <Link> and it navigates.
+  const DRAG_THRESHOLD = 6;
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (n <= 1) return;
-    drag.current = { active: true, startX: e.clientX, delta: 0 };
-    setDragging(true);
+    // Note: no setPointerCapture here — capturing eagerly retargets the click and
+    // breaks tap-to-open. We capture lazily on the first real move instead.
+    drag.current = { active: true, startX: e.clientX, delta: 0, pointerId: e.pointerId, captured: false };
     setDragDelta(0);
-    stageRef.current?.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current.active) return;
     drag.current.delta = e.clientX - drag.current.startX;
-    setDragDelta(drag.current.delta);
+    // Promote to a real drag once the pointer has actually moved.
+    if (!drag.current.captured && Math.abs(drag.current.delta) > DRAG_THRESHOLD) {
+      drag.current.captured = true;
+      setDragging(true);
+      stageRef.current?.setPointerCapture?.(e.pointerId);
+    }
+    if (drag.current.captured) setDragDelta(drag.current.delta);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current.active) return;
-    const d = drag.current.delta;
+    const { delta: d, captured } = drag.current;
     drag.current.active = false;
+    drag.current.captured = false;
     setDragging(false);
     setDragDelta(0);
-    stageRef.current?.releasePointerCapture?.(e.pointerId);
-    if (d < -55) goTo(active + 1);
-    else if (d > 55) goTo(active - 1);
+    if (captured) {
+      stageRef.current?.releasePointerCapture?.(e.pointerId);
+      if (d < -55) goTo(active + 1);
+      else if (d > 55) goTo(active - 1);
+    }
+    // A tap (never captured) falls through to the card's click handler / <Link>.
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
