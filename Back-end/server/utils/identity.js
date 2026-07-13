@@ -40,3 +40,23 @@ export function buildIdentityKey({ email, phone } = {}) {
   if (p) return `phone:${p}`;
   return null;
 }
+
+/** Escape a string for safe use as a literal inside a RegExp (injection/ReDoS guard). */
+export function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Build a regex SOURCE that matches a phone number tolerant of the separators
+ * and country/trunk prefixes that stored values carry — `+91 98765 43210`,
+ * `09876543210` and the normalized `9876543210` all match the same query. Each
+ * significant digit is separated by `\D*` so only digits are compared. Returns
+ * null when `search` isn't phone-like (< 7 digits), so callers can fall back to
+ * plain text search. The `\D*` runs are each followed by a required literal
+ * digit, so there's no catastrophic backtracking, and inputs are short.
+ */
+export function phoneSearchPattern(search) {
+  const normalized = normalizePhone(search);
+  if (!normalized) return null;
+  return normalized.split('').join('\\D*');
+}

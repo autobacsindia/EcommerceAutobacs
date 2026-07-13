@@ -382,6 +382,13 @@ export const createOfflineOrder = async (req, res) => {
         mustResetPassword: true,
       });
       isNewUser = true;
+    } else if (!user.phone && phone) {
+      // Existing customer with no phone on file → backfill from this offline
+      // order (convenience contact field, never overwrite an existing value).
+      // Without this the number lives only on the Lead/Order and the account
+      // stays un-findable by phone.
+      user.phone = phone;
+      await userRepository.save(user);
     }
 
     // ── Build the order (amounts in rupees, matching the rest of the system) ──
