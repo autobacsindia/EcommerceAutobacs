@@ -191,28 +191,45 @@ export default function LeadDetailPage() {
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Status</h2>
             <div className="flex flex-wrap gap-2">
-              {LEAD_STATUSES.map((s) => {
-                // Won is set only by a real order (online payment or an offline
-                // order) — never by hand — so it can't be picked manually.
-                const isCurrent = lead.status === s;
-                const wonLocked = s === 'won' && !isCurrent;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => changeStatus(s)}
-                    disabled={saving || isCurrent || wonLocked}
-                    title={wonLocked ? 'Set automatically when an order is placed or an offline order is created' : undefined}
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      isCurrent ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
-                  >
-                    {LEAD_STATUS_LABELS[s]}
-                  </button>
-                );
-              })}
+              {(() => {
+                // Manual status rules, mirrored from the API: forward-only through
+                // the active stages; won/lost are terminal (only a new customer
+                // signal reopens them); won is order-backed, never set by hand.
+                const RANK: Record<string, number> = { new: 0, contacted: 1, qualified: 2 };
+                const terminal = lead.status === 'won' || lead.status === 'lost';
+                return LEAD_STATUSES.map((s) => {
+                  const isCurrent = lead.status === s;
+                  let locked = false;
+                  let reason: string | undefined;
+                  if (isCurrent) {
+                    locked = true;
+                  } else if (s === 'won') {
+                    locked = true; reason = 'Set automatically when an order is placed or an offline order is created';
+                  } else if (terminal) {
+                    locked = true; reason = 'This lead is closed — a new signal from the customer reopens it';
+                  } else if (s !== 'lost' && RANK[s] <= RANK[lead.status]) {
+                    locked = true; reason = 'Leads move forward only';
+                  }
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => changeStatus(s)}
+                      disabled={saving || locked}
+                      title={reason}
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${
+                        isCurrent ? LEAD_STATUS_COLORS[s] + ' ring-2 ring-offset-1 ring-blue-400' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {LEAD_STATUS_LABELS[s]}
+                    </button>
+                  );
+                });
+              })()}
             </div>
             <p className="mt-2 text-xs text-gray-400">
-              Won is set automatically when an order is placed (online) or you create an offline order — it can&apos;t be set by hand.
+              {lead.status === 'won' || lead.status === 'lost'
+                ? 'This lead is closed and locked. If the customer comes back, a new signal reopens it automatically.'
+                : 'Leads move forward only. Won is set automatically by a paid online order or an offline order — never by hand.'}
             </p>
             {lead.sources.some((s) => s.type === 'consultation') && (
               <p className="mt-1 text-xs text-gray-400">Status changes mirror to the linked consultancy record.</p>
@@ -377,6 +394,13 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
   const [status, setStatus] = useState<'processing' | 'delivered'>('processing');
   const [email, setEmail] = useState(lead.email || '');
   const [phone, setPhone] = useState(lead.phone || '');
+  // Delivery address — required so the order actually ships somewhere.
+  const [addr, setAddr] = useState({
+    fullName: lead.name || '', addressLine1: '', addressLine2: '',
+    city: '', state: '', postalCode: '', country: 'India',
+  });
+  const setAddrField = (k: keyof typeof addr, v: string) => setAddr((p) => ({ ...p, [k]: v }));
+  const addressComplete = !!(addr.addressLine1.trim() && addr.city.trim() && addr.state.trim() && /^\d{6}$/.test(addr.postalCode.trim()));
   // Default the crediting rep to the lead's current owner.
   const [repId, setRepId] = useState(lead.assignedRep?._id || '');
   const [submitting, setSubmitting] = useState(false);
@@ -406,7 +430,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
   async function submit() {
-    if (!email || !phone || items.length === 0) return;
+    if (!email || !phone || items.length === 0 || !addressComplete) return;
     setSubmitting(true);
     try {
       const res = await apiClient.post<{ success: boolean; order: { orderNumber?: string; _id: string } }>(
@@ -414,6 +438,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
         {
           email, phone, name: lead.name,
           items: items.map((i) => ({ product: i.product, name: i.name, price: i.price, quantity: i.quantity })),
+          shippingAddress: { ...addr, phone },
           status,
           leadId: lead._id,
           repId: repId || undefined,
@@ -470,6 +495,44 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
               <span className="mb-1 block text-gray-600">Customer phone</span>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             </label>
+          </div>
+
+          {/* Delivery address */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery address</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-gray-600">Recipient name</span>
+                <input value={addr.fullName} onChange={(e) => setAddrField('fullName', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-gray-600">Address line 1 <span className="text-red-500">*</span></span>
+                <input value={addr.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)} placeholder="House / flat no., street" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-gray-600">Address line 2</span>
+                <input value={addr.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)} placeholder="Area, landmark (optional)" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">City <span className="text-red-500">*</span></span>
+                <input value={addr.city} onChange={(e) => setAddrField('city', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">State <span className="text-red-500">*</span></span>
+                <input value={addr.state} onChange={(e) => setAddrField('state', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">PIN code <span className="text-red-500">*</span></span>
+                <input value={addr.postalCode} onChange={(e) => setAddrField('postalCode', e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="6 digits" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">Country</span>
+                <input value={addr.country} onChange={(e) => setAddrField('country', e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+            </div>
+            {!addressComplete && (
+              <p className="mt-2 text-xs text-amber-600">Address line 1, city, state and a 6-digit PIN are required so the order can be delivered.</p>
+            )}
           </div>
 
           {/* Product search */}
@@ -538,7 +601,7 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
 
           <div className="flex justify-end gap-2">
             <button onClick={() => setOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={submitting || !email || !phone || items.length === 0} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+            <button onClick={submit} disabled={submitting || !email || !phone || items.length === 0 || !addressComplete} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
               {submitting ? 'Creating…' : 'Create order & close'}
             </button>
           </div>

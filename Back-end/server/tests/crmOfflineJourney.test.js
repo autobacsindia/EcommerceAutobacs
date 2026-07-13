@@ -69,6 +69,8 @@ async function makeRep(overrides = {}) {
 }
 
 const BUYER = { email: 'walkin.buyer@example.com', phone: '9812345678', name: 'Walk In Buyer' };
+// A valid delivery address for offline-order requests (now required).
+const OFF_ADDR = { addressLine1: '12 MG Road', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India' };
 
 async function seedPendingOrder(identity) {
   // A created-but-unpaid order → the "left at checkout" lead signal.
@@ -143,6 +145,7 @@ describe('CRM — offline deal → account → set password → order history', 
       body: {
         email: BUYER.email, phone: BUYER.phone, name: BUYER.name,
         items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 2, price: 1200, name: 'Wiper' }],
+        shippingAddress: OFF_ADDR,
         status: 'processing',
         leadId: lead._id.toString(),
         repId: closingRep._id.toString(),
@@ -162,6 +165,10 @@ describe('CRM — offline deal → account → set password → order history', 
     expect(order.paymentStatus).toBe('paid');
     // The closing rep is credited on the order.
     expect(order.salesRep?.toString()).toBe(closingRep._id.toString());
+    // The real delivery address is stored (not the old 'N/A' / '000000' placeholders).
+    expect(order.shippingAddress.addressLine1).toBe(OFF_ADDR.addressLine1);
+    expect(order.shippingAddress.city).toBe('Pune');
+    expect(order.shippingAddress.postalCode).toBe('411001');
 
     const user = await User.findOne({ email: BUYER.email });
     expect(user).toBeTruthy();
@@ -178,6 +185,28 @@ describe('CRM — offline deal → account → set password → order history', 
     expect(closedLead.activities.some((x) => x.type === 'conversion' && x.rep?.toString() === closingRep._id.toString())).toBe(true);
   });
 
+  it('rejects an offline order with no / incomplete delivery address (400, nothing created)', async () => {
+    const rep = await makeRep();
+    const req = {
+      user: { id: rep._id.toString(), role: 'admin' },
+      body: {
+        email: 'noaddr@example.com', phone: '9800000000', name: 'No Addr',
+        items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 100, name: 'x' }],
+        status: 'processing', // no shippingAddress
+      },
+    };
+    const res = makeRes();
+    await createOfflineOrder(req, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/address/i);
+    expect(await User.findOne({ email: 'noaddr@example.com' })).toBeNull(); // no account created on a rejected order
+
+    // A bad PIN is also rejected.
+    const res2 = makeRes();
+    await createOfflineOrder({ ...req, body: { ...req.body, shippingAddress: { ...OFF_ADDR, postalCode: '12' } } }, res2);
+    expect(res2.statusCode).toBe(400);
+  });
+
   it('mints a claimable set-password token even when the queue Redis is down', async () => {
     const savedRedis = process.env.REDIS_URL;
     delete process.env.REDIS_URL; // simulate queue outage at creation time
@@ -188,6 +217,7 @@ describe('CRM — offline deal → account → set password → order history', 
         body: {
           email: 'noredis.buyer@example.com', phone: '9811111111', name: 'No Redis',
           items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 500, name: 'Bulb' }],
+          shippingAddress: OFF_ADDR,
           status: 'processing',
         },
       };
@@ -211,6 +241,7 @@ describe('CRM — offline deal → account → set password → order history', 
       body: {
         email: BUYER.email, phone: BUYER.phone, name: BUYER.name,
         items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 999, name: 'Mat' }],
+        shippingAddress: OFF_ADDR,
         status: 'processing',
       },
     };

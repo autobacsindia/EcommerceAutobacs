@@ -171,6 +171,63 @@ describe('leadController — Won is order-backed only (no hollow wins)', () => {
   });
 });
 
+describe('leadController — forward-only + terminal-lock transitions', () => {
+  const mkLead = (status, key) => Lead.create({ identityKey: key, email: key.replace('email:', ''), status });
+  const patch = (id, status) => {
+    const res = mockRes();
+    return updateLeadStatus({ params: { id: id.toString() }, body: { status }, user: { id: ADMIN_ID } }, res).then(() => res);
+  };
+
+  it('blocks a backward move (qualified → contacted)', async () => {
+    const lead = await mkLead('qualified', 'email:b1@x.com');
+    const res = await patch(lead._id, 'contacted');
+    expect(res.statusCode).toBe(400);
+    expect((await Lead.findById(lead._id)).status).toBe('qualified');
+  });
+
+  it('blocks contacted → new', async () => {
+    const lead = await mkLead('contacted', 'email:b2@x.com');
+    const res = await patch(lead._id, 'new');
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('allows a forward move (new → qualified)', async () => {
+    const lead = await mkLead('new', 'email:f1@x.com');
+    const res = await patch(lead._id, 'qualified');
+    expect(res.body.success).toBe(true);
+  });
+
+  it('locks a won lead — no manual change out of it', async () => {
+    const lead = await mkLead('won', 'email:t1@x.com');
+    const res = await patch(lead._id, 'contacted');
+    expect(res.statusCode).toBe(400);
+    expect((await Lead.findById(lead._id)).status).toBe('won');
+  });
+
+  it('locks a lost lead too', async () => {
+    const lead = await mkLead('lost', 'email:t2@x.com');
+    const res = await patch(lead._id, 'contacted');
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('lets a live lead be marked lost from any active stage', async () => {
+    const lead = await mkLead('qualified', 'email:l1@x.com');
+    const res = await patch(lead._id, 'lost');
+    expect(res.body.success).toBe(true);
+    expect((await Lead.findById(lead._id)).status).toBe('lost');
+  });
+
+  it('bulkStatus skips closed/backward leads (blocked bucket)', async () => {
+    const won = await mkLead('won', 'email:bk1@x.com');
+    const qualified = await mkLead('qualified', 'email:bk2@x.com'); // → contacted is backward
+    const contacted = await mkLead('contacted', 'email:bk3@x.com'); // → contacted is a no-op self
+    const res = mockRes();
+    await bulkStatus({ body: { leadIds: [won._id.toString(), qualified._id.toString(), contacted._id.toString()], status: 'contacted' }, user: { id: ADMIN_ID } }, res);
+    expect(res.body.results.blocked).toEqual(expect.arrayContaining([won._id.toString(), qualified._id.toString()]));
+    expect((await Lead.findById(won._id)).status).toBe('won');
+  });
+});
+
 describe('leadController.releaseLead — idempotent, no spurious activity', () => {
   it('releasing an already-pooled lead adds no activity', async () => {
     const lead = await seedLead(); // assignedRep null
