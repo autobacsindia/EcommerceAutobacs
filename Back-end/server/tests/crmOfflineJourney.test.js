@@ -185,6 +185,39 @@ describe('CRM — offline deal → account → set password → order history', 
     expect(closedLead.activities.some((x) => x.type === 'conversion' && x.rep?.toString() === closingRep._id.toString())).toBe(true);
   });
 
+  it('creates a STANDALONE offline order (no lead) → account + paid order + set-password token, no lead', async () => {
+    const admin = await makeRep();
+    const closingRep = await SalesRep.create({ name: 'Standalone Rep' });
+    enqueued.length = 0;
+    const req = {
+      user: { id: admin._id.toString(), role: 'admin' },
+      body: {
+        email: 'meta.lead@example.com', phone: '9700000123', name: 'Meta Lead',
+        items: [{ product: new mongoose.Types.ObjectId().toString(), quantity: 1, price: 800, name: 'Cover' }],
+        shippingAddress: OFF_ADDR,
+        status: 'processing',
+        repId: closingRep._id.toString(),
+        // no leadId — this buyer is not in the CRM pipeline
+      },
+    };
+    const res = makeRes();
+    await createOfflineOrder(req, res);
+
+    expect(res.statusCode).toBe(201);
+    const user = await User.findOne({ email: 'meta.lead@example.com' });
+    expect(user).toBeTruthy();
+    expect(user.mustResetPassword).toBe(true);                 // first-time password set
+    expect(user.magicLinkToken).toBeTruthy();                   // set-password link issued
+    expect(enqueued.some((j) => j.name === 'send-magic-link-email')).toBe(true);
+
+    const order = await orderRepository.findById(res.body.order._id);
+    expect(order.paymentStatus).toBe('paid');
+    expect(order.salesRep?.toString()).toBe(closingRep._id.toString()); // credited to the rep
+
+    // A direct sale does not spin up a CRM lead.
+    expect(await Lead.findOne({ email: 'meta.lead@example.com' })).toBeNull();
+  });
+
   it('rejects an offline order with no / incomplete delivery address (400, nothing created)', async () => {
     const rep = await makeRep();
     const req = {

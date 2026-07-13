@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Search, Eye, Users, RefreshCw, CheckCircle2, Phone, Mail, ShoppingBag,
+  Search, Eye, Users, RefreshCw, CheckCircle2, Phone, Mail, ShoppingBag, Plus, X,
 } from 'lucide-react';
 import apiClient from '@/lib/api';
+import OfflineOrderForm from '@/components/admin/OfflineOrderForm';
 import {
   Lead, LeadStatus, LeadSourceType, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep,
@@ -71,6 +72,9 @@ export default function AdminLeadsPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkRep, setBulkRep] = useState('');
+  // Standalone offline order (for a customer not in the pipeline — e.g. a Meta lead).
+  const [offlineOpen, setOfflineOpen] = useState(false);
+  const [offlineDone, setOfflineDone] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -186,6 +190,12 @@ export default function AdminLeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setOfflineDone(null); setOfflineOpen(true); }}
+            className="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+          >
+            <Plus className="h-4 w-4" /> New offline order
+          </button>
           <Link
             href="/admin/sales-reps"
             className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -200,6 +210,38 @@ export default function AdminLeadsPage() {
           </button>
         </div>
       </div>
+
+      {/* Standalone offline-order modal — for a customer not in the pipeline. */}
+      {offlineOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="mt-8 mb-8 w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-6 shadow-xl">
+            <div className="mb-1 flex items-start justify-between">
+              <h2 className="text-lg font-bold text-gray-900">New offline order</h2>
+              <button onClick={() => setOfflineOpen(false)} className="text-gray-400 hover:text-gray-700" aria-label="Close"><X className="h-5 w-5" /></button>
+            </div>
+            <p className="mb-4 text-sm text-gray-500">
+              For a customer who isn&apos;t in the leads pipeline (e.g. a Meta lead or walk-in). Creates their account and a paid order, and emails an invoice + a link to set their first password so they can log in and track it.
+            </p>
+            {offlineDone ? (
+              <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700">
+                <p>Offline order <b>{offlineDone}</b> created. The customer will get an invoice and a set-password link by email.</p>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={() => setOfflineDone(null)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">Create another</button>
+                  <button onClick={() => { setOfflineOpen(false); setOfflineDone(null); }} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Done</button>
+                </div>
+              </div>
+            ) : (
+              <OfflineOrderForm
+                reps={reps}
+                requireRep
+                submitLabel="Create order"
+                onCreated={(ref) => setOfflineDone(ref)}
+                onCancel={() => setOfflineOpen(false)}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Assignment tabs */}
       <div className="flex gap-2">
