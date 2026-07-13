@@ -54,6 +54,8 @@ const LeadCycleSchema = new mongoose.Schema(
     outcome: { type: String, enum: LEAD_STATUSES }, // 'won' | 'lost' in practice
     sources: { type: [ArchivedSourceSchema], default: [] },
     primarySource: { type: String, enum: SOURCE_TYPES },
+    // Named rep credited when this cycle closed — preserves "who won it" across a reopen.
+    assignedRep: { type: mongoose.Schema.Types.ObjectId, ref: "SalesRep", default: null },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     contactedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     convertedOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
