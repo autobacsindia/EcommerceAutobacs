@@ -10,31 +10,8 @@ import leadRepository from '../repositories/leadRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
+import { resolveRep } from '../utils/salesRepResolver.js';
 import { LEAD_STATUSES, SOURCE_TYPES } from '../config/leadConstants.js';
-
-/**
- * Resolve a rep id from a request into a SalesRep profile.
- * @param {string} repId
- * @param {{requireActive?:boolean}} [opts] requireActive=true (default) rejects a
- *   deactivated rep — correct when ASSIGNING new work. Pass false when merely
- *   CREDITING an action on an already-owned lead (status change / activity log):
- *   the lead's owner may since have been deactivated, and that action must still
- *   be attributable to them rather than 400.
- * @returns {Promise<{rep?:object, error?:{status:number,message:string}}>}
- */
-async function resolveRep(repId, { requireActive = true } = {}) {
-  if (!mongoose.isValidObjectId(repId)) {
-    return { error: { status: 400, message: 'A valid sales rep is required' } };
-  }
-  const rep = await salesRepRepository.findById(repId);
-  if (!rep) {
-    return { error: { status: 400, message: 'Sales rep not found' } };
-  }
-  if (requireActive && !rep.isActive) {
-    return { error: { status: 400, message: 'Sales rep is inactive' } };
-  }
-  return { rep };
-}
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;

@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import Order from "../models/Order.js";
 import emailHandler from "../services/emailHandler.js";
+import { hashToken } from "../utils/tokenUtils.js";
 import {
   generateTokenPair,
   storeRefreshToken,
@@ -43,9 +44,10 @@ export const requestMagicLink = async (req, res) => {
       });
     }
     
-    // Generate magic link token
+    // Generate magic link token — email the RAW token, store only its hash at
+    // rest (like the reset-password flow) so a DB read can't replay it.
     const token = crypto.randomBytes(32).toString('hex');
-    user.magicLinkToken = token;
+    user.magicLinkToken = hashToken(token);
     user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
     
     // If orderId provided, verify user owns this order
@@ -115,9 +117,9 @@ export const verifyMagicLink = async (req, res) => {
       });
     }
     
-    // Find user by token
+    // Look up by the token's hash (tokens are stored hashed at rest).
     const user = await User.findOne({
-      magicLinkToken: token,
+      magicLinkToken: hashToken(token),
       magicLinkExpires: { $gt: new Date() } // Not expired
     });
     

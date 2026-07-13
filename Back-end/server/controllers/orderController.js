@@ -6,8 +6,8 @@ import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
-import salesRepRepository from '../repositories/salesRepRepository.js';
-import mongoose from 'mongoose';
+import { resolveRep } from '../utils/salesRepResolver.js';
+import { hashToken } from '../utils/tokenUtils.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -331,16 +331,11 @@ export const createOfflineOrder = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Customer email and phone are required' });
   }
   // Validate the crediting rep up front (optional field) so a bad id fails fast
-  // BEFORE we create a user/order.
+  // BEFORE we create a user/order. Shared with the lead controller.
   let salesRepId = null;
   if (repId) {
-    if (!mongoose.isValidObjectId(repId)) {
-      return res.status(400).json({ success: false, message: 'Invalid sales rep' });
-    }
-    const rep = await salesRepRepository.findById(repId);
-    if (!rep || !rep.isActive) {
-      return res.status(400).json({ success: false, message: 'Sales rep not found or inactive' });
-    }
+    const { rep, error } = await resolveRep(repId);
+    if (error) return res.status(error.status).json({ success: false, message: error.message });
     salesRepId = rep._id;
   }
   if (!Array.isArray(items) || items.length === 0) {
@@ -458,9 +453,12 @@ export const createOfflineOrder = async (req, res) => {
     // New buyer: mint the single-use account-claim (set-password) token NOW. This
     // is a DB write and must NOT depend on the queue — otherwise a Redis outage at
     // creation time leaves the buyer with an account they can never claim (random
-    // password + mustResetPassword, no token). The email below is best-effort on top.
+    // password + mustResetPassword, no token). Email the RAW token; store only its
+    // hash at rest (like the reset-password flow). The email below is best-effort.
+    let magicRawToken = null;
     if (isNewUser) {
-      user.magicLinkToken = crypto.randomBytes(32).toString('hex');
+      magicRawToken = crypto.randomBytes(32).toString('hex');
+      user.magicLinkToken = hashToken(magicRawToken);
       user.magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
       await userRepository.save(user);
     }
@@ -478,7 +476,7 @@ export const createOfflineOrder = async (req, res) => {
         queue
           .add('send-magic-link-email', {
             email: normEmail,
-            token: user.magicLinkToken,
+            token: magicRawToken,
             orderId: order._id.toString(),
           })
           .catch((err) => console.error('[Queue] Failed to enqueue send-magic-link-email:', err.message));

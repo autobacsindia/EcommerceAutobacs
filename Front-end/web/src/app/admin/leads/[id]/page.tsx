@@ -438,7 +438,10 @@ function CloseDealForm({ lead, reps, onClosed }: { lead: Lead; reps: SalesRep[];
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900">Close deal → offline order</h2>
         {!open && (
-          <button onClick={() => setOpen(true)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+          <button
+            onClick={() => { setRepId(lead.assignedRep?._id || ''); setOpen(true); }}
+            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+          >
             Create offline order
           </button>
         )}

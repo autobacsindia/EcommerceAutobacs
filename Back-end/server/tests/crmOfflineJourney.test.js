@@ -25,8 +25,10 @@ import bcrypt from 'bcryptjs';
 // but no real Redis/email is touched.
 process.env.REDIS_URL = 'redis://localhost:6379';
 // Plain functions (not jest.fn) so the suite's resetMocks doesn't wipe the
-// resolved-promise implementation between tests.
-const mockAdd = () => Promise.resolve({});
+// resolved-promise implementation between tests. Capture enqueued jobs so a test
+// can read the RAW magic-link token (only the hash is persisted on the user).
+const enqueued = [];
+const mockAdd = (name, data) => { enqueued.push({ name, data }); return Promise.resolve({}); };
 const mockQueue = { add: mockAdd };
 jest.unstable_mockModule('../queue/queues.js', () => ({
   getNotificationsQueue: () => mockQueue,
@@ -212,11 +214,16 @@ describe('CRM — offline deal → account → set password → order history', 
         status: 'processing',
       },
     };
+    enqueued.length = 0;
     await createOfflineOrder(req, makeRes());
 
     const created = await User.findOne({ email: BUYER.email });
-    const token = created.magicLinkToken;
+    // The user stores only the HASH; the buyer gets the RAW token by email.
+    expect(created.magicLinkToken).toBeTruthy();
+    expect(created.magicLinkToken).not.toBe('');
+    const token = enqueued.find((j) => j.name === 'send-magic-link-email')?.data.token;
     expect(token).toBeTruthy();
+    expect(token).not.toBe(created.magicLinkToken); // raw ≠ stored hash
 
     // The buyer opens the claim link and sets their first password.
     const NEW_PASSWORD = 'BuyerChosen123!';
