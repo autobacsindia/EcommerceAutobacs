@@ -46,18 +46,21 @@ const decode = (s) => {
 };
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 
-// WooCommerce status → our Order.status enum. Original WC status kept in legacyStatus.
+// WooCommerce status → { status (fulfilment), paymentStatus }. Order.status was
+// refactored to fulfilment-only (see scripts/migrate-order-status-phase2.js); payment
+// state now lives in paymentStatus. Original WC status is preserved in legacyStatus.
 const STATUS_MAP = {
-  pending: 'pending',
-  processing: 'processing',
-  'on-hold': 'confirmed',
-  completed: 'delivered',
-  cancelled: 'cancelled',
-  refunded: 'refunded',
-  failed: 'failed',
-  trash: 'cancelled',
-  'checkout-draft': 'pending',
+  pending:          { status: 'awaiting_payment', paymentStatus: 'pending'   },
+  'checkout-draft': { status: 'awaiting_payment', paymentStatus: 'pending'   },
+  'on-hold':        { status: 'awaiting_payment', paymentStatus: 'pending'   },
+  processing:       { status: 'processing',       paymentStatus: 'paid'      },
+  completed:        { status: 'delivered',        paymentStatus: 'paid'      },
+  cancelled:        { status: 'cancelled',        paymentStatus: 'cancelled' },
+  trash:            { status: 'cancelled',        paymentStatus: 'cancelled' },
+  failed:           { status: 'cancelled',        paymentStatus: 'failed'    },
+  refunded:         { status: 'cancelled',        paymentStatus: 'refunded'  },
 };
+const DEFAULT_MAP = { status: 'awaiting_payment', paymentStatus: 'pending' };
 
 // Build a schema-valid shippingAddress. Historical WC orders sometimes miss fields;
 // required fields fall back so the order still imports (address isn't used in analytics).
@@ -164,7 +167,8 @@ export async function runOrderImport({ dryRun = true, logger = console } = {}) {
 
         const created = new Date(o.date_created_gmt ? `${o.date_created_gmt}Z` : o.date_created);
         const modified = new Date(o.date_modified_gmt ? `${o.date_modified_gmt}Z` : (o.date_modified || o.date_created));
-        const status = STATUS_MAP[o.status] || 'pending';
+        const mapped = STATUS_MAP[o.status] || DEFAULT_MAP;
+        const status = mapped.status;
         const payNote = o.payment_method_title || o.payment_method || 'unknown';
 
         const data = {
@@ -172,6 +176,7 @@ export async function runOrderImport({ dryRun = true, logger = console } = {}) {
           source: 'woocommerce',
           legacyStatus: o.status,
           status,
+          paymentStatus: mapped.paymentStatus,
           ...(userId && { user: userId }),
           ...(!userId && billingEmail && { guestEmail: billingEmail }),
           items,
