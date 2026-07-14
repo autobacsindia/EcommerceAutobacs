@@ -130,19 +130,19 @@ export default function ConfirmStatusChangeModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-obsidian-deep bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-obsidian rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-hairline sticky top-0 bg-obsidian">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
           <div>
-            <h3 className="text-xl font-bold text-ink">Confirm status change</h3>
-            <p className="text-sm text-ink-muted mt-1">
+            <h3 className="text-xl font-bold text-gray-900">Confirm status change</h3>
+            <p className="text-sm text-gray-500 mt-1">
               {isBulk ? `${count} orders selected` : orderNumber ? `Order #${orderNumber}` : 'Order'}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-ink-muted hover:text-ink transition"
+            className="text-gray-500 hover:text-gray-900 transition"
             disabled={isSubmitting}
             aria-label="Close"
           >
@@ -155,13 +155,13 @@ export default function ConfirmStatusChangeModal({
           <div className="flex items-center justify-center gap-3 mb-6">
             {isBulk ? (
               <>
-                <span className="text-sm text-ink-muted">Set all to</span>
+                <span className="text-sm text-gray-500">Set all to</span>
                 <StatusChip status={newStatus} />
               </>
             ) : (
               <>
                 {currentStatus && <StatusChip status={currentStatus} />}
-                <ArrowRight className="h-4 w-4 text-ink-muted" />
+                <ArrowRight className="h-4 w-4 text-gray-500" />
                 <StatusChip status={newStatus} />
               </>
             )}
@@ -171,7 +171,7 @@ export default function ConfirmStatusChangeModal({
           {isShipping && (
             <div className="mb-6 space-y-4">
               <div>
-                <label htmlFor="tracking-number" className="block text-sm font-medium text-ink/80 mb-2">
+                <label htmlFor="tracking-number" className="block text-sm font-medium text-gray-700 mb-2">
                   Tracking number <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -181,12 +181,12 @@ export default function ConfirmStatusChangeModal({
                   onChange={(e) => setTrackingNumber(e.target.value)}
                   placeholder="e.g. 123456789012"
                   disabled={isSubmitting}
-                  className="w-full px-4 py-3 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg focus:outline-none focus:ring-2 focus:ring-gold"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
-                <label htmlFor="carrier" className="block text-sm font-medium text-ink/80 mb-2">
+                <label htmlFor="carrier" className="block text-sm font-medium text-gray-700 mb-2">
                   Carrier <span className="text-red-400">*</span>
                 </label>
                 <select
@@ -194,7 +194,7 @@ export default function ConfirmStatusChangeModal({
                   value={carrierCode}
                   onChange={(e) => setCarrierCode(e.target.value)}
                   disabled={isSubmitting}
-                  className="w-full px-4 py-3 bg-obsidian-raised border border-hairline text-ink rounded-lg focus:outline-none focus:ring-2 focus:ring-gold"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="" disabled>
                     {carriers.length ? 'Select a carrier…' : 'Loading carriers…'}
@@ -208,7 +208,7 @@ export default function ConfirmStatusChangeModal({
               </div>
 
               <div>
-                <label htmlFor="slip" className="block text-sm font-medium text-ink/80 mb-2">
+                <label htmlFor="slip" className="block text-sm font-medium text-gray-700 mb-2">
                   Shipping slip (PDF, optional)
                 </label>
                 <input
@@ -217,10 +217,10 @@ export default function ConfirmStatusChangeModal({
                   accept="application/pdf"
                   onChange={handleSlipChange}
                   disabled={isSubmitting}
-                  className="block w-full text-sm text-ink-muted file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-obsidian-raised file:text-ink hover:file:bg-obsidian-deep"
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-50 file:text-gray-900 hover:file:bg-white"
                 />
                 {slipFile && (
-                  <p className="mt-2 text-xs text-ink-muted flex items-center gap-1.5">
+                  <p className="mt-2 text-xs text-gray-500 flex items-center gap-1.5">
                     <Paperclip className="h-3.5 w-3.5" />
                     {slipFile.name} — attached to the customer email
                   </p>
@@ -231,9 +231,9 @@ export default function ConfirmStatusChangeModal({
 
           {/* Customer email warning */}
           {notifiesCustomer && (
-            <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6 flex gap-3">
-              <Mail className="h-5 w-5 text-gold flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-gold">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex gap-3">
+              <Mail className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-600">
                 {isBulk
                   ? `The customer for each of these ${count} orders will be emailed about this update.`
                   : isShipping
@@ -246,7 +246,7 @@ export default function ConfirmStatusChangeModal({
 
           {/* Optional admin note */}
           <div className="mb-6">
-            <label htmlFor="status-note" className="block text-sm font-medium text-ink/80 mb-2">
+            <label htmlFor="status-note" className="block text-sm font-medium text-gray-700 mb-2">
               Note (optional)
             </label>
             <textarea
@@ -257,7 +257,7 @@ export default function ConfirmStatusChangeModal({
               rows={3}
               maxLength={500}
               disabled={isSubmitting}
-              className="w-full px-4 py-3 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg focus:outline-none focus:ring-2 focus:ring-gold resize-none"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
 
@@ -275,7 +275,7 @@ export default function ConfirmStatusChangeModal({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="flex-1 px-6 py-3 border border-hairline text-ink/80 rounded-lg hover:bg-obsidian-deep font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-6 py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-100 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -283,11 +283,11 @@ export default function ConfirmStatusChangeModal({
               type="button"
               onClick={handleConfirm}
               disabled={isSubmitting}
-              className="flex-1 px-6 py-3 bg-gold text-obsidian rounded-lg hover:bg-gold/90 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-obsidian"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-200"></div>
                   <span>Updating…</span>
                 </>
               ) : (

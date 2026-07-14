@@ -158,11 +158,11 @@ class OrderRepository extends BaseRepository {
   }
 
   async findAllAdmin(query, options = {}) {
-    const { limit = 20, skip = 0, session = null } = options;
+    const { limit = 20, skip = 0, sort = { createdAt: -1 }, session = null } = options;
     let q = Order.find(query)
       .populate('user', 'name email')
       .populate('items.product', 'name')
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(limit)
       .lean();

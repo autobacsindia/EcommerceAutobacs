@@ -9,6 +9,7 @@ import { API_ENDPOINTS, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, CUSTOMER_NOTIF
 import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import OrderFiltersPanel, { OrderFilters } from '@/components/orders/OrderFiltersPanel';
+import { getPageNumbers } from '@/lib/pagination';
 import BulkActionsBar from '@/components/orders/BulkActionsBar';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
@@ -103,6 +104,62 @@ interface OrdersResponse {
 
 type SortField = 'createdAt' | 'totalAmount' | 'status';
 type SortOrder = 'asc' | 'desc';
+
+/** Numbered pagination navigator for the admin orders table (light theme). */
+function OrdersPagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const pages = getPageNumbers(currentPage, totalPages);
+  const base = 'min-w-9 px-3 py-2 rounded-lg border text-sm font-medium transition-colors';
+  const inactive = `${base} bg-white border-gray-300 text-gray-700 hover:bg-gray-50`;
+  const active = `${base} bg-blue-600 border-blue-600 text-white`;
+  const disabled = `${base} bg-white border-gray-200 text-gray-300 cursor-not-allowed`;
+
+  return (
+    <nav className="mt-6 flex items-center justify-center gap-2" aria-label="Orders pagination">
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage <= 1}
+        className={currentPage <= 1 ? disabled : inactive}
+        aria-label="Previous page"
+      >
+        Prev
+      </button>
+
+      {pages.map((page, i) =>
+        typeof page === 'string' ? (
+          <span key={`gap-${i}`} className="px-2 text-gray-400 select-none">{page}</span>
+        ) : (
+          <button
+            key={page}
+            onClick={() => onPageChange(page as number)}
+            className={page === currentPage ? active : inactive}
+            aria-current={page === currentPage ? 'page' : undefined}
+          >
+            {page}
+          </button>
+        )
+      )}
+
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage >= totalPages}
+        className={currentPage >= totalPages ? disabled : inactive}
+        aria-label="Next page"
+      >
+        Next
+      </button>
+    </nav>
+  );
+}
 
 function AdminOrdersPageInner() {
   const searchParams = useSearchParams();
@@ -235,6 +292,8 @@ function AdminOrdersPageInner() {
     router.push(`/admin/orders?${params.toString()}`, { scroll: false });
   };
 
+  // Sorting re-orders the whole result set, so jump back to page 1 — staying on
+  // page 5 of a freshly re-sorted list would show an arbitrary middle slice.
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -242,6 +301,16 @@ function AdminOrdersPageInner() {
       setSortField(field);
       setSortOrder('desc');
     }
+    setPagination(prev => ({ ...prev, currentPage: 1 }));
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPagination(prev => ({ ...prev, currentPage: 1 }));
+  };
+
+  const goToPage = (page: number) => {
+    setPagination(prev => ({ ...prev, currentPage: page }));
   };
 
   const handleExport = () => {
@@ -434,7 +503,7 @@ function AdminOrdersPageInner() {
             <span>Per page:</span>
             <select
               value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
               className="border border-gray-300 rounded px-2 py-1"
             >
               <option value="10">10</option>
@@ -596,27 +665,16 @@ function AdminOrdersPageInner() {
 
       {/* Pagination */}
       {pagination.pages > 1 && (
-        <div className="mt-6 flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+        <>
+          <OrdersPagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.pages}
+            onPageChange={goToPage}
+          />
+          <div className="mt-2 text-center text-sm text-gray-600">
             Page {pagination.currentPage} of {pagination.pages}
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }))}
-              disabled={pagination.hasPrev === false || !pagination.hasPrev}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setPagination(prev => ({ ...prev, currentPage: prev.currentPage + 1 }))}
-              disabled={pagination.hasNext === false || !pagination.hasNext}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Empty State */}

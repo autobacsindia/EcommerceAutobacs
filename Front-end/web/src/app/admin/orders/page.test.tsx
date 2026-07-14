@@ -188,6 +188,34 @@ describe('AdminOrdersPage', () => {
     });
   });
 
+  it('renders a numbered pagination navigator and switches pages', async () => {
+    // Echo the requested page so the navigator reflects real server-driven paging.
+    (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+        return Promise.resolve({ carriers: [] });
+      }
+      const currentPage = Number(/[?&]page=(\d+)/.exec(url)?.[1] ?? 1);
+      return Promise.resolve({
+        success: true,
+        count: mockOrders.orders.length,
+        orders: mockOrders.orders,
+        pagination: { total: 25, pages: 3, currentPage, limit: 10, hasNext: currentPage < 3, hasPrev: currentPage > 1 },
+      });
+    });
+
+    render(<AdminOrdersPage />);
+    await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+    const nav = screen.getByRole('navigation', { name: /orders pagination/i });
+    expect(within(nav).getByRole('button', { name: '2' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: '3' })).toBeInTheDocument();
+
+    fireEvent.click(within(nav).getByRole('button', { name: '2' }));
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('page=2'));
+    });
+  });
+
   it('handles row selection', async () => {
     render(<AdminOrdersPage />);
 

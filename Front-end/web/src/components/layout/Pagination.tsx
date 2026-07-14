@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Pagination as PaginationType } from '@/lib/types';
+import { getPageNumbers } from '@/lib/pagination';
 
 interface PaginationProps {
   pagination: PaginationType;
@@ -16,32 +17,13 @@ export default function Pagination({ pagination, currentPage, basePath, searchPa
 
   if (!totalPages || totalPages <= 1) return null;
 
-  const getPageNumbers = () => {
-    const delta = 2;
-    const range: number[] = [1];
-    for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
-      range.push(i);
-    }
-    if (totalPages > 1) range.push(totalPages);
-
-    const rangeWithDots: (number | string)[] = [];
-    let lastPage = 0;
-    for (const page of range) {
-      if (page - lastPage === 2) rangeWithDots.push(lastPage + 1);
-      else if (page - lastPage !== 1) rangeWithDots.push('...');
-      rangeWithDots.push(page);
-      lastPage = page;
-    }
-    return rangeWithDots;
-  };
-
   const createPageUrl = (page: number) => {
     const params = new URLSearchParams(searchParams?.toString() || '');
     params.set('page', page.toString());
     return `${basePath}?${params.toString()}`;
   };
 
-  const pageNumbers = getPageNumbers();
+  const pageNumbers = getPageNumbers(currentPage, totalPages);
 
   const btnBase = 'px-3 py-2 rounded-sm border transition-colors font-display font-bold text-sm';
   const btnActive = `${btnBase} bg-gold text-obsidian border-gold`;
@@ -70,8 +52,8 @@ export default function Pagination({ pagination, currentPage, basePath, searchPa
         )}
 
         {pageNumbers.map((page, index) =>
-          page === '...' ? (
-            <span key={`dots-${index}`} className="px-3 py-2 text-ink-muted font-display">...</span>
+          typeof page === 'string' ? (
+            <span key={`dots-${index}`} className="px-3 py-2 text-ink-muted font-display">{page}</span>
           ) : (
             <Link
               key={page}

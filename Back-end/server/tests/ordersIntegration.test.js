@@ -410,4 +410,180 @@ describe('Orders Integration API', () => {
         .expect(403);
     });
   });
+
+  describe('GET /orders/admin/all', () => {
+    const BASE = '/api/v1';
+    // Auth here is httpOnly-cookie based; the token lands in Set-Cookie, not the body.
+    // Pull it out and send as a (CSRF-exempt) Bearer — same pattern as cart.test.js.
+    const loginBearer = async (email, password) => {
+      const res = await request(app).post(`${BASE}/auth/login`).send({ email, password });
+      const cookie = (res.headers['set-cookie'] || []).find(c => c.startsWith('accessToken='));
+      return cookie ? cookie.split(';')[0].split('=')[1] : res.body.accessToken;
+    };
+
+    // Minimal valid order for the given user, overridable per-field.
+    const seedOrder = (overrides = {}) => Order.create({
+      user: userId,
+      items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
+      shippingAddress: {
+        fullName: 'Test User', phone: '1234567890', addressLine1: '123 Test St',
+        city: 'Test City', state: 'Test State', postalCode: '12345', country: 'India'
+      },
+      subtotal: 500,
+      totalAmount: 500,
+      status: 'processing',
+      ...overrides,
+    });
+
+    let admin;
+    let customer;
+    beforeEach(async () => {
+      admin = await loginBearer(adminUser.email, adminUser.password);
+      customer = await loginBearer(testUser.email, testUser.password);
+    });
+
+    it('returns a nested pagination object with hasNext/hasPrev', async () => {
+      for (let i = 0; i < 12; i++) await seedOrder();
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?page=1&limit=5`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.orders).toHaveLength(5);
+      expect(res.body.pagination).toMatchObject({
+        total: 12, pages: 3, currentPage: 1, limit: 5, hasNext: true, hasPrev: false,
+      });
+
+      const last = await request(app)
+        .get(`${BASE}/orders/admin/all?page=3&limit=5`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      expect(last.body.orders).toHaveLength(2);
+      expect(last.body.pagination).toMatchObject({ currentPage: 3, hasNext: false, hasPrev: true });
+    });
+
+    it('filters by a single status', async () => {
+      await seedOrder({ status: 'processing' });
+      await seedOrder({ status: 'delivered' });
+      await seedOrder({ status: 'delivered' });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?status=delivered`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(2);
+      expect(res.body.orders.every(o => o.status === 'delivered')).toBe(true);
+    });
+
+    it('filters by multiple comma-joined statuses and ignores unknown ones', async () => {
+      await seedOrder({ status: 'processing' });
+      await seedOrder({ status: 'delivered' });
+      await seedOrder({ status: 'cancelled' });
+
+      // `pending` is a legacy value not in the enum — it must be dropped, not zero the result.
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?status=processing,delivered,pending`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(2);
+    });
+
+    it('returns an empty page when a status filter has only invalid values', async () => {
+      await seedOrder({ status: 'processing' });
+      await seedOrder({ status: 'delivered' });
+
+      // A filter that survives to zero real statuses is an explicit "none of these" —
+      // it must not silently widen back to every order.
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?status=pending`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(0);
+      expect(res.body.orders).toHaveLength(0);
+    });
+
+    it('filters by amount range', async () => {
+      await seedOrder({ subtotal: 100, totalAmount: 100 });
+      await seedOrder({ subtotal: 5000, totalAmount: 5000 });
+      await seedOrder({ subtotal: 20000, totalAmount: 20000 });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?minAmount=1000&maxAmount=10000`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.orders[0].totalAmount).toBe(5000);
+    });
+
+    it('filters by customer name/email', async () => {
+      await seedOrder();
+      const salt = await bcrypt.genSalt(10);
+      const jane = await User.create({
+        name: 'Jane Buyer', email: 'jane.buyer@example.com',
+        passwordHash: await bcrypt.hash('password123', salt), role: 'customer',
+      });
+      await seedOrder({ user: jane._id, totalAmount: 999, subtotal: 999 });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?customer=jane`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.orders[0].totalAmount).toBe(999);
+    });
+
+    it('returns an empty page when the customer matches nobody', async () => {
+      await seedOrder();
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?customer=nobody-here-xyz`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(0);
+      expect(res.body.orders).toHaveLength(0);
+    });
+
+    it('sorts by amount ascending when requested', async () => {
+      await seedOrder({ subtotal: 300, totalAmount: 300 });
+      await seedOrder({ subtotal: 100, totalAmount: 100 });
+      await seedOrder({ subtotal: 200, totalAmount: 200 });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?sortBy=totalAmount&sortOrder=asc`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      const amounts = res.body.orders.map(o => o.totalAmount);
+      expect(amounts).toEqual([...amounts].sort((a, b) => a - b));
+      expect(amounts[0]).toBe(100);
+    });
+
+    it('finds an order by the trailing hex of its id (the visible order #)', async () => {
+      await seedOrder();
+      const target = await seedOrder({ totalAmount: 777, subtotal: 777 });
+      const visibleId = target._id.toString().slice(-8);
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?orderNumber=${visibleId}`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.orders[0].totalAmount).toBe(777);
+    });
+
+    it('rejects a non-admin', async () => {
+      await request(app)
+        .get(`${BASE}/orders/admin/all`)
+        .set('Authorization', `Bearer ${customer}`)
+        .expect(403);
+    });
+  });
 });

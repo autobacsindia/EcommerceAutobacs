@@ -13,6 +13,7 @@ import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinary
 import { getNotificationsQueue } from '../queue/queues.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
 
 // @desc    Get all orders for logged-in user with pagination
@@ -1241,9 +1242,39 @@ export const getTrackingStats = async (req, res) => {
   res.json({ success: true, statistics: result.statistics });
 };
 
+// Fulfillment statuses an admin may filter on (mirrors the Order.status enum).
+const ADMIN_ORDER_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
+// Whitelisted sort fields — anything else falls back to createdAt to avoid injecting
+// an arbitrary (and unindexed) sort key.
+const ADMIN_ORDER_SORT_FIELDS = new Set(['createdAt', 'totalAmount', 'status']);
+// The store operates in a single timezone (India). Admin date-range filters send a
+// date-only string ("YYYY-MM-DD"); we anchor it to this offset so "14 Jul" means the
+// IST calendar day regardless of the server's own timezone. If the business ever goes
+// multi-region this should become configurable per store.
+const STORE_TZ_OFFSET = process.env.STORE_TZ_OFFSET || '+05:30';
+
+// An immediately-empty page (no rows can match) — used when a filter resolves to an
+// impossible set (e.g. a customer term matching no user) so we skip the DB round-trip.
+function emptyOrdersPage(page, limit) {
+  return {
+    success: true,
+    count: 0,
+    total: 0,
+    pages: 0,
+    currentPage: page,
+    pagination: { total: 0, pages: 0, currentPage: page, limit, hasNext: false, hasPrev: false },
+    orders: [],
+  };
+}
+
 // @desc    Get all orders (Admin only)
 // @route   GET /orders/admin/all
 // @access  Private/Admin
+//
+// Server-authoritative list: every filter (status, customer, order #, date range,
+// amount range) and the sort are applied in MongoDB against the full collection, then
+// paginated — never post-filtered on a single page. Returns a nested `pagination`
+// object (with hasNext/hasPrev) that the admin table drives its navigator from.
 export const getAllOrdersAdmin = async (req, res) => {
   const DEFAULT_LIMIT = 20;
   const MAX_LIMIT     = 100;
@@ -1253,19 +1284,96 @@ export const getAllOrdersAdmin = async (req, res) => {
   const skip  = (page - 1) * limit;
 
   const query = {};
-  if (req.query.status) query.status = req.query.status;
+
+  // Status — the panel sends a comma-joined multi-select; keep only real statuses.
+  // If a status filter WAS supplied but nothing survives the whitelist (e.g. a stale
+  // 'pending'), that's an intentional "none of these exist" filter, so return an empty
+  // page rather than silently widening back to every order.
+  if (req.query.status) {
+    const statuses = String(req.query.status)
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => ADMIN_ORDER_STATUSES.includes(s));
+    if (statuses.length === 0) return res.json(emptyOrdersPage(page, limit));
+    if (statuses.length === 1) query.status = statuses[0];
+    else query.status = { $in: statuses };
+  }
+
+  // Created-at range, anchored to the store timezone so a date-only "YYYY-MM-DD"
+  // covers that whole IST calendar day (from 00:00 to 23:59:59.999 IST), not a
+  // UTC-midnight window that would leak into the neighbouring day.
+  const createdAt = {};
+  if (req.query.startDate) {
+    const d = new Date(`${req.query.startDate}T00:00:00.000${STORE_TZ_OFFSET}`);
+    if (!isNaN(d.getTime())) createdAt.$gte = d;
+  }
+  if (req.query.endDate) {
+    const d = new Date(`${req.query.endDate}T23:59:59.999${STORE_TZ_OFFSET}`);
+    if (!isNaN(d.getTime())) createdAt.$lte = d;
+  }
+  if (Object.keys(createdAt).length) query.createdAt = createdAt;
+
+  // Total-amount range (rupees, matching Order.totalAmount and the UI display).
+  const amount = {};
+  if (req.query.minAmount !== undefined && req.query.minAmount !== '') {
+    const n = Number(req.query.minAmount);
+    if (!isNaN(n)) amount.$gte = n;
+  }
+  if (req.query.maxAmount !== undefined && req.query.maxAmount !== '') {
+    const n = Number(req.query.maxAmount);
+    if (!isNaN(n)) amount.$lte = n;
+  }
+  if (Object.keys(amount).length) query.totalAmount = amount;
+
+  // Customer name/email → resolve to user ids (orders only reference the user by id).
+  // No matching user ⇒ no orders can match, so short-circuit to an empty page.
+  if (req.query.customer && String(req.query.customer).trim()) {
+    const userIds = await userRepository.findIdsByNameOrEmail(String(req.query.customer).trim());
+    if (userIds.length === 0) return res.json(emptyOrdersPage(page, limit));
+    query.user = { $in: userIds };
+  }
+
+  // Order-number search. There is no `orderNumber` field — the visible id is the last
+  // 8 hex chars of _id — so match a full ObjectId exactly, else a trailing-hex fragment
+  // of the stringified _id. Anything non-hex can never match an ObjectId-derived id.
+  const searchTerm = String(req.query.orderNumber || req.query.search || '').trim();
+  if (searchTerm) {
+    if (mongoose.Types.ObjectId.isValid(searchTerm) && searchTerm.length === 24) {
+      query._id = new mongoose.Types.ObjectId(searchTerm);
+    } else if (/^[a-fA-F0-9]+$/.test(searchTerm)) {
+      query.$expr = { $regexMatch: { input: { $toString: '$_id' }, regex: `${searchTerm}$`, options: 'i' } };
+    } else {
+      return res.json(emptyOrdersPage(page, limit));
+    }
+  }
+
+  const sortField = ADMIN_ORDER_SORT_FIELDS.has(req.query.sortBy) ? req.query.sortBy : 'createdAt';
+  const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+  const sort = { [sortField]: sortOrder };
 
   const [orders, total] = await Promise.all([
-    orderRepository.findAllAdmin(query, { skip, limit }),
+    orderRepository.findAllAdmin(query, { skip, limit, sort }),
     orderRepository.count(query)
   ]);
+
+  const pages = Math.ceil(total / limit);
 
   res.json({
     success: true,
     count: orders.length,
+    // Flat fields kept for backward compatibility with any existing consumer.
     total,
-    pages: Math.ceil(total / limit),
+    pages,
     currentPage: page,
+    // Nested shape the admin table reads (it drives the paginator + prev/next state).
+    pagination: {
+      total,
+      pages,
+      currentPage: page,
+      limit,
+      hasNext: page < pages,
+      hasPrev: page > 1,
+    },
     orders
   });
 };

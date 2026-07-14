@@ -644,6 +644,7 @@ export default function EditProductPage() {
                 Description *
               </label>
               <RichTextEditor
+                variant="light"
                 value={formData.description}
                 onChange={(html) => setFormData((prev) => ({ ...prev, description: html }))}
                 placeholder="Enter product description…"
