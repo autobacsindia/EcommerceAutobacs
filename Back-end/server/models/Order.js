@@ -138,6 +138,14 @@ const OrderSchema = new mongoose.Schema({
     }
   },
 
+  // Razorpay order id (order_xxx) for the CURRENT payment attempt, stamped when
+  // POST /razorpay/create-order mints the gateway order. Lets the reconciliation
+  // sweep (services/paymentReconciliationService.js) ask Razorpay whether a stuck
+  // awaiting_payment order was in fact captured — the safety net for a missed or
+  // misconfigured webhook. Sparse: only gateway-checkout orders carry it (offline
+  // payment-link orders are resolved by the payment_link.paid webhook instead).
+  razorpayOrderId: { type: String, default: null },
+
   // Guest checkout session binding (prevents order hijacking)
   sessionId: String,  // Client-provided session ID (for initial order lookup)
   guestSessionHash: String,  // SHA256 hash of server-generated session token (defense-in-depth)

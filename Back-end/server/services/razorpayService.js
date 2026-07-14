@@ -417,6 +417,52 @@ class RazorpayService {
   }
 
   /**
+   * Fetch every payment Razorpay has recorded against one of our gateway orders.
+   * Used by the reconciliation sweep to discover captures whose webhook never
+   * arrived. Encapsulates the SDK so callers stay transport-agnostic.
+   * @param {string} razorpayOrderId - gateway order id (order_...)
+   * @returns {Promise<Array<Object>>} payment entities (possibly empty)
+   */
+  async fetchOrderPayments(razorpayOrderId) {
+    if (!razorpayOrderId) return [];
+    const Razorpay = await import('razorpay');
+    const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+    const res = await instance.orders.fetchPayments(razorpayOrderId);
+    return res?.items || [];
+  }
+
+  /**
+   * Reconcile a single stuck order against Razorpay. Asks the gateway for the
+   * payments on the order's razorpayOrderId; if a CAPTURED one exists and matches
+   * our amount/currency, it is driven through the SAME idempotent success path the
+   * webhook uses. This is the safety net for a missed/misconfigured webhook — money
+   * captured at the gateway can never be silently stranded in awaiting_payment.
+   *
+   * Idempotent and safe to run repeatedly: _validatePaymentAgainstOrder reports an
+   * already-processed capture, and processPaymentSuccess is itself idempotent.
+   *
+   * @param {Object} order - our Order doc (needs _id, razorpayOrderId, totalAmount, user)
+   * @returns {Promise<{recovered: boolean, reason?: string, paymentId?: string}>}
+   */
+  async reconcileOrder(order) {
+    if (!order?.razorpayOrderId) return { recovered: false, reason: 'no_razorpay_order' };
+
+    const payments = await this.fetchOrderPayments(order.razorpayOrderId);
+    // Only a CAPTURED payment means money actually left the customer. `authorized`
+    // (not captured) or `failed`/`created` must not confirm the order.
+    const captured = payments.find((p) => p.status === 'captured');
+    if (!captured) return { recovered: false, reason: 'no_captured_payment' };
+
+    // Amount/currency guard (throws on mismatch — a real security anomaly the caller
+    // will surface to Sentry) + idempotency check, identical to the webhook path.
+    const { alreadyProcessed } = await this._validatePaymentAgainstOrder(order, captured);
+    if (alreadyProcessed) return { recovered: false, reason: 'already_processed' };
+
+    await this.processPaymentSuccess(order._id.toString(), captured, order.user?.toString());
+    return { recovered: true, paymentId: captured.id };
+  }
+
+  /**
    * Map Razorpay payment method to internal payment method
    * @param {string} razorpayMethod - Razorpay payment method
    * @returns {string} Internal payment method

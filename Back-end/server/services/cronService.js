@@ -4,6 +4,7 @@ import importJobRepository from '../repositories/importJobRepository.js';
 import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
 import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
+import { reconcileStuckPayments } from './paymentReconciliationService.js';
 
 class CronService {
   constructor() {
@@ -49,6 +50,7 @@ class CronService {
     this.scheduleWordPressSync();
     this.scheduleSaleExpiry();
     this.scheduleLeadSweeps();
+    this.schedulePaymentReconciliation();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -132,6 +134,48 @@ class CronService {
 
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Lead sweeps scheduled: frequent "${frequent}", daily "${daily}"`);
+    }
+  }
+
+  /**
+   * Schedule the payment reconciliation sweep — the safety net for a missed or
+   * misconfigured Razorpay webhook. Reconciles orders captured at the gateway but
+   * still stuck in `awaiting_payment`, driving them through the same idempotent
+   * success path the webhook uses. Lock-guarded so replicas don't double-run;
+   * best-effort and idempotent regardless. Skipped when Razorpay isn't configured
+   * (e.g. local/dev without keys) so the constructor throw never breaks boot.
+   */
+  schedulePaymentReconciliation() {
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('[CronService] Razorpay not configured — payment reconciliation sweep NOT scheduled');
+      }
+      return;
+    }
+
+    const schedule = process.env.PAYMENT_RECONCILE_CRON || '*/10 * * * *'; // every 10 min
+
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid PAYMENT_RECONCILE_CRON "${schedule}" — reconciliation sweep NOT scheduled`);
+      return;
+    }
+
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:paymentReconcile', 5 * 60, () =>
+        reconcileStuckPayments().catch(err =>
+          console.error('[CronService] Payment reconciliation sweep failed:', err.message)
+        )
+      )
+    );
+    this.scheduledTasks.push({
+      name: 'paymentReconcile',
+      task,
+      schedule,
+      description: 'Payments: reconcile stuck awaiting_payment orders against Razorpay',
+    });
+
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Payment reconciliation scheduled: "${schedule}"`);
     }
   }
 

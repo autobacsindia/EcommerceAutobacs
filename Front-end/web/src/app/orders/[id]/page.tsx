@@ -91,6 +91,7 @@ export default function OrderDetailPage() {
   const [showReturnDialog, setShowReturnDialog] = useState(false);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [selectedItemForReview, setSelectedItemForReview] = useState<any>(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
 
   const { processPayment, isProcessing: isPaymentProcessing } = useRazorpay({
     onSuccess: () => fetchOrderDetail(),
@@ -105,17 +106,46 @@ export default function OrderDetailPage() {
     if (isAuthenticated && orderId) fetchOrderDetail();
   }, [isAuthenticated, orderId]);
 
-  const fetchOrderDetail = async () => {
+  const fetchOrderDetail = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const order = await orderService.getOrderById(orderId);
       setOrder(order as unknown as OrderDetail);
     } catch (err: any) {
-      setError(err.message || 'Failed to load order details');
+      // A background poll must not blow away a rendered order with an error screen.
+      if (!silent) setError(err.message || 'Failed to load order details');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  // After a verified payment the order is confirmed asynchronously by the Razorpay
+  // webhook (or the reconciliation sweep). Poll briefly so the page reflects the
+  // confirmed state without a manual refresh. Gated on a per-order marker set by
+  // useRazorpay, so it never nags a customer who simply abandoned an unpaid order.
+  useEffect(() => {
+    if (!order) return;
+    const key = `awaitingPaymentConfirmation:${orderId}`;
+    let marker: string | null = null;
+    try { marker = sessionStorage.getItem(key); } catch { /* unavailable */ }
+    if (!marker) return;
+
+    const paymentStatus = (order as { paymentStatus?: string }).paymentStatus;
+    const confirmed = order.status.toLowerCase() !== 'awaiting_payment' || paymentStatus === 'paid';
+    const waitedMs = Date.now() - Number(marker);
+
+    // Confirmed, or we've waited past the window (webhook + sweep should have run) —
+    // stop polling and clear the marker so a future visit doesn't re-trigger it.
+    if (confirmed || waitedMs > 2 * 60 * 1000) {
+      try { sessionStorage.removeItem(key); } catch { /* ignore */ }
+      setIsConfirmingPayment(false);
+      return;
+    }
+
+    setIsConfirmingPayment(true);
+    const t = setTimeout(() => fetchOrderDetail(true), 4000);
+    return () => clearTimeout(t);
+  }, [order, orderId]);
 
   const handleDeleteOrder = async () => {
     if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) return;
@@ -248,6 +278,16 @@ export default function OrderDetailPage() {
             <TimelineProgress currentStatus={order.status as OrderStatus} />
           </div>
         </div>
+
+        {/* Payment confirmation banner (shown while polling for the confirmed state) */}
+        {isConfirmingPayment && (
+          <div className="bg-gold/10 border border-gold/30 rounded-sm p-4 mb-6 flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin shrink-0" />
+            <p className="text-sm text-ink/80 font-display">
+              Payment received — we’re confirming your order. This page updates automatically.
+            </p>
+          </div>
+        )}
 
         {/* Actions */}
         <div className={cardClass}>

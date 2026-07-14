@@ -137,7 +137,16 @@ router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayO
       currency,
       receipt
     });
-    
+
+    // Persist the gateway order id so the reconciliation sweep can later ask
+    // Razorpay whether this order was captured, should its webhook be missed.
+    // Guests persist it as part of the session-binding save below; authenticated
+    // orders (which take no other write here) are saved now.
+    order.razorpayOrderId = razorpayOrder.orderId;
+    if (isAuthenticated) {
+      await orderRepository.save(order);
+    }
+
     // SECURITY: Bind guest order to server-generated session (prevents hijacking)
     if (!isAuthenticated) {
       // Generate secure session token (256-bit entropy)

@@ -11,6 +11,7 @@ import { getRedisClient } from '../services/redisClient.js';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import razorpayService from '../services/razorpayService.js';
 import WebhookEvent from '../models/WebhookEvent.js';
+import { WEBHOOK_LAST_SEEN_KEY } from '../services/paymentReconciliationService.js';
 
 const router = express.Router();
 
@@ -137,7 +138,16 @@ router.post("/", asyncHandler(async (req, res) => {
     
     // Process webhook event (with DB validation)
     const result = await razorpayService.handleWebhook(webhookData, eventType);
-    
+
+    // Liveness heartbeat: record that a valid webhook was just processed. The
+    // reconciliation sweep reads this to tell a one-off missed event apart from
+    // the whole webhook pipeline being down. Best-effort — never fail on it.
+    try {
+      if (redisClient) await redisClient.set(WEBHOOK_LAST_SEEN_KEY, Date.now().toString());
+    } catch (heartbeatErr) {
+      console.warn('[Webhook] Failed to record webhook heartbeat:', heartbeatErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message: result.message || 'Webhook processed successfully'
