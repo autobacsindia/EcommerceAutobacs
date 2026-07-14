@@ -170,6 +170,26 @@ class OrderRepository extends BaseRepository {
     return q;
   }
 
+  /**
+   * Orders that may have paid but were never confirmed — the reconciliation sweep's
+   * candidate set. Still in the pre-payment fulfillment state, not yet marked paid,
+   * carrying a gateway order id (so there is something to ask Razorpay about), and
+   * created inside the [maxAge, minAge] window: old enough that a webhook would
+   * normally have arrived, young enough that chasing it is still worthwhile.
+   * Returns full docs (not lean) — reconcileOrder mutates + saves them.
+   * @param {{ minCutoff: Date, maxCutoff: Date, limit?: number }} args
+   */
+  async findStuckAwaitingPayment({ minCutoff, maxCutoff, limit = 50 }) {
+    return Order.find({
+      status: 'awaiting_payment',
+      paymentStatus: { $ne: 'paid' },
+      razorpayOrderId: { $ne: null },
+      createdAt: { $lt: minCutoff, $gt: maxCutoff },
+    })
+      .sort({ createdAt: 1 })
+      .limit(limit);
+  }
+
   // Status-history fetch for orderStatusService (special populate + select)
   async findForStatusHistory(id, session = null) {
     let q = Order.findById(id)

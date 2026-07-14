@@ -441,8 +441,10 @@ function CheckoutPageContent() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-ink-muted font-display">Status</span>
-              <span className="font-display font-bold text-green-400">
-                Success
+              {/* Payment is captured but the order is confirmed asynchronously by the
+                  webhook/reconciliation — don't claim a hard "Success" here. */}
+              <span className="font-display font-bold text-gold">
+                Received — confirming
               </span>
             </div>
           </div>

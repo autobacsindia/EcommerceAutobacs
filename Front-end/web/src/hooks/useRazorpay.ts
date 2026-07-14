@@ -200,7 +200,16 @@ export const useRazorpay = ({
             }) as any;
 
             if (verifyResponse.success) {
-              toast.success('Payment successful!');
+              // Signature is verified, but the order is only truly confirmed once
+              // the Razorpay webhook (or the reconciliation sweep) records the
+              // capture. Don't claim "successful" yet — the order page polls for
+              // the confirmed state and updates when it lands.
+              toast.success('Payment received — confirming your order…');
+              // Marker read by the order page to poll for the confirmed state (and
+              // to know NOT to nag orders the customer simply abandoned unpaid).
+              try {
+                sessionStorage.setItem(`awaitingPaymentConfirmation:${orderId}`, String(Date.now()));
+              } catch { /* sessionStorage unavailable — polling just won't auto-start */ }
               setRetryCount(0); // Reset on success
               onSuccess(orderId);
             } else {
