@@ -38,6 +38,11 @@ export function useSSE({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isRefreshingRef = useRef(false);
+  // True once we've already attempted a token refresh for the current connection
+  // cycle. A 401 that persists *after* a successful refresh is a genuine
+  // authorization failure, not an expired access token — retrying would just
+  // hammer /auth/refresh. Reset on a successful connect or a fresh trigger.
+  const hasRefreshedRef = useRef(false);
   const isMountedRef = useRef(false);
 
   // Keep latest prop values in refs so the connect loop never goes stale
@@ -106,14 +111,18 @@ export function useSSE({
 
         if (!response.ok) {
           if (response.status === 401) {
-            // Attempt silent token refresh before giving up
-            if (!isRefreshingRef.current) {
+            // Attempt a silent token refresh ONCE per connection cycle. If the
+            // stream still 401s after a successful refresh, the session is
+            // genuinely unauthorized (not a stale access token) — re-refreshing
+            // would loop, hammering /auth/refresh and flooding logs/Sentry.
+            if (!hasRefreshedRef.current && !isRefreshingRef.current) {
               isRefreshingRef.current = true;
               try {
                 const refreshRes = await fetch('/api/v1/auth/refresh', {
                   method: 'POST',
                   credentials: 'include',
                 });
+                hasRefreshedRef.current = true;
                 isRefreshingRef.current = false;
                 if (refreshRes.ok) {
                   // Refresh succeeded — retry SSE connection immediately
@@ -124,11 +133,12 @@ export function useSSE({
                 }
               } catch {
                 isRefreshingRef.current = false;
+                hasRefreshedRef.current = true;
               }
             }
-            // Refresh failed or already in progress — session is truly expired.
-            // Stop retrying; further attempts will all get 401 until user logs in.
-            console.warn('SSE: session expired, stopping reconnect');
+            // Refresh already attempted (or in progress) and still unauthorized —
+            // session is truly expired. Stop retrying until the user logs in.
+            console.warn('SSE: unauthorized, stopping reconnect');
             setConnectionState('error');
             onErrorRef.current?.(new Error('Session expired'));
             return;
@@ -141,6 +151,7 @@ export function useSSE({
         if (!isMountedRef.current) return;
         setConnectionState('connected');
         reconnectAttemptsRef.current = 0;
+        hasRefreshedRef.current = false; // Fresh healthy connection — allow one refresh again later
         console.log('SSE: Connected successfully');
         onConnectRef.current?.();
 
@@ -183,6 +194,10 @@ export function useSSE({
 
         if (!isMountedRef.current) return;
         setConnectionState('error');
+        // A network-level failure (not a 401) is unrelated to auth, so allow a fresh
+        // token refresh on the next 401. Without this, a refresh consumed earlier in
+        // this connection's lifetime would suppress the refresh a later 401 needs.
+        hasRefreshedRef.current = false;
         // Don't surface network errors to onError — backend being down is expected/retriable
         if (!isNetworkError) {
           onErrorRef.current?.(error);
@@ -226,6 +241,7 @@ export function useSSE({
   useEffect(() => {
     isMountedRef.current = true;
     reconnectAttemptsRef.current = 0; // Fresh trigger = fresh retry budget
+    hasRefreshedRef.current = false;  // Fresh trigger = allow one refresh attempt
 
     // Abort any in-flight connection / pending retry from previous run
     if (abortControllerRef.current) {

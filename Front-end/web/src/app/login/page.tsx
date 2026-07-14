@@ -18,7 +18,6 @@ export default function LoginPage() {
   const { login, error, clearError } = useAuth();
 
   const reasonMessages: Record<string, string> = {
-    context_mismatch: 'Your admin session was terminated because your network or device changed. Please sign in again.',
     refresh_failed: 'Your session expired. Please sign in again.',
   };
   const reasonBanner = searchParams.get('reason') ? reasonMessages[searchParams.get('reason')!] ?? null : null;

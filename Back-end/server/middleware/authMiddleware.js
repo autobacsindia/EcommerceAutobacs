@@ -1,8 +1,8 @@
-import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { asyncHandler } from "./errorMiddleware.js";
 import * as Sentry from "@sentry/node";
 import { verifyTokenWithRotation } from "../utils/jwtSecretManager.js";
+import { getRedisClient } from "../services/redisClient.js";
 import crypto from 'crypto';
 
 // Protect routes - verify JWT token with rotation support
@@ -91,10 +91,26 @@ export const protect = asyncHandler(async (req, res, next) => {
 });
 
 // Admin middleware - check if user is admin
-// SECURITY: Binds every admin request to the IP + UA captured at login.
-// Both hashes must be present (set during login) and must match the current
-// request. A missing hash means the session predates context-binding or login
-// failed to write hashes — reject to force a fresh login in either case.
+//
+// SECURITY POSTURE: admin sessions are protected by httpOnly + SameSite cookies
+// and hashed, per-session refresh tokens (see utils/sessionManager.js). Device
+// context (IP + UA) is used for ANOMALY DETECTION ONLY — we log/alert on a change
+// but never block the request.
+//
+// We deliberately do NOT hard-block on User-Agent. That was both weak and an
+// availability hazard:
+//   - UA is not a secret: it is sent in the clear on every request and is
+//     trivially replayed by anyone who already holds the session cookie, so
+//     blocking on it adds ~no protection against session theft.
+//   - The bound value lived in a single scalar field on the User document
+//     (lastAdminUAHash) that every admin login overwrote. The same admin account
+//     on a second device — or the same device after a browser auto-update —
+//     was silently 401'd on every request, including the dashboard SSE stream,
+//     surfacing as an endless "trying to reconnect".
+//
+// If enforceable device binding is ever required (e.g. for compliance), bind it
+// PER SESSION: thread a session id into the access token and store the hash on
+// the matching refreshTokens[] entry — never on a shared scalar field.
 export const admin = asyncHandler(async (req, res, next) => {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({
@@ -103,71 +119,80 @@ export const admin = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // Use cf-connecting-ip first so the value is consistent with what was stored
-  // at login (login uses the same priority order).
-  const currentIP = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress || 'unknown';
+  // Anomaly detection runs OFF the request hot path (fire-and-forget) so it never
+  // adds latency to, or can break, a legitimate admin request. Alerts are deduped
+  // per admin+device so a second logged-in device doesn't emit one alert per call.
+  detectAdminContextAnomaly(req).catch((err) =>
+    console.error('[SECURITY] Admin context anomaly check failed (ignored):', err.message)
+  );
+
+  next();
+});
+
+// How long to suppress duplicate context-change alerts for the same admin + device
+// fingerprint. Keeps the "anomaly" signal meaningful: one alert per device per hour
+// instead of one per request (the baseline is a single shared field, so a legitimate
+// second device mismatches on *every* call).
+const ADMIN_CTX_ALERT_TTL_SECONDS = 60 * 60;
+
+// Best-effort, non-blocking detection of an admin request whose device context
+// (User-Agent / client IP) differs from the baseline captured at login. Detect and
+// alert only — never blocks (see the `admin` middleware doc for why).
+async function detectAdminContextAnomaly(req) {
+  const storedIPHash = req.user.lastAdminIPHash;
+  const storedUAHash = req.user.lastAdminUAHash;
+
+  // No baseline captured yet (legacy session / never logged in as admin) — nothing
+  // to compare, so skip the hashing work entirely.
+  if (!storedUAHash && !storedIPHash) return;
+
+  // Use cf-connecting-ip first so the value is consistent with what login stored.
+  const currentIP = req.headers['cf-connecting-ip'] || req.ip || req.connection?.remoteAddress || 'unknown';
   const currentUA = req.get('user-agent') || 'unknown';
 
   const currentIPHash = crypto.createHash('sha256').update(currentIP).digest('hex');
   const currentUAHash = crypto.createHash('sha256').update(currentUA).digest('hex');
 
-  const storedIPHash = req.user.lastAdminIPHash;
-  const storedUAHash = req.user.lastAdminUAHash;
+  const uaChanged = !!storedUAHash && storedUAHash !== currentUAHash;
+  const ipChanged = !!storedIPHash && storedIPHash !== currentIPHash;
+  if (!uaChanged && !ipChanged) return;
 
-  if (!storedIPHash || !storedUAHash) {
-    console.error(
-      `[SECURITY] Admin session missing context hashes | User: ${req.user.email} | IP: ${currentIP}`
-    );
-    Sentry.captureMessage('Admin session missing context hashes — access denied', {
-      level: 'error',
-      extra: { userId: req.user._id, email: req.user.email, ip: currentIP }
-    });
-    return res.status(401).json({
-      success: false,
-      message: 'Session context not initialized. Please login again.',
-      code: 'context_missing'
-    });
+  // Suppress duplicate alerts for the same admin + device fingerprint within the
+  // window. Fail-open (alert) if Redis is unavailable — a rare duplicate alert is
+  // preferable to a silent gap in a security signal.
+  if (!(await claimAdminAnomalyAlertSlot(req.user._id, currentUAHash, currentIPHash))) return;
+
+  console.warn(
+    `[SECURITY] Admin session context change (detect-only, not blocked) | ` +
+    `User: ${req.user.email} | UA changed: ${uaChanged} | IP changed: ${ipChanged} | IP: ${currentIP}`
+  );
+  Sentry.captureMessage('Admin session context change detected', {
+    level: 'warning',
+    extra: {
+      userId: req.user._id,
+      email: req.user.email,
+      uaChanged,
+      ipChanged,
+      ip: currentIP
+    }
+  });
+}
+
+// Returns true if this call "claims" the alert slot for the admin+device in the
+// current window (i.e. it's the first such mismatch we've seen) — using Redis
+// SET NX EX as an atomic once-per-window gate. Fail-open on any Redis issue.
+async function claimAdminAnomalyAlertSlot(userId, uaHash, ipHash) {
+  const redis = getRedisClient();
+  if (!redis) return true; // No Redis configured — don't suppress alerts.
+  const key = `admin:ctx-alert:${userId}:${uaHash.slice(0, 16)}:${ipHash.slice(0, 16)}`;
+  try {
+    const result = await redis.set(key, '1', 'EX', ADMIN_CTX_ALERT_TTL_SECONDS, 'NX');
+    return result === 'OK'; // 'OK' = we set it (first in window); null = already alerted.
+  } catch (err) {
+    console.error('[SECURITY] Admin anomaly alert dedupe failed (fail-open):', err.message);
+    return true;
   }
-
-  // IP binding is only meaningful with a *trusted* client IP. Behind the current
-  // Vercel proxy (Cloudflare not yet in front) req.ip is a rotating proxy egress,
-  // not the client — comparing it produces false 401s on every admin request.
-  // Enforce IP match only when a real client IP is observable (cf-connecting-ip,
-  // i.e. Cloudflare fronting) or when explicitly forced on via env. UA binding
-  // always applies. Flip ADMIN_CONTEXT_BIND_IP=true at the Cloudflare cutover.
-  const ipBindingEnabled =
-    process.env.ADMIN_CONTEXT_BIND_IP === 'true' ||
-    (process.env.ADMIN_CONTEXT_BIND_IP !== 'false' && !!req.headers['cf-connecting-ip']);
-
-  const ipMismatch = ipBindingEnabled && storedIPHash !== currentIPHash;
-  const uaMismatch = storedUAHash !== currentUAHash;
-
-  if (ipMismatch || uaMismatch) {
-    console.error(
-      `[SECURITY] Admin session context mismatch | User: ${req.user.email} | ` +
-      `IP changed: ${ipMismatch} (binding ${ipBindingEnabled ? 'on' : 'off'}) | UA changed: ${uaMismatch} | ` +
-      `IP: ${currentIP} | UA: ${currentUA}`
-    );
-    Sentry.captureMessage('Admin session context mismatch — access denied', {
-      level: 'error',
-      extra: {
-        userId: req.user._id,
-        email: req.user.email,
-        ipChanged: ipMismatch,
-        uaChanged: uaMismatch,
-        ipBindingEnabled,
-        ip: currentIP
-      }
-    });
-    return res.status(401).json({
-      success: false,
-      message: 'Session context changed. Please login again.',
-      code: 'context_mismatch'
-    });
-  }
-
-  next();
-});
+}
 
 // Optional auth middleware - populate req.user if token exists, but don't reject if missing
 export const optionalAuth = asyncHandler(async (req, res, next) => {
