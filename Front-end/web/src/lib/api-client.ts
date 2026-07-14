@@ -198,11 +198,6 @@ class APIClient {
           endpoint.includes('/auth/refresh');
         if (isAuthEndpoint) return { action: 'skip' };
 
-        if (error.rawData?.code === 'context_mismatch' && typeof window !== 'undefined') {
-          window.location.href = '/login?reason=context_mismatch';
-          return { action: 'skip' };
-        }
-
         // Under httpOnly-cookie auth `tokenManager.refreshToken` is always null
         // (JS can't read the cookie), so we gate the silent refresh on the login
         // hint instead. Genuine guests (no hint) skip refresh so public-page 401s
