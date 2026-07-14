@@ -114,7 +114,7 @@ export default function ImageUploader({
   return (
     <div className={`space-y-3 ${className}`}>
       {label && (
-        <label className="block text-sm font-medium text-ink/70">{label}</label>
+        <label className="block text-sm font-medium text-gray-700">{label}</label>
       )}
 
       {/* ── Drop zone ─────────────────────────────────────────────────────── */}
@@ -129,15 +129,15 @@ export default function ImageUploader({
           transition-colors
           ${dragging
             ? 'border-red-400 bg-red-500/10'
-            : 'border-hairline hover:border-hairline bg-obsidian-raised/50'}
+            : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >
-        <Upload className="h-8 w-8 text-ink-muted" />
-        <p className="text-sm text-ink-muted">
+        <Upload className="h-8 w-8 text-gray-500" />
+        <p className="text-sm text-gray-500">
           Drag &amp; drop or <span className="text-red-400 font-medium">browse</span>
         </p>
-        <p className="text-xs text-ink-muted">
+        <p className="text-xs text-gray-500">
           JPG, PNG, WebP · max 5 MB · {remaining} slot{remaining !== 1 ? 's' : ''} remaining
         </p>
         <input
@@ -156,7 +156,7 @@ export default function ImageUploader({
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
           {/* Existing Cloudinary images */}
           {value.map((img, idx) => (
-            <div key={img.public_id || idx} className="relative group aspect-square rounded-lg overflow-hidden bg-obsidian-raised">
+            <div key={img.public_id || idx} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-50">
               <Image
                 src={img.url}
                 alt={img.alt || `Image ${idx + 1}`}
@@ -165,7 +165,7 @@ export default function ImageUploader({
                 sizes="120px"
               />
               {img.isPrimary && (
-                <span className="absolute top-1 left-1 text-[10px] bg-red-600 text-ink px-1 rounded">
+                <span className="absolute top-1 left-1 text-[10px] bg-red-600 text-white px-1 rounded">
                   Primary
                 </span>
               )}
@@ -176,7 +176,7 @@ export default function ImageUploader({
                     e.stopPropagation();
                     onRemoveExisting(img.public_id, idx);
                   }}
-                  className="absolute top-1 right-1 p-0.5 rounded-full bg-obsidian-deep/60 text-ink opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 p-0.5 rounded-full bg-white/60 text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label="Remove image"
                 >
                   <X className="h-3 w-3" />
@@ -187,21 +187,21 @@ export default function ImageUploader({
 
           {/* Local previews (not yet uploaded) */}
           {localPreviews.map((p, idx) => (
-            <div key={p.preview} className="relative group aspect-square rounded-lg overflow-hidden bg-obsidian-raised ring-2 ring-yellow-400/50">
+            <div key={p.preview} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-50 ring-2 ring-yellow-400/50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={p.preview}
                 alt={`Preview ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
-              <span className="absolute bottom-1 left-1 text-[10px] bg-yellow-500 text-ink px-1 rounded font-medium">
+              <span className="absolute bottom-1 left-1 text-[10px] bg-yellow-500 text-gray-900 px-1 rounded font-medium">
                 New
               </span>
               {!disabled && (
                 <button
                   type="button"
                   onClick={() => removeLocal(idx)}
-                  className="absolute top-1 right-1 p-0.5 rounded-full bg-obsidian-deep/60 text-ink opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 p-0.5 rounded-full bg-white/60 text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label="Remove preview"
                 >
                   <X className="h-3 w-3" />

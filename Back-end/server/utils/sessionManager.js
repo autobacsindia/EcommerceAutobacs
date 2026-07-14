@@ -16,6 +16,17 @@ import { buildCookieOptions } from './cookieOptions.js';
 // window are still caught). Tunable via env for prod.
 const ROTATION_GRACE_SECONDS = Number(process.env.REFRESH_ROTATION_GRACE_SECONDS) || 30;
 
+// Max concurrent sessions (refresh tokens) retained per user. When exceeded, the
+// OLDEST session is evicted and that device must log in again. Per-role so an
+// admin using several devices isn't silently dropped at a low limit; both tunable
+// via env. This is the only *involuntary* logout not tied to a security event, so
+// keep the admin ceiling comfortably above real device counts.
+const MAX_SESSIONS_DEFAULT = Number(process.env.MAX_SESSIONS_PER_USER) || 5;
+const MAX_SESSIONS_ADMIN = Number(process.env.MAX_SESSIONS_PER_ADMIN) || 10;
+
+const maxSessionsFor = (user) =>
+  user?.role === 'admin' ? MAX_SESSIONS_ADMIN : MAX_SESSIONS_DEFAULT;
+
 /**
  * Generate a secure refresh token
  * @returns {string} - Secure random refresh token
@@ -81,14 +92,24 @@ export const storeRefreshToken = async (user, refreshToken, expiresAt, ipAddress
   
   // Clean up expired tokens
   user.refreshTokens = user.refreshTokens.filter(rt => rt.expiresAt > new Date());
-  
-  // Limit to 5 active sessions per user
-  if (user.refreshTokens.length >= 5) {
-    // Remove oldest token
-    user.refreshTokens.sort((a, b) => a.createdAt - b.createdAt);
-    user.refreshTokens.shift();
+
+  // Cap active sessions per user (per-role). When full, evict the oldest so there's
+  // room for the one we're about to add.
+  const maxSessions = maxSessionsFor(user);
+  if (user.refreshTokens.length >= maxSessions) {
+    user.refreshTokens.sort((a, b) => a.createdAt - b.createdAt); // oldest first
+    const evicted = user.refreshTokens.splice(0, user.refreshTokens.length - (maxSessions - 1));
+    for (const rt of evicted) {
+      // Keep Redis consistent with Mongo (otherwise the evicted session lingers in
+      // the cache until its own TTL) and make this involuntary logout observable.
+      sessionStore.revokeSession(user._id.toString(), rt.token).catch(() => {});
+      console.warn(
+        `[Session] Evicted oldest session — session cap (${maxSessions}) reached | ` +
+        `User: ${user._id} | Device: ${rt.deviceInfo || 'unknown'}`
+      );
+    }
   }
-  
+
   // Add new refresh token to MongoDB (backup)
   user.refreshTokens.push({
     token: hashedToken,

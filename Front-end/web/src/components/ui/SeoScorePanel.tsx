@@ -308,25 +308,25 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
   const dashOffset   = circumference - (score / 100) * circumference;
 
   return (
-    <div className="bg-obsidian rounded-lg shadow p-4 space-y-4">
-      <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">SEO Score</h2>
+    <div className="bg-white rounded-lg shadow p-4 space-y-4">
+      <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">SEO Score</h2>
 
       {/* ── Focus Keyword input ── */}
       <div>
-        <label className="block text-xs font-medium text-ink-muted mb-1">
+        <label className="block text-xs font-medium text-gray-500 mb-1">
           Focus Keyword
         </label>
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 pointer-events-none" />
           <input
             type="text"
             value={focusKeyword}
             onChange={(e) => setFocusKeyword(e.target.value)}
             placeholder="e.g. toyota fortuner body kit"
-            className="w-full pl-7 pr-3 py-1.5 border border-hairline rounded text-xs focus:outline-none focus:ring-2 focus:ring-gold text-ink bg-obsidian placeholder:text-ink-muted"
+            className="w-full pl-7 pr-3 py-1.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder:text-gray-400"
           />
         </div>
-        <p className="text-[10px] text-ink-muted mt-1">
+        <p className="text-[10px] text-gray-500 mt-1">
           {focusKeyword.trim()
             ? 'Keyword checks active — 20 bonus points included in score'
             : 'Enter a keyword to unlock +20 keyword-specific checks'}
@@ -354,7 +354,7 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
           <text x="50" y="63" textAnchor="middle" fontSize="9" fill="#9ca3af">/ 100</text>
         </svg>
         <span className={`text-sm font-semibold mt-1 ${scoreLabelCls}`}>{scoreLabel}</span>
-        <span className="text-[10px] text-ink-muted mt-0.5">Updates live as you fill the form</span>
+        <span className="text-[10px] text-gray-500 mt-0.5">Updates live as you fill the form</span>
       </div>
 
       {/* ── Check groups ── */}
@@ -367,13 +367,13 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
           return (
             <details
               key={group.title}
-              className={`border rounded-md overflow-hidden ${group.isKeywordGroup ? 'border-gold/40' : 'border-hairline'}`}
+              className={`border rounded-md overflow-hidden ${group.isKeywordGroup ? 'border-blue-200' : 'border-gray-200'}`}
               open
             >
               <summary className={`flex items-center justify-between px-3 py-2 text-xs font-semibold cursor-pointer select-none list-none
                 ${group.isKeywordGroup
-                  ? allPassed ? 'bg-gold/10 text-gold' : 'bg-gold/10 text-gold'
-                  : allPassed ? 'bg-green-50 text-green-700' : 'bg-obsidian-deep text-ink/80'
+                  ? allPassed ? 'bg-blue-50 text-blue-600' : 'bg-blue-50 text-blue-600'
+                  : allPassed ? 'bg-green-50 text-green-700' : 'bg-white text-gray-700'
                 }`}
               >
                 <span className="flex items-center gap-1.5">
@@ -382,12 +382,12 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
                   )}
                   {group.title}
                 </span>
-                <span className={`ml-2 shrink-0 ${allPassed ? (group.isKeywordGroup ? 'text-gold' : 'text-green-600') : 'text-ink-muted'}`}>
+                <span className={`ml-2 shrink-0 ${allPassed ? (group.isKeywordGroup ? 'text-blue-600' : 'text-green-600') : 'text-gray-500'}`}>
                   {groupEarned}/{groupPossible}
                 </span>
               </summary>
 
-              <div className="divide-y divide-hairline">
+              <div className="divide-y divide-gray-200">
                 {group.checks.map(check => {
                   const passed  = check.earned === check.possible;
                   const partial = check.earned > 0 && !passed;
@@ -403,9 +403,9 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
                         }
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-ink/80 leading-snug">{check.label}</p>
+                        <p className="text-xs text-gray-700 leading-snug">{check.label}</p>
                         {check.tip && (
-                          <p className="text-[10px] text-ink-muted mt-0.5 leading-snug">{check.tip}</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{check.tip}</p>
                         )}
                       </div>
                       <span className={`text-[10px] font-medium shrink-0
@@ -423,9 +423,9 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
 
         {/* Placeholder when no keyword yet */}
         {!focusKeyword.trim() && (
-          <div className="border border-dashed border-gold/40 rounded-md px-3 py-4 text-center">
-            <Search className="h-4 w-4 text-gold mx-auto mb-1.5" />
-            <p className="text-xs text-ink-muted leading-snug">
+          <div className="border border-dashed border-blue-200 rounded-md px-3 py-4 text-center">
+            <Search className="h-4 w-4 text-blue-600 mx-auto mb-1.5" />
+            <p className="text-xs text-gray-500 leading-snug">
               Enter a focus keyword above to check title, slug, description placement, and keyword density
             </p>
           </div>

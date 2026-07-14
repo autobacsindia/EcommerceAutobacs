@@ -154,9 +154,44 @@ export const validatePaymentFailed = [
 ];
 
 export const validateAdminOrderQuery = [
+  // status is a comma-joined multi-select; the controller filters out non-real
+  // statuses, so we only trim here rather than reject.
   query('status')
     .optional()
     .trim(),
+  query('orderNumber')
+    .optional()
+    .trim(),
+  query('search')
+    .optional()
+    .trim(),
+  query('customer')
+    .optional()
+    .trim(),
+  query('startDate')
+    .optional({ checkFalsy: true })
+    .isISO8601()
+    .withMessage('startDate must be a valid date'),
+  query('endDate')
+    .optional({ checkFalsy: true })
+    .isISO8601()
+    .withMessage('endDate must be a valid date'),
+  query('minAmount')
+    .optional({ checkFalsy: true })
+    .isFloat({ min: 0 })
+    .withMessage('minAmount must be a non-negative number'),
+  query('maxAmount')
+    .optional({ checkFalsy: true })
+    .isFloat({ min: 0 })
+    .withMessage('maxAmount must be a non-negative number'),
+  query('sortBy')
+    .optional()
+    .isIn(['createdAt', 'totalAmount', 'status'])
+    .withMessage('sortBy must be one of: createdAt, totalAmount, status'),
+  query('sortOrder')
+    .optional()
+    .isIn(['asc', 'desc'])
+    .withMessage('sortOrder must be asc or desc'),
   query('page')
     .optional()
     .isInt({ min: 1 })
