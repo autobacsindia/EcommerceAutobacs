@@ -209,8 +209,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Server-side change detected (ban, role change, force-logout).
           // Update React state immediately, don't wait for TTL.
           setUser(fresh);
-          writeCache(fresh, fresh.sessionVersion);
         }
+        // Always refresh the cached entry (and its timestamp) on a successful
+        // check so the TTL actually resets. Otherwise a stale entry served via
+        // stale-while-revalidate would stay "expired" forever and re-fetch on
+        // every page load — the admin 60s TTL made this especially costly.
+        writeCache(fresh, fresh.sessionVersion);
       } else {
         // No longer authenticated server-side — clear immediately.
         setUser(null);
@@ -224,24 +228,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     const cached = readCache();
 
-    if (cached && isCacheValid(cached)) {
-      // Serve cached state immediately (zero latency).
-      setUser(cached.user ?? null);
+    // Stale-while-revalidate: a cached USER is served immediately — even once its
+    // TTL has lapsed — so an authenticated user never flashes the signed-out
+    // avatar/href while we re-check. This matters most for admins, whose TTL is
+    // only 60s: without this they'd blank to "Sign In" on nearly every full page
+    // load until GET /me returned, then "suddenly" flip back to "My Account".
+    // The background revalidation still clears state promptly if the session is
+    // genuinely gone (logout elsewhere, ban, expiry).
+    if (cached?.user) {
+      setUser(cached.user);
       setToken(null);
       setIsLoading(false);
 
-      if (cached.user) {
-        // Cancel any previous background revalidation before starting a new one
-        // so rapid navigation never leaves multiple revalidations racing.
-        revalidateAbortRef.current?.abort();
-        const controller = new AbortController();
-        revalidateAbortRef.current = controller;
-        revalidateInBackground(cached, controller.signal); // fire-and-forget
-      }
+      // Cancel any previous background revalidation before starting a new one
+      // so rapid navigation never leaves multiple revalidations racing.
+      revalidateAbortRef.current?.abort();
+      const controller = new AbortController();
+      revalidateAbortRef.current = controller;
+      revalidateInBackground(cached, controller.signal); // fire-and-forget
       return;
     }
 
-    // Cache missing or expired — do a full synchronous check.
+    // A fresh cache entry that records "logged out" — trust it, skip the network.
+    if (cached && isCacheValid(cached)) {
+      setUser(null);
+      setToken(null);
+      setIsLoading(false);
+      return;
+    }
+
+    // No usable cache (missing, or expired with no user) — full synchronous check.
     // Guard: if one is already in flight, skip rather than letting two fetches
     // race and potentially resolve out of order.
     if (isCheckingAuthRef.current) return;
