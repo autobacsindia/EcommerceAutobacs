@@ -94,9 +94,9 @@ export const navLinks = [
 ];
 
 export const hero = {
-  eyebrow: 'Performance · Collection 2024',
-  headlineTop: 'Engineer',
-  headlineAccent: 'Perfection.',
+  eyebrow: 'Performance · Collection',
+  headlineTop: 'Drive Beyond',
+  headlineAccent: 'Limits.',
   tagline: 'Premium aftermarket parts for the discerning enthusiast.',
   bottomTagline: 'Reimagine every drive.',
   ctaLabel: 'Explore Collection',
