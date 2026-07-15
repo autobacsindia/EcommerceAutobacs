@@ -32,6 +32,31 @@ describe('JourneyTimeline', () => {
     expect(screen.getByRole('link', { name: /Order W1/ })).toHaveAttribute('href', '/admin/orders/o-won');
   });
 
+  it('shows the cart items + amount on a "left at checkout" payment signal', () => {
+    const groups: JourneyGroup[] = [
+      {
+        cycleNo: 1, outcome: 'open', events: [
+          {
+            kind: 'signal', at: Date.parse('2026-03-01'), sourceType: 'payment_pending',
+            snapshot: {
+              total: 1500,
+              itemCount: 2,
+              items: [
+                { name: 'Brake Pads', quantity: 2, price: 300 },
+                { name: 'Oil Filter', quantity: 1, price: 900 },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+
+    render(<JourneyTimeline groups={groups} />);
+
+    expect(screen.getByText('₹1,500')).toBeInTheDocument();
+    expect(screen.getByText('2× Brake Pads, 1× Oil Filter')).toBeInTheDocument();
+  });
+
   it('omits cycle headers for a single-cycle lead and shows the empty state', () => {
     const empty: JourneyGroup[] = [{ cycleNo: 1, outcome: 'open', events: [] }];
     render(<JourneyTimeline groups={empty} />);

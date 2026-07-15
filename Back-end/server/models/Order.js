@@ -119,9 +119,15 @@ const OrderSchema = new mongoose.Schema({
   // popup) — distinct from a `status: cancelled` admin order-cancellation. The
   // order stays `awaiting_payment` (retry still possible) and becomes a
   // "payment cancelled" lead.
+  // `expired` = the customer never returned to pay (closed the tab / walked away).
+  // Set by the abandoned-order sweep (services/leadSweepService.js) ONLY after the
+  // payment-reconciliation window has closed, so a genuinely-paid-but-webhook-missed
+  // order is never wrongly buried. Distinct from `failed` (gateway rejected an
+  // attempt) and `cancelled` (popup dismissed). These drop out of the default admin
+  // Orders view and live on as "left at checkout" CRM leads.
   paymentStatus: {
     type: String,
-    enum: ["pending", "paid", "failed", "refunded", "cancelled"],
+    enum: ["pending", "paid", "failed", "refunded", "cancelled", "expired"],
     default: "pending",
     index: true
   },

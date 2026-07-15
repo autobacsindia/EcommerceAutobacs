@@ -43,9 +43,10 @@ jest.mock('@/components/orders/OrderFiltersPanel', () => {
     <div data-testid="filters-panel">
       <button 
         data-testid="apply-filter-btn"
-        onClick={() => onFiltersChange({ 
+        onClick={() => onFiltersChange({
           search: 'test-order',
           statuses: [],
+          paymentStatuses: [],
           startDate: '',
           endDate: '',
           minAmount: '',
