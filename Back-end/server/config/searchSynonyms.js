@@ -14,7 +14,12 @@
 export const SYNONYM_GROUPS = [
   ['lights', 'light', 'lighting', 'lamp', 'lamps', 'led', 'headlight', 'headlights', 'taillight', 'taillights', 'foglight', 'foglights', 'fog lamp', 'drl', 'ambient light', 'ambient lights'],
   ['audio', 'sound', 'sound system', 'speaker', 'speakers', 'subwoofer', 'sub', 'amplifier', 'amp', 'stereo', 'head unit'],
-  ['bodykit', 'body kit', 'body kits', 'body-kit', 'bumper', 'spoiler', 'splitter', 'diffuser'],
+  // Spelling variants of "body kit" only. bumper / spoiler / splitter / diffuser
+  // were previously in this group as mutual synonyms, which meant a search for
+  // "spoiler" also returned every bumper (and vice-versa) — they are DISTINCT
+  // part types, not synonyms. Recall for each is carried by its own name/category
+  // match, not by cross-expanding into the others.
+  ['bodykit', 'body kit', 'body kits', 'body-kit'],
   ['suspension', 'shock', 'shocks', 'shock absorber', 'coilover', 'coilovers', 'strut', 'struts', 'lowering spring'],
   ['performance', 'tuning', 'exhaust', 'intake', 'turbo', 'ecu'],
   ['exterior', 'exterior styling', 'trim', 'molding'],
@@ -25,6 +30,31 @@ export const SYNONYM_GROUPS = [
   ['winch', 'recovery winch'],
   ['portable fridge', 'car fridge', 'cooler'],
 ];
+
+// Filler words that carry no product intent. Stripped from a query before matching
+// so "tailgate spoiler FOR hilux" is treated as [tailgate, spoiler, hilux] and a
+// required-terms match isn't distorted by a word almost no product name contains.
+// Deliberately conservative — words like "kit"/"set"/"pair" are meaningful in this
+// catalog ("body kit") and are NOT stopwords.
+export const STOPWORDS = new Set([
+  'for', 'the', 'a', 'an', 'and', 'or', 'with', 'of', 'to', 'in', 'on', 'my', 'your', 'me',
+]);
+
+/**
+ * Reduce a raw query to its content tokens (lowercased, stopwords removed).
+ * Never returns an empty list for a non-empty query — if every token is a
+ * stopword (e.g. "for the"), the original tokens are kept so the search still runs.
+ *
+ * @param {string} term - Raw user search term
+ * @returns {string[]} Lowercase content tokens
+ */
+export function contentTokens(term) {
+  if (!term || typeof term !== 'string') return [];
+  const tokens = term.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+  const filtered = tokens.filter((t) => !STOPWORDS.has(t));
+  return filtered.length ? filtered : tokens;
+}
 
 // Build a flat index: term -> Set of all terms in every group that contains it.
 const synonymIndex = new Map();
@@ -73,4 +103,4 @@ export function expand(term) {
   return Array.from(result);
 }
 
-export default { SYNONYM_GROUPS, expand };
+export default { SYNONYM_GROUPS, expand, STOPWORDS, contentTokens };

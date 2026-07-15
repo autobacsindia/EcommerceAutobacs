@@ -175,6 +175,31 @@ describe('SearchService Unit Tests', () => {
       );
     });
 
+    it('requires EVERY token for a specific multi-word query (no synonym over-recall)', async () => {
+      // Regression for the "tailgate spoiler for hilux" → 151 results bug: a
+      // multi-word query must AND its tokens across high-signal fields, and must
+      // NOT expand "spoiler" into bumper/diffuser synonyms.
+      categoryMappingService.findCategory.mockReturnValue(null); // no category match
+
+      await SearchService.searchProducts({ search: 'tailgate spoiler for hilux' });
+
+      const queryArg = Product.find.mock.calls[0][0];
+      // Top-level $or wraps a single $and of per-token clauses.
+      expect(Array.isArray(queryArg.$or)).toBe(true);
+      const andClause = queryArg.$or.find((c) => Array.isArray(c.$and));
+      expect(andClause).toBeDefined();
+      // "for" is a stripped stopword → tokens are [tailgate, spoiler, hilux].
+      expect(andClause.$and).toHaveLength(3);
+      // Each token is required across name/brand/tags/sku (whole-word anchored).
+      for (const clause of andClause.$and) {
+        expect(Array.isArray(clause.$or)).toBe(true);
+        const nameBranch = clause.$or.find((c) => c.name instanceof RegExp);
+        expect(nameBranch.name.source.startsWith('\\b')).toBe(true);
+      }
+      // No bare synonym name-lane (the over-recall vector) at the top level.
+      expect(queryArg.$or.some((c) => c.name instanceof RegExp)).toBe(false);
+    });
+
     it('should not set $text (broad regex path replaces the text-index-first approach)', async () => {
       await SearchService.searchProducts({ search: 'anything' });
       const queryArg = Product.find.mock.calls[0][0];

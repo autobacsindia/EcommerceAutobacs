@@ -63,8 +63,16 @@ describe('ElasticsearchService.searchProducts query shape', () => {
     expect(bool.minimum_should_match).toBe(1);
 
     expect(multi).toBeDefined();
-    // All typed words must be present — prevents OR-explosion.
-    expect(multi.multi_match.operator).toBe('and');
+    // Most typed words must be present — prevents OR-explosion. ≤2 tokens → all
+    // required; >2 → 70%. (Cross-field AND recall is a separate lane.)
+    expect(multi.multi_match.operator).toBe('or');
+    expect(multi.multi_match.minimum_should_match).toBe('2<70%');
+    // A cross_fields lane requires EVERY token across the combined fields.
+    const crossFields = bool.should.find(
+      (c) => c.multi_match && c.multi_match.type === 'cross_fields'
+    );
+    expect(crossFields).toBeDefined();
+    expect(crossFields.multi_match.operator).toBe('and');
     // First two chars must be exact — stops "led"→"red"/"bed" fuzzy noise.
     expect(multi.multi_match.prefix_length).toBe(2);
     // AUTO:5,8 keeps short tokens (<5 chars) exact so "thor" can't fuzzy-match
@@ -119,6 +127,39 @@ describe('ElasticsearchService.searchProducts query shape', () => {
       (c) => c.match && c.match.description
     );
     expect(hasDescriptionBoost).toBe(true);
+  });
+
+  it('does NOT expand synonyms for a specific multi-word query (the 151-result bug)', async () => {
+    // Reported: "tailgate spoiler for hilux" returned 151 products because
+    // "spoiler" expanded to bumper/diffuser/bodykit and each became an
+    // independent name-recall lane, pulling in every bumper. A multi-token query
+    // must stay literal — no synonym name-lanes.
+    const body = await captureQuery({ q: 'tailgate spoiler for hilux' });
+    const bool = recallBool(body);
+
+    const nameSynonymLanes = bool.should.filter(
+      (c) => c.match && c.match.name && typeof c.match.name === 'object'
+    );
+    expect(nameSynonymLanes).toHaveLength(0);
+
+    // The filler word "for" is stripped: recall runs on [tailgate, spoiler, hilux].
+    const multi = literalMultiMatch(body);
+    expect(multi.multi_match.query).toBe('tailgate spoiler hilux');
+    const crossFields = bool.should.find(
+      (c) => c.multi_match && c.multi_match.type === 'cross_fields'
+    );
+    expect(crossFields.multi_match.query).toBe('tailgate spoiler hilux');
+  });
+
+  it('boosts an exact name phrase match so the exactly-named product ranks first', async () => {
+    const body = await captureQuery({ q: 'tailgate spoiler hilux' });
+    const should = body.query.function_score.query.bool.should || [];
+    const phrase = should.find((c) => c.match_phrase && c.match_phrase.name);
+    expect(phrase).toBeDefined();
+    expect(phrase.match_phrase.name.boost).toBeGreaterThanOrEqual(10);
+    // Popularity must be ADDITIVE, not multiplicative (else 0-rating products
+    // get their relevance zeroed and ranking collapses).
+    expect(body.query.function_score.boost_mode).toBe('sum');
   });
 
   it('falls back to match_all only when no query term is supplied', async () => {
