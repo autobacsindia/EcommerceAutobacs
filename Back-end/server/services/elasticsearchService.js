@@ -1,6 +1,6 @@
 import { Client } from '@elastic/elasticsearch';
 import Product from '../models/Product.js';
-import { expand as expandSynonyms } from '../config/searchSynonyms.js';
+import { expand as expandSynonyms, contentTokens } from '../config/searchSynonyms.js';
 
 class ElasticsearchService {
   constructor() {
@@ -516,7 +516,13 @@ class ElasticsearchService {
               }
             ],
             score_mode: "sum",
-            boost_mode: "multiply"
+            // ADDITIVE, not multiplicative. With multiply, any product whose
+            // popularity functions summed to 0 (no reviews + 0 rating — most of the
+            // migrated catalog) had its text relevance multiplied to 0, flattening
+            // ranking so the exact-name match never surfaced. `sum` keeps text
+            // relevance (incl. the phrase boosts below) dominant and treats
+            // rating/popularity as an additive nudge.
+            boost_mode: "sum"
           }
         },
         aggs: {
@@ -570,79 +576,76 @@ class ElasticsearchService {
       if (safeQ) {
         // Precision-first matching that mirrors the MongoDB fallback path so the
         // two engines return the same intuitive result set. The set of RETURNED
-        // docs is decided by a single required `bool` (with minimum_should_match:
-        // 1); the outer `should` below only RANKS.
+        // docs is decided by a single required `bool` (minimum_should_match: 1
+        // over the recall lanes); the outer `should` below only RANKS.
         //
-        // A product qualifies if it satisfies ANY of these precise recall lanes:
+        // The query is first reduced to CONTENT tokens — filler words ("for",
+        // "with"…) are dropped — so "tailgate spoiler for hilux" is matched as
+        // [tailgate, spoiler, hilux]. A product qualifies via ANY recall lane:
         //
-        //  1. LITERAL term matches high-signal product fields
-        //     (name/brand/sku/tags/vehicle). `operator:'and'` requires every typed
-        //     word (no OR-explosion into the whole catalog); `prefix_length:2`
-        //     keeps the first two chars exact so short fuzzy tokens (e.g. "led")
-        //     stop matching unrelated words ("red"/"bed").
-        //  2. CATEGORY recall — the product sits in a category whose NAME matches
-        //     the query or a synonym. This is what makes a broad query like
-        //     "lights" return everything in the Lights category, not just products
-        //     with "lights" literally in the name (matches the Mongo category
-        //     branch).
-        //  3. SYNONYM terms match the NAME only. Matching fuzzy synonyms against
-        //     SEO-stuffed tags/descriptions over-recalls (e.g. "lights" dragging in
-        //     a bumper tagged "fog light bumper"), so synonyms are name-scoped —
-        //     category-name recall carries the rest.
+        //  1. best_fields — a single high-signal field (name/brand/sku/tags/vehicle)
+        //     contains MOST of the tokens. `minimum_should_match:'2<70%'` means
+        //     ≤2 tokens → ALL required, >2 tokens → 70% required. This is what
+        //     stops the OR-explosion into the whole catalog while tolerating one
+        //     missing/typo'd word on longer queries. `prefix_length:2` keeps the
+        //     first two chars exact so short fuzzy tokens ("led") don't match
+        //     "red"/"bed"; `AUTO:5,8` keeps sub-5-char tokens exact ("thor"≠"thar").
+        //  2. cross_fields — EVERY token is present somewhere across the combined
+        //     high-signal fields (`operator:'and'`). Lets a query legitimately span
+        //     fields, e.g. "spoiler"(name) + "hilux"(vehicle_models), while still
+        //     requiring all tokens. (cross_fields can't fuzzy-match, hence lane 1.)
+        //  3. CATEGORY-name recall — the product's category NAME matches the whole
+        //     query. Makes a broad "brakes" return the Brakes category members.
+        //
+        // SYNONYMS (spoiler↔bumper, lights↔lamp…) are only expanded for a SINGLE
+        // content token — i.e. a broad category-style search. For a specific
+        // multi-word query they are the bug: "spoiler" pulled in every bumper and
+        // returned 151 results. There, literal intent must win, so no expansion.
         //
         // `description` is DELIBERATELY excluded from every recall lane: long,
         // SEO-stuffed descriptions share common words across nearly the whole
-        // catalog, so requiring/fuzzy-matching them returned almost everything for
-        // any query. It survives only as a `should` ranking boost.
-        const terms = expandSynonyms(safeQ);
-        const [literal, ...synonyms] = terms.length ? terms : [safeQ];
+        // catalog. It survives only as a `should` ranking boost.
+        const tokens = contentTokens(safeQ);
+        const cleanedQuery = tokens.length ? tokens.join(' ') : safeQ;
+        const isSingleToken = tokens.length <= 1;
+
+        const HIGH_SIGNAL = ['name^3', 'brand^2', 'sku^2', 'vehicle_models.text^3', 'vehicle_makes.text^2', 'tags^1.5'];
 
         const recall = [
           {
             multi_match: {
-              query: literal,
-              fields: [
-                'name^3',
-                'brand^2',
-                'sku^2',
-                'vehicle_models.text^3',
-                'vehicle_makes.text^2',
-                'tags^1.5'
-              ],
+              query: cleanedQuery,
+              fields: HIGH_SIGNAL,
               type: 'best_fields',
-              operator: 'and',
-              // AUTO:5,8 = 0 edits under 5 chars, 1 edit for 5-7, 2 for 8+.
-              // Plain AUTO allows 1 edit at 3-5 chars, which collides short
-              // brand/model tokens that differ by one letter: "thor" (brand)
-              // fuzzy-matched "thar" (Mahindra Thar) and returned 131 vehicle
-              // products instead of the ~4 THOR items. Requiring an exact match
-              // under 5 chars fixes that while keeping typo tolerance on the
-              // longer words where mistakes actually happen (profendor->profender,
-              // suspensiom->suspension).
+              operator: 'or',
+              // ≤2 tokens → all required; >2 tokens → 70% (tolerates one miss/typo).
+              minimum_should_match: '2<70%',
               fuzziness: 'AUTO:5,8',
               prefix_length: 2
             }
           },
-          // Category-name recall — LITERAL query only, all words required
-          // (`operator:'and'`). This pulls in a category's members when the user
-          // types the category's name ("lights" → everything in Lights), without
-          // the broad category-level synonyms over-recalling: e.g. "floor mat"
-          // expands to interior/cabin/seat-cover, and ORing those against category
-          // names would drag in every interior product (steering wheels, covers).
-          // Synonyms still contribute via the name-only lanes below.
+          {
+            multi_match: {
+              query: cleanedQuery,
+              fields: ['name^3', 'brand^2', 'sku^2', 'vehicle_models.text^2', 'vehicle_makes.text^2', 'tags'],
+              type: 'cross_fields',
+              operator: 'and'
+            }
+          },
           {
             match: {
-              'categories.name': {
-                query: literal,
-                operator: 'and',
-                boost: 2.0
-              }
+              'categories.name': { query: cleanedQuery, operator: 'and', boost: 2.0 }
             }
           }
         ];
-        // Synonyms match the NAME only (precision — parity with the Mongo path).
-        for (const s of synonyms) {
-          recall.push({ match: { name: { query: s, operator: 'and' } } });
+
+        // Broaden ONLY single-token, category-style queries with synonyms.
+        if (isSingleToken) {
+          const synonyms = expandSynonyms(cleanedQuery).slice(1); // drop the literal
+          for (const s of synonyms) {
+            recall.push({ match: { name: { query: s, operator: 'and' } } });
+            recall.push({ match: { 'categories.name': { query: s, operator: 'and', boost: 1.5 } } });
+          }
         }
 
         searchBody.query.function_score.query.bool.must.push({
@@ -650,15 +653,17 @@ class ElasticsearchService {
         });
         // Boost products whose vehicle_model matches the query term
         searchBody.query.function_score.functions.push({
-          filter: { match: { 'vehicle_models.text': safeQ } },
+          filter: { match: { 'vehicle_models.text': cleanedQuery } },
           weight: 2.0
         });
-        // Ranking-only signals (do NOT widen the match set): description recall
-        // plus prefix boosts for partial/typeahead matches.
+        // Ranking-only signals (do NOT widen the match set): an exact / near-exact
+        // phrase match on the name is heavily boosted so the product literally
+        // named like the query ranks first; description survives as a weak recall.
         searchBody.query.function_score.query.bool.should = [
-          { match: { description: { query: safeQ, boost: 0.5 } } },
-          { match_phrase_prefix: { 'vehicle_models.text': { query: safeQ, boost: 2.0 } } },
-          { match_phrase_prefix: { name: { query: safeQ, boost: 1.0 } } }
+          { match_phrase: { name: { query: cleanedQuery, slop: 2, boost: 10 } } },
+          { match_phrase: { 'vehicle_models.text': { query: cleanedQuery, boost: 3 } } },
+          { match_phrase_prefix: { name: { query: cleanedQuery, boost: 1.0 } } },
+          { match: { description: { query: cleanedQuery, boost: 0.3 } } }
         ];
       } else {
         // Match all if no query

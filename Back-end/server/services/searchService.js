@@ -4,7 +4,7 @@ import Vehicle from "../models/Vehicle.js";
 import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
-import { expand as expandSynonyms } from "../config/searchSynonyms.js";
+import { expand as expandSynonyms, contentTokens } from "../config/searchSynonyms.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
 
 class SearchService {
@@ -83,34 +83,59 @@ class SearchService {
       if (validRatings.length > 0) query.averageRating = { $gte: Math.max(...validRatings) };
     }
 
-    // Broad text search across product fields + the matching category branch (synonym-expanded).
+    // Broad text search across product fields + the matching category branch.
+    // Mirrors the Elasticsearch precision model (services/elasticsearchService.js)
+    // so the fallback returns the same intuitive set. Whole-word match (\b…\b) so
+    // short tokens like "led" hit the word "LED" but not substrings ("instal-led").
     if (search) {
-      const terms = expandSynonyms(search);
-      const [literal, ...synonyms] = terms;
-      const orConditions = [];
-      // Whole-word match (\b…\b) so short tokens like "led" hit the word "LED" but not
-      // substrings ("instal-led"). Precision strategy:
-      //  - the LITERAL term the user typed matches high-signal fields (name/brand/tags/sku);
-      //  - AUTO-EXPANDED synonyms match the NAME only — matching fuzzy synonyms against
-      //    SEO-stuffed tags or long descriptions made "lights" return e.g. a bumper tagged
-      //    "fog light bumper". Category-name recall is carried by the category branch below.
       const anchor = (t) => new RegExp('\\b' + escapeRegex(t) + '\\b', 'i');
-      if (literal) {
-        const lit = anchor(literal);
-        orConditions.push({ name: lit }, { brand: lit }, { tags: lit }, { sku: lit });
-      }
-      for (const s of synonyms) orConditions.push({ name: anchor(s) });
+      const tokens = contentTokens(search);
+      const isSingleToken = tokens.length <= 1;
+
       if (!categoryMappingService.initialized) await categoryMappingService.initialize();
+      // Category-name recall. For a single (category-style) token we resolve the
+      // whole synonym set to catch "lights"→Lighting; for a specific multi-word
+      // query we only resolve the literal phrase (synonyms would over-recall).
+      const catTerms = isSingleToken ? expandSynonyms(search) : [tokens.join(' ')];
       const matchedCategoryIds = new Set();
-      for (const term of terms) {
+      for (const term of catTerms) {
         const foundCategory = categoryMappingService.findCategory(term);
         if (foundCategory) {
           const ids = await categoryMappingService.getAllCategoryIdsIncludingChildren(foundCategory._id.toString());
           ids.forEach(id => matchedCategoryIds.add(id));
         }
       }
-      if (matchedCategoryIds.size > 0) orConditions.push({ categories: { $in: Array.from(matchedCategoryIds).map(toObjectId) } });
-      query.$or = orConditions;
+      const categoryBranch = matchedCategoryIds.size > 0
+        ? { categories: { $in: Array.from(matchedCategoryIds).map(toObjectId) } }
+        : null;
+
+      if (isSingleToken) {
+        // Broad recall for a category-style search: literal on high-signal fields,
+        // synonyms on the NAME only (fuzzy synonyms against SEO-stuffed tags/desc
+        // over-recall), plus the category branch.
+        const terms = expandSynonyms(search);
+        const [literal, ...synonyms] = terms;
+        const orConditions = [];
+        if (literal) {
+          const lit = anchor(literal);
+          orConditions.push({ name: lit }, { brand: lit }, { tags: lit }, { sku: lit });
+        }
+        for (const s of synonyms) orConditions.push({ name: anchor(s) });
+        if (categoryBranch) orConditions.push(categoryBranch);
+        query.$or = orConditions;
+      } else {
+        // Precise recall for a specific multi-word query: EVERY token must appear
+        // in some high-signal field (this is the ES cross_fields `operator:'and'`
+        // parity — it's what stops "spoiler" from dragging in every bumper), OR the
+        // query resolves to a category whose subtree we return.
+        const perToken = tokens.map((t) => {
+          const a = anchor(t);
+          return { $or: [{ name: a }, { brand: a }, { tags: a }, { sku: a }] };
+        });
+        query.$or = categoryBranch
+          ? [{ $and: perToken }, categoryBranch]
+          : [{ $and: perToken }];
+      }
     }
 
     return query;
