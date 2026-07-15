@@ -99,6 +99,37 @@ describe('leadSyncService — source ingestion & dedup', () => {
     expect(lead.primarySource).toBe('payment_failed');
   });
 
+  it('denormalizes cart line items + amount onto the lead snapshot', async () => {
+    const pending = await seedOrder({
+      guestEmail: 'cart@x.com',
+      items: [
+        { product: new mongoose.Types.ObjectId(), quantity: 2, price: 300, name: 'Brake Pads' },
+        { product: new mongoose.Types.ObjectId(), quantity: 1, price: 900, name: 'Oil Filter' },
+      ],
+      subtotal: 1500,
+      totalAmount: 1500,
+    });
+    const lead = await leadSyncService.upsertFromOrder(pending);
+    const src = lead.sources.find((s) => s.type === 'payment_pending');
+    expect(src.snapshot.total).toBe(1500);
+    expect(src.snapshot.itemCount).toBe(2);
+    expect(src.snapshot.items).toEqual([
+      { name: 'Brake Pads', quantity: 2, price: 300 },
+      { name: 'Oil Filter', quantity: 1, price: 900 },
+    ]);
+  });
+
+  it('treats an auto-expired order as a "left at checkout" (payment_pending) lead', async () => {
+    const expired = await seedOrder({
+      status: 'awaiting_payment',
+      paymentStatus: 'expired',
+      guestEmail: 'expired@x.com',
+    });
+    const lead = await leadSyncService.upsertFromOrder(expired);
+    expect(lead.sources.map((s) => s.type)).toEqual(['payment_pending']);
+    expect(lead.sources[0].snapshot.items).toHaveLength(1);
+  });
+
   it('skips a source with no usable contact info', async () => {
     // A guest cart with items but no email/phone can't be worked → no lead.
     const lead = await leadSyncService.upsertFromCart(

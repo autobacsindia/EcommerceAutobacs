@@ -182,7 +182,11 @@ class OrderRepository extends BaseRepository {
   async findStuckAwaitingPayment({ minCutoff, maxCutoff, limit = 50 }) {
     return Order.find({
       status: 'awaiting_payment',
-      paymentStatus: { $ne: 'paid' },
+      // Chase anything not yet paid (incl. failed/cancelled — the client can report a
+      // failure that the gateway actually captured), but never an `expired` order: the
+      // abandoned-sweep only sets that AFTER this window closes, so it is a settled
+      // "customer walked away", not a webhook to recover.
+      paymentStatus: { $nin: ['paid', 'expired'] },
       razorpayOrderId: { $ne: null },
       createdAt: { $lt: minCutoff, $gt: maxCutoff },
     })

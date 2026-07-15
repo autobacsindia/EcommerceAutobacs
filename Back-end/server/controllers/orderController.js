@@ -1244,6 +1244,13 @@ export const getTrackingStats = async (req, res) => {
 
 // Fulfillment statuses an admin may filter on (mirrors the Order.status enum).
 const ADMIN_ORDER_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
+// Payment-axis states an admin may filter on (mirrors Order.paymentStatus enum).
+const ADMIN_PAYMENT_STATUSES = ['pending', 'paid', 'failed', 'refunded', 'cancelled', 'expired'];
+// The CLEAN default Orders view: the operational queue only — in-flight/awaiting payment
+// (pending) plus paid & refunded. Unpaid outcomes (failed/cancelled/expired) are excluded
+// by default; they belong to the CRM Leads section and are reachable here only via an
+// explicit `paymentStatus` filter. Nothing is deleted — just hidden from the default view.
+const ORDERS_DEFAULT_PAYMENT_STATUSES = ['pending', 'paid', 'refunded'];
 // Whitelisted sort fields — anything else falls back to createdAt to avoid injecting
 // an arbitrary (and unindexed) sort key.
 const ADMIN_ORDER_SORT_FIELDS = new Set(['createdAt', 'totalAmount', 'status']);
@@ -1297,6 +1304,22 @@ export const getAllOrdersAdmin = async (req, res) => {
     if (statuses.length === 0) return res.json(emptyOrdersPage(page, limit));
     if (statuses.length === 1) query.status = statuses[0];
     else query.status = { $in: statuses };
+  }
+
+  // Payment axis. An explicit `paymentStatus` filter (e.g. the "Unpaid / abandoned"
+  // toggle sending failed,cancelled,expired) is honoured as-is. Otherwise, when the admin
+  // has ALSO not narrowed by fulfillment status, we impose the clean default so the
+  // Orders queue isn't cluttered with never-paid orders (which live in Leads). Same
+  // "intentional none" semantics as the status filter above.
+  if (req.query.paymentStatus) {
+    const payStatuses = String(req.query.paymentStatus)
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => ADMIN_PAYMENT_STATUSES.includes(s));
+    if (payStatuses.length === 0) return res.json(emptyOrdersPage(page, limit));
+    query.paymentStatus = payStatuses.length === 1 ? payStatuses[0] : { $in: payStatuses };
+  } else if (!req.query.status) {
+    query.paymentStatus = { $in: ORDERS_DEFAULT_PAYMENT_STATUSES };
   }
 
   // Created-at range, anchored to the store timezone so a date-only "YYYY-MM-DD"

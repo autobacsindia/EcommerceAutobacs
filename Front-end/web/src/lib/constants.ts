@@ -182,6 +182,7 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   failed: 'Failed',
   cancelled: 'Cancelled', // customer cancelled the payment popup
   refunded: 'Refunded',
+  expired: 'Abandoned', // never returned to pay ("left at checkout") — settled by the sweep
 };
 
 export const PAYMENT_STATUS_COLORS: Record<string, string> = {
@@ -190,7 +191,13 @@ export const PAYMENT_STATUS_COLORS: Record<string, string> = {
   failed: 'bg-red-100 text-red-800',
   cancelled: 'bg-rose-100 text-rose-800',
   refunded: 'bg-orange-100 text-orange-800',
+  expired: 'bg-gray-200 text-gray-600',
 };
+
+// Payment states considered "unpaid outcomes" — excluded from the default admin Orders
+// view (they live in the CRM Leads section) and surfaced by the "Unpaid / abandoned"
+// filter. Mirrors ORDERS_DEFAULT_PAYMENT_STATUSES in the backend orderController.
+export const UNPAID_PAYMENT_STATUSES = ['failed', 'cancelled', 'expired'] as const;
 
 // User Roles
 export const USER_ROLES = {

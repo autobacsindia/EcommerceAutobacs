@@ -189,6 +189,7 @@ function AdminOrdersPageInner() {
   const [filters, setFilters] = useState<OrderFilters>(() => ({
     search: searchParams.get('search') || '',
     statuses: searchParams.get('status')?.split(',').filter(Boolean) || [],
+    paymentStatuses: searchParams.get('paymentStatus')?.split(',').filter(Boolean) || [],
     startDate: searchParams.get('startDate') || '',
     endDate: searchParams.get('endDate') || '',
     minAmount: searchParams.get('minAmount') || '',
@@ -210,6 +211,7 @@ function AdminOrdersPageInner() {
       if (filters.search) params.append('orderNumber', filters.search);
       if (filters.customer) params.append('customer', filters.customer);
       if (filters.statuses.length > 0) params.append('status', filters.statuses.join(','));
+      if (filters.paymentStatuses.length > 0) params.append('paymentStatus', filters.paymentStatuses.join(','));
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
@@ -284,6 +286,7 @@ function AdminOrdersPageInner() {
     if (newFilters.search) params.set('search', newFilters.search);
     if (newFilters.customer) params.set('customer', newFilters.customer);
     if (newFilters.statuses.length > 0) params.set('status', newFilters.statuses.join(','));
+    if (newFilters.paymentStatuses.length > 0) params.set('paymentStatus', newFilters.paymentStatuses.join(','));
     if (newFilters.startDate) params.set('startDate', newFilters.startDate);
     if (newFilters.endDate) params.set('endDate', newFilters.endDate);
     if (newFilters.minAmount) params.set('minAmount', newFilters.minAmount);

@@ -2,11 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Filter, Calendar } from 'lucide-react';
-import { ORDER_STATUS_LABELS } from '@/lib/constants';
+import { ORDER_STATUS_LABELS, UNPAID_PAYMENT_STATUSES } from '@/lib/constants';
 
 export interface OrderFilters {
   search: string;
   statuses: string[];
+  // Payment-axis filter. Empty = the clean default view (in-flight + paid/refunded);
+  // the "Unpaid / abandoned" quick filter sets it to the unpaid outcomes so those
+  // (which otherwise live only in Leads) can be surfaced here on demand.
+  paymentStatuses: string[];
   startDate: string;
   endDate: string;
   minAmount: string;
@@ -29,6 +33,9 @@ const QUICK_FILTERS = [
   // attention. ('pending' used to be here but isn't a real Order.status value.)
   { label: 'To fulfill', value: 'processing' },
   { label: 'High Value (>₹10k)', value: 'high_value' },
+  // Unpaid outcomes (failed / cancelled / abandoned) — hidden from the default view
+  // since they live in the CRM Leads section. This surfaces them on demand.
+  { label: 'Unpaid / abandoned', value: 'unpaid' },
 ];
 
 const HIGH_VALUE_THRESHOLD = '10000';
@@ -125,6 +132,7 @@ export default function OrderFiltersPanel({
     if (range) return localFilters.startDate === range.start && localFilters.endDate === range.end;
     if (filterType === 'processing') return localFilters.statuses.length === 1 && localFilters.statuses[0] === 'processing';
     if (filterType === 'high_value') return localFilters.minAmount === HIGH_VALUE_THRESHOLD;
+    if (filterType === 'unpaid') return (localFilters.paymentStatuses?.length ?? 0) > 0;
     return false;
   };
 
@@ -141,6 +149,8 @@ export default function OrderFiltersPanel({
       newFilters = { ...newFilters, statuses: active ? [] : ['processing'] };
     } else if (filterType === 'high_value') {
       newFilters = { ...newFilters, minAmount: active ? '' : HIGH_VALUE_THRESHOLD };
+    } else if (filterType === 'unpaid') {
+      newFilters = { ...newFilters, paymentStatuses: active ? [] : [...UNPAID_PAYMENT_STATUSES] };
     }
 
     setLocalFilters(newFilters);
@@ -151,6 +161,7 @@ export default function OrderFiltersPanel({
     const emptyFilters: OrderFilters = {
       search: '',
       statuses: [],
+      paymentStatuses: [],
       startDate: '',
       endDate: '',
       minAmount: '',
@@ -165,6 +176,7 @@ export default function OrderFiltersPanel({
     let count = 0;
     if (localFilters.search) count++;
     if (localFilters.statuses.length > 0) count++;
+    if ((localFilters.paymentStatuses?.length ?? 0) > 0) count++;
     if (localFilters.startDate || localFilters.endDate) count++;
     if (localFilters.minAmount || localFilters.maxAmount) count++;
     if (localFilters.customer) count++;

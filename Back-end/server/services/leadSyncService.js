@@ -23,6 +23,24 @@ import {
   CONSULTATION_TO_LEAD,
 } from '../config/leadConstants.js';
 
+// Max line items to denormalize onto a lead source snapshot — keeps it "intentionally
+// tiny" (see Lead.js LeadSourceSchema) while still telling sales what the prospect wanted.
+const MAX_SNAPSHOT_ITEMS = 10;
+
+/**
+ * Compact, join-free view of an order's cart for the lead snapshot: what the prospect
+ * had at checkout so a rep can follow up with specifics. Names/prices are already
+ * snapshotted on the order line item, so no Product lookup is needed.
+ */
+function orderItemsSnapshot(order) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  return items.slice(0, MAX_SNAPSHOT_ITEMS).map((it) => ({
+    name: it.name || null,
+    quantity: it.quantity,
+    price: it.price,
+  }));
+}
+
 class LeadSyncService {
   /** Run a sync operation without ever throwing into the caller's flow. */
   async safeSync(fn) {
@@ -203,6 +221,8 @@ class LeadSyncService {
   /**
    * Order changed state → sync the matching lead.
    *  - pending  → payment_pending signal ("left at checkout")
+   *  - expired  → payment_pending too (abandoned & auto-settled by the sweep — same
+   *               "left at checkout" prospect, just closed out on the order side)
    *  - failed   → payment_failed signal
    *  - paid     → conversion (mark won, tag as customer) — never creates a lead
    *  - cancelled→ order_cancelled re-engagement signal (admin OR customer cancel).
@@ -237,6 +257,7 @@ class LeadSyncService {
           snapshot: {
             total: doc.totalAmount,
             itemCount: doc.items?.length || 0,
+            items: orderItemsSnapshot(doc),
             orderNumber: doc.orderNumber,
             cancelledBy: doc.cancelledBy || null,
             wasPaid: doc.paymentStatus === 'paid' || doc.paymentStatus === 'refunded',
@@ -269,8 +290,8 @@ class LeadSyncService {
         ? 'payment_failed'
         : doc.paymentStatus === 'cancelled'
           ? 'payment_cancelled' // customer dismissed the payment popup
-          : doc.paymentStatus === 'pending' && doc.status === 'awaiting_payment'
-            ? 'payment_pending' // created, never paid → "left at checkout"
+          : (doc.paymentStatus === 'pending' || doc.paymentStatus === 'expired') && doc.status === 'awaiting_payment'
+            ? 'payment_pending' // created, never paid (still stuck OR auto-expired) → "left at checkout"
             : null;
     if (!type) return null; // other states carry no lead signal
 
@@ -280,7 +301,12 @@ class LeadSyncService {
         type,
         ref: doc._id,
         refModel: 'Order',
-        snapshot: { total: doc.totalAmount, itemCount: doc.items?.length || 0, orderNumber: doc.orderNumber },
+        snapshot: {
+          total: doc.totalAmount,
+          itemCount: doc.items?.length || 0,
+          items: orderItemsSnapshot(doc),
+          orderNumber: doc.orderNumber,
+        },
       },
       { linkedUser: doc.user || null }
     );

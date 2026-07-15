@@ -44,6 +44,31 @@ function fmtDate(at: number) {
   return new Date(at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// Signal snapshot shape for order-backed signals (payment_* / order_cancelled). The
+// cart line items + amount are denormalized onto the lead source (see backend
+// leadSyncService.orderItemsSnapshot) so a rep sees what the prospect wanted without
+// opening the order — crucial for abandoned/guest carts that have no order-history row.
+type OrderSnapshot = {
+  total?: number;
+  itemCount?: number;
+  orderNumber?: string;
+  items?: { name?: string | null; quantity?: number; price?: number }[];
+};
+
+// Signal types that carry an order snapshot (and therefore a cart + amount worth showing).
+const ORDER_SIGNAL_TYPES = new Set<LeadSourceType>([
+  'payment_pending', 'payment_failed', 'payment_cancelled', 'order_cancelled',
+]);
+
+const MAX_SHOWN_ITEMS = 4;
+
+/** "2× Brake Pads, 1× Oil Filter +3 more" — compact cart line for a signal row. */
+function formatItems(items: NonNullable<OrderSnapshot['items']>, itemCount?: number): string {
+  const shown = items.slice(0, MAX_SHOWN_ITEMS).map((it) => `${it.quantity ?? 1}× ${it.name || 'Item'}`);
+  const extra = (itemCount ?? items.length) - Math.min(items.length, MAX_SHOWN_ITEMS);
+  return extra > 0 ? `${shown.join(', ')} +${extra} more` : shown.join(', ');
+}
+
 /** One event row: icon on the rail, title + optional body, dated on the right. */
 function EventRow({ ev }: { ev: JourneyEvent }) {
   const Icon = iconFor(ev);
@@ -66,19 +91,30 @@ function EventRow({ ev }: { ev: JourneyEvent }) {
 
 function renderBody(ev: JourneyEvent) {
   if (ev.kind === 'signal') {
+    const snap = ev.snapshot as OrderSnapshot | undefined;
     const cancel = ev.sourceType === 'order_cancelled'
-      ? cancelAttribution(ev.snapshot as { cancelledBy?: string | null; wasPaid?: boolean } | undefined)
+      ? cancelAttribution(snap as { cancelledBy?: string | null; wasPaid?: boolean } | undefined)
       : null;
+    const isOrderSignal = ORDER_SIGNAL_TYPES.has(ev.sourceType);
+    const items = Array.isArray(snap?.items) ? snap!.items : [];
     return (
-      <span className="flex flex-wrap items-center gap-1">
-        <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[ev.sourceType]}`}>
-          {LEAD_SOURCE_LABELS[ev.sourceType]}
+      <div className="space-y-0.5">
+        <span className="flex flex-wrap items-center gap-1">
+          <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[ev.sourceType]}`}>
+            {LEAD_SOURCE_LABELS[ev.sourceType]}
+          </span>
+          {isOrderSignal && typeof snap?.total === 'number' && (
+            <span className="text-xs font-medium text-gray-600">₹{snap.total.toLocaleString('en-IN')}</span>
+          )}
+          {cancel?.by && <span className="text-xs text-gray-500">{cancel.by}</span>}
+          {cancel?.wasPaid && (
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">was paid</span>
+          )}
         </span>
-        {cancel?.by && <span className="text-xs text-gray-500">{cancel.by}</span>}
-        {cancel?.wasPaid && (
-          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">was paid</span>
+        {items.length > 0 && (
+          <span className="block text-xs text-gray-500">{formatItems(items, snap?.itemCount)}</span>
         )}
-      </span>
+      </div>
     );
   }
 

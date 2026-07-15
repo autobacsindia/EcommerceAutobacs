@@ -12,6 +12,7 @@ jest.mock('lucide-react', () => ({
 const emptyFilters: OrderFilters = {
   search: '',
   statuses: [],
+  paymentStatuses: [],
   startDate: '',
   endDate: '',
   minAmount: '',
@@ -56,5 +57,22 @@ describe('OrderFiltersPanel', () => {
     fireEvent.click(toFulfill);
     expect(onFiltersChange).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: [] }));
     expect(toFulfill).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('surfaces unpaid outcomes via the "Unpaid / abandoned" quick filter', () => {
+    const onFiltersChange = jest.fn();
+    render(<OrderFiltersPanel filters={emptyFilters} onFiltersChange={onFiltersChange} autoApply />);
+
+    const unpaid = screen.getByRole('button', { name: 'Unpaid / abandoned' });
+
+    fireEvent.click(unpaid);
+    expect(onFiltersChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ paymentStatuses: ['failed', 'cancelled', 'expired'] }),
+    );
+    expect(unpaid).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(unpaid);
+    expect(onFiltersChange).toHaveBeenLastCalledWith(expect.objectContaining({ paymentStatuses: [] }));
+    expect(unpaid).toHaveAttribute('aria-pressed', 'false');
   });
 });
