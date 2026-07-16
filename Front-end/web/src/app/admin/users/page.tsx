@@ -22,11 +22,18 @@ interface User {
   addresses?: Address[];
 }
 
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 350;
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false); // first load done — controls the full-page skeleton
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: PAGE_SIZE });
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   // Seed the search box from a `?search=` deep link (e.g. from a lead's "View
@@ -36,21 +43,44 @@ export default function AdminUsersPage() {
     if (q) setSearchTerm(q);
   }, []);
 
+  // Debounce the free-text search so we hit the backend once the admin pauses,
+  // not on every keystroke. Resetting to page 1 keeps results and pager in sync.
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get('/users') as any;
-      setUsers(response.users || []);
-    } catch (err) {
-      console.error('Failed to fetch users:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Server-side search/filter/pagination — the whole user collection is queried in
+  // MongoDB (name/email/phone + role), never a client-side filter over one page.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (debouncedSearch) params.append('search', debouncedSearch);
+        if (roleFilter !== 'all') params.append('role', roleFilter);
+        params.append('page', String(page));
+        params.append('limit', String(PAGE_SIZE));
+        const response = await apiClient.get(`/users?${params.toString()}`) as any;
+        if (cancelled) return;
+        setUsers(response.users || []);
+        if (response.pagination) setPagination(response.pagination);
+      } catch (err) {
+        if (!cancelled) console.error('Failed to fetch users:', err);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setReady(true);
+        }
+      }
+    };
+    fetchUsers();
+    return () => { cancelled = true; };
+  }, [debouncedSearch, roleFilter, page]);
 
   const toggleRep = async (user: User) => {
     const next = !user.isSalesRep;
@@ -74,14 +104,9 @@ export default function AdminUsersPage() {
     }
   };
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
-
-  if (loading) {
+  // Full-page skeleton only on the very first load — subsequent search/filter/page
+  // fetches keep the page (and the focused search input) mounted.
+  if (!ready) {
     return (
       <div className="p-8">
         <div className="flex justify-between items-center mb-8">
@@ -124,7 +149,7 @@ export default function AdminUsersPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search users..."
+            placeholder="Search by name, email, or phone..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg"
@@ -132,7 +157,7 @@ export default function AdminUsersPage() {
         </div>
         <select
           value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
+          onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
           className="border rounded-lg px-4 py-2"
         >
           <option value="all">All Roles</option>
@@ -163,7 +188,7 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredUsers.map((user) => (
+            {users.map((user) => (
               <tr key={user._id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{user.name}</div>
@@ -226,9 +251,35 @@ export default function AdminUsersPage() {
         </table>
       </div>
 
-      {filteredUsers.length === 0 && (
+      {users.length === 0 && (
         <div className="text-center py-12 text-gray-500">
-          No users found
+          {loading ? 'Loading…' : 'No users found'}
+        </div>
+      )}
+
+      {/* Pagination — server-driven; the whole collection is searched, so the pager
+          reflects total matches, not just the loaded page. */}
+      {pagination.pages > 1 && (
+        <div className="mt-6 flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            {pagination.total} user{pagination.total === 1 ? '' : 's'} · page {pagination.page} of {pagination.pages}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+              disabled={page >= pagination.pages || loading}
+              className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

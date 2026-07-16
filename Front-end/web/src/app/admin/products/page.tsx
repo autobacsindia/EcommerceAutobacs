@@ -16,6 +16,7 @@ interface Product {
   stock: StockStatus;
   categories?: { name: string }[];
   isFeatured: boolean;
+  isActive?: boolean;
 }
 
 interface ProductsResponse {
@@ -47,6 +48,8 @@ function AdminProductsPageInner() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  // Admin can view all products or narrow to just active / just inactive (drafts).
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -71,7 +74,12 @@ function AdminProductsPageInner() {
 
   useEffect(() => {
     fetchProducts(currentPage);
-  }, [currentPage, debouncedSearchTerm, categoryId]);
+  }, [currentPage, debouncedSearchTerm, categoryId, statusFilter]);
+
+  // Reset to the first page whenever the status filter changes.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
 
   // Reset to the first page whenever the category filter changes.
   useEffect(() => {
@@ -123,11 +131,15 @@ function AdminProductsPageInner() {
         params.append('category', categoryId);
       }
 
-      // Cache busting to prevent stale data
-      params.append('t', Date.now().toString());
+      // Active / inactive narrowing (the admin endpoint returns both by default).
+      if (statusFilter !== 'all') {
+        params.append('status', statusFilter);
+      }
 
+      // The admin list endpoint is server-side uncached, so an edit shows up
+      // immediately — no cache-busting query param needed.
       const response = await apiClient.get<ProductsResponse>(
-        `${API_ENDPOINTS.PRODUCTS}?${params.toString()}`
+        `${API_ENDPOINTS.ADMIN_PRODUCTS}?${params.toString()}`
       );
       
       setProducts(response.products || []);
@@ -176,8 +188,8 @@ function AdminProductsPageInner() {
         </div>
       </div>
 
-      <div className="mb-6">
-        <div className="relative max-w-md">
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
@@ -187,6 +199,16 @@ function AdminProductsPageInner() {
             className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm"
           />
         </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+          className="border rounded-lg px-4 py-2 text-sm bg-white"
+          aria-label="Filter by status"
+        >
+          <option value="all">All statuses</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+        </select>
       </div>
 
       {categoryId && (
@@ -251,9 +273,16 @@ function AdminProductsPageInner() {
                 </tr>
               )}
               {!loading && products.map((product) => (
-                <tr key={product._id} className="hover:bg-gray-50">
+                <tr key={product._id} className={`hover:bg-gray-50 ${product.isActive === false ? 'bg-gray-50/60' : ''}`}>
                   <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>{product.name}</div>
+                    <div className="flex items-start gap-2">
+                      <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>{product.name}</div>
+                      {product.isActive === false && (
+                        <span className="shrink-0 mt-0.5 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-sm text-gray-500 line-clamp-2">

@@ -45,8 +45,8 @@ describe('Home page (redesign)', () => {
     render(<Home />);
 
     // Hero
-    expect(screen.getByText('Engineer')).toBeInTheDocument();
-    expect(screen.getByText('Perfection.')).toBeInTheDocument();
+    expect(screen.getByText('Drive Beyond')).toBeInTheDocument();
+    expect(screen.getByText('Limits.')).toBeInTheDocument();
 
     // Section anchors that should always be present regardless of data wiring
     expect(screen.getByText('Shop by Category')).toBeInTheDocument();

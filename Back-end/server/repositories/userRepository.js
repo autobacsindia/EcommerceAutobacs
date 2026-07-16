@@ -54,17 +54,17 @@ class UserRepository extends BaseRepository {
   }
 
   /**
-   * Ids of users whose name or email matches `term` (case-insensitive substring).
-   * Backs admin filters that let staff search orders by customer. The term is
-   * regex-escaped (untrusted input). The cap is a safety valve against a pathological
-   * match (e.g. "a") producing an unbounded `$in`; it's set high enough that a
-   * realistic customer search (a name or a full/partial email) is never truncated.
+   * Ids of users whose name, email, OR phone matches `term` (case-insensitive
+   * substring). Backs admin filters that let staff search orders by customer. The
+   * term is regex-escaped (untrusted input). The cap is a safety valve against a
+   * pathological match (e.g. "a") producing an unbounded `$in`; it's set high enough
+   * that a realistic customer search (name / partial email / phone) is never truncated.
    */
   async findIdsByNameOrEmail(term, { limit = 10000 } = {}) {
     const escaped = String(term).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (!escaped) return [];
     const rx = new RegExp(escaped, 'i');
-    const users = await User.find({ $or: [{ name: rx }, { email: rx }] })
+    const users = await User.find({ $or: [{ name: rx }, { email: rx }, { phone: rx }] })
       .select('_id')
       .limit(limit)
       .lean();

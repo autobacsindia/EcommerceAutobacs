@@ -88,6 +88,33 @@ export const getProducts = async (req, res) => {
   }
 };
 
+// GET /products/admin/list — admin product management list (route is protect+admin).
+// Differs from the public getProducts on purpose:
+//   • includes INACTIVE products (disabled/draft items the admin must still manage);
+//   • honours an optional `status=active|inactive` filter;
+//   • NEVER cached — an admin who just edited a product must see the change now, not
+//     up to 5 minutes later off the shared public list cache.
+// `includeInactive` is passed by the server here, never read from the query, so a
+// public caller of /products can't use it to surface hidden products.
+export const getAdminProducts = async (req, res) => {
+  try {
+    const searchResults = await SearchService.searchProducts(req.query, { includeInactive: true });
+    res.json({
+      success: true,
+      count: searchResults.products.length,
+      ...searchResults.pagination,
+      products: searchResults.products,
+    });
+  } catch (error) {
+    console.error('[ProductController] Error in getAdminProducts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
 // GET /products/facets — per-brand and per-category counts for the filter sidebar.
 export const getProductFacets = async (req, res) => {
   const cacheKey = `${CACHE_VERSION}:products:facets:${JSON.stringify(req.query)}`;

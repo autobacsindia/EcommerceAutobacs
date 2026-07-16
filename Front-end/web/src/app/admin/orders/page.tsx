@@ -51,6 +51,7 @@ interface Order {
   createdAt: string;
   status: string;
   paymentStatus?: string;
+  cancelledBy?: 'admin' | 'customer' | 'system';
   totalAmount: number;
   refundDetails?: {
     status?: string;
@@ -64,6 +65,14 @@ interface Order {
   };
   items: any[];
 }
+
+// Who cancelled the order — mirrors the wording on the order detail page so the list and
+// the detail read the same. `system` = an automated/expiry cancel, not a person.
+const CANCELLED_BY_TEXT: Record<string, string> = {
+  customer: 'by Customer',
+  admin: 'by Admin',
+  system: 'by System',
+};
 
 /**
  * Refund state for a row, derived from the cancellation refund flow:
@@ -208,7 +217,8 @@ function AdminOrdersPageInner() {
       // Build query parameters
       const params = new URLSearchParams();
       
-      if (filters.search) params.append('orderNumber', filters.search);
+      // Unified search: order id OR customer name/email/phone OR recipient on the order.
+      if (filters.search) params.append('search', filters.search);
       if (filters.customer) params.append('customer', filters.customer);
       if (filters.statuses.length > 0) params.append('status', filters.statuses.join(','));
       if (filters.paymentStatuses?.length) params.append('paymentStatus', filters.paymentStatuses.join(','));
@@ -621,21 +631,27 @@ function AdminOrdersPageInner() {
                       // Fulfillment hasn't started — the Payment column tells the story.
                       <span className="text-gray-400">—</span>
                     ) : (
-                      <select
-                        value={order.status}
-                        onChange={(e) => requestStatusChange(order, e.target.value)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
-                      >
-                        {/* Current status — always shown as selected, disabled so user must pick a different one */}
-                        <option value={order.status} disabled>
-                          {(ORDER_STATUS_LABELS[order.status] || order.status)} (current)
-                        </option>
-                        {getAdminNextStatuses(order.status).map(s => (
-                          <option key={s} value={s}>
-                            {ORDER_STATUS_LABELS[s] || s}
+                      <>
+                        <select
+                          value={order.status}
+                          onChange={(e) => requestStatusChange(order, e.target.value)}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
+                        >
+                          {/* Current status — always shown as selected, disabled so user must pick a different one */}
+                          <option value={order.status} disabled>
+                            {(ORDER_STATUS_LABELS[order.status] || order.status)} (current)
                           </option>
-                        ))}
-                      </select>
+                          {getAdminNextStatuses(order.status).map(s => (
+                            <option key={s} value={s}>
+                              {ORDER_STATUS_LABELS[s] || s}
+                            </option>
+                          ))}
+                        </select>
+                        {/* Cancellation attribution — admin vs customer at a glance, no drill-in. */}
+                        {order.status === 'cancelled' && order.cancelledBy && CANCELLED_BY_TEXT[order.cancelledBy] && (
+                          <div className="mt-1 text-[11px] text-gray-400">{CANCELLED_BY_TEXT[order.cancelledBy]}</div>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

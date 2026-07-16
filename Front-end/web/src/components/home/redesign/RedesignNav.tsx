@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import Img from './Img';
 import RedesignVehicleMenu from './RedesignVehicleMenu';
+import RedesignNavSearch from './RedesignNavSearch';
 import ProfileAvatar from './ProfileAvatar';
 import { Search, Heart, Cart, Menu, Close, UserIcon } from './icons';
 import { brand, navLinks } from './homeContent';
@@ -14,12 +14,10 @@ import { useCart } from '@/context/CartContext';
 const VEHICLE_LABEL = 'Vehicle Makes';
 
 export default function RedesignNav() {
-  const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { itemCount } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [q, setQ] = useState('');
 
   // Lock body scroll while the mobile menu is open.
   useEffect(() => {
@@ -30,15 +28,6 @@ export default function RedesignNav() {
       document.body.style.overflow = prev;
     };
   }, [menuOpen]);
-
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const term = q.trim();
-    if (!term) return;
-    setSearchOpen(false);
-    setMenuOpen(false);
-    router.push(`/products/search?q=${encodeURIComponent(term)}`);
-  };
 
   const accountHref = isAuthenticated ? '/profile' : '/login';
   const accountLabel = isAuthenticated ? 'My Account' : 'Sign In';
@@ -82,17 +71,14 @@ export default function RedesignNav() {
         )}
       </div>
 
-      {/* Desktop inline search */}
-      <form className="nav-search nav-search-desktop" role="search" onSubmit={submitSearch}>
-        <Search />
-        <input
-          type="text"
-          placeholder="Search parts, brands…"
-          aria-label="Search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      </form>
+      {/* Desktop inline search (live suggestions + recent searches) */}
+      <RedesignNavSearch
+        variant="desktop"
+        onNavigate={() => {
+          setSearchOpen(false);
+          setMenuOpen(false);
+        }}
+      />
 
       <div className="actions">
         {/* Mobile-only: search toggle */}
@@ -131,17 +117,13 @@ export default function RedesignNav() {
 
       {/* Mobile search bar (revealed by the search toggle) */}
       {searchOpen && (
-        <form className="nav-search-bar" role="search" onSubmit={submitSearch}>
-          <Search width={17} height={17} />
-          <input
-            type="text"
-            placeholder="Search parts, brands…"
-            aria-label="Search"
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </form>
+        <RedesignNavSearch
+          variant="mobile"
+          onNavigate={() => {
+            setSearchOpen(false);
+            setMenuOpen(false);
+          }}
+        />
       )}
 
       {/* Mobile hamburger menu */}

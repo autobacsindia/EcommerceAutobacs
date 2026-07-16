@@ -9,7 +9,7 @@ import apiClient from '@/lib/api';
 import OfflineOrderForm from '@/components/admin/OfflineOrderForm';
 import {
   Lead, LeadStatus, LeadSourceType, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
-  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep,
+  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution,
 } from '@/lib/leads';
 
 type Assignment = 'all' | 'unassigned';
@@ -410,6 +410,13 @@ export default function AdminLeadsPage() {
                         {LEAD_SOURCE_LABELS[lead.primarySource]}
                       </span>
                     )}
+                    {/* Who cancelled — reads the order_cancelled signal's snapshot so admin vs
+                        customer is legible at a glance, not just inside the lead. */}
+                    {lead.primarySource === 'order_cancelled' && (() => {
+                      const src = lead.sources.find((s) => s.type === 'order_cancelled');
+                      const attr = cancelAttribution(src?.snapshot as { cancelledBy?: string | null; wasPaid?: boolean } | undefined);
+                      return attr?.by ? <span className="ml-1 text-xs text-gray-500">{attr.by}</span> : null;
+                    })()}
                     {lead.sources.length > 1 && <span className="ml-1 text-xs text-gray-400">+{lead.sources.length - 1}</span>}
                   </td>
                   <td className="px-4 py-3">

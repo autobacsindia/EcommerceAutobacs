@@ -107,6 +107,8 @@ export const validateProductSearch = [
   query('year').optional().trim(),
   query('make').optional().trim(),
   query('model').optional().trim(),
+  // Admin list only (public list ignores it); 'all' or absent = no status narrowing.
+  query('status').optional().isIn(['all', 'active', 'inactive']).withMessage('Status must be all, active, or inactive'),
   validateRequest
 ];
 
