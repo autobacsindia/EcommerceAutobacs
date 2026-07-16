@@ -179,5 +179,18 @@ describe('ProductService', () => {
         canFulfill: false
       });
     });
+
+    it('reports not fulfillable when on backorder (enquiry-only)', async () => {
+      productRepository.getStock.mockResolvedValue('backorder');
+
+      const result = await productService.checkStock('product123', 5);
+
+      expect(result).toEqual({
+        status: 'backorder',
+        requested: 5,
+        inStock: false,
+        canFulfill: false
+      });
+    });
   });
 });

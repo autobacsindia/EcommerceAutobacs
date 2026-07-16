@@ -702,8 +702,9 @@ class ElasticsearchService {
       }
 
       if (inStock === 'true') {
+        // "In stock only" means actually on hand — excludes out AND backorder.
         searchBody.query.function_score.query.bool.filter.push({
-          bool: { must_not: { term: { stock: 'out' } } }
+          bool: { must_not: { terms: { stock: ['out', 'backorder'] } } }
         });
       }
 

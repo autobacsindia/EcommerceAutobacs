@@ -70,7 +70,7 @@ export interface ProductRow {
 export interface ProductPerformanceData {
   topByRevenue: ProductRow[];
   topByUnits: ProductRow[];
-  stock: { in: number; low: number; out: number };
+  stock: { in: number; low: number; out: number; backorder: number };
 }
 
 export interface CustomerData {

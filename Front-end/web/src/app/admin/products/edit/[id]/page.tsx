@@ -345,7 +345,7 @@ export default function EditProductPage() {
     }
 
     const stock = formData.stock;
-    if (!['in', 'low', 'out'].includes(stock)) {
+    if (!['in', 'low', 'out', 'backorder'].includes(stock)) {
       alert('Please select a valid stock status');
       setSubmitting(false);
       return;
@@ -727,6 +727,7 @@ export default function EditProductPage() {
                 <option value="in">In Stock</option>
                 <option value="low">Low Stock</option>
                 <option value="out">Out of Stock</option>
+                <option value="backorder">On Backorder</option>
               </select>
             </div>
             

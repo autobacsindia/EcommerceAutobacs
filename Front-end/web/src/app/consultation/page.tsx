@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -95,6 +95,18 @@ export default function ConsultationPage() {
   const [whatsappError, setWhatsappError] = useState('');
   const [emailError, setEmailError] = useState('');
   const formRef = useRef<HTMLDivElement>(null);
+
+  // Prefill from a product enquiry (e.g. backorder "Click to enquire" links
+  // pass ?product=<name>). Read on mount from the URL to avoid coupling this
+  // client page to useSearchParams (which would force a Suspense boundary).
+  useEffect(() => {
+    const product = new URLSearchParams(window.location.search).get('product');
+    if (product) {
+      setForm((prev) =>
+        prev.notes ? prev : { ...prev, notes: `Enquiry about: ${product}` }
+      );
+    }
+  }, []);
 
   function scrollToForm() {
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

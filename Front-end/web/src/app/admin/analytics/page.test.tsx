@@ -104,7 +104,7 @@ describe('AdminAnalyticsPage', () => {
     api.products.mockResolvedValue({
       topByRevenue: [{ productId: 'p1', name: 'Pad', revenue: 300, units: 3, orders: 2 }],
       topByUnits: [],
-      stock: { in: 1, low: 1, out: 1 },
+      stock: { in: 1, low: 1, out: 1, backorder: 0 },
     });
     render(<AdminAnalyticsPage />);
     act(() => {

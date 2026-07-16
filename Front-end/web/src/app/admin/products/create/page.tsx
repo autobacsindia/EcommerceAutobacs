@@ -387,6 +387,7 @@ export default function CreateProductPage() {
                 <option value="in">In Stock</option>
                 <option value="low">Low Stock</option>
                 <option value="out">Out of Stock</option>
+                <option value="backorder">On Backorder</option>
               </select>
             </div>
             

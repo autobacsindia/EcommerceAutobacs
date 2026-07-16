@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
-import { isOutOfStock } from '@/lib/stock';
+import { isOutOfStock, getStockStatus } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
 
@@ -168,7 +168,9 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       price: product.price,
       availability: isOutOfStock(product)
         ? 'https://schema.org/OutOfStock'
-        : 'https://schema.org/InStock',
+        : getStockStatus(product) === 'backorder'
+          ? 'https://schema.org/BackOrder'
+          : 'https://schema.org/InStock',
       url: `${SITE_URL}/products/${product.slug}`,
       seller: { '@type': 'Organization', name: 'Autobacs India' },
       
