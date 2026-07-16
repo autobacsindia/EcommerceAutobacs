@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
+import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, HeadphonesIcon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { StockStatus } from '@/lib/stock';
 import { useCart } from '@/context/CartContext';
@@ -58,7 +58,13 @@ export default function BuyBox({ product }: { product: BuyBoxProduct }) {
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
   const outOfStock = product.stock === 'out';
+  const backorder = product.stock === 'backorder';
   const wished = isInWishlist(product._id);
+
+  // Backorder items are enquiry-only — routed to the consultation flow with the
+  // product name prefilled, instead of Add to cart / Buy now.
+  const enquire = () =>
+    router.push(`/consultation?product=${encodeURIComponent(product.name)}`);
   const categoryName =
     typeof product.category === 'object' ? product.category?.name : product.category;
 
@@ -144,30 +150,37 @@ export default function BuyBox({ product }: { product: BuyBoxProduct }) {
         </p>
       )}
 
-      {/* Quantity */}
+      {/* Quantity — hidden for enquiry-only (backorder) items */}
       <div className="mt-8 flex items-center gap-5">
-        <span className="text-[10px] uppercase tracking-[0.24em] text-ink-muted">Quantity</span>
-        <div className="flex items-center border border-hairline">
-          <button
-            onClick={() => setQty((q) => Math.max(1, q - 1))}
-            disabled={qty <= 1}
-            className="grid h-11 w-11 place-items-center text-ink transition-colors hover:text-gold disabled:opacity-30"
-            aria-label="Decrease quantity"
-          >
-            −
-          </button>
-          <span className="grid h-11 w-12 place-items-center border-x border-hairline text-[14px] text-ink">{qty}</span>
-          <button
-            onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}
-            disabled={qty >= MAX_QTY}
-            className="grid h-11 w-11 place-items-center text-ink transition-colors hover:text-gold disabled:opacity-30"
-            aria-label="Increase quantity"
-          >
-            +
-          </button>
-        </div>
+        {!backorder && (
+          <>
+            <span className="text-[10px] uppercase tracking-[0.24em] text-ink-muted">Quantity</span>
+            <div className="flex items-center border border-hairline">
+              <button
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                className="grid h-11 w-11 place-items-center text-ink transition-colors hover:text-gold disabled:opacity-30"
+                aria-label="Decrease quantity"
+              >
+                −
+              </button>
+              <span className="grid h-11 w-12 place-items-center border-x border-hairline text-[14px] text-ink">{qty}</span>
+              <button
+                onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}
+                disabled={qty >= MAX_QTY}
+                className="grid h-11 w-11 place-items-center text-ink transition-colors hover:text-gold disabled:opacity-30"
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
+          </>
+        )}
         {product.stock === 'low' && (
           <span className="text-[11px] uppercase tracking-[0.16em] text-gold">Low stock</span>
+        )}
+        {backorder && (
+          <span className="text-[11px] uppercase tracking-[0.16em] text-gold">On backorder — enquire for availability</span>
         )}
         {outOfStock && (
           <span className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Sold out</span>
@@ -175,35 +188,56 @@ export default function BuyBox({ product }: { product: BuyBoxProduct }) {
       </div>
 
       {/* EMI / affordability options (Razorpay) — mirrors the WooCommerce widget */}
-      <EmiOptions price={product.price} className="mt-7" />
+      {!backorder && <EmiOptions price={product.price} className="mt-7" />}
 
       {/* CTAs */}
       <div className="mt-7 flex flex-col gap-3">
-        <button
-          onClick={add}
-          disabled={outOfStock || adding}
-          className="flex items-center justify-center gap-3 bg-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-obsidian transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ShoppingBag className="h-4 w-4" />
-          {adding ? 'Adding…' : 'Add to cart'}
-        </button>
-        <div className="flex gap-3">
-          <button
-            onClick={buyNow}
-            disabled={outOfStock || buying}
-            className="flex flex-1 items-center justify-center gap-2.5 border border-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-gold transition-colors hover:bg-gold hover:text-obsidian disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Zap className="h-4 w-4" />
-            {buying ? 'Processing…' : 'Buy now'}
-          </button>
-          <button
-            onClick={toggleWish}
-            aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-            className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
-          >
-            <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
-          </button>
-        </div>
+        {backorder ? (
+          <div className="flex gap-3">
+            <button
+              onClick={enquire}
+              className="flex flex-1 items-center justify-center gap-3 bg-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-obsidian transition-opacity hover:opacity-90"
+            >
+              <HeadphonesIcon className="h-4 w-4" />
+              Click to enquire
+            </button>
+            <button
+              onClick={toggleWish}
+              aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
+              className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
+            >
+              <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={add}
+              disabled={outOfStock || adding}
+              className="flex items-center justify-center gap-3 bg-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-obsidian transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              {adding ? 'Adding…' : 'Add to cart'}
+            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={buyNow}
+                disabled={outOfStock || buying}
+                className="flex flex-1 items-center justify-center gap-2.5 border border-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-gold transition-colors hover:bg-gold hover:text-obsidian disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Zap className="h-4 w-4" />
+                {buying ? 'Processing…' : 'Buy now'}
+              </button>
+              <button
+                onClick={toggleWish}
+                aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
+                className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
+              >
+                <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Trust badges */}

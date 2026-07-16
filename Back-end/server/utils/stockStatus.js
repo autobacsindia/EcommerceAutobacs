@@ -7,6 +7,8 @@ export const STOCK_STATUS = Object.freeze({
   IN: 'in',
   LOW: 'low',
   OUT: 'out',
+  // Not on hand, but still orderable — ships when restocked. Purchasable.
+  BACKORDER: 'backorder',
 });
 
 // Allowed enum values (used by the Mongoose schema and request validators).
@@ -17,11 +19,21 @@ export const STOCK_LABELS = Object.freeze({
   [STOCK_STATUS.IN]:  'In Stock',
   [STOCK_STATUS.LOW]: 'Low Stock',
   [STOCK_STATUS.OUT]: 'Out of Stock',
+  [STOCK_STATUS.BACKORDER]: 'On Backorder',
 });
 
-/** True when an item can be added to cart / ordered. */
+/**
+ * True when an item can be added to cart / ordered directly. Out of stock and
+ * backorder are both non-purchasable: out is unavailable, backorder is
+ * enquiry-only (routed to the consultation flow, not the cart).
+ */
 export function isPurchasable(status) {
-  return status !== STOCK_STATUS.OUT;
+  return status !== STOCK_STATUS.OUT && status !== STOCK_STATUS.BACKORDER;
+}
+
+/** True when the item is orderable only via the enquiry/consultation flow. */
+export function isEnquiryOnly(status) {
+  return status === STOCK_STATUS.BACKORDER;
 }
 
 /**

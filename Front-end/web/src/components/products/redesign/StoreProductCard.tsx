@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart, ShoppingBag } from 'lucide-react';
+import { Heart, ShoppingBag, HeadphonesIcon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import ProductImage from '@/components/products/ProductImage';
@@ -54,6 +54,7 @@ export default function StoreProductCard({
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
   const outOfStock = product.stock === 'out';
+  const backorder = product.stock === 'backorder';
   const wished = isInWishlist(product._id);
 
   const toggleWish = async (e: React.MouseEvent) => {
@@ -72,6 +73,12 @@ export default function StoreProductCard({
     e.preventDefault();
     e.stopPropagation();
     if (outOfStock) return;
+    // Backorder is enquiry-only — route to the consultation flow with the
+    // product name prefilled instead of adding to cart.
+    if (backorder) {
+      router.push(`/consultation?product=${encodeURIComponent(product.name)}`);
+      return;
+    }
     // Optimistic: the cart badge and this toast fire on tap; addToCart rolls the
     // count back and the catch surfaces an error toast if the server rejects.
     toast.success('Added to cart');
@@ -108,6 +115,11 @@ export default function StoreProductCard({
           {outOfStock && (
             <span className="bg-obsidian-deep/85 px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-ink-muted backdrop-blur">
               Sold out
+            </span>
+          )}
+          {product.stock === 'backorder' && (
+            <span className="bg-obsidian-deep/85 px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-gold backdrop-blur">
+              Backorder
             </span>
           )}
           {onSale && !outOfStock && (
@@ -164,7 +176,8 @@ export default function StoreProductCard({
           <button
             onClick={add}
             disabled={outOfStock}
-            aria-label="Add to cart"
+            aria-label={backorder ? 'Enquire about this product' : 'Add to cart'}
+            title={backorder ? 'On backorder — click to enquire' : undefined}
             className={cn(
               'grid h-10 w-10 place-items-center rounded-full transition-all duration-300',
               outOfStock
@@ -172,7 +185,7 @@ export default function StoreProductCard({
                 : 'bg-gold text-obsidian hover:scale-105'
             )}
           >
-            <ShoppingBag className="h-4 w-4" />
+            {backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
           </button>
         </div>
       </div>

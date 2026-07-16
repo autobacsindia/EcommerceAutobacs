@@ -137,7 +137,7 @@ describe('getProductPerformance', () => {
   it('ranks products and reports the active stock mix', async () => {
     const out = await svc.getProductPerformance(window);
     expect(out.topByRevenue[0].revenue).toBeGreaterThanOrEqual(out.topByRevenue[1].revenue);
-    expect(out.stock).toEqual({ in: 1, low: 1, out: 1 });
+    expect(out.stock).toEqual({ in: 1, low: 1, out: 1, backorder: 0 });
   });
 });
 

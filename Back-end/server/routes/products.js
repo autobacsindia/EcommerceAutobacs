@@ -24,6 +24,7 @@ import {
 } from "../middleware/uploadMiddleware.js";
 import {
   getProducts,
+  getAdminProducts,
   getProductFacets,
   getSearchSuggestions,
   getSearchAnalytics,
@@ -89,6 +90,14 @@ const publicProductRateLimit = rateLimit({
 // @access  Public
 // CRITICAL: Layered rate limiting for search (broad IP cap → burst → sustained)
 router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), publicCacheResponse('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
+
+// @route   GET /products/admin/list
+// @desc    Admin product-management list: includes INACTIVE products, honours a
+//          status=active|inactive filter, and is uncached (fresh after every edit).
+// @access  Private/Admin
+// Defined before "/:id" so the literal path wins over the id param. No cache
+// middleware here on purpose — admins must see their edits immediately.
+router.get("/admin/list", protect, admin, validateProductSearch, asyncHandler(getAdminProducts));
 
 // @route   GET /products/facets
 // @desc    Per-brand and per-category counts for the filter sidebar (accepts the same filters)

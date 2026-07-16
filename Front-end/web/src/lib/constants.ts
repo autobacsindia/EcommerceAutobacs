@@ -12,6 +12,8 @@ export const API_ENDPOINTS = {
   
   // Products
   PRODUCTS: '/products',
+  // Admin-only list: includes inactive products, uncached (see backend getAdminProducts).
+  ADMIN_PRODUCTS: '/products/admin/list',
   PRODUCT_DETAIL: (id: string) => `/products/${id}`,
   FEATURED_PRODUCTS: '/products/featured',
   

@@ -16,11 +16,11 @@ class SearchService {
    * @param {{excludeBrand?: boolean, excludeCategory?: boolean}} [exclude]
    * @returns {Object} Mongo query
    */
-  static async buildBaseQuery(params, { excludeBrand = false, excludeCategory = false } = {}) {
+  static async buildBaseQuery(params, { excludeBrand = false, excludeCategory = false, includeInactive = false } = {}) {
     const {
       category, brand, minPrice, maxPrice, search,
       vehicle, vehicleMake, vehicleModel,
-      isFeatured, isFastMoving, inStock, rating,
+      isFeatured, isFastMoving, inStock, rating, status,
     } = params;
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Cast id strings to ObjectId. find() auto-casts via the schema, but aggregate()
@@ -28,7 +28,18 @@ class SearchService {
     // filter match nothing.
     const toObjectId = (id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id);
 
-    const query = { isActive: true };
+    // Public callers see ONLY active products (hard default). Admin callers pass
+    // `includeInactive` to manage drafts/disabled items too, and may narrow with an
+    // explicit `status` (active|inactive). A public request can never set this — the
+    // flag is supplied by the server (admin controller), not read from user query.
+    const query = {};
+    if (!includeInactive) {
+      query.isActive = true;
+    } else if (status === 'active') {
+      query.isActive = true;
+    } else if (status === 'inactive') {
+      query.isActive = false;
+    }
 
     // Categories (+ all descendants)
     if (category && !excludeCategory) {
@@ -243,9 +254,11 @@ class SearchService {
    * @param {Object} params - Search parameters
    * @returns {Object} Search results with products and pagination info
    */
-  static async searchProducts(params) {
-    // Check if Elasticsearch is available
-    if (await elasticsearchService.isConnected()) {
+  static async searchProducts(params, { includeInactive = false } = {}) {
+    // Elasticsearch indexes ONLY active products (see indexAllProducts), so an admin
+    // list that must surface inactive/draft items skips ES and goes straight to Mongo
+    // against the full collection. Public search keeps using ES when available.
+    if (!includeInactive && await elasticsearchService.isConnected()) {
       try {
         const esParams = { ...params };
         if (!esParams.q && esParams.search) {
@@ -278,7 +291,7 @@ class SearchService {
     } = params;
 
     // Build the Mongo filter (shared with getFacets).
-    const query = await SearchService.buildBaseQuery(params);
+    const query = await SearchService.buildBaseQuery(params, { includeInactive });
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);

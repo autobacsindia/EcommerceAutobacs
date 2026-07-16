@@ -95,11 +95,36 @@
 .hr .main-nav .nav-links { display: flex; gap: 20px; flex: 1 1 auto; justify-content: center; align-items: center; }
 .hr .main-nav .nav-links a { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); transition: color 0.25s; white-space: nowrap; }
 .hr .main-nav .nav-links a:hover { color: var(--text); }
-.hr .main-nav .nav-search { flex: 0 1 220px; max-width: 220px; min-width: 110px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); transition: border-color 0.25s; }
+.hr .main-nav .nav-search { position: relative; flex: 0 1 220px; max-width: 220px; min-width: 110px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); transition: border-color 0.25s; }
 .hr .main-nav .nav-search:focus-within { border-color: rgba(201, 168, 112, 0.55); }
 .hr .main-nav .nav-search svg { flex-shrink: 0; }
 .hr .main-nav .nav-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; letter-spacing: 0.1em; }
 .hr .main-nav .nav-search input::placeholder { color: var(--muted); text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; }
+
+/* ── Search suggestions dropdown (live typeahead + recent searches) ──────────
+ * Anchored to the search box (desktop: right-aligned, wider than the input;
+ * mobile: full width under the fixed bar). Shared by both nav-search variants. */
+.hr .nav-search-panel { position: absolute; top: calc(100% + 8px); right: 0; width: 360px; max-width: min(360px, calc(100vw - 32px)); z-index: 60; background: var(--bg2); border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); backdrop-filter: blur(18px); max-height: min(70vh, 460px); overflow-y: auto; padding: 6px 0; text-align: left; }
+.hr .nav-search-bar .nav-search-panel { top: 100%; left: 0; right: 0; width: auto; max-width: none; border-left: none; border-right: none; }
+.hr .nav-search-panel .nsp-section + .nsp-section { border-top: 1px solid var(--line); }
+.hr .nav-search-panel .nsp-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 6px; font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); }
+.hr .nav-search-panel .nsp-clear { background: none; border: none; cursor: pointer; color: var(--muted); font-family: inherit; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; transition: color 0.2s; }
+.hr .nav-search-panel .nsp-clear:hover { color: var(--text); }
+.hr .nav-search-panel .nsp-empty { padding: 16px; color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
+.hr .nav-search-panel .nsp-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; color: var(--text); transition: background 0.15s; }
+.hr .nav-search-panel .nsp-row:hover, .hr .nav-search-panel .nsp-row.is-active { background: var(--bg3); }
+.hr .nav-search-panel .nsp-clock { color: var(--muted); flex-shrink: 0; }
+.hr .nav-search-panel .nsp-recent-term { flex: 1; min-width: 0; font-size: 12px; letter-spacing: 0.04em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr .nav-search-panel .nsp-remove { flex-shrink: 0; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 4px; transition: color 0.2s; }
+.hr .nav-search-panel .nsp-remove:hover { color: var(--text); }
+.hr .nav-search-panel .nsp-thumb { flex-shrink: 0; width: 38px; height: 38px; object-fit: cover; background: var(--bg3); }
+.hr .nav-search-panel .nsp-thumb-empty { display: block; }
+.hr .nav-search-panel .nsp-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hr .nav-search-panel .nsp-name { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr .nav-search-panel .nsp-meta { font-size: 10px; letter-spacing: 0.04em; color: var(--muted); text-transform: capitalize; }
+.hr .nav-search-panel .nsp-seeall { border-top: 1px solid var(--line); color: var(--gold); font-size: 11px; letter-spacing: 0.08em; }
+.hr .nav-search-panel .nsp-seeall svg { color: var(--gold); flex-shrink: 0; }
+.hr .nav-search-panel .nsp-seeall span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hr .main-nav .actions { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
 .hr .main-nav .icon-btn { position: relative; color: rgba(240, 237, 231, 0.6); cursor: pointer; display: flex; transition: color 0.25s; background: none; border: none; }
 .hr .main-nav .icon-btn:hover { color: var(--gold); }

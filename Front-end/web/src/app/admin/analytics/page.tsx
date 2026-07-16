@@ -261,6 +261,7 @@ function ProductsSection({ data, period, formatMoney }: { data: ProductPerforman
     { name: 'In stock', value: data.stock?.in ?? 0 },
     { name: 'Low stock', value: data.stock?.low ?? 0 },
     { name: 'Out of stock', value: data.stock?.out ?? 0 },
+    { name: 'On backorder', value: data.stock?.backorder ?? 0 },
   ];
   return (
     <div className="space-y-6">

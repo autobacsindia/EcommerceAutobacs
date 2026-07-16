@@ -182,9 +182,10 @@ describe('AdminOrdersPage', () => {
     fireEvent.click(screen.getByTestId('apply-filter-btn'));
 
     await waitFor(() => {
-      // Expect apiClient.get to be called with search param
+      // The unified search box sends `search=` (order id OR customer OR recipient),
+      // not the legacy id-only `orderNumber=`.
       expect(apiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('orderNumber=test-order')
+        expect.stringContaining('search=test-order')
       );
     });
   });

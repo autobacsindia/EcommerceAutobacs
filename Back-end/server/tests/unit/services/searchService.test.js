@@ -118,6 +118,37 @@ describe('SearchService Unit Tests', () => {
       expect(Product.find).toHaveBeenCalled();
     });
 
+    it('public search always constrains to isActive:true', async () => {
+      await SearchService.searchProducts({});
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(queryArg.isActive).toBe(true);
+    });
+
+    it('includeInactive drops the isActive filter AND uses Mongo even when ES is up', async () => {
+      // ES only indexes active products, so an admin list that must include inactive
+      // items has to bypass ES and query the full Mongo collection.
+      elasticsearchService.isConnected.mockResolvedValue(true);
+
+      await SearchService.searchProducts({}, { includeInactive: true });
+
+      expect(elasticsearchService.searchProducts).not.toHaveBeenCalled();
+      expect(Product.find).toHaveBeenCalled();
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(queryArg.isActive).toBeUndefined(); // no active/inactive constraint = all
+    });
+
+    it('admin status=inactive narrows to isActive:false', async () => {
+      await SearchService.searchProducts({ status: 'inactive' }, { includeInactive: true });
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(queryArg.isActive).toBe(false);
+    });
+
+    it('admin status=active narrows to isActive:true', async () => {
+      await SearchService.searchProducts({ status: 'active' }, { includeInactive: true });
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(queryArg.isActive).toBe(true);
+    });
+
     it('should apply brand filter in MongoDB query', async () => {
       const params = { brand: 'Toyota' };
       await SearchService.searchProducts(params);

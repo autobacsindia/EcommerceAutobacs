@@ -229,7 +229,12 @@ class AnalyticsReportService {
         ]),
       ]);
 
-      const stock = { [STOCK_STATUS.IN]: 0, [STOCK_STATUS.LOW]: 0, [STOCK_STATUS.OUT]: 0 };
+      const stock = {
+        [STOCK_STATUS.IN]: 0,
+        [STOCK_STATUS.LOW]: 0,
+        [STOCK_STATUS.OUT]: 0,
+        [STOCK_STATUS.BACKORDER]: 0,
+      };
       stockMix.forEach((row) => {
         if (row._id in stock) stock[row._id] = row.count;
       });

@@ -66,30 +66,27 @@ describe('AdminUsersPage', () => {
     });
   });
 
-  it('handles search and filtering', async () => {
+  it('searches and filters server-side (debounced, whole collection)', async () => {
     render(<AdminUsersPage />);
 
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
     });
 
-    // Search
-    const searchInput = screen.getByPlaceholderText('Search users...');
+    // Typing sends the term to the backend (search covers name/email/phone) rather
+    // than filtering the loaded page client-side, so results past page 1 are found.
+    const searchInput = screen.getByPlaceholderText('Search by name, email, or phone...');
     fireEvent.change(searchInput, { target: { value: 'Jane' } });
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('search=Jane')),
+    );
 
-    expect(screen.queryByText('John Doe')).not.toBeInTheDocument();
-    expect(screen.getByText('Jane Smith')).toBeInTheDocument();
-
-    // Reset search
-    fireEvent.change(searchInput, { target: { value: '' } });
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-
-    // Filter by role
+    // Role filter is also a server param.
     const roleSelect = screen.getByRole('combobox');
     fireEvent.change(roleSelect, { target: { value: 'admin' } });
-
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.queryByText('Jane Smith')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('role=admin')),
+    );
   });
 
   it('handles delete user', async () => {

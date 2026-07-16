@@ -275,7 +275,7 @@ class ProductRepository {
   }
 
   /**
-   * Set product stock status ('in' | 'low' | 'out').
+   * Set product stock status ('in' | 'low' | 'out' | 'backorder').
    */
   async updateStock(productId, status) {
     return Product.updateOne(

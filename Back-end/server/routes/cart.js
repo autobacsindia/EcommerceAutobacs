@@ -4,7 +4,7 @@ import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import pricingService from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
-import { STOCK_STATUS } from "../utils/stockStatus.js";
+import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 
 const router = express.Router();
 
@@ -52,7 +52,9 @@ router.get("/", asyncHandler(async (req, res) => {
   const removedItems = [];
 
   cart.items = cart.items.filter(item => {
-    if (!item.product || !item.product.isActive || item.product.stock === STOCK_STATUS.OUT) {
+    // Drop items that became inactive or non-purchasable (out of stock, or
+    // switched to backorder/enquiry-only after they were added).
+    if (!item.product || !item.product.isActive || !isPurchasable(item.product.stock)) {
       if (item.product) {
         removedItems.push({
           productId: item.product._id,
@@ -123,11 +125,14 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     });
   }
 
-  // Check stock availability (coarse status — out of stock blocks add)
-  if (product.stock === STOCK_STATUS.OUT) {
+  // Check stock availability (coarse status). Out of stock is unavailable;
+  // backorder is enquiry-only and must go through the consultation flow.
+  if (!isPurchasable(product.stock)) {
     return res.status(400).json({
       success: false,
-      message: 'This item is out of stock'
+      message: product.stock === STOCK_STATUS.BACKORDER
+        ? 'This item is on backorder — please enquire to order it'
+        : 'This item is out of stock'
     });
   }
 
@@ -304,11 +309,14 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
   // 🟡 LAYER 1: Stock Validation on Quantity Update
   const product = await Product.findById(req.params.productId);
 
-  // Check if product is out of stock (coarse status — no quantity cap)
-  if (product.stock === STOCK_STATUS.OUT) {
+  // Block quantity updates for items that are no longer purchasable (out of
+  // stock, or switched to backorder/enquiry-only).
+  if (!isPurchasable(product.stock)) {
     return res.status(400).json({
       success: false,
-      message: `This item is now out of stock`
+      message: product.stock === STOCK_STATUS.BACKORDER
+        ? `This item is now on backorder — please enquire to order it`
+        : `This item is now out of stock`
     });
   }
 

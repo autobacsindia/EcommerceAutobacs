@@ -1348,23 +1348,64 @@ export const getAllOrdersAdmin = async (req, res) => {
   }
   if (Object.keys(amount).length) query.totalAmount = amount;
 
-  // Customer name/email → resolve to user ids (orders only reference the user by id).
-  // No matching user ⇒ no orders can match, so short-circuit to an empty page.
+  // Customer name/email/phone → resolve to user ids (orders only reference the user
+  // by id). This is the ADVANCED, customer-only filter; the main `search` box below
+  // is broader. No matching user ⇒ no orders can match, so short-circuit to empty.
   if (req.query.customer && String(req.query.customer).trim()) {
     const userIds = await userRepository.findIdsByNameOrEmail(String(req.query.customer).trim());
     if (userIds.length === 0) return res.json(emptyOrdersPage(page, limit));
     query.user = { $in: userIds };
   }
 
-  // Order-number search. There is no `orderNumber` field — the visible id is the last
-  // 8 hex chars of _id — so match a full ObjectId exactly, else a trailing-hex fragment
-  // of the stringified _id. Anything non-hex can never match an ObjectId-derived id.
-  const searchTerm = String(req.query.orderNumber || req.query.search || '').trim();
-  if (searchTerm) {
-    if (mongoose.Types.ObjectId.isValid(searchTerm) && searchTerm.length === 24) {
-      query._id = new mongoose.Types.ObjectId(searchTerm);
-    } else if (/^[a-fA-F0-9]+$/.test(searchTerm)) {
-      query.$expr = { $regexMatch: { input: { $toString: '$_id' }, regex: `${searchTerm}$`, options: 'i' } };
+  // Search. Two params, by design:
+  //  • `search` — the UNIFIED box. Matches an order by ANY of: order id (full
+  //    ObjectId or a trailing-hex fragment of _id — the visible order # is the last
+  //    8 hex chars), the buyer (user name/email/phone → ids), or the order's own
+  //    recipient details (shippingAddress.fullName / .phone + guest contact email,
+  //    which cover guest and offline orders whose `user` link is thin/absent).
+  //    Previously the box only accepted order-id hex, so typing a customer name
+  //    returned an empty page.
+  //  • `orderNumber` — the LEGACY strict order-id lookup, kept for API compatibility
+  //    (a numeric fragment must not spuriously match phone numbers here).
+  const unifiedTerm = String(req.query.search || '').trim();
+  const orderNumberTerm = String(req.query.orderNumber || '').trim();
+
+  if (unifiedTerm) {
+    const or = [];
+
+    // Order-id lane. 24-char hex = full ObjectId; a shorter hex run = trailing
+    // fragment of the stringified _id. Non-hex simply skips this lane.
+    if (mongoose.Types.ObjectId.isValid(unifiedTerm) && unifiedTerm.length === 24) {
+      or.push({ _id: new mongoose.Types.ObjectId(unifiedTerm) });
+    } else if (/^[a-fA-F0-9]+$/.test(unifiedTerm)) {
+      or.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${unifiedTerm}$`, options: 'i' } } });
+    }
+
+    // Buyer lane — resolve matching users to ids.
+    const userIds = await userRepository.findIdsByNameOrEmail(unifiedTerm);
+    if (userIds.length > 0) or.push({ user: { $in: userIds } });
+
+    // Recipient / guest-contact lanes stored directly on the order (regex-escaped).
+    const rx = new RegExp(unifiedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    or.push(
+      { 'shippingAddress.fullName': rx },
+      { 'shippingAddress.phone': rx },
+      { guestEmail: rx },
+    );
+
+    // If the caller already narrowed by `customer` (query.user set above), keep both
+    // constraints via $and so the two never clobber each other's key.
+    if (query.user) {
+      query.$and = [{ user: query.user }, { $or: or }];
+      delete query.user;
+    } else {
+      query.$or = or;
+    }
+  } else if (orderNumberTerm) {
+    if (mongoose.Types.ObjectId.isValid(orderNumberTerm) && orderNumberTerm.length === 24) {
+      query._id = new mongoose.Types.ObjectId(orderNumberTerm);
+    } else if (/^[a-fA-F0-9]+$/.test(orderNumberTerm)) {
+      query.$expr = { $regexMatch: { input: { $toString: '$_id' }, regex: `${orderNumberTerm}$`, options: 'i' } };
     } else {
       return res.json(emptyOrdersPage(page, limit));
     }

@@ -565,6 +565,77 @@ describe('Orders Integration API', () => {
       expect(amounts[0]).toBe(100);
     });
 
+    it('unified search finds an order by the buyer name (was empty before)', async () => {
+      await seedOrder();
+      const salt = await bcrypt.genSalt(10);
+      const zoe = await User.create({
+        name: 'Zoe Shopper', email: 'zoe.shopper@example.com', phone: '9998887777',
+        passwordHash: await bcrypt.hash('password123', salt), role: 'customer',
+      });
+      await seedOrder({ user: zoe._id, totalAmount: 888, subtotal: 888 });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?search=zoe`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.orders[0].totalAmount).toBe(888);
+    });
+
+    it('unified search finds an order by the recipient name on the order itself', async () => {
+      await seedOrder();
+      await seedOrder({
+        totalAmount: 654, subtotal: 654,
+        shippingAddress: {
+          fullName: 'Rajesh Kumar', phone: '9123456780', addressLine1: '9 Road',
+          city: 'Pune', state: 'MH', postalCode: '411001', country: 'India',
+        },
+      });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?search=Rajesh`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.orders[0].totalAmount).toBe(654);
+    });
+
+    it('unified search finds an order by the recipient phone on the order', async () => {
+      await seedOrder(); // phone 1234567890
+      await seedOrder({
+        totalAmount: 543, subtotal: 543,
+        shippingAddress: {
+          fullName: 'Meera', phone: '9555000111', addressLine1: '2 Lane',
+          city: 'Delhi', state: 'DL', postalCode: '110001', country: 'India',
+        },
+      });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?search=9555000111`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      expect(res.body.total).toBe(1);
+      expect(res.body.orders[0].totalAmount).toBe(543);
+    });
+
+    it('unified search still finds an order by the trailing hex of its id', async () => {
+      await seedOrder();
+      const target = await seedOrder({ totalAmount: 321, subtotal: 321 });
+      const visibleId = target._id.toString().slice(-8);
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?search=${visibleId}`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+
+      // The id lane matches the target; recipient lanes on the shared 'Test User' /
+      // phone don't match a hex id fragment, so the target is the only hit.
+      expect(res.body.orders.some(o => o.totalAmount === 321)).toBe(true);
+    });
+
     it('finds an order by the trailing hex of its id (the visible order #)', async () => {
       await seedOrder();
       const target = await seedOrder({ totalAmount: 777, subtotal: 777 });

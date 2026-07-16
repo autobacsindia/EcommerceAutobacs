@@ -28,7 +28,7 @@ describe('OrderFiltersPanel', () => {
 
     // Search lives in the collapsible section — expand it first.
     fireEvent.click(screen.getByText('Filters'));
-    const input = screen.getByPlaceholderText(/search order #/i);
+    const input = screen.getByPlaceholderText(/order id/i);
 
     // Two quick keystrokes must NOT fire a request each.
     fireEvent.change(input, { target: { value: 'ab' } });
