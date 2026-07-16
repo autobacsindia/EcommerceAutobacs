@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart, ShoppingBag, HeadphonesIcon } from 'lucide-react';
+import { Heart, ShoppingBag, HeadphonesIcon, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import ProductImage from '@/components/products/ProductImage';
@@ -49,7 +49,14 @@ export default function StoreProductCard({
     (typeof product.category === 'object' && product.category ? (product.category as { name?: string }).name : undefined) ??
     (typeof product.category === 'string' ? product.category : undefined);
 
-  const onSale = !!product.originalPrice && product.originalPrice > product.price;
+  // A variable product can't be quick-added from a card (a model must be picked on
+  // the PDP), so it shows a "From" price and a Select affordance that opens the PDP.
+  const isVariable = product.productType === 'variable';
+  const priceMin = product.priceMin ?? product.price;
+  const priceMax = product.priceMax ?? product.price;
+  const showsRange = isVariable && priceMax > priceMin;
+
+  const onSale = !isVariable && !!product.originalPrice && product.originalPrice > product.price;
   const discount = onSale
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
@@ -73,6 +80,12 @@ export default function StoreProductCard({
     e.preventDefault();
     e.stopPropagation();
     if (outOfStock) return;
+    // Variable products need a model chosen on the PDP — the server rejects an
+    // add without a variant, so send the shopper there instead of quick-adding.
+    if (isVariable) {
+      if (url) router.push(url);
+      return;
+    }
     // Backorder is enquiry-only — route to the consultation flow with the
     // product name prefilled instead of adding to cart.
     if (backorder) {
@@ -166,7 +179,12 @@ export default function StoreProductCard({
         {/* Price + add */}
         <div className="mt-auto flex items-end justify-between pt-2">
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-[18px] font-medium text-ink">{formatPrice(product.price)}</span>
+            {showsRange && (
+              <span className="font-display text-[10px] uppercase tracking-[0.14em] text-ink-muted">From</span>
+            )}
+            <span className="font-display text-[18px] font-medium text-ink">
+              {formatPrice(isVariable ? priceMin : product.price)}
+            </span>
             {onSale && (
               <span className="font-display text-[12px] text-ink-muted line-through">
                 {formatPrice(product.originalPrice!)}
@@ -176,8 +194,8 @@ export default function StoreProductCard({
           <button
             onClick={add}
             disabled={outOfStock}
-            aria-label={backorder ? 'Enquire about this product' : 'Add to cart'}
-            title={backorder ? 'On backorder — click to enquire' : undefined}
+            aria-label={isVariable ? 'Select a model' : backorder ? 'Enquire about this product' : 'Add to cart'}
+            title={isVariable ? 'Choose a model on the product page' : backorder ? 'On backorder — click to enquire' : undefined}
             className={cn(
               'grid h-10 w-10 place-items-center rounded-full transition-all duration-300',
               outOfStock
@@ -185,7 +203,7 @@ export default function StoreProductCard({
                 : 'bg-gold text-obsidian hover:scale-105'
             )}
           >
-            {backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
+            {isVariable ? <SlidersHorizontal className="h-4 w-4" /> : backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
           </button>
         </div>
       </div>

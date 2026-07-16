@@ -131,6 +131,10 @@ export default function ProductCard({
           price={product.price}
           originalPrice={product.originalPrice}
           stock={product.stock}
+          productType={product.productType}
+          priceMin={product.priceMin}
+          priceMax={product.priceMax}
+          href={url}
         />
       </div>
     </div>

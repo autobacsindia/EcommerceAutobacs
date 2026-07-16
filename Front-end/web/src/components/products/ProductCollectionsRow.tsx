@@ -3,7 +3,7 @@
 import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, Heart, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Heart, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -33,6 +33,10 @@ interface Product {
   brand?: string;
   stock: StockStatus;
   averageRating: number;
+  slug?: string;
+  productType?: 'simple' | 'variable' | 'grouped';
+  priceMin?: number;
+  priceMax?: number;
 }
 
 interface CollectionConfig {
@@ -107,11 +111,14 @@ export default function ProductCollectionsRow({
     fetchAllCollections();
   }, [collections, productsPerCollection]);
 
-  const handleAddToCart = async (productId: string, e: React.MouseEvent) => {
+  const handleAddToCart = async (product: Product, e: React.MouseEvent) => {
+    // Variable products can't be quick-added — let the click bubble to the card
+    // <Link> so it opens the PDP where a model is selected.
+    if (product.productType === 'variable') return;
     e.preventDefault();
     toast.success('Added to cart!');
     try {
-      await addToCart(productId, 1);
+      await addToCart(product._id, 1);
     } catch (error) {
       console.error('Failed to add to cart:', error);
       toast.error('Failed to add to cart');
@@ -262,7 +269,14 @@ export default function ProductCollectionsRow({
 
                             {/* Price - Compact */}
                             <div className="mt-2">
-                              {product.originalPrice && product.originalPrice > product.price ? (
+                              {product.productType === 'variable' ? (
+                                <p className="text-lg font-bold text-ink">
+                                  {(product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
+                                    <span className="text-xs uppercase tracking-[0.14em] text-ink-muted mr-1">From</span>
+                                  )}
+                                  {formatPrice(product.priceMin ?? product.price)}
+                                </p>
+                              ) : product.originalPrice && product.originalPrice > product.price ? (
                                 <div>
                                   <p className="text-lg font-bold text-gold">
                                     {formatPrice(product.price)}
@@ -278,14 +292,14 @@ export default function ProductCollectionsRow({
                               )}
                             </div>
 
-                            {/* Compact Add to Cart Button */}
+                            {/* Compact Add to Cart / Select button */}
                             <button
-                              onClick={(e) => handleAddToCart(product._id, e)}
+                              onClick={(e) => handleAddToCart(product, e)}
                               disabled={product.stock === 'out'}
                               className="w-full mt-3 flex items-center justify-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium"
                             >
-                              <ShoppingCart className="h-4 w-4" />
-                              <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
+                              {product.productType === 'variable' ? <SlidersHorizontal className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+                              <span>{product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}</span>
                             </button>
                           </div>
                         </div>

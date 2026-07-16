@@ -3,7 +3,7 @@
 import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Heart, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -33,6 +33,10 @@ interface Product {
   brand?: string;
   stock: StockStatus;
   averageRating: number;
+  slug?: string;
+  productType?: 'simple' | 'variable' | 'grouped';
+  priceMin?: number;
+  priceMax?: number;
 }
 
 interface CollectionConfig {
@@ -119,12 +123,15 @@ export default function CuratedCollectionCarousel({
 
 
 
-  const handleAddToCart = async (productId: string, e: React.MouseEvent) => {
+  const handleAddToCart = async (product: Product, e: React.MouseEvent) => {
+    // Variable products can't be quick-added — let the click bubble to the card
+    // <Link> so it opens the PDP where a model is selected.
+    if (product.productType === 'variable') return;
     e.preventDefault();
     e.stopPropagation();
     toast.success('Added to cart!');
     try {
-      await addToCart(productId, 1);
+      await addToCart(product._id, 1);
     } catch (error) {
       console.error('Failed to add to cart:', error);
       toast.error('Failed to add to cart');
@@ -304,7 +311,14 @@ export default function CuratedCollectionCarousel({
 
                     {/* Price */}
                     <div className="mb-2">
-                      {product.originalPrice && product.originalPrice > product.price ? (
+                      {product.productType === 'variable' ? (
+                        <p className="text-lg font-bold text-ink">
+                          {(product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
+                            <span className="text-xs uppercase tracking-[0.14em] text-ink-muted mr-1">From</span>
+                          )}
+                          {formatPrice(product.priceMin ?? product.price)}
+                        </p>
+                      ) : product.originalPrice && product.originalPrice > product.price ? (
                         <div>
                           <div className="flex items-baseline gap-2">
                             <span className="text-lg font-bold text-ink">
@@ -331,11 +345,12 @@ export default function CuratedCollectionCarousel({
 
                     {/* Add to Cart Button - Amazon Orange Style */}
                     <button
-                      onClick={(e) => handleAddToCart(product._id, e)}
+                      onClick={(e) => handleAddToCart(product, e)}
                       disabled={product.stock === 'out'}
-                      className="w-full bg-yellow-400 hover:bg-yellow-500 text-ink px-3 py-2 rounded-lg transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                      className="w-full flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-ink px-3 py-2 rounded-lg transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium shadow-sm"
                     >
-                      {product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}
+                      {product.productType === 'variable' && product.stock !== 'out' && <SlidersHorizontal className="h-4 w-4" />}
+                      {product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}
                     </button>
                   </div>
                 </div>

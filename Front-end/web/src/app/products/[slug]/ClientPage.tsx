@@ -88,6 +88,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
           originalPrice: product.originalPrice,
           image: product.images?.[0]?.url,
           slug: product.slug || '',
+          // Variant context so the Recently-Viewed card can show a "From" range
+          // and route to the PDP instead of quick-adding.
+          productType: product.productType,
+          priceMin: product.priceMin,
+          priceMax: product.priceMax,
         },
         ...filtered,
       ].slice(0, 10);

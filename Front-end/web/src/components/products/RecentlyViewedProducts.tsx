@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, SlidersHorizontal } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
@@ -17,6 +17,10 @@ interface RecentProduct {
   price: number;
   originalPrice?: number;
   image?: string;
+  // Variable-product fields snapshotted when the product was viewed (see ClientPage).
+  productType?: 'simple' | 'variable' | 'grouped';
+  priceMin?: number;
+  priceMax?: number;
 }
 
 export default function RecentlyViewedProducts() {
@@ -95,27 +99,43 @@ export default function RecentlyViewedProducts() {
 
                 <div className="mt-3 flex items-end justify-between">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-display font-bold text-gold">{formatPrice(product.price)}</span>
-                    {product.originalPrice && product.originalPrice > product.price && (
+                    {product.productType === 'variable' && (product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-ink-muted">From</span>
+                    )}
+                    <span className="text-lg font-display font-bold text-gold">
+                      {formatPrice(product.productType === 'variable' ? (product.priceMin ?? product.price) : product.price)}
+                    </span>
+                    {product.productType !== 'variable' && product.originalPrice && product.originalPrice > product.price && (
                       <span className="text-xs text-ink-muted line-through">{formatPrice(product.originalPrice)}</span>
                     )}
                   </div>
 
-                  <button
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      toast.success('Added to cart');
-                      try {
-                        await addToCart(product._id, 1);
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to add to cart');
-                      }
-                    }}
-                    className="p-2 bg-obsidian-raised text-ink/70 rounded-full hover:bg-gold hover:text-obsidian transition-colors"
-                    title="Add to Cart"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                  </button>
+                  {product.productType === 'variable' ? (
+                    // Must pick a model on the PDP — link there instead of quick-adding.
+                    <Link
+                      href={url}
+                      className="p-2 bg-obsidian-raised text-ink/70 rounded-full hover:bg-gold hover:text-obsidian transition-colors"
+                      title="Select a model"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        toast.success('Added to cart');
+                        try {
+                          await addToCart(product._id, 1);
+                        } catch (error: any) {
+                          toast.error(error.message || 'Failed to add to cart');
+                        }
+                      }}
+                      className="p-2 bg-obsidian-raised text-ink/70 rounded-full hover:bg-gold hover:text-obsidian transition-colors"
+                      title="Add to Cart"
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -359,6 +359,11 @@ class ElasticsearchService {
         brand: product.brand,
         price: product.price,
         originalPrice: product.originalPrice,
+        // Variable-product fields so search/list cards can show a "From" range and
+        // route to the PDP instead of quick-adding (a variant must be selected).
+        productType: product.productType || 'simple',
+        priceMin: product.priceMin,
+        priceMax: product.priceMax,
         stock: product.stock,
         sku: product.sku,
         isActive: product.isActive,
