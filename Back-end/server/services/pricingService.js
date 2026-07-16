@@ -68,6 +68,25 @@ export function effectivePrice(product, now = new Date()) {
   return product.price;
 }
 
+/**
+ * Resolve a variable product's selected variant. The single implementation of
+ * "find the variant by id, ensure it exists and is purchasable" — shared by the
+ * checkout recompute (priceItems) and add-to-cart (routes/cart.js) so the two can
+ * never drift. Returns `{ variant }` on success, or `{ reason }` describing the
+ * failure ('unselected' | 'missing' | 'out' | 'backorder'); callers format their
+ * own buyer-facing message. `variant` is included on 'out'/'backorder' for labels.
+ */
+export function resolveVariant(product, rawVariantId) {
+  const selectedId = rawVariantId != null ? String(rawVariantId) : '';
+  if (!selectedId) return { reason: 'unselected' };
+  const variant = (product.variants || []).find(v => String(v._id) === selectedId);
+  if (!variant) return { reason: 'missing' };
+  if (!isPurchasable(variant.stock)) {
+    return { reason: variant.stock === STOCK_STATUS.BACKORDER ? 'backorder' : 'out', variant };
+  }
+  return { variant };
+}
+
 class PricingService {
   /**
    * Validate each item against the catalogue and re-price from the DB.
@@ -94,11 +113,10 @@ class PricingService {
       let variantId = null;
       let variantLabel = null;
       if (product.productType === 'variable') {
-        const selectedId = item.variantId != null ? String(item.variantId) : '';
-        if (!selectedId) throw new AppError(`Please select a variant for ${product.name}`, 400);
-        const variant = (product.variants || []).find(v => String(v._id) === selectedId);
-        if (!variant) throw new AppError(`Selected variant is no longer available for ${product.name}`, 400);
-        if (!isPurchasable(variant.stock)) throw new AppError(`${product.name} (${variant.label}) is out of stock`, 400);
+        const { variant, reason } = resolveVariant(product, item.variantId);
+        if (reason === 'unselected') throw new AppError(`Please select a variant for ${product.name}`, 400);
+        if (reason === 'missing') throw new AppError(`Selected variant is no longer available for ${product.name}`, 400);
+        if (reason) throw new AppError(`${product.name} (${variant.label}) is out of stock`, 400);
         priceSource = variant;
         variantId = variant._id;
         variantLabel = variant.label;

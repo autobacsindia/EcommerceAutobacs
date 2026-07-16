@@ -2,7 +2,7 @@ import express from "express";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import pricingService, { effectivePrice } from "../services/pricingService.js";
+import pricingService, { effectivePrice, resolveVariant } from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 
@@ -12,14 +12,15 @@ import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 // Centralised so add-to-cart and the pricing service stay consistent.
 function resolvePurchasable(product, rawVariantId) {
   if (product.productType === 'variable') {
-    const selectedId = rawVariantId != null ? String(rawVariantId) : '';
-    if (!selectedId) throw { status: 400, message: 'Please select a variant before adding to cart' };
-    const variant = (product.variants || []).find(v => String(v._id) === selectedId);
-    if (!variant) throw { status: 400, message: 'Selected variant is no longer available' };
-    if (!isPurchasable(variant.stock)) {
+    // Shared resolution (find / exists / stock) lives in pricingService.resolveVariant
+    // so add-to-cart and the checkout recompute never diverge.
+    const { variant, reason } = resolveVariant(product, rawVariantId);
+    if (reason === 'unselected') throw { status: 400, message: 'Please select a variant before adding to cart' };
+    if (reason === 'missing') throw { status: 400, message: 'Selected variant is no longer available' };
+    if (reason) {
       throw {
         status: 400,
-        message: variant.stock === STOCK_STATUS.BACKORDER
+        message: reason === 'backorder'
           ? 'This model is on backorder — please enquire to order it'
           : 'This model is out of stock'
       };
@@ -41,6 +42,19 @@ function resolvePurchasable(product, rawVariantId) {
 const sameLine = (item, productId, variantId) =>
   (item.product._id || item.product).toString() === String(productId) &&
   String(item.variantId || '') === String(variantId || '');
+
+// Is a POPULATED cart line still buyable? Variant-aware: a variable line requires
+// its selected variant to still exist AND be purchasable; a simple line uses the
+// product's own stock. Used to prune the cart on read (GET /cart).
+function linePurchasable(item) {
+  const product = item.product;
+  if (!product || !product.isActive) return false;
+  if (product.productType === 'variable') {
+    const variant = (product.variants || []).find(v => String(v._id) === String(item.variantId || ''));
+    return !!variant && isPurchasable(variant.stock);
+  }
+  return isPurchasable(product.stock);
+}
 
 // Re-price a POPULATED cart line against current DB state (variant-aware). Returns
 // the current unit price + display name, and flags stock/variant problems for the
@@ -113,13 +127,14 @@ router.get("/", asyncHandler(async (req, res) => {
   const removedItems = [];
 
   cart.items = cart.items.filter(item => {
-    // Drop items that became inactive or non-purchasable (out of stock, or
-    // switched to backorder/enquiry-only after they were added).
-    if (!item.product || !item.product.isActive || !isPurchasable(item.product.stock)) {
+    // Drop items that became inactive or non-purchasable. Variant-aware: a
+    // variable line is dropped when its selected variant is gone or out of
+    // stock/backorder, even if a sibling variant keeps the parent "in stock".
+    if (!linePurchasable(item)) {
       if (item.product) {
         removedItems.push({
           productId: item.product._id,
-          productName: item.product.name,
+          productName: item.variantLabel ? `${item.product.name} — ${item.variantLabel}` : item.product.name,
           previousQuantity: item.quantity
         });
       }

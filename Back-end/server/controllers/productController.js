@@ -99,11 +99,18 @@ export const getProducts = async (req, res) => {
 export const getAdminProducts = async (req, res) => {
   try {
     const searchResults = await SearchService.searchProducts(req.query, { includeInactive: true });
+    // The list table only needs the variant COUNT, not every embedded variant
+    // (up to ~15 subdocs each). Replace the heavy array with a count so a page of
+    // variable products doesn't ship hundreds of unused variant subdocs.
+    const products = searchResults.products.map(({ variants, ...p }) => ({
+      ...p,
+      variantCount: Array.isArray(variants) ? variants.length : 0,
+    }));
     res.json({
       success: true,
-      count: searchResults.products.length,
+      count: products.length,
       ...searchResults.pagination,
-      products: searchResults.products,
+      products,
     });
   } catch (error) {
     console.error('[ProductController] Error in getAdminProducts:', error);

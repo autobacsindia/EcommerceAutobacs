@@ -27,7 +27,7 @@ import Brand from '../models/Brand.js';
 import { resolveBrand } from '../utils/brandResolution.js';
 import { STOCK_STATUS, statusFromQuantity } from '../utils/stockStatus.js';
 import { splitDescriptionSections } from '../utils/descriptionSections.js';
-import { mapVariationsToVariants, aggregateFromVariants } from '../utils/wcVariants.js';
+import { mapVariationsToVariants, aggregateFromVariants, reconcileVariantIds } from '../utils/wcVariants.js';
 
 function getConfig() {
   const cfg = {
@@ -235,7 +235,9 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
         // back-compat parent price/stock explicitly from the variants.
         if (wc.type === 'variable') {
           const wcVariations = await wcGetAll(`products/${wc.id}/variations`);
-          const variants = mapVariationsToVariants(wcVariations);
+          // Preserve existing variant _ids (match on wpVariationId) so a re-sync
+          // doesn't orphan cart/order references — see reconcileVariantIds.
+          const variants = reconcileVariantIds(existingDoc?.variants, mapVariationsToVariants(wcVariations));
           if (variants.length) {
             data.variants = variants;
             Object.assign(data, aggregateFromVariants(variants));

@@ -92,14 +92,18 @@ export default function VariantsEditor({
                     className="w-28 border rounded px-2 py-1.5"
                   />
                 </td>
-                <td className="py-2 pr-3">
+                <td className="py-2 pr-3 align-top">
                   <input
                     type="number" min="0" step="0.01"
                     value={v.originalPrice ?? ''}
                     onChange={(e) => update(i, { originalPrice: e.target.value })}
                     placeholder="—"
-                    className="w-24 border rounded px-2 py-1.5"
+                    className={`w-24 border rounded px-2 py-1.5 ${isWasPriceInvalid(v) ? 'border-red-400 bg-red-50' : ''}`}
+                    aria-invalid={isWasPriceInvalid(v)}
                   />
+                  {isWasPriceInvalid(v) && (
+                    <p className="text-[11px] text-red-500 mt-1 max-w-24">Must exceed price, or it won’t show a discount.</p>
+                  )}
                 </td>
                 <td className="py-2 pr-3">
                   <select
@@ -160,14 +164,24 @@ export default function VariantsEditor({
 // single option name). Drops blank rows. Keeps `_id` so references survive edits.
 export function serializeVariants(attributeName: string, variants: EditorVariant[]) {
   return variants
-    .map((v) => ({
-      ...(v._id && { _id: v._id }),
-      label: v.label.trim(),
-      attributes: [{ name: (attributeName || 'option').trim(), option: v.label.trim() }],
-      price: Number(v.price) || 0,
-      originalPrice: v.originalPrice != null && v.originalPrice !== '' ? Number(v.originalPrice) : null,
-      stock: v.stock,
-      ...(v.sku && v.sku.trim() && { sku: v.sku.trim() }),
-    }))
+    .map((v) => {
+      const price = Number(v.price) || 0;
+      const was = v.originalPrice != null && v.originalPrice !== '' ? Number(v.originalPrice) : null;
+      return {
+        ...(v._id && { _id: v._id }),
+        label: v.label.trim(),
+        attributes: [{ name: (attributeName || 'option').trim(), option: v.label.trim() }],
+        price,
+        // Keep "Was (₹)" only when it's a genuine discount (> price); otherwise it
+        // would render no badge and just be misleading stored data.
+        originalPrice: was != null && was > price ? was : null,
+        stock: v.stock,
+        ...(v.sku && v.sku.trim() && { sku: v.sku.trim() }),
+      };
+    })
     .filter((v) => v.label && v.price >= 0);
 }
+
+/** True when a row has a "Was (₹)" that isn't a genuine discount (≤ price). */
+export const isWasPriceInvalid = (v: EditorVariant) =>
+  v.originalPrice != null && v.originalPrice !== '' && Number(v.originalPrice) <= Number(v.price);

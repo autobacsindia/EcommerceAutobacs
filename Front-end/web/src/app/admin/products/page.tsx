@@ -18,7 +18,8 @@ interface Product {
   isFeatured: boolean;
   isActive?: boolean;
   productType?: 'simple' | 'variable' | 'grouped';
-  variants?: unknown[];
+  // The admin list endpoint returns a count, not the full variants array.
+  variantCount?: number;
   priceMin?: number;
   priceMax?: number;
 }
@@ -300,7 +301,7 @@ function AdminProductsPageInner() {
                       <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>{product.name}</div>
                       {product.productType === 'variable' && (
                         <span className="shrink-0 mt-0.5 px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                          Variable{product.variants?.length ? ` · ${product.variants.length}` : ''}
+                          Variable{product.variantCount ? ` · ${product.variantCount}` : ''}
                         </span>
                       )}
                       {product.productType === 'grouped' && (

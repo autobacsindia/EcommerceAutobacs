@@ -26,7 +26,7 @@ import mongoose from 'mongoose';
 import axios from 'axios';
 import https from 'https';
 import Product from '../models/Product.js';
-import { mapVariationsToVariants, aggregateFromVariants } from '../utils/wcVariants.js';
+import { mapVariationsToVariants, aggregateFromVariants, reconcileVariantIds } from '../utils/wcVariants.js';
 
 const arg = (k) => { const m = process.argv.find(a => a.startsWith(`--${k}=`)); return m ? m.split('=')[1] : null; };
 const DRY = process.argv.includes('--dry-run');
@@ -89,7 +89,8 @@ async function wcGetAll(path, params = {}) {
       if (!doc) { stats.noMongoMatch++; noMatch.push(p.id); continue; }
 
       const wcVariations = await wcGetAll(`/products/${p.id}/variations`);
-      const variants = mapVariationsToVariants(wcVariations);
+      // Preserve existing variant _ids on re-run so references stay stable.
+      const variants = reconcileVariantIds(doc.variants, mapVariationsToVariants(wcVariations));
       if (!variants.length) { stats.noVariants++; console.log(`  · ${p.id} "${(p.name||'').replace(/<[^>]+>/g,'').slice(0,45)}" — no variations, skipped`); continue; }
 
       const agg = aggregateFromVariants(variants);

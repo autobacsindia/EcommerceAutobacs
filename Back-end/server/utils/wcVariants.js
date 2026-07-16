@@ -74,6 +74,30 @@ export function mapVariationsToVariants(wcVariations = []) {
 }
 
 /**
+ * Preserve existing variant subdoc _ids across a re-import. mapVariationsToVariants
+ * produces fresh variants with no _id; assigning them straight into a product would
+ * mint NEW ObjectIds every sync, orphaning any cart/order that references a variant
+ * by _id. This matches incoming variants to the current ones by wpVariationId and
+ * carries the existing _id over, so a re-sync is stable. New variants (no match)
+ * keep no _id and Mongoose assigns one once.
+ *
+ * @param {Array} existingVariants - the product's current variants (may be undefined)
+ * @param {Array} newVariants      - freshly mapped variants (from mapVariationsToVariants)
+ * @returns {Array} newVariants with _id back-filled from matching existing variants
+ */
+export function reconcileVariantIds(existingVariants = [], newVariants = []) {
+  const byWpId = new Map(
+    (existingVariants || [])
+      .filter((v) => v && v.wpVariationId != null && v._id != null)
+      .map((v) => [String(v.wpVariationId), v._id])
+  );
+  return newVariants.map((v) => {
+    const existingId = v.wpVariationId != null ? byWpId.get(String(v.wpVariationId)) : undefined;
+    return existingId ? { ...v, _id: existingId } : v;
+  });
+}
+
+/**
  * Derive the parent aggregates from variants. The Product pre('validate') hook
  * does this on .save(), but bulk `$set` updates (findByIdAndUpdate) bypass that
  * hook — so importers that use $set must set these explicitly to keep priceMin/
@@ -85,9 +109,14 @@ export function aggregateFromVariants(variants = []) {
   const prices = variants.map(v => v.price).filter(p => typeof p === 'number' && !Number.isNaN(p));
   const priceMin = prices.length ? Math.min(...prices) : 0;
   const priceMax = prices.length ? Math.max(...prices) : 0;
-  // Parent is in stock if ANY variant is purchasable (not OUT and not BACKORDER).
-  const anyPurchasable = variants.some(v => v.stock !== STOCK_STATUS.OUT && v.stock !== STOCK_STATUS.BACKORDER);
-  return { priceMin, priceMax, price: priceMin, stock: anyPurchasable ? STOCK_STATUS.IN : STOCK_STATUS.OUT };
+  // Parent stock reflects the best availability among variants:
+  //   any in/low → IN; else any backorder → BACKORDER (still enquiry-orderable);
+  //   else OUT. Collapsing backorder to OUT would wrongly hide a product whose
+  //   models can still be ordered via the enquiry flow.
+  const anyInStock = variants.some(v => v.stock === STOCK_STATUS.IN || v.stock === STOCK_STATUS.LOW);
+  const anyBackorder = variants.some(v => v.stock === STOCK_STATUS.BACKORDER);
+  const stock = anyInStock ? STOCK_STATUS.IN : anyBackorder ? STOCK_STATUS.BACKORDER : STOCK_STATUS.OUT;
+  return { priceMin, priceMax, price: priceMin, stock };
 }
 
 export default mapVariationsToVariants;

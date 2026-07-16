@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { getSearchSyncQueue } from '../queue/queues.js';
-import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue, isPurchasable } from '../utils/stockStatus.js';
+import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
 
@@ -292,7 +292,11 @@ ProductSchema.pre('validate', function () {
       // coupon minimums and search ranking keep working unchanged.
       this.price = this.priceMin;
     }
-    this.stock = variants.some(v => isPurchasable(v.stock)) ? STOCK_STATUS.IN : STOCK_STATUS.OUT;
+    // Parent stock = best availability among variants: any in/low → IN;
+    // else any backorder → BACKORDER; else OUT (mirrors aggregateFromVariants).
+    const anyInStock = variants.some(v => v.stock === STOCK_STATUS.IN || v.stock === STOCK_STATUS.LOW);
+    const anyBackorder = variants.some(v => v.stock === STOCK_STATUS.BACKORDER);
+    this.stock = anyInStock ? STOCK_STATUS.IN : anyBackorder ? STOCK_STATUS.BACKORDER : STOCK_STATUS.OUT;
   } else {
     // Non-variable: no variants, and the range collapses to the single price.
     if (this.variants?.length) this.variants = [];
