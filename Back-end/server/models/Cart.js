@@ -22,6 +22,17 @@ const CartSchema = new mongoose.Schema({
       ref: "Product",
       required: true
     },
+    // For variable products: the selected variant's subdoc _id (Product.variants[]._id)
+    // and its label snapshot. null/absent for simple products. A product+variant pair
+    // is a DISTINCT cart line — the same filter for two car models = two lines.
+    variantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null
+    },
+    variantLabel: {
+      type: String,
+      default: null
+    },
     quantity: {
       type: Number,
       required: true,

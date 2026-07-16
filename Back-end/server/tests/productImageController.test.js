@@ -342,3 +342,90 @@ describe('POST /products — atomic rollback on DB failure', () => {
     saveSpy.mockRestore();
   });
 });
+
+// ── Tests: variable-product variants (parseProductFields aggregate path) ──────
+// The update path uses findByIdAndUpdate (bypasses the model's pre('validate')
+// hook), so parseProductFields must derive priceMin/priceMax + parent price/stock
+// itself. These exercise that branch end-to-end.
+describe('PUT /products/:id — variable product variants', () => {
+  test('persists variants and derives priceMin/priceMax, parent price=min, stock', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    ).send({
+      name:        product.name,
+      description: product.description,
+      productType: 'variable',
+      variants: [
+        { label: 'Model A', price: 7299,  stock: 'in',  attributes: [{ name: 'models', option: 'Model A' }] },
+        { label: 'Model B', price: 10499, stock: 'out', attributes: [{ name: 'models', option: 'Model B' }] },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.productType).toBe('variable');
+    expect(inDb.variants).toHaveLength(2);
+    expect(inDb.priceMin).toBe(7299);
+    expect(inDb.priceMax).toBe(10499);
+    expect(inDb.price).toBe(7299);   // parent mirrors the cheapest variant
+    expect(inDb.stock).toBe('in');   // Model A is in stock → parent in stock
+    expect(inDb.variants[0]._id).toBeDefined();
+  });
+
+  test('blank-label variants are dropped', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    ).send({
+      name:        product.name,
+      description: product.description,
+      productType: 'variable',
+      variants: [
+        { label: 'Good', price: 100, stock: 'in' },
+        { label: '',     price: 200, stock: 'in' }, // dropped
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.variants).toHaveLength(1);
+    expect(inDb.variants[0].label).toBe('Good');
+  });
+
+  test('switching variable → simple clears variants and collapses the range', async () => {
+    const product = await seedProduct({
+      productType: 'variable',
+      variants: [{ label: 'M', price: 500, stock: 'in', attributes: [] }],
+      priceMin: 500, priceMax: 500, price: 500,
+    });
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    ).send({
+      name:        product.name,
+      description: product.description,
+      productType: 'simple',
+      price:       1499,
+      stock:       'in',
+    });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.productType).toBe('simple');
+    expect(inDb.variants).toHaveLength(0);
+    expect(inDb.priceMin).toBe(1499);
+    expect(inDb.priceMax).toBe(1499);
+  });
+});

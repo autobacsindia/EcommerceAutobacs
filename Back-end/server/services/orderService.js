@@ -113,8 +113,8 @@ class OrderService {
         order = await orderRepository.create(
           {
             user: userId,
-            items: quote.orderItems.map(({ product, quantity, price, name, image }) =>
-              ({ product, quantity, price, name, image })),
+            items: quote.orderItems.map(({ product, variantId, variantLabel, quantity, price, name, image }) =>
+              ({ product, variantId, variantLabel, quantity, price, name, image })),
             shippingAddress,
             subtotal: quote.subtotal,
             shippingCost: quote.shippingCost,

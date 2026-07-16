@@ -23,7 +23,7 @@ import couponUserUsageRepository from '../repositories/couponUserUsageRepository
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import AppError from '../utils/AppError.js';
-import { STOCK_STATUS } from '../utils/stockStatus.js';
+import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 
@@ -68,6 +68,25 @@ export function effectivePrice(product, now = new Date()) {
   return product.price;
 }
 
+/**
+ * Resolve a variable product's selected variant. The single implementation of
+ * "find the variant by id, ensure it exists and is purchasable" — shared by the
+ * checkout recompute (priceItems) and add-to-cart (routes/cart.js) so the two can
+ * never drift. Returns `{ variant }` on success, or `{ reason }` describing the
+ * failure ('unselected' | 'missing' | 'out' | 'backorder'); callers format their
+ * own buyer-facing message. `variant` is included on 'out'/'backorder' for labels.
+ */
+export function resolveVariant(product, rawVariantId) {
+  const selectedId = rawVariantId != null ? String(rawVariantId) : '';
+  if (!selectedId) return { reason: 'unselected' };
+  const variant = (product.variants || []).find(v => String(v._id) === selectedId);
+  if (!variant) return { reason: 'missing' };
+  if (!isPurchasable(variant.stock)) {
+    return { reason: variant.stock === STOCK_STATUS.BACKORDER ? 'backorder' : 'out', variant };
+  }
+  return { variant };
+}
+
 class PricingService {
   /**
    * Validate each item against the catalogue and re-price from the DB.
@@ -85,12 +104,32 @@ class PricingService {
     for (const item of items) {
       const product = await productRepository.findActiveById(item.product, session);
       if (!product) throw new AppError(`Product ${item.product} not found or not available`, 400);
-      if (product.stock === STOCK_STATUS.OUT) throw new AppError(`${product.name} is out of stock`, 400);
+
+      // Variable products: the price + stock come from the SELECTED variant, never
+      // the parent. The client only sends a variantId; we resolve it against the DB
+      // so a tampered/stale price can never be charged. A variable line with no or
+      // an unknown variant is a hard error (the UI blocks add-to-cart until picked).
+      let priceSource = product;              // what effectivePrice() reads
+      let variantId = null;
+      let variantLabel = null;
+      if (product.productType === 'variable') {
+        const { variant, reason } = resolveVariant(product, item.variantId);
+        if (reason === 'unselected') throw new AppError(`Please select a variant for ${product.name}`, 400);
+        if (reason === 'missing') throw new AppError(`Selected variant is no longer available for ${product.name}`, 400);
+        if (reason) throw new AppError(`${product.name} (${variant.label}) is out of stock`, 400);
+        priceSource = variant;
+        variantId = variant._id;
+        variantLabel = variant.label;
+      } else if (product.stock === STOCK_STATUS.OUT) {
+        throw new AppError(`${product.name} is out of stock`, 400);
+      }
 
       const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
-      const unitPrice = effectivePrice(product);   // honours an expired sale window
+      const unitPrice = effectivePrice(priceSource);   // honours an expired sale window (product or variant)
       orderItems.push({
         product: product._id,
+        variantId,                       // null for simple products
+        variantLabel,                    // e.g. "COROLLA ALTIS 1.8 P" — snapshotted for history
         quantity,
         price: unitPrice,                // always DB price, never client price
         name: product.name,

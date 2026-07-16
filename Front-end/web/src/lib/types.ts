@@ -54,6 +54,11 @@ export interface Product {
   averageRating: number;
   totalReviews: number;
   tags?: string[] | string;
+  // Variable-product fields (simple products omit them). Cards show a "From"
+  // price range and route to the PDP to pick a model.
+  productType?: 'simple' | 'variable' | 'grouped';
+  priceMin?: number;
+  priceMax?: number;
   createdAt: string;
   updatedAt: string;
   __v?: number;

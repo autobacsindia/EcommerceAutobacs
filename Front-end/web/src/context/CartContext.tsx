@@ -17,8 +17,41 @@ interface CartItem {
     images: ProductImage[] | string;
     stock: StockStatus;
   };
+  // For variable products: the chosen variant's id + label. A product+variant
+  // pair is a distinct cart line, so both are needed to identify/mutate a line.
+  variantId?: string | null;
+  variantLabel?: string | null;
+  // Authoritative per-unit line price (variant price for variable products).
+  // Prefer this over product.price, which for variable products is only the range min.
+  price?: number;
   quantity: number;
 }
+
+// Two cart lines are the same only when product AND variant match.
+const isSameLine = (item: CartItem, productId: string, variantId?: string | null) =>
+  item.product._id === productId && (item.variantId ?? null) === (variantId ?? null);
+
+// Normalize a server cart payload into our client Cart shape (variant-aware).
+const mapServerCart = (serverCart: any): Cart => ({
+  _id: serverCart._id,
+  items: (serverCart.items ?? []).map((item: any) => ({
+    product: {
+      _id: item.product._id,
+      name: item.product.name,
+      price: item.product.price,
+      images: Array.isArray(item.product.images) ? item.product.images : [],
+      stock: item.product.stock,
+    },
+    variantId: item.variantId ?? null,
+    variantLabel: item.variantLabel ?? null,
+    // The line price is authoritative (variant price for variable products);
+    // the populated product.price is only the parent/range min.
+    price: item.price,
+    quantity: item.quantity,
+  })),
+  total: serverCart.totalPrice || serverCart.total || 0,
+  couponCode: serverCart.couponCode ?? null,
+});
 
 /**
  * Minimal product fields a caller can hand to `addToCart` so the optimistic
@@ -31,6 +64,8 @@ export type OptimisticProduct = {
   price: number;
   images: ProductImage[] | string;
   stock: StockStatus;
+  /** For variable products: the selected variant's label, shown on the optimistic line. */
+  variantLabel?: string | null;
 };
 
 interface Cart {
@@ -46,9 +81,9 @@ interface CartContextType {
   itemCount: number;
   isLoading: boolean;
   error: string | null;
-  addToCart: (productId: string, quantity?: number, snapshot?: OptimisticProduct) => Promise<void>;
-  removeFromCart: (productId: string) => Promise<void>;
-  updateQuantity: (productId: string, quantity: number) => Promise<void>;
+  addToCart: (productId: string, quantity?: number, snapshot?: OptimisticProduct, variantId?: string | null) => Promise<void>;
+  removeFromCart: (productId: string, variantId?: string | null) => Promise<void>;
+  updateQuantity: (productId: string, quantity: number, variantId?: string | null) => Promise<void>;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
   applyCoupon: (code: string) => Promise<void>;
@@ -85,22 +120,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const response: any = await apiClient.get(API_ENDPOINTS.CART, { signal });
 
       if (response.success && response.cart) {
-        const cartData: Cart = {
-          _id: response.cart._id,
-          items: response.cart.items.map((item: any) => ({
-            product: {
-              _id: item.product._id,
-              name: item.product.name,
-              price: item.product.price,
-              images: Array.isArray(item.product.images) ? item.product.images : [],
-              stock: item.product.stock
-            },
-            quantity: item.quantity
-          })),
-          total: response.cart.totalPrice || response.cart.total || 0,
-          couponCode: response.cart.couponCode ?? null
-        };
-        setCart(cartData);
+        setCart(mapServerCart(response.cart));
       } else {
         setCart(null);
       }
@@ -161,21 +181,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(AUTH_LOGIN_EVENT, onLogin);
   }, [refreshCart]);
 
-  const addToCart = async (productId: string, quantity: number = 1, snapshot?: OptimisticProduct) => {
+  const addToCart = async (productId: string, quantity: number = 1, snapshot?: OptimisticProduct, variantId?: string | null) => {
     const previousCart = cart;
+    const vId = variantId ?? null;
 
     // Optimistic update: reflect the add immediately so the cart badge responds on
-    // tap instead of after the ~1s server round-trip. This covers the *first* add
-    // of a product (append a line) as well as re-adds of an item already present —
-    // previously only re-adds were optimistic, so a product's first add felt slow.
+    // tap instead of after the ~1s server round-trip. Lines are keyed by product +
+    // variant, so adding a second model of the same product appends a new line.
     setCart(prev => {
       const base: Cart = prev ?? { _id: 'optimistic', items: [], total: 0, couponCode: null };
-      const existingItem = base.items.find(item => item.product._id === productId);
+      const existingItem = base.items.find(item => isSameLine(item, productId, vId));
       if (existingItem) {
         return {
           ...base,
           items: base.items.map(item =>
-            item.product._id === productId
+            isSameLine(item, productId, vId)
               ? { ...item, quantity: item.quantity + quantity }
               : item
           ),
@@ -193,6 +213,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
               images: snapshot?.images ?? [],
               stock: snapshot?.stock ?? 'in',
             },
+            variantId: vId,
+            variantLabel: snapshot?.variantLabel ?? null,
+            price: snapshot?.price ?? 0,
             quantity,
           },
         ],
@@ -206,31 +229,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const response: any = await apiClient.post(API_ENDPOINTS.CART_ADD, {
         productId,
         quantity,
+        ...(vId && { variantId: vId }),
       });
 
       if (response.success && response.cart) {
-        const cartData: Cart = {
-          _id: response.cart._id,
-          items: response.cart.items.map((item: any) => ({
-            product: {
-              _id: item.product._id,
-              name: item.product.name,
-              price: item.product.price,
-              images: Array.isArray(item.product.images) ? item.product.images : [],
-              stock: item.product.stock
-            },
-            quantity: item.quantity
-          })),
-          total: response.cart.totalPrice || response.cart.total || 0,
-          couponCode: response.cart.couponCode ?? null
-        };
-
+        const cartData = mapServerCart(response.cart);
         setCart(cartData);
 
         // Analytics: add_to_cart (ADR-005)
-        const added = cartData.items.find(i => i.product._id === productId);
+        const added = cartData.items.find(i => isSameLine(i, productId, vId));
         if (added) {
-          trackAddToCart({ id: productId, name: added.product.name, price: added.product.price, quantity });
+          trackAddToCart({ id: productId, name: added.product.name, price: added.price ?? added.product.price, quantity });
         }
       } else {
         setCart(previousCart);
@@ -252,17 +261,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
   
-  const removeFromCart = async (productId: string) => {
+  const removeFromCart = async (productId: string, variantId?: string | null) => {
+    const vId = variantId ?? null;
     // Capture item details before removal for analytics.
-    const removed = cart?.items.find(i => i.product._id === productId);
+    const removed = cart?.items.find(i => isSameLine(i, productId, vId));
     const previousCart = cart;
 
-    // Optimistic update: drop the item immediately so the badge/list reflect the
-    // tap before the server round-trip. Rolled back below if the request fails.
+    // Optimistic update: drop the exact line (product + variant) immediately.
     if (cart) {
       setCart({
         ...cart,
-        items: cart.items.filter(item => item.product._id !== productId),
+        items: cart.items.filter(item => !isSameLine(item, productId, vId)),
       });
     }
 
@@ -270,32 +279,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const response: any = await apiClient.delete(API_ENDPOINTS.CART_REMOVE(productId));
+      const url = API_ENDPOINTS.CART_REMOVE(productId) + (vId ? `?variantId=${encodeURIComponent(vId)}` : '');
+      const response: any = await apiClient.delete(url);
 
       if (response.success && response.cart) {
         // Analytics: remove_from_cart (ADR-005)
         if (removed) {
-          trackRemoveFromCart({ id: productId, name: removed.product.name, price: removed.product.price, quantity: removed.quantity });
+          trackRemoveFromCart({ id: productId, name: removed.product.name, price: removed.price ?? removed.product.price, quantity: removed.quantity });
         }
 
-        // Ensure consistent cart data structure
-        const cartData: Cart = {
-          _id: response.cart._id,
-          items: response.cart.items.map((item: any) => ({
-            product: {
-              _id: item.product._id,
-              name: item.product.name,
-              price: item.product.price,
-              images: Array.isArray(item.product.images) ? item.product.images : [],
-              stock: item.product.stock
-            },
-            quantity: item.quantity
-          })),
-          total: response.cart.totalPrice || response.cart.total || 0,
-          couponCode: response.cart.couponCode ?? null
-        };
-        
-        setCart(cartData);
+        setCart(mapServerCart(response.cart));
       }
     } catch (err: any) {
       // Roll the optimistic removal back to the last known-good cart.
@@ -309,17 +302,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateQuantity = async (productId: string, quantity: number) => {
+  const updateQuantity = async (productId: string, quantity: number, variantId?: string | null) => {
     const previousCart = cart;
+    const vId = variantId ?? null;
 
-    // Optimistic update: reflect the new quantity immediately. Rolled back below
-    // if the request fails. Guard against non-positive values (the cart UI uses
-    // removeFromCart for zero) so the badge count never goes negative.
+    // Optimistic update: reflect the new quantity on the exact line (product +
+    // variant). Guard against non-positive values (the cart UI uses removeFromCart
+    // for zero) so the badge count never goes negative.
     if (cart && quantity > 0) {
       setCart({
         ...cart,
         items: cart.items.map(item =>
-          item.product._id === productId ? { ...item, quantity } : item
+          isSameLine(item, productId, vId) ? { ...item, quantity } : item
         ),
       });
     }
@@ -330,27 +324,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response: any = await apiClient.put(API_ENDPOINTS.CART_UPDATE(productId), {
         quantity,
+        ...(vId && { variantId: vId }),
       });
-      
+
       if (response.success && response.cart) {
-        // Ensure consistent cart data structure
-        const cartData: Cart = {
-          _id: response.cart._id,
-          items: response.cart.items.map((item: any) => ({
-            product: {
-              _id: item.product._id,
-              name: item.product.name,
-              price: item.product.price,
-              images: Array.isArray(item.product.images) ? item.product.images : [],
-              stock: item.product.stock
-            },
-            quantity: item.quantity
-          })),
-          total: response.cart.totalPrice || response.cart.total || 0,
-          couponCode: response.cart.couponCode ?? null
-        };
-        
-        setCart(cartData);
+        setCart(mapServerCart(response.cart));
       }
     } catch (err: any) {
       // Roll the optimistic quantity change back to the last known-good cart.

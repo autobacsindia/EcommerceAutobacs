@@ -12,6 +12,7 @@ import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoScorePanel from '@/components/ui/SeoScorePanel';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
+import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 import { generateSlug } from '@/lib/utils';
 
@@ -112,6 +113,10 @@ export default function EditProductPage() {
   const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
   const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
+  // Variable-product authoring (hydrated from the product below).
+  const [productType, setProductType] = useState<'simple' | 'variable'>('simple');
+  const [attributeName, setAttributeName] = useState('models');
+  const [variants, setVariants] = useState<EditorVariant[]>([emptyVariant()]);
 
   useEffect(() => {
     fetchCategories();
@@ -271,6 +276,22 @@ export default function EditProductPage() {
 
       // Hydrate SEO overrides (blank fields fall back to computed defaults)
       setSeo(toSeoFormValue(productData.seo));
+
+      // Hydrate variable-product models (if any) so edits preserve variant _ids.
+      if (productData.productType === 'variable' && Array.isArray(productData.variants) && productData.variants.length) {
+        setProductType('variable');
+        setAttributeName(productData.variants[0]?.attributes?.[0]?.name || 'models');
+        setVariants(productData.variants.map((v: any) => ({
+          _id: v._id,
+          label: v.label || '',
+          price: v.price != null ? String(v.price) : '',
+          originalPrice: v.originalPrice != null ? String(v.originalPrice) : '',
+          stock: v.stock || 'in',
+          sku: v.sku || '',
+        })));
+      } else {
+        setProductType('simple');
+      }
     } catch (err: any) {
       console.error('Failed to fetch product:', err);
       if (err.message.includes('Failed to fetch')) {
@@ -337,33 +358,42 @@ export default function EditProductPage() {
       }
     }
 
+    // Variable products derive price/stock from their models; a single price is
+    // not required. Validate that at least one valid model exists.
+    const serializedVariants = productType === 'variable' ? serializeVariants(attributeName, variants) : [];
+    if (productType === 'variable' && serializedVariants.length === 0) {
+      alert('Add at least one model with a name and price for a variable product.');
+      setSubmitting(false);
+      return;
+    }
+
     const price = parseFloat(formData.price);
-    if (isNaN(price)) {
-      alert('Please enter a valid price');
-      setSubmitting(false);
-      return;
-    }
-
     const stock = formData.stock;
-    if (!['in', 'low', 'out', 'backorder'].includes(stock)) {
-      alert('Please select a valid stock status');
-      setSubmitting(false);
-      return;
-    }
-
-    // A sale countdown is only meaningful with a real markdown — mirror the
-    // server-side rule so the admin gets an instant message, not a 400.
-    if (formData.saleEndsAt) {
-      const original = parseFloat(formData.originalPrice);
-      if (!(original > price)) {
-        alert('Set an Original Price higher than Price to use a sale countdown, or clear the "Sale ends at" field.');
+    if (productType === 'simple') {
+      if (isNaN(price)) {
+        alert('Please enter a valid price');
         setSubmitting(false);
         return;
       }
-      if (new Date(formData.saleEndsAt).getTime() <= Date.now()) {
-        alert('Sale end date must be in the future.');
+      if (!['in', 'low', 'out', 'backorder'].includes(stock)) {
+        alert('Please select a valid stock status');
         setSubmitting(false);
         return;
+      }
+      // A sale countdown is only meaningful with a real markdown — mirror the
+      // server-side rule so the admin gets an instant message, not a 400.
+      if (formData.saleEndsAt) {
+        const original = parseFloat(formData.originalPrice);
+        if (!(original > price)) {
+          alert('Set an Original Price higher than Price to use a sale countdown, or clear the "Sale ends at" field.');
+          setSubmitting(false);
+          return;
+        }
+        if (new Date(formData.saleEndsAt).getTime() <= Date.now()) {
+          alert('Sale end date must be in the future.');
+          setSubmitting(false);
+          return;
+        }
       }
     }
 
@@ -375,12 +405,18 @@ export default function EditProductPage() {
       fd.append('name',             formData.name);
       fd.append('description',      formData.description);
       fd.append('shortDescription', formData.shortDescription);
-      fd.append('price',            String(price));
-      if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
-      // Always sent (even empty) so clearing the field ends a sale early.
-      // Non-empty → absolute UTC instant; empty → backend clears saleEndsAt.
-      fd.append('saleEndsAt', formData.saleEndsAt ? new Date(formData.saleEndsAt).toISOString() : '');
-      fd.append('stock',      String(stock));
+      fd.append('productType',      productType);
+      if (productType === 'variable') {
+        // Price + stock derived from the models server-side.
+        fd.append('variants', JSON.stringify(serializedVariants));
+      } else {
+        fd.append('price',            String(price));
+        if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
+        // Always sent (even empty) so clearing the field ends a sale early.
+        // Non-empty → absolute UTC instant; empty → backend clears saleEndsAt.
+        fd.append('saleEndsAt', formData.saleEndsAt ? new Date(formData.saleEndsAt).toISOString() : '');
+        fd.append('stock',      String(stock));
+      }
       if (formData.sku) fd.append('sku', formData.sku);
       fd.append('brand',      formData.brand);
       fd.append('isActive',   String(formData.isActive));
@@ -656,7 +692,31 @@ export default function EditProductPage() {
           {/* Pricing & Inventory */}
           <div>
             <h2 className="text-xl font-semibold mb-4">Pricing & Inventory</h2>
-            
+
+            {/* Product type: simple (one price) vs variable (per-model prices). */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Product type</label>
+              <div className="flex gap-2">
+                {(['simple', 'variable'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setProductType(t)}
+                    className={`px-4 py-2 rounded-lg text-sm border ${productType === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'}`}
+                  >
+                    {t === 'simple' ? 'Simple' : 'Variable (models)'}
+                  </button>
+                ))}
+              </div>
+              {productType === 'variable' && (
+                <p className="mt-1 text-xs text-amber-600">
+                  Switching to Simple discards the models. Existing model rows keep their identity on save.
+                </p>
+              )}
+            </div>
+
+            {productType === 'simple' ? (
+            <>
             <div className="mb-4">
               <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
                 Price (₹) *
@@ -673,7 +733,7 @@ export default function EditProductPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Original Price (₹)
@@ -730,7 +790,19 @@ export default function EditProductPage() {
                 <option value="backorder">On Backorder</option>
               </select>
             </div>
-            
+            </>
+            ) : (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Models *</label>
+              <VariantsEditor
+                attributeName={attributeName}
+                onAttributeNameChange={setAttributeName}
+                variants={variants}
+                onChange={setVariants}
+              />
+            </div>
+            )}
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 SKU

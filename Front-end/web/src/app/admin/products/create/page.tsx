@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react';
 import ImageUploader from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
+import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 
 type Category = CategoryOption;
@@ -65,6 +66,10 @@ export default function CreateProductPage() {
   const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([{ key: '', value: '' }]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
   const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
+  // Variable-product authoring: type toggle + models editor.
+  const [productType, setProductType] = useState<'simple' | 'variable'>('simple');
+  const [attributeName, setAttributeName] = useState('models');
+  const [variants, setVariants] = useState<EditorVariant[]>([emptyVariant()]);
 
   useEffect(() => {
     fetchCategories();
@@ -130,9 +135,18 @@ export default function CreateProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Variable products: at least one valid model with a price is required. The
+    // single price/sale fields are ignored (price is derived from the models).
+    const serializedVariants = productType === 'variable' ? serializeVariants(attributeName, variants) : [];
+    if (productType === 'variable' && serializedVariants.length === 0) {
+      alert('Add at least one model with a name and price for a variable product.');
+      return;
+    }
+
     // A sale countdown is only meaningful with a real markdown — mirror the
     // server-side rule so the admin gets an instant message, not a 400.
-    if (formData.saleEndsAt) {
+    // (Simple products only; variable products don't use the single sale field.)
+    if (productType === 'simple' && formData.saleEndsAt) {
       const price = parseFloat(formData.price);
       const original = parseFloat(formData.originalPrice);
       if (!(original > price)) {
@@ -154,18 +168,25 @@ export default function CreateProductPage() {
       // ── Scalar fields ──────────────────────────────────────────────────
       fd.append('name',             formData.name);
       fd.append('description',      formData.description);
-      fd.append('price',            formData.price);
-      fd.append('stock',            formData.stock);
+      fd.append('productType',      productType);
       fd.append('isActive',         String(formData.isActive));
       fd.append('isFeatured',       String(formData.isFeatured));
       fd.append('isFastMoving',     String(formData.isFastMoving));
       if (formData.shortDescription) fd.append('shortDescription', formData.shortDescription);
-      if (formData.originalPrice)    fd.append('originalPrice',    formData.originalPrice);
-      // Sale countdown end — send as an absolute UTC instant so the server
-      // doesn't reinterpret the admin's local wall-clock time.
-      if (formData.saleEndsAt)       fd.append('saleEndsAt',       new Date(formData.saleEndsAt).toISOString());
       if (formData.brand)            fd.append('brand',            formData.brand);
       if (formData.sku)              fd.append('sku',              formData.sku);
+
+      if (productType === 'variable') {
+        // Price + stock are derived from the models server-side.
+        fd.append('variants', JSON.stringify(serializedVariants));
+      } else {
+        fd.append('price',          formData.price);
+        fd.append('stock',          formData.stock);
+        if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
+        // Sale countdown end — send as an absolute UTC instant so the server
+        // doesn't reinterpret the admin's local wall-clock time.
+        if (formData.saleEndsAt)    fd.append('saleEndsAt',   new Date(formData.saleEndsAt).toISOString());
+      }
 
       // ── JSON-encoded arrays ────────────────────────────────────────────
       if (selectedCategories.length)  fd.append('categories',        JSON.stringify(selectedCategories));
@@ -314,7 +335,31 @@ export default function CreateProductPage() {
           {/* Pricing & Inventory */}
           <div>
             <h2 className="text-xl font-semibold mb-4">Pricing & Inventory</h2>
-            
+
+            {/* Product type: simple (one price) vs variable (per-model prices). */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Product type</label>
+              <div className="flex gap-2">
+                {(['simple', 'variable'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setProductType(t)}
+                    className={`px-4 py-2 rounded-lg text-sm border ${productType === t ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'}`}
+                  >
+                    {t === 'simple' ? 'Simple' : 'Variable (models)'}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {productType === 'variable'
+                  ? 'Shoppers pick a model; each model has its own price + stock.'
+                  : 'One price and stock for the whole product.'}
+              </p>
+            </div>
+
+            {productType === 'simple' ? (
+            <>
             <div className="mb-4">
               <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
                 Price (₹) *
@@ -331,7 +376,7 @@ export default function CreateProductPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Original Price (₹)
@@ -390,7 +435,19 @@ export default function CreateProductPage() {
                 <option value="backorder">On Backorder</option>
               </select>
             </div>
-            
+            </>
+            ) : (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Models *</label>
+              <VariantsEditor
+                attributeName={attributeName}
+                onAttributeNameChange={setAttributeName}
+                variants={variants}
+                onChange={setVariants}
+              />
+            </div>
+            )}
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 SKU

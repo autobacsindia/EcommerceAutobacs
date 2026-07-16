@@ -2,9 +2,84 @@ import express from "express";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import pricingService from "../services/pricingService.js";
+import pricingService, { effectivePrice, resolveVariant } from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
+
+// Resolve the buyable unit for an add/update: a simple product prices from itself;
+// a variable product prices from its SELECTED variant (which carries its own price
+// + stock). Returns { price, variantId, variantLabel } or throws a {status,message}.
+// Centralised so add-to-cart and the pricing service stay consistent.
+function resolvePurchasable(product, rawVariantId) {
+  if (product.productType === 'variable') {
+    // Shared resolution (find / exists / stock) lives in pricingService.resolveVariant
+    // so add-to-cart and the checkout recompute never diverge.
+    const { variant, reason } = resolveVariant(product, rawVariantId);
+    if (reason === 'unselected') throw { status: 400, message: 'Please select a variant before adding to cart' };
+    if (reason === 'missing') throw { status: 400, message: 'Selected variant is no longer available' };
+    if (reason) {
+      throw {
+        status: 400,
+        message: reason === 'backorder'
+          ? 'This model is on backorder — please enquire to order it'
+          : 'This model is out of stock'
+      };
+    }
+    return { price: effectivePrice(variant), variantId: variant._id, variantLabel: variant.label };
+  }
+  if (!isPurchasable(product.stock)) {
+    throw {
+      status: 400,
+      message: product.stock === STOCK_STATUS.BACKORDER
+        ? 'This item is on backorder — please enquire to order it'
+        : 'This item is out of stock'
+    };
+  }
+  return { price: effectivePrice(product), variantId: null, variantLabel: null };
+}
+
+// Two cart lines are the SAME only if product AND variant match (null==null for simple).
+const sameLine = (item, productId, variantId) =>
+  (item.product._id || item.product).toString() === String(productId) &&
+  String(item.variantId || '') === String(variantId || '');
+
+// Is a POPULATED cart line still buyable? Variant-aware: a variable line requires
+// its selected variant to still exist AND be purchasable; a simple line uses the
+// product's own stock. Used to prune the cart on read (GET /cart).
+function linePurchasable(item) {
+  const product = item.product;
+  if (!product || !product.isActive) return false;
+  if (product.productType === 'variable') {
+    const variant = (product.variants || []).find(v => String(v._id) === String(item.variantId || ''));
+    return !!variant && isPurchasable(variant.stock);
+  }
+  return isPurchasable(product.stock);
+}
+
+// Re-price a POPULATED cart line against current DB state (variant-aware). Returns
+// the current unit price + display name, and flags stock/variant problems for the
+// validate endpoints. Requires item.product to have `variants` populated for
+// variable products.
+function repriceLine(item) {
+  const product = item.product;
+  const displayName = (label) => label ? `${product.name} — ${label}` : product.name;
+  if (product.productType === 'variable') {
+    const variant = (product.variants || []).find(v => String(v._id) === String(item.variantId || ''));
+    if (!variant) {
+      return { ok: false, type: 'unavailable', message: 'Selected variant no longer available',
+               unitPrice: item.price, name: displayName(item.variantLabel) };
+    }
+    const name = displayName(variant.label);
+    if (!isPurchasable(variant.stock)) {
+      return { ok: false, type: 'out_of_stock', message: 'Out of stock', unitPrice: effectivePrice(variant), name };
+    }
+    return { ok: true, unitPrice: effectivePrice(variant), name };
+  }
+  if (product.stock === STOCK_STATUS.OUT) {
+    return { ok: false, type: 'out_of_stock', message: 'Out of stock', unitPrice: effectivePrice(product), name: product.name };
+  }
+  return { ok: true, unitPrice: effectivePrice(product), name: product.name };
+}
 
 const router = express.Router();
 
@@ -21,7 +96,7 @@ router.get("/", asyncHandler(async (req, res) => {
     if (isAuthenticated) {
       // Authenticated user - find by user ID
       cart = await Cart.findOne({ user: req.user.id })
-        .populate('items.product', 'name price images stock isActive');
+        .populate('items.product', 'name price images stock isActive productType variants');
       
       if (!cart) {
         cart = await Cart.create({ user: req.user.id, items: [], isGuest: false });
@@ -36,7 +111,7 @@ router.get("/", asyncHandler(async (req, res) => {
       }
       
       cart = await Cart.findOne({ sessionId })
-        .populate('items.product', 'name price images stock isActive');
+        .populate('items.product', 'name price images stock isActive productType variants');
       
       if (!cart) {
         cart = await Cart.create({ sessionId, items: [], isGuest: true });
@@ -52,13 +127,14 @@ router.get("/", asyncHandler(async (req, res) => {
   const removedItems = [];
 
   cart.items = cart.items.filter(item => {
-    // Drop items that became inactive or non-purchasable (out of stock, or
-    // switched to backorder/enquiry-only after they were added).
-    if (!item.product || !item.product.isActive || !isPurchasable(item.product.stock)) {
+    // Drop items that became inactive or non-purchasable. Variant-aware: a
+    // variable line is dropped when its selected variant is gone or out of
+    // stock/backorder, even if a sibling variant keeps the parent "in stock".
+    if (!linePurchasable(item)) {
       if (item.product) {
         removedItems.push({
           productId: item.product._id,
-          productName: item.product.name,
+          productName: item.variantLabel ? `${item.product.name} — ${item.variantLabel}` : item.product.name,
           previousQuantity: item.quantity
         });
       }
@@ -114,7 +190,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // @desc    Add item to cart
 // @access  Private
 router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
-  const { productId, quantity = 1 } = req.body;
+  const { productId, variantId = null, quantity = 1 } = req.body;
 
   // Check if product exists and is active
   const product = await Product.findById(productId);
@@ -125,15 +201,14 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     });
   }
 
-  // Check stock availability (coarse status). Out of stock is unavailable;
-  // backorder is enquiry-only and must go through the consultation flow.
-  if (!isPurchasable(product.stock)) {
-    return res.status(400).json({
-      success: false,
-      message: product.stock === STOCK_STATUS.BACKORDER
-        ? 'This item is on backorder — please enquire to order it'
-        : 'This item is out of stock'
-    });
+  // Resolve the buyable unit + its price/stock. For variable products this
+  // requires (and validates) the selected variant; out-of-stock / backorder /
+  // missing-selection all surface a buyer-facing 400 here.
+  let resolved;
+  try {
+    resolved = resolvePurchasable(product, variantId);
+  } catch (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message });
   }
 
   // Determine if user is authenticated or guest
@@ -145,7 +220,7 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   if (isAuthenticated) {
     // Authenticated user - find by user ID
     cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price images stock isActive');
+      .populate('items.product', 'name price images stock isActive productType variants');
     
     if (!cart) {
       cart = new Cart({ user: req.user.id, items: [], isGuest: false });
@@ -160,33 +235,36 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     }
     
     cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price images stock isActive');
+      .populate('items.product', 'name price images stock isActive productType variants');
     
     if (!cart) {
       cart = new Cart({ sessionId, items: [], isGuest: true });
     }
   }
 
-  // Check if product already in cart
-  // After populate(), item.product is a document — use _id; before populate it's an ObjectId
+  // Same product + same variant = same line (a variable product added for two
+  // different models becomes two distinct lines). After populate(), item.product
+  // is a document — sameLine handles both populated and raw forms.
   const existingItemIndex = cart.items.findIndex(
-    item => (item.product._id || item.product).toString() === productId
+    item => sameLine(item, productId, resolved.variantId)
   );
 
   if (existingItemIndex > -1) {
     // Update quantity (no per-unit stock cap under status-based availability)
     cart.items[existingItemIndex].quantity += Number(quantity);
   } else {
-    // Add new item
+    // Add new item (price is the resolved unit price — variant price for variable)
     cart.items.push({
       product: productId,
+      variantId: resolved.variantId,
+      variantLabel: resolved.variantLabel,
       quantity: Number(quantity),
-      price: product.price
+      price: resolved.price
     });
   }
 
   await cart.save();
-  await cart.populate('items.product', 'name price images stock isActive');
+  await cart.populate('items.product', 'name price images stock isActive productType variants');
 
   res.json({
     success: true,
@@ -225,8 +303,9 @@ router.post("/merge", asyncHandler(async (req, res) => {
   if (guestCart && guestCart.items.length > 0) {
     for (const guestItem of guestCart.items) {
       const productId = (guestItem.product._id || guestItem.product).toString();
+      // Union by product + variant: the same product under two models stays two lines.
       const existing = userCart.items.find(
-        item => (item.product._id || item.product).toString() === productId
+        item => sameLine(item, productId, guestItem.variantId)
       );
       if (existing) {
         // Union: sum quantities so re-adding a product the user already had accumulates.
@@ -234,6 +313,8 @@ router.post("/merge", asyncHandler(async (req, res) => {
       } else {
         userCart.items.push({
           product: guestItem.product,
+          variantId: guestItem.variantId || null,
+          variantLabel: guestItem.variantLabel || null,
           quantity: guestItem.quantity,
           price: guestItem.price
         });
@@ -255,7 +336,7 @@ router.post("/merge", asyncHandler(async (req, res) => {
     await Cart.deleteOne({ _id: guestCart._id });
   }
 
-  await userCart.populate('items.product', 'name price images stock isActive');
+  await userCart.populate('items.product', 'name price images stock isActive productType variants');
 
   res.json({
     success: true,
@@ -295,8 +376,11 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
     });
   }
 
+  // Target the exact line: product + variant (variantId optional in the body for
+  // variable products; simple products send none).
+  const variantId = req.body.variantId || null;
   const itemIndex = cart.items.findIndex(
-    item => item.product.toString() === req.params.productId
+    item => sameLine(item, req.params.productId, variantId)
   );
 
   if (itemIndex === -1) {
@@ -308,23 +392,24 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
 
   // 🟡 LAYER 1: Stock Validation on Quantity Update
   const product = await Product.findById(req.params.productId);
+  if (!product || !product.isActive) {
+    return res.status(404).json({ success: false, message: 'Product not found or not available' });
+  }
 
-  // Block quantity updates for items that are no longer purchasable (out of
-  // stock, or switched to backorder/enquiry-only).
-  if (!isPurchasable(product.stock)) {
-    return res.status(400).json({
-      success: false,
-      message: product.stock === STOCK_STATUS.BACKORDER
-        ? `This item is now on backorder — please enquire to order it`
-        : `This item is now out of stock`
-    });
+  // Re-resolve the buyable unit (variant-aware): blocks updates for items that are
+  // no longer purchasable and re-prices from the current variant/product price.
+  let resolved;
+  try {
+    resolved = resolvePurchasable(product, variantId);
+  } catch (err) {
+    return res.status(err.status || 400).json({ success: false, message: err.message });
   }
 
   cart.items[itemIndex].quantity = Number(quantity);
-  cart.items[itemIndex].price = product.price; // Update price to current price
-  
+  cart.items[itemIndex].price = resolved.price; // Update price to current (variant) price
+
   await cart.save();
-  await cart.populate('items.product', 'name price images stock isActive');
+  await cart.populate('items.product', 'name price images stock isActive productType variants');
 
   res.json({
     success: true,
@@ -362,12 +447,17 @@ router.delete("/remove/:productId", validateCartProductIdParam, asyncHandler(asy
     });
   }
 
+  // Remove the exact line. variantId (query) disambiguates when the same product
+  // sits in the cart under multiple variants; omitting it removes the simple line
+  // (variantId null). If no variantId is given for a product that only exists as a
+  // single line, that line still matches.
+  const variantId = req.query.variantId || null;
   cart.items = cart.items.filter(
-    item => item.product.toString() !== req.params.productId
+    item => !sameLine(item, req.params.productId, variantId)
   );
 
   await cart.save();
-  await cart.populate('items.product', 'name price images stock isActive');
+  await cart.populate('items.product', 'name price images stock isActive productType variants');
 
   res.json({
     success: true,
@@ -488,13 +578,13 @@ router.get("/validate", asyncHandler(async (req, res) => {
   let cart;
   if (isAuthenticated) {
     cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price stock isActive');
+      .populate('items.product', 'name price stock isActive productType variants');
   } else {
     if (!sessionId) {
       return res.status(400).json({ success: false, message: 'Session ID required for guest cart operations' });
     }
     cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price stock isActive');
+      .populate('items.product', 'name price stock isActive productType variants');
   }
 
   if (!cart || cart.items.length === 0) {
@@ -509,24 +599,20 @@ router.get("/validate", asyncHandler(async (req, res) => {
       stockErrors.push({ productId: item.product?._id, message: 'Product no longer available', type: 'unavailable' });
       continue;
     }
-    if (item.product.stock === STOCK_STATUS.OUT) {
-      stockErrors.push({
-        productId: item.product._id,
-        name: item.product.name,
-        message: 'Out of stock',
-        stockStatus: item.product.stock,
-        requestedQuantity: item.quantity,
-        type: 'out_of_stock'
-      });
-      // Still include in repricing so the frontend can show updated prices.
+    // For variable products the price + stock come from the selected variant.
+    const line = repriceLine(item);
+    if (!line.ok) {
+      stockErrors.push({ productId: item.product._id, name: item.product.name, message: line.message, type: line.type });
+      if (line.type !== 'out_of_stock') continue; // unresolved variant → skip repricing
     }
-    // Always use item.product.price — current DB price, never the stale cart-stored price
+    // Always use the current DB price (variant-aware), never the stale cart-stored price.
     validatedItems.push({
       productId: item.product._id,
-      name: item.product.name,
+      variantId: item.variantId || null,
+      name: line.name,
       quantity: item.quantity,
-      unitPrice: item.product.price,
-      lineTotal: item.product.price * item.quantity
+      unitPrice: line.unitPrice,
+      lineTotal: line.unitPrice * item.quantity
     });
   }
 
@@ -560,7 +646,7 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
   let cart;
   if (isAuthenticated) {
     cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price images stock isActive');
+      .populate('items.product', 'name price images stock isActive productType variants');
   } else {
     if (!sessionId) {
       return res.status(400).json({
@@ -570,7 +656,7 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
     }
     
     cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price images stock isActive');
+      .populate('items.product', 'name price images stock isActive productType variants');
   }
 
   if (!cart || cart.items.length === 0) {
@@ -594,12 +680,15 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
       continue;
     }
 
-    if (item.product.stock === STOCK_STATUS.OUT) {
+    // Variant-aware stock check: for variable products the selected variant must
+    // still exist and be purchasable.
+    const line = repriceLine(item);
+    if (!line.ok) {
       validationErrors.push({
         productId: item.product._id,
-        name: item.product.name,
-        message: 'This item is out of stock',
-        type: 'out_of_stock'
+        name: line.name,
+        message: line.type === 'unavailable' ? 'Selected model no longer available' : 'This item is out of stock',
+        type: line.type
       });
       continue;
     }

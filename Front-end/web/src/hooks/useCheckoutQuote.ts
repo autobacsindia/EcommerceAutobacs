@@ -20,7 +20,7 @@ export interface CheckoutQuote {
   maxRedeemablePoints: number;
 }
 
-export interface QuoteItem { product: string; quantity: number }
+export interface QuoteItem { product: string; quantity: number; variantId?: string | null }
 
 /**
  * Debounced live price breakdown for the checkout (coupon + karma preview).

@@ -4,6 +4,36 @@ import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockS
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
 
+// One selectable model of a `variable` product (e.g. the car model a filter fits).
+// Each variant carries its OWN price + stock status, independent of its siblings —
+// the shopper picks one on the PDP and that variant's price is what gets charged.
+// `_id` (the subdoc id) is the canonical variant identifier used by cart/order/API;
+// `wpVariationId` only maps back to the WooCommerce variation during import/sync.
+const VariantSchema = new mongoose.Schema({
+  wpVariationId: { type: Number, index: true, sparse: true },
+  // Human-facing model name, e.g. "COROLLA ALTIS 1.8 P". Built from the WC
+  // variation's attribute option(s); for multi-attribute products it's the
+  // options joined, e.g. "Black / XL".
+  label: { type: String, required: true, trim: true },
+  // The raw attribute pairs the label is built from. Stored so a future
+  // multi-dropdown UI can resolve a variant from a combination without a reparse.
+  attributes: [{
+    name:   { type: String, trim: true },   // e.g. "models"
+    option: { type: String, trim: true }     // e.g. "COROLLA ALTIS 1.8 P"
+  }],
+  // Same price semantics as the parent Product: `price` is the charged price,
+  // `originalPrice` the slashed "was" (set only when genuinely on sale), and an
+  // optional per-variant sale window (saleEndsAt) that the pricing service's
+  // read-time guard honours exactly like it does for simple products.
+  price:         { type: Number, required: true, min: 0 },
+  originalPrice: { type: Number, min: 0 },
+  salePrice:     { type: Number, min: 0 },
+  saleEndsAt:    { type: Date, default: null },
+  // Per-variant availability (coarse status, mirrors Product.stock).
+  stock: { type: String, enum: STOCK_VALUES, default: STOCK_STATUS.IN },
+  sku:   { type: String, trim: true }
+}, { _id: true });
+
 const ProductSchema = new mongoose.Schema({
   name: { 
     type: String, 
@@ -85,6 +115,25 @@ const ProductSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  // Product type (mirrors WooCommerce). 'simple' = one price/stock (the default,
+  // covers the vast majority). 'variable' = the shopper picks a model/variant and
+  // that variant's price is charged (see variants[] below). 'grouped' is accepted
+  // for parity/filtering but has no dedicated buy behaviour yet.
+  productType: {
+    type: String,
+    enum: ['simple', 'variable', 'grouped'],
+    default: 'simple',
+    index: true
+  },
+  // Selectable models for a 'variable' product. Empty for simple products.
+  // Derivation hook keeps priceMin/priceMax + the parent price/stock in sync
+  // with these on every save (see pre-validate below).
+  variants: { type: [VariantSchema], default: [] },
+  // Cheapest / dearest variant price — drives the "₹X – ₹Y" range on the PDP and
+  // card, sort/filter, and the min used for coupon thresholds. For simple products
+  // both equal `price`.
+  priceMin: { type: Number, min: 0 },
+  priceMax: { type: Number, min: 0 },
   compatibleVehicles: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: "Vehicle"
@@ -222,6 +271,42 @@ ProductSchema.index({ saleEndsAt: 1 }, { sparse: true });
 //
 // Only runs when slug is absent — an explicitly supplied slug (admin edit form,
 // WooCommerce's own slug) is normalized but never renamed, so URLs stay stable.
+// Keep variable-product aggregates in sync with variants[] BEFORE validation, so
+// the required `price` passes even when the admin/importer only sends variants.
+//   • variable → priceMin/priceMax = cheapest/dearest variant; parent `price` =
+//     priceMin (back-compat for sort/coupon-min/ES); parent `stock` = IN if any
+//     variant is purchasable, else OUT. Must have ≥1 variant.
+//   • simple/grouped → clear variants; priceMin/priceMax mirror `price`.
+ProductSchema.pre('validate', function () {
+  if (this.productType === 'variable') {
+    const variants = Array.isArray(this.variants) ? this.variants : [];
+    if (variants.length === 0) {
+      this.invalidate('variants', 'A variable product must have at least one variant');
+      return;
+    }
+    const prices = variants.map(v => v.price).filter(p => typeof p === 'number' && !Number.isNaN(p));
+    if (prices.length) {
+      this.priceMin = Math.min(...prices);
+      this.priceMax = Math.max(...prices);
+      // Parent price mirrors the cheapest variant so existing price-based sort,
+      // coupon minimums and search ranking keep working unchanged.
+      this.price = this.priceMin;
+    }
+    // Parent stock = best availability among variants: any in/low → IN;
+    // else any backorder → BACKORDER; else OUT (mirrors aggregateFromVariants).
+    const anyInStock = variants.some(v => v.stock === STOCK_STATUS.IN || v.stock === STOCK_STATUS.LOW);
+    const anyBackorder = variants.some(v => v.stock === STOCK_STATUS.BACKORDER);
+    this.stock = anyInStock ? STOCK_STATUS.IN : anyBackorder ? STOCK_STATUS.BACKORDER : STOCK_STATUS.OUT;
+  } else {
+    // Non-variable: no variants, and the range collapses to the single price.
+    if (this.variants?.length) this.variants = [];
+    if (typeof this.price === 'number') {
+      this.priceMin = this.price;
+      this.priceMax = this.price;
+    }
+  }
+});
+
 ProductSchema.pre('validate', async function () {
   if (this.slug) {
     this.slug = slugify(this.slug);

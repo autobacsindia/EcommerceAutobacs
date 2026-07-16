@@ -27,6 +27,7 @@ import Brand from '../models/Brand.js';
 import { resolveBrand } from '../utils/brandResolution.js';
 import { STOCK_STATUS, statusFromQuantity } from '../utils/stockStatus.js';
 import { splitDescriptionSections } from '../utils/descriptionSections.js';
+import { mapVariationsToVariants, aggregateFromVariants, reconcileVariantIds } from '../utils/wcVariants.js';
 
 function getConfig() {
   const cfg = {
@@ -194,6 +195,9 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
           sku: wc.sku || undefined,
           brand: r ? r.entry.name : '',
           brandSlug: r ? r.entry.slug : '',
+          // WC product type → ours. Only 'variable' gets variant behaviour;
+          // 'grouped' is carried for parity/filtering, everything else is simple.
+          productType: wc.type === 'variable' ? 'variable' : (wc.type === 'grouped' ? 'grouped' : 'simple'),
           isActive: wc.status === 'publish',
           ...(!alreadyMigrated && {
             images: (wc.images || []).map((img, i) => ({ url: img.src, alt: htmlToText(img.alt) || cleanName, public_id: `wp_${img.id}`, isPrimary: i === 0 })),
@@ -225,6 +229,25 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
           data.features = [];
           data.whyChoose = [];
         }
+        // Variable products: pull the variations and map them to embedded
+        // variants[]. Because the update path uses $set (which bypasses the
+        // Product pre('validate') aggregate hook), set priceMin/priceMax + the
+        // back-compat parent price/stock explicitly from the variants.
+        if (wc.type === 'variable') {
+          const wcVariations = await wcGetAll(`products/${wc.id}/variations`);
+          // Preserve existing variant _ids (match on wpVariationId) so a re-sync
+          // doesn't orphan cart/order references — see reconcileVariantIds.
+          const variants = reconcileVariantIds(existingDoc?.variants, mapVariationsToVariants(wcVariations));
+          if (variants.length) {
+            data.variants = variants;
+            Object.assign(data, aggregateFromVariants(variants));
+          } else {
+            // A variable product with no usable variations degrades to simple so
+            // it never becomes an unbuyable "select a model" dead end.
+            data.productType = 'simple';
+          }
+        }
+
         if (dryRun) { existingDoc ? stats.products.updated++ : stats.products.inserted++; continue; }
         if (existingDoc) { await Product.findByIdAndUpdate(existingDoc._id, { $set: data }); stats.products.updated++; }
         else { await new Product(data).save(); stats.products.inserted++; }

@@ -3,7 +3,7 @@
 import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, Heart, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Heart, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
@@ -33,6 +33,10 @@ interface Product {
   brand?: string;
   stock: StockStatus;
   averageRating: number;
+  slug?: string;
+  productType?: 'simple' | 'variable' | 'grouped';
+  priceMin?: number;
+  priceMax?: number;
 }
 
 interface ProductCollectionProps {
@@ -113,11 +117,14 @@ export default function ProductCollection({
     }
   }, [productIds, category, brand, searchKeyword, limit]);
 
-  const handleAddToCart = async (productId: string, e: React.MouseEvent) => {
+  const handleAddToCart = async (product: Product, e: React.MouseEvent) => {
+    // Variable products can't be quick-added (a model must be picked): let the
+    // click bubble to the wrapping card <Link> so it opens the PDP.
+    if (product.productType === 'variable') return;
     e.preventDefault();
     toast.success('Added to cart!');
     try {
-      await addToCart(productId, 1);
+      await addToCart(product._id, 1);
     } catch (error) {
       console.error('Failed to add to cart:', error);
       toast.error('Failed to add to cart');
@@ -299,7 +306,17 @@ export default function ProductCollection({
 
                   {/* Price */}
                   <div className="mt-auto">
-                    {product.originalPrice && product.originalPrice > product.price ? (
+                    {product.productType === 'variable' ? (
+                      <div className="mb-4">
+                        <p className="text-2xl font-bold text-ink">
+                          {(product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
+                            <span className="text-xs uppercase tracking-[0.14em] text-ink-muted mr-1">From</span>
+                          )}
+                          {formatPrice(product.priceMin ?? product.price)}
+                        </p>
+                        <p className="text-xs text-ink-muted mt-1">(incl. taxes)</p>
+                      </div>
+                    ) : product.originalPrice && product.originalPrice > product.price ? (
                       <div className="mb-4">
                         <p className="text-2xl font-bold text-gold">
                           {formatPrice(product.price)}
@@ -321,14 +338,14 @@ export default function ProductCollection({
                       </div>
                     )}
 
-                    {/* Add to Cart Button */}
+                    {/* Add to Cart / Select — variable products route to the PDP */}
                     <button
-                      onClick={(e) => handleAddToCart(product._id, e)}
+                      onClick={(e) => handleAddToCart(product, e)}
                       disabled={product.stock === 'out'}
                       className="w-full flex items-center justify-center gap-2 bg-gold text-obsidian px-6 py-3 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed font-medium"
                     >
-                      <ShoppingCart className="h-5 w-5" />
-                      <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>
+                      {product.productType === 'variable' ? <SlidersHorizontal className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
+                      <span>{product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}</span>
                     </button>
                   </div>
                 </div>

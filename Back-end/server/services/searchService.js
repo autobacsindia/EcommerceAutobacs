@@ -20,7 +20,7 @@ class SearchService {
     const {
       category, brand, minPrice, maxPrice, search,
       vehicle, vehicleMake, vehicleModel,
-      isFeatured, isFastMoving, inStock, rating, status,
+      isFeatured, isFastMoving, inStock, rating, status, productType,
     } = params;
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Cast id strings to ObjectId. find() auto-casts via the schema, but aggregate()
@@ -39,6 +39,11 @@ class SearchService {
       query.isActive = true;
     } else if (status === 'inactive') {
       query.isActive = false;
+    }
+
+    // Product-type narrowing (admin filter: simple / variable / grouped).
+    if (productType && ['simple', 'variable', 'grouped'].includes(productType)) {
+      query.productType = productType;
     }
 
     // Categories (+ all descendants)

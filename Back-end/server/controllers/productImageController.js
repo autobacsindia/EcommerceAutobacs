@@ -23,7 +23,8 @@ import {
 } from '../utils/cloudinaryHelpers.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { cleanHTML } from '../utils/htmlSanitizer.js';
-import { STOCK_VALUES } from '../utils/stockStatus.js';
+import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
+import { aggregateFromVariants } from '../utils/wcVariants.js';
 import { normalizeSeo } from '../utils/seo.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
@@ -47,11 +48,41 @@ const parseProductFields = (body) => {
   const fields = { ...body };
 
   ['categories', 'features', 'whyChoose', 'tags',
-   'specifications', 'compatibleVehicles', 'seo'].forEach((key) => {
+   'specifications', 'compatibleVehicles', 'seo', 'variants'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
   });
+
+  // ── Variable products ──────────────────────────────────────────────────────
+  // The pre('validate') hook derives the price range + parent price/stock on
+  // .save() (create), but the update path uses findByIdAndUpdate which bypasses
+  // that hook — so normalize variants and compute the aggregates HERE so both
+  // paths persist a consistent product.
+  if (fields.productType === 'variable' && Array.isArray(fields.variants)) {
+    fields.variants = fields.variants
+      .map((v) => ({
+        ...(v._id && { _id: v._id }),
+        ...(v.wpVariationId != null && { wpVariationId: v.wpVariationId }),
+        label: String(v.label || '').trim(),
+        attributes: Array.isArray(v.attributes) ? v.attributes : [],
+        price: Number(v.price) || 0,
+        originalPrice: v.originalPrice != null && v.originalPrice !== '' ? Number(v.originalPrice) : null,
+        ...(v.salePrice != null && v.salePrice !== '' && { salePrice: Number(v.salePrice) }),
+        stock: STOCK_VALUES.includes(v.stock) ? v.stock : STOCK_STATUS.IN,
+        ...(v.sku && { sku: String(v.sku).trim() }),
+      }))
+      .filter((v) => v.label && v.price >= 0);
+    Object.assign(fields, aggregateFromVariants(fields.variants));
+  } else if (fields.productType && fields.productType !== 'variable') {
+    // Switching to / staying simple|grouped: clear variants, collapse the range.
+    fields.variants = [];
+    if (fields.price != null && fields.price !== '') {
+      const p = Number(fields.price);
+      fields.priceMin = p;
+      fields.priceMax = p;
+    }
+  }
 
   // Normalize the SEO sub-document: coerce noindex, trim/strip strings, drop
   // blank fields. We only touch `seo` when the client actually sent it, so a

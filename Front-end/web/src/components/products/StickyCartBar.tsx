@@ -8,6 +8,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
 
+interface StickyVariant {
+  _id: string;
+  label: string;
+  price: number;
+  stock: StockStatus;
+}
+
 interface StickyCartBarProps {
   product: {
     _id: string;
@@ -16,14 +23,38 @@ interface StickyCartBarProps {
     stock: StockStatus;
   };
   isDark?: boolean;
+  // Variable-product context (mirrors the BuyBox selection, lifted to the page).
+  isVariable?: boolean;
+  variant?: StickyVariant | null;
+  priceMin?: number;
+  priceMax?: number;
 }
 
-export default function StickyCartBar({ product, isDark = true }: StickyCartBarProps) {
+export default function StickyCartBar({
+  product,
+  isDark = true,
+  isVariable = false,
+  variant = null,
+  priceMin,
+  priceMax,
+}: StickyCartBarProps) {
   const { addToCart } = useCart();
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [buyNowLoading, setBuyNowLoading] = useState(false);
+
+  // For a variable product the buyable unit is the selected variant; until one is
+  // picked the bar shows the range and its buttons prompt selection (scroll up).
+  const needsSelection = isVariable && !variant;
+  const activePrice = variant ? variant.price : product.price;
+  const activeStock: StockStatus = variant ? variant.stock : product.stock;
+  const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+
+  const promptSelect = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('Select a model to continue', { icon: '👆' });
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -35,13 +66,22 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const snapshot = () => ({
+    name: product.name,
+    price: activePrice,
+    images: [] as [],
+    stock: activeStock,
+    variantLabel: variant?.label ?? null,
+  });
+
   const handleAddToCart = async () => {
+    if (needsSelection) return promptSelect();
     setLoading(true);
     // Optimistic: badge + toast fire on tap; rolled back with an error toast on
     // a server rejection.
     toast.success('Added to cart!');
     try {
-      await addToCart(product._id, 1);
+      await addToCart(product._id, 1, snapshot(), variant?._id ?? null);
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
     } finally {
@@ -50,9 +90,10 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
   };
 
   const handleBuyNow = async () => {
+    if (needsSelection) return promptSelect();
     setBuyNowLoading(true);
     try {
-      await addToCart(product._id, 1);
+      await addToCart(product._id, 1, snapshot(), variant?._id ?? null);
       router.push('/checkout');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
@@ -60,7 +101,9 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
     }
   };
 
-  if (!isVisible || product.stock === 'out') {
+  // Hide when the resolved unit is sold out (a selected out-of-stock variant, or a
+  // simple product out of stock). Variable products with no selection stay visible.
+  if (!isVisible || activeStock === 'out') {
     return null;
   }
 
@@ -75,9 +118,16 @@ export default function StickyCartBar({ product, isDark = true }: StickyCartBarP
       >
         <div className="flex items-center justify-between p-4 max-w-7xl mx-auto gap-4">
           <div className="flex-1 min-w-0">
-            <p className={`text-sm truncate ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>{product.name}</p>
+            <p className={`text-sm truncate ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+              {product.name}
+              {variant ? ` · ${variant.label}` : ''}
+            </p>
             <p className="text-2xl font-black text-orange-500">
-              ₹{product.price.toLocaleString('en-IN')}
+              {needsSelection
+                ? (priceMin != null && priceMax != null && priceMin !== priceMax
+                    ? `${fmt(priceMin)} – ${fmt(priceMax)}`
+                    : fmt(priceMin ?? activePrice))
+                : fmt(activePrice)}
             </p>
           </div>
           <div className="flex gap-2">
