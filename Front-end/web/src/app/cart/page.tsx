@@ -107,19 +107,24 @@ function CartPageContent() {
     if (isAuthenticated && !isLoading) fetchCartWithStockCheck();
   }, [isAuthenticated, isLoading]);
 
-  const handleQuantityChange = async (productId: string, newQuantity: number) => {
+  // A line is identified by product + variant, so the same product under two
+  // models tracks its spinner/updates independently.
+  const lineKey = (productId: string, variantId?: string | null) =>
+    productId + (variantId ? `:${variantId}` : '');
+
+  const handleQuantityChange = async (productId: string, newQuantity: number, variantId?: string | null) => {
     if (newQuantity < 1) return;
     try {
-      setUpdatingItem(productId);
-      await updateQuantity(productId, newQuantity);
+      setUpdatingItem(lineKey(productId, variantId));
+      await updateQuantity(productId, newQuantity, variantId);
       toast.success('Cart updated');
     } catch (error: any) {
       if (error.message?.includes('out of stock')) {
         toast.error('This item is now out of stock', { icon: '❌' });
-        setTimeout(() => removeFromCart(productId), 2000);
+        setTimeout(() => removeFromCart(productId, variantId), 2000);
       } else if (error.message?.includes('Only') && error.message?.includes('available')) {
         toast.error(error.message, { icon: '⚠️' });
-        if (error.maxQuantity) setTimeout(async () => { await updateQuantity(productId, error.maxQuantity); }, 1500);
+        if (error.maxQuantity) setTimeout(async () => { await updateQuantity(productId, error.maxQuantity, variantId); }, 1500);
       } else {
         toast.error('Failed to update quantity');
       }
@@ -128,10 +133,10 @@ function CartPageContent() {
     }
   };
 
-  const handleRemoveItem = async (productId: string) => {
+  const handleRemoveItem = async (productId: string, variantId?: string | null) => {
     if (confirm('Remove this item from cart?')) {
       try {
-        await removeFromCart(productId);
+        await removeFromCart(productId, variantId);
         toast.success('Item removed from cart');
       } catch {
         toast.error('Failed to remove item');
@@ -233,8 +238,11 @@ function CartPageContent() {
               </div>
 
               <div className="divide-y divide-hairline">
-                {cart.items.map((item, index) => (
-                  <div key={`${item.product._id}-${index}`} className="p-6">
+                {cart.items.map((item, index) => {
+                  const unitPrice = item.price ?? item.product.price;
+                  const uid = lineKey(item.product._id, item.variantId);
+                  return (
+                  <div key={`${uid}-${index}`} className="p-6">
                     <div className="flex gap-4">
                       <Link
                         href={productUrl(item.product, '/products') || '/products'}
@@ -259,10 +267,13 @@ function CartPageContent() {
                             >
                               {item.product.name}
                             </Link>
-                            <p className="text-sm text-ink-muted font-display mt-1">{formatPrice(item.product.price)} each</p>
+                            {item.variantLabel && (
+                              <p className="text-[11px] uppercase tracking-[0.14em] text-gold mt-1">{item.variantLabel}</p>
+                            )}
+                            <p className="text-sm text-ink-muted font-display mt-1">{formatPrice(unitPrice)} each</p>
                           </div>
                           <button
-                            onClick={() => handleRemoveItem(item.product._id)}
+                            onClick={() => handleRemoveItem(item.product._id, item.variantId)}
                             className="text-ink-muted hover:text-red-400 transition-colors"
                             title="Remove item"
                           >
@@ -273,8 +284,8 @@ function CartPageContent() {
                         <div className="mt-4 flex items-center justify-between">
                           <div className="flex items-center border border-hairline rounded-sm">
                             <button
-                              onClick={() => handleQuantityChange(item.product._id, item.quantity - 1)}
-                              disabled={item.quantity <= 1 || updatingItem === item.product._id}
+                              onClick={() => handleQuantityChange(item.product._id, item.quantity - 1, item.variantId)}
+                              disabled={item.quantity <= 1 || updatingItem === uid}
                               className="p-2 text-ink/70 hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Minus className="h-4 w-4" />
@@ -283,15 +294,15 @@ function CartPageContent() {
                               {item.quantity}
                             </span>
                             <button
-                              onClick={() => handleQuantityChange(item.product._id, item.quantity + 1)}
-                              disabled={item.product.stock === 'out' || updatingItem === item.product._id}
+                              onClick={() => handleQuantityChange(item.product._id, item.quantity + 1, item.variantId)}
+                              disabled={item.product.stock === 'out' || updatingItem === uid}
                               className="p-2 text-ink/70 hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
                           <p className="text-lg font-display font-bold text-gold">
-                            {formatPrice(item.product.price * item.quantity)}
+                            {formatPrice(unitPrice * item.quantity)}
                           </p>
                         </div>
 
@@ -306,7 +317,8 @@ function CartPageContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

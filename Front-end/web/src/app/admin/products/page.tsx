@@ -17,6 +17,10 @@ interface Product {
   categories?: { name: string }[];
   isFeatured: boolean;
   isActive?: boolean;
+  productType?: 'simple' | 'variable' | 'grouped';
+  variants?: unknown[];
+  priceMin?: number;
+  priceMax?: number;
 }
 
 interface ProductsResponse {
@@ -50,6 +54,7 @@ function AdminProductsPageInner() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   // Admin can view all products or narrow to just active / just inactive (drafts).
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'simple' | 'variable' | 'grouped'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -74,12 +79,12 @@ function AdminProductsPageInner() {
 
   useEffect(() => {
     fetchProducts(currentPage);
-  }, [currentPage, debouncedSearchTerm, categoryId, statusFilter]);
+  }, [currentPage, debouncedSearchTerm, categoryId, statusFilter, typeFilter]);
 
-  // Reset to the first page whenever the status filter changes.
+  // Reset to the first page whenever the status or product-type filter changes.
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter]);
+  }, [statusFilter, typeFilter]);
 
   // Reset to the first page whenever the category filter changes.
   useEffect(() => {
@@ -134,6 +139,11 @@ function AdminProductsPageInner() {
       // Active / inactive narrowing (the admin endpoint returns both by default).
       if (statusFilter !== 'all') {
         params.append('status', statusFilter);
+      }
+
+      // Product-type narrowing (simple / variable / grouped).
+      if (typeFilter !== 'all') {
+        params.append('productType', typeFilter);
       }
 
       // The admin list endpoint is server-side uncached, so an edit shows up
@@ -209,6 +219,17 @@ function AdminProductsPageInner() {
           <option value="active">Active only</option>
           <option value="inactive">Inactive only</option>
         </select>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as 'all' | 'simple' | 'variable' | 'grouped')}
+          className="border rounded-lg px-4 py-2 text-sm bg-white"
+          aria-label="Filter by product type"
+        >
+          <option value="all">All types</option>
+          <option value="simple">Simple</option>
+          <option value="variable">Variable</option>
+          <option value="grouped">Grouped</option>
+        </select>
       </div>
 
       {categoryId && (
@@ -277,6 +298,16 @@ function AdminProductsPageInner() {
                   <td className="px-4 py-3">
                     <div className="flex items-start gap-2">
                       <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>{product.name}</div>
+                      {product.productType === 'variable' && (
+                        <span className="shrink-0 mt-0.5 px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          Variable{product.variants?.length ? ` · ${product.variants.length}` : ''}
+                        </span>
+                      )}
+                      {product.productType === 'grouped' && (
+                        <span className="shrink-0 mt-0.5 px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                          Grouped
+                        </span>
+                      )}
                       {product.isActive === false && (
                         <span className="shrink-0 mt-0.5 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                           Inactive
@@ -292,7 +323,11 @@ function AdminProductsPageInner() {
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">₹{product.price.toFixed(2)}</div>
+                    <div className="text-sm text-gray-900">
+                      {product.productType === 'variable' && product.priceMin != null && product.priceMax != null && product.priceMin !== product.priceMax
+                        ? `₹${product.priceMin.toFixed(2)} – ₹${product.priceMax.toFixed(2)}`
+                        : `₹${product.price.toFixed(2)}`}
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className={`text-sm ${product.stock === 'in' ? 'text-green-600' : product.stock === 'low' ? 'text-orange-600' : 'text-red-600'}`}>

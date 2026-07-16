@@ -27,7 +27,7 @@ interface ServerValidation {
   subtotal: number;
   tax: number;
   total: number;
-  items: Array<{ productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number }>;
+  items: Array<{ productId: string; variantId?: string | null; name: string; quantity: number; unitPrice: number; lineTotal: number }>;
 }
 
 interface Address {
@@ -300,6 +300,8 @@ function CheckoutPageContent() {
         paymentMethod,
         items: validated.items.map(item => ({
           product: item.productId,
+          // Variable products: the backend re-prices from THIS variant (client price ignored).
+          ...(item.variantId && { variantId: item.variantId }),
           quantity: item.quantity,
           price: item.unitPrice,
         })),
@@ -532,13 +534,16 @@ function CheckoutPageContent() {
 
             <div className="space-y-3 mb-8">
               {cart?.items.map((item: any) => (
-                <div key={item.product._id} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-sm p-4">
+                <div key={`${item.product._id}-${item.variantId ?? ''}`} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-sm p-4">
                   <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-sm shrink-0" />
                   <div className="flex-1">
                     <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm">{item.product.name}</h3>
+                    {item.variantLabel && (
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-gold mt-0.5">{item.variantLabel}</p>
+                    )}
                     <p className="text-ink-muted font-display text-xs mt-0.5">Qty: {item.quantity}</p>
                   </div>
-                  <p className="font-display font-bold text-gold">₹{(item.product.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-display font-bold text-gold">₹{((item.price ?? item.product.price) * item.quantity).toFixed(2)}</p>
                 </div>
               ))}
             </div>
@@ -785,7 +790,7 @@ function CheckoutPageContent() {
               <div className="border-t border-hairline pt-4">
                 {/* Coupon + karma + server-computed breakdown (single source of truth). */}
                 <CheckoutSummary
-                  items={(cart?.items || []).map((it: any) => ({ product: it.product._id, quantity: it.quantity }))}
+                  items={(cart?.items || []).map((it: any) => ({ product: it.product._id, quantity: it.quantity, variantId: it.variantId ?? null }))}
                   isAuthenticated={isAuthenticated}
                   onChange={setPricing}
                 />

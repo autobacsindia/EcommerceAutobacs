@@ -399,6 +399,10 @@ export const createOfflineOrder = async (req, res) => {
     // ── Build the order (amounts in rupees, matching the rest of the system) ──
     const lineItems = items.map((i) => ({
       product: i.product,
+      // Offline orders carry the admin-picked variant + its manually-entered price
+      // (this path is authoritative-by-admin, not re-priced from the catalogue).
+      variantId: i.variantId || null,
+      variantLabel: i.variantLabel || null,
       quantity: Number(i.quantity),
       price: Number(i.price),
       name: i.name || '',

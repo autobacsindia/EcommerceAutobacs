@@ -16,7 +16,7 @@ import VehicleCards from '@/components/products/VehicleCards';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import Gallery from '@/components/products/redesign/Gallery';
-import BuyBox from '@/components/products/redesign/BuyBox';
+import BuyBox, { type ProductVariant } from '@/components/products/redesign/BuyBox';
 import ConsultSpecialistBanner from '@/components/products/ConsultSpecialistBanner';
 
 async function getProduct(slugOrId: string): Promise<Product | null> {
@@ -54,6 +54,11 @@ interface Product {
   totalReviews: number;
   tags?: string[];
   slug?: string;
+  // Variable-product fields (simple products omit these).
+  productType?: 'simple' | 'variable' | 'grouped';
+  variants?: ProductVariant[];
+  priceMin?: number;
+  priceMax?: number;
 }
 
 const sectionCls = 'border-t border-hairline py-16';
@@ -61,6 +66,10 @@ const headingCls = 'text-[clamp(26px,3vw,40px)] font-light leading-tight text-in
 
 export function ProductDetailPageClient({ product }: { product: Product | null }) {
   const { isAuthenticated, user } = useAuth();
+
+  // Selected variant is lifted here so BuyBox and the mobile StickyCartBar stay in
+  // sync (both must add the SAME chosen model). Simple products never set it.
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 
   const stripHtml = (html: string) => (html ? html.replace(/<[^>]*>/g, '') : '');
 
@@ -174,7 +183,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             <Gallery images={displayImages} name={product.name} onSale={onSale} />
           </Reveal>
           <Reveal y={20} delay={0.08}>
-            <BuyBox product={product} />
+            <BuyBox
+              product={product}
+              selectedVariantId={selectedVariantId}
+              onSelectVariant={setSelectedVariantId}
+            />
           </Reveal>
         </div>
 
@@ -257,7 +270,14 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         </section>
       </div>
 
-      <StickyCartBar product={product} isDark />
+      <StickyCartBar
+        product={product}
+        isDark
+        isVariable={product.productType === 'variable' && (product.variants?.length ?? 0) > 0}
+        variant={product.variants?.find((v) => v._id === selectedVariantId) ?? null}
+        priceMin={product.priceMin ?? product.price}
+        priceMax={product.priceMax ?? product.price}
+      />
     </div>
   );
 }

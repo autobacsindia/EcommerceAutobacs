@@ -35,14 +35,25 @@ const OrderSchema = new mongoose.Schema({
         // Historical line items may reference products no longer in catalog; name/price are snapshotted.
         required: function () { return this.parent()?.source !== "woocommerce"; }
       },
-      quantity: { 
-        type: Number, 
+      // Selected variant (variable products only). Snapshotted like name/price so
+      // order history + invoices stay correct even if the variant is later edited
+      // or the product is removed. null for simple products.
+      variantId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null
+      },
+      variantLabel: {
+        type: String,
+        default: null
+      },
+      quantity: {
+        type: Number,
         required: true,
         min: 1
       },
-      price: { 
-        type: Number, 
-        required: true 
+      price: {
+        type: Number,
+        required: true
       },
       name: String,
       image: String
