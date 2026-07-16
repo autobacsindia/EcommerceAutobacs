@@ -111,7 +111,14 @@ describe('ClientPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
 
     await waitFor(() => {
-      expect(mockAddToCart).toHaveBeenCalledWith('p1', 2);
+      // A simple product passes an optimistic snapshot and a null variantId
+      // (variants only apply to variable products).
+      expect(mockAddToCart).toHaveBeenCalledWith(
+        'p1',
+        2,
+        expect.objectContaining({ name: 'Test Product', variantLabel: null }),
+        null,
+      );
     });
   });
 });
