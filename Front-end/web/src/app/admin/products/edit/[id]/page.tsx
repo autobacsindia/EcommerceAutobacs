@@ -52,6 +52,7 @@ interface Product {
   images: { url: string; public_id: string; alt: string; isPrimary: boolean }[];
   features?: string[];
   whyChoose?: string[];
+  packageContents?: string[];
   specifications?: Array<{ key: string; value: string }>;
   compatibleVehicles?: Vehicle[];
   tags?: string[];
@@ -110,6 +111,7 @@ export default function EditProductPage() {
   const [replaceMode, setReplaceMode] = useState(false);
   const [features, setFeatures] = useState<string[]>([]);
   const [whyChoose, setWhyChoose] = useState<string[]>([]);
+  const [packageContents, setPackageContents] = useState<string[]>([]);
   const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
   const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
@@ -220,6 +222,7 @@ export default function EditProductPage() {
       setExistingImages(imgs);
       setFeatures(productData.features || []);
       setWhyChoose(productData.whyChoose || []);
+      setPackageContents(productData.packageContents || []);
       setSpecifications(productData.specifications || []);
 
       if (productData.compatibleVehicles && Array.isArray(productData.compatibleVehicles)) {
@@ -440,6 +443,8 @@ export default function EditProductPage() {
       fd.append('features', JSON.stringify(validFeatures));
       const validWhyChoose = whyChoose.filter(w => w.trim());
       fd.append('whyChoose', JSON.stringify(validWhyChoose));
+      const validPackageContents = packageContents.filter(p => p.trim());
+      fd.append('packageContents', JSON.stringify(validPackageContents));
       const validSpecs = specifications.filter(s => s.key.trim() && s.value.trim());
       fd.append('specifications', JSON.stringify(validSpecs));
 
@@ -1148,6 +1153,45 @@ export default function EditProductPage() {
                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
               >
                 Add Reason
+              </button>
+            </div>
+          </div>
+
+          {/* Package Includes */}
+          <div className="md:col-span-2">
+            <h2 className="text-xl font-semibold mb-1">Package Includes</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              What&apos;s in the box — <strong>one item per box</strong> (a pointer, not a sentence). Shows as a bulleted list on the product page.
+            </p>
+            <div className="space-y-4">
+              {packageContents.map((item, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={item}
+                    onChange={(e) => {
+                      const next = [...packageContents];
+                      next[index] = e.target.value;
+                      setPackageContents(next);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="e.g. 1 × Front Bumper Assembly"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPackageContents(packageContents.filter((_, i) => i !== index))}
+                    className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPackageContents([...packageContents, ''])}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Add Item
               </button>
             </div>
           </div>
