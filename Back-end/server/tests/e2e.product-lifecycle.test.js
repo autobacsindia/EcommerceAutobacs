@@ -36,6 +36,10 @@ jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => ({
   deleteFromCloudinary:     (...args) => mockDeleteSingle(...args),
   deleteManyFromCloudinary: (...args) => mockDeleteMany(...args),
   buildOptimizedUrl:        (publicId) => `https://mock.cloudinary/${publicId}`,
+  // Imported by routes/uploads.js (mounted in app.js) for direct-to-Cloudinary uploads.
+  generateUploadSignature:  ({ folder = 'general' } = {}) => ({
+    cloudName: 'test-cloud', apiKey: 'test-key', timestamp: 1700000000, folder, allowedFormats: 'jpg,jpeg,png,webp', signature: 'test-sig',
+  }),
 }));
 
 // ── Dynamic imports after mock registration ───────────────────────────────────

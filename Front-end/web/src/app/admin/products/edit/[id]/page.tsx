@@ -7,6 +7,7 @@ import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
+import { uploadImagesToCloudinary } from '@/lib/cloudinaryUpload';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
@@ -469,8 +470,14 @@ export default function EditProductPage() {
         fd.append('deletePublicIds', JSON.stringify(pendingDeletes));
       }
 
-      // ── New image files (binary) ───────────────────────────────────────────
-      newImageFiles.forEach((file) => fd.append('images', file));
+      // ── New images ─────────────────────────────────────────────────────────
+      // Upload straight to Cloudinary (bypasses the ~4.5 MB proxy limit), then
+      // send only the refs as JSON so the update request stays tiny.
+      if (newImageFiles.length) {
+        // Group new assets under autobacs/products/<id> for the edited product.
+        const refs = await uploadImagesToCloudinary(newImageFiles, 'products', productId);
+        fd.append('uploadedImages', JSON.stringify(refs));
+      }
 
       // ── Send ──────────────────────────────────────────────────────────────
       // Use the relative /api/v1 path so the request goes through the Next.js
@@ -1214,6 +1221,9 @@ export default function EditProductPage() {
               onFilesChange={(files) => setNewImageFiles(files)}
               maxFiles={8}
               label=""
+              // Images upload straight to Cloudinary, so only per-file 3 MB
+              // applies — no combined-request cap.
+              maxTotalSizeMB={Infinity}
             />
             <p className="mt-2 text-xs text-gray-500">
               {replaceMode

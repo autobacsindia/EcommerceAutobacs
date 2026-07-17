@@ -82,6 +82,9 @@ export default function ImageUploader({
   const totalCount = value.length + localPreviews.length;
   const remaining  = maxFiles - totalCount;
 
+  // A non-finite ceiling disables the combined-size cap — used where images
+  // upload straight to Cloudinary and never traverse the proxy request body.
+  const enforceTotal = Number.isFinite(maxTotalSizeMB) && maxTotalSizeMB > 0;
   const MAX_TOTAL_BYTES = maxTotalSizeMB * 1024 * 1024;
 
   // ── Add files ──────────────────────────────────────────────────────────────
@@ -115,19 +118,23 @@ export default function ImageUploader({
     }
 
     // Combined size across all pending new files (existing DB images don't
-    // count — they're already on Cloudinary and aren't re-uploaded).
-    const accepted: File[] = [];
-    let running = localPreviews.reduce((sum, p) => sum + p.file.size, 0);
-    let totalExceeded = false;
-    for (const f of sized) {
-      if (running + f.size > MAX_TOTAL_BYTES) { totalExceeded = true; break; }
-      running += f.size;
-      accepted.push(f);
-    }
-    if (totalExceeded) {
-      problems.push(
-        `Combined upload must stay under ${maxTotalSizeMB} MB — compress images or upload fewer at once.`
-      );
+    // count — they're already on Cloudinary and aren't re-uploaded). Skipped
+    // entirely when the combined cap is disabled (direct-to-Cloudinary).
+    let accepted: File[] = sized;
+    if (enforceTotal) {
+      accepted = [];
+      let running = localPreviews.reduce((sum, p) => sum + p.file.size, 0);
+      let totalExceeded = false;
+      for (const f of sized) {
+        if (running + f.size > MAX_TOTAL_BYTES) { totalExceeded = true; break; }
+        running += f.size;
+        accepted.push(f);
+      }
+      if (totalExceeded) {
+        problems.push(
+          `Combined upload must stay under ${maxTotalSizeMB} MB — compress images or upload fewer at once.`
+        );
+      }
     }
 
     setError(problems.length ? problems.join(' ') : null);
@@ -143,7 +150,7 @@ export default function ImageUploader({
       onFilesChange?.(next.map((p) => p.file));
       return next;
     });
-  }, [remaining, maxFiles, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews, onFilesChange]);
+  }, [remaining, maxFiles, enforceTotal, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews, onFilesChange]);
 
   // ── Remove local preview ───────────────────────────────────────────────────
   const removeLocal = (idx: number) => {
@@ -198,7 +205,7 @@ export default function ImageUploader({
           Drag &amp; drop or <span className="text-red-400 font-medium">browse</span>
         </p>
         <p className="text-xs text-gray-500">
-          JPG, PNG, WebP · max {maxFileSizeMB} MB each · {maxTotalSizeMB} MB total · {Math.max(remaining, 0)} slot{remaining !== 1 ? 's' : ''} remaining
+          JPG, PNG, WebP · max {maxFileSizeMB} MB each{enforceTotal ? ` · ${maxTotalSizeMB} MB total` : ''} · {Math.max(remaining, 0)} slot{remaining !== 1 ? 's' : ''} remaining
         </p>
         <input
           ref={inputRef}

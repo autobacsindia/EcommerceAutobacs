@@ -58,6 +58,7 @@ import salesRepRoutes from './salesReps.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
 import mediaRoutes from './media.js';
+import uploadRoutes from './uploads.js';
 import pageSeoRoutes from './pageSeo.js';
 import scheduledTasksRoutes from './scheduledTasks.js';
 
@@ -142,6 +143,7 @@ apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access
 apiRouter.use('/page-seo', publicBrowsingRateLimit, pageSeoRoutes); // Public read; admin write guarded in-route
 apiRouter.use('/scheduled-tasks', adminRouteRateLimit, scheduledTasksRoutes);
+apiRouter.use('/uploads', adminRouteRateLimit, uploadRoutes); // Admin-only: direct-to-Cloudinary signatures
 
 // ============================================================================
 // ADMIN MONITORING DOMAIN
