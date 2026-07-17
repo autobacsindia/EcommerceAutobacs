@@ -331,7 +331,12 @@ export const getSimilarProducts = async (req, res) => {
         shortDescription: product.shortDescription || '',
         description: product.description || '',
         stock: product.stock || 0,
-        isActive: product.isActive !== false
+        isActive: product.isActive !== false,
+        // Variable-product context so the card can offer quick-add (simple) vs
+        // a "Select options" link to the PDP (variable — a model must be chosen).
+        productType: product.productType || 'simple',
+        priceMin: product.priceMin ?? null,
+        priceMax: product.priceMax ?? null
       };
     });
     
@@ -404,7 +409,12 @@ export const getComplementaryProducts = async (req, res) => {
         shortDescription: product.shortDescription || '',
         description: product.description || '',
         stock: product.stock || 0,
-        isActive: product.isActive !== false
+        isActive: product.isActive !== false,
+        // Variable-product context so the card can offer quick-add (simple) vs
+        // a "Select options" link to the PDP (variable — a model must be chosen).
+        productType: product.productType || 'simple',
+        priceMin: product.priceMin ?? null,
+        priceMax: product.priceMax ?? null
       };
     });
     
