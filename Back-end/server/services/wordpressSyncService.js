@@ -28,6 +28,7 @@ import { resolveBrand } from '../utils/brandResolution.js';
 import { STOCK_STATUS, statusFromQuantity } from '../utils/stockStatus.js';
 import { splitDescriptionSections } from '../utils/descriptionSections.js';
 import { mapVariationsToVariants, aggregateFromVariants, reconcileVariantIds } from '../utils/wcVariants.js';
+import { extractPackageContents } from '../utils/wcCustomTabs.js';
 
 function getConfig() {
   const cfg = {
@@ -205,6 +206,10 @@ export async function runWordPressSync({ dryRun = false, withImages = true, logg
           categories: resolveCategories(wc.categories),
           categoryIds: (wc.categories || []).map(c => c.id),
           tags: (wc.tags || []).map(t => htmlToText(t.name)).filter(Boolean),
+          // "What's in the box" pointers from the WC "Package"/"Package Includes"
+          // custom tab (yikes_woo_products_tabs). WC is source of truth → an empty
+          // array clears stale contents when the tab is removed.
+          packageContents: extractPackageContents(wc.meta_data),
           // WC product attributes → spec table (e.g. Size, Material, Fitment).
           // Mirrors the legacy importers; variation-only attributes are kept too
           // since their options describe the product. value joins multi-options.

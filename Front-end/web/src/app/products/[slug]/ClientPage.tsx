@@ -47,6 +47,7 @@ interface Product {
   specifications?: Array<{ key: string; value: string }>;
   features?: string[];
   whyChoose?: string[];
+  packageContents?: string[];
   compatibleVehicles?: Array<{ make: string; model: string }>;
   isActive: boolean;
   isFeatured: boolean;
@@ -134,6 +135,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   const cleanDescription = stripHtml(product.description);
   const features = product.features ?? [];
   const whyChoose = product.whyChoose ?? [];
+  const packageContents = product.packageContents ?? [];
   const specifications = product.specifications ?? [];
   const categoryName = typeof product.category === 'object' ? product.category?.name : product.category;
   const categorySlug = typeof product.category === 'object' ? product.category?.slug : undefined;
@@ -218,6 +220,19 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             <div className="max-w-3xl whitespace-pre-line text-[15px] font-light leading-[1.85] text-ink-muted">
               {cleanDescription}
             </div>
+          </section>
+        )}
+
+        {/* Package contents — bulleted "pointers", not a paragraph */}
+        {packageContents.length > 0 && (
+          <section className={sectionCls}>
+            <Eyebrow className="mb-4">In the box</Eyebrow>
+            <h2 className={`${headingCls} mb-6`}>Package Includes</h2>
+            <ul className="max-w-3xl list-disc space-y-3 pl-6 text-[15px] font-light leading-relaxed text-ink-muted marker:text-gold">
+              {packageContents.map((item, i) => (
+                <li key={i} className="pl-1">{item}</li>
+              ))}
+            </ul>
           </section>
         )}
 

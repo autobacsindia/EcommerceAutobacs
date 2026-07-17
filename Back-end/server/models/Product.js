@@ -149,6 +149,10 @@ const ProductSchema = new mongoose.Schema({
   }],
   features: [String],
   whyChoose: [String],
+  // "What's in the box" — one pointer per line (NOT a paragraph). Migrated from the
+  // WooCommerce "Package"/"Package Includes" custom tab (yikes_woo_products_tabs);
+  // see utils/wcCustomTabs.js. Rendered as a bulleted list on the PDP.
+  packageContents: [String],
   isActive: {
     type: Boolean,
     default: true
