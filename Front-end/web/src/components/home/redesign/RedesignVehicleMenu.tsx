@@ -23,8 +23,11 @@ const slugify = (s: string) => s.toLowerCase().replace(/\s+/g, '-');
  */
 export default function RedesignVehicleMenu({
   variant = 'dropdown',
+  onNavigate,
 }: {
   variant?: 'dropdown' | 'inline';
+  /** Called after this menu navigates, so a parent (e.g. the mobile hamburger) can close itself. */
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(variant === 'inline');
@@ -80,6 +83,7 @@ export default function RedesignVehicleMenu({
     if (!make || !model) return;
     setOpen(variant === 'inline');
     router.push(`/model/${slugify(make)}-${slugify(model)}`);
+    onNavigate?.();
   };
 
   return (
@@ -166,6 +170,7 @@ export default function RedesignVehicleMenu({
             onClick={() => {
               setOpen(variant === 'inline');
               router.push('/vehicles');
+              onNavigate?.();
             }}
           >
             View All Vehicles →

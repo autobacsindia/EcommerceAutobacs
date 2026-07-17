@@ -48,7 +48,7 @@ interface Product {
   features?: string[];
   whyChoose?: string[];
   packageContents?: string[];
-  compatibleVehicles?: Array<{ make: string; model: string }>;
+  compatibleVehicles?: Array<{ make: string; model: string; slug?: string; image?: { url?: string; alt?: string } }>;
   isActive: boolean;
   isFeatured: boolean;
   averageRating: number;

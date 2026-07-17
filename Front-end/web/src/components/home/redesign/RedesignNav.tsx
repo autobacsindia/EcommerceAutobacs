@@ -131,7 +131,7 @@ export default function RedesignNav() {
         <div className="nav-mobile">
           {navLinks.map((l) =>
             l.label === VEHICLE_LABEL ? (
-              <RedesignVehicleMenu key={l.label} variant="inline" />
+              <RedesignVehicleMenu key={l.label} variant="inline" onNavigate={() => setMenuOpen(false)} />
             ) : (
               <Link key={l.label} href={l.href} onClick={() => setMenuOpen(false)}>
                 {l.label}

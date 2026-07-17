@@ -1,13 +1,24 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Check } from 'lucide-react';
 
 interface Vehicle {
   make: string;
   model: string;
+  slug?: string;
+  image?: { url?: string; alt?: string };
 }
+
+// Storefront route for a vehicle's parts. Prefer the admin-set slug; otherwise
+// derive the same `make-model` slug the vehicle menu builds so the link still works.
+const slugify = (value: string) =>
+  value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+const vehicleHref = (vehicle: Vehicle) =>
+  `/model/${vehicle.slug || `${slugify(vehicle.make)}-${slugify(vehicle.model)}`}`;
 
 interface VehicleCardsProps {
   vehicles?: Vehicle[];
@@ -41,8 +52,8 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
             {/* Vehicle Image */}
             <div className={`relative h-48 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} overflow-hidden`}>
               <Image
-                src="/placeholder-product.jpg"
-                alt={`${vehicle.make} ${vehicle.model}`}
+                src={vehicle.image?.url || '/placeholder-product.jpg'}
+                alt={vehicle.image?.alt || `${vehicle.make} ${vehicle.model}`}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-110"
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -62,9 +73,12 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
                 {vehicle.make} {vehicle.model}
               </h4>
 
-              <button className={`w-full mt-4 ${isDark ? 'bg-obsidian-raised hover:bg-orange-500' : 'bg-obsidian-raised hover:bg-orange-500 hover:text-ink'} text-ink font-semibold py-2 px-4 rounded-lg transition-colors text-sm`}>
+              <Link
+                href={vehicleHref(vehicle)}
+                className={`block w-full mt-4 text-center ${isDark ? 'bg-obsidian-raised hover:bg-orange-500' : 'bg-obsidian-raised hover:bg-orange-500 hover:text-ink'} text-ink font-semibold py-2 px-4 rounded-lg transition-colors text-sm`}
+              >
                 Shop Parts for This Vehicle
-              </button>
+              </Link>
             </div>
           </motion.div>
         ))}
