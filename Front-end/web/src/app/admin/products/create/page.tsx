@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
+import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { ArrowLeft } from 'lucide-react';
 import ImageUploader from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
@@ -208,26 +209,10 @@ export default function CreateProductPage() {
       // ── Image files ────────────────────────────────────────────────────
       images.forEach((file) => fd.append('images', file));
 
-      // Use raw fetch so we can send multipart without apiClient JSON serialization
-      const token = typeof window !== 'undefined'
-        ? document.cookie.match(/(?:^|;\s*)token=([^;]*)/)?.[1] ?? ''
-        : '';
-      const csrfToken = typeof window !== 'undefined'
-        ? document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? ''
-        : '';
-
-      const res = await fetch('/api/v1/products', {
-        method: 'POST',
-        headers: {
-          ...(token      ? { Authorization: `Bearer ${token}` } : {}),
-          ...(csrfToken  ? { 'X-XSRF-TOKEN': decodeURIComponent(csrfToken) } : {}),
-        },
-        credentials: 'include',
-        body: fd,
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to create product');
+      // Raw multipart submit (apiClient can't send FormData without JSON-serializing).
+      const res = await submitMultipart('/api/v1/products', 'POST', fd);
+      const data = await parseApiResponse(res);
+      if (!res.ok) throw new Error(errorMessage(res, data, 'Failed to create product'));
 
       // A new (featured) product may belong on the homepage's featured shelf.
       revalidateHome('home:products');
@@ -784,8 +769,7 @@ export default function CreateProductPage() {
           <div className="md:col-span-2">
             <h2 className="text-xl font-semibold mb-4">Product Images</h2>
             <ImageUploader
-              label="Upload product images (JPG, PNG, WebP · max 5 MB each)"
-              maxFiles={10}
+              label="Upload product images"
               onFilesChange={(files) => setImages(files)}
               disabled={submitting}
             />

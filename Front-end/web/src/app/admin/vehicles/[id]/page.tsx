@@ -3,9 +3,11 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import ImageUploader from '@/components/ui/ImageUploader';
 
 interface Vehicle {
   _id: string;
@@ -33,6 +35,7 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
     imageAlt: '',
     isActive: true
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch vehicle data on mount
@@ -96,21 +99,8 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
       newErrors.slug = 'Slug can only contain lowercase letters, numbers, and hyphens';
     }
 
-    if (formData.imageUrl && !isValidUrl(formData.imageUrl)) {
-      newErrors.imageUrl = 'Please enter a valid URL';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -123,27 +113,32 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
     setLoading(true);
 
     try {
-      const vehicleData = {
-        make: formData.make.trim(),
-        model: formData.model.trim(),
-        slug: formData.slug.trim(),
-        image: formData.imageUrl ? {
-          url: formData.imageUrl.trim(),
-          alt: formData.imageAlt.trim() || `${formData.make} ${formData.model}`
-        } : undefined,
-        isActive: formData.isActive
-      };
+      // Multipart so a newly chosen image file reaches Cloudinary via the
+      // backend. Omitting `image` keeps the existing image untouched; `imageAlt`
+      // is always sent so alt-text edits persist.
+      const fd = new FormData();
+      fd.append('make', formData.make.trim());
+      fd.append('model', formData.model.trim());
+      fd.append('slug', formData.slug.trim());
+      fd.append('isActive', String(formData.isActive));
+      fd.append('imageAlt', formData.imageAlt.trim() || `${formData.make} ${formData.model}`);
+      if (imageFile) fd.append('image', imageFile);
 
-      await apiClient.put(API_ENDPOINTS.VEHICLE_UPDATE(unwrappedParams.id), vehicleData);
-      
+      const res = await submitMultipart(`/api/v1/vehicles/${unwrappedParams.id}`, 'PUT', fd);
+      const data = await parseApiResponse(res);
+      if (!res.ok) {
+        const msg = data.message || '';
+        if (msg.includes('duplicate') || msg.includes('slug')) {
+          setErrors({ slug: 'This slug is already in use. Please choose a different one.' });
+          return;
+        }
+        throw new Error(errorMessage(res, data, 'Failed to update vehicle'));
+      }
+
       alert('Vehicle updated successfully!');
       router.push('/admin/vehicles');
     } catch (err: any) {
-      if (err.message.includes('duplicate') || err.message.includes('slug')) {
-        setErrors({ slug: 'This slug is already in use. Please choose a different one.' });
-      } else {
-        alert(err.message || 'Failed to update vehicle');
-      }
+      alert(err.message || 'Failed to update vehicle');
     } finally {
       setLoading(false);
     }
@@ -257,22 +252,34 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
         <div className="bg-white rounded-lg shadow p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">Image</h2>
 
+          {formData.imageUrl && !imageFile && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Current image:</p>
+              <div className="border rounded-lg p-4 bg-gray-50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={formData.imageUrl}
+                  alt={formData.imageAlt || 'Current vehicle image'}
+                  className="max-w-xs h-auto rounded"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           <div>
-            <label htmlFor="imageUrl" className="block text-sm font-medium text-gray-700 mb-1">
-              Image URL
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {formData.imageUrl ? 'Replace image' : 'Vehicle image'}
             </label>
-            <input
-              type="text"
-              id="imageUrl"
-              name="imageUrl"
-              value={formData.imageUrl}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.imageUrl ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="https://example.com/vehicle-image.jpg"
+            <ImageUploader
+              label=""
+              maxFiles={1}
+              onFilesChange={(files) => setImageFile(files[0] ?? null)}
+              disabled={loading}
             />
-            {errors.imageUrl && <p className="text-red-500 text-sm mt-1">{errors.imageUrl}</p>}
           </div>
 
           <div>
@@ -289,23 +296,6 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
               placeholder={`${formData.make} ${formData.model}` || 'Image description'}
             />
           </div>
-
-          {formData.imageUrl && isValidUrl(formData.imageUrl) && (
-            <div className="mt-4">
-              <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <img
-                  src={formData.imageUrl}
-                  alt={formData.imageAlt || 'Preview'}
-                  className="max-w-xs h-auto rounded"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                  }}
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Status */}

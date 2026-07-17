@@ -2,23 +2,23 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
+import ImageUploader from '@/components/ui/ImageUploader';
 
 export default function CreateBrandPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     name: '',
-    logo: '',
     description: '',
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -31,7 +31,7 @@ export default function CreateBrandPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
       setError('Brand name is required');
       return;
@@ -41,7 +41,17 @@ export default function CreateBrandPage() {
     setError(null);
 
     try {
-      await apiClient.post(API_ENDPOINTS.BRAND_CREATE, { ...formData, seo });
+      // Multipart so the logo file reaches Cloudinary via the backend.
+      const fd = new FormData();
+      fd.append('name', formData.name.trim());
+      if (formData.description.trim()) fd.append('description', formData.description.trim());
+      fd.append('seo', JSON.stringify(seo));
+      if (logoFile) fd.append('logo', logoFile);
+
+      const res = await submitMultipart('/api/v1/brands', 'POST', fd);
+      const data = await parseApiResponse(res);
+      if (!res.ok) throw new Error(errorMessage(res, data, 'Failed to create brand'));
+
       revalidateHome('home:brands');
       alert('Brand created successfully!');
       router.push('/admin/brands');
@@ -98,38 +108,17 @@ export default function CreateBrandPage() {
             )}
           </div>
 
-          {/* Logo URL */}
+          {/* Logo */}
           <div>
-            <label htmlFor="logo" className="block text-sm font-medium text-gray-700 mb-1">
-              Logo URL
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Logo
             </label>
-            <input
-              type="url"
-              id="logo"
-              name="logo"
-              value={formData.logo}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="https://example.com/logo.png"
+            <ImageUploader
+              label=""
+              maxFiles={1}
+              onFilesChange={(files) => setLogoFile(files[0] ?? null)}
+              disabled={loading}
             />
-            <p className="mt-1 text-sm text-gray-500">
-              Enter a URL to the brand logo image
-            </p>
-            {formData.logo && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-500 mb-1">Preview:</p>
-                <div className="h-16 w-32 bg-gray-100 rounded border overflow-hidden">
-                  <img 
-                    src={formData.logo} 
-                    alt="Logo preview" 
-                    className="h-full w-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Description */}

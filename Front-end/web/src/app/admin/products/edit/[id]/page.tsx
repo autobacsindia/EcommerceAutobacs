@@ -6,6 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
+import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
@@ -508,22 +509,12 @@ export default function EditProductPage() {
       console.log('Response status:', res.status);
       console.log('Response headers:', Object.fromEntries(res.headers.entries()));
       
-      let data;
-      try {
-        const text = await res.text();
-        console.log('Raw response:', text);
-        data = text ? JSON.parse(text) : {};
-      } catch (parseError) {
-        console.error('Failed to parse response:', parseError);
-        throw new Error(`Server returned invalid response (${res.status})`);
-      }
-      
+      const data = await parseApiResponse(res);
       console.log('Update response:', res.status, data);
-      
+
       if (!res.ok) {
-        console.error('Update failed:', data);
-        console.error('Error details:', JSON.stringify(data, null, 2));
-        throw new Error(data.message || data.error || `Failed to update product (${res.status})`);
+        console.error('Update failed:', res.status, data);
+        throw new Error(errorMessage(res, data, 'Failed to update product'));
       }
 
       // Edits to the featured flag / name / price / image should reflect on the

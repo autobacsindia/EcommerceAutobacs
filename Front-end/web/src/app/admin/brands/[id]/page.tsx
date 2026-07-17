@@ -4,10 +4,12 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
+import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Save, Loader2, Package } from 'lucide-react';
 import Link from 'next/link';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
+import ImageUploader from '@/components/ui/ImageUploader';
 
 interface Brand {
   id: string;
@@ -34,6 +36,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
     description: '',
     isActive: true,
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
 
   useEffect(() => {
@@ -84,7 +87,20 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
     setError(null);
 
     try {
-      await apiClient.put(API_ENDPOINTS.BRAND_UPDATE(id), { ...formData, seo });
+      // Multipart so a newly chosen logo file reaches Cloudinary via the backend.
+      const fd = new FormData();
+      fd.append('name', formData.name.trim());
+      fd.append('description', formData.description.trim());
+      fd.append('isActive', String(formData.isActive));
+      fd.append('seo', JSON.stringify(seo));
+      // Only send `logo` when the admin picked a new file — omitting it keeps
+      // the existing logo untouched on the backend.
+      if (logoFile) fd.append('logo', logoFile);
+
+      const res = await submitMultipart(`/api/v1/brands/${id}`, 'PUT', fd);
+      const data = await parseApiResponse(res);
+      if (!res.ok) throw new Error(errorMessage(res, data, 'Failed to update brand'));
+
       revalidateHome('home:brands');
       alert('Brand updated successfully!');
       router.push('/admin/brands');
@@ -192,38 +208,34 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
             )}
           </div>
 
-          {/* Logo URL */}
+          {/* Logo */}
           <div>
-            <label htmlFor="logo" className="block text-sm font-medium text-gray-700 mb-1">
-              Logo URL
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Logo
             </label>
-            <input
-              type="url"
-              id="logo"
-              name="logo"
-              value={formData.logo}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="https://example.com/logo.png"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Enter a URL to the brand logo image
-            </p>
-            {formData.logo && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-500 mb-1">Preview:</p>
+            {formData.logo && !logoFile && (
+              <div className="mb-2">
+                <p className="text-sm text-gray-500 mb-1">Current logo:</p>
                 <div className="h-16 w-32 bg-gray-100 rounded border overflow-hidden">
-                  <img 
-                    src={formData.logo} 
-                    alt="Logo preview" 
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={formData.logo}
+                    alt="Current logo"
                     className="h-full w-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
                 </div>
               </div>
             )}
+            <ImageUploader
+              label=""
+              maxFiles={1}
+              onFilesChange={(files) => setLogoFile(files[0] ?? null)}
+              disabled={saving}
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              {formData.logo ? 'Upload a new image to replace the current logo.' : 'Upload a brand logo.'}
+            </p>
           </div>
 
           {/* Description */}
