@@ -1,126 +1,100 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import CreateBrandPage from './page';
-import apiClient from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { API_ENDPOINTS } from '@/lib/constants';
 
-// Mock dependencies
-jest.mock('@/lib/api');
+// The form now submits multipart/form-data via raw fetch (so the logo file can
+// be uploaded to Cloudinary), not apiClient JSON. We mock global.fetch.
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
+jest.mock('@/lib/revalidateHome', () => ({ revalidateHome: jest.fn() }));
 jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
   Save: () => <span data-testid="icon-save">Save</span>,
   Loader2: () => <span data-testid="icon-loader">Loader</span>,
-  // Icons used by the embedded <SeoPanel>.
+  // Icons used by the embedded <SeoPanel> and <ImageUploader>.
   Search: () => <span data-testid="icon-search">Search</span>,
   ChevronDown: () => <span data-testid="icon-chevron-down">ChevronDown</span>,
   ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
   Info: () => <span data-testid="icon-info">Info</span>,
+  Upload: () => <span data-testid="icon-upload">Upload</span>,
+  X: () => <span data-testid="icon-x">X</span>,
+  ImageIcon: () => <span data-testid="icon-image">ImageIcon</span>,
 }));
-// Mock constants if needed, but usually we can import them. 
-// If API_ENDPOINTS is not mocked, it uses real values.
-// We should check what the real value is or just match whatever is passed.
+
+const okJson = (body: unknown = { success: true }) =>
+  Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) } as Response);
 
 describe('CreateBrandPage', () => {
-  const mockRouter = {
-    back: jest.fn(),
-    push: jest.fn(),
-    refresh: jest.fn(),
-  };
+  const mockRouter = { back: jest.fn(), push: jest.fn(), refresh: jest.fn() };
 
   beforeEach(() => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
-    (apiClient.post as jest.Mock).mockResolvedValue({ success: true });
+    global.fetch = jest.fn(() => okJson()) as jest.Mock;
     window.alert = jest.fn();
   });
 
   it('renders form elements', () => {
     render(<CreateBrandPage />);
     expect(screen.getByLabelText(/Brand Name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Logo URL/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Logo$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Description/i)).toBeInTheDocument();
   });
 
-  it('handles input changes and preview generation', () => {
+  it('generates a slug preview from the name', () => {
     render(<CreateBrandPage />);
-    
-    const nameInput = screen.getByLabelText(/Brand Name/i);
-    fireEvent.change(nameInput, { target: { value: 'Test Brand 123' } });
-    
-    expect(nameInput).toHaveValue('Test Brand 123');
-    // The component converts to lowercase and replaces non-alphanumeric with hyphens
+    fireEvent.change(screen.getByLabelText(/Brand Name/i), { target: { value: 'Test Brand 123' } });
     expect(screen.getByText('test-brand-123')).toBeInTheDocument();
-    
-    const logoInput = screen.getByLabelText(/Logo URL/i);
-    fireEvent.change(logoInput, { target: { value: 'http://example.com/logo.png' } });
-    expect(logoInput).toHaveValue('http://example.com/logo.png');
-    
-    // Check if image preview appears
-    expect(screen.getByAltText('Logo preview')).toBeInTheDocument();
   });
 
-  it('submits form successfully', async () => {
+  it('submits form as multipart to /api/v1/brands', async () => {
     render(<CreateBrandPage />);
-    
+
     fireEvent.change(screen.getByLabelText(/Brand Name/i), { target: { value: 'New Brand' } });
-    fireEvent.change(screen.getByLabelText(/Logo URL/i), { target: { value: 'http://logo.com' } });
     fireEvent.change(screen.getByLabelText(/Description/i), { target: { value: 'Desc' } });
-    
-    const submitButton = screen.getByRole('button', { name: /Create Brand/i });
-    fireEvent.click(submitButton);
-    
-    await waitFor(() => {
-      // We can use expect.anything() for the URL if we are not sure about the constant value,
-      // or import it. Since we imported it, let's use it.
-      expect(apiClient.post).toHaveBeenCalledWith(API_ENDPOINTS.BRAND_CREATE, {
-        name: 'New Brand',
-        logo: 'http://logo.com',
-        description: 'Desc',
-        // SeoPanel defaults sent when no SEO override is entered.
-        seo: {
-          metaTitle: '',
-          metaDescription: '',
-          canonical: '',
-          ogImage: '',
-          noindex: false,
-          focusKeyword: '',
-        },
-      });
-    });
-    
+    fireEvent.click(screen.getByRole('button', { name: /Create Brand/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+
+    const [url, opts] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe('/api/v1/brands');
+    expect(opts.method).toBe('POST');
+    expect(opts.body).toBeInstanceOf(FormData);
+    const fd = opts.body as FormData;
+    expect(fd.get('name')).toBe('New Brand');
+    expect(fd.get('description')).toBe('Desc');
+    expect(fd.get('seo')).toBeTruthy();
+
     expect(window.alert).toHaveBeenCalledWith('Brand created successfully!');
     expect(mockRouter.push).toHaveBeenCalledWith('/admin/brands');
   });
 
-  it('handles submission error', async () => {
-    (apiClient.post as jest.Mock).mockRejectedValue(new Error('Creation failed'));
-    
+  it('surfaces a server error message', async () => {
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 400,
+        text: () => Promise.resolve(JSON.stringify({ message: 'Creation failed' })),
+      } as Response),
+    ) as jest.Mock;
+
     render(<CreateBrandPage />);
-    
     fireEvent.change(screen.getByLabelText(/Brand Name/i), { target: { value: 'Fail Brand' } });
-    const submitButton = screen.getByRole('button', { name: /Create Brand/i });
-    fireEvent.click(submitButton);
-    
-    await waitFor(() => {
-      expect(screen.getByText('Creation failed')).toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /Create Brand/i }));
+
+    await waitFor(() => expect(screen.getByText('Creation failed')).toBeInTheDocument());
   });
 
   it('validates required fields', async () => {
     render(<CreateBrandPage />);
-    
+
     const form = screen.getByRole('button', { name: /Create Brand/i }).closest('form');
     if (!form) throw new Error('Form not found');
     fireEvent.submit(form);
-    
-    await waitFor(() => {
-      expect(screen.getByText('Brand name is required')).toBeInTheDocument();
-    });
-    
-    expect(apiClient.post).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(screen.getByText('Brand name is required')).toBeInTheDocument());
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

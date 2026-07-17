@@ -212,16 +212,17 @@ router.put(
 
     // Replace logo if a new file was uploaded
     if (req.file) {
-      if (brand.logo?.public_id) {
-        await deleteFromCloudinary(brand.logo.public_id);
-      }
+      // Upload the new asset FIRST, then delete the old one only after success —
+      // so a failed upload can never leave the brand pointing at a deleted logo.
+      const oldPublicId = brand.logo?.public_id;
       const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/brands' });
       brand.logo = { url: uploaded.secure_url, public_id: uploaded.public_id };
-    } else if (req.body.logo !== undefined) {
-      // Plain URL string passed (no file) — keep existing public_id if URL unchanged
-      if (typeof req.body.logo === 'string') {
-        brand.logo = { url: req.body.logo, public_id: brand.logo?.public_id || '' };
+      if (oldPublicId && oldPublicId !== uploaded.public_id) {
+        await deleteFromCloudinary(oldPublicId);
       }
+    } else if (typeof req.body.logo === 'string') {
+      // Plain URL string passed (no file) — keep existing public_id if URL unchanged
+      brand.logo = { url: req.body.logo, public_id: brand.logo?.public_id || '' };
     }
 
     if (description !== undefined) brand.description = description;

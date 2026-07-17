@@ -22,6 +22,7 @@
 import React, { useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { X, Upload, ImageIcon } from 'lucide-react';
+import { IMAGE_ACCEPT, IMAGE_MAX_FILE_MB, IMAGE_MAX_TOTAL_MB, IMAGE_MAX_FILES, validateImageFile } from '@/lib/imageUpload';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,14 @@ interface ImageUploaderProps {
   /** Called each time new local files are added */
   onFilesChange?: (files: File[]) => void;
   maxFiles?:   number;
+  /** Per-file size ceiling (MB). Default matches backend multer limit. */
+  maxFileSizeMB?: number;
+  /**
+   * Combined ceiling (MB) across all *new* files in one submit. Defaults below
+   * the ~4.5 MB proxy (Vercel) request-body limit so the upload never dies
+   * upstream with an opaque "Request Entity Too Large".
+   */
+  maxTotalSizeMB?: number;
   label?:      string;
   accept?:     string;
   disabled?:   boolean;
@@ -57,26 +66,74 @@ export default function ImageUploader({
   value = [],
   onRemoveExisting,
   onFilesChange,
-  maxFiles = 10,
+  maxFiles = IMAGE_MAX_FILES,
+  maxFileSizeMB = IMAGE_MAX_FILE_MB,
+  maxTotalSizeMB = IMAGE_MAX_TOTAL_MB,
   label = 'Upload Images',
-  accept = 'image/jpeg,image/png,image/webp',
+  accept = IMAGE_ACCEPT,
   disabled = false,
   className = '',
 }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localPreviews, setLocalPreviews] = useState<LocalPreview[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const totalCount = value.length + localPreviews.length;
   const remaining  = maxFiles - totalCount;
 
+  const MAX_TOTAL_BYTES = maxTotalSizeMB * 1024 * 1024;
+
   // ── Add files ──────────────────────────────────────────────────────────────
+  // Reject client-side against the *real* constraints (per-file + combined +
+  // slot count) so the admin gets a precise message instead of a 3 MB multer
+  // 400 or an opaque proxy 413 after the bytes have already been uploaded.
   const addFiles = useCallback((incoming: FileList | File[]) => {
     const files = Array.from(incoming);
-    const allowed = files.slice(0, Math.max(remaining, 0));
-    if (!allowed.length) return;
+    if (!files.length) return;
 
-    const previews: LocalPreview[] = allowed.map((file) => ({
+    if (remaining <= 0) {
+      setError(`You can upload at most ${maxFiles} image${maxFiles === 1 ? '' : 's'}.`);
+      return;
+    }
+
+    const problems: string[] = [];
+
+    // Slot count
+    const withinCount = files.slice(0, remaining);
+    if (files.length > remaining) {
+      problems.push(`Only ${remaining} more slot${remaining === 1 ? '' : 's'} available — extra files were skipped.`);
+    }
+
+    // Per-file type + size (shared validator — one source of truth with the
+    // single-file admin forms, so the rules can't drift).
+    const sized: File[] = [];
+    for (const f of withinCount) {
+      const problem = validateImageFile(f, maxFileSizeMB);
+      if (problem) problems.push(problem);
+      else sized.push(f);
+    }
+
+    // Combined size across all pending new files (existing DB images don't
+    // count — they're already on Cloudinary and aren't re-uploaded).
+    const accepted: File[] = [];
+    let running = localPreviews.reduce((sum, p) => sum + p.file.size, 0);
+    let totalExceeded = false;
+    for (const f of sized) {
+      if (running + f.size > MAX_TOTAL_BYTES) { totalExceeded = true; break; }
+      running += f.size;
+      accepted.push(f);
+    }
+    if (totalExceeded) {
+      problems.push(
+        `Combined upload must stay under ${maxTotalSizeMB} MB — compress images or upload fewer at once.`
+      );
+    }
+
+    setError(problems.length ? problems.join(' ') : null);
+    if (!accepted.length) return;
+
+    const previews: LocalPreview[] = accepted.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
     }));
@@ -86,10 +143,13 @@ export default function ImageUploader({
       onFilesChange?.(next.map((p) => p.file));
       return next;
     });
-  }, [remaining, onFilesChange]);
+  }, [remaining, maxFiles, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews, onFilesChange]);
 
   // ── Remove local preview ───────────────────────────────────────────────────
   const removeLocal = (idx: number) => {
+    // Removing a file frees slot/size budget, so any prior rejection message no
+    // longer applies — clear it to avoid a stale error next to a valid selection.
+    setError(null);
     setLocalPreviews((prev) => {
       const next = [...prev];
       URL.revokeObjectURL(next[idx].preview);
@@ -138,7 +198,7 @@ export default function ImageUploader({
           Drag &amp; drop or <span className="text-red-400 font-medium">browse</span>
         </p>
         <p className="text-xs text-gray-500">
-          JPG, PNG, WebP · max 5 MB · {remaining} slot{remaining !== 1 ? 's' : ''} remaining
+          JPG, PNG, WebP · max {maxFileSizeMB} MB each · {maxTotalSizeMB} MB total · {Math.max(remaining, 0)} slot{remaining !== 1 ? 's' : ''} remaining
         </p>
         <input
           ref={inputRef}
@@ -147,9 +207,16 @@ export default function ImageUploader({
           multiple
           disabled={disabled}
           className="sr-only"
-          onChange={(e) => e.target.files && addFiles(e.target.files)}
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = ''; // allow re-selecting the same file after a rejection
+          }}
         />
       </div>
+
+      {error && (
+        <p role="alert" className="text-xs text-red-600">{error}</p>
+      )}
 
       {/* ── Image grid ────────────────────────────────────────────────────── */}
       {(value.length > 0 || localPreviews.length > 0) && (

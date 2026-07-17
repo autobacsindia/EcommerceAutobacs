@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Upload } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
+import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
+import { validateImageFile, IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 // Define the Category interface inline to avoid import issues
@@ -90,6 +92,15 @@ function CreateCategoryForm() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Reject oversized/unsupported files up front so the admin gets a precise
+      // message instead of a multer 400 or an opaque proxy 413 after upload.
+      const problem = validateImageFile(file);
+      if (problem) {
+        setError(problem);
+        e.target.value = '';
+        return;
+      }
+      setError(null);
       // Keep the real File for multipart upload; the blob URL is preview-only.
       setImagePreview(prev => {
         if (prev) URL.revokeObjectURL(prev);
@@ -140,21 +151,9 @@ function CreateCategoryForm() {
         if (imageAlt.trim()) fd.append('imageAlt', imageAlt.trim());
       }
 
-      const token = document.cookie.match(/(?:^|;\s*)token=([^;]*)/)?.[1] ?? '';
-      const csrfToken = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '';
-
-      const res = await fetch('/api/v1/categories', {
-        method: 'POST',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(csrfToken ? { 'X-XSRF-TOKEN': decodeURIComponent(csrfToken) } : {}),
-        },
-        credentials: 'include',
-        body: fd,
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Failed to create category');
+      const res = await submitMultipart('/api/v1/categories', 'POST', fd);
+      const data = await parseApiResponse(res);
+      if (!res.ok) throw new Error(errorMessage(res, data, 'Failed to create category'));
 
       // Refresh the home page's cached categories section.
       revalidateHome('home:categories');
@@ -290,7 +289,7 @@ function CreateCategoryForm() {
                     type="file"
                     id="image"
                     name="image"
-                    accept="image/*"
+                    accept={IMAGE_ACCEPT}
                     onChange={handleImageChange}
                     className="block w-full text-sm text-gray-500
                       file:mr-4 file:py-2 file:px-4
@@ -300,7 +299,7 @@ function CreateCategoryForm() {
                       hover:file:bg-blue-100"
                   />
                   <p className="mt-1 text-sm text-gray-500">
-                    PNG, JPG, GIF up to 5MB
+                    JPG, PNG, WebP up to {IMAGE_MAX_FILE_MB} MB
                   </p>
                 </div>
               </div>

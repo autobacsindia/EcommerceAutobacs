@@ -44,7 +44,9 @@ describe('CreateCategoryPage', () => {
     // actually uploaded), not apiClient.post.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({ success: true }),
+      text: async () => JSON.stringify({ success: true }),
     }) as jest.Mock;
 
     // Mock URL.createObjectURL / revokeObjectURL
@@ -165,7 +167,9 @@ describe('CreateCategoryPage', () => {
   it('handles API error on submission', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
+      status: 400,
       json: async () => ({ message: 'API Error' }),
+      text: async () => JSON.stringify({ message: 'API Error' }),
     });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 

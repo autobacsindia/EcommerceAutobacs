@@ -64,7 +64,9 @@ describe('EditCategoryPage', () => {
     // Updates submit via raw fetch (multipart) so a new image file is uploaded.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({ success: true }),
+      text: async () => JSON.stringify({ success: true }),
     }) as jest.Mock;
 
     global.URL.createObjectURL = jest.fn(() => 'blob:http://localhost:3000/test-blob');

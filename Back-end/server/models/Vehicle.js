@@ -19,7 +19,10 @@ const VehicleSchema = new mongoose.Schema({
   },
   image: {
     url: String,
-    alt: String
+    alt: String,
+    // Present when the image was uploaded to Cloudinary (vs a legacy pasted
+    // URL). Lets us delete/replace the old asset on update.
+    public_id: String
   },
   isActive: {
     type: Boolean,

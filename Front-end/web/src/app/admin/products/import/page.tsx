@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Upload, CheckCircle, AlertTriangle } from 'lucide-react';
+import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
 
 interface ImportError { line: number; name: string; reason: string; }
 interface ImportResults { total: number; created: number; failed: number; errors: ImportError[]; }
@@ -38,9 +39,10 @@ export default function BulkImportPage() {
         credentials: 'include',
         body: fd,
       });
-      const data = await res.json();
-      if (!res.ok && !data.results) throw new Error(data.message || 'Import failed');
-      setResults(data.results);
+      const data = await parseApiResponse(res);
+      const importResults = data.results as ImportResults | undefined;
+      if (!res.ok && !importResults) throw new Error(errorMessage(res, data, 'Import failed'));
+      setResults(importResults ?? null);
     } catch (err: any) {
       setError(err?.message || 'Import failed');
     } finally {
