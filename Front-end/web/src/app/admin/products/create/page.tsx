@@ -6,6 +6,7 @@ import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
+import { uploadImagesToCloudinary } from '@/lib/cloudinaryUpload';
 import { ArrowLeft } from 'lucide-react';
 import ImageUploader from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
@@ -207,7 +208,12 @@ export default function CreateProductPage() {
       fd.append('seo', JSON.stringify(seo));
 
       // ── Image files ────────────────────────────────────────────────────
-      images.forEach((file) => fd.append('images', file));
+      // Upload images straight to Cloudinary (bypasses the ~4.5 MB proxy limit),
+      // then send only the resulting refs as JSON — so the product request is tiny.
+      if (images.length) {
+        const refs = await uploadImagesToCloudinary(images, 'products');
+        fd.append('uploadedImages', JSON.stringify(refs));
+      }
 
       // Raw multipart submit (apiClient can't send FormData without JSON-serializing).
       const res = await submitMultipart('/api/v1/products', 'POST', fd);
@@ -772,6 +778,9 @@ export default function CreateProductPage() {
               label="Upload product images"
               onFilesChange={(files) => setImages(files)}
               disabled={submitting}
+              // Images upload straight to Cloudinary, so only per-file 3 MB
+              // applies — no combined-request cap.
+              maxTotalSizeMB={Infinity}
             />
           </div>
 

@@ -162,7 +162,9 @@ function buildCsp(nonce: string): string {
     // Drive and talks to a Google Apps Script web app: script.google.com issues
     // the token and 302-redirects its JSON response to script.googleusercontent.com;
     // www.googleapis.com receives the resumable Drive uploads + permission calls.
-    "connect-src 'self' https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://script.google.com https://script.googleusercontent.com https://www.googleapis.com",
+    // api.cloudinary.com: admin image uploads go browser→Cloudinary directly
+    // (signed), bypassing our API + the proxy request-body limit.
+    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://script.google.com https://script.googleusercontent.com https://www.googleapis.com",
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes.
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",

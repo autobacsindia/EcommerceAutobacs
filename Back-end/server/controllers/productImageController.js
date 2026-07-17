@@ -41,6 +41,40 @@ const BASE_FOLDER = 'autobacs/products';
 /** Return per-product Cloudinary folder for easier bulk-delete and debugging */
 const productFolder = (productId) => `${BASE_FOLDER}/${productId}`;
 
+/** Hard cap on images accepted per create/update request (matches the uploader). */
+const MAX_NEW_IMAGES = 8;
+
+/**
+ * Validate image refs the browser uploaded DIRECTLY to Cloudinary (bypassing the
+ * proxy body limit) and sent back as JSON. We only trust assets that live on OUR
+ * Cloudinary cloud — never an arbitrary client-supplied URL — and require a
+ * public_id so the asset can be cleaned up on delete/replace.
+ *
+ * @param {unknown} raw
+ * @returns {{ url: string, public_id: string }[]}
+ */
+const normalizePreUploaded = (raw) => {
+  if (!Array.isArray(raw)) return [];
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+  const accepted = raw
+    .filter((i) => i && typeof i.url === 'string' && typeof i.public_id === 'string' && i.public_id)
+    .filter((i) =>
+      /^https:\/\/res\.cloudinary\.com\//.test(i.url) &&
+      (!cloud || i.url.includes(`/${cloud}/`))
+    )
+    .slice(0, MAX_NEW_IMAGES)
+    .map((i) => ({ url: i.url, public_id: i.public_id }));
+
+  // Surface silently-dropped refs — otherwise an admin's uploaded image just
+  // vanishes from the product with no error (e.g. an unexpected Cloudinary host).
+  if (accepted.length < raw.length) {
+    console.warn(
+      `[ProductController] normalizePreUploaded dropped ${raw.length - accepted.length} image ref(s) that failed validation`
+    );
+  }
+  return accepted;
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // Helper: parse non-file fields from multipart body
 // ────────────────────────────────────────────────────────────────────────────
@@ -48,7 +82,7 @@ const parseProductFields = (body) => {
   const fields = { ...body };
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
-   'specifications', 'compatibleVehicles', 'seo', 'variants'].forEach((key) => {
+   'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
@@ -183,25 +217,32 @@ const assertValidProduct = (fields, { partial = false } = {}) => {
 // ────────────────────────────────────────────────────────────────────────────
 export const createProductWithImages = async (req, res) => {
   const fields = parseProductFields(req.body);
+  // Images the browser already uploaded straight to Cloudinary (direct upload).
+  const preUploaded = normalizePreUploaded(fields.uploadedImages);
+  delete fields.uploadedImages;
   assertValidProduct(fields, { partial: false });
   const files  = req.files || (req.file ? [req.file] : []);
 
-  console.log(`[ProductController] CREATE product: "${fields.name}" | ${files.length} image(s)`);
+  console.log(`[ProductController] CREATE product: "${fields.name}" | ${files.length} file(s) + ${preUploaded.length} direct upload(s)`);
 
-  // Upload images (all-or-nothing — throws and rolls back on any failure)
+  // Legacy path: image bytes sent through our API (still supported) — all-or-nothing.
   let uploadedImages = [];
   if (files.length > 0) {
-    // Use a temp folder since we don't have the productId yet;
-    // images will live at autobacs/products/<generatedId>/...
-    // Cloudinary public_id carries the final path after save
     uploadedImages = await uploadManyToCloudinary(
       files.map((f) => f.buffer),
       { folder: BASE_FOLDER }
     );
   }
 
-  const images = uploadedImages.map((img, idx) => ({
-    url:       img.secure_url,
+  // Direct-uploaded refs first (they preserve the admin's chosen order), then any
+  // server-side uploads. Both carry public_ids so both can be rolled back.
+  const allRefs = [
+    ...preUploaded,
+    ...uploadedImages.map((img) => ({ url: img.secure_url, public_id: img.public_id })),
+  ];
+
+  const images = allRefs.map((img, idx) => ({
+    url:       img.url,
     public_id: img.public_id,
     alt:       fields.name || '',
     isPrimary: idx === 0,
@@ -214,10 +255,11 @@ export const createProductWithImages = async (req, res) => {
     savedProduct = await product.save();
     console.log(`[ProductController] Saved product: ${savedProduct._id} | "${savedProduct.name}"`);
   } catch (dbError) {
-    // Atomic rollback — clean Cloudinary assets before propagating error
-    if (uploadedImages.length) {
-      console.warn(`[ProductController] DB save failed — rolling back ${uploadedImages.length} Cloudinary asset(s)`);
-      await deleteManyFromCloudinary(uploadedImages.map((i) => i.public_id));
+    // Atomic rollback — clean every Cloudinary asset (direct + server-side) before propagating
+    const rollbackIds = allRefs.map((i) => i.public_id).filter(Boolean);
+    if (rollbackIds.length) {
+      console.warn(`[ProductController] DB save failed — rolling back ${rollbackIds.length} Cloudinary asset(s)`);
+      await deleteManyFromCloudinary(rollbackIds);
     }
     throw dbError;
   }
@@ -250,6 +292,9 @@ export const updateProductWithImages = async (req, res, next) => {
   if (!product) throw new AppError('Product not found', 404);
 
   const fields = parseProductFields(req.body);
+  // Images the browser already uploaded straight to Cloudinary (direct upload).
+  const preUploaded = normalizePreUploaded(fields.uploadedImages);
+  delete fields.uploadedImages;
   assertValidProduct(fields, { partial: true });
   const files  = req.files || (req.file ? [req.file] : []);
   const replaceImages = fields.replaceImages === 'true' || fields.replaceImages === true;
@@ -292,25 +337,36 @@ export const updateProductWithImages = async (req, res, next) => {
     // uploadManyToCloudinary is all-or-nothing — if it throws, no DB changes happen
   }
 
+  // Combine direct-uploaded refs (order preserved) with any server-side uploads.
+  const newRefs = [
+    ...preUploaded,
+    ...newUploads.map((img) => ({ url: img.secure_url, public_id: img.public_id })),
+  ];
+
   // ── Step 2: Apply new images to the fields object ─────────────────────
-  if (newUploads.length > 0) {
+  if (newRefs.length > 0) {
     if (replaceImages) {
       // Replace: build entirely new image list
-      fields.images = newUploads.map((img, idx) => ({
-        url:       img.secure_url,
+      fields.images = newRefs.map((img, idx) => ({
+        url:       img.url,
         public_id: img.public_id,
         alt:       fields.name || product.name,
         isPrimary: idx === 0,
       }));
     } else {
       // Append: merge existing + new
-      const appended = newUploads.map((img) => ({
-        url:       img.secure_url,
+      const appended = newRefs.map((img) => ({
+        url:       img.url,
         public_id: img.public_id,
         alt:       fields.name || product.name,
         isPrimary: false,
       }));
       fields.images = [...(product.images || []), ...appended];
+      // Guarantee exactly one primary — a product that had no images (or none
+      // flagged primary) would otherwise end up with an all-false gallery.
+      if (!fields.images.some((img) => img.isPrimary) && fields.images.length) {
+        fields.images[0].isPrimary = true;
+      }
     }
   }
 
@@ -328,10 +384,12 @@ export const updateProductWithImages = async (req, res, next) => {
     ).populate('categories', 'name slug');
     console.log(`[ProductController] Updated product: ${updatedProduct._id}`);
   } catch (dbError) {
-    // DB failed after new images uploaded — rollback new uploads
-    if (newUploads.length) {
-      console.warn(`[ProductController] DB update failed — rolling back ${newUploads.length} new Cloudinary upload(s)`);
-      await deleteManyFromCloudinary(newUploads.map((i) => i.public_id));
+    // DB failed after new images landed on Cloudinary — rollback every new asset
+    // (direct-uploaded + server-side) so nothing is orphaned.
+    const rollbackIds = newRefs.map((i) => i.public_id).filter(Boolean);
+    if (rollbackIds.length) {
+      console.warn(`[ProductController] DB update failed — rolling back ${rollbackIds.length} new Cloudinary upload(s)`);
+      await deleteManyFromCloudinary(rollbackIds);
     }
     // Surface duplicate-key errors as a human-readable 409 instead of a generic 500
     if (dbError.code === 11000) {
@@ -348,14 +406,17 @@ export const updateProductWithImages = async (req, res, next) => {
   // ── Step 4: Delete images from Cloudinary (AFTER DB confirmed) ──────
   //
   // Two sources of IDs to clean up:
-  //   A) replaceImages=true  → delete all OLD product images (gallery replaced)
+  //   A) replaceImages=true WITH new images → delete all OLD product images
+  //      (gallery was actually replaced). CRITICAL: only when newRefs replaced
+  //      the gallery — a replace request with no new image leaves fields.images
+  //      untouched, so deleting the old assets would strand the DB URLs.
   //   B) clientPendingDeletes → images the admin individually removed in the UI
   //
   // Failures here are logged with [CLEANUP_REQUIRED] by deleteFromCloudinary but
   // do NOT throw — the DB is already consistent at this point, so we never
   // unwind a successful save over a Cloudinary cleanup failure.
   const toDelete = new Set();
-  if (replaceImages && oldPublicIds.length > 0) {
+  if (replaceImages && newRefs.length > 0 && oldPublicIds.length > 0) {
     oldPublicIds.forEach((id) => toDelete.add(id));
   }
   clientPendingDeletes.forEach((id) => typeof id === 'string' && id && toDelete.add(id));

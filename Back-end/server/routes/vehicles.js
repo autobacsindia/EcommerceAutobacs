@@ -198,7 +198,7 @@ router.post(
     // string for backward compatibility. Undefined when neither is provided.
     let image;
     if (req.file) {
-      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/vehicles' });
+      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/vehicle and makes' });
       image = { url: uploaded.secure_url, public_id: uploaded.public_id, alt: imageAlt || `${make} ${model}` };
     } else if (req.body.image) {
       image = { url: req.body.image, alt: imageAlt || `${make} ${model}` };
@@ -251,7 +251,7 @@ router.put(
       // Upload the new asset FIRST, then delete the old one only after success —
       // so a failed upload can never leave the vehicle pointing at a deleted image.
       const oldPublicId = vehicle.image?.public_id;
-      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/vehicles' });
+      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/vehicle and makes' });
       vehicle.image = {
         url: uploaded.secure_url,
         public_id: uploaded.public_id,

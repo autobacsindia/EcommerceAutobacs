@@ -74,6 +74,44 @@ export const uploadToCloudinary = (buffer, options = {}) => {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// generateUploadSignature
+// ────────────────────────────────────────────────────────────────────────────
+/**
+ * Issue a short-lived signature for a browser-side *direct* Cloudinary upload.
+ *
+ * The browser uploads the image bytes straight to Cloudinary using these signed
+ * params — bypassing our API and any proxy request-body limit (~4.5 MB) — then
+ * sends only the resulting { url, public_id } back to us. The API secret never
+ * leaves the server: it is used solely to compute the signature here.
+ *
+ * `folder` + `timestamp` + `allowed_formats` are signed, so those are the only
+ * params (besides file/api_key) the client may send to Cloudinary; anything else
+ * breaks the signature. `allowed_formats` makes Cloudinary itself reject any
+ * non-image upload server-side — a defence the direct path would otherwise lose
+ * versus the multer/magic-byte checks on the server-side upload path.
+ *
+ * @param {object} opts
+ * @param {string} [opts.folder='general'] Cloudinary folder (constrained by the caller)
+ * @returns {{ cloudName, apiKey, timestamp, folder, allowedFormats, signature }}
+ */
+export const generateUploadSignature = ({ folder = 'general' } = {}) => {
+  const timestamp = Math.round(Date.now() / 1000);
+  const allowedFormats = ALLOWED_FORMATS.join(',');
+  const signature = cloudinary.utils.api_sign_request(
+    { allowed_formats: allowedFormats, folder, timestamp },
+    process.env.CLOUDINARY_API_SECRET,
+  );
+  return {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey:    process.env.CLOUDINARY_API_KEY,
+    timestamp,
+    folder,
+    allowedFormats,
+    signature,
+  };
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // uploadRawToCloudinary
 // ────────────────────────────────────────────────────────────────────────────
 /**
