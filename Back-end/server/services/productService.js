@@ -85,19 +85,19 @@ class ProductService {
     }
 
     // Build search params with vehicle filter.
-    // `vehicle` (id) drives the MongoDB fallback (`compatibleVehicles` match);
-    // `vehicleMake`/`vehicleModel` drive Elasticsearch, which indexes the
-    // vehicle make/model strings (not the id) on each product. Both are set so
-    // the query is filtered correctly regardless of which engine serves it.
     const searchParams = {
       ...queryParams,
-      vehicle: vehicle._id.toString(),
-      vehicleMake: vehicle.make,
-      vehicleModel: vehicle.model
+      vehicle: vehicle._id.toString()
     };
 
-    // Search products
-    const searchResults = await this.searchProducts(searchParams);
+    // Fitment is an exact structured filter on `Product.compatibleVehicles`, so
+    // this queries MongoDB directly rather than Elasticsearch. The ES index only
+    // stores compatible vehicles as make/model strings (no vehicle id) and can
+    // lag Mongo between reindexes, so filtering by vehicle through ES is both
+    // imprecise and staleness-prone. Mongo is the source of truth for fitment and
+    // needs no text relevance here (there is no search query — just filter + sort
+    // + paginate), so it is the correct engine for this route.
+    const searchResults = await this._searchWithMongoDB(searchParams);
 
     return {
       vehicle: {
@@ -275,7 +275,7 @@ class ProductService {
         limit: Number(limit),
         skip,
         sort,
-        select: 'name slug price originalPrice images stock sku brand averageRating totalReviews shortDescription isFeatured isFastMoving isOfferFeatured offerStartDate offerEndDate categories isActive tags',
+        select: 'name slug price originalPrice productType priceMin priceMax images stock sku brand averageRating totalReviews shortDescription isFeatured isFastMoving isOfferFeatured offerStartDate offerEndDate categories isActive tags',
         populate: [
           { path: 'categories', select: 'name slug' }
         ]

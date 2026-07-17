@@ -473,8 +473,6 @@ class ElasticsearchService {
       category,
       brand,
       vehicleType, // Mapping "Vehicle Type" request to vehicle make
-      vehicleMake,  // Exact make of a single vehicle (from the /by-vehicle route)
-      vehicleModel, // Exact model of a single vehicle (from the /by-vehicle route)
       minPrice,
       maxPrice,
       inStock,
@@ -696,22 +694,6 @@ class ElasticsearchService {
         const types = Array.isArray(vehicleType) ? vehicleType : vehicleType.split(',');
         searchBody.query.function_score.query.bool.filter.push({
           terms: { 'vehicle_makes.keyword': types }
-        });
-      }
-
-      // Single-vehicle fitment filter (used by the /products/by-vehicle route).
-      // Matched against the analyzed `.text` subfields — the products index
-      // stores compatible vehicles as make/model strings, not vehicle ids. Both
-      // constraints together isolate a specific make+model (e.g. Toyota Fortuner)
-      // rather than every product that fits any Toyota or any Fortuner.
-      if (vehicleMake) {
-        searchBody.query.function_score.query.bool.filter.push({
-          match_phrase: { 'vehicle_makes.text': vehicleMake }
-        });
-      }
-      if (vehicleModel) {
-        searchBody.query.function_score.query.bool.filter.push({
-          match_phrase: { 'vehicle_models.text': vehicleModel }
         });
       }
 
