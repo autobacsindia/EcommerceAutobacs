@@ -84,10 +84,16 @@ class ProductService {
       return null; // Vehicle not found
     }
 
-    // Build search params with vehicle filter
+    // Build search params with vehicle filter.
+    // `vehicle` (id) drives the MongoDB fallback (`compatibleVehicles` match);
+    // `vehicleMake`/`vehicleModel` drive Elasticsearch, which indexes the
+    // vehicle make/model strings (not the id) on each product. Both are set so
+    // the query is filtered correctly regardless of which engine serves it.
     const searchParams = {
       ...queryParams,
-      vehicle: vehicle._id.toString()
+      vehicle: vehicle._id.toString(),
+      vehicleMake: vehicle.make,
+      vehicleModel: vehicle.model
     };
 
     // Search products

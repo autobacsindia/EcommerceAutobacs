@@ -280,7 +280,7 @@ router.get("/batch", publicProductRateLimit, asyncHandler(async (req, res) => {
 
   const products = await Product.find({ _id: { $in: validIds }, isActive: true })
     .populate('categories', 'name slug')
-    .populate('compatibleVehicles', 'make model')
+    .populate('compatibleVehicles', 'make model slug image')
     .lean();
 
   res.json({ success: true, products });
