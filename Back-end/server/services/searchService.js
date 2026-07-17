@@ -693,7 +693,7 @@ class SearchService {
   // ── Core recommendation functions ────────────────────────────────────────────
 
   // Fields the recommendation controllers serialize for the product cards.
-  static RECO_FIELDS = 'name slug price originalPrice images averageRating totalReviews brand categories shortDescription description stock isActive compatibleVehicles';
+  static RECO_FIELDS = 'name slug price originalPrice images averageRating totalReviews brand categories shortDescription description stock isActive compatibleVehicles productType priceMin priceMax';
 
   /**
    * Get products similar to the specified product.
