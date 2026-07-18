@@ -1,38 +1,122 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 
+interface LedgerEntry {
+  _id: string;
+  type: 'earn' | 'redeem' | 'reverse' | 'expire' | 'adjust';
+  points: number;
+  balanceAfter: number;
+  description?: string;
+  createdAt: string;
+}
+
+const TYPE_LABEL: Record<string, string> = {
+  earn: 'Earned', redeem: 'Redeemed', reverse: 'Reversed', expire: 'Expired', adjust: 'Adjusted',
+};
+
 /**
- * Compact karma balance pill shown beside the user's name on the profile header.
- * Self-contained; renders nothing while loading, on error, or when loyalty is disabled.
- * The full balance + ledger history live in {@link KarmaCard}.
+ * Karma balance shown on the right of the profile identity header. The chevron
+ * expands the ledger history in a dropdown (loaded lazily on first open).
+ * Self-contained; renders nothing while loading, on error, or when loyalty is
+ * disabled.
  */
 export default function KarmaBadge() {
   const [balance, setBalance] = useState<number | null>(null);
+  const [pointValue, setPointValue] = useState(1);
   const [enabled, setEnabled] = useState(true);
+  const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     apiClient
-      .get<{ success: boolean; balance: number; config: { enabled: boolean } }>(API_ENDPOINTS.LOYALTY_ME)
+      .get<{ success: boolean; balance: number; config: { enabled: boolean; pointValueInRupees: number } }>(API_ENDPOINTS.LOYALTY_ME)
       .then((r) => {
         setBalance(r.balance);
+        setPointValue(r.config.pointValueInRupees);
         setEnabled(r.config.enabled);
       })
       .catch(() => setBalance(null));
   }, []);
 
+  // Close the dropdown on outside click / Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (!open && entries === null) {
+      apiClient
+        .get<{ success: boolean; entries: LedgerEntry[] }>(API_ENDPOINTS.LOYALTY_HISTORY)
+        .then((r) => setEntries(r.entries || []))
+        .catch(() => setEntries([]));
+    }
+    setOpen((v) => !v);
+  };
+
   if (balance === null || !enabled) return null;
 
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-display font-bold uppercase tracking-widest text-gold"
-      title="Karma points"
-    >
-      <Sparkles className="h-3.5 w-3.5" />
-      {balance} pts
-    </span>
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        aria-label="Karma points, view history"
+        title="Karma points"
+        className="flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1.5 text-gold hover:bg-gold/20 transition-colors"
+      >
+        <Sparkles className="h-4 w-4" />
+        <span className="text-sm font-display font-bold uppercase tracking-widest">{balance} pts</span>
+        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-3rem)] z-20 bg-obsidian border border-hairline rounded-lg p-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-hairline pb-3 mb-3">
+            <div>
+              <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Karma Points</p>
+              <p className="text-xl font-display font-bold text-ink">{balance}</p>
+            </div>
+            <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)}</p>
+          </div>
+          {entries === null ? (
+            <p className="text-ink-muted font-display text-sm">Loading…</p>
+          ) : entries.length === 0 ? (
+            <p className="text-ink-muted font-display text-sm">No karma activity yet.</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {entries.map((e) => (
+                <div key={e._id} className="flex items-center justify-between text-sm">
+                  <div>
+                    <span className="text-ink/70 font-display font-bold uppercase tracking-wide text-xs">{TYPE_LABEL[e.type] || e.type}</span>
+                    <span className="text-ink-muted font-display ml-2">{new Date(e.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <span className={`font-display font-bold ${e.points >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {e.points >= 0 ? '+' : ''}{e.points} pts
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
