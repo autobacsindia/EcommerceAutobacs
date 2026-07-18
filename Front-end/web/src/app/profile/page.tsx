@@ -9,6 +9,7 @@ import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
 import KarmaCard from '@/components/profile/KarmaCard';
+import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 
 const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm p-2 focus:outline-none focus:border-gold font-display text-sm';
@@ -175,30 +176,30 @@ export default function ProfilePage() {
           <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Profile</h1>
         </div>
 
-        <KarmaCard />
-
-        <RecentOrdersCard />
-
+        {/* Identity header — name, karma, email, verification */}
         <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
           {/* Avatar + name/email */}
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-4">
             <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-full flex items-center justify-center shrink-0">
               <User className="h-10 w-10 text-gold" />
             </div>
-            <div>
-              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">
-                {editing ? (
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="bg-transparent border-b border-gold text-ink focus:outline-none font-display font-bold uppercase tracking-wide text-2xl w-full"
-                  />
-                ) : (
-                  profile?.name
-                )}
-              </h2>
+            <div className="min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">
+                  {editing ? (
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="bg-transparent border-b border-gold text-ink focus:outline-none font-display font-bold uppercase tracking-wide text-2xl w-full"
+                    />
+                  ) : (
+                    profile?.name
+                  )}
+                </h2>
+                {!editing && <KarmaBadge />}
+              </div>
               <p className="text-ink/70 font-display mt-1">
                 {editing ? (
                   <input
@@ -263,7 +264,16 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+        </div>
 
+        {/* Recent orders — directly under the identity header */}
+        <RecentOrdersCard />
+
+        {/* Karma balance + ledger history */}
+        <KarmaCard />
+
+        {/* Addresses + account actions */}
+        <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
           {/* Addresses */}
           {editing ? (
             <div className="mb-6">

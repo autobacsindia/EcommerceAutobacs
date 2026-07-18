@@ -129,6 +129,10 @@ export default function RedesignNav() {
       {/* Mobile hamburger menu */}
       {menuOpen && (
         <div className="nav-mobile">
+          <Link href={accountHref} className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
+            <UserIcon width={16} height={16} />
+            {accountLabel}
+          </Link>
           {navLinks.map((l) =>
             l.label === VEHICLE_LABEL ? (
               <RedesignVehicleMenu key={l.label} variant="inline" onNavigate={() => setMenuOpen(false)} />
@@ -141,10 +145,6 @@ export default function RedesignNav() {
           <Link href="/wishlist" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
             <Heart width={16} height={16} />
             Wishlist
-          </Link>
-          <Link href={accountHref} className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
-            <UserIcon width={16} height={16} />
-            {accountLabel}
           </Link>
         </div>
       )}

@@ -288,6 +288,16 @@ async function ensureCriticalIndexes() {
       { unique: true, background: true }
     );
     console.log('✓ CouponUserUsage per-user unique index confirmed');
+
+    // Sales-CRM lead worklist sort — serves the default admin leads view (a pool/rep
+    // queue ranked by { leadScore, createdAt }). Non-unique perf index; declared on the
+    // Lead schema too, but autoIndex is off in prod so this safety net is what actually
+    // builds it there. Without it the score sort falls back to a blocking in-memory sort.
+    await db.collection('leads').createIndex(
+      { assignedRep: 1, leadScore: -1, createdAt: -1 },
+      { background: true }
+    );
+    console.log('✓ Lead worklist score index confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);
