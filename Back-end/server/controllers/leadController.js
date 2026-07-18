@@ -12,7 +12,7 @@ import salesRepRepository from '../repositories/salesRepRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
 import { escapeRegex, phoneSearchPattern } from '../utils/identity.js';
-import { LEAD_STATUSES, SOURCE_TYPES } from '../config/leadConstants.js';
+import { LEAD_STATUSES, SOURCE_TYPES, NURTURE_SOURCE, OPEN_LEAD_STATUSES } from '../config/leadConstants.js';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -50,22 +50,39 @@ function manualTransitionError(from, to) {
 
 /** Build the Mongo query for the list from validated query params. */
 // Whitelisted sort orders (label → Mongo sort). Prevents arbitrary sort injection.
+// `score` is the default: it ranks by computed priority so strong leads outrank the
+// low-intent flood, with createdAt as a stable tiebreak. See utils/leadScore.js.
 const SORT_OPTIONS = {
+  score: { leadScore: -1, createdAt: -1 },
   newest: { createdAt: -1 },
   oldest: { createdAt: 1 },
   recent_contact: { lastContactedAt: -1 },
   follow_up: { nextFollowUpAt: 1 },
 };
+const DEFAULT_SORT = SORT_OPTIONS.score;
 
 function buildListQuery(req) {
   const {
     status, source, assignment, hasPurchased, search, createdFrom, createdTo, followUpDue,
-    rep, reopened, neverContacted, lostReason,
+    rep, reopened, neverContacted, lostReason, bucket,
   } = req.query;
   const query = {};
 
   if (status && LEAD_STATUSES.includes(status)) query.status = status;
   if (source && SOURCE_TYPES.includes(source)) query['sources.type'] = source;
+
+  // Bucket: separates the passive never-purchased "Nurture" segment from the active
+  // rep worklist so it can't crowd out strong leads. Keyed on `primarySource` — a
+  // person is only "nurture" if dormant_user is their STRONGEST signal (any real
+  // intent signal outranks it and pulls them into the active pipeline). An explicit
+  // `source` filter is a precise override, so bucket is skipped when one is set.
+  //   • active (default) — everything except dormant-only leads
+  //   • nurture          — only dormant-only leads
+  //   • all              — no bucket constraint
+  if (!source) {
+    if (bucket === 'nurture') query.primarySource = NURTURE_SOURCE;
+    else if (bucket !== 'all') query.primarySource = { $ne: NURTURE_SOURCE };
+  }
 
   // Ownership is a named SalesRep profile now (no per-user login).
   if (assignment === 'unassigned') query.assignedRep = null;
@@ -118,7 +135,12 @@ export const listLeads = async (req, res) => {
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit) || DEFAULT_LIMIT));
   const skip = (page - 1) * limit;
   const query = buildListQuery(req);
-  const sort = SORT_OPTIONS[req.query.sort] || SORT_OPTIONS.newest;
+  // Own-property lookup only: a query param like `sort=constructor`/`toString` would
+  // otherwise resolve to an inherited function and get passed to Mongoose .sort().
+  const sortParam = req.query.sort;
+  const sort = (typeof sortParam === 'string' && Object.hasOwn(SORT_OPTIONS, sortParam))
+    ? SORT_OPTIONS[sortParam]
+    : DEFAULT_SORT;
 
   const [leads, total] = await Promise.all([
     leadRepository.find(query, {
@@ -149,14 +171,19 @@ export const listLeads = async (req, res) => {
 // @access  Private/Admin
 export const getLeadStats = async (req, res) => {
   const due = { nextFollowUpAt: { $ne: null, $lte: new Date() } };
-  const [byStatus, unassigned, total, followUpDue] = await Promise.all([
+  // Pool = unclaimed ACTIVE leads in the active bucket (dormant-only excluded) so the
+  // badge matches the default worklist view. Nurture = the whole dormant-only segment,
+  // sized to match exactly what the `bucket=nurture` list shows (no status filter), so
+  // the tab badge and the rows can't disagree.
+  const [byStatus, unassigned, total, followUpDue, nurture] = await Promise.all([
     leadRepository.statusCounts({}),
-    leadRepository.count({ assignedRep: null, status: { $in: ['new', 'contacted', 'qualified'] } }),
+    leadRepository.count({ assignedRep: null, status: { $in: OPEN_LEAD_STATUSES }, primarySource: { $ne: NURTURE_SOURCE } }),
     leadRepository.count({}),
     leadRepository.count(due),
+    leadRepository.count({ primarySource: NURTURE_SOURCE }),
   ]);
 
-  res.json({ success: true, stats: { byStatus, unassigned, total, followUpDue } });
+  res.json({ success: true, stats: { byStatus, unassigned, total, followUpDue, nurture } });
 };
 
 // @desc    Assignable sales reps (for the assign dropdown + rep filter)

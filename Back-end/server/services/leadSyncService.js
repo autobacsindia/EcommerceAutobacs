@@ -15,6 +15,7 @@ import leadRepository from '../repositories/leadRepository.js';
 import consultationRepository from '../repositories/consultationRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { normalizeEmail, normalizePhone, buildIdentityKey } from '../utils/identity.js';
+import { computeLeadScore } from '../utils/leadScore.js';
 import {
   SOURCE_PRIORITY,
   REOPEN_SOURCE_TYPES,
@@ -189,6 +190,7 @@ class LeadSyncService {
     }
 
     lead.primarySource = this._highestPrioritySource(lead.sources);
+    lead.leadScore = computeLeadScore(lead);
     await leadRepository.save(lead);
     return lead;
   }
@@ -351,6 +353,7 @@ class LeadSyncService {
     // unsaved in-memory change here would be lost.
     lead.hasPurchased = true;
     if (userId && !lead.linkedUser) lead.linkedUser = userId;
+    lead.leadScore = computeLeadScore(lead); // won-path below zeroes it; keep consistent if already won
     await leadRepository.save(lead);
 
     if (lead.status !== 'won') {
@@ -396,6 +399,9 @@ class LeadSyncService {
       notes: notes || `Status ${prev} → ${status}`,
       meta: meta || {},
     });
+    // Recompute after the status change — won/lost drop to 0 (closed leads sink),
+    // a forward move keeps the active score fresh.
+    lead.leadScore = computeLeadScore(lead);
     await leadRepository.save(lead);
 
     if (mirror) await this._mirrorToConsultation(lead, status);

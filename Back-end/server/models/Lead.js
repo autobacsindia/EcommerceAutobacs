@@ -112,6 +112,13 @@ const LeadSchema = new mongoose.Schema(
     nextFollowUpAt: { type: Date, default: null },
     lostReason: { type: String, default: "" },
 
+    // ── Priority score ────────────────────────────────────────────────────────
+    // Denormalized 0–100 hotness/priority, computed by utils/leadScore.js on every
+    // sync write and refreshed by the daily sweep (for recency decay). Drives the
+    // default worklist sort so strong leads outrank the low-intent flood. Closed
+    // (won/lost) leads score 0. Never hand-edited — it's a projection of the doc.
+    leadScore: { type: Number, default: 0, index: true },
+
     // ── Tags ──────────────────────────────────────────────────────────────────
     hasPurchased: { type: Boolean, default: false }, // "already bought before"
     linkedUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
@@ -140,6 +147,14 @@ LeadSchema.index({ phone: 1 }, { sparse: true });
 LeadSchema.index({ assignedRep: 1, status: 1 }); // rep queue, pool
 LeadSchema.index({ assignedTo: 1, status: 1 }); // audit-side queries
 LeadSchema.index({ status: 1, createdAt: -1 }); // list default sort within a status
+// Serves the default worklist sort: a pool/rep queue (assignedRep equality) ranked by
+// { leadScore, createdAt }. The sort keys follow assignedRep directly — the common
+// list view sends NO status filter, so status must NOT sit between them or it would
+// break sort-coverage and force a blocking in-memory sort (risking the sort memory
+// limit on a large collection). status/primarySource are applied as residual filters.
+// (The 'All' assignment view has no assignedRep equality and still blocking-sorts —
+// inherent, and far less frequent than the default pool view.)
+LeadSchema.index({ assignedRep: 1, leadScore: -1, createdAt: -1 });
 LeadSchema.index({ primarySource: 1 });
 LeadSchema.index({ hasPurchased: 1 });
 LeadSchema.index({ reopenCount: 1 }); // "reopened / returning" segment filter

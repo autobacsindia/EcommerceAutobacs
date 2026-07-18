@@ -28,6 +28,7 @@
     "seed-press": "node --import=dotenv/config scripts/seed-press-coverage.js",
     "backfill-original-price": "node --import=dotenv/config scripts/backfill-original-price.js",
     "backfill-crm-leads": "node --import=dotenv/config scripts/backfill-crm-leads.js",
+    "backfill-lead-scores": "node --import=dotenv/config scripts/backfill-lead-scores.js",
     "backfill-payment-status": "node --import=dotenv/config scripts/backfill-payment-status.js",
     "backfill-normalize-emails": "node --import=dotenv/config scripts/backfill-normalize-emails.js",
     "reconcile-user-ltv": "node --import=dotenv/config scripts/reconcile-user-ltv.js",

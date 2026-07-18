@@ -51,6 +51,9 @@ export interface Lead {
   lastContactedAt?: string | null;
   nextFollowUpAt?: string | null;
   lostReason?: string;
+  // 0–100 priority score (backend utils/leadScore.js). Drives the default sort;
+  // closed leads are 0. See scoreBadge() for the hot/warm/cold presentation.
+  leadScore?: number;
   hasPurchased: boolean;
   linkedUser?: {
     _id: string;
@@ -170,6 +173,15 @@ export const LEAD_SOURCE_COLORS: Record<LeadSourceType, string> = {
 
 // LTV over this (paise) earns a VIP chip. Display-only threshold; ₹50,000.
 export const VIP_MIN_SPENT_PAISE = 50_00_000;
+
+// Score → hot/warm/cold presentation. Thresholds mirror backend utils/leadScore.js
+// (SCORE_HOT=60, SCORE_WARM=30) — keep them in sync.
+export function scoreBadge(score: number | undefined): { label: string; tier: 'hot' | 'warm' | 'cold'; className: string } {
+  const s = Math.max(0, Math.round(score ?? 0));
+  if (s >= 60) return { label: String(s), tier: 'hot', className: 'bg-red-100 text-red-800' };
+  if (s >= 30) return { label: String(s), tier: 'warm', className: 'bg-amber-100 text-amber-800' };
+  return { label: String(s), tier: 'cold', className: 'bg-slate-100 text-slate-600' };
+}
 
 /**
  * The single "who is this person" badge shown on list + detail. Encodes the

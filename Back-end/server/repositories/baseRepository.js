@@ -92,6 +92,17 @@ class BaseRepository {
     return this.model.findByIdAndDelete(id, session ? { session } : {});
   }
 
+  /**
+   * Batched writes in a single round-trip. `operations` is a standard Mongo
+   * bulkWrite array (updateOne/insertOne/…). No-op on an empty array so callers
+   * don't have to guard. Unordered by default — one failing op doesn't abort the
+   * rest — override via `options.ordered`.
+   */
+  async bulkWrite(operations, options = {}) {
+    if (!operations || operations.length === 0) return null;
+    return this.model.bulkWrite(operations, { ordered: false, ...options });
+  }
+
   async exists(id, session = null) {
     let q = this.model.countDocuments({ _id: id });
     if (session) q = q.session(session);
