@@ -9,10 +9,15 @@ import apiClient from '@/lib/api';
 import OfflineOrderForm from '@/components/admin/OfflineOrderForm';
 import {
   Lead, LeadStatus, LeadSourceType, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
-  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution,
+  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution, scoreBadge,
 } from '@/lib/leads';
 
 type Assignment = 'all' | 'unassigned';
+// Which segment of the pipeline to show. `active` (default) hides the passive
+// never-purchased "Nurture" pool so strong leads aren't buried; `nurture` shows
+// only it; `all` drops the split. Mirrors the backend `bucket` query param.
+type Bucket = 'active' | 'nurture' | 'all';
+type LeadSort = 'score' | 'newest' | 'oldest' | 'recent_contact' | 'follow_up';
 
 interface LeadsResponse {
   success: boolean;
@@ -26,6 +31,7 @@ interface StatsResponse {
     unassigned: number;
     total: number;
     followUpDue: number;
+    nurture: number;
   };
 }
 
@@ -41,6 +47,7 @@ export default function AdminLeadsPage() {
 
   // filters
   const [assignment, setAssignment] = useState<Assignment>('unassigned');
+  const [bucket, setBucket] = useState<Bucket>('active');
   const [status, setStatus] = useState<LeadStatus | ''>('');
   const [source, setSource] = useState<LeadSourceType | ''>('');
   const [hasPurchased, setHasPurchased] = useState<'' | 'true' | 'false'>('');
@@ -50,7 +57,7 @@ export default function AdminLeadsPage() {
   const [rep, setRep] = useState('');
   const [reopened, setReopened] = useState(false);
   const [neverContacted, setNeverContacted] = useState(false);
-  const [sort, setSort] = useState<'newest' | 'oldest' | 'recent_contact' | 'follow_up'>('newest');
+  const [sort, setSort] = useState<LeadSort>('score');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [reps, setReps] = useState<SalesRep[]>([]);
@@ -59,7 +66,7 @@ export default function AdminLeadsPage() {
     setStatus(''); setSource(''); setHasPurchased('');
     setCreatedFrom(''); setCreatedTo(''); setFollowUpDue(false);
     setRep(''); setReopened(false); setNeverContacted(false);
-    setSort('newest'); setSearch('');
+    setSort('score'); setSearch('');
   }
 
   // One-click "Returning customers" preset = existing customer + reopened cycle.
@@ -81,6 +88,7 @@ export default function AdminLeadsPage() {
     try {
       const params = new URLSearchParams();
       params.set('assignment', assignment);
+      params.set('bucket', bucket);
       if (status) params.set('status', status);
       if (source) params.set('source', source);
       if (hasPurchased) params.set('hasPurchased', hasPurchased);
@@ -105,7 +113,7 @@ export default function AdminLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort, search, page]);
+  }, [assignment, bucket, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort, search, page]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -126,7 +134,7 @@ export default function AdminLeadsPage() {
   }, []);
 
   // Reset to page 1 whenever a filter changes.
-  useEffect(() => { setPage(1); }, [assignment, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort]);
+  useEffect(() => { setPage(1); }, [assignment, bucket, status, source, hasPurchased, createdFrom, createdTo, followUpDue, rep, reopened, neverContacted, sort]);
 
   // Owner cell handler: set/clear the named rep on a lead.
   //  - unassigned → repId : atomic /claim (race-safe against a second grab)
@@ -248,7 +256,7 @@ export default function AdminLeadsPage() {
       )}
 
       {/* Assignment tabs */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {(['unassigned', 'all'] as Assignment[]).map((a) => (
           <button
             key={a}
@@ -260,6 +268,32 @@ export default function AdminLeadsPage() {
             {a === 'unassigned' && <Users className="h-4 w-4" />}
             {a === 'unassigned' ? 'Pool' : 'All'}
             {a === 'unassigned' && stats ? ` (${stats.unassigned})` : ''}
+          </button>
+        ))}
+
+        <span className="mx-1 h-6 w-px bg-gray-200" />
+
+        {/* Bucket segment: keep the passive "never purchased" pool out of the active
+            worklist so strong leads sort to the top. */}
+        {([
+          ['active', 'Active pipeline'] as const,
+          ['nurture', 'Nurture'] as const,
+          ['all', 'All'] as const,
+        ]).map(([b, label]) => (
+          <button
+            key={b}
+            onClick={() => setBucket(b)}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${
+              bucket === b ? 'bg-slate-800 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+            title={
+              b === 'active' ? 'Workable leads — excludes never-purchased signups'
+                : b === 'nurture' ? 'Never-purchased registered users (marketing/re-engagement)'
+                : 'Everything, including the nurture pool'
+            }
+          >
+            {label}
+            {b === 'nurture' && stats ? ` (${stats.nurture})` : ''}
           </button>
         ))}
       </div>
@@ -289,7 +323,8 @@ export default function AdminLeadsPage() {
           <option value="true">Existing customers</option>
           <option value="false">Never bought</option>
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+        <select value={sort} onChange={(e) => setSort(e.target.value as LeadSort)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <option value="score">Best leads (score)</option>
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
           <option value="recent_contact">Recently contacted</option>
@@ -370,6 +405,7 @@ export default function AdminLeadsPage() {
           <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
             <tr>
               <th className="px-4 py-3 w-8"></th>
+              <th className="px-4 py-3 w-16">Score</th>
               <th className="px-4 py-3">Lead</th>
               <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Status</th>
@@ -380,14 +416,27 @@ export default function AdminLeadsPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">Loading…</td></tr>
             ) : leads.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">No leads match these filters.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">No leads match these filters.</td></tr>
             ) : (
               leads.map((lead) => (
                 <tr key={lead._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.includes(lead._id)} onChange={() => toggle(lead._id)} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const b = scoreBadge(lead.leadScore);
+                      return (
+                        <span
+                          className={`inline-flex min-w-[2rem] justify-center rounded px-1.5 py-0.5 text-xs font-semibold ${b.className}`}
+                          title={`Priority score ${b.label}/100 (${b.tier})`}
+                        >
+                          {b.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{lead.name || 'Unknown'}</div>

@@ -21,6 +21,8 @@ import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import leadRepository from '../repositories/leadRepository.js';
 import leadSyncService from './leadSyncService.js';
+import { computeLeadScore } from '../utils/leadScore.js';
+import { OPEN_LEAD_STATUSES } from '../config/leadConstants.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_MS = 60 * 1000;
@@ -117,7 +119,7 @@ export async function sweepStaleLeads() {
   const cutoff = followUpCutoff();
   const stale = await leadRepository.find(
     {
-      status: { $in: ['new', 'contacted', 'qualified'] },
+      status: { $in: OPEN_LEAD_STATUSES },
       nextFollowUpAt: null,
       $or: [{ lastContactedAt: null }, { lastContactedAt: { $lt: cutoff } }],
       updatedAt: { $lt: cutoff },
@@ -132,6 +134,47 @@ export async function sweepStaleLeads() {
   return { scanned: stale.length, flagged };
 }
 
+/**
+ * Refresh `leadScore` on ALL open leads so the recency term decays over time.
+ * Real-time recompute (leadSyncService) already covers every new signal; this only
+ * corrects passage-of-time drift, so a once-daily full pass is enough.
+ *
+ * Full pass (not an oldest-N slice): a per-run cap that always restarts from the
+ * smallest _id would forever rescore the same oldest leads and never reach newer
+ * ones, so their decay would never run. Instead we page the whole open set via a
+ * keyset cursor on the immutable _id (writing leadScore bumps updatedAt, so a
+ * skip/updatedAt cursor would drift), with a large batch-count guard against a
+ * runaway loop. Changed docs are flushed per batch with a single bulkWrite.
+ */
+export async function sweepRescoreLeads() {
+  const maxBatches = Number(process.env.LEAD_RESCORE_MAX_BATCHES) || 1000; // runaway guard
+  let scanned = 0;
+  let updated = 0;
+  let afterId = null;
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const filter = { status: { $in: OPEN_LEAD_STATUSES } };
+    if (afterId) filter._id = { $gt: afterId };
+    const leads = await leadRepository.find(filter, { limit: SWEEP_BATCH, sort: { _id: 1 } });
+    if (leads.length === 0) break;
+
+    const ops = [];
+    for (const lead of leads) {
+      const next = computeLeadScore(lead);
+      if (next !== lead.leadScore) {
+        ops.push({ updateOne: { filter: { _id: lead._id }, update: { $set: { leadScore: next } } } });
+      }
+    }
+    if (ops.length) {
+      await leadRepository.bulkWrite(ops);
+      updated += ops.length;
+    }
+    scanned += leads.length;
+    afterId = leads[leads.length - 1]._id;
+    if (leads.length < SWEEP_BATCH) break;
+  }
+  return { scanned, updated };
+}
+
 /** Frequent sweep (abandoned checkouts + stale follow-up flagging). */
 export async function runFrequentSweeps() {
   const abandoned = await sweepAbandonedOrders();
@@ -139,8 +182,9 @@ export async function runFrequentSweeps() {
   return { abandoned, stale };
 }
 
-/** Daily sweep (dormant users). */
+/** Daily sweep (dormant users + score recency-decay refresh). */
 export async function runDailySweeps() {
   const dormant = await sweepDormantUsers();
-  return { dormant };
+  const rescored = await sweepRescoreLeads();
+  return { dormant, rescored };
 }
