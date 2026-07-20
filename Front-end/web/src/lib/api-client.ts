@@ -23,11 +23,14 @@ import {
   type ResponseInterceptor,
 } from './api-types';
 
-// Client-readable "a session existed" hint, written by AuthContext on login
-// (localStorage key). Under httpOnly-cookie auth JS cannot read the refresh
-// token, so this is the only signal available to decide whether a 401 should
-// trigger a silent refresh vs. be treated as a plain guest response.
-// Keep in sync with CACHE_KEY in context/AuthContext.tsx.
+// Client-readable "a session existed" hint. Under httpOnly-cookie auth JS
+// cannot read the refresh token, so this is the only signal available to decide
+// whether a 401 should trigger a silent refresh vs. be treated as a plain guest
+// response. The value is the CachedAuth entry AuthContext writes after every
+// auth check ({ user, sessionVersion, timestamp }) — note it exists for guests
+// too (with user: null), so mere presence of the key is NOT proof of a session;
+// a real session requires a non-null `user`. Keep in sync with CACHE_KEY in
+// context/AuthContext.tsx.
 const AUTH_HINT_KEY = 'auth_check';
 
 /** Broadcast a soft "session expired" signal. AuthContext listens and clears
@@ -56,13 +59,20 @@ export function emitAuthLogin(): void {
   }
 }
 
-/** True when the client believes it has (or had) an authenticated session. SSR-safe. */
+/** True when the client believes it has (or had) an authenticated session. SSR-safe.
+ *  Requires a persisted CachedAuth entry with a non-null `user` — a guest whose
+ *  auth check merely wrote `{ user: null }` must NOT be treated as having a
+ *  session, or their public-page 401s would trigger a doomed silent refresh and
+ *  surface a spurious "session expired" prompt on return visits. */
 function hasSessionHint(): boolean {
   if (tokenManager.refreshToken != null) return true; // legacy bearer flow
   if (typeof window === 'undefined') return false;
   try {
-    return window.localStorage.getItem(AUTH_HINT_KEY) != null;
+    const raw = window.localStorage.getItem(AUTH_HINT_KEY);
+    if (raw == null) return false;
+    return JSON.parse(raw)?.user != null;
   } catch {
+    // Malformed/legacy value — treat as no session rather than risk a refresh loop.
     return false;
   }
 }
