@@ -1,36 +1,35 @@
 /**
- * Route-cache keys must be reachable by the invalidation globs their callers pass.
+ * Write-path invalidation reaches every cached response for a resource, and
+ * only that resource.
  *
- * Regression: both middlewares hashed the request into an opaque `route:<md5>` /
- * `public:<md5>` key. `invalidateCache('categories')` globs `*categories*`, which
- * can never match a hex digest — so creating a category left the cached
- * `GET /categories` list serving stale data until its 10-minute TTL expired, and
- * newly-added categories/brands/vehicles never appeared in the admin product form.
- *
- * These tests run against the real CacheService with REDIS_URL unset, which
- * exercises its in-memory Map path — no external Redis is touched.
+ * Post-overhaul: cacheable routes are cached by middleware/httpCache.js under
+ * `v3:resp:<ns>:<md5>` keys filed in the tag index, and invalidateCache /
+ * invalidatePublicCache clear by tag (with a SCAN-glob fallback for any legacy
+ * or untagged key). These tests run against the real CacheService with
+ * REDIS_URL unset — its in-memory Map + tagMap path — so no Redis is touched.
  */
 
 import { jest } from '@jest/globals';
 
 const { routeNamespace } = await import('../../../utils/cacheKeys.js');
 const { default: cacheService } = await import('../../../services/cacheService.js');
-const { cacheResponse, invalidateCache } = await import('../../../middleware/cacheMiddleware.js');
-const { publicCacheResponse, invalidatePublicCache } = await import('../../../middleware/publicCacheMiddleware.js');
+const { httpCache } = await import('../../../middleware/httpCache.js');
+const { invalidateCache } = await import('../../../middleware/cacheMiddleware.js');
+const { invalidatePublicCache } = await import('../../../middleware/publicCacheMiddleware.js');
 
-/** Drive a caching middleware to completion and return the key it wrote. */
-const primeCache = async (middleware, url, payload) => {
-  const req = { method: 'GET', originalUrl: url, query: {}, headers: {} };
+/** Drive httpCache to completion so it writes the response through to the cache. */
+const primeCache = async (profile, url, payload) => {
+  const req = { method: 'GET', originalUrl: url, query: {}, headers: {}, cookies: {} };
   const res = {
-    setHeader: jest.fn(),
+    headers: {},
     statusCode: 200,
+    setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
+    getHeader(k) { return this.headers[k.toLowerCase()]; },
     json(body) { this.body = body; return this; },
   };
-  await new Promise((resolve) => middleware(req, res, resolve));
-  res.json(payload); // middleware wraps res.json to write through to the cache
-  // The write-through is fire-and-forget; let its microtasks settle.
-  await new Promise((r) => setTimeout(r, 10));
-  return req;
+  await new Promise((resolve) => httpCache(profile)(req, res, resolve));
+  res.json(payload); // httpCache wrapped res.json to write through
+  await new Promise((r) => setTimeout(r, 10)); // let the fire-and-forget set settle
 };
 
 /** Wait for the fire-and-forget invalidation to drain. */
@@ -39,8 +38,10 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 const findKeys = (substring) =>
   [...cacheService.cache.keys()].filter((k) => k.includes(substring));
 
-beforeEach(async () => {
+beforeEach(() => {
   cacheService.cache.clear();
+  cacheService.tagMap.clear();
+  cacheService.keyTags.clear();
 });
 
 describe('routeNamespace', () => {
@@ -65,39 +66,66 @@ describe('routeNamespace', () => {
   });
 });
 
-describe('invalidateCache reaches route-cached responses', () => {
+describe('invalidateCache reaches cached responses by tag', () => {
   it('clears a cached GET /categories when a category is written', async () => {
-    await primeCache(cacheResponse(600), '/api/v1/categories', { categories: ['stale'] });
-
-    expect(findKeys('route:categories:')).toHaveLength(1);
+    await primeCache('CATEGORY_LIST', '/api/v1/categories', { categories: ['stale'] });
+    expect(findKeys('resp:categories:')).toHaveLength(1);
 
     invalidateCache('categories', 'products');
     await settle();
 
-    expect(findKeys('route:categories:')).toHaveLength(0);
+    expect(findKeys('resp:categories:')).toHaveLength(0);
   });
 
   it('does not clear an unrelated resource', async () => {
-    await primeCache(cacheResponse(600), '/api/v1/categories', { categories: ['a'] });
-    await primeCache(cacheResponse(600), '/api/v1/brands', { brands: ['b'] });
+    await primeCache('CATEGORY_LIST', '/api/v1/categories', { categories: ['a'] });
+    await primeCache('BRAND_LIST', '/api/v1/brands', { brands: ['b'] });
 
     invalidateCache('categories');
     await settle();
 
-    expect(findKeys('route:categories:')).toHaveLength(0);
-    expect(findKeys('route:brands:')).toHaveLength(1);
+    expect(findKeys('resp:categories:')).toHaveLength(0);
+    expect(findKeys('resp:brands:')).toHaveLength(1);
   });
 });
 
-describe('invalidatePublicCache reaches public-cached responses', () => {
-  it('clears a cached GET /vehicles when a vehicle is written', async () => {
-    await primeCache(publicCacheResponse('VEHICLE_LIST'), '/api/v1/vehicles', { vehicles: ['stale'] });
+describe("a single 'products' invalidation clears every product cache layer", () => {
+  it('clears httpCache detail entries AND service-layer product keys', async () => {
+    // httpCache-stored product detail (tagged 'products' + per-entity).
+    await primeCache('PRODUCT_DETAIL', '/api/v1/products/slug/x', { success: true, product: { _id: 'p', slug: 'x' } });
+    // Service-layer key (productService.wrap style): tagged 'products'.
+    await cacheService.set('v3:default:product:{"slug":"x"}', { product: 'stale' }, 300, ['products']);
+    // A legacy/untagged key that only the SCAN-glob fallback can reach.
+    await cacheService.set('v2:products:list:{"page":"1"}', { products: ['stale'] }, 300);
 
-    expect(findKeys('public:vehicles:')).toHaveLength(1);
+    expect(findKeys('product')).toHaveLength(3);
+
+    invalidatePublicCache('products');
+    await settle();
+
+    expect(findKeys('product')).toHaveLength(0);
+  });
+
+  it('leaves non-product caches untouched', async () => {
+    await primeCache('VEHICLE_LIST', '/api/v1/vehicles', { vehicles: ['keep'] });
+    await primeCache('PRODUCT_DETAIL', '/api/v1/products/slug/y', { success: true, product: { _id: 'q', slug: 'y' } });
+
+    invalidatePublicCache('products');
+    await settle();
+
+    expect(findKeys('resp:products:')).toHaveLength(0);
+    expect(findKeys('resp:vehicles:')).toHaveLength(1);
+  });
+});
+
+describe('invalidatePublicCache reaches cached responses by tag', () => {
+  it('clears a cached GET /vehicles when a vehicle is written', async () => {
+    await primeCache('VEHICLE_LIST', '/api/v1/vehicles', { vehicles: ['stale'] });
+    expect(findKeys('resp:vehicles:')).toHaveLength(1);
 
     invalidatePublicCache('vehicles');
     await settle();
 
-    expect(findKeys('public:vehicles:')).toHaveLength(0);
+    expect(findKeys('resp:vehicles:')).toHaveLength(0);
   });
 });

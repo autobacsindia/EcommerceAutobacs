@@ -12,8 +12,21 @@ import {
 } from "../middleware/validationMiddleware.js";
 import { cleanHTML } from "../utils/htmlSanitizer.js";
 import { questionSubmitRateLimit, questionAnswerRateLimit } from "../middleware/rateLimitMiddleware.js";
+import { httpCache } from "../middleware/httpCache.js";
+import { invalidateCache } from "../middleware/cacheMiddleware.js";
+import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 
 const router = express.Router();
+
+// Clear the public Q&A cache for one product and refresh its PDP (which lists
+// answered questions). Answering/deleting are the only writes that change what
+// the public GET returns.
+const invalidateQuestionCaches = async (productId) => {
+  if (!productId) return;
+  invalidateCache(`questions:product:${productId}`);
+  const product = await Product.findById(productId).select('slug');
+  if (product?.slug) revalidateFrontendTags([`product:${product.slug}`]);
+};
 
 // @desc    Submit a question
 // @route   POST /api/product-questions
@@ -45,7 +58,7 @@ router.post("/", questionSubmitRateLimit, validateProductQuestion, asyncHandler(
 // @desc    Get questions for a product (Public - only answered/public ones)
 // @route   GET /api/product-questions/product/:id
 // @access  Public
-router.get("/product/:id", validateProductIdParam, asyncHandler(async (req, res) => {
+router.get("/product/:id", validateProductIdParam, httpCache('QA_PRODUCT'), asyncHandler(async (req, res) => {
   const questions = await productQuestionRepository.find({
     product: req.params.id,
     isPublic: true,
@@ -106,6 +119,7 @@ router.put("/:id/answer", protect, admin, questionAnswerRateLimit, validateIdPar
 
   // Q&A lives solely in the ProductQuestion collection. The legacy embedded
   // Product.qna field was removed; questions are read back via this route's GET.
+  await invalidateQuestionCaches(question.product);
 
   res.json({
     success: true,
@@ -125,6 +139,7 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
   }
 
   await productQuestionRepository.deleteOne({ _id: question._id });
+  await invalidateQuestionCaches(question.product);
 
   res.json({
     success: true,

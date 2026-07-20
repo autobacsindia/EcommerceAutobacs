@@ -23,8 +23,7 @@
  */
 
 import Redis from 'ioredis';
-
-const PATTERNS = ['route:*', 'public:*'];
+import { RESPONSE_CACHE_PATTERNS, flushPattern } from '../services/cache/flush.js';
 
 /**
  * Purge the Cloudflare edge cache for the zone. No-op unless both env vars are set.
@@ -58,25 +57,6 @@ async function purgeCloudflare() {
   }
 }
 
-async function flushPattern(redis, match) {
-  let scanned = 0, deleted = 0;
-  await new Promise((resolve, reject) => {
-    const stream = redis.scanStream({ match, count: 200 });
-    stream.on('data', (keys) => {
-      if (!keys.length) return;
-      scanned += keys.length;
-      stream.pause();
-      redis.unlink(keys)
-        .then((n) => { deleted += n; stream.resume(); })
-        .catch((e) => { console.error(`  unlink error (${match}):`, e.message); stream.resume(); });
-    });
-    stream.on('end', resolve);
-    stream.on('error', reject);
-  });
-  console.log(`${match.padEnd(10)} — scanned ${scanned}, deleted ${deleted}`);
-  return deleted;
-}
-
 async function main() {
   const url = process.env.REDIS_URL;
   if (!url) { console.error('[ERROR] REDIS_URL not set'); process.exit(1); }
@@ -84,7 +64,14 @@ async function main() {
   const redis = new Redis(url, { maxRetriesPerRequest: 3, connectTimeout: 5000 });
   let total = 0;
   try {
-    for (const p of PATTERNS) total += await flushPattern(redis, p);
+    // Same core as CacheService.clear() (admin /redis/cache/clear endpoint);
+    // patterns now also cover the controller/service-level v2:* keys and
+    // delivery-zones:* that the old route:/public:-only sweep missed.
+    for (const p of RESPONSE_CACHE_PATTERNS) {
+      const { scanned, deleted } = await flushPattern(redis, p);
+      console.log(`${p.padEnd(18)} — scanned ${scanned}, deleted ${deleted}`);
+      total += deleted;
+    }
     console.log(`\nRedis: deleted ${total} cache key(s).`);
   } catch (err) {
     console.error('[flush-public-cache] failed:', err.message);

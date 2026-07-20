@@ -4,6 +4,9 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
 import { STATIC_PAGES, STATIC_PAGE_BY_PATH } from "../config/staticPages.js";
+import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
+import { invalidateCache } from "../middleware/cacheMiddleware.js";
+import { httpCache } from "../middleware/httpCache.js";
 
 const router = express.Router();
 
@@ -23,6 +26,7 @@ function normalizePath(raw) {
 // the page's computed defaults on the frontend.
 router.get(
   "/",
+  httpCache('PAGESEO_PUBLIC'),
   asyncHandler(async (req, res) => {
     const path = normalizePath(req.query.path);
     if (!path) {
@@ -96,6 +100,11 @@ router.put(
       { $set: { seo, updatedBy: req.user?._id } },
       { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
     ).lean();
+
+    // Clear the backend page-seo response cache + refresh the static page's
+    // metadata on the storefront immediately.
+    invalidateCache('pageseo');
+    revalidateFrontendTags([`seo:${path}`]);
 
     res.json({ success: true, data: { path: doc.path, seo: doc.seo || {}, updatedAt: doc.updatedAt } });
   })

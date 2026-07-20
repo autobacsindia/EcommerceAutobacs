@@ -4,7 +4,9 @@ import productRepository from "../repositories/productRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
-import { cacheResponse, invalidateCache } from "../middleware/cacheMiddleware.js";
+import { invalidateCache } from "../middleware/cacheMiddleware.js";
+import { httpCache } from "../middleware/httpCache.js";
+import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
@@ -13,14 +15,12 @@ import { normalizeSeo } from "../utils/seo.js";
 
 const router = express.Router();
 
-// TTLs — categories change rarely; 10 min is safe
-const CATEGORY_LIST_TTL  = 10 * 60; // 10 min
-const CATEGORY_ITEM_TTL  = 10 * 60; // 10 min
+// TTLs live in config/cacheProfiles.js (CATEGORY_LIST / CATEGORY_ITEM).
 
 // @route   GET /categories
 // @desc    Get all active categories with optional pagination
 // @access  Public
-router.get("/", cacheMiddleware('static-data'), cacheResponse(CATEGORY_LIST_TTL), asyncHandler(async (req, res) => {
+router.get("/", httpCache('CATEGORY_LIST'), asyncHandler(async (req, res) => {
   // Categories are a small, bounded collection (rarely > 100).
   // Still cap at 200 as a safety guard; clients that need all categories
   // for nav menus can omit page/limit and get the full list up to the cap.
@@ -141,7 +141,7 @@ router.get("/sitemap", cacheMiddleware('static-data'), asyncHandler(async (_req,
 // @route   GET /categories/:id
 // @desc    Get category by ID
 // @access  Public
-router.get("/:id", validateIdParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandler(async (req, res) => {
+router.get("/:id", validateIdParam, httpCache('CATEGORY_ITEM'), asyncHandler(async (req, res) => {
   const category = await categoryRepository.findById(req.params.id)
     .populate('parent', 'name slug');
 
@@ -161,7 +161,7 @@ router.get("/:id", validateIdParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandl
 // @route   GET /categories/slug/:slug
 // @desc    Get category by slug (supports both hyphenated and non-hyphenated versions)
 // @access  Public
-router.get("/slug/:slug", validateSlugParam, cacheResponse(CATEGORY_ITEM_TTL), asyncHandler(async (req, res) => {
+router.get("/slug/:slug", validateSlugParam, httpCache('CATEGORY_ITEM'), asyncHandler(async (req, res) => {
   let category = await categoryRepository.findOne({ slug: req.params.slug, isActive: true })
     .populate('parent', 'name slug');
 
@@ -267,6 +267,9 @@ router.post(
       // 'products' also clears the facet/list caches — a new category can appear
       // as a filter facet and shifts the sidebar counts.
       invalidateCache('categories', 'products');
+      // Refresh the storefront's Next.js Data Cache (home + nav) so a new
+      // category shows up without waiting out the ISR window.
+      revalidateFrontendTags(['home:categories', 'nav:categories']);
       // Drop the in-memory hierarchy cache so new categories aggregate immediately.
       categoryMappingService.refresh();
 
@@ -403,6 +406,7 @@ router.put(
       // Parent/name/active changes alter the hierarchy AND the rolled-up facet
       // counts, so bust the product/facet caches too.
       invalidateCache('categories', 'products');
+      revalidateFrontendTags(['home:categories', 'nav:categories', ...(updated?.slug ? [`category:${updated.slug}`] : [])]);
       // Parent/slug/name changes alter the hierarchy; refresh the lookup cache.
       categoryMappingService.refresh();
 
@@ -456,6 +460,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 
   // Soft-delete removes a facet and changes ancestor counts → bust products too.
   invalidateCache('categories', 'products');
+  revalidateFrontendTags(['home:categories', 'nav:categories', `category:${category.slug}`]);
   // Soft-deleted category must drop out of hierarchy aggregation.
   categoryMappingService.refresh();
 
@@ -479,6 +484,7 @@ router.patch("/:id/feature", protect, admin, validateIdParam, asyncHandler(async
 
   // Featured only affects presentation/ordering, not the hierarchy — no mapping refresh.
   invalidateCache('categories');
+  revalidateFrontendTags(['home:categories', 'nav:categories']);
 
   res.json({
     success: true,

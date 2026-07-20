@@ -6,6 +6,8 @@ import Img from './Img';
 import RedesignVehicleMenu from './RedesignVehicleMenu';
 import RedesignNavSearch from './RedesignNavSearch';
 import ProfileAvatar from './ProfileAvatar';
+import KarmaBadge from '@/components/profile/KarmaBadge';
+import { CheckCircle2 } from 'lucide-react';
 import { Search, Heart, Cart, Menu, Close, UserIcon } from './icons';
 import { brand, navLinks } from './homeContent';
 import { useAuth } from '@/context/AuthContext';
@@ -14,7 +16,7 @@ import { useCart } from '@/context/CartContext';
 const VEHICLE_LABEL = 'Vehicle Makes';
 
 export default function RedesignNav() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -28,9 +30,6 @@ export default function RedesignNav() {
       document.body.style.overflow = prev;
     };
   }, [menuOpen]);
-
-  const accountHref = isAuthenticated ? '/profile' : '/login';
-  const accountLabel = isAuthenticated ? 'My Account' : 'Sign In';
 
   return (
     <nav className="main-nav" id="hr-nav">
@@ -129,6 +128,38 @@ export default function RedesignNav() {
       {/* Mobile hamburger menu */}
       {menuOpen && (
         <div className="nav-mobile">
+          {isAuthenticated ? (
+            <div className="nav-mobile-account">
+              <Link href="/profile" className="nav-mobile-account-main" onClick={() => setMenuOpen(false)}>
+                <span className="avatar nav-mobile-account-avatar">
+                  {user?.avatarUrl ? (
+                    <Img src={user.avatarUrl} alt={user?.name || 'Profile'} />
+                  ) : (
+                    <span className="avatar-fallback">
+                      <UserIcon />
+                    </span>
+                  )}
+                </span>
+                <span className="nav-mobile-account-text">
+                  <span className="nav-mobile-account-name">{user?.name}</span>
+                  <span className="nav-mobile-account-email">
+                    <span className="nav-mobile-account-email-text">{user?.email}</span>
+                    {user?.isVerified && (
+                      <span className="nav-mobile-account-tick" title="Email verified" aria-label="Email verified">
+                        <CheckCircle2 width={14} height={14} />
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </Link>
+              <KarmaBadge />
+            </div>
+          ) : (
+            <Link href="/login" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
+              <UserIcon width={16} height={16} />
+              Sign In
+            </Link>
+          )}
           {navLinks.map((l) =>
             l.label === VEHICLE_LABEL ? (
               <RedesignVehicleMenu key={l.label} variant="inline" onNavigate={() => setMenuOpen(false)} />
@@ -141,10 +172,6 @@ export default function RedesignNav() {
           <Link href="/wishlist" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
             <Heart width={16} height={16} />
             Wishlist
-          </Link>
-          <Link href={accountHref} className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
-            <UserIcon width={16} height={16} />
-            {accountLabel}
           </Link>
         </div>
       )}

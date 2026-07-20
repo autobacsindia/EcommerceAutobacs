@@ -3,12 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { User, Shield, MapPin, Edit, X, Plus } from 'lucide-react';
+import { User, Shield, MapPin, Edit, X, Plus, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
 import { UserProfile, Address } from '@/lib/types';
-import KarmaCard from '@/components/profile/KarmaCard';
+import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 
 const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm p-2 focus:outline-none focus:border-gold font-display text-sm';
@@ -175,44 +175,55 @@ export default function ProfilePage() {
           <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Profile</h1>
         </div>
 
-        <KarmaCard />
-
-        <RecentOrdersCard />
-
+        {/* Identity header — name, karma, email, verification */}
         <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
           {/* Avatar + name/email */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-full flex items-center justify-center shrink-0">
-              <User className="h-10 w-10 text-gold" />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-full flex items-center justify-center shrink-0">
+                <User className="h-10 w-10 text-gold" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">
+                  {editing ? (
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="bg-transparent border-b border-gold text-ink focus:outline-none font-display font-bold uppercase tracking-wide text-2xl w-full"
+                    />
+                  ) : (
+                    profile?.name
+                  )}
+                </h2>
+                <p className="text-ink/70 font-display mt-1 flex items-center gap-1.5">
+                  {editing ? (
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="bg-transparent border-b border-gold text-ink/70 focus:outline-none font-display text-sm w-full"
+                    />
+                  ) : (
+                    <>
+                      <span className="truncate">{profile?.email}</span>
+                      {verificationStatus?.isVerified && (
+                        <span
+                          className="inline-flex shrink-0 text-green-400"
+                          title={verificationStatus.verifiedAt ? `Email verified on ${new Date(verificationStatus.verifiedAt).toLocaleDateString()}` : 'Email verified'}
+                          aria-label="Email verified"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">
-                {editing ? (
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="bg-transparent border-b border-gold text-ink focus:outline-none font-display font-bold uppercase tracking-wide text-2xl w-full"
-                  />
-                ) : (
-                  profile?.name
-                )}
-              </h2>
-              <p className="text-ink/70 font-display mt-1">
-                {editing ? (
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="bg-transparent border-b border-gold text-ink/70 focus:outline-none font-display text-sm w-full"
-                  />
-                ) : (
-                  profile?.email
-                )}
-              </p>
-            </div>
+            {!editing && <KarmaBadge />}
           </div>
 
           {/* Email verification banner — unverified */}
@@ -243,27 +254,13 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+        </div>
 
-          {/* Email verification banner — verified */}
-          {verificationStatus && verificationStatus.isVerified && (
-            <div className="mb-6 bg-green-500/10 border border-green-500/30 rounded-sm p-4">
-              <div className="flex items-start gap-3">
-                <svg className="h-5 w-5 text-green-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <div>
-                  <h3 className="text-sm font-display font-bold text-green-400 uppercase tracking-wide">Email Verified</h3>
-                  <p className="mt-1 text-sm text-green-300/80 font-display">
-                    Your email address has been verified.
-                    {verificationStatus.verifiedAt && (
-                      <span className="ml-1">(Verified on {new Date(verificationStatus.verifiedAt).toLocaleDateString()})</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+        {/* Recent orders — directly under the identity header */}
+        <RecentOrdersCard />
 
+        {/* Addresses + account actions */}
+        <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
           {/* Addresses */}
           {editing ? (
             <div className="mb-6">

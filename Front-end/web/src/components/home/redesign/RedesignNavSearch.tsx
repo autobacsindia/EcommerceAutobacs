@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
+import { suggestionKeys } from '@/hooks/queries/keys';
 import { useAuth } from '@/context/AuthContext';
 import { trackSearch } from '@/lib/analytics';
 import Img from './Img';
@@ -62,6 +64,7 @@ export default function RedesignNavSearch({
 }) {
   const router = useRouter();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -131,10 +134,19 @@ export default function RedesignNavSearch({
     timeoutRef.current = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const data = await apiClient.get<SuggestionsResponse>(
-          `/products/suggestions?q=${encodeURIComponent(q)}&limit=${SUGGESTION_LIMIT}`,
-          { signal: controller.signal },
-        );
+        // Routed through the shared QueryClient so an already-typed term (e.g.
+        // the user backspacing and retyping) is served from cache instead of
+        // re-hitting the network. staleTime 5min; the debounce/abort below still
+        // governs when a NEW term fires.
+        const data = await queryClient.fetchQuery<SuggestionsResponse>({
+          queryKey: suggestionKeys.query(q),
+          queryFn: () =>
+            apiClient.get<SuggestionsResponse>(
+              `/products/suggestions?q=${encodeURIComponent(q)}&limit=${SUGGESTION_LIMIT}`,
+              { signal: controller.signal },
+            ),
+          staleTime: 300_000,
+        });
         if (data?.success) {
           setSuggestions(data.suggestions || []);
           setIsOpen(true);
@@ -151,7 +163,7 @@ export default function RedesignNavSearch({
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [query]);
+  }, [query, queryClient]);
 
   const goToResults = (term: string) => {
     const t = term.trim();

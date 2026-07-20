@@ -21,6 +21,7 @@
 
 import productRepository from '../repositories/productRepository.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { revalidateFrontendTags } from './frontendRevalidator.js';
 
 /**
  * Run one sweep. Never throws — returns a summary for observability/logging.
@@ -53,6 +54,9 @@ export async function expireEndedSales(now = new Date()) {
 
   if (reverted > 0) {
     invalidateCache('products');
+    // A sweep can revert many products at once; refresh the home featured grid
+    // coarsely rather than enumerating every affected slug.
+    revalidateFrontendTags(['home:products']);
     console.log(`[ProductSale] Reverted ${reverted} expired sale(s)` + (failed ? `, ${failed} failed` : ''));
   }
 

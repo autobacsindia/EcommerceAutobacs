@@ -599,10 +599,24 @@ class SessionStore {
         }
       });
       
-      // Count session keys
-      const sessionKeys = await this.redis.keys('session:*');
-      stats.sessionKeys = sessionKeys.length;
-      stats.totalKeys = sessionKeys.length;
+      // Count session keys with non-blocking SCAN — KEYS blocks the shared
+      // cache/session instance and is O(keyspace) per admin stats call.
+      // Iterations are capped so a huge keyspace can't hammer Upstash.
+      let sessionKeyCount = 0;
+      let cursor = '0';
+      let iterations = 0;
+      const MAX_SCAN_ITERATIONS = 100; // 100 × COUNT 500 = up to 50k keys examined
+      do {
+        const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', 'session:*', 'COUNT', 500);
+        cursor = nextCursor;
+        sessionKeyCount += keys.length;
+        iterations++;
+      } while (cursor !== '0' && iterations < MAX_SCAN_ITERATIONS);
+      if (cursor !== '0') {
+        stats.sessionKeysTruncated = true;
+      }
+      stats.sessionKeys = sessionKeyCount;
+      stats.totalKeys = sessionKeyCount;
       
       return stats;
     } catch (err) {

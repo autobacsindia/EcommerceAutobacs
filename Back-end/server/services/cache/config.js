@@ -1,6 +1,7 @@
 // Bump on cache-key-shape or recommendation-logic changes to invalidate stale
-// entries (e.g. v2: similar/complementary reworked to structured relevance).
-export const CACHE_VERSION = process.env.CACHE_VERSION || 'v2';
+// entries (a free global flush — old-prefix keys simply age out). v3: unified
+// response cache (middleware/httpCache.js) — keys are now v3:resp:<ns>:<md5>.
+export const CACHE_VERSION = process.env.CACHE_VERSION || 'v3';
 
 export const CACHE_CONFIG = {
   TTL_JITTER_PERCENT: 0.1,

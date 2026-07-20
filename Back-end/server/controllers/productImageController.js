@@ -22,6 +22,11 @@ import {
   deleteManyFromCloudinary,
 } from '../utils/cloudinaryHelpers.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
+
+// Next.js Data Cache tags to refresh after a product write: the home featured
+// grid always, plus this product's PDP when we know its slug.
+const productNextTags = (p) => ['home:products', ...(p?.slug ? [`product:${p.slug}`] : [])];
 import { cleanHTML } from '../utils/htmlSanitizer.js';
 import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
 import { aggregateFromVariants } from '../utils/wcVariants.js';
@@ -265,6 +270,7 @@ export const createProductWithImages = async (req, res) => {
   }
 
   invalidateCache('products');
+  revalidateFrontendTags(productNextTags(savedProduct));
 
   res.locals.product = savedProduct;
   res.status(201).json({
@@ -427,6 +433,7 @@ export const updateProductWithImages = async (req, res, next) => {
   }
 
   invalidateCache('products');
+  revalidateFrontendTags(productNextTags(updatedProduct));
 
   res.locals.product = updatedProduct;
   res.json({
@@ -469,6 +476,7 @@ export const deleteProductWithImages = async (req, res) => {
   }
 
   invalidateCache('products');
+  revalidateFrontendTags(productNextTags(product));
 
   res.locals.product = product;
   res.json({
@@ -513,6 +521,7 @@ export const uploadProductImages = async (req, res) => {
   }
 
   invalidateCache('products');
+  revalidateFrontendTags(productNextTags(product));
 
   res.json({
     success: true,
@@ -555,6 +564,7 @@ export const deleteProductImage = async (req, res) => {
   await deleteFromCloudinary(publicId);
 
   invalidateCache('products');
+  revalidateFrontendTags(productNextTags(product));
 
   res.json({
     success: true,

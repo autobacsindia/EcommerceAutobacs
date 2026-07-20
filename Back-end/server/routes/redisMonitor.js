@@ -221,14 +221,9 @@ router.post('/cache/clear', protect, admin, async (req, res) => {
       });
     }
     
-    if (!cacheService.clear) {
-      return res.status(501).json({ 
-        error: 'Cache clear not implemented' 
-      });
-    }
-    
-    // Clear all cache
-    await cacheService.clear();
+    // Clear all response caches (route:*, public:*, v2:*, delivery-zones:*).
+    // Sessions and rate limits are untouched.
+    const clearResult = await cacheService.clear();
     
     // AUDIT LOG (persistent, not just console)
     await auditLogRepository.logAction({
@@ -247,6 +242,8 @@ router.post('/cache/clear', protect, admin, async (req, res) => {
     res.json({
       success: true,
       message: 'Cache cleared successfully',
+      deleted: clearResult.total,
+      perPattern: clearResult.perPattern,
     });
   } catch (err) {
     console.error('[RedisMonitor] Error clearing cache:', err.message);

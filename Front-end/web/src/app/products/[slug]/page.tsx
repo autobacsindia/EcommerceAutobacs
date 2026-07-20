@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { cache } from 'react';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
 import { isOutOfStock, getStockStatus } from '@/lib/stock';
@@ -15,12 +16,14 @@ function serializeJsonLd(data: unknown): string {
     .replace(/&/g, '\\u0026');
 }
 
-async function getProductForMetadata(slug: string) {
+// Wrapped in React cache() so generateMetadata and the page component (which
+// both need the product) share ONE fetch per request instead of two.
+const getProductForMetadata = cache(async (slug: string) => {
   try {
     // Slug-only lookup — ObjectId URLs are permanently redirected by the backend
     // revalidate 60s: keeps the page cached but shrinks the window between an
     // admin SEO/content edit and it appearing publicly (was 3600 = up to 1h).
-    const res = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 60 } });
+    const res = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 60, tags: [`product:${slug}`] } });
     if (!res.ok) return null;
     const data = await res.json();
     return data.product ?? null;
@@ -28,7 +31,7 @@ async function getProductForMetadata(slug: string) {
     console.error('Metadata fetch error:', error);
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -230,7 +233,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbSchema) }}
         />
       )}
-      <ClientPage slug={slug} />
+      <ClientPage slug={slug} initialProduct={product} />
     </>
   );
 }

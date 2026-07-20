@@ -88,6 +88,14 @@
 .hr .nav-search-bar { display: none; }
 .hr .nav-mobile-row { display: flex; align-items: center; gap: 12px; }
 .hr .nav-mobile-row svg { color: var(--gold); flex-shrink: 0; }
+/* Logged-in account summary at the top of the mobile menu (avatar + name + email + karma) */
+.hr .nav-mobile-account { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.hr .nav-mobile .nav-mobile-account-main { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; padding: 0; border-bottom: none; }
+.hr .nav-mobile-account-text { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.hr .nav-mobile-account-name { font-size: 15px; letter-spacing: 0.02em; text-transform: none; color: var(--text); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr .nav-mobile-account-email { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); line-height: 1.2; }
+.hr .nav-mobile-account-email-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr .nav-mobile-account-tick { display: inline-flex; flex-shrink: 0; color: #4ade80; }
 /* Links take the middle zone and centre themselves: logo stays left,
    search + actions stay right. flex:1 lets the group grow into the free
    space so it sits centred without overlapping the side zones on medium

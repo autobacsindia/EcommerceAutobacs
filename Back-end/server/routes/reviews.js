@@ -14,34 +14,39 @@ import {
 import { cleanHTML } from "../utils/htmlSanitizer.js";
 import { reviewSubmitRateLimit } from "../middleware/rateLimitMiddleware.js";
 import { enqueueNotification } from "../queue/queues.js";
+import { httpCache } from "../middleware/httpCache.js";
+import { invalidateCache } from "../middleware/cacheMiddleware.js";
+import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 
 const router = express.Router();
 
-// Helper function to calculate product rating stats
+// Helper function to calculate product rating stats.
+// Central hook for review-cache invalidation: every rating-affecting write
+// (submit / approve / reject / delete / admin-create) funnels through here, so
+// clearing caches in one place keeps them consistent. Also revalidates the
+// storefront (the PDP embeds the rating in its JSON-LD; testimonials feed home).
 const updateProductRatingStats = async (productId) => {
   const reviews = await reviewRepository.find({ product: productId, isApproved: true });
-  
-  if (reviews.length === 0) {
-    await Product.findByIdAndUpdate(productId, {
-      averageRating: 0,
-      totalReviews: 0
-    });
-    return;
-  }
 
-  const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-  const averageRating = totalRating / reviews.length;
-  
-  await Product.findByIdAndUpdate(productId, {
-    averageRating: parseFloat(averageRating.toFixed(1)),
-    totalReviews: reviews.length
-  });
+  const stats = reviews.length === 0
+    ? { averageRating: 0, totalReviews: 0 }
+    : {
+        averageRating: parseFloat((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)),
+        totalReviews: reviews.length,
+      };
+
+  const product = await Product.findByIdAndUpdate(productId, stats, { new: true }).select('slug');
+
+  // 'reviews' clears review lists/summaries; 'products' clears product caches
+  // whose payload carries the (now-changed) averageRating.
+  invalidateCache('reviews', 'products');
+  revalidateFrontendTags(['home:testimonials', ...(product?.slug ? [`product:${product.slug}`] : [])]);
 };
 
 // @route   GET /reviews/products/:productId
 // @desc    Get all approved reviews for a product with filtering and sorting
 // @access  Public
-router.get("/products/:productId", validateRouteProductId, asyncHandler(async (req, res) => {
+router.get("/products/:productId", validateRouteProductId, httpCache('REVIEWS_PRODUCT'), asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, sortBy = "createdAt", order = "desc", minRating, maxRating, hasImages } = req.query;
   const productId = req.params.productId;
 
@@ -109,7 +114,7 @@ router.get("/products/:productId", validateRouteProductId, asyncHandler(async (r
 // @route   GET /reviews/products/:productId/summary
 // @desc    Get review summary for a product
 // @access  Public
-router.get("/products/:productId/summary", validateRouteProductId, asyncHandler(async (req, res) => {
+router.get("/products/:productId/summary", validateRouteProductId, httpCache('REVIEWS_SUMMARY'), asyncHandler(async (req, res) => {
   const productId = req.params.productId;
 
   // Get all approved reviews for this product
@@ -162,7 +167,7 @@ router.get("/products/:productId/summary", validateRouteProductId, asyncHandler(
 // @route   GET /reviews/testimonials
 // @desc    Approved reviews flagged as testimonials, for the homepage (across all products)
 // @access  Public
-router.get("/testimonials", asyncHandler(async (req, res) => {
+router.get("/testimonials", httpCache('TESTIMONIALS'), asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 12, 50);
 
   const reviews = await reviewRepository.find({ isTestimonial: true, isApproved: true })
@@ -560,6 +565,11 @@ router.put("/:reviewId/testimonial", protect, admin, validateReviewIdParam, asyn
   if (!review) {
     return res.status(404).json({ success: false, message: "Review not found" });
   }
+
+  // Toggling testimonial status doesn't change ratings (so it skips the central
+  // hook), but it does change the testimonials list on the home page.
+  invalidateCache('reviews');
+  revalidateFrontendTags(['home:testimonials']);
 
   res.json({
     success: true,

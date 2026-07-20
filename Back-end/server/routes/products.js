@@ -14,8 +14,8 @@ import {
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
-import { cacheMiddleware } from "../middleware/cacheControl.js";
-import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
+import { httpCache } from "../middleware/httpCache.js";
+import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import {
   uploadMultiple,
   handleMulterError,
@@ -89,7 +89,7 @@ const publicProductRateLimit = rateLimit({
 // @desc    Get all products with filtering, sorting, and pagination
 // @access  Public
 // CRITICAL: Layered rate limiting for search (broad IP cap → burst → sustained)
-router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, cacheMiddleware('product-listing'), publicCacheResponse('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
+router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, httpCache('PRODUCT_LIST'), validateProductSearch, asyncHandler(getProducts));
 
 // @route   GET /products/admin/list
 // @desc    Admin product-management list: includes INACTIVE products, honours a
@@ -108,7 +108,7 @@ router.get("/facets", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit
 // @desc    Get search suggestions
 // @access  Public
 // CRITICAL: Rate limit search suggestions (autocomplete fires on every keystroke)
-router.get("/suggestions", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, publicCacheResponse('PRODUCT_SEARCH'), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
+router.get("/suggestions", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, httpCache('PRODUCT_SEARCH'), validateSearchSuggestions, asyncHandler(getSearchSuggestions));
 
 // @route   GET /products/analytics
 // @desc    Get search analytics
@@ -118,7 +118,7 @@ router.get("/analytics", protect, admin, validateSearchAnalytics, asyncHandler(g
 // @route   GET /products/history
 // @desc    Get search history
 // @access  Public
-router.get("/history", validateSearchHistory, publicCacheResponse('PRODUCT_HISTORY'), asyncHandler(getSearchHistory));
+router.get("/history", validateSearchHistory, httpCache('PRODUCT_HISTORY'), asyncHandler(getSearchHistory));
 
 // @route   DELETE /products/history
 // @desc    Clear search history
@@ -133,12 +133,12 @@ router.delete("/history/:term", validateSearchTermParam, asyncHandler(removeSear
 // @route   GET /products/featured
 // @desc    Get featured products
 // @access  Public
-router.get("/featured", publicProductRateLimit, publicCacheResponse('PRODUCT_FEATURED'), asyncHandler(getFeaturedProducts));
+router.get("/featured", publicProductRateLimit, httpCache('PRODUCT_FEATURED'), asyncHandler(getFeaturedProducts));
 
 // @route   GET /products/offers
 // @desc    Get products to showcase on Offers page
 // @access  Public
-router.get("/offers", publicCacheResponse('PRODUCT_OFFERS'), asyncHandler(getOfferProducts));
+router.get("/offers", httpCache('PRODUCT_OFFERS'), asyncHandler(getOfferProducts));
 
 // @route   GET /products/sitemap?limit=250&page=1
 // @desc    Lightweight slug+updatedAt list for sitemap generation (indexable only)
@@ -170,12 +170,12 @@ router.get('/by-vehicle/:vehicleId', asyncHandler(getProductsByVehicle));
 // @route   GET /products/brands
 // @desc    Get all available brands
 // @access  Public
-router.get('/brands', publicProductRateLimit, publicCacheResponse('PRODUCT_BRANDS'), asyncHandler(getBrands));
+router.get('/brands', publicProductRateLimit, httpCache('PRODUCT_BRANDS'), asyncHandler(getBrands));
 
 // @route   GET /products/brands/:brandName
 // @desc    Get products for a specific brand
 // @access  Public
-router.get('/brands/:brandName', publicProductRateLimit, publicCacheResponse('PRODUCT_BRANDS'), asyncHandler(getBrandProducts));
+router.get('/brands/:brandName', publicProductRateLimit, httpCache('PRODUCT_BRANDS'), asyncHandler(getBrandProducts));
 
 // @route   GET /products/brands/:brandName/details
 // @desc    Get details for a specific brand
@@ -256,7 +256,7 @@ router.get("/cleanup/status", protect, admin, asyncHandler(getCleanupStatus));
 // @route   GET /products/slug/:slug
 // @desc    Get product by slug (SEO-friendly canonical URL)
 // @access  Public
-router.get("/slug/:slug", cacheMiddleware('product-detail'), publicCacheResponse('PRODUCT_DETAIL'), asyncHandler(getProductBySlug));
+router.get("/slug/:slug", httpCache('PRODUCT_DETAIL'), asyncHandler(getProductBySlug));
 
 // @route   GET /products/batch?ids=id1,id2,id3
 // @desc    Fetch multiple products by ID in one request (used by compare page)
@@ -294,7 +294,7 @@ router.get("/:id/admin-fetch", protect, admin, validateProductIdParam, asyncHand
 // @route   GET /products/:id
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing
 // @access  Public
-router.get("/:id", validateProductIdParam, publicCacheResponse('PRODUCT_DETAIL'), asyncHandler(async (req, res) => {
+router.get("/:id", validateProductIdParam, httpCache('PRODUCT_DETAIL'), asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id).select('slug').lean();
 
   if (!product) {
@@ -314,12 +314,12 @@ router.get("/:id", validateProductIdParam, publicCacheResponse('PRODUCT_DETAIL')
 // @route   GET /products/:id/similar
 // @desc    Get products similar to the specified product (same category/brand/tags)
 // @access  Public
-router.get('/:id/similar', validateProductIdParam, publicProductRateLimit, publicCacheResponse('PRODUCT_SIMILAR'), asyncHandler(getSimilarProducts));
+router.get('/:id/similar', validateProductIdParam, publicProductRateLimit, httpCache('PRODUCT_SIMILAR'), asyncHandler(getSimilarProducts));
 
 // @route   GET /products/:id/complementary
 // @desc    Get complementary products (commonly bought together)
 // @access  Public
-router.get('/:id/complementary', validateProductIdParam, publicProductRateLimit, publicCacheResponse('PRODUCT_COMPLEMENTARY'), asyncHandler(getComplementaryProducts));
+router.get('/:id/complementary', validateProductIdParam, publicProductRateLimit, httpCache('PRODUCT_COMPLEMENTARY'), asyncHandler(getComplementaryProducts));
 
 // @route   POST /products
 // @desc    Create a new product (supports multipart/form-data with images)
@@ -347,20 +347,12 @@ router.put(
   uploadMultiple('images', 8),
   handleMulterError,
   validateUploadedFiles,
-  asyncHandler(updateProductWithImages),
-  // Invalidate product detail and list cache after update.
-  // updateProductWithImages has already sent the response; this runs as a
-  // terminal side-effect and must NOT call next() — doing so would fall through
-  // to the 404 notFound handler and race the buffered response.
-  asyncHandler(async (req) => {
-    try {
-      await invalidatePublicCache(`PRODUCT_DETAIL:*${req.params.id}*`);
-      await invalidatePublicCache('PRODUCT_LIST*');
-      console.log(`[Cache] Invalidated product caches for ${req.params.id}`);
-    } catch (error) {
-      console.warn('[Cache] Failed to invalidate product cache:', error.message);
-    }
-  })
+  // Cache invalidation happens inside updateProductWithImages via
+  // invalidateCache('products'), whose glob matches every product cache key
+  // (public:products:*, route:products:*, v2:products:list:*). The old
+  // route-level hook here used PRODUCT_DETAIL:*/PRODUCT_LIST* patterns that
+  // never matched the real md5 keys — a silent no-op.
+  asyncHandler(updateProductWithImages)
 );
 
 // @route   DELETE /products/:id
@@ -407,16 +399,16 @@ router.post(
   admin,
   validateStockUpdate,
   asyncHandler(updateStock),
-  // Invalidate product detail cache after stock update
-  asyncHandler(async (req, res, next) => {
-    try {
-      await invalidatePublicCache(`PRODUCT_DETAIL:*${req.params.id}*`);
-      console.log(`[Cache] Invalidated product detail cache for ${req.params.id}`);
-    } catch (error) {
-      console.warn('[Cache] Failed to invalidate product cache:', error.message);
-    }
-    next();
-  })
+  // Invalidate all product caches after a stock update. updateStock does no
+  // invalidation itself, so this hook is the only flush on this path. The
+  // 'products' substring glob reaches public:products:*, route:products:* and
+  // the controller-level v2:products:list:* keys (the old PRODUCT_DETAIL:*
+  // pattern matched nothing — stock changes served stale until TTL).
+  // Terminal side-effect: updateStock already sent the response; calling
+  // next() here would fall through to the 404 handler and race the response.
+  () => {
+    invalidatePublicCache('products');
+  }
 );
 
 export default router;

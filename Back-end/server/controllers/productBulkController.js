@@ -16,6 +16,7 @@ import { parse } from 'csv-parse/sync';
 import Product from '../models/Product.js';
 import categoryMappingService from '../services/categoryMappingService.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
 import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
 
 const slugify = (s) => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -110,7 +111,10 @@ export const importProductsCSV = async (req, res) => {
     }
   }
 
-  if (results.created > 0) invalidateCache('products');
+  if (results.created > 0) {
+    invalidateCache('products');
+    revalidateFrontendTags(['home:products']);
+  }
 
   res.status(results.failed === 0 ? 201 : 207).json({
     success: results.failed === 0,

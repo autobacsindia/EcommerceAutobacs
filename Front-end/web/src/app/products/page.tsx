@@ -1,15 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { SlidersHorizontal, X } from 'lucide-react';
 import ProductFetchError from '@/components/products/ProductFetchError';
 import Pagination from '@/components/layout/Pagination';
-import apiClient, { ApiError, ErrorCategory } from '@/lib/api';
 import { trackViewItemList } from '@/lib/analytics';
-import type { Product, Pagination as PaginationType } from '@/lib/types';
+import { useProducts } from '@/hooks/queries/useProducts';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
@@ -18,68 +17,9 @@ import ActiveFilters from '@/components/products/redesign/ActiveFilters';
 
 const Filters = dynamic(() => import('@/components/products/redesign/Filters'), { ssr: false });
 
-interface ProductsData {
-  products: Product[];
-  pagination: PaginationType;
-}
-
-const SORTS: Record<string, { sortBy: string; order: string }> = {
-  price_asc: { sortBy: 'price', order: 'asc' },
-  price_desc: { sortBy: 'price', order: 'desc' },
-  name_asc: { sortBy: 'name', order: 'asc' },
-  rating_desc: { sortBy: 'averageRating', order: 'desc' },
-  createdAt_desc: { sortBy: 'createdAt', order: 'desc' },
-};
-
-async function getProducts(searchParams: Record<string, string>, retries = 3): Promise<ProductsData> {
-  let lastError: unknown;
-  const passthrough = [
-    'category', 'search', 'page', 'minPrice', 'maxPrice', 'inStock',
-    'isFeatured', 'isFastMoving', 'rating', 'vehicleMake', 'vehicleModel', 'brand',
-  ];
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const q = new URLSearchParams();
-      passthrough.forEach((k) => { if (searchParams[k]) q.append(k, searchParams[k]); });
-      if (searchParams.showAll === 'true') q.append('limit', '500');
-      const sort = SORTS[searchParams.sort ?? 'createdAt_desc'] ?? SORTS.createdAt_desc;
-      q.append('sortBy', sort.sortBy);
-      q.append('order', sort.order);
-
-      const data = await apiClient.get<Record<string, unknown> & { products?: Product[] }>(
-        `/products?${q.toString()}`
-      );
-      if (data && data.products) {
-        const { total, pages, currentPage, hasNext, hasPrev, count } = data as Record<string, number | boolean>;
-        return {
-          products: data.products,
-          pagination: { total, pages, currentPage, hasNext, hasPrev, count } as PaginationType,
-        };
-      }
-      return { products: [], pagination: {} };
-    } catch (error: unknown) {
-      lastError = error;
-      if (attempt === retries) {
-        if (error instanceof ApiError && (error.category === ErrorCategory.NETWORK || error.status === 0)) {
-          throw new Error('Unable to connect to the server. Please try again shortly.');
-        }
-        throw error;
-      }
-      const base = error instanceof ApiError && error.category === ErrorCategory.SERVER ? 2000 : 1000;
-      const delay = Math.pow(2, attempt) * base * (0.8 + Math.random() * 0.4);
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-  throw lastError;
-}
-
 function ProductsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
@@ -87,29 +27,26 @@ function ProductsPageInner() {
   const isFeatured = searchParams.get('isFeatured') === 'true';
   const isFastMoving = searchParams.get('isFastMoving') === 'true';
 
+  const resolved = Object.fromEntries(searchParams.entries());
+  const { data = { products: [], pagination: {} }, isPending, isError, error } = useProducts(resolved);
+  // isPending is true only on the very first load for a given key; with
+  // keepPreviousData a filter/sort/page change keeps the old grid up (no
+  // skeleton flash) while the next page fetches.
+  const loading = isPending;
+
+  // Fire the analytics list-view event once per distinct successful result set.
+  const lastTrackedKey = useRef<string>('');
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const resolved = Object.fromEntries(searchParams.entries());
-        const result = await getProducts(resolved);
-        if (!mounted) return;
-        setData(result);
-        trackViewItemList({
-          listType: resolved.search ? 'search' : (resolved.category || resolved.brand) ? 'category' : 'all',
-          listName: resolved.search || resolved.category || resolved.brand,
-          itemCount: result.products.length,
-        });
-      } catch (err) {
-        if (mounted) setError(err as Error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [searchParams]);
+    if (isPending || isError) return;
+    const key = JSON.stringify(resolved);
+    if (lastTrackedKey.current === key) return;
+    lastTrackedKey.current = key;
+    trackViewItemList({
+      listType: resolved.search ? 'search' : (resolved.category || resolved.brand) ? 'category' : 'all',
+      listName: resolved.search || resolved.category || resolved.brand,
+      itemCount: data.products.length,
+    });
+  }, [resolved, data.products.length, isPending, isError]);
 
   const setSort = (value: string) => {
     const p = new URLSearchParams(searchParams.toString());
@@ -188,7 +125,7 @@ function ProductsPageInner() {
             </div>
 
             {/* Error */}
-            {error && !loading && <ProductFetchError onRetry={() => router.refresh()} error={error} />}
+            {isError && <ProductFetchError onRetry={() => router.refresh()} error={error as Error} />}
 
             {/* Loading */}
             {loading && (
@@ -207,7 +144,7 @@ function ProductsPageInner() {
             )}
 
             {/* Grid */}
-            {!loading && !error && data.products.length > 0 && (
+            {!loading && !isError && data.products.length > 0 && (
               <>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
                   {data.products.map((p, i) => (
@@ -230,7 +167,7 @@ function ProductsPageInner() {
             )}
 
             {/* Empty */}
-            {!loading && !error && data.products.length === 0 && (
+            {!loading && !isError && data.products.length === 0 && (
               <div className="border border-hairline py-20 text-center">
                 <p className="mb-4 font-display text-[15px] font-light text-ink-muted">
                   No products match your filters.

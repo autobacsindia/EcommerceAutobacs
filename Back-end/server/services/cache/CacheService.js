@@ -1,5 +1,11 @@
 import { CACHE_VERSION, CACHE_CONFIG } from './config.js';
 import { redisClient } from './redisClient.js';
+import { flushResponseCaches } from './flush.js';
+import { addKeyToTags, invalidateTags as invalidateRedisTags, MAX_TAGGED_TTL } from './tagIndex.js';
+
+// A cache TTL larger than this almost always means milliseconds were passed to
+// a seconds API (the ×1000 bug fixed in Phase 0). Warn loudly.
+const SUSPICIOUS_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 class CacheService {
   constructor() {
@@ -93,10 +99,25 @@ class CacheService {
     }
   }
 
+  /**
+   * @param {string} key
+   * @param {*} value
+   * @param {number} ttl  TTL in SECONDS (fed straight to Redis `EX`). Passing
+   *   milliseconds is the classic ×1000 bug — a dev-mode guard warns on it.
+   * @param {string[]} [tags]  invalidation tags (registered in the Redis tag index)
+   */
   async set(key, value, ttl = 300, tags = []) {
+    if (ttl > SUSPICIOUS_TTL_SECONDS) {
+      console.warn(`[CacheService] Suspicious TTL ${ttl}s for '${key}' — expected seconds, did you pass milliseconds?`);
+    } else if (tags.length > 0 && ttl > MAX_TAGGED_TTL) {
+      // Beyond this the tag index may expire before the entry, leaving it
+      // un-invalidatable until its own TTL. Cap noisy rather than silently wrong.
+      console.warn(`[CacheService] Tagged TTL ${ttl}s for '${key}' exceeds tag-index lifetime (${MAX_TAGGED_TTL}s); invalidation past that window is not guaranteed.`);
+    }
     try {
       if (redisClient) {
         await redisClient.set(key, JSON.stringify(value), 'EX', ttl);
+        if (tags.length > 0) await addKeyToTags(key, tags);
       } else {
         this.cache.set(key, { value, expiry: Date.now() + (ttl * 1000) });
       }
@@ -151,6 +172,31 @@ class CacheService {
     console.log(`[CacheService] Invalidating tag '${tag}': ${keys.size} keys`);
     await Promise.all(Array.from(keys).map(key => this.delete(key)));
     this.metrics.tagInvalidations++;
+  }
+
+  /**
+   * Invalidate every cache key filed under any of the given tags. This is the
+   * one public invalidation API for the unified cache layer (httpCache +
+   * cacheProfiles). Uses the Redis tag index in prod; falls back to the
+   * in-memory tagMap when REDIS_URL is unset (dev/tests).
+   * @param {...string} tags
+   * @returns {Promise<number>} count of cache keys removed
+   */
+  async invalidateTags(...tags) {
+    if (!tags.length) return 0;
+    this.metrics.tagInvalidations++;
+    if (redisClient) {
+      return invalidateRedisTags(...tags);
+    }
+    let removed = 0;
+    for (const tag of tags) {
+      const keys = this.tagMap.get(tag);
+      if (!keys) continue;
+      const snapshot = Array.from(keys);
+      await Promise.all(snapshot.map(key => this.delete(key)));
+      removed += snapshot.length;
+    }
+    return removed;
   }
 
   async invalidatePattern(pattern) {
@@ -461,6 +507,35 @@ class CacheService {
       region: this.regionId,
       timestamp: new Date().toISOString()
     };
+  }
+
+  // Alias used by routes/redisMonitor.js (/admin/redis/stats and /metrics),
+  // which historically called a getStats() that never existed — the admin
+  // dashboard's cache section rendered empty.
+  getStats() {
+    return this.getMetrics();
+  }
+
+  /**
+   * Clear every response-cache namespace (route:*, public:*, v2:*,
+   * delivery-zones:*). Sessions and rate limits are untouched. Backs the
+   * admin POST /admin/redis/cache/clear endpoint, which returned 501 before
+   * this existed. Same SCAN+UNLINK core as scripts/flush-public-cache.js.
+   * @returns {Promise<{total: number, perPattern?: Record<string, number>}>}
+   */
+  async clear() {
+    if (redisClient) {
+      const result = await flushResponseCaches(redisClient);
+      this.metrics.deletes += result.total;
+      return result;
+    }
+    const total = this.cache.size;
+    this.cache.clear();
+    this.tagMap.clear();
+    this.keyTags.clear();
+    this.tagExpiry.clear();
+    this.metrics.deletes += total;
+    return { total };
   }
 
   exportMetricsPeriodically() {

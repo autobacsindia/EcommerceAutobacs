@@ -22,7 +22,9 @@ const DEFAULT_OG = `${SITE_URL}/og-image.jpg`;
 async function fetchPageSeo(path: string): Promise<SeoOverrides | null> {
   try {
     const res = await fetch(`${getServerApiBase()}/page-seo?path=${encodeURIComponent(path)}`, {
-      next: { revalidate: 300 },
+      // Tagged so an admin PageSeo edit can revalidate this exact path on-demand
+      // via revalidateTag(`seo:${path}`); the 5-min TTL is the fallback.
+      next: { revalidate: 300, tags: [`seo:${path}`] },
     });
     if (!res.ok) return null;
     const data = await res.json();

@@ -13,77 +13,58 @@
 
 import productService from "../services/productService.js";
 import SearchService from "../services/searchService.js";
-import cacheService, { TTL, CACHE_VERSION, getRedisClient } from "../services/cacheService.js";
+import cacheService, { TTL, CACHE_VERSION } from "../services/cacheService.js";
+import { buildResponseKey, isCacheDisabled } from "../middleware/httpCache.js";
+import { CACHE_PROFILES, resolveTags } from "../config/cacheProfiles.js";
 
+const PRODUCT_LIST_PROFILE = CACHE_PROFILES.PRODUCT_LIST;
+
+// Public product list. Cached here (not in httpCache) because the list is a
+// 'lock' profile — CacheService.getWithLock gives single-flight stampede
+// protection so a cold cache under load fires ONE search, not N. The key is
+// built by the shared buildResponseKey so it's regional and consistent with the
+// rest of the unified cache; tags come from the profile so a product write
+// invalidates it via invalidateTags('products'). Replaces the old bespoke
+// SET-NX lock + 30×100ms poll and the un-invalidatable v2:products:list key.
 export const getProducts = async (req, res) => {
-  // CRITICAL: Add Redis caching for public product API
-  const cacheKey = `${CACHE_VERSION}:products:list:${JSON.stringify(req.query)}`;
-  
-  try {
-    // Try cache first
-    const cached = await cacheService.get(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-  } catch (cacheError) {
-    console.warn('[ProductController] Cache read failed:', cacheError.message);
-    // Continue to DB query if cache fails
-  }
-  
-  // CRITICAL: Cache stampede protection - prevent multiple DB queries for same cache key
-  try {
-    const redis = await getRedisClient();
-    const lockKey = `lock:${cacheKey}`;
-    
-    if (redis) {
-      // Try to acquire distributed lock for this cache key
-      const lock = await redis.set(lockKey, 'fetching', 'NX', 'EX', 10); // 10s lock TTL
-      
-      if (!lock) {
-        // Another request is already fetching this data - wait for it
-        console.log('[ProductController] Cache stampede detected, waiting for other request...');
-        
-        // Wait up to 3 seconds for cache to be populated
-        for (let i = 0; i < 30; i++) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          const cached = await cacheService.get(cacheKey);
-          if (cached) {
-            console.log('[ProductController] Cache populated by other request, returning cached data');
-            return res.json(cached);
-          }
-        }
-        
-        // Timeout - proceed with DB query anyway
-        console.warn('[ProductController] Cache wait timeout, proceeding with DB query');
-      }
-    }
-    
-    // Cache miss - query database (only one request should reach here per cache key)
+  const fetchList = async () => {
     const searchResults = await SearchService.searchProducts(req.query);
-    
-    const responseData = {
+    return {
       success: true,
       count: searchResults.products.length,
       ...searchResults.pagination,
       products: searchResults.products,
-      facets: searchResults.facets
+      facets: searchResults.facets,
     };
-    
-    // Cache for 5 minutes (PRODUCT_LIST TTL)
-    try {
-      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
-    } catch (cacheError) {
-      console.warn('[ProductController] Cache write failed:', cacheError.message);
-      // Don't fail request if cache write fails
+  };
+
+  try {
+    if (isCacheDisabled()) {
+      return res.json(await fetchList());
     }
-    
+
+    const cacheKey = buildResponseKey(req, PRODUCT_LIST_PROFILE);
+    const cached = await cacheService.get(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      return res.json(cached);
+    }
+
+    res.setHeader('X-Cache', 'MISS');
+    const tags = resolveTags(PRODUCT_LIST_PROFILE, req);
+    const responseData = await cacheService.getWithLock(
+      cacheKey,
+      fetchList,
+      PRODUCT_LIST_PROFILE.ttl,
+      tags,
+    );
     res.json(responseData);
   } catch (error) {
     console.error('[ProductController] Error in getProducts:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -136,7 +117,7 @@ export const getProductFacets = async (req, res) => {
     const facets = await SearchService.getFacets(req.query);
     const responseData = { success: true, facets };
     try {
-      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
+      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST, ['products']);
     } catch (cacheError) {
       console.warn('[ProductController] Facet cache write failed:', cacheError.message);
     }
@@ -348,7 +329,7 @@ export const getSimilarProducts = async (req, res) => {
     
     // Cache for 5 minutes
     try {
-      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
+      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST, ['products']);
     } catch (cacheError) {
       console.warn('[ProductController] Similar products cache write failed:', cacheError.message);
       // Don't fail request if cache write fails
@@ -426,7 +407,7 @@ export const getComplementaryProducts = async (req, res) => {
     
     // Cache for 5 minutes
     try {
-      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST);
+      await cacheService.set(cacheKey, responseData, TTL.PRODUCT_LIST, ['products']);
     } catch (cacheError) {
       console.warn('[ProductController] Complementary products cache write failed:', cacheError.message);
       // Don't fail request if cache write fails
