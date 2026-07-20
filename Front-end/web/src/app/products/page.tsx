@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { SlidersHorizontal, X } from 'lucide-react';
@@ -27,26 +27,29 @@ function ProductsPageInner() {
   const isFeatured = searchParams.get('isFeatured') === 'true';
   const isFastMoving = searchParams.get('isFastMoving') === 'true';
 
-  const resolved = Object.fromEntries(searchParams.entries());
-  const { data = { products: [], pagination: {} }, isPending, isError, error } = useProducts(resolved);
+  // Stable per URL so it doesn't churn the query key / effect on every render.
+  const spString = searchParams.toString();
+  const resolved = useMemo(() => Object.fromEntries(new URLSearchParams(spString)), [spString]);
+  const { data = { products: [], pagination: {} }, isPending, isError, isSuccess, isPlaceholderData, error } = useProducts(resolved);
   // isPending is true only on the very first load for a given key; with
   // keepPreviousData a filter/sort/page change keeps the old grid up (no
   // skeleton flash) while the next page fetches.
   const loading = isPending;
 
-  // Fire the analytics list-view event once per distinct successful result set.
+  // Fire the analytics list-view event once per distinct params — but only when
+  // the data is FRESH for those params, not the keepPreviousData placeholder
+  // from the prior query (otherwise itemCount would be the previous page's).
   const lastTrackedKey = useRef<string>('');
   useEffect(() => {
-    if (isPending || isError) return;
-    const key = JSON.stringify(resolved);
-    if (lastTrackedKey.current === key) return;
-    lastTrackedKey.current = key;
+    if (!isSuccess || isPlaceholderData) return;
+    if (lastTrackedKey.current === spString) return;
+    lastTrackedKey.current = spString;
     trackViewItemList({
       listType: resolved.search ? 'search' : (resolved.category || resolved.brand) ? 'category' : 'all',
       listName: resolved.search || resolved.category || resolved.brand,
       itemCount: data.products.length,
     });
-  }, [resolved, data.products.length, isPending, isError]);
+  }, [spString, resolved, data.products.length, isSuccess, isPlaceholderData]);
 
   const setSort = (value: string) => {
     const p = new URLSearchParams(searchParams.toString());

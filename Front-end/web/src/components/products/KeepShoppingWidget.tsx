@@ -6,7 +6,7 @@ import apiClient from '@/lib/api';
 import { useCurrency } from '@/context/CurrencyContext';
 import ProductImage from '@/components/products/ProductImage';
 import { productUrl } from '@/lib/types';
-import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
+import { useQuery } from '@tanstack/react-query';
 
 interface ProductImageType {
   url: string;
@@ -46,14 +46,10 @@ export default function KeepShoppingWidget({
 }: KeepShoppingWidgetProps) {
   const { formatPrice } = useCurrency();
 
-  const cacheKey = categorySlug
-    ? `products_category_widget_${encodeURIComponent(categorySlug)}`
-    : CACHE_KEYS.PRODUCTS_SEARCH(searchKeyword);
-
-  // Fetch products with global cache service
-  const { data: products, loading, error: productsError } = useCachedData<Product[]>(
-    cacheKey,
-    async () => {
+  // Fetch the widget's products via TanStack Query (was the hand-rolled cache).
+  const { data: products = [], isLoading: loading, error: productsError } = useQuery<Product[]>({
+    queryKey: ['products', 'widget', categorySlug ? { category: categorySlug } : { search: searchKeyword }],
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (categorySlug) {
         params.append('category', categorySlug);
@@ -67,8 +63,8 @@ export default function KeepShoppingWidget({
       const response: any = await apiClient.get(`/products?${params.toString()}`);
       return response.products?.slice(0, 4) || [];
     },
-    60 * 60 * 1000 // 1 hour
-  );
+    staleTime: 60 * 60 * 1000, // 1 hour
+  });
 
   // Loading skeleton
   if (loading) {

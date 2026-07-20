@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { User, Shield, MapPin, Edit, X, Plus, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
-import { UserProfile, Address } from '@/lib/types';
+import { profileKeys } from '@/hooks/queries/keys';
+import { Address } from '@/lib/types';
 import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 
@@ -17,14 +19,29 @@ const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercas
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const router = useRouter();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<{
-    isVerified: boolean;
-    email: string;
-    verifiedAt?: string;
-  } | null>(null);
+
+  // Profile + verification fire together (gated on auth) instead of the old
+  // auth-resolves-then-Promise.all waterfall; TanStack Query dedupes/caches them.
+  const enabled = isAuthenticated && !!user;
+  const { data: profile = null, isPending, error: profileError } = useQuery({
+    queryKey: profileKeys.me(),
+    queryFn: () => profileService.getProfile(),
+    enabled,
+  });
+  const { data: verificationStatus = null } = useQuery({
+    queryKey: profileKeys.verification(),
+    queryFn: async () => {
+      const v = await apiClient
+        .get<{ success: boolean; isVerified: boolean; email: string; verifiedAt?: string }>('/auth/verification-status')
+        .catch(() => ({ success: false, isVerified: false, email: '', verifiedAt: undefined }));
+      return v.success ? { isVerified: v.isVerified, email: v.email, verifiedAt: v.verifiedAt } : null;
+    },
+    enabled,
+  });
+  // Loading until auth resolves AND the profile has loaded.
+  const loading = !enabled || isPending;
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -50,49 +67,20 @@ export default function ProfilePage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  // Seed the edit form from the loaded profile — but never clobber in-progress
+  // edits, so a background refetch while editing is harmless.
   useEffect(() => {
-    if (isAuthenticated && user) {
-      loadProfileData();
+    if (profile && !editing) {
+      setFormData({ name: profile.name, email: profile.email, addresses: profile.addresses });
     }
-  }, [isAuthenticated, user]);
+  }, [profile, editing]);
 
-  const loadProfileData = async () => {
-    try {
-      setLoading(true);
-      if (!isAuthenticated || !user) {
-        router.push('/login');
-        return;
-      }
-      const [profileData, verificationData] = await Promise.all([
-        profileService.getProfile(),
-        apiClient.get<{
-          success: boolean;
-          isVerified: boolean;
-          email: string;
-          verifiedAt?: string;
-        }>('/auth/verification-status').catch(() => ({ success: false, isVerified: false, email: '', verifiedAt: undefined }))
-      ]);
-      setProfile(profileData);
-      if (verificationData.success) {
-        setVerificationStatus({
-          isVerified: verificationData.isVerified,
-          email: verificationData.email,
-          verifiedAt: verificationData.verifiedAt
-        });
-      }
-      setFormData({
-        name: profileData.name,
-        email: profileData.email,
-        addresses: profileData.addresses
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('Not authorized')) {
-        router.push('/login?reason=auth_failed');
-      }
-    } finally {
-      setLoading(false);
+  // Preserve the old auth-failure redirect (the profile query surfaces it as an error).
+  useEffect(() => {
+    if (profileError instanceof Error && profileError.message.includes('Not authorized')) {
+      router.push('/login?reason=auth_failed');
     }
-  };
+  }, [profileError, router]);
 
   const handleEdit = () => setEditing(true);
 
@@ -104,7 +92,7 @@ export default function ProfilePage() {
   const handleSave = async () => {
     try {
       const updatedProfile = await profileService.updateProfile(formData);
-      setProfile(updatedProfile);
+      queryClient.setQueryData(profileKeys.me(), updatedProfile);
       setEditing(false);
     } catch (error) {
       console.error('Error updating profile:', error);

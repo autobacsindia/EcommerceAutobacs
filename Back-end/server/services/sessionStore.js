@@ -601,22 +601,24 @@ class SessionStore {
       
       // Count session keys with non-blocking SCAN — KEYS blocks the shared
       // cache/session instance and is O(keyspace) per admin stats call.
-      // Iterations are capped so a huge keyspace can't hammer Upstash.
-      let sessionKeyCount = 0;
+      // Iterations are capped so a huge keyspace can't hammer Upstash. Keys are
+      // deduped via a Set: SCAN may return the same key across iterations
+      // (especially during rehashing), so summing lengths would over-count.
+      const sessionKeys = new Set();
       let cursor = '0';
       let iterations = 0;
       const MAX_SCAN_ITERATIONS = 100; // 100 × COUNT 500 = up to 50k keys examined
       do {
         const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', 'session:*', 'COUNT', 500);
         cursor = nextCursor;
-        sessionKeyCount += keys.length;
+        for (const k of keys) sessionKeys.add(k);
         iterations++;
       } while (cursor !== '0' && iterations < MAX_SCAN_ITERATIONS);
       if (cursor !== '0') {
         stats.sessionKeysTruncated = true;
       }
-      stats.sessionKeys = sessionKeyCount;
-      stats.totalKeys = sessionKeyCount;
+      stats.sessionKeys = sessionKeys.size;
+      stats.totalKeys = sessionKeys.size;
       
       return stats;
     } catch (err) {

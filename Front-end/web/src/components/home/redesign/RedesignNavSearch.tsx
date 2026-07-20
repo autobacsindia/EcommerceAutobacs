@@ -137,15 +137,22 @@ export default function RedesignNavSearch({
         // Routed through the shared QueryClient so an already-typed term (e.g.
         // the user backspacing and retyping) is served from cache instead of
         // re-hitting the network. staleTime 5min; the debounce/abort below still
-        // governs when a NEW term fires.
+        // governs when a NEW term fires. A failed/empty backend response THROWS
+        // so it is never cached as a "successful" empty result (which would make
+        // a retype within 5min serve stale-empty without retrying). retry:false
+        // keeps that intentional throw from double-firing the request.
         const data = await queryClient.fetchQuery<SuggestionsResponse>({
           queryKey: suggestionKeys.query(q),
-          queryFn: () =>
-            apiClient.get<SuggestionsResponse>(
+          queryFn: async () => {
+            const res = await apiClient.get<SuggestionsResponse>(
               `/products/suggestions?q=${encodeURIComponent(q)}&limit=${SUGGESTION_LIMIT}`,
               { signal: controller.signal },
-            ),
+            );
+            if (!res?.success) throw new Error('suggestions unavailable');
+            return res;
+          },
           staleTime: 300_000,
+          retry: false,
         });
         if (data?.success) {
           setSuggestions(data.suggestions || []);

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '@/lib/api';
 import { VehicleSelectorSkeleton } from '@/components/skeletons/VehicleSelectorSkeleton';
-import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
+import { useVehicleMakes } from '@/hooks/queries/useVehicleMakes';
 
 interface VehicleMake {
   _id: string;
@@ -33,19 +33,9 @@ export default function VehicleSelector({
     onVehicleSelectRef.current = onVehicleSelect;
   });
 
-  // Fetch vehicle makes — shared with HeaderVehicleSelector via in-memory cache + in-flight dedup
-  const { data: makes, loading, error: makesError } = useCachedData<VehicleMake[]>(
-    CACHE_KEYS.VEHICLE_MAKES,
-    async () => {
-      const response: any = await apiClient.get('/vehicles/makes');
-      return response.makes.map((make: string) => ({
-        _id: make,
-        name: make,
-        slug: make.toLowerCase().replace(/\s+/g, '-')
-      }));
-    },
-    24 * 60 * 60 * 1000 // 24 hours
-  );
+  // Shared vehicle-makes query — deduped with HeaderVehicleSelector / the home
+  // menu via the ['vehicles','makes'] TanStack Query key.
+  const { data: makes, isLoading: loading, error: makesError } = useVehicleMakes();
 
   const error = makesError ? 'Failed to load vehicle makes' : null;
 

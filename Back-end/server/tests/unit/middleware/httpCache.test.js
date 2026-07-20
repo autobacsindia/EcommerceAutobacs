@@ -149,6 +149,34 @@ describe('httpCache Cache-Control header', () => {
     await run(mw, makeReq(), res, { categories: [] });
     expect(res.getHeader('Cache-Control')).toMatch(/no-store/);
   });
+
+  it('downgrades a lock-profile response to private when it sets a cookie', async () => {
+    // Regression: /products (PRODUCT_LIST = lock) used to emit the public
+    // s-maxage header alongside a Set-Cookie CSRF token — a shared-cache leak.
+    process.env.NODE_ENV = 'production';
+    const mw = httpCache('PRODUCT_LIST');
+    const res = makeRes();
+    // Simulate the controller: sets X-Cache itself, and the CSRF middleware has
+    // stamped a Set-Cookie earlier in the chain.
+    await new Promise((resolve) => mw(makeReq({ originalUrl: '/api/v1/products' }), res, resolve));
+    expect(res.getHeader('Cache-Control')).toBe('public, max-age=300, s-maxage=600'); // optimistic
+    res.setHeader('Set-Cookie', 'XSRF-TOKEN=abc');
+    res.setHeader('X-Cache', 'MISS');
+    res.json({ success: true, products: [] });
+    expect(res.getHeader('Cache-Control')).toMatch(/private, no-store/);
+    expect(res.getHeader('X-Cache')).toBe('MISS'); // controller's value preserved
+  });
+
+  it('keeps the public header for a lock-profile response with no cookie', async () => {
+    process.env.NODE_ENV = 'production';
+    const mw = httpCache('PRODUCT_LIST');
+    const res = makeRes();
+    await new Promise((resolve) => mw(makeReq({ originalUrl: '/api/v1/products' }), res, resolve));
+    res.setHeader('X-Cache', 'HIT');
+    res.json({ success: true, products: [] });
+    expect(res.getHeader('Cache-Control')).toBe('public, max-age=300, s-maxage=600');
+    expect(res.getHeader('X-Cache')).toBe('HIT');
+  });
 });
 
 describe('buildResponseKey', () => {

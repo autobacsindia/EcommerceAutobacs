@@ -117,7 +117,7 @@ class CacheService {
     try {
       if (redisClient) {
         await redisClient.set(key, JSON.stringify(value), 'EX', ttl);
-        if (tags.length > 0) await addKeyToTags(key, tags);
+        if (tags.length > 0) await addKeyToTags(key, tags, ttl);
       } else {
         this.cache.set(key, { value, expiry: Date.now() + (ttl * 1000) });
       }

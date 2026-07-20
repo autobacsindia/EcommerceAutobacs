@@ -1,0 +1,69 @@
+# Dependabot — proactive dependency version updates.
+#
+# This file drives scheduled VERSION updates (keeps deps fresh). The more
+# important SECURITY updates + vulnerability alerts are enabled separately in
+# GitHub → Settings → Code security (no file needed) and directly patch CVEs.
+#
+# PRs target `develop` to match the two-tier flow (develop → test → main), so a
+# dependency bump rides the same CI + soak path as any other change. (Note:
+# Dependabot *security* auto-fix PRs always target the default branch `main`.)
+#
+# Updates are grouped by app so you get one PR per app per week, not dozens.
+version: 2
+updates:
+  # ── Backend (Express API) ────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/Back-end/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    target-branch: "develop"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      backend-deps:
+        # One PR for all non-major bumps; majors still come as individual PRs
+        # so a breaking change is easy to review/revert in isolation.
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── Frontend (Next.js) ───────────────────────────────────────────────────
+  # NOTE: this app installs with `--legacy-peer-deps` (see .githooks/pre-push).
+  # Dependabot can't pass that flag, so an occasional frontend PR may land with
+  # a lockfile that fails `npm ci --legacy-peer-deps`. If a PR's CI fails on the
+  # lockfile, run `npm install --legacy-peer-deps` in Front-end/web on that
+  # branch and push the regenerated package-lock.json (same fix we did for the
+  # react-query add).
+  - package-ecosystem: "npm"
+    directory: "/Front-end/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    target-branch: "develop"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      frontend-deps:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── GitHub Actions (CI workflow action versions) ─────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    target-branch: "develop"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"

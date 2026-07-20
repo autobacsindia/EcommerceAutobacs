@@ -89,20 +89,25 @@ export const httpCache = (profileName) => {
 
     applyCacheHeader(res, profile);
 
-    // 'lock' profiles are cached by the controller (getWithLock); here we only
-    // own the HTTP header, so don't double-store.
-    if (profile.strategy === 'lock') return next();
+    // 'lock' profiles are cached by the controller (getWithLock), so we don't
+    // read or store here — BUT we still wrap res.json below to enforce the
+    // Set-Cookie / non-2xx header guard. Skipping that wrap (as the old code did)
+    // let /products emit `public, s-maxage` alongside a Set-Cookie CSRF token —
+    // a shared-cache token leak on the busiest route.
+    const isLock = profile.strategy === 'lock';
 
-    const key = buildResponseKey(req, profile);
-
-    try {
-      const cached = await cacheService.get(key);
-      if (cached && typeof cached === 'object' && Object.keys(cached).length > 0) {
-        res.setHeader('X-Cache', 'HIT');
-        return res.json(cached);
+    // Non-lock profiles: try to serve from the shared cache first.
+    const key = isLock ? null : buildResponseKey(req, profile);
+    if (!isLock) {
+      try {
+        const cached = await cacheService.get(key);
+        if (cached && typeof cached === 'object' && Object.keys(cached).length > 0) {
+          res.setHeader('X-Cache', 'HIT');
+          return res.json(cached);
+        }
+      } catch (err) {
+        console.warn('[httpCache] GET error, bypassing cache:', err.message);
       }
-    } catch (err) {
-      console.warn('[httpCache] GET error, bypassing cache:', err.message);
     }
 
     const originalJson = res.json.bind(res);
@@ -111,7 +116,14 @@ export const httpCache = (profileName) => {
         res.statusCode >= 200 &&
         res.statusCode < 300 &&
         !res.getHeader('Set-Cookie'); // never cache a response minting a cookie
-      if (cacheable) {
+      if (!cacheable) {
+        // Error status or a Set-Cookie response: the public directive was set
+        // optimistically before the status/cookie was known — downgrade it so an
+        // error or cookie-bearing body is never edge-cached. Applies to lock
+        // profiles too (their store is owned by the controller, but the header
+        // guard is not).
+        res.setHeader('Cache-Control', PRIVATE_NO_STORE);
+      } else if (!isLock) {
         try {
           const tags = resolveTags(profile, req, body);
           cacheService.set(key, body, profile.ttl, tags).catch((err) => {
@@ -120,13 +132,9 @@ export const httpCache = (profileName) => {
         } catch (err) {
           console.warn('[httpCache] SET error:', err.message);
         }
-      } else {
-        // Non-cacheable after all (error status or a Set-Cookie response): the
-        // public directive was set optimistically before the status was known —
-        // downgrade it so an error or cookie-bearing body is never edge-cached.
-        res.setHeader('Cache-Control', PRIVATE_NO_STORE);
       }
-      res.setHeader('X-Cache', 'MISS');
+      // Lock profiles set their own X-Cache (HIT/MISS) in the controller.
+      if (!isLock) res.setHeader('X-Cache', 'MISS');
       return originalJson(body);
     };
 
