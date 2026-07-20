@@ -1,13 +1,21 @@
 # CI — Backend test suite
 #
-# Runs on every push (all branches incl. main) and pull-request that touches
-# Back-end/server/** or this workflow file itself. This is the gate: its checks
-# are required by branch protection on main, so an unvetted commit can never be
-# merged — and Railway deploys main natively only after it passes (enable Railway's
-# "Wait for CI" so a direct push to main can't outrun this).
+# Runs on every push (all branches incl. main) and every pull-request. This is a
+# required gate on main, so an unvetted commit can never be merged — and Railway
+# deploys main natively only after it passes (enable Railway's "Wait for CI" so a
+# direct push to main can't outrun this).
+#
+# WHY NO `paths:` FILTER: a required status check whose workflow is skipped by a
+# path filter stays "pending" forever and permanently BLOCKS the PR (a frontend-only
+# PR could never satisfy "Test & Coverage"). Instead the job ALWAYS runs and reports
+# a status; a `git diff` step short-circuits the expensive work when the backend
+# wasn't touched, so the check goes green in seconds without wasting CI minutes.
+# Skipping is done at the STEP level (job still concludes "success"), never at the
+# job level (which would report the ambiguous "skipped" conclusion).
 #
 # Jobs
-#   test  — install deps, run jest --coverage, upload the lcov report
+#   test  — detect backend changes; if any, install deps, run jest --coverage,
+#           upload the lcov report; otherwise report success and stop.
 #
 # Coverage threshold is enforced by jest.config.js (coverageThreshold.global.lines = 60).
 # If the threshold is not met, jest exits non-zero and this job fails.
@@ -16,14 +24,8 @@ name: Backend CI
 
 on:
   push:
-    paths:
-      - "Back-end/server/**"
-      - ".github/workflows/ci.yml"
   pull_request:
     branches: ["**"]
-    paths:
-      - "Back-end/server/**"
-      - ".github/workflows/ci.yml"
 
 defaults:
   run:
@@ -35,28 +37,60 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    strategy:
-      matrix:
-        node-version: ["20.x"]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Full history so we can diff against the PR base / previous push.
+          fetch-depth: 0
 
-      - name: Set up Node.js ${{ matrix.node-version }}
+      # Decide whether the backend actually changed. Dependency-free (plain git,
+      # no third-party action) and fail-safe: if the base commit can't be resolved
+      # (first push, force-push, shallow clone) we run the full suite rather than
+      # skip the gate.
+      - name: Detect backend changes
+        id: changes
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] \
+             || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "No resolvable base commit; running full suite (fail-safe)."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$base" HEAD \
+               | grep -qE '^(Back-end/server/|\.github/workflows/ci\.yml$)'; then
+            echo "Backend changes detected; running full suite."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No backend changes; reporting success without running the suite."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js
+        if: steps.changes.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: "20.x"
           cache: "npm"
           cache-dependency-path: Back-end/server/package-lock.json
 
       - name: Install dependencies
+        if: steps.changes.outputs.run == 'true'
         run: npm ci
 
       # Provide the minimum env vars the app reads at module-import time.
       # Real secrets (Cloudinary, Razorpay, SendGrid) are never needed because
       # those integrations are fully mocked in the test suite.
       - name: Run tests with coverage
+        if: steps.changes.outputs.run == 'true'
         env:
           NODE_ENV: test
           JWT_SECRET: ci-test-jwt-secret-not-for-production
@@ -71,7 +105,7 @@ jobs:
         run: npm run test:coverage -- --forceExit --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle|pricingService|couponKarmaIntegration|processRefund|refundWebhook"
 
       - name: Upload coverage report
-        if: always()
+        if: always() && steps.changes.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
