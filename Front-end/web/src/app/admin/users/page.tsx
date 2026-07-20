@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
+import { adminKeys } from '@/hooks/queries/keys';
 import { Plus, Trash2, Search, Eye, X, BadgeCheck } from 'lucide-react';
-import Link from 'next/link';
 
 interface Address {
   fullName: string;
@@ -25,16 +26,48 @@ interface User {
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
 
+interface UsersResponse {
+  users: User[];
+  pagination: { total: number; page: number; pages: number; limit: number };
+}
+
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [ready, setReady] = useState(false); // first load done — controls the full-page skeleton
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: PAGE_SIZE });
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Server-side search/filter/pagination via TanStack Query. keepPreviousData
+  // keeps the current table (and focused search input) up while the next
+  // page/filter loads — no full-page skeleton flash after the first load.
+  const listParams = {
+    search: debouncedSearch || undefined,
+    role: roleFilter !== 'all' ? roleFilter : undefined,
+    page: String(page),
+  };
+  const listKey = adminKeys.list('users', listParams);
+  const { data, isPending, isFetching, isError } = useQuery({
+    queryKey: listKey,
+    queryFn: async (): Promise<UsersResponse> => {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.append('search', debouncedSearch);
+      if (roleFilter !== 'all') params.append('role', roleFilter);
+      params.append('page', String(page));
+      params.append('limit', String(PAGE_SIZE));
+      const response = await apiClient.get(`/users?${params.toString()}`) as any;
+      return {
+        users: response.users || [],
+        pagination: response.pagination || { total: 0, page: 1, pages: 1, limit: PAGE_SIZE },
+      };
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  const users = data?.users ?? [];
+  const pagination = data?.pagination ?? { total: 0, page: 1, pages: 1, limit: PAGE_SIZE };
+  const loading = isFetching; // disables the pager + shows "Loading…" during a fetch
 
   // Seed the search box from a `?search=` deep link (e.g. from a lead's "View
   // account"). Read via window to avoid the useSearchParams Suspense requirement.
@@ -53,40 +86,14 @@ export default function AdminUsersPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Server-side search/filter/pagination — the whole user collection is queried in
-  // MongoDB (name/email/phone + role), never a client-side filter over one page.
-  useEffect(() => {
-    let cancelled = false;
-    const fetchUsers = async () => {
-      try {
-        setLoading(true);
-        const params = new URLSearchParams();
-        if (debouncedSearch) params.append('search', debouncedSearch);
-        if (roleFilter !== 'all') params.append('role', roleFilter);
-        params.append('page', String(page));
-        params.append('limit', String(PAGE_SIZE));
-        const response = await apiClient.get(`/users?${params.toString()}`) as any;
-        if (cancelled) return;
-        setUsers(response.users || []);
-        if (response.pagination) setPagination(response.pagination);
-      } catch (err) {
-        if (!cancelled) console.error('Failed to fetch users:', err);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setReady(true);
-        }
-      }
-    };
-    fetchUsers();
-    return () => { cancelled = true; };
-  }, [debouncedSearch, roleFilter, page]);
-
   const toggleRep = async (user: User) => {
     const next = !user.isSalesRep;
     try {
       await apiClient.put(`/users/${user._id}`, { isSalesRep: next });
-      setUsers((prev) => prev.map((u) => (u._id === user._id ? { ...u, isSalesRep: next } : u)));
+      // Optimistically update the current page's cache (no pagination change).
+      queryClient.setQueryData<UsersResponse>(listKey, (old) =>
+        old ? { ...old, users: old.users.map((u) => (u._id === user._id ? { ...u, isSalesRep: next } : u)) } : old
+      );
     } catch (err: any) {
       alert(err.message || 'Failed to update sales-rep status');
     }
@@ -94,10 +101,14 @@ export default function AdminUsersPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
-    
+
     try {
       await apiClient.delete(`/users/${id}`);
-      setUsers(users.filter(u => u._id !== id));
+      // Optimistically drop the row from the current page (matches the prior
+      // behaviour); other cached pages refresh on next visit via staleTime.
+      queryClient.setQueryData<UsersResponse>(listKey, (old) =>
+        old ? { ...old, users: old.users.filter((u) => u._id !== id) } : old
+      );
       alert('User deleted successfully');
     } catch (err: any) {
       alert(err.message || 'Failed to delete user');
@@ -105,8 +116,8 @@ export default function AdminUsersPage() {
   };
 
   // Full-page skeleton only on the very first load — subsequent search/filter/page
-  // fetches keep the page (and the focused search input) mounted.
-  if (!ready) {
+  // fetches keep the page (and the focused search input) mounted (keepPreviousData).
+  if (isPending) {
     return (
       <div className="p-8">
         <div className="flex justify-between items-center mb-8">
@@ -165,6 +176,12 @@ export default function AdminUsersPage() {
           <option value="admin">Admin</option>
         </select>
       </div>
+
+      {isError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Couldn&apos;t load users — the server may be unavailable. Retry search or reload the page.
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
