@@ -2,8 +2,10 @@
 
 import { type StockStatus, getStockLabel } from '@/lib/stock';
 import { useState, useEffect, Suspense } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+import { adminKeys } from '@/hooks/queries/keys';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, X, Package, ChevronUp, Upload } from 'lucide-react';
@@ -49,18 +51,50 @@ function AdminProductsPageInner() {
   const categoryId = searchParams.get('category') || '';
   const categoryNameParam = searchParams.get('categoryName') || '';
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   // Admin can view all products or narrow to just active / just inactive (drafts).
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'simple' | 'variable' | 'grouped'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [limit] = useState(50); // Show 50 products per page
   const [categoryInfo, setCategoryInfo] = useState<CategoryInfo | null>(null);
+  const limit = 50; // products per page
+
+  // Server-side list via TanStack Query. keepPreviousData keeps the current table
+  // up while a filter/page change loads (no blank flash between fetches).
+  const listParams = {
+    page: String(currentPage),
+    search: debouncedSearchTerm || undefined,
+    category: categoryId || undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    type: typeFilter !== 'all' ? typeFilter : undefined,
+  };
+  const listKey = adminKeys.list('products', listParams);
+  const { data, isPending } = useQuery({
+    queryKey: listKey,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('page', String(currentPage));
+      params.append('limit', String(limit));
+      if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
+      if (categoryId) params.append('category', categoryId);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (typeFilter !== 'all') params.append('productType', typeFilter);
+      const response = await apiClient.get<ProductsResponse>(`${API_ENDPOINTS.ADMIN_PRODUCTS}?${params.toString()}`);
+      const total = response.total || response.count || 0;
+      return {
+        products: response.products || [],
+        totalCount: total,
+        totalPages: response.pages || Math.ceil(total / limit),
+      };
+    },
+    placeholderData: keepPreviousData,
+  });
+  const products = data?.products ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const loading = isPending;
 
   const goToCategory = (id: string, name: string) =>
     router.push(`/admin/products?category=${id}&categoryName=${encodeURIComponent(name)}`);
@@ -77,10 +111,6 @@ function AdminProductsPageInner() {
       clearTimeout(timer);
     };
   }, [searchTerm]);
-
-  useEffect(() => {
-    fetchProducts(currentPage);
-  }, [currentPage, debouncedSearchTerm, categoryId, statusFilter, typeFilter]);
 
   // Reset to the first page whenever the status or product-type filter changes.
   useEffect(() => {
@@ -120,55 +150,16 @@ function AdminProductsPageInner() {
     return () => { cancelled = true; };
   }, [categoryId, categoryNameParam]);
 
-  const fetchProducts = async (page: number = 1) => {
-    try {
-      setLoading(true);
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append('page', page.toString());
-      params.append('limit', limit.toString());
-      
-      if (debouncedSearchTerm) {
-        params.append('search', debouncedSearchTerm);
-      }
-
-      // Filter by category (backend includes all descendant categories).
-      if (categoryId) {
-        params.append('category', categoryId);
-      }
-
-      // Active / inactive narrowing (the admin endpoint returns both by default).
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter);
-      }
-
-      // Product-type narrowing (simple / variable / grouped).
-      if (typeFilter !== 'all') {
-        params.append('productType', typeFilter);
-      }
-
-      // The admin list endpoint is server-side uncached, so an edit shows up
-      // immediately — no cache-busting query param needed.
-      const response = await apiClient.get<ProductsResponse>(
-        `${API_ENDPOINTS.ADMIN_PRODUCTS}?${params.toString()}`
-      );
-      
-      setProducts(response.products || []);
-      setTotalCount(response.total || response.count || 0);
-      setTotalPages(response.pages || Math.ceil((response.total || response.count || 0) / limit));
-    } catch (err) {
-      console.error('Failed to fetch products:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this product?')) return;
-    
+
     try {
       await apiClient.delete(`${API_ENDPOINTS.PRODUCTS}/${id}`);
-      setProducts(products.filter(p => p._id !== id));
+      // Optimistically drop the row from the current page's cache.
+      queryClient.setQueryData<{ products: Product[]; totalCount: number; totalPages: number }>(
+        listKey,
+        (old) => (old ? { ...old, products: old.products.filter((p) => p._id !== id) } : old)
+      );
       // Deleting a product may remove it from the homepage's featured shelf.
       revalidateHome('home:products');
       alert('Product deleted successfully');

@@ -1,7 +1,18 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminOrdersPage from './page';
 import apiClient from '@/lib/api';
+
+// The page reads orders via TanStack Query, so tests render it in a provider.
+const renderPage = () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <AdminOrdersPage />
+    </QueryClientProvider>
+  );
+};
 
 // Mock dependencies
 jest.mock('@/lib/api');
@@ -116,7 +127,7 @@ describe('AdminOrdersPage', () => {
   });
 
   it('renders orders table after fetch', async () => {
-    render(<AdminOrdersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
@@ -127,7 +138,7 @@ describe('AdminOrdersPage', () => {
   });
 
   it('confirms via modal before updating status, and warns about the customer email', async () => {
-    render(<AdminOrdersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
@@ -172,7 +183,7 @@ describe('AdminOrdersPage', () => {
   });
 
   it('refetches orders when filters change', async () => {
-    render(<AdminOrdersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
@@ -205,7 +216,7 @@ describe('AdminOrdersPage', () => {
       });
     });
 
-    render(<AdminOrdersPage />);
+    renderPage();
     await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
 
     const nav = screen.getByRole('navigation', { name: /orders pagination/i });
@@ -219,7 +230,7 @@ describe('AdminOrdersPage', () => {
   });
 
   it('handles row selection', async () => {
-    render(<AdminOrdersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();

@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import apiClient from '@/lib/api';
+import { adminKeys } from '@/hooks/queries/keys';
 import toast from 'react-hot-toast';
 import { API_ENDPOINTS, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, CUSTOMER_NOTIFIED_STATUSES, PAYMENT_STATUS_COLORS, PAYMENT_STATUS_LABELS } from '@/lib/constants';
 import { Eye, RefreshCw, Download, ArrowUpDown } from 'lucide-react';
@@ -174,9 +176,8 @@ function AdminOrdersPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState<{ total: number; pages: number; currentPage: number; hasNext?: boolean; hasPrev?: boolean }>({ total: 0, pages: 0, currentPage: 1, hasNext: false, hasPrev: false });
+  const queryClient = useQueryClient();
+  const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [pageSize, setPageSize] = useState(20);
@@ -206,17 +207,27 @@ function AdminOrdersPageInner() {
     customer: searchParams.get('customer') || '',
   }));
 
-  useEffect(() => {
-    fetchOrders();
-  }, [filters, pagination.currentPage, sortField, sortOrder, pageSize]);
-
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      
-      // Build query parameters
+  // Server-side list via TanStack Query. `currentPage` is now the input page;
+  // the server's echoed pagination comes back in the query data. keepPreviousData
+  // keeps the current table up while a filter/sort/page change loads.
+  const listKey = adminKeys.list('orders', {
+    page: String(currentPage),
+    size: String(pageSize),
+    sortBy: sortField,
+    sortOrder,
+    search: filters.search || undefined,
+    customer: filters.customer || undefined,
+    status: filters.statuses.length ? filters.statuses.join(',') : undefined,
+    paymentStatus: filters.paymentStatuses?.length ? filters.paymentStatuses.join(',') : undefined,
+    startDate: filters.startDate || undefined,
+    endDate: filters.endDate || undefined,
+    minAmount: filters.minAmount || undefined,
+    maxAmount: filters.maxAmount || undefined,
+  });
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: listKey,
+    queryFn: async () => {
       const params = new URLSearchParams();
-      
       // Unified search: order id OR customer name/email/phone OR recipient on the order.
       if (filters.search) params.append('search', filters.search);
       if (filters.customer) params.append('customer', filters.customer);
@@ -226,35 +237,23 @@ function AdminOrdersPageInner() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
       if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
-      
-      params.append('page', pagination.currentPage.toString());
-      params.append('limit', pageSize.toString());
+      params.append('page', String(currentPage));
+      params.append('limit', String(pageSize));
       params.append('sortBy', sortField);
       params.append('sortOrder', sortOrder);
-      
-      const response = await apiClient.get<OrdersResponse>(
-        `${API_ENDPOINTS.ADMIN_ORDERS}?${params.toString()}`
-      );
-      
-      setOrders(response.orders || []);
-      if (response.pagination) {
-        setPagination(response.pagination);
-      } else {
-        // If no pagination data, set defaults based on current data
-        setPagination({
-          total: response.orders?.length || 0,
-          pages: 1,
-          currentPage: 1,
-          hasNext: false,
-          hasPrev: false
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch orders:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const response = await apiClient.get<OrdersResponse>(`${API_ENDPOINTS.ADMIN_ORDERS}?${params.toString()}`);
+      return {
+        orders: response.orders || [],
+        pagination: response.pagination || {
+          total: response.orders?.length || 0, pages: 1, currentPage: 1, hasNext: false, hasPrev: false,
+        },
+      };
+    },
+    placeholderData: keepPreviousData,
+  });
+  const orders = data?.orders ?? [];
+  const pagination = data?.pagination ?? { total: 0, pages: 0, currentPage, hasNext: false, hasPrev: false };
+  const loading = isFetching;
 
   // Open the confirmation modal instead of firing the API immediately.
   const requestStatusChange = (order: Order, newStatus: string) => {
@@ -277,16 +276,17 @@ function AdminOrdersPageInner() {
       shipping,
     });
 
-    setOrders(orders.map(order =>
-      order._id === orderId ? { ...order, status: to } : order
-    ));
+    // Optimistically reflect the new status in the current page's cache.
+    queryClient.setQueryData<{ orders: Order[]; pagination: typeof pagination }>(listKey, (old) =>
+      old ? { ...old, orders: old.orders.map((o) => (o._id === orderId ? { ...o, status: to } : o)) } : old
+    );
     setPendingChange(null);
     toast.success(`Order status updated to ${to}`);
   };
 
   const handleFiltersChange = (newFilters: OrderFilters) => {
     setFilters(newFilters);
-    setPagination(prev => ({ ...prev, currentPage: 1 })); // Reset to first page
+    setCurrentPage(1); // Reset to first page
     updateURL(newFilters);
   };
 
@@ -314,16 +314,16 @@ function AdminOrdersPageInner() {
       setSortField(field);
       setSortOrder('desc');
     }
-    setPagination(prev => ({ ...prev, currentPage: 1 }));
+    setCurrentPage(1);
   };
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
-    setPagination(prev => ({ ...prev, currentPage: 1 }));
+    setCurrentPage(1);
   };
 
   const goToPage = (page: number) => {
-    setPagination(prev => ({ ...prev, currentPage: page }));
+    setCurrentPage(page);
   };
 
   const handleExport = () => {
@@ -392,7 +392,7 @@ function AdminOrdersPageInner() {
       console.warn('Bulk update failures:', failed);
     }
 
-    await fetchOrders();
+    await queryClient.invalidateQueries({ queryKey: adminKeys.resource('orders') });
     setSelectedOrders([]);
     setPendingBulk(null);
   };
@@ -423,7 +423,7 @@ function AdminOrdersPageInner() {
       }
       
       // Refresh and clear selection
-      await fetchOrders();
+      await queryClient.invalidateQueries({ queryKey: adminKeys.resource('orders') });
       setSelectedOrders([]);
     } catch (error: any) {
       console.error('Bulk delete failed:', error);
@@ -482,7 +482,7 @@ function AdminOrdersPageInner() {
         <h1 className="text-3xl font-bold">Orders Management</h1>
         <div className="flex gap-2">
           <button
-            onClick={fetchOrders}
+            onClick={() => refetch()}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
           >
@@ -686,12 +686,12 @@ function AdminOrdersPageInner() {
       {pagination.pages > 1 && (
         <>
           <OrdersPagination
-            currentPage={pagination.currentPage}
+            currentPage={currentPage}
             totalPages={pagination.pages}
             onPageChange={goToPage}
           />
           <div className="mt-2 text-center text-sm text-gray-600">
-            Page {pagination.currentPage} of {pagination.pages}
+            Page {currentPage} of {pagination.pages}
           </div>
         </>
       )}
