@@ -48,7 +48,7 @@ export default function AdminUsersPage() {
     page: String(page),
   };
   const listKey = adminKeys.list('users', listParams);
-  const { data, isPending, isFetching } = useQuery({
+  const { data, isPending, isFetching, isError } = useQuery({
     queryKey: listKey,
     queryFn: async (): Promise<UsersResponse> => {
       const params = new URLSearchParams();
@@ -176,6 +176,12 @@ export default function AdminUsersPage() {
           <option value="admin">Admin</option>
         </select>
       </div>
+
+      {isError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Couldn&apos;t load users — the server may be unavailable. Retry search or reload the page.
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">

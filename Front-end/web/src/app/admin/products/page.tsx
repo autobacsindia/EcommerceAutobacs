@@ -71,7 +71,7 @@ function AdminProductsPageInner() {
     type: typeFilter !== 'all' ? typeFilter : undefined,
   };
   const listKey = adminKeys.list('products', listParams);
-  const { data, isPending } = useQuery({
+  const { data, isPending, isFetching, isError } = useQuery({
     queryKey: listKey,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -155,10 +155,19 @@ function AdminProductsPageInner() {
 
     try {
       await apiClient.delete(`${API_ENDPOINTS.PRODUCTS}/${id}`);
-      // Optimistically drop the row from the current page's cache.
+      // Optimistically drop the row from the current page's cache, and keep the
+      // total/page counts in sync so the footer ("of N") isn't off by one.
       queryClient.setQueryData<{ products: Product[]; totalCount: number; totalPages: number }>(
         listKey,
-        (old) => (old ? { ...old, products: old.products.filter((p) => p._id !== id) } : old)
+        (old) => {
+          if (!old) return old;
+          const nextCount = Math.max(0, old.totalCount - 1);
+          return {
+            products: old.products.filter((p) => p._id !== id),
+            totalCount: nextCount,
+            totalPages: Math.max(1, Math.ceil(nextCount / limit)),
+          };
+        }
       );
       // Deleting a product may remove it from the homepage's featured shelf.
       revalidateHome('home:products');
@@ -249,6 +258,12 @@ function AdminProductsPageInner() {
               View parent category: {categoryInfo.parent.name}
             </button>
           )}
+        </div>
+      )}
+
+      {isError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Couldn&apos;t load products — the server may be unavailable. Adjust a filter or reload the page.
         </div>
       )}
 
@@ -359,13 +374,14 @@ function AdminProductsPageInner() {
       <div className="mt-6 flex items-center justify-between">
         <div className="text-sm text-gray-700">
           Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, totalCount)} of {totalCount} products
+          {isFetching && <span className="ml-2 text-gray-400">· updating…</span>}
         </div>
         <div className="flex space-x-2">
           <button
             onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
+            disabled={currentPage === 1 || isFetching}
             className={`px-4 py-2 text-sm rounded ${
-              currentPage === 1
+              currentPage === 1 || isFetching
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
@@ -393,9 +409,9 @@ function AdminProductsPageInner() {
           
           <button
             onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            disabled={currentPage === totalPages || isFetching}
             className={`px-4 py-2 text-sm rounded ${
-              currentPage === totalPages
+              currentPage === totalPages || isFetching
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}

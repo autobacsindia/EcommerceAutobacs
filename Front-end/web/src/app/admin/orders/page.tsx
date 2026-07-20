@@ -224,7 +224,7 @@ function AdminOrdersPageInner() {
     minAmount: filters.minAmount || undefined,
     maxAmount: filters.maxAmount || undefined,
   });
-  const { data, isFetching, refetch } = useQuery({
+  const { data, isFetching, isError, refetch } = useQuery({
     queryKey: listKey,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -276,10 +276,14 @@ function AdminOrdersPageInner() {
       shipping,
     });
 
-    // Optimistically reflect the new status in the current page's cache.
+    // Optimistically reflect the new status in the current page's cache for
+    // instant feedback, then invalidate so the row re-sorts / re-pages correctly
+    // (e.g. when the table is sorted by status the row must move, and a status
+    // filter may drop it from the current view).
     queryClient.setQueryData<{ orders: Order[]; pagination: typeof pagination }>(listKey, (old) =>
       old ? { ...old, orders: old.orders.map((o) => (o._id === orderId ? { ...o, status: to } : o)) } : old
     );
+    queryClient.invalidateQueries({ queryKey: adminKeys.resource('orders') });
     setPendingChange(null);
     toast.success(`Order status updated to ${to}`);
   };
@@ -392,6 +396,9 @@ function AdminOrdersPageInner() {
       console.warn('Bulk update failures:', failed);
     }
 
+    // A bulk status change can drop orders off a status-filtered page; reset to
+    // page 1 so the refetched view is never an empty out-of-range page.
+    setCurrentPage(1);
     await queryClient.invalidateQueries({ queryKey: adminKeys.resource('orders') });
     setSelectedOrders([]);
     setPendingBulk(null);
@@ -422,6 +429,9 @@ function AdminOrdersPageInner() {
         );
       }
       
+      // Reset to page 1 so a delete that shrinks the result set below the current
+      // page can't strand the admin on an empty, un-navigable page.
+      setCurrentPage(1);
       // Refresh and clear selection
       await queryClient.invalidateQueries({ queryKey: adminKeys.resource('orders') });
       setSelectedOrders([]);
@@ -505,6 +515,12 @@ function AdminOrdersPageInner() {
         onFiltersChange={handleFiltersChange}
         autoApply={true}
       />
+
+      {isError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Couldn&apos;t load orders — the server may be unavailable. Use Refresh or adjust the filters to retry.
+        </div>
+      )}
 
       {/* Stats Summary */}
       <div className="mb-6 flex items-center justify-between text-sm text-gray-600">
