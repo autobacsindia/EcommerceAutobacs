@@ -1,10 +1,21 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminUsersPage from './page';
 import apiClient from '@/lib/api';
 
 // Mock dependencies
 jest.mock('@/lib/api');
+
+// The page reads user data via TanStack Query, so tests render it in a provider.
+const renderPage = () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <AdminUsersPage />
+    </QueryClientProvider>
+  );
+};
 
 // Mock icons
 jest.mock('lucide-react', () => ({
@@ -48,14 +59,14 @@ describe('AdminUsersPage', () => {
 
   it('renders loading state initially', async () => {
     (apiClient.get as jest.Mock).mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ users: mockUsers }), 100)));
-    render(<AdminUsersPage />);
+    renderPage();
     expect(screen.getByText('Users Management')).toBeInTheDocument();
     // Check for skeleton or specific loading indicator if possible, or just wait
     await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
   });
 
   it('renders users list after fetch', async () => {
-    render(<AdminUsersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
@@ -67,7 +78,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('searches and filters server-side (debounced, whole collection)', async () => {
-    render(<AdminUsersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
@@ -90,7 +101,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('handles delete user', async () => {
-    render(<AdminUsersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
@@ -109,7 +120,7 @@ describe('AdminUsersPage', () => {
   });
 
   it('opens and closes user details modal', async () => {
-    render(<AdminUsersPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();

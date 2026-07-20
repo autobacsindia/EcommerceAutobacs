@@ -47,6 +47,8 @@ export const profileKeys = {
 
 export const adminKeys = {
   all: ['admin'] as const,
+  /** Prefix for every list of a resource — use to invalidate all pages/filters at once. */
+  resource: (resource: string) => [...adminKeys.all, resource] as const,
   list: (resource: string, params: Record<string, string | undefined>) =>
-    [...adminKeys.all, resource, normalizeParams(params)] as const,
+    [...adminKeys.resource(resource), normalizeParams(params)] as const,
 };
