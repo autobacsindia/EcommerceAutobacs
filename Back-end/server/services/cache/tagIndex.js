@@ -23,19 +23,16 @@ import { redisClient } from './redisClient.js';
 
 const TAG_PREFIX = 'ctag:';
 
-/**
- * TTL (seconds) for a tag-index SET. Must exceed the longest cache-entry TTL so
- * an index never expires while a key it points at is still live (which would
- * strand that key until its own TTL). The longest profile TTL is 7200s
- * (VEHICLE_MAKES); 2h10m gives head-room. cacheProfiles enforces the ceiling.
- *
- * Members whose underlying key has already expired are harmless — UNLINK of a
- * missing key is a no-op — so we never need to prune them individually.
- */
-export const TAG_INDEX_TTL = 7800;
+/** Grace period a tag index outlives its longest-lived member (seconds). */
+const TAG_INDEX_BUFFER = 600;
 
-/** Largest cache-entry TTL the tag index can guarantee to outlive. */
-export const MAX_TAGGED_TTL = TAG_INDEX_TTL - 600;
+/**
+ * Max lifetime (seconds) a tag-index SET can be given. The longest profile TTL
+ * is 7200s (VEHICLE_MAKES); cacheProfiles enforces this ceiling so a member key
+ * never outlives its index (which would strand it until its own TTL).
+ */
+export const MAX_TAGGED_TTL = 7200;
+export const TAG_INDEX_TTL = MAX_TAGGED_TTL + TAG_INDEX_BUFFER;
 
 const UNLINK_BATCH = 200;
 
@@ -44,17 +41,33 @@ const tagKeyFor = (tag) => `${TAG_PREFIX}${tag}`;
 /**
  * Register a cache key under each tag. Fire-and-forget friendly: resolves even
  * if Redis is unavailable (logged, never thrown).
- * @param {string} key       the cache key that was just stored
- * @param {string[]} tags    tags to file it under
+ *
+ * The index SET is given an expiry of the KEY's own ttl + buffer, seeded with
+ * `EXPIRE NX` (first member) and extended only via `EXPIRE GT` (a longer-lived
+ * member added later). Net effect: the set lives just past its longest-lived
+ * member, then self-expires — so a hot tag written continuously with short-TTL
+ * keys can't accumulate dead members indefinitely (the previous fixed 7800s
+ * refresh-on-every-write meant the set never expired under load). It still never
+ * expires before a live member, so invalidation stays complete.
+ *
+ * Requires Redis ≥ 7.0 for the NX/GT flags (Upstash is 7+). If the flags error
+ * on an older server the whole op is caught below and the key simply isn't
+ * tag-indexed — invalidation then falls back to TTL, never incorrect.
+ *
+ * @param {string} key    the cache key that was just stored
+ * @param {string[]} tags tags to file it under
+ * @param {number} [ttl]  the stored key's TTL in seconds
  */
-export async function addKeyToTags(key, tags) {
+export async function addKeyToTags(key, tags, ttl = MAX_TAGGED_TTL) {
   if (!redisClient || !key || !tags?.length) return;
+  const indexTtl = Math.min(ttl, MAX_TAGGED_TTL) + TAG_INDEX_BUFFER;
   try {
     const pipeline = redisClient.pipeline();
     for (const tag of tags) {
       const tagKey = tagKeyFor(tag);
       pipeline.sadd(tagKey, key);
-      pipeline.expire(tagKey, TAG_INDEX_TTL);
+      pipeline.expire(tagKey, indexTtl, 'NX'); // seed expiry on a brand-new set
+      pipeline.expire(tagKey, indexTtl, 'GT'); // extend only for a longer-lived member
     }
     await pipeline.exec();
   } catch (err) {
