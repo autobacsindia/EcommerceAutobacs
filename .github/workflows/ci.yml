@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload coverage report
         if: always() && steps.changes.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: Back-end/server/coverage/
