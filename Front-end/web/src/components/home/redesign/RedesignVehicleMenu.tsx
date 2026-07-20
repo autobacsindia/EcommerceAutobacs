@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
-import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
+import { useVehicleMakes } from '@/hooks/queries/useVehicleMakes';
 
 interface NamedItem {
   _id: string;
@@ -37,15 +37,8 @@ export default function RedesignVehicleMenu({
   const [loadingModels, setLoadingModels] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const { data: makesData } = useCachedData<NamedItem[]>(
-    CACHE_KEYS.VEHICLE_MAKES,
-    async () => {
-      const res = await apiClient.get<{ makes: string[] }>('/vehicles/makes');
-      return res.makes.map((m) => ({ _id: m, name: m }));
-    },
-    24 * 60 * 60 * 1000
-  );
-  const makes = makesData ?? [];
+  const { data: makesData } = useVehicleMakes();
+  const makes: NamedItem[] = makesData ?? [];
 
   // Fetch models for the chosen make.
   useEffect(() => {

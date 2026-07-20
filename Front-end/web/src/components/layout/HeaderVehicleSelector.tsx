@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { Car } from 'lucide-react';
-import { useCachedData, CACHE_KEYS } from '@/lib/cacheService';
+import { useVehicleMakes } from '@/hooks/queries/useVehicleMakes';
 
 interface VehicleMake {
   _id: string;
@@ -28,19 +28,8 @@ export default function HeaderVehicleSelector() {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch vehicle makes with global cache service
-  const { data: makesData, loading: makesLoading, error: makesError, refetch: refetchMakes } = useCachedData<VehicleMake[]>(
-    CACHE_KEYS.VEHICLE_MAKES,
-    async () => {
-      const response: any = await apiClient.get('/vehicles/makes');
-      return response.makes.map((make: string) => ({
-        _id: make,
-        name: make,
-        slug: make.toLowerCase().replace(/\s+/g, '-')
-      }));
-    },
-    24 * 60 * 60 * 1000 // 24 hours
-  );
+  // Shared vehicle-makes query (TanStack Query).
+  const { data: makesData, isLoading: makesLoading, error: makesError, refetch: refetchMakes } = useVehicleMakes();
 
   useEffect(() => {
     if (makesData) {
