@@ -157,7 +157,7 @@ router.get("/", protect, admin, async (req, res) => {
     const zones = await deliveryZoneService.getAllZones(filters);
     const body = { success: true, count: zones.length, zones };
 
-    cacheService.set(cacheKey, body, DELIVERY_ZONES_TTL * 1000).catch(() => {});
+    cacheService.set(cacheKey, body, DELIVERY_ZONES_TTL).catch(() => {});
     res.setHeader('X-Cache', 'MISS');
     res.status(200).json(body);
   } catch (error) {

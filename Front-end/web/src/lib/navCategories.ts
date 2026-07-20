@@ -90,7 +90,9 @@ export async function getNavCategories(): Promise<NavCategory[]> {
   try {
     const data = await serverFetch<{ categories?: ApiCategory[] }>(
       '/categories?limit=200',
-      { next: { revalidate: 600 } }
+      // Tagged so the backend can revalidate the header nav on-demand after a
+      // category write (revalidateTag('nav:categories')); TTL is the safety net.
+      { next: { revalidate: 600, tags: ['nav:categories'] } }
     );
     const resolved = resolveNavCategories(data?.categories ?? []);
     return resolved.length > 0 ? resolved : FALLBACK_NAV_CATEGORIES;

@@ -188,10 +188,12 @@ async function getCategoryBySlug(slug: string): Promise<Category | null> {
   }
 }
 
-export default function ClientPage({ slug }: { slug: string }) {
+export default function ClientPage({ slug, initialCategory }: { slug: string; initialCategory?: Category | null }) {
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
-  const [category, setCategory] = useState<Category | null>(null);
+  // Seed from the category the server component already fetched for metadata, so
+  // the header renders immediately and we skip a redundant category network call.
+  const [category, setCategory] = useState<Category | null>(initialCategory ?? null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -234,8 +236,11 @@ export default function ClientPage({ slug }: { slug: string }) {
           return;
         }
         
-        // Fetch category by slug
-        const categoryData = await getCategoryBySlug(slug);
+        // Reuse the server-provided category on the initial slug; only hit the
+        // network when navigating client-side to a different category.
+        const categoryData = (initialCategory && initialCategory.slug === slug)
+          ? initialCategory
+          : await getCategoryBySlug(slug);
         if (!categoryData) {
           if (isMounted) {
             setError('Category not found');

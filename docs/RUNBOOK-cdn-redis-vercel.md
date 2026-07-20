@@ -16,8 +16,8 @@ Env var names the code expects (all optional, with safe fallbacks):
 
 | Var | Where | Purpose |
 |---|---|---|
-| `REDIS_URL` | Railway backend | Primary (Upstash) — cache + sessions + CSRF |
-| `QUEUE_REDIS_URL` | Railway backend | Dedicated Redis — BullMQ + rate-limit (falls back to `REDIS_URL`) |
+| `REDIS_URL` | Railway backend | Primary (Upstash) — cache + sessions |
+| `QUEUE_REDIS_URL` | Railway backend | Dedicated Redis — BullMQ + rate-limit + CSRF (`middleware/csrfMiddleware.js` imports the rate-limit client; falls back to `REDIS_URL`) |
 | `COOKIE_DOMAIN` | Railway backend | Unset now; `.autobacsindia.com` at cutover |
 | `COOKIE_SAMESITE` | Railway backend | Unset now (→ `none` in prod); `lax` at cutover |
 | `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID` | Railway backend | Optional — lets `flush-public-cache` purge the edge |

@@ -169,7 +169,10 @@ class ProductService {
       () => productRepository.findBySlug(slug, [
         { path: 'categories', select: 'name slug' }
       ]),
-      { ttl: 3600, strategy: 'basic' } // 1 hour
+      // Tagged so a product write (invalidateCache('products')) clears this
+      // 1-hour entry — previously untagged, so an edited product could serve
+      // stale from this service cache for up to an hour.
+      { ttl: 3600, strategy: 'basic', tags: ['products', `product:${slug}`] }
     );
   }
 

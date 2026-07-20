@@ -1,12 +1,15 @@
 import { Metadata } from 'next';
+import { cache } from 'react';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
 
-async function getCategoryForMetadata(slug: string) {
+// cache()d so generateMetadata and the page share one fetch; the result is also
+// handed to ClientPage as initialCategory to drop its redundant client refetch.
+const getCategoryForMetadata = cache(async (slug: string) => {
   try {
-    const res = await fetch(`${getServerApiBase()}/categories/slug/${slug}`, { next: { revalidate: 300 } });
+    const res = await fetch(`${getServerApiBase()}/categories/slug/${slug}`, { next: { revalidate: 300, tags: [`category:${slug}`] } });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.success && data.category) {
@@ -17,7 +20,7 @@ async function getCategoryForMetadata(slug: string) {
     console.error('Metadata fetch error:', error);
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -72,5 +75,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return <ClientPage slug={slug} />;
+  const category = await getCategoryForMetadata(slug);
+  return <ClientPage slug={slug} initialCategory={category} />;
 }

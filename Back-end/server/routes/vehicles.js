@@ -11,7 +11,8 @@ import {
   validateMakeModelParam,
   validateVehicleQuery,
 } from "../middleware/validationMiddleware.js";
-import { publicCacheResponse, invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
+import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
+import { httpCache } from "../middleware/httpCache.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
@@ -20,7 +21,7 @@ const router = express.Router();
 // @route   GET /vehicles
 // @desc    Get all active vehicles
 // @access  Public
-router.get("/", publicCacheResponse('VEHICLE_LIST'), asyncHandler(async (req, res) => {
+router.get("/", httpCache('VEHICLE_LIST'), asyncHandler(async (req, res) => {
   const vehicles = await vehicleRepository.find({ isActive: true })
     .sort({ make: 1, model: 1 });
 
@@ -34,7 +35,7 @@ router.get("/", publicCacheResponse('VEHICLE_LIST'), asyncHandler(async (req, re
 // @route   GET /vehicles/makes
 // @desc    Get all vehicle makes
 // @access  Public
-router.get("/makes", publicCacheResponse('VEHICLE_MAKES'), asyncHandler(async (req, res) => {
+router.get("/makes", httpCache('VEHICLE_MAKES'), asyncHandler(async (req, res) => {
   try {
     const makes = await vehicleRepository.distinct("make", { isActive: true }).sort();
     

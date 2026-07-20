@@ -3,11 +3,13 @@
 import type { StockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
+import { productKeys } from '@/hooks/queries/keys';
 import { trackProductView } from '@/lib/analytics';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
@@ -302,22 +304,35 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   );
 }
 
-export default function ClientPage({ slug }: { slug: string }) {
+export default function ClientPage({ slug, initialProduct }: { slug: string; initialProduct?: Product | null }) {
   const router = useRouter();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
 
+  // The server component already fetched this product (for metadata + JSON-LD)
+  // and hands it down as initialData, so the first paint shows the product with
+  // NO spinner and NO duplicate client fetch — the previous version threw the
+  // server data away and re-fetched here. TanStack Query still owns it after
+  // hydration (staleTime 60s), shared with any other consumer of this key.
+  const { data: product = null, isLoading } = useQuery({
+    queryKey: productKeys.detail(slug),
+    queryFn: () => getProduct(slug),
+    initialData: initialProduct ?? undefined,
+    // Mark server data slightly stale so a background refresh corrects any drift
+    // between SSR and interaction, without blocking the first paint.
+    initialDataUpdatedAt: initialProduct ? Date.now() - 30_000 : undefined,
+    staleTime: 60_000,
+  });
+
+  // Canonicalize the URL if the resolved product's slug differs (e.g. an
+  // ObjectId or legacy slug was requested).
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const fetched = await getProduct(slug);
-      setProduct(fetched);
-      setLoading(false);
-      if (fetched?.slug && fetched.slug !== slug) {
-        router.replace(`/products/${fetched.slug}`, { scroll: false });
-      }
-    })();
-  }, [slug, router]);
+    if (product?.slug && product.slug !== slug) {
+      router.replace(`/products/${product.slug}`, { scroll: false });
+    }
+  }, [product, slug, router]);
+
+  // With initialProduct present this is false on first paint; only a cold
+  // client-side navigation with no server payload shows the spinner.
+  const loading = isLoading && !product;
 
   if (loading) {
     return (

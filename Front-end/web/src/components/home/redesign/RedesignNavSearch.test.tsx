@@ -1,8 +1,16 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import RedesignNavSearch from './RedesignNavSearch';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
+
+// The component reads the shared QueryClient (suggestion memoization), so tests
+// render it inside a provider.
+const renderNav = (ui: React.ReactElement) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+};
 
 jest.mock('next/navigation', () => ({ useRouter: jest.fn() }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
@@ -36,7 +44,7 @@ describe('RedesignNavSearch', () => {
     const five = ['a', 'b', 'c', 'd', 'e'].map((term, i) => ({ term, timestamp: i }));
     store['searchHistory_guest_global'] = JSON.stringify(five);
 
-    render(<RedesignNavSearch />);
+    renderNav(<RedesignNavSearch />);
     fireEvent.focus(screen.getByLabelText('Search'));
 
     await waitFor(() => expect(screen.getByText('Recent')).toBeInTheDocument());
@@ -53,7 +61,7 @@ describe('RedesignNavSearch', () => {
       ['a', 'b', 'c'].map((term, i) => ({ term, timestamp: i })),
     );
 
-    render(<RedesignNavSearch />);
+    renderNav(<RedesignNavSearch />);
     const input = screen.getByLabelText('Search') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'brakes' } });
     fireEvent.submit(input.closest('form')!);
@@ -72,7 +80,7 @@ describe('RedesignNavSearch', () => {
       suggestions: [{ id: 'p1', text: 'Bumper Guard', type: 'product', slug: 'bumper-guard' }],
     });
 
-    render(<RedesignNavSearch />);
+    renderNav(<RedesignNavSearch />);
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'bum' } });
 
     await waitFor(() =>
@@ -85,7 +93,7 @@ describe('RedesignNavSearch', () => {
   });
 
   it('does not query the backend for a single character', async () => {
-    render(<RedesignNavSearch />);
+    renderNav(<RedesignNavSearch />);
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'b' } });
     // Give any debounce a chance to (not) fire.
     await new Promise((r) => setTimeout(r, 300));

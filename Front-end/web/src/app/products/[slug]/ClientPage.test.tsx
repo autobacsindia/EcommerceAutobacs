@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ClientPage from './ClientPage'; // Default export (the wrapper)
 import apiClient from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -49,6 +50,14 @@ jest.mock('@/components/products/SaleCountdown', () => ({
   useSaleCountdown: () => ({ live: true, remaining: 0 }),
 }));
 
+// ClientPage now reads product data via useQuery, so it needs a QueryClient.
+// No initialData is passed, so it fetches through the mocked apiClient (the
+// original loading→resolved flow these tests assert).
+const renderPDP = (ui: React.ReactElement) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+};
+
 describe('ClientPage', () => {
   const mockProduct = {
     _id: 'p1',
@@ -88,7 +97,7 @@ describe('ClientPage', () => {
   });
 
   it('renders product details after loading', async () => {
-    render(<ClientPage slug="p1" />);
+    renderPDP(<ClientPage slug="p1" />);
     expect(screen.getByText('Loading product…')).toBeInTheDocument();
 
     await waitFor(() => {
@@ -102,7 +111,7 @@ describe('ClientPage', () => {
   });
 
   it('adds to cart with the selected quantity', async () => {
-    render(<ClientPage slug="p1" />);
+    renderPDP(<ClientPage slug="p1" />);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
     });

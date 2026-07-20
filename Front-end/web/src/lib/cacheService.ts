@@ -172,11 +172,11 @@ export function getCacheMetrics() {
   };
 }
 
-// Initialize with some defaults
-if (typeof window !== 'undefined') {
-  // Log cache metrics periodically for debugging
+// Dev-only: log cache metrics periodically. This used to run unconditionally in
+// production, leaving a permanent 30s console-logging timer in every browser
+// tab. (This module is being retired in favour of TanStack Query.)
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
   setInterval(() => {
-    const metrics = getCacheMetrics();
-    console.log('[CacheService] Metrics:', metrics);
-  }, 30000); // Every 30 seconds
+    console.log('[CacheService] Metrics:', getCacheMetrics());
+  }, 30000);
 }
