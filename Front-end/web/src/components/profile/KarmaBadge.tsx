@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { profileKeys } from '@/hooks/queries/keys';
 
 interface LedgerEntry {
   _id: string;
@@ -25,23 +27,30 @@ const TYPE_LABEL: Record<string, string> = {
  * disabled.
  */
 export default function KarmaBadge() {
-  const [balance, setBalance] = useState<number | null>(null);
-  const [pointValue, setPointValue] = useState(1);
-  const [enabled, setEnabled] = useState(true);
-  const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    apiClient
-      .get<{ success: boolean; balance: number; config: { enabled: boolean; pointValueInRupees: number } }>(API_ENDPOINTS.LOYALTY_ME)
-      .then((r) => {
-        setBalance(r.balance);
-        setPointValue(r.config.pointValueInRupees);
-        setEnabled(r.config.enabled);
-      })
-      .catch(() => setBalance(null));
-  }, []);
+  // Balance + config via TanStack Query so it's cached across navigations. This
+  // was a per-mount useEffect fetch, which re-loaded the badge on every profile
+  // visit and flashed it in.
+  const { data: karma } = useQuery({
+    queryKey: profileKeys.karma(),
+    queryFn: () =>
+      apiClient.get<{ success: boolean; balance: number; config: { enabled: boolean; pointValueInRupees: number } }>(
+        API_ENDPOINTS.LOYALTY_ME,
+      ),
+  });
+
+  // Ledger history: fetched only once the dropdown is first opened (enabled:open),
+  // then cached — reopening or revisiting doesn't refetch.
+  const { data: entries } = useQuery({
+    queryKey: profileKeys.karmaHistory(),
+    queryFn: () =>
+      apiClient
+        .get<{ success: boolean; entries: LedgerEntry[] }>(API_ENDPOINTS.LOYALTY_HISTORY)
+        .then((r) => r.entries || []),
+    enabled: open,
+  });
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -60,17 +69,13 @@ export default function KarmaBadge() {
     };
   }, [open]);
 
-  const toggle = () => {
-    if (!open && entries === null) {
-      apiClient
-        .get<{ success: boolean; entries: LedgerEntry[] }>(API_ENDPOINTS.LOYALTY_HISTORY)
-        .then((r) => setEntries(r.entries || []))
-        .catch(() => setEntries([]));
-    }
-    setOpen((v) => !v);
-  };
+  const balance = karma?.balance ?? null;
+  const pointValue = karma?.config.pointValueInRupees ?? 1;
+  const loyaltyEnabled = karma?.config.enabled ?? false;
 
-  if (balance === null || !enabled) return null;
+  const toggle = () => setOpen((v) => !v);
+
+  if (balance === null || !loyaltyEnabled) return null;
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -96,7 +101,7 @@ export default function KarmaBadge() {
             </div>
             <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)}</p>
           </div>
-          {entries === null ? (
+          {entries === undefined ? (
             <p className="text-ink-muted font-display text-sm">Loading…</p>
           ) : entries.length === 0 ? (
             <p className="text-ink-muted font-display text-sm">No karma activity yet.</p>

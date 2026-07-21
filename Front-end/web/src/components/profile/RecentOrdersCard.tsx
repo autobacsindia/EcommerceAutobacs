@@ -1,25 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { Package, ChevronRight } from 'lucide-react';
 import orderService from '@/lib/services/orderService';
-import { Order } from '@/lib/types';
+import { profileKeys } from '@/hooks/queries/keys';
 import { getOrderStatusBadgeClass, getOrderStatusLabel } from '@/lib/orderStatus';
 
-/** Recent orders summary for the profile dashboard. Self-contained. */
+/**
+ * Recent orders summary for the profile dashboard. Reads via TanStack Query so
+ * the list is cached across navigations — revisiting /profile shows it instantly
+ * instead of re-fetching + flashing empty on every visit.
+ */
 export default function RecentOrdersCard() {
-  const [orders, setOrders] = useState<Order[] | null>(null);
+  const { data: orders } = useQuery({
+    queryKey: profileKeys.recentOrders(),
+    queryFn: () => orderService.getUserOrders(1, 4).then((res) => res.orders || []),
+  });
 
-  useEffect(() => {
-    orderService
-      .getUserOrders(1, 4)
-      .then((res) => setOrders(res.orders || []))
-      .catch(() => setOrders([]));
-  }, []);
-
-  // Hide while loading; show empty state only once we know there are no orders.
-  if (orders === null) return null;
+  // Hide while the FIRST load resolves; on revisits the cached list renders at
+  // once (no null flash). A failed fetch resolves via the shared retry policy.
+  if (orders === undefined) return null;
 
   return (
     <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
