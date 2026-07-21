@@ -1,77 +1,40 @@
-'use client';
-
-import { useState, useEffect } from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import apiClient from '@/lib/api';
 import OrganizedCategoryGrid from '@/components/categories/OrganizedCategoryGrid';
 import { Category } from '@/lib/types';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
+import { getServerApiBase } from '@/lib/server-api';
+import { SITE_URL } from '@/lib/siteUrl';
 
-export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// The category list has no per-request inputs, so it renders as a fully static
+// page revalidated every 10 min (ISR) — the HTML is served from the edge with
+// no client fetch/spinner on first paint. Matches the backend CATEGORY_LIST TTL.
+export const revalidate = 600;
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setLoading(true);
-        const response = await apiClient.get('/categories') as { data?: Category[]; categories?: Category[] };
-        setCategories(response.data || response.categories || []);
-      } catch (err) {
-        console.error('Failed to fetch categories:', err);
-        setError('Failed to load categories. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCategories();
-  }, []);
+export const metadata: Metadata = {
+  title: 'Product Categories',
+  description: 'Browse our collection of automotive products, organised by category.',
+  alternates: { canonical: `${SITE_URL}/categories` },
+};
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-obsidian-deep py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-1">Browse</p>
-            <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Product Categories</h1>
-            <p className="text-ink-muted font-display">Loading categories...</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[...Array(6)].map((_, index) => (
-              <div key={index} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
-                <div className="h-48 bg-obsidian-raised" />
-                <div className="p-6">
-                  <div className="h-5 bg-obsidian-raised rounded-sm mb-3" />
-                  <div className="h-4 bg-obsidian-raised rounded-sm w-3/4" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+async function getCategories(): Promise<Category[]> {
+  const res = await fetch(`${getServerApiBase()}/categories`, {
+    next: { revalidate: 600, tags: ['categories'] },
+  });
+  if (!res.ok) throw new Error(`categories fetch failed: ${res.status}`);
+  const data = (await res.json()) as { data?: Category[]; categories?: Category[] };
+  return data.data || data.categories || [];
+}
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-obsidian-deep py-12 flex items-center justify-center">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 max-w-md mx-4 text-center">
-          <svg className="w-14 h-14 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Error Loading Categories</h2>
-          <p className="text-ink/70 font-display mb-6">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-gold text-obsidian font-display text-[10px] font-semibold uppercase tracking-[0.2em] px-6 py-3 transition-opacity hover:opacity-90"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
+export default async function CategoriesPage() {
+  let categories: Category[] = [];
+  let failed = false;
+  try {
+    categories = await getCategories();
+  } catch (error) {
+    console.error('[categories/page] server fetch failed:', error);
+    failed = true;
   }
 
   return (
@@ -91,7 +54,22 @@ export default function CategoriesPage() {
 
       {/* Categories Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {categories.length === 0 ? (
+        {failed ? (
+          <div className="text-center py-12">
+            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">
+              Error Loading Categories
+            </h2>
+            <p className="text-ink/70 font-display mb-6">
+              We couldn’t load categories right now. Please try again shortly.
+            </p>
+            <Link
+              href="/categories"
+              className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors"
+            >
+              Retry
+            </Link>
+          </div>
+        ) : categories.length === 0 ? (
           <div className="text-center py-12">
             <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">No Categories Found</h2>
             <p className="text-ink/70 font-display mb-6">There are currently no categories available.</p>
