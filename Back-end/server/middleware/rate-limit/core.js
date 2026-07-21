@@ -4,6 +4,24 @@ import { redisClient, checkRedisHealth, markRedisDown } from './redisClient.js';
 import { handleRedisUnavailable } from './emergencyLimiter.js';
 import { isValidIP } from './ipValidator.js';
 
+// Atomic fixed-window counter in a SINGLE Redis round-trip.
+//   KEYS[1] = counter key, ARGV[1] = window seconds → returns {count, ttl}.
+// Collapses the former INCR + EXPIRE + TTL (2–3 sequential round-trips) into one
+// call — the round-trip count is what dominates latency when the rate-limit
+// Redis is a network hop from the app. `if t < 0` (re)applies the window
+// whenever the key has no expiry, covering both the first increment and any
+// "key lost its TTL" case, so a counter can never get stuck without a reset
+// (the guarantee the old del-on-expire-failure branch provided).
+const RATE_LIMIT_LUA = `
+local c = redis.call('INCR', KEYS[1])
+local t = redis.call('TTL', KEYS[1])
+if t < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+  t = tonumber(ARGV[1])
+end
+return {c, t}
+`;
+
 export const rateLimit = (options = {}) => {
   const {
     windowMs = 15 * 60 * 1000,
@@ -39,18 +57,8 @@ export const rateLimit = (options = {}) => {
 
     try {
       const redisKey = `rl:${baseKey}`;
-      const count = await redisClient.incr(redisKey);
-      if (count === 1) {
-        try {
-          await redisClient.expire(redisKey, windowSec);
-        } catch (expireErr) {
-          await redisClient.del(redisKey).catch(() => {});
-          console.warn('[RateLimit] expire failed, key deleted to prevent permanent block:', expireErr.message);
-          return next();
-        }
-      }
-
-      const ttl = count === 1 ? windowSec : await redisClient.ttl(redisKey);
+      // One atomic round-trip: increment, ensure the window TTL, read it back.
+      const [count, ttl] = await redisClient.eval(RATE_LIMIT_LUA, 1, redisKey, windowSec);
       const resetTime = now + ttl * 1000;
 
       res.set('X-RateLimit-Limit', effectiveMax.toString());
