@@ -11,6 +11,7 @@
  */
 
 import { tokenManager } from './http/tokenManager';
+import { hasAuthenticatedSession, clearAuthCache } from './authStorage';
 import { normaliseResponse } from './http/errorNormaliser';
 import { getRetryConfig, executeWithRetry, type On401Result } from './http/retryHandler';
 import { API_BASE_URL, DEFAULT_TIMEOUT } from './http/fetchConfig';
@@ -22,16 +23,6 @@ import {
   type RequestInterceptor,
   type ResponseInterceptor,
 } from './api-types';
-
-// Client-readable "a session existed" hint. Under httpOnly-cookie auth JS
-// cannot read the refresh token, so this is the only signal available to decide
-// whether a 401 should trigger a silent refresh vs. be treated as a plain guest
-// response. The value is the CachedAuth entry AuthContext writes after every
-// auth check ({ user, sessionVersion, timestamp }) — note it exists for guests
-// too (with user: null), so mere presence of the key is NOT proof of a session;
-// a real session requires a non-null `user`. Keep in sync with CACHE_KEY in
-// context/AuthContext.tsx.
-const AUTH_HINT_KEY = 'auth_check';
 
 /** Broadcast a soft "session expired" signal. AuthContext listens and clears
  * the user + surfaces an inline prompt, so an unrecoverable session does NOT
@@ -60,21 +51,13 @@ export function emitAuthLogin(): void {
 }
 
 /** True when the client believes it has (or had) an authenticated session. SSR-safe.
- *  Requires a persisted CachedAuth entry with a non-null `user` — a guest whose
- *  auth check merely wrote `{ user: null }` must NOT be treated as having a
- *  session, or their public-page 401s would trigger a doomed silent refresh and
- *  surface a spurious "session expired" prompt on return visits. */
+ *  Delegates the storage read to `authStorage` so the `auth_check` key and its
+ *  shape live in exactly one place: a guest whose auth check merely wrote
+ *  `{ user: null }` is NOT a session, so their public-page 401s don't trigger a
+ *  doomed silent refresh and a spurious "session expired" prompt on return. */
 function hasSessionHint(): boolean {
   if (tokenManager.refreshToken != null) return true; // legacy bearer flow
-  if (typeof window === 'undefined') return false;
-  try {
-    const raw = window.localStorage.getItem(AUTH_HINT_KEY);
-    if (raw == null) return false;
-    return JSON.parse(raw)?.user != null;
-  } catch {
-    // Malformed/legacy value — treat as no session rather than risk a refresh loop.
-    return false;
-  }
+  return hasAuthenticatedSession();
 }
 
 class APIClient {
@@ -222,10 +205,8 @@ class APIClient {
           return { action: 'retry' };
         } catch (refreshError) {
           tokenManager.clearAuthToken();
-          // Drop the stale login hint so a hard-expired session doesn't loop.
-          try {
-            if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_HINT_KEY);
-          } catch { /* storage unavailable — non-fatal */ }
+          // Drop the stale auth cache so a hard-expired session doesn't loop.
+          clearAuthCache();
           console.error('Token refresh failed:', refreshError);
           // Soft-expire: keep the user on the current page and let AuthContext
           // surface an inline "session expired" prompt instead of a hard
