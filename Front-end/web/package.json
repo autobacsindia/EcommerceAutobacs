@@ -27,7 +27,6 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ducanh2912/next-pwa": "^10.2.9",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@sentry/nextjs": "^10.39.0",
@@ -40,7 +39,7 @@
     "@tiptap/react": "^3.23.6",
     "@tiptap/starter-kit": "^3.23.6",
     "@types/three": "^0.185.1",
-    "axios": "^1.13.2",
+    "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
     "dexie": "^4.4.2",
     "framer-motion": "^12.31.1",

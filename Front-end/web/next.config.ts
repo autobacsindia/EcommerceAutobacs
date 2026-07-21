@@ -26,30 +26,22 @@ const nextConfig: NextConfig = {
     removeConsole: process.env.NODE_ENV === "production"
   },
   images: {
-    formats: ['image/avif', 'image/webp'],
-    // Explicit allowlist — prevents open proxy abuse via /_next/image?url=...
-    // The legacy WordPress patterns are env-gated: they only load while the apex
-    // still serves WP assets. After the Cloudinary migration, set
-    // NEXT_PUBLIC_ALLOW_WP_IMAGES=false (or unset) — no code edit needed at cutover,
-    // because these URLs 404 once autobacsindia.com leaves WordPress.
-    remotePatterns: [
-      // Cloudinary — scoped to your cloud name only (prevents proxying other tenants)
-      { protocol: 'https' as const, hostname: 'res.cloudinary.com', pathname: '/dhwxtl6l8/**' },
-      ...(process.env.NEXT_PUBLIC_ALLOW_WP_IMAGES === 'true'
-        ? [
-            // Legacy WordPress assets — dropped after logo migration complete
-            { protocol: 'https' as const, hostname: 'autobacsindia.com', pathname: '/wp-content/uploads/**' },
-            // Cloudflare Images / Polish CDN cache (same domain, different path)
-            { protocol: 'https' as const, hostname: 'autobacsindia.com', pathname: '/cdn-cgi/image/**' },
-          ]
-        : []),
-    ],
+    // Delivery is handled by Cloudinary via a custom loader (see
+    // src/lib/cloudinaryLoader.ts), NOT the built-in Next optimizer. The loader
+    // injects `f_auto,q_auto,c_limit,w_<width>` into every Cloudinary URL, so
+    // next/image emits a proper responsive srcset of right-sized WebP/AVIF
+    // variants instead of shipping the full-resolution original. This replaces
+    // the previous `unoptimized: true` (which sent originals) with no build-time
+    // optimizer cost — Cloudinary generates + edge-caches the derivatives.
+    //
+    // NOTE: with a custom loader, `formats`, `remotePatterns`, `minimumCacheTTL`
+    // and the built-in optimizer route (/_next/image) are all bypassed — the
+    // loader output URL is used verbatim, so there is no open-proxy surface to
+    // allowlist. deviceSizes/imageSizes still drive the srcset width candidates.
+    loader: 'custom',
+    loaderFile: './src/lib/cloudinaryLoader.ts',
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    minimumCacheTTL: 86400, // 24 hours
-    // OPTIMIZATION: Skip build-time image optimization for faster CI/CD builds
-    // Images are already optimized via Cloudinary, so Next.js optimization is redundant
-    unoptimized: true,
   },
   async headers() {
     // Content-Security-Policy is intentionally absent here.

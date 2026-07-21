@@ -215,15 +215,20 @@ class ProductService {
         }));
     } else {
       try {
-        const response: any = await apiClient.get(`/brands?limit=${limit}`);
+        // Product-brand filter only: exclude car makes (type:'make' — those belong
+        // in the "My Vehicle" fitment section) and inactive brands.
+        const response: any = await apiClient.get(`/brands?limit=${limit}&make=false&active=true`);
         const list: any[] = Array.isArray(response.brands) ? response.brands
                           : Array.isArray(response.data)   ? response.data
                           : [];
-        return list.map((brand: any) => ({
-          name: brand.name,
-          _id: brand._id ?? brand.id ?? brand.slug ?? brand.name,
-          productCount: brand.productCount
-        }));
+        return list
+          // Drop stale brands that no longer have any live product.
+          .filter((brand: any) => brand.productCount == null || brand.productCount > 0)
+          .map((brand: any) => ({
+            name: brand.name,
+            _id: brand._id ?? brand.id ?? brand.slug ?? brand.name,
+            productCount: brand.productCount
+          }));
       } catch (error) {
         if (process.env.NODE_ENV !== 'test') {
           console.error('Error fetching brands from API:', error);
