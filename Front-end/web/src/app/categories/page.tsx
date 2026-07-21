@@ -28,14 +28,13 @@ async function getCategories(): Promise<Category[]> {
 }
 
 export default async function CategoriesPage() {
-  let categories: Category[] = [];
-  let failed = false;
-  try {
-    categories = await getCategories();
-  } catch (error) {
-    console.error('[categories/page] server fetch failed:', error);
-    failed = true;
-  }
+  // Intentionally NOT wrapped in try/catch. On a fetch failure we WANT the error
+  // to propagate: during an ISR background revalidation Next keeps serving the
+  // last successfully generated page (stale-while-error) instead of caching a
+  // failure, and a cold request surfaces error.tsx (with a working reset()).
+  // Swallowing the error here would let ISR cache an error page for `revalidate`
+  // seconds and hand every visitor a dead "retry" link.
+  const categories = await getCategories();
 
   return (
     <div className="min-h-screen bg-obsidian-deep">
@@ -54,22 +53,7 @@ export default async function CategoriesPage() {
 
       {/* Categories Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {failed ? (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">
-              Error Loading Categories
-            </h2>
-            <p className="text-ink/70 font-display mb-6">
-              We couldn’t load categories right now. Please try again shortly.
-            </p>
-            <Link
-              href="/categories"
-              className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors"
-            >
-              Retry
-            </Link>
-          </div>
-        ) : categories.length === 0 ? (
+        {categories.length === 0 ? (
           <div className="text-center py-12">
             <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">No Categories Found</h2>
             <p className="text-ink/70 font-display mb-6">There are currently no categories available.</p>

@@ -23,8 +23,17 @@
 
 const UPLOAD_MARKER = '/image/upload/';
 
-// Cloudinary transform tokens we look for to detect an already-transformed URL.
-const TRANSFORM_TOKEN = /(^|,)(f_|q_|w_|h_|c_|e_|dpr_|g_|b_|r_|ar_|l_|o_|fl_)/;
+// A Cloudinary transformation component is a comma-separated list of `key_value`
+// params (f_auto, q_auto, w_600, e_trim, a named transform t_thumb, …). We treat
+// the first path segment after /upload/ as an existing transformation when EVERY
+// comma-separated part starts with a Cloudinary param prefix (`^[a-z]+_`). This
+// generalises over the whole param namespace instead of an ad-hoc allowlist
+// (which missed t_/x_/y_/co_/… and could double-transform), and it can never
+// match a version (`v12345`, no underscore) or a plain folder (`autobacs`), so
+// those still get a transform injected. Ambiguous segments err toward NOT
+// injecting (skip optimization) rather than corrupting the URL.
+const isTransformSegment = (segment: string): boolean =>
+  segment.length > 0 && segment.split(',').every((part) => /^[a-z]+_/.test(part));
 
 type LoaderArgs = { src: string; width: number; quality?: number };
 
@@ -38,9 +47,10 @@ export default function cloudinaryLoader({ src, width, quality }: LoaderArgs): s
   const prefix = src.slice(0, uploadAt + UPLOAD_MARKER.length); // …/image/upload/
   const rest = src.slice(uploadAt + UPLOAD_MARKER.length);      // v123/folder/img.jpg
 
-  // If the first path segment already looks like a transformation, leave it be.
+  // If the first path segment already carries a transformation, leave it be —
+  // never double-transform.
   const firstSegment = rest.split('/')[0];
-  if (TRANSFORM_TOKEN.test(firstSegment)) return src;
+  if (isTransformSegment(firstSegment)) return src;
 
   const transform = [
     'f_auto',                       // best format the browser accepts (AVIF/WebP)
