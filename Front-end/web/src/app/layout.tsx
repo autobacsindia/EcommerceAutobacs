@@ -19,7 +19,6 @@ import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -240,10 +239,6 @@ export default async function RootLayout({
           </QueryProvider>
           </PostHogProvider>
         </LogRocketProvider>
-        {/* Real-user Core Web Vitals (LCP/INP/CLS). No-op off Vercel; beacons
-            same-origin to /_vercel/speed-insights, allowed by the existing
-            'self' connect-src and strict-dynamic CSP. */}
-        <SpeedInsights />
       </body>
     </html>
   );

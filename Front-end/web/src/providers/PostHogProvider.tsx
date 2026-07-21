@@ -29,6 +29,10 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         ui_host: process.env.NEXT_PUBLIC_POSTHOG_UI_HOST || 'https://us.posthog.com',
         capture_pageview: false,      // handled manually below (App Router SPA navigation)
         capture_pageleave: true,
+        // Real-user Core Web Vitals (LCP/INP/CLS/FCP) — the free replacement for
+        // Vercel Speed Insights. Shows up under Web Analytics / Web Vitals in the
+        // PostHog dashboard, no extra dependency or cost.
+        capture_performance: { web_vitals: true },
         persistence: 'localStorage+cookie',
       });
     }
