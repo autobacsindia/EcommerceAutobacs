@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, DM_Sans, Montserrat } from "next/font/google";
+import { DM_Sans, Montserrat } from "next/font/google";
 import Script from "next/script";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -19,13 +19,6 @@ import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
-
-const barlowCondensed = Barlow_Condensed({
-  variable: "--font-barlow-condensed",
-  subsets: ["latin"],
-  weight: ["400", "600", "700", "800", "900"],
-  display: "swap",
-});
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -195,7 +188,7 @@ export default async function RootLayout({
         {nonce && <meta name="csp-nonce" content={nonce} />}
       </head>
       <body
-        className={`${barlowCondensed.variable} ${dmSans.variable} ${montserrat.variable} antialiased`}
+        className={`${dmSans.variable} ${montserrat.variable} antialiased`}
       >
         <LogRocketProvider>
           <PostHogProvider>

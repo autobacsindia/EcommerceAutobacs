@@ -21,8 +21,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        condensed: ["var(--font-barlow-condensed)", "sans-serif"],
-        body:      ["var(--font-dm-sans)", "sans-serif"],
+        body: ["var(--font-dm-sans)", "sans-serif"],
       },
     },
   },
