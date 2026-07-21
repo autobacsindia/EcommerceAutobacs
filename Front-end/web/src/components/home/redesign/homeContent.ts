@@ -100,8 +100,14 @@ export const hero = {
   tagline: 'Premium aftermarket parts for the discerning enthusiast.',
   bottomTagline: 'Reimagine every drive.',
   ctaLabel: 'Explore Collection',
+  // Served from our own Cloudinary (was a raw Unsplash JPEG). Transform is baked
+  // into the delivery URL because the hero renders via a plain <img> (not
+  // next/image), so the custom loader doesn't apply here: f_auto→WebP/AVIF,
+  // q_auto, w_1200 (this fallback is the MOBILE hero — desktop uses the canvas
+  // sequence). Swap the underlying asset by re-uploading the same public_id.
   image:
-'https://images.unsplash.com/photo-1485291571150-772bcfc10da5?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MzR8fGNhcnxlbnwwfHwwfHx8MA%3D%3D',  imageAlt: 'Performance Vehicle',
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1200/autobacs/site/hero-performance-vehicle.jpg',
+  imageAlt: 'Performance Vehicle',
 };
 
 /**
