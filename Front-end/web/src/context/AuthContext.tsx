@@ -3,6 +3,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
 import { SESSION_EXPIRED_EVENT, emitAuthLogin } from '@/lib/api-client';
+import {
+  readAuthCache,
+  writeAuthCache,
+  clearAuthCache,
+  type CachedAuth as StoredAuth,
+} from '@/lib/authStorage';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 
@@ -38,8 +44,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const CACHE_KEY = 'auth_check';
-
 // Admin sessions are validated more frequently — a role change or ban must
 // propagate quickly. Customer sessions tolerate slightly more staleness.
 const CACHE_TTL: Record<string, number> = {
@@ -48,36 +52,15 @@ const CACHE_TTL: Record<string, number> = {
 };
 const DEFAULT_TTL = 60 * 1000;
 
-interface CachedAuth {
-  user: User | null;
-  sessionVersion: number;
-  timestamp: number;
-}
-
-function readCache(): CachedAuth | null {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as CachedAuth;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(user: User | null, sessionVersion: number) {
-  try {
-    const entry: CachedAuth = { user, sessionVersion, timestamp: Date.now() };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
-  } catch {
-    // localStorage unavailable (private browsing, storage full) — non-fatal
-  }
-}
-
-function clearCache() {
-  try {
-    localStorage.removeItem(CACHE_KEY);
-  } catch { /* non-fatal */ }
-}
+// The `auth_check` localStorage key and its `{ user, sessionVersion, timestamp }`
+// shape are owned by lib/authStorage — the single place api-client also reads to
+// decide whether a 401 is a real (refreshable) session or a plain guest. These
+// thin, typed wrappers keep the existing call sites unchanged.
+type CachedAuth = StoredAuth<User>;
+const readCache = (): CachedAuth | null => readAuthCache<User>();
+const writeCache = (user: User | null, sessionVersion: number): void =>
+  writeAuthCache(user, sessionVersion);
+const clearCache = clearAuthCache;
 
 function isCacheValid(cached: CachedAuth): boolean {
   const ttl = cached.user?.role
