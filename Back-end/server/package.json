@@ -116,7 +116,7 @@
     "postmark": "^4.0.7",
     "razorpay": "^2.9.6",
     "sanitize-html": "2.17.5",
-    "twilio": "^5.10.6",
+    "twilio": "^6.0.2",
     "uuid": "^13.0.2"
   },
   "devDependencies": {
