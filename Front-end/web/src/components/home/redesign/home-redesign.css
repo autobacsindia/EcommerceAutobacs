@@ -440,7 +440,13 @@
 .hr .transformation .section-header .eyebrow { font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--gold); margin-bottom: 20px; }
 .hr .transformation .section-header h2 { font-size: clamp(36px, 5vw, 64px); font-weight: 300; line-height: 1.05; }
 .hr .transformation .section-header h2 em { font-style: italic; color: var(--gold); }
-.hr .split-reveal { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #1a1c1c; margin-bottom: 64px; cursor: ew-resize; user-select: none; touch-action: none; }
+/* max-width caps the upscale of the before/after source on very large screens:
+   full-bleed (width:100%) would stretch the ~1672px source across a 2560px+
+   monitor and look soft. 1340px matches the site content width (.journal-inner
+   et al.) so the source renders ~1:1 or downscaled = crisp on standard-DPI big
+   screens. High-DPR/4K crispness still needs a ≥2560px source (see
+   homeContent.ts transformation note); the responsive srcSet then serves it. */
+.hr .split-reveal { position: relative; width: 100%; max-width: 1340px; margin: 0 auto 64px; aspect-ratio: 16 / 9; overflow: hidden; background: #1a1c1c; cursor: ew-resize; user-select: none; touch-action: none; }
 .hr .split-reveal img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .hr .split-after { filter: brightness(0.78); }
 .hr .split-before { filter: brightness(0.78); }
