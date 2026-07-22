@@ -11,12 +11,17 @@ import '@/components/home/redesign/home-redesign.css';
  */
 export default function ConditionalFooter() {
   const pathname = usePathname();
+  // Trailing-slash-safe match: `skipTrailingSlashRedirect` (next.config.ts)
+  // serves `/careers/` verbatim, so an exact `=== '/careers'` check would miss
+  // it and render a second global footer under the page's own. Keep this in
+  // sync with ConditionalHeader.
+  const path = pathname?.replace(/\/+$/, '') || '/';
   const hide =
-    pathname === '/' ||
-    pathname === '/careers' ||
-    pathname === '/login' ||
-    pathname === '/register' ||
-    pathname?.startsWith('/admin');
+    path === '/' ||
+    path === '/careers' ||
+    path === '/login' ||
+    path === '/register' ||
+    path.startsWith('/admin');
 
   if (hide) return null;
 

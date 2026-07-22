@@ -21,12 +21,18 @@ import type { NavCategory } from '@/lib/navCategories';
  */
 export default function ConditionalHeader({ navCategories: _navCategories }: { navCategories: NavCategory[] }) {
   const pathname = usePathname();
+  // Normalise a trailing slash before matching. `next.config.ts` sets
+  // `skipTrailingSlashRedirect`, so `/careers/` is served verbatim and
+  // usePathname() returns it with the slash — an exact `=== '/careers'` check
+  // would miss it and render the global nav on top of the page's own header
+  // (the double-header bug). Collapse trailing slashes, keeping root as '/'.
+  const path = pathname?.replace(/\/+$/, '') || '/';
   const hide =
-    pathname === '/' ||
-    pathname === '/careers' ||
-    pathname === '/login' ||
-    pathname === '/register' ||
-    pathname?.startsWith('/admin');
+    path === '/' ||
+    path === '/careers' ||
+    path === '/login' ||
+    path === '/register' ||
+    path.startsWith('/admin');
 
   if (hide) return null;
 

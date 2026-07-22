@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
+import { cloudinarySrcSet } from '@/lib/cloudinarySrcSet';
 
 /**
  * Plain <img> with graceful degradation for the redesign.
@@ -13,6 +14,13 @@ import { useState } from 'react';
  * We use a native <img> (not next/image) on purpose: these are decorative,
  * swappable placeholders, and it sidesteps next.config remote-host allowlisting
  * while the real artwork is still being sourced.
+ *
+ * RESPONSIVE: pass `sizes` (the CSS width the image occupies, e.g. "100vw") to
+ * opt a Cloudinary-hosted image into a responsive `srcSet` — the plain-<img>
+ * equivalent of what next/image gives its optimized images. Without it the
+ * <img> ships a single fixed width to every device. Callers that omit `sizes`
+ * are unchanged. Non-Cloudinary URLs never get a srcSet (helper returns
+ * undefined), so Unsplash placeholders keep their own `?w=` sizing.
  */
 export default function Img({
   src,
@@ -20,6 +28,7 @@ export default function Img({
   className,
   draggable,
   priority = false,
+  sizes,
 }: {
   src?: string;
   alt: string;
@@ -31,6 +40,13 @@ export default function Img({
    * of poor mobile LCP.
    */
   priority?: boolean;
+  /**
+   * CSS width the image renders at (the `sizes` attribute, e.g. "100vw" for a
+   * full-bleed image). Presence enables a responsive Cloudinary `srcSet` so the
+   * browser downloads a variant matched to the viewport × DPR instead of one
+   * fixed width. No-op for non-Cloudinary sources.
+   */
+  sizes?: string;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -48,9 +64,13 @@ export default function Img({
     );
   }
 
+  const srcSet = sizes ? cloudinarySrcSet(src) : undefined;
+
   return (
     <img
       src={src}
+      srcSet={srcSet}
+      sizes={srcSet ? sizes : undefined}
       alt={alt}
       className={className}
       draggable={draggable}
