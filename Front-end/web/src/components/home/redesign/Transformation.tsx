@@ -74,9 +74,9 @@ export default function Transformation() {
       </div>
 
       <div className="split-reveal reveal reveal-d1" ref={wrapRef}>
-        <Img src={transformation.after} alt="After" className="split-after" draggable={false} />
+        <Img src={transformation.after} alt="After" className="split-after" draggable={false} sizes="100vw" />
         <div ref={beforeRef} className="split-before-wrap">
-          <Img src={transformation.before} alt="Before" className="split-before" draggable={false} />
+          <Img src={transformation.before} alt="Before" className="split-before" draggable={false} sizes="100vw" />
         </div>
         <div className="split-label split-label-before">Before</div>
         <div className="split-label split-label-after">After</div>

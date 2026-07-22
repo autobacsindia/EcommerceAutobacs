@@ -281,10 +281,17 @@ export const brands: string[] = [
  * IMPORTANT: like `hero.image`, these render through a plain <img> (see
  * Transformation.tsx / Img.tsx), NOT next/image — so the Cloudinary loader does
  * NOT apply and the delivery transform MUST be baked into the URL. Always keep
- * `f_auto,q_auto,c_limit,w_1600` right after `/upload/`: f_auto→WebP/AVIF,
- * q_auto→perceptual quality (no visible loss), c_limit,w_1600→a sharp full-bleed
- * width without shipping the multi-MB original. A bare `/upload/v123/x.jpg` URL
- * serves the full-resolution JPEG to every visitor — don't paste one.
+ * `f_auto,q_auto,c_limit,w_1920` right after `/upload/`: f_auto→WebP/AVIF,
+ * q_auto→perceptual quality (no visible loss), c_limit,w_1920→cap the width
+ * WITHOUT ever upscaling (c_limit is downscale-only). A bare `/upload/v123/x.jpg`
+ * URL serves the full-resolution JPEG to every visitor — don't paste one.
+ *
+ * RESOLUTION NOTE: this slider is full-bleed (`.split-reveal` is width:100%, no
+ * max-width) so it paints ~1816 CSS px on a 1920 monitor and ~2× that on retina.
+ * The current source assets are only 1672px wide, so on large/high-DPR screens
+ * they get upscaled and look soft — that is a SOURCE limitation, not a transform
+ * one. To look crisp everywhere, re-upload before/after photos at ≥2560px wide
+ * (same public_id); w_1920 above then delivers the extra resolution automatically.
  *
  * ↓↓↓ ADD YOUR CLOUDINARY LINKS HERE (keep the transform prefix) ↓↓↓
  */
@@ -294,9 +301,9 @@ export const transformation = {
   titleAccent: 'Autobaacs',
   titleBottom: 'Effect.',
   before:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1600/v1782907582/before_bmw_hlwaqs.jpg',
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1920/v1782907582/before_bmw_hlwaqs.jpg',
   after:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1600/v1782907582/after_bmw_svmikn.jpg',
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1920/v1782907582/after_bmw_svmikn.jpg',
 };
 
 export const testimonials: TestimonialItem[] = [
