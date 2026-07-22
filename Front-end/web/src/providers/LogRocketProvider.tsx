@@ -122,8 +122,10 @@ export const identifyLogRocketUser = (user: {
 /**
  * Helper to log custom events. Fire-and-forget.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const logLogRocketEvent = (event: string, data?: Record<string, any>) => {
+export const logLogRocketEvent = (
+  event: string,
+  data?: Record<string, string | number | boolean>,
+) => {
   if (!process.env.NEXT_PUBLIC_LOGROCKET_APP_ID) return;
   loadLogRocket()
     .then((LogRocket) => {
