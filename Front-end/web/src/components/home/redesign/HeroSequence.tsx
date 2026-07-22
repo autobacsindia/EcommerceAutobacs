@@ -199,7 +199,7 @@ export default function HeroSequence({
       <canvas ref={canvasRef} className="hero-seq" aria-hidden="true" />
       {/* Mobile / reduced-motion fallback — toggled via CSS, not JS, so SSR is
           deterministic and the canvas path never affects hydration. */}
-      <Img src={hero.image} alt={hero.imageAlt} className="hero-seq-fallback" />
+      <Img src={hero.image} alt={hero.imageAlt} className="hero-seq-fallback" priority />
     </>
   );
 }

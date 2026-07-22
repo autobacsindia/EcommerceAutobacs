@@ -19,11 +19,18 @@ export default function Img({
   alt,
   className,
   draggable,
+  priority = false,
 }: {
   src?: string;
   alt: string;
   className?: string;
   draggable?: boolean;
+  /**
+   * Above-the-fold / LCP image: load eagerly with high fetch priority instead of
+   * the default lazy. Use for the hero — a lazy-loaded LCP element is a top cause
+   * of poor mobile LCP.
+   */
+  priority?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -47,7 +54,9 @@ export default function Img({
       alt={alt}
       className={className}
       draggable={draggable}
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : undefined}
+      decoding="async"
       onError={() => setFailed(true)}
     />
   );

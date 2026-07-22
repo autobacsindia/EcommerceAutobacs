@@ -186,6 +186,10 @@ export default async function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {nonce && <meta name="csp-nonce" content={nonce} />}
+        {/* Warm the TLS connection to Cloudinary — it serves the eager mobile
+            hero LCP image and every product image, so this speeds the first
+            image on any page. */}
+        <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
       </head>
       <body
         className={`${dmSans.variable} ${montserrat.variable} antialiased`}

@@ -100,8 +100,14 @@ export const hero = {
   tagline: 'Premium aftermarket parts for the discerning enthusiast.',
   bottomTagline: 'Reimagine every drive.',
   ctaLabel: 'Explore Collection',
+  // Served from our own Cloudinary (was a raw Unsplash JPEG). Transform is baked
+  // into the delivery URL because the hero renders via a plain <img> (not
+  // next/image), so the custom loader doesn't apply here: f_auto→WebP/AVIF,
+  // q_auto, w_1200 (this fallback is the MOBILE hero — desktop uses the canvas
+  // sequence). Swap the underlying asset by re-uploading the same public_id.
   image:
-'https://images.unsplash.com/photo-1485291571150-772bcfc10da5?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MzR8fGNhcnxlbnwwfHwwfHx8MA%3D%3D',  imageAlt: 'Performance Vehicle',
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1200/autobacs/site/hero-performance-vehicle.jpg',
+  imageAlt: 'Performance Vehicle',
 };
 
 /**
@@ -269,13 +275,18 @@ export const brands: string[] = [
 
 /**
  * Before/After comparison slider. This section is NOT DB-backed — it's a
- * curated pair of images. Paste your Cloudinary URLs below (replace the two
- * Unsplash placeholders). Use the SAME aspect ratio for both so the wipe lines
- * up, e.g.:
- *   before: 'https://res.cloudinary.com/<cloud>/image/upload/f_auto,q_auto/v123/before.jpg',
- *   after:  'https://res.cloudinary.com/<cloud>/image/upload/f_auto,q_auto/v123/after.jpg',
+ * curated pair of images. Use the SAME aspect ratio for both so the wipe lines
+ * up.
  *
- * ↓↓↓ ADD YOUR CLOUDINARY LINKS HERE ↓↓↓
+ * IMPORTANT: like `hero.image`, these render through a plain <img> (see
+ * Transformation.tsx / Img.tsx), NOT next/image — so the Cloudinary loader does
+ * NOT apply and the delivery transform MUST be baked into the URL. Always keep
+ * `f_auto,q_auto,c_limit,w_1600` right after `/upload/`: f_auto→WebP/AVIF,
+ * q_auto→perceptual quality (no visible loss), c_limit,w_1600→a sharp full-bleed
+ * width without shipping the multi-MB original. A bare `/upload/v123/x.jpg` URL
+ * serves the full-resolution JPEG to every visitor — don't paste one.
+ *
+ * ↓↓↓ ADD YOUR CLOUDINARY LINKS HERE (keep the transform prefix) ↓↓↓
  */
 export const transformation = {
   eyebrow: 'Before & After',
@@ -283,9 +294,9 @@ export const transformation = {
   titleAccent: 'Autobaacs',
   titleBottom: 'Effect.',
   before:
-'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1782907582/before_bmw_hlwaqs.jpg',
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1600/v1782907582/before_bmw_hlwaqs.jpg',
   after:
-'https://res.cloudinary.com/dhwxtl6l8/image/upload/v1782907582/after_bmw_svmikn.jpg',
+    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1600/v1782907582/after_bmw_svmikn.jpg',
 };
 
 export const testimonials: TestimonialItem[] = [

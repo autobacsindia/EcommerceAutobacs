@@ -43,6 +43,9 @@ export const profileKeys = {
   all: ['profile'] as const,
   me: () => [...profileKeys.all, 'me'] as const,
   verification: () => [...profileKeys.all, 'verification'] as const,
+  recentOrders: () => [...profileKeys.all, 'recent-orders'] as const,
+  karma: () => [...profileKeys.all, 'karma'] as const,
+  karmaHistory: () => [...profileKeys.all, 'karma', 'history'] as const,
 };
 
 export const adminKeys = {
