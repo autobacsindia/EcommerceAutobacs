@@ -298,6 +298,24 @@ async function ensureCriticalIndexes() {
       { background: true }
     );
     console.log('✓ Lead worklist score index confirmed');
+
+    // Back-in-stock dedup — the ONLY thing enforcing "one pending request per
+    // (product, variant, user)". stockNotificationRequestRepository.upsertPending
+    // relies on this partial-unique index throwing E11000 on a concurrent double
+    // sign-up; without it a shopper can accumulate duplicate pending rows and get
+    // duplicate back-in-stock emails. Partial on status:'pending' so notified/
+    // cancelled rows don't block a fresh sign-up on the next out-of-stock cycle.
+    // autoIndex is off in prod, so this safety net is what actually builds it there.
+    await db.collection('stocknotificationrequests').createIndex(
+      { product: 1, variantId: 1, user: 1 },
+      { unique: true, partialFilterExpression: { status: 'pending' }, background: true }
+    );
+    // Fan-out + admin-list read path: pending rows for a product/variant.
+    await db.collection('stocknotificationrequests').createIndex(
+      { product: 1, variantId: 1, status: 1 },
+      { background: true }
+    );
+    console.log('✓ StockNotificationRequest indexes confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);

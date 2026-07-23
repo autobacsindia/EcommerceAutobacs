@@ -28,6 +28,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
       { href: '/admin/coupons', label: 'Coupons', icon: '🎟️' },
       { href: '/admin/loyalty', label: 'Karma Points', icon: '✨' },
+      { href: '/admin/stock-requests', label: 'Stock Requests', icon: '🔔' },
     ],
   },
   {

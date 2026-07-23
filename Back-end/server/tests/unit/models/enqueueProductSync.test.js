@@ -12,6 +12,7 @@ const mockSearchSyncAdd = jest.fn().mockResolvedValue(undefined);
 
 jest.unstable_mockModule('../../../queue/queues.js', () => ({
   getSearchSyncQueue: () => ({ add: mockSearchSyncAdd }),
+  enqueueNotification: jest.fn(),
 }));
 
 // The enqueue is gated on REDIS_URL + ELASTICSEARCH_ENABLED, checked at call time.

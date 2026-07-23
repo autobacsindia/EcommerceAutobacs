@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
-import { getSearchSyncQueue } from '../queue/queues.js';
+import { getSearchSyncQueue, enqueueNotification } from '../queue/queues.js';
 import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
+import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
 
@@ -425,6 +426,70 @@ ProductSchema.post('deleteMany', function () {
   for (const id of (this._idsToSync || [])) {
     enqueueSync(id);
   }
+});
+
+// ── Back-in-stock notification hooks ──────────────────────────────────────────
+// When an item transitions out → purchasable (in/low), fan out an email to every
+// customer who asked to be notified (see models/StockNotificationRequest.js and
+// queue/workers/notificationWorker.js). Detection is a before/after snapshot diff
+// (utils/restockDetect.js): per-variant for variable products, whole-item for
+// simple ones. Enqueue is fire-and-forget — a queue outage must never fail the
+// stock write. The prior-state read is only taken when the write actually touches
+// `stock`/`variants`, so non-availability updates (price edits, SEO, etc.) pay nothing.
+
+function enqueueRestock(before, after, productId) {
+  for (const variantId of diffRecoveredTargets(before, after)) {
+    notifyRestockForTarget(productId, variantId);
+  }
+}
+
+// Explicit escape hatch for bulk stock writes that BYPASS the document hooks below.
+// `updateMany` / `bulkWrite` fire no per-doc middleware, so a future bulk "mark
+// back in stock" path (there is none today) must enqueue restock itself — the same
+// boundary as enqueueProductSync for ES. Keeps the job name/shape in one place.
+export function notifyRestockForTarget(productId, variantId = null) {
+  enqueueNotification('notify-back-in-stock', {
+    productId: productId.toString(),
+    variantId: variantId != null ? variantId.toString() : null,
+  });
+}
+
+// save() path — admin create/edit (full-document), WooCommerce sync inserts.
+ProductSchema.pre('save', async function () {
+  this._stockBefore = null;
+  if (this.isNew || !(this.isModified('stock') || this.isModified('variants'))) return;
+  const prior = await this.constructor.findById(this._id).select('stock variants').lean();
+  this._stockBefore = snapshotStock(prior);
+});
+
+ProductSchema.post('save', function (doc) {
+  if (doc._stockBefore) enqueueRestock(doc._stockBefore, snapshotStock(doc), doc._id);
+});
+
+// findByIdAndUpdate / findOneAndUpdate path — admin quick stock edit, variable
+// product edit, WooCommerce sync updates. Only snapshot when the update payload
+// could change availability, so non-availability updates (price/SEO) pay nothing.
+ProductSchema.pre('findOneAndUpdate', async function () {
+  this._stockBefore = null;
+  // Mongoose may carry fields both at the top level AND inside $set (it appends a
+  // $set for the timestamp), so check both places — not `upd.$set || upd`.
+  const upd = this.getUpdate() || {};
+  const touches = (obj) => obj && ('stock' in obj || 'variants' in obj);
+  if (!touches(upd) && !touches(upd.$set)) return;
+  const prior = await this.model.findOne(this.getFilter()).select('stock variants').lean();
+  this._stockBefore = snapshotStock(prior);
+});
+
+ProductSchema.post('findOneAndUpdate', async function (doc) {
+  if (!this._stockBefore || !doc) return;
+  // When the caller asked for the updated doc ({ new: true } / returnDocument:
+  // 'after'), `doc` already reflects post-update state — reuse it and skip a second
+  // read (the common admin path). The WooCommerce-sync path omits that option, so
+  // `doc` there is the pre-update version and we must re-read the fresh state.
+  const opts = this.getOptions();
+  const returnsNew = opts.new === true || opts.returnDocument === 'after' || opts.returnOriginal === false;
+  const after = returnsNew ? doc : await this.model.findById(doc._id).select('stock variants').lean();
+  enqueueRestock(this._stockBefore, snapshotStock(after), doc._id);
 });
 
 export default mongoose.model("Product", ProductSchema);

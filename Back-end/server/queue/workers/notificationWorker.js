@@ -6,6 +6,8 @@
  *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
+ *   notify-back-in-stock       { productId, variantId } — fan out to everyone waiting on a recovered item
+ *   send-back-in-stock-email   { requestId }            — provider send for one claimed request
  *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
  *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
  *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
@@ -19,6 +21,7 @@ import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
+import { fanOutRestock, emailBackInStock } from '../../services/restockNotificationService.js';
 import {
   emailAdminReviewAlert,
   emailAdminConsultationAlert,
@@ -47,6 +50,19 @@ const handlers = {
   'send-magic-link-email': async (job) => {
     const { email, token, orderId } = job.data;
     await emailHandler.sendMagicLinkEmail(email, token, orderId);
+  },
+
+  // Fan out: an item recovered — claim every pending request for it and enqueue
+  // one send-back-in-stock-email per claimed request (idempotent, concurrency-safe).
+  'notify-back-in-stock': async (job) => {
+    const { productId, variantId } = job.data;
+    await fanOutRestock(productId, variantId ?? null);
+  },
+
+  // Provider send for a single already-claimed back-in-stock request.
+  'send-back-in-stock-email': async (job) => {
+    const { requestId } = job.data;
+    await emailBackInStock(requestId);
   },
 
   'send-admin-review-alert': async (job) => {
