@@ -228,7 +228,14 @@ export default function EditProductPage() {
       setFeatures(productData.features || []);
       setWhyChoose(productData.whyChoose || []);
       setPackageContents(productData.packageContents || []);
-      setSpecifications(productData.specifications || []);
+      // Migrated products can carry spec rows missing a key or value (both are
+      // optional in the schema). Coerce to a safe {key,value} shape so inputs stay
+      // controlled and the submit-time trim() never hits undefined.
+      setSpecifications(
+        (productData.specifications || [])
+          .filter((s: any) => s && typeof s === 'object')
+          .map((s: any) => ({ key: s.key ?? '', value: s.value ?? '' }))
+      );
 
       if (productData.compatibleVehicles && Array.isArray(productData.compatibleVehicles)) {
         // Handle both populated (objects) and unpopulated (strings) arrays
@@ -450,7 +457,7 @@ export default function EditProductPage() {
       fd.append('whyChoose', JSON.stringify(validWhyChoose));
       const validPackageContents = packageContents.filter(p => p.trim());
       fd.append('packageContents', JSON.stringify(validPackageContents));
-      const validSpecs = specifications.filter(s => s.key.trim() && s.value.trim());
+      const validSpecs = specifications.filter(s => s?.key?.trim() && s?.value?.trim());
       fd.append('specifications', JSON.stringify(validSpecs));
 
       // SEO overrides — always sent so cleared fields reset back to defaults;

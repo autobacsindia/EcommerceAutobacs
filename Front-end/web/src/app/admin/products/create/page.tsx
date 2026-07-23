@@ -200,7 +200,7 @@ export default function CreateProductPage() {
       if (features.filter(f => f.trim()).length) fd.append('features', JSON.stringify(features.filter(f => f.trim())));
       if (whyChoose.filter(w => w.trim()).length) fd.append('whyChoose', JSON.stringify(whyChoose.filter(w => w.trim())));
       if (packageContents.filter(p => p.trim()).length) fd.append('packageContents', JSON.stringify(packageContents.filter(p => p.trim())));
-      const validSpecs = specifications.filter(s => s.key.trim() && s.value.trim());
+      const validSpecs = specifications.filter(s => s?.key?.trim() && s?.value?.trim());
       if (validSpecs.length)          fd.append('specifications',    JSON.stringify(validSpecs));
 
       const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);

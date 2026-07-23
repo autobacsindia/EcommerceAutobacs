@@ -123,6 +123,17 @@ const parseProductFields = (body) => {
     }
   }
 
+  // Normalize specifications: both key and value are optional in the schema, so a
+  // malformed client payload (or a legacy migrated row) could carry a null/missing
+  // side. Coerce to trimmed strings and drop rows where either side is blank so we
+  // never persist half-rows that later crash trim()-based consumers.
+  if (Array.isArray(fields.specifications)) {
+    fields.specifications = fields.specifications
+      .filter((s) => s && typeof s === 'object')
+      .map((s) => ({ key: String(s.key ?? '').trim(), value: String(s.value ?? '').trim() }))
+      .filter((s) => s.key && s.value);
+  }
+
   // Normalize the SEO sub-document: coerce noindex, trim/strip strings, drop
   // blank fields. We only touch `seo` when the client actually sent it, so a
   // partial update that omits `seo` never wipes stored values — but an admin
