@@ -514,7 +514,7 @@ export default function AdminOrderDetailPage() {
               
               <div className="flex justify-between">
                 <span>Shipping</span>
-                <span>₹{order.shippingCost.toFixed(2)}</span>
+                <span>{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Calculated at delivery'}</span>
               </div>
               
               <div className="flex justify-between">
