@@ -1,8 +1,16 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CreateProductPage from './page';
 import apiClient from '@/lib/api';
 import { useRouter } from 'next/navigation';
+
+// The page uses TanStack Query's useQueryClient (to invalidate the admin product
+// list after create), so renders must be wrapped in a QueryClientProvider.
+const renderWithClient = (ui: React.ReactElement) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+};
 
 // Mock apiClient
 jest.mock('@/lib/api');
@@ -61,7 +69,7 @@ describe('CreateProductPage', () => {
   });
 
   it('renders form after fetching data', async () => {
-    render(<CreateProductPage />);
+    renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toBeInTheDocument();
@@ -71,7 +79,7 @@ describe('CreateProductPage', () => {
   });
 
   it('handles input changes', async () => {
-    render(<CreateProductPage />);
+    renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toBeInTheDocument();
@@ -90,7 +98,7 @@ describe('CreateProductPage', () => {
   });
 
   it('handles vehicle selection', async () => {
-    render(<CreateProductPage />);
+    renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Toyota Corolla')).toBeInTheDocument();
@@ -102,7 +110,7 @@ describe('CreateProductPage', () => {
   });
 
   it('handles form submission', async () => {
-    render(<CreateProductPage />);
+    renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toBeInTheDocument();
@@ -132,7 +140,7 @@ describe('CreateProductPage', () => {
   });
 
   it('handles dynamic features', async () => {
-    render(<CreateProductPage />);
+    renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Add Feature')).toBeInTheDocument();
@@ -148,7 +156,7 @@ describe('CreateProductPage', () => {
   });
 
   it('handles image selection', async () => {
-    render(<CreateProductPage />);
+    renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText('Select Images')).toBeInTheDocument();

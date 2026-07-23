@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
+import { adminKeys } from '@/hooks/queries/keys';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
@@ -30,6 +32,7 @@ interface Brand {
 
 export default function CreateProductPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [categories, setCategories] = useState<Category[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -222,6 +225,10 @@ export default function CreateProductPage() {
 
       // A new (featured) product may belong on the homepage's featured shelf.
       revalidateHome('home:products');
+      // Drop the admin product-list cache (all pages/filters) so the list we're
+      // about to navigate to refetches and shows this new product immediately —
+      // otherwise TanStack serves the pre-create cached list for up to staleTime.
+      queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
       alert('Product created successfully');
       router.push('/admin/products');
     } catch (err: any) {
