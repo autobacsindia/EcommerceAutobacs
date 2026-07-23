@@ -477,7 +477,7 @@ export default function OrderDetailPage() {
             </div>
             <div className="font-display text-sm space-y-2">
               <div className="flex justify-between"><span className="text-ink-muted">Subtotal</span><span className="text-ink/70">₹{(order.subtotal || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">₹{(order.shippingCost || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Calculated at delivery'}</span></div>
               <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">₹{(order.tax || 0).toFixed(2)}</span></div>
               {(order.discount || 0) > 0 && (
                 <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="text-green-400">-₹{(order.discount || 0).toFixed(2)}</span></div>

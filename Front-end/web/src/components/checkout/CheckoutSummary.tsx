@@ -137,7 +137,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           {!!quote?.couponDiscount && (
             <Row label={`Coupon (${quote.appliedCoupon?.code})`} value={`- ${money(quote.couponDiscount)}`} positive />
           )}
-          {quote?.freeShippingApplied && <Row label="Shipping" value="Free" positive />}
+          <Row label="Shipping" value="Calculated at delivery" muted />
           {!!quote?.karmaDiscount && (
             <Row label={`Karma (${quote.karmaPointsUsed} pts)`} value={`- ${money(quote.karmaDiscount)}`} positive />
           )}
