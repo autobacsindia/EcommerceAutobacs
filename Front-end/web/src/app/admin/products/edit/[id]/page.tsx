@@ -4,6 +4,8 @@ import { type StockStatus, getStockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
+import { adminKeys } from '@/hooks/queries/keys';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
@@ -63,6 +65,7 @@ interface Product {
 
 export default function EditProductPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useParams();
   const productId = params.id as string;
   
@@ -527,6 +530,9 @@ export default function EditProductPage() {
       // Edits to the featured flag / name / price / image should reflect on the
       // homepage's featured shelf right away.
       revalidateHome('home:products');
+      // Invalidate the admin product-list cache (all pages/filters) so edits are
+      // reflected the moment we navigate back, instead of after staleTime.
+      queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
       alert('Product updated successfully');
       router.push('/admin/products');
     } catch (err: any) {

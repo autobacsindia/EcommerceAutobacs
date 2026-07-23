@@ -1,8 +1,16 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EditProductPage from './page';
 import apiClient from '@/lib/api';
 import { useRouter, useParams } from 'next/navigation';
+
+// The page uses TanStack Query's useQueryClient (to invalidate the admin product
+// list after an edit), so renders must be wrapped in a QueryClientProvider.
+const renderWithClient = (ui: React.ReactElement) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+};
 
 // Mock apiClient
 jest.mock('@/lib/api');
@@ -88,7 +96,7 @@ describe('EditProductPage', () => {
   });
 
   it('renders form populated with product data', async () => {
-    render(<EditProductPage />);
+    renderWithClient(<EditProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Existing Product');
@@ -98,7 +106,7 @@ describe('EditProductPage', () => {
   });
 
   it('handles input changes', async () => {
-    render(<EditProductPage />);
+    renderWithClient(<EditProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Existing Product');
@@ -109,7 +117,7 @@ describe('EditProductPage', () => {
   });
 
   it('handles form submission', async () => {
-    render(<EditProductPage />);
+    renderWithClient(<EditProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Existing Product');
@@ -141,7 +149,7 @@ describe('EditProductPage', () => {
   });
 
   it('handles offer date validation', async () => {
-    render(<EditProductPage />);
+    renderWithClient(<EditProductPage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Feature on offers page/i)).toBeInTheDocument();
