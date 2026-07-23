@@ -10,6 +10,7 @@ import { jest } from '@jest/globals';
 
 jest.unstable_mockModule('../../../queue/queues.js', () => ({
   getSearchSyncQueue: () => ({ add: jest.fn().mockResolvedValue(undefined) }),
+  enqueueNotification: jest.fn(),
 }));
 
 const { default: Product } = await import('../../../models/Product.js');

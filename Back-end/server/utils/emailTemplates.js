@@ -5,6 +5,16 @@
 import { formatInvoiceNumber } from './invoiceFormat.js';
 
 /**
+ * Escape a value for safe interpolation into HTML text/attribute contexts.
+ * Product names, variant labels, and Cloudinary URLs can carry `&`/`<`/`"`, which
+ * would otherwise break the email markup (or the surrounding attribute).
+ */
+const escapeHtml = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
+
+/**
  * Password Reset Email Template
  * @param {Object} params
  * @param {string} params.name - User's name
@@ -927,6 +937,88 @@ ${companyName}
     </div>
     <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
       <p style="margin:4px 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  return { subject, text, html };
+};
+
+/**
+ * Back-in-stock notification. Sent once, to a logged-in customer who tapped
+ * "Notify me" on an out-of-stock item that has since returned. `variantLabel`
+ * names the exact model for a variable product (null for simple products).
+ */
+export const backInStockEmail = ({ product, user = null, variantLabel = null, url, company = {} }) => {
+  const name = user?.name || 'there';
+  const companyName = company.name || 'Autobacs India';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+  const title = variantLabel ? `${product.name} — ${variantLabel}` : product.name;
+
+  // HTML-context escapes (subject/text are plain-text contexts and stay raw).
+  const nameHtml = escapeHtml(name);
+  const titleHtml = escapeHtml(title);
+  const companyHtml = escapeHtml(companyName);
+  const supportHtml = escapeHtml(supportEmail);
+  const imageHtml = escapeHtml(product.image);
+  const urlHtml = escapeHtml(url);
+
+  const subject = `Back in stock: ${title} 🎉`;
+
+  const text = `
+Hi ${name},
+
+Good news — ${title} is back in stock at ${companyName}.
+
+Popular items sell out fast, so grab yours before it's gone:
+${url}
+
+You're receiving this because you asked to be notified when this item returned.
+
+Questions? Contact us at ${supportEmail}.
+
+Best regards,
+${companyName}
+  `.trim();
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Back in stock</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111;padding:24px 30px;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">It's back! 🎉</h1>
+    </div>
+    <div style="padding:30px;">
+      <p>Hi ${nameHtml},</p>
+      <p>Good news — the item you were waiting on is back in stock at <strong>${companyHtml}</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tbody>
+          <tr>
+            <td style="padding:12px 0;width:72px;vertical-align:top;">
+              ${product.image ? `<img src="${imageHtml}" alt="" width="64" height="64" style="border-radius:6px;object-fit:cover;display:block;">` : ''}
+            </td>
+            <td style="padding:12px 0 12px 4px;font-size:15px;vertical-align:top;">
+              <strong>${titleHtml}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:14px;color:#666;">Popular items sell out fast — grab yours before it's gone.</p>
+      <div style="text-align:center;margin:28px 0;">
+        <a href="${urlHtml}" style="display:inline-block;background:#f97316;color:#fff;padding:14px 32px;text-decoration:none;border-radius:8px;font-size:16px;font-weight:bold;">Shop now</a>
+      </div>
+      <p style="font-size:12px;color:#999;margin-top:24px;">You're receiving this because you asked to be notified when this item returned. Questions? Contact us at ${supportHtml}.</p>
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} ${companyHtml}. All rights reserved.</p>
     </div>
   </div>
 </body>

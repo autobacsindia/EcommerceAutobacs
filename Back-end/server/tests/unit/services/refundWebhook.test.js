@@ -22,6 +22,7 @@ jest.unstable_mockModule('../../../queue/queues.js', () => ({
   getNotificationsQueue: () => ({ add: mockNotificationsAdd }),
   getOrderQueue: () => ({ add: jest.fn().mockResolvedValue(undefined) }),
   getSearchSyncQueue: () => ({ add: jest.fn().mockResolvedValue(undefined) }),
+  enqueueNotification: jest.fn(),
 }));
 
 const razorpayService = (await import('../../../services/razorpayService.js')).default;

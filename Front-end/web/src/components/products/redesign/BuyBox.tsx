@@ -13,6 +13,7 @@ import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
 import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
 import EmiOptions from '@/components/products/redesign/EmiOptions';
+import NotifyMeButton from '@/components/products/redesign/NotifyMeButton';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 const MAX_QTY = 99;
@@ -218,8 +219,10 @@ export default function BuyBox({
             <option value="" disabled>
               Choose a model…
             </option>
+            {/* Sold-out models stay SELECTABLE so a shopper can pick one and get the
+                per-variant "Notify me" CTA; Add/Buy stay disabled for them below. */}
             {variants.map((v) => (
-              <option key={v._id} value={v._id} disabled={v.stock === 'out'}>
+              <option key={v._id} value={v._id}>
                 {v.label}
                 {v.stock === 'out' ? ' — Sold out' : ` — ${formatPrice(v.price)}`}
               </option>
@@ -234,9 +237,9 @@ export default function BuyBox({
         </p>
       )}
 
-      {/* Quantity — hidden for enquiry-only (backorder) items */}
+      {/* Quantity — hidden for enquiry-only (backorder) and sold-out items */}
       <div className="mt-8 flex items-center gap-5">
-        {!backorder && (
+        {!backorder && !outOfStock && (
           <>
             <span className="text-[10px] uppercase tracking-[0.24em] text-ink-muted">Quantity</span>
             <div className="flex items-center border border-hairline">
@@ -272,8 +275,9 @@ export default function BuyBox({
       </div>
 
       {/* EMI / affordability options (Razorpay) — mirrors the WooCommerce widget.
-          Hidden until a model is chosen so it never advertises the range min. */}
-      {!backorder && !needsSelection && <EmiOptions price={activePrice} className="mt-7" />}
+          Hidden until a model is chosen (never advertises the range min) and for
+          sold-out items (nothing to finance). */}
+      {!backorder && !needsSelection && !outOfStock && <EmiOptions price={activePrice} className="mt-7" />}
 
       {/* CTAs */}
       <div className="mt-7 flex flex-col gap-3">
@@ -286,6 +290,23 @@ export default function BuyBox({
               <HeadphonesIcon className="h-4 w-4" />
               Click to enquire
             </button>
+            <button
+              onClick={toggleWish}
+              aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
+              className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
+            >
+              <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
+            </button>
+          </div>
+        ) : outOfStock ? (
+          // Sold out — swap the dead Add/Buy CTAs for a back-in-stock alert
+          // (scoped to the selected variant for variable products).
+          <div className="flex gap-3">
+            <NotifyMeButton
+              productId={product._id}
+              variantId={selectedVariant?._id ?? null}
+              className="flex-1"
+            />
             <button
               onClick={toggleWish}
               aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}

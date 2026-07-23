@@ -16,6 +16,13 @@ export const API_ENDPOINTS = {
   ADMIN_PRODUCTS: '/products/admin/list',
   PRODUCT_DETAIL: (id: string) => `/products/${id}`,
   FEATURED_PRODUCTS: '/products/featured',
+
+  // Back-in-stock ("Notify me")
+  NOTIFY_ME: (id: string) => `/products/${id}/notify-me`,
+  STOCK_NOTIFICATIONS_MINE: '/stock-notifications/mine',
+  STOCK_NOTIFICATION_CANCEL: (id: string) => `/stock-notifications/${id}`,
+  ADMIN_STOCK_REQUESTS: '/stock-notifications/admin',
+  ADMIN_STOCK_REQUESTERS: '/stock-notifications/admin/requesters',
   
   // Categories
   CATEGORIES: '/categories',

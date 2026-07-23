@@ -1,8 +1,8 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
@@ -73,6 +73,21 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   // Selected variant is lifted here so BuyBox and the mobile StickyCartBar stay in
   // sync (both must add the SAME chosen model). Simple products never set it.
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  // Deep-link preselect: the back-in-stock email links to ?variant=<id> so the
+  // shopper lands on the exact model that came back. Apply each distinct param
+  // value AT MOST ONCE (tracked in a ref) so a later product refetch or the user's
+  // own dropdown choice is never clobbered by re-running this effect.
+  const appliedVariantParam = useRef<string | null>(null);
+  useEffect(() => {
+    const v = searchParams.get('variant');
+    if (!v || appliedVariantParam.current === v) return;
+    if (product?.variants?.some((variant) => variant._id === v)) {
+      appliedVariantParam.current = v;
+      setSelectedVariantId(v);
+    }
+  }, [product, searchParams]);
 
   const stripHtml = (html: string) => (html ? html.replace(/<[^>]*>/g, '') : '');
 

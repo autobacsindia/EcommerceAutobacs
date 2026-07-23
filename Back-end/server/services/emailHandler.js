@@ -479,6 +479,29 @@ class EmailHandler {
   }
 
   /**
+   * Send the "back in stock" email for an item a customer asked to be notified about.
+   * The request/product/variant are pre-resolved by restockNotificationService, so
+   * this stays provider-only (no DB access).
+   * @param {Object} params
+   * @param {string} params.to - Recipient email
+   * @param {Object} [params.user] - User document (name)
+   * @param {{name: string, slug: string, image: string}} params.product - Product summary
+   * @param {string|null} [params.variantId] - Variant subdoc id to preselect on the PDP
+   * @param {string|null} [params.variantLabel] - Variant model name (variable products)
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async sendBackInStockEmail({ to, user = null, product, variantId = null, variantLabel = null }) {
+    const { backInStockEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const url = `${frontendUrl}/products/${product.slug}${variantId ? `?variant=${variantId}` : ''}`;
+
+    const { subject, text, html } = backInStockEmail({ product, user, variantLabel, url, company: companyInfo });
+
+    return this.sendEmail({ to, subject, text, html });
+  }
+
+  /**
    * Send the welcome email on registration.
    * Sent from a friendlier sender (POSTMARK_WELCOME_FROM_EMAIL, e.g. hi@autobacsindia.com)
    * than the default transactional noreply@ — falls back to the default sender if unset.

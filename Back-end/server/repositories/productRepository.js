@@ -96,6 +96,26 @@ class ProductRepository {
   }
 
   /**
+   * Lightweight availability view for the back-in-stock feature: just the fields
+   * needed to validate a notify-me request, resolve a variant, and build the email
+   * (no heavy `description`). Lean — read-only.
+   */
+  async findStockView(productId) {
+    return Product.findById(productId)
+      .select('name slug stock variants productType images')
+      .lean();
+  }
+
+  /**
+   * Stock-view for a set of products (admin Stock Requests list). Lean.
+   */
+  async findStockViewByIds(ids) {
+    return Product.find({ _id: { $in: ids } })
+      .select('name slug stock variants productType images')
+      .lean();
+  }
+
+  /**
    * Find single product by slug
    */
   async findBySlug(slug, populate = []) {

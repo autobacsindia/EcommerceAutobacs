@@ -42,6 +42,7 @@ import profileRoutes from './profile.js';
 import cartRoutes from './cart.js';
 import wishlistRoutes from './wishlist.js';
 import reviewRoutes from './reviews.js';
+import stockNotificationRoutes from './stockNotifications.js';
 
 import orderRoutes from './orders.js';
 import returnRoutes from './returnRoutes.js';
@@ -107,6 +108,8 @@ apiRouter.use('/profile', authenticatedUserRateLimit, profileRoutes);
 apiRouter.use('/cart', publicBrowsingRateLimit, optionalAuth, cartRoutes);  // Cart supports guest and authenticated users
 apiRouter.use('/wishlist', authenticatedUserRateLimit, wishlistRoutes);
 apiRouter.use('/reviews', publicBrowsingRateLimit, reviewRoutes);  // Reviews can be browsed publicly
+// Back-in-stock ("Notify me") — self endpoints (auth) + admin demand list (guarded in-route)
+apiRouter.use('/stock-notifications', authenticatedUserRateLimit, stockNotificationRoutes);
 
 // ============================================================================
 // ORDER DOMAIN

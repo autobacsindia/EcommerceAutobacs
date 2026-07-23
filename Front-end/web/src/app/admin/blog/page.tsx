@@ -9,6 +9,8 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import RichTextEditor from '@/components/ui/RichTextEditor';
+import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
+import SingleImageUpload from '@/components/ui/SingleImageUpload';
 
 type Tab = 'posts' | 'gallery' | 'videos' | 'comments';
 
@@ -85,12 +87,16 @@ export default function AdminBlogPage() {
   const [postForm, setPostForm] = useState({ ...EMPTY_POST });
   const [postSeo, setPostSeo] = useState<SeoFormValue>(EMPTY_SEO);
   const [postSaving, setPostSaving] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
 
   // Media form state
   const [showMediaForm, setShowMediaForm] = useState(false);
   const [editingMedia, setEditingMedia] = useState<MediaItem | null>(null);
   const [mediaForm, setMediaForm] = useState({ ...EMPTY_MEDIA });
   const [mediaSaving, setMediaSaving] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState<null | 'url' | 'thumbnail'>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -164,6 +170,24 @@ export default function AdminBlogPage() {
 
   // ── Blog Post CRUD ────────────────────────────────────────────────────────────
 
+  // Cover image uploads straight to Cloudinary (signed, via the shared helper —
+  // the API secret never reaches the browser) and we keep only the resulting URL
+  // on the form. When editing, the post id groups the asset into a per-article
+  // subfolder (autobacs/articles/<id>/) matching the WP rehost layout.
+  async function handleCoverUpload(file: File | undefined) {
+    if (!file) return;
+    setCoverError(null);
+    setCoverUploading(true);
+    try {
+      const { url } = await uploadImageToCloudinary(file, 'articles', editingPost?._id);
+      setPostForm(f => ({ ...f, coverImage: url }));
+    } catch (err) {
+      setCoverError(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setCoverUploading(false);
+    }
+  }
+
   async function savePost(e: React.FormEvent) {
     e.preventDefault();
     // The rich-text editor has no native `required`; guard against empty content
@@ -218,6 +242,7 @@ export default function AdminBlogPage() {
 
   function startEditPost(article: Article) {
     setEditingPost(article);
+    setCoverError(null);
     apiClient.get<any>(API_ENDPOINTS.ADMIN_MEDIA_ARTICLE(article._id))
       .then(res => {
         if (res.success) {
@@ -237,8 +262,31 @@ export default function AdminBlogPage() {
 
   // ── Media CRUD ────────────────────────────────────────────────────────────────
 
+  // Gallery images upload straight to Cloudinary (signed helper); videos still
+  // reference an external URL (YouTube/Vimeo), but a video's poster thumbnail can
+  // be uploaded too. `field` is the mediaForm key the resulting URL lands in.
+  async function handleMediaUpload(file: File | undefined, field: 'url' | 'thumbnail') {
+    if (!file) return;
+    setMediaError(null);
+    setMediaUploading(field);
+    try {
+      const { url } = await uploadImageToCloudinary(file, 'media', editingMedia?._id);
+      setMediaForm(f => ({ ...f, [field]: url }));
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setMediaUploading(null);
+    }
+  }
+
   async function saveMedia(e: React.FormEvent) {
     e.preventDefault();
+    // The image upload control has no native `required`; guard against saving a
+    // gallery image with no uploaded file.
+    if (mediaForm.type === 'image' && !mediaForm.url) {
+      setMediaError('Please upload an image.');
+      return;
+    }
     setMediaSaving(true);
     try {
       const payload = {
@@ -268,6 +316,7 @@ export default function AdminBlogPage() {
 
   function startEditMedia(item: MediaItem) {
     setEditingMedia(item);
+    setMediaError(null);
     setMediaForm({
       type: item.type, title: item.title, description: (item as any).description || '',
       url: item.url, thumbnail: item.thumbnail, album: item.album, category: item.category,
@@ -318,8 +367,8 @@ export default function AdminBlogPage() {
           {tab !== 'comments' && (
             <button
               onClick={() => {
-                if (tab === 'posts') { setEditingPost(null); setPostForm({ ...EMPTY_POST }); setPostSeo(EMPTY_SEO); setShowPostForm(true); }
-                else { setEditingMedia(null); setMediaForm({ ...EMPTY_MEDIA, type: tab === 'gallery' ? 'image' : 'video' }); setShowMediaForm(true); }
+                if (tab === 'posts') { setEditingPost(null); setPostForm({ ...EMPTY_POST }); setPostSeo(EMPTY_SEO); setCoverError(null); setShowPostForm(true); }
+                else { setEditingMedia(null); setMediaForm({ ...EMPTY_MEDIA, type: tab === 'gallery' ? 'image' : 'video' }); setMediaError(null); setShowMediaForm(true); }
               }}
               className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
             >
@@ -747,12 +796,13 @@ export default function AdminBlogPage() {
                   <label htmlFor="featured" className="text-sm font-medium text-gray-700">Featured post</label>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Cover Image URL</label>
-                  <input
+                  <SingleImageUpload
+                    label="Cover Image"
                     value={postForm.coverImage}
-                    onChange={e => setPostForm(f => ({ ...f, coverImage: e.target.value }))}
-                    placeholder="https://..."
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    uploading={coverUploading}
+                    error={coverError}
+                    onUpload={handleCoverUpload}
+                    onRemove={() => { setPostForm(f => ({ ...f, coverImage: '' })); setCoverError(null); }}
                   />
                 </div>
                 <div className="col-span-2">
@@ -826,26 +876,38 @@ export default function AdminBlogPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">URL * {mediaForm.type === 'video' && '(YouTube, Vimeo or direct link)'}</label>
-                <input
-                  required
+              {mediaForm.type === 'image' ? (
+                /* Gallery images upload straight to Cloudinary — the url IS the
+                   image, so no separate thumbnail field (render falls back to url). */
+                <SingleImageUpload
+                  label="Image *"
                   value={mediaForm.url}
-                  onChange={e => setMediaForm(f => ({ ...f, url: e.target.value }))}
-                  placeholder={mediaForm.type === 'video' ? 'https://www.youtube.com/watch?v=...' : 'https://...'}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  uploading={mediaUploading === 'url'}
+                  error={mediaError}
+                  onUpload={file => handleMediaUpload(file, 'url')}
+                  onRemove={() => { setMediaForm(f => ({ ...f, url: '' })); setMediaError(null); }}
                 />
-              </div>
-              {mediaForm.type === 'image' && (
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Thumbnail URL (optional, defaults to URL)</label>
-                  <input
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">URL * (YouTube, Vimeo or direct link)</label>
+                    <input
+                      required
+                      value={mediaForm.url}
+                      onChange={e => setMediaForm(f => ({ ...f, url: e.target.value }))}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <SingleImageUpload
+                    label="Thumbnail (optional poster image)"
                     value={mediaForm.thumbnail}
-                    onChange={e => setMediaForm(f => ({ ...f, thumbnail: e.target.value }))}
-                    placeholder="https://..."
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    uploading={mediaUploading === 'thumbnail'}
+                    error={mediaError}
+                    onUpload={file => handleMediaUpload(file, 'thumbnail')}
+                    onRemove={() => { setMediaForm(f => ({ ...f, thumbnail: '' })); setMediaError(null); }}
                   />
-                </div>
+                </>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
