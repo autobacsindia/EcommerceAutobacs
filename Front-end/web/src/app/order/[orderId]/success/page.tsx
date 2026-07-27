@@ -4,8 +4,11 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { CheckCircle, Package, Truck } from 'lucide-react';
 import { serverFetch } from '@/lib/server-api';
+import { formatPriceINR } from '@/utils/priceFormatter';
 import { GOOGLE_ADS_PURCHASE_SEND_TO } from '@/lib/googleAds';
-import PurchaseTracker, { type PurchasePayload } from './PurchaseTracker';
+import { buildPurchasePayload, itemName } from './purchase';
+import PurchaseTracker from './PurchaseTracker';
+import ConversionFallback from './ConversionFallback';
 
 // Transactional, per-user page — never index it.
 export const metadata: Metadata = {
@@ -35,27 +38,12 @@ interface OrderResponse {
     _id: string;
     orderNumber?: string;
     status: string;
+    paymentStatus?: string;
     totalAmount: number; // rupees
     items: OrderItem[];
     estimatedDelivery?: string;
     createdAt: string;
   };
-}
-
-const inr = (rupees: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(
-    rupees || 0,
-  );
-
-function itemProductId(item: OrderItem): string {
-  if (item.product && typeof item.product === 'object') return item.product._id ?? '';
-  if (typeof item.product === 'string') return item.product;
-  return '';
-}
-
-function itemProductName(item: OrderItem): string {
-  if (item.product && typeof item.product === 'object' && item.product.name) return item.product.name;
-  return item.name ?? 'Item';
 }
 
 export default async function OrderSuccessPage({
@@ -80,30 +68,19 @@ export default async function OrderSuccessPage({
       cache: 'no-store',
     });
   } catch {
-    // Token expired, not the owner, or not found — fall back to the canonical
-    // order page, which handles auth refresh / login redirects client-side.
-    redirect(`/orders/${orderId}`);
+    // SSR fetch failed — most often an access token that expired between payment
+    // and this render, which a server component cannot refresh. Hand off to the
+    // client, which re-fetches WITH token refresh and still fires the (payment-
+    // gated) conversion — instead of redirecting away and silently losing it.
+    return <ConversionFallback orderId={orderId} />;
   }
 
   const order = data.order;
 
-  // Build the Google Ads purchase payload server-side (single home for the
-  // rupee math) and hand it to the client tracker to fire once.
-  const purchase: PurchasePayload = {
-    // Routes the conversion to the specific Google Ads "Purchase" action.
-    // Omitted when not configured (Preview/local) so the event stays a harmless
-    // generic purchase and never counts against the live conversion action.
-    ...(GOOGLE_ADS_PURCHASE_SEND_TO ? { send_to: GOOGLE_ADS_PURCHASE_SEND_TO } : {}),
-    transaction_id: order._id,
-    value: order.totalAmount, // already rupees — do NOT divide by 100
-    currency: 'INR',
-    items: order.items.map((item) => ({
-      item_id: itemProductId(item),
-      item_name: itemProductName(item),
-      price: item.price, // already rupees — do NOT divide by 100
-      quantity: item.quantity,
-    })),
-  };
+  // Build the Google Ads purchase payload (rupee math + numeric guards live in
+  // the shared builder) and hand it to the client tracker, which fires it once
+  // for genuinely-paid orders only.
+  const purchase = buildPurchasePayload(order, GOOGLE_ADS_PURCHASE_SEND_TO);
 
   const estimatedDelivery = order.estimatedDelivery
     ? new Date(order.estimatedDelivery).toLocaleDateString('en-IN', {
@@ -115,8 +92,16 @@ export default async function OrderSuccessPage({
 
   return (
     <div className="min-h-screen bg-obsidian-deep py-16">
-      {/* Client child: fires gtag('event','purchase', …) exactly once. */}
-      <PurchaseTracker orderId={order._id} purchase={purchase} />
+      {/* Client child: fires gtag('event','purchase', …) once, for paid orders
+          only. Keyed on the order id so a client-side nav to another success
+          page remounts it and re-evaluates. */}
+      <PurchaseTracker
+        key={order._id}
+        orderId={order._id}
+        purchase={purchase}
+        paymentStatus={order.paymentStatus}
+        orderStatus={order.status}
+      />
 
       <div className="max-w-2xl mx-auto px-4">
         {/* Header */}
@@ -149,7 +134,7 @@ export default async function OrderSuccessPage({
           </h2>
           <div className="space-y-4">
             {order.items.map((item, index) => {
-              const name = itemProductName(item);
+              const name = itemName(item);
               const image =
                 (typeof item.product === 'object' && item.product?.images?.[0]?.url) || item.image;
               return (
@@ -171,7 +156,7 @@ export default async function OrderSuccessPage({
                     <p className="font-display font-light text-ink tracking-[-0.01em] line-clamp-2">{name}</p>
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
                   </div>
-                  <p className="font-display font-bold text-gold shrink-0">{inr(item.price * item.quantity)}</p>
+                  <p className="font-display font-bold text-gold shrink-0">{formatPriceINR(item.price * item.quantity)}</p>
                 </div>
               );
             })}
@@ -179,7 +164,7 @@ export default async function OrderSuccessPage({
 
           <div className="flex justify-between border-t border-hairline pt-4 mt-4">
             <span className="font-display font-light text-ink tracking-[-0.01em]">Total Paid</span>
-            <span className="text-xl font-display font-bold text-gold">{inr(order.totalAmount)}</span>
+            <span className="text-xl font-display font-bold text-gold">{formatPriceINR(order.totalAmount)}</span>
           </div>
         </div>
 
