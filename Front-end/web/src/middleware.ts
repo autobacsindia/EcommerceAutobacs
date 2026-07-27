@@ -141,9 +141,11 @@ function buildCsp(nonce: string): string {
     'https://cdn.razorpay.com',
     'https://maps.googleapis.com',
     // Google Tag (gtag.js) for Google Ads conversion tracking. 'strict-dynamic'
-    // already trusts the sub-scripts the nonce'd loader pulls in; this explicit
-    // entry is the fallback for browsers that ignore 'strict-dynamic'.
+    // already trusts the sub-scripts the nonce'd loader pulls in; these explicit
+    // entries are the fallback for browsers that ignore 'strict-dynamic'.
+    // googleadservices.com serves the conversion linker / conversion_async.js.
     'https://www.googletagmanager.com',
+    'https://www.googleadservices.com',
   ].join(' ');
 
   return [
@@ -159,9 +161,11 @@ function buildCsp(nonce: string): string {
     // remove once all artwork is hosted on Cloudinary (res.cloudinary.com).
     // cdn.razorpay.com serves the EMI widget's bank/lender logos.
     // Google Ads / gtag fire conversion tracking as <img> pixel beacons to
-    // google.com/pagead and googleads.g.doubleclick.net — without these the
-    // conversion never reaches Google even though the script itself ran.
-    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com",
+    // google.com/pagead, googleadservices.com and googleads.g.doubleclick.net —
+    // without these the conversion never reaches Google even though the script ran.
+    // (Verified against a live Vercel preview: the googleadservices.com + doubleclick
+    // beacons were CSP-blocked until added here.)
+    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
@@ -172,8 +176,10 @@ function buildCsp(nonce: string): string {
     // api.cloudinary.com: admin image uploads go browser→Cloudinary directly
     // (signed), bypassing our API + the proxy request-body limit.
     // Trailing Google Tag / Ads entries: gtag.js XHR/beacon endpoints for
-    // loading config and posting the purchase conversion.
-    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://script.google.com https://script.googleusercontent.com https://www.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://googleads.g.doubleclick.net",
+    // loading config and posting the purchase conversion. googleadservices.com +
+    // ad.doubleclick.net + the regional google.co.in are the enhanced-conversion /
+    // conversion-linker fetch targets (were CSP-blocked on the preview until added).
+    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://script.google.com https://script.googleusercontent.com https://www.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net",
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes.
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",
