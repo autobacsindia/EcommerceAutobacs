@@ -19,6 +19,7 @@ import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
+import { GOOGLE_ADS_ID, isGoogleAdsEnabled } from "@/lib/googleAds";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -190,6 +191,32 @@ export default async function RootLayout({
             hero LCP image and every product image, so this speeds the first
             image on any page. */}
         <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
+
+        {/* Google Tag (gtag.js) for Google Ads conversion tracking.
+            Rendered only when a real AW- id is configured (isGoogleAdsEnabled),
+            so unset/preview environments never load a broken tag or fire real
+            conversions. nonce={nonce} is REQUIRED — the strict nonce-based CSP
+            (middleware.ts) would block these scripts otherwise; 'strict-dynamic'
+            then propagates trust to the sub-scripts gtag loads. The conversion
+            event itself fires from app/order/[orderId]/success (PurchaseTracker). */}
+        {isGoogleAdsEnabled && (
+          <>
+            <Script
+              id="gtag-src"
+              src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
+              strategy="afterInteractive"
+              nonce={nonce}
+            />
+            <Script id="gtag-init" strategy="afterInteractive" nonce={nonce}>
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GOOGLE_ADS_ID}');
+              `}
+            </Script>
+          </>
+        )}
       </head>
       <body
         className={`${dmSans.variable} ${montserrat.variable} antialiased`}

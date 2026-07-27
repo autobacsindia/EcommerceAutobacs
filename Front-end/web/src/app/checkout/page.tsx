@@ -134,9 +134,15 @@ function CheckoutPageContent() {
 
   const { processPayment, isProcessing: isRazorpayProcessing } = useRazorpay({
     onSuccess: async (orderId) => {
-      setOrderId(orderId);
+      // We now redirect to the dedicated confirmation page (which fires the
+      // Google Ads conversion) instead of rendering the inline 'confirmation'
+      // step. Fire the PostHog purchase here so we don't lose the event that
+      // previously rode on that step, and flip purchasedRef so the pagehide/
+      // unmount 'checkout_abandoned' guard doesn't misfire on the navigation.
+      purchasedRef.current = true;
+      trackPurchase({ orderId, value: lastCartTotalRef.current, itemCount: lastItemCountRef.current });
       await clearCart();
-      setCurrentStep('confirmation');
+      router.push(`/order/${orderId}/success`);
     },
     onFailure: (error) => {
       if (error.message !== 'Payment cancelled') console.error('Payment failed:', error);
