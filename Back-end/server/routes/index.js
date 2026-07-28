@@ -65,6 +65,7 @@ import scheduledTasksRoutes from './scheduledTasks.js';
 
 import contactRoutes from './contact.js';
 import consultationRoutes from './consultation.js';
+import careersRoutes from './careers.js';
 
 import rateLimitDashboardRoutes from './rateLimitDashboard.js';
 import adaptiveThrottlingRoutes from './adaptiveThrottling.js';
@@ -165,6 +166,9 @@ apiRouter.use('/admin', adminStatsRoutes);
 // ============================================================================
 apiRouter.use('/contact', contactFormRateLimit, contactRoutes);
 apiRouter.use('/consultation', consultationRateLimit, consultationRoutes);
+// Careers: public open-roles read + admin CRUD (guarded in-route). Applications
+// (Phase 3) attach their own stricter limiter on the submit sub-route.
+apiRouter.use('/careers', publicBrowsingRateLimit, careersRoutes);
 
 // ============================================================================
 // SECURITY DOMAIN

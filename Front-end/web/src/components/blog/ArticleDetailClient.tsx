@@ -152,7 +152,7 @@ export default function ArticleDetailClient({ article, related }: Props) {
                 <img
                   src={article.coverImage}
                   alt={article.title}
-                  className="w-full h-72 md:h-96 object-cover"
+                  className="w-full h-auto max-h-[70vh] object-contain bg-obsidian-deep"
                 />
               )}
 

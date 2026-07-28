@@ -147,6 +147,12 @@ export const API_ENDPOINTS = {
   ADMIN_CONSULTATIONS: '/consultation/admin',
   ADMIN_CONSULTATION: (id: string) => `/consultation/admin/${id}`,
   ADMIN_CONSULTATION_STATUS: (id: string) => `/consultation/admin/${id}/status`,
+
+  // Careers — public open roles (read) + admin CRUD
+  CAREERS_POSTINGS: '/careers/postings',
+  CAREERS_POSTING: (slug: string) => `/careers/postings/${slug}`,
+  ADMIN_CAREERS_POSTINGS: '/careers/admin/postings',
+  ADMIN_CAREERS_POSTING: (id: string) => `/careers/admin/postings/${id}`,
 };
 
 // Order Status

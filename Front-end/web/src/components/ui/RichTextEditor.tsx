@@ -4,11 +4,12 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
 import { useEffect, useRef, useState } from 'react';
 import {
   Bold, Italic, List, ListOrdered, Quote,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Link as LinkIcon, Unlink, ChevronDown,
+  Link as LinkIcon, Unlink, ChevronDown, ImagePlus, Loader2,
 } from 'lucide-react';
 
 type Variant = 'dark' | 'light';
@@ -20,6 +21,12 @@ interface RichTextEditorProps {
   minHeight?: string;
   /** Visual theme. `dark` (default) suits the obsidian admin shell; `light` suits white/legacy forms. */
   variant?: Variant;
+  /**
+   * Enables the in-body "insert image" toolbar button. Receives the picked file,
+   * should upload it (e.g. to Cloudinary) and resolve to the hosted URL. When
+   * omitted, the image button is hidden so the editor stays text-only.
+   */
+  onImageUpload?: (file: File) => Promise<string>;
 }
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
@@ -77,9 +84,12 @@ export default function RichTextEditor({
   placeholder = 'Enter description…',
   minHeight = '180px',
   variant = 'dark',
+  onImageUpload,
 }: RichTextEditorProps) {
   const initialized = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const t = THEME[variant];
 
   const editor = useEditor({
@@ -89,6 +99,10 @@ export default function RichTextEditor({
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { class: t.linkClass },
+      }),
+      Image.configure({
+        inline: false,
+        HTMLAttributes: { class: 'rte-img' },
       }),
     ],
     content: '',
@@ -127,6 +141,22 @@ export default function RichTextEditor({
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
     } else {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    }
+  };
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file twice still fires onChange.
+    e.target.value = '';
+    if (!file || !editor || !onImageUpload) return;
+    setUploadingImage(true);
+    try {
+      const url = await onImageUpload(file);
+      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -217,6 +247,30 @@ export default function RichTextEditor({
             <Unlink className="h-4 w-4" />
           </Btn>
         )}
+
+        {onImageUpload && (
+          <>
+            <Sep theme={t} />
+            <Btn
+              theme={t}
+              onClick={() => fileInputRef.current?.click()}
+              active={false}
+              disabled={uploadingImage}
+              title="Insert Image"
+            >
+              {uploadingImage
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <ImagePlus className="h-4 w-4" />}
+            </Btn>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageFile}
+            />
+          </>
+        )}
       </div>
 
       {/* ── Editor content ── */}
@@ -231,19 +285,21 @@ export default function RichTextEditor({
 
 type Theme = (typeof THEME)[Variant];
 
-function Btn({ children, onClick, active, title, theme }: {
+function Btn({ children, onClick, active, title, theme, disabled = false }: {
   children: React.ReactNode;
   onClick: () => void;
   active: boolean;
   title: string;
   theme: Theme;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={title}
-      className={`p-1.5 rounded transition-colors ${active ? theme.btnActive : theme.btnIdle}`}
+      disabled={disabled}
+      className={`p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${active ? theme.btnActive : theme.btnIdle}`}
     >
       {children}
     </button>

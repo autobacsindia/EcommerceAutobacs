@@ -3,31 +3,109 @@
 /*
  * Careers ("Roavion") standalone application page.
  *
- * Ported from the WordPress `roavion_careers` shortcode. The markup is rendered
- * verbatim (dangerouslySetInnerHTML) — it is 100% author-controlled static HTML
- * with no interpolated user data, so there is no XSS surface — and the original
- * imperative behaviour is re-attached in a client-only effect. This keeps the
- * port pixel-faithful while staying CSP-clean: all JS ships in the bundle (no
- * inline <script>), and inline style="" attributes are permitted by the app CSP
- * (style-src 'unsafe-inline').
+ * Ported from the WordPress `roavion_careers` shortcode. The static shell (hero,
+ * "Why Roavion" pillars, application form) is rendered verbatim
+ * (dangerouslySetInnerHTML) — it is author-controlled static HTML — and the
+ * original imperative behaviour is re-attached in a client-only effect.
  *
- * Submission flow is UNCHANGED from WordPress: the browser fetches a short-lived
- * OAuth token from a Google Apps Script web app, uploads each video/PDF straight
- * to Google Drive (resumable), then POSTs the metadata + Drive URLs back to the
- * same GAS endpoint. Files never touch our server. The GAS URL is injected via
+ * The OPEN ROLES section and the apply-form role <select> are NO LONGER
+ * hardcoded: they are generated from `postings` (fetched server-side from
+ * /careers/postings and passed in), so a role is added/edited/withdrawn from the
+ * admin without a code change. Dynamic values are HTML-escaped before injection.
+ * Two placeholder tokens in the template mark where they go.
+ *
+ * Submission flow is UNCHANGED here (still the Google Apps Script → Drive upload
+ * — that migration is Phase 4). The GAS URL is injected via
  * NEXT_PUBLIC_CAREERS_FORM_URL (no hardcoded deployment URL in source).
  *
- * Fonts: markup references 'Bebas Neue' / 'Inter'; those literals are rewritten
- * to the next/font CSS variables (--font-bebas / --font-inter) provided by the
- * page.tsx wrapper. Do not reintroduce the Google Fonts <link> (CSP font-src).
+ * Fonts: dynamic role markup references the next/font CSS variables
+ * (var(--font-bebas) / var(--font-inter)) directly; the static template literals
+ * ('Bebas Neue' / 'Inter') are rewritten to the same variables below. Do not
+ * reintroduce the Google Fonts <link> (CSP font-src).
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import './careers.css';
 
 const SCRIPT_URL = process.env.NEXT_PUBLIC_CAREERS_FORM_URL || '';
 
-const MARKUP = `
+/** A public job posting as returned by GET /careers/postings. */
+export interface CareerPosting {
+  _id: string;
+  department: string;
+  title: string;
+  slug: string;
+  tagline?: string;
+  experience?: string;
+  intro?: string;
+  responsibilities?: string[];
+  requirements?: string[];
+  closer?: string;
+}
+
+// Escape dynamic text/attribute values before injecting into the markup string.
+const esc = (s: unknown) =>
+  String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
+const INTER = 'var(--font-inter),sans-serif';
+const BEBAS = 'var(--font-bebas),sans-serif';
+
+/** One "What you'll own" / "What we need" labelled bullet list (omitted if empty). */
+function listBlock(label: string, items?: string[]) {
+  const rows = (items || []).map((s) => s.trim()).filter(Boolean);
+  if (rows.length === 0) return '';
+  const lis = rows
+    .map(
+      (it) =>
+        `<li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:${INTER};">${esc(it)}</li>`,
+    )
+    .join('');
+  return (
+    `<div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:${INTER};">${esc(label)}</div>` +
+    `<ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;">${lis}</ul>`
+  );
+}
+
+/** One accordion role card, matching the original hardcoded markup exactly. */
+function roleCardHtml(p: CareerPosting, i: number) {
+  const id = `r${i + 1}`;
+  const tagline = p.tagline
+    ? `<div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:${INTER};">${esc(p.tagline)}</div>`
+    : '';
+  const tag = p.experience ? `<div class="rv-role-tag">${esc(p.experience)}</div>` : '';
+  const intro = p.intro
+    ? `<p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:${INTER};">${esc(p.intro)}</p>`
+    : '';
+  const closer = p.closer
+    ? `<div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:${INTER};">${esc(p.closer)}</div>`
+    : '';
+  return `
+      <div class="rv-role-card" data-role-id="${id}">
+        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:${INTER};">${esc(p.department)}</div><div style="font-family:${BEBAS};font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">${esc(p.title)}</div>${tagline}</div><span class="rv-role-arrow" id="arr-${id}">+</span></div>
+        <div class="rv-role-body" id="body-${id}">
+          ${tag}
+          ${intro}
+          ${listBlock("What you'll own", p.responsibilities)}
+          ${listBlock('What we need', p.requirements)}
+          ${closer}
+          <a href="#rv-form" class="rv-apply-btn" data-role="${esc(p.title)}" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:${INTER};">Apply for this role &rarr;</a>
+        </div>
+      </div>`;
+}
+
+/** The middle <option>s of the role <select> (placeholder + "Other" live in the template). */
+function roleOptionsHtml(postings: CareerPosting[]) {
+  return postings
+    .map((p) => `<option value="${esc(p.title)}">${esc(p.title)}</option>`)
+    .join('');
+}
+
+const MARKUP_TEMPLATE = `
 <div style="font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;background:#111210;color:#F7F5F0;margin:0;padding:0;">
 
 <header style="position:sticky;top:0;z-index:999;background:#111210;border-bottom:1px solid #2E2D2B;padding:0 2.5rem;display:flex;align-items:center;justify-content:space-between;height:64px;">
@@ -65,119 +143,7 @@ const MARKUP = `
     <div style="margin-bottom:1rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#C93F1A;display:block;font-family:'Inter',sans-serif;">Open Roles</span></div>
     <h2 style="font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,52px);letter-spacing:0.03em;line-height:1.0;color:#F7F5F0;margin:0 0 3rem 0;padding:0;border:none;background:none;font-weight:normal;">THE SEATS<br>WE'RE FILLING NOW.</h2>
     <div style="border-top:1px solid #2E2D2B;">
-
-      <div class="rv-role-card" data-role-id="r1">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Marketing</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Marketing Manager</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Own the story. Own the growth.</div></div><span class="rv-role-arrow" id="arr-r1">+</span></div>
-        <div class="rv-role-body" id="body-r1">
-          <div class="rv-role-tag">3-5 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">We didn't build a brand. We're building a category. Someone needs to own how India hears about it.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The entire marketing engine — strategy, calendar, budget, results. No committee. Your call, your numbers.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Every campaign from Meta to ground activations — built, launched, measured, fixed.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The SOPs that don't exist yet. If there's no process, you write one.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The line between "looks good" and "drives revenue." You live on the revenue side.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">3-5 years running marketing that moved a P&amp;L, not just a feed.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Someone who's built a system before — a funnel, a content engine, a launch playbook — and can prove it still runs.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Sharp instincts for premium, automotive-adjacent, or D2C audiences.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">You don't wait for a brief. You write the brief.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">We are the first mover in a category nobody has packaged for India yet. How we tell that story decides how fast we scale.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Marketing Manager" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r2">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Business Development</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Business Development Executive</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Hunt the deals. Build the pipeline. Close the gap.</div></div><span class="rv-role-arrow" id="arr-r2">+</span></div>
-        <div class="rv-role-body" id="body-r2">
-          <div class="rv-role-tag">2-4 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">Global brands. Indian customers. Someone has to go get the partnerships that make that bridge real.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">New brand and supplier relationships — sourced, pitched, signed, by you.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Your own pipeline, your own targets, your own follow-through. No hand-holding, no hand-offs.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Installation partner and dealer network expansion across new cities.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The negotiation room. You walk in, you walk out with terms that work for us.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">2-4 years in B2B sales, partnerships, or business development — automotive, retail, or D2C preferred.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Comfortable cold-opening a conversation with someone who's never heard of us.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Numbers-driven. You know your conversion rate without checking.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Thrives without a script. Builds one instead.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">Every brand we bring in, every partner we sign, is one more piece of "the moment" we're building. You're the one closing it.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Business Development Executive" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r3">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Operations</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Operations Executive</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Make the chaos run on time.</div></div><span class="rv-role-arrow" id="arr-r3">+</span></div>
-        <div class="rv-role-body" id="body-r3">
-          <div class="rv-role-tag">2-4 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">Products from Thailand, Japan, Italy, USA. Customers across every pin code in India. Someone has to make that machine run without dropping a single order.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">End-to-end order flow — sourcing to delivery to installation.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The SOPs for fulfillment, logistics, and installation scheduling.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Vendor and installation-partner coordination across India.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The fire-drills. When something goes wrong at 9pm, you're already solving it.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">2-4 years in operations, logistics, or supply chain — e-commerce or automotive a strong plus.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">High tolerance for ambiguity, low tolerance for excuses.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Process-obsessed. You see a recurring problem and build a system so it never recurs again.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Calm under pressure. We move fast — you make sure fast doesn't mean broken.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">"Delivered like it was next door" is our promise. You're the one who keeps it.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Operations Executive" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r4">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Finance</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Jr. Accounts &amp; Finance Executive</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Keep the numbers honest. Keep the company fundable.</div></div><span class="rv-role-arrow" id="arr-r4">+</span></div>
-        <div class="rv-role-body" id="body-r4">
-          <div class="rv-role-tag">1-3 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">We're scaling toward an IPO. That starts with books that are clean from day one — not cleaned up later.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Day-to-day bookkeeping, invoicing, reconciliations, and vendor payments.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">GST, TDS, and compliance filings, coordinated with our CA.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The financial SOPs that scale with us — not the ones that fall apart at 2x volume.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Early visibility into cash flow and costs, flagged before they become problems.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">1-3 years in accounts/finance — Tally or Zoho Books experience preferred.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Commerce graduate (CA-Inter or pursuing is a plus, not a requirement).</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Detail-obsessive. A mismatched entry bothers you more than it should.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Trustworthy with numbers nobody else is watching.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">Every funding conversation, every audit, every investor question comes back to the books. You're building the foundation for all of it.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Jr. Accounts &amp; Finance Executive" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r5">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Content</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Content Strategist</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Build the world people fall in love with.</div></div><span class="rv-role-arrow" id="arr-r5">+</span></div>
-        <div class="rv-role-body" id="body-r5">
-          <div class="rv-role-tag">2-4 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">We're not running ads. We're building a universe — Instagram, comics, campaigns, culture. Someone needs to own where that goes next.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The content calendar and creative direction across Instagram, Meta ads, and emerging formats.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Original IP — like our comic series — from concept to publish, on schedule, every time.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The brand voice. You decide what sounds like us and what doesn't.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Performance, not just aesthetics. If it doesn't move the needle, you fix it or kill it.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">2-4 years creating content that built an audience, not just posted to one.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">A portfolio that shows range — copy, concept, campaign thinking, not just captions.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Strong instinct for automotive, gearhead, or premium lifestyle culture.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">You pitch ideas nobody asked for, because you already know they'll work.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">We're educating a market from scratch. The content you build is often the first real exposure someone has to this category. That's not small.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Content Strategist" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r6">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Procurement</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Procurement Executive</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Source it right. Source it real.</div></div><span class="rv-role-arrow" id="arr-r6">+</span></div>
-        <div class="rv-role-body" id="body-r6">
-          <div class="rv-role-tag">2-4 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">Verified authentic. Globally sourced. Locally delivered. That promise lives or dies in procurement.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Supplier sourcing and vetting across Thailand, Japan, Italy, USA, and beyond.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Pricing negotiations, purchase orders, and import logistics — start to finish.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The authenticity standard. Nothing ships that you haven't verified.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Supplier relationships built for the next five years, not the next one.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">2-4 years in procurement, sourcing, or import/export — automotive parts or international trade a strong plus.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Comfortable navigating customs, documentation, and cross-border vendor relationships.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Negotiates hard, but builds trust that lasts.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Treats every sourcing decision like it's their own money on the line.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">"Verified authentic" is the entire reason customers trust us over a workshop guess. You're the one who makes that true.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Procurement Executive" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r7">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">People &amp; Talent</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">Talent Acquisition &amp; People Generalist</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Hire people who don't need to be managed.</div></div><span class="rv-role-arrow" id="arr-r7">+</span></div>
-        <div class="rv-role-body" id="body-r7">
-          <div class="rv-role-tag">2-4 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">We don't hire for titles — and we don't build a culture that needs constant oversight either. This role exists to find people who own their work, and to build the systems that let them keep owning it.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The full hiring pipeline — sourcing, screening, founder-round coordination, offer, close.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The bar at the door. You're the first filter for ownership over execution.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">People operations end-to-end — onboarding, policies, documentation, compliance — built lean, not bureaucratic.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Hiring and people SOPs that scale with us — written once, improved every cycle, never frozen in place.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">2-4 years across talent acquisition and HR generalist work — startup or high-growth environment strongly preferred.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">A track record of closing candidates other companies couldn't, not just filling reqs.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Sharp judgment for substance over polish.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Fast and decisive. A slow pipeline costs us the best people.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">Every other role on this page runs through you first. The kind of company we become in five years is decided by who you let in today.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="Talent Acquisition &amp; People Generalist" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
-      <div class="rv-role-card" data-role-id="r8">
-        <div class="rv-role-header"><div><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#C93F1A;margin-bottom:4px;font-family:'Inter',sans-serif;">Design</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em;color:#F7F5F0;">UI/UX Designer</div><div style="font-size:13px;font-weight:300;color:#8A8880;margin-top:2px;font-family:'Inter',sans-serif;">Design an experience worthy of the customer we serve.</div></div><span class="rv-role-arrow" id="arr-r8">+</span></div>
-        <div class="rv-role-body" id="body-r8">
-          <div class="rv-role-tag">2-4 years exp</div>
-          <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1.5rem 0;font-family:'Inter',sans-serif;">Our customer isn't browsing. They already own something premium and expect everything around it — including how they buy — to match.</p>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What you'll own</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The end-to-end experience across our site, app, and checkout — researched, designed, shipped, measured.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Every screen between "curious" and "ordered," held to a premium standard.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Design systems and component libraries — built once, built right, reused everywhere.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">The handoff to engineering — clean, documented, no guesswork left for someone else to fill in.</li></ul>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#F7F5F0;margin-bottom:0.75rem;font-family:'Inter',sans-serif;">What we need</div>
-          <ul style="margin:0 0 1.5rem 0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">2-4 years designing for premium, luxury, or high-consideration e-commerce.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Fluent in Figma, prototyping, and design systems.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">An eye for restraint. Premium isn't more — it's deliberate.</li><li style="font-size:14px;font-weight:300;line-height:1.65;color:#8A8880;font-family:'Inter',sans-serif;">Data-informed, not just opinion-driven.</li></ul>
-          <div style="font-size:13px;font-weight:400;line-height:1.7;color:#C93F1A;border-left:2px solid #C93F1A;padding-left:1rem;font-family:'Inter',sans-serif;">We're building the digital front door for India's premium automotive culture. It has to look like where it belongs.</div>
-          <a href="#rv-form" class="rv-apply-btn" data-role="UI/UX Designer" style="display:inline-flex;align-items:center;gap:8px;margin-top:1.5rem;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;text-decoration:none;background:#C93F1A;padding:10px 20px;border-radius:2px;font-family:'Inter',sans-serif;">Apply for this role &rarr;</a>
-        </div>
-      </div>
-
+<!--ROLE_CARDS-->
     </div>
 
     <div style="margin-top:3rem;padding:2rem;border:1px solid #2E2D2B;border-radius:2px;background:#1E1D1B;">
@@ -207,14 +173,7 @@ const MARKUP = `
         <label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#8A8880;margin-bottom:8px;font-family:'Inter',sans-serif;">Role you're applying for <span style="color:#C93F1A;">*</span></label>
         <select id="rv-role-select" name="role" required style="width:100%;background:#1E1D1B;border:1px solid #2E2D2B;border-radius:2px;padding:13px 16px;font-family:'Inter',sans-serif;font-size:15px;font-weight:300;color:#F7F5F0;outline:none;box-sizing:border-box;appearance:none;-webkit-appearance:none;cursor:pointer;">
           <option value="">Select a role...</option>
-          <option value="Marketing Manager">Marketing Manager</option>
-          <option value="Business Development Executive">Business Development Executive</option>
-          <option value="Operations Executive">Operations Executive</option>
-          <option value="Jr. Accounts &amp; Finance Executive">Jr. Accounts &amp; Finance Executive</option>
-          <option value="Content Strategist">Content Strategist</option>
-          <option value="Procurement Executive">Procurement Executive</option>
-          <option value="Talent Acquisition &amp; People Generalist">Talent Acquisition &amp; People Generalist</option>
-          <option value="UI/UX Designer">UI/UX Designer</option>
+<!--ROLE_OPTIONS-->
           <option value="Other / Open Application">Other / Open Application</option>
         </select>
       </div>
@@ -346,8 +305,19 @@ const MARKUP = `
   .replaceAll("'Bebas Neue',sans-serif", 'var(--font-bebas),sans-serif')
   .replaceAll("'Inter',sans-serif", 'var(--font-inter),sans-serif');
 
-export default function CareersApplication() {
+/** Assemble the final markup: static template + data-driven roles + options. */
+function buildMarkup(postings: CareerPosting[]) {
+  const cards = postings.length
+    ? postings.map(roleCardHtml).join('\n')
+    : `<div style="padding:2rem 0;color:#8A8880;font-size:14px;font-family:${INTER};">New roles are being finalised — check back shortly, or submit an open application below.</div>`;
+  return MARKUP_TEMPLATE
+    .replace('<!--ROLE_CARDS-->', cards)
+    .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
+}
+
+export default function CareersApplication({ postings = [] }: { postings?: CareerPosting[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const markup = useMemo(() => buildMarkup(postings), [postings]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -667,7 +637,7 @@ export default function CareersApplication() {
     }, { signal });
 
     return () => { unmounted = true; ac.abort(); };
-  }, []);
+  }, [markup]);
 
-  return <div ref={rootRef} className="rv-careers-page" dangerouslySetInnerHTML={{ __html: MARKUP }} />;
+  return <div ref={rootRef} className="rv-careers-page" dangerouslySetInnerHTML={{ __html: markup }} />;
 }
