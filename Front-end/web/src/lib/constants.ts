@@ -17,8 +17,10 @@ export const API_ENDPOINTS = {
   PRODUCT_DETAIL: (id: string) => `/products/${id}`,
   FEATURED_PRODUCTS: '/products/featured',
 
-  // Back-in-stock ("Notify me")
+  // Back-in-stock ("Notify me") + on-backorder ("Join the waiting list").
+  // Both are StockNotificationRequest rows, distinguished by `kind` on the query.
   NOTIFY_ME: (id: string) => `/products/${id}/notify-me`,
+  JOIN_WAITLIST: (id: string) => `/products/${id}/join-waitlist`,
   STOCK_NOTIFICATIONS_MINE: '/stock-notifications/mine',
   STOCK_NOTIFICATION_CANCEL: (id: string) => `/stock-notifications/${id}`,
   ADMIN_STOCK_REQUESTS: '/stock-notifications/admin',

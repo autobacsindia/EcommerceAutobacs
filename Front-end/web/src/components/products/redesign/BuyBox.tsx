@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, HeadphonesIcon } from 'lucide-react';
+import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { StockStatus } from '@/lib/stock';
 import { useCart } from '@/context/CartContext';
@@ -14,6 +14,7 @@ import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
 import EmiOptions from '@/components/products/redesign/EmiOptions';
 import NotifyMeButton from '@/components/products/redesign/NotifyMeButton';
+import JoinWaitlistButton from '@/components/products/redesign/JoinWaitlistButton';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 const MAX_QTY = 99;
@@ -102,10 +103,8 @@ export default function BuyBox({
   const backorder = activeStock === 'backorder';
   const wished = isInWishlist(product._id);
 
-  // Backorder items are enquiry-only — routed to the consultation flow with the
-  // product name prefilled, instead of Add to cart / Buy now.
-  const enquire = () =>
-    router.push(`/consultation?product=${encodeURIComponent(product.name)}`);
+  // Backorder items aren't directly purchasable — the shopper joins a waiting list
+  // (a warm CRM lead + restock-demand signal) instead of Add to cart / Buy now.
   const categoryName =
     typeof product.category === 'object' ? product.category?.name : product.category;
 
@@ -267,7 +266,7 @@ export default function BuyBox({
           <span className="text-[11px] uppercase tracking-[0.16em] text-gold">Low stock</span>
         )}
         {backorder && (
-          <span className="text-[11px] uppercase tracking-[0.16em] text-gold">On backorder — enquire for availability</span>
+          <span className="text-[11px] uppercase tracking-[0.16em] text-gold">On backorder — join the waiting list</span>
         )}
         {outOfStock && (
           <span className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Sold out</span>
@@ -283,13 +282,11 @@ export default function BuyBox({
       <div className="mt-7 flex flex-col gap-3">
         {backorder ? (
           <div className="flex gap-3">
-            <button
-              onClick={enquire}
-              className="flex flex-1 items-center justify-center gap-3 bg-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-obsidian transition-opacity hover:opacity-90"
-            >
-              <HeadphonesIcon className="h-4 w-4" />
-              Click to enquire
-            </button>
+            <JoinWaitlistButton
+              productId={product._id}
+              variantId={selectedVariant?._id ?? null}
+              className="flex-1"
+            />
             <button
               onClick={toggleWish}
               aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}

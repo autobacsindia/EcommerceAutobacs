@@ -11,10 +11,14 @@ class StockNotificationRequestRepository extends BaseRepository {
     super(StockNotificationRequest);
   }
 
-  /** All pending request ids for one target (variantId null = simple product). */
+  /**
+   * All pending back-in-stock request ids for one target (variantId null = simple
+   * product). Scoped to kind:'restock' so the restock fan-out never emails people
+   * who only joined the on-backorder waiting list (that list is sales-follow-up).
+   */
   findPendingIdsForTarget(productId, variantId = null) {
     return this.model
-      .find({ product: productId, variantId: variantId ?? null, status: 'pending' })
+      .find({ product: productId, variantId: variantId ?? null, kind: 'restock', status: 'pending' })
       .select('_id')
       .lean();
   }
@@ -61,9 +65,13 @@ class StockNotificationRequestRepository extends BaseRepository {
     return { request: res.value, created: !res.lastErrorObject?.updatedExisting };
   }
 
-  /** The caller's own pending requests (optionally scoped to one product). */
-  findMinePending(userId, productId = null) {
-    const query = { user: userId, status: 'pending' };
+  /**
+   * The caller's own pending requests of one kind (optionally scoped to one
+   * product). Kind-scoped so the PDP "Notify me" and "Join the waiting list"
+   * buttons each only hydrate from their own list.
+   */
+  findMinePending(userId, productId = null, kind = 'restock') {
+    const query = { user: userId, kind, status: 'pending' };
     if (productId) query.product = productId;
     return this.model
       .find(query)
@@ -86,9 +94,9 @@ class StockNotificationRequestRepository extends BaseRepository {
    * Demand grouped per product/variant, highest demand first, paginated.
    * Returns { rows, total }.
    */
-  async groupedByTarget(status, page, limit) {
+  async groupedByTarget(status, page, limit, kind = 'restock') {
     const result = await this.model.aggregate([
-      { $match: { status } },
+      { $match: { status, kind } },
       {
         $group: {
           _id: { product: '$product', variantId: '$variantId' },

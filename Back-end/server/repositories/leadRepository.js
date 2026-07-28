@@ -24,6 +24,19 @@ class LeadRepository extends BaseRepository {
   }
 
   /**
+   * Reverse-lookup: the leads whose `sources[]` reference any of `refs` (e.g. the
+   * StockNotificationRequest ids in a Stock Requests drill-down), so each waitlist
+   * requester can be paired with its CRM lead + status. Returns lean rows keyed by
+   * ref via the returned `sources.ref`.
+   */
+  async findBySourceRefs(refs) {
+    if (!refs?.length) return [];
+    return Lead.find({ 'sources.ref': { $in: refs } })
+      .select('status sources.ref')
+      .lean();
+  }
+
+  /**
    * Atomic claim for a name-only rep: assign an UNCLAIMED lead to `repId`. The
    * `assignedRep: null` filter makes this compare-and-set — a second concurrent
    * claim matches no document and returns null, so two browser tabs (or two

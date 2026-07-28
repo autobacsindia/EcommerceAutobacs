@@ -1,12 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
+import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
-import { ChevronDown, ChevronRight, Bell } from 'lucide-react';
+import { ChevronDown, ChevronRight, Bell, PackageX, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
+import { LeadStatus, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS } from '@/lib/leads';
 
 type Status = 'pending' | 'notified' | 'cancelled';
+// Which demand list: out-of-stock "Notify me" (restock) vs on-backorder waiting
+// list (backorder). Mirrors StockNotificationRequest.kind on the backend.
+type Kind = 'restock' | 'backorder';
 
 interface RequestRow {
   product: { _id: string; name: string; slug: string | null; stock: string | null; image: string };
@@ -31,6 +36,10 @@ interface Requester {
   status: Status;
   createdAt: string;
   notifiedAt?: string | null;
+  // Backorder waitlist only — the linked CRM lead, so the row can show/drive the
+  // shared "contacted" status (null when no lead could be seeded).
+  leadId?: string | null;
+  leadStatus?: LeadStatus | null;
 }
 
 const STOCK_LABEL: Record<string, string> = { in: 'In stock', low: 'Low', out: 'Out of stock', backorder: 'Backorder' };
@@ -39,6 +48,7 @@ const rowKey = (r: RequestRow) => `${r.product._id}:${r.variantId ?? 'null'}`;
 export default function AdminStockRequestsPage() {
   const [items, setItems] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [kind, setKind] = useState<Kind>('restock');
   const [status, setStatus] = useState<Status>('pending');
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -47,11 +57,12 @@ export default function AdminStockRequestsPage() {
   // Drill-down: which grouped row is expanded, and its (cached) requester list.
   const [expanded, setExpanded] = useState<string | null>(null);
   const [requesters, setRequesters] = useState<Record<string, Requester[]>>({});
+  const [markingLead, setMarkingLead] = useState<string | null>(null);
 
   const fetchList = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({ status, page: String(page), limit: '25' });
+      const params = new URLSearchParams({ kind, status, page: String(page), limit: '25' });
       const res = await apiClient.get<ListResponse>(`${API_ENDPOINTS.ADMIN_STOCK_REQUESTS}?${params.toString()}`);
       setItems(res.items || []);
       setPages(res.pagination?.pages || 1);
@@ -61,16 +72,31 @@ export default function AdminStockRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, page]);
+  }, [kind, status, page]);
 
   useEffect(() => { fetchList(); }, [fetchList]);
 
+  // Switch list (restock ↔ backorder): reset to the pending tab, page 1, and drop
+  // the drill-down cache in one batched update so the fetch fires exactly once.
+  const selectKind = (k: Kind) => {
+    if (k === kind) return;
+    setKind(k);
+    setStatus('pending');
+    setPage(1);
+    setExpanded(null);
+    setRequesters({});
+  };
+
   // Switch status tab: reset page + collapse drill-downs in one batched update so
   // the [status, page] fetch fires exactly once (not twice — stale page then page 1).
+  // Also drop the requester cache: it's keyed by product only, so a product that
+  // appears under more than one status would otherwise show the previous tab's
+  // requesters when re-expanded here.
   const selectStatus = (s: Status) => {
     setStatus(s);
     setPage(1);
     setExpanded(null);
+    setRequesters({});
   };
 
   const toggleRow = async (r: RequestRow) => {
@@ -79,7 +105,7 @@ export default function AdminStockRequestsPage() {
     setExpanded(key);
     if (!requesters[key]) {
       try {
-        const params = new URLSearchParams({ productId: r.product._id, status });
+        const params = new URLSearchParams({ productId: r.product._id, kind, status });
         if (r.variantId) params.append('variantId', r.variantId);
         const res = await apiClient.get<{ success: boolean; requesters: Requester[] }>(
           `${API_ENDPOINTS.ADMIN_STOCK_REQUESTERS}?${params.toString()}`
@@ -92,16 +118,65 @@ export default function AdminStockRequestsPage() {
     }
   };
 
+  // Mark a waitlist requester's linked lead as contacted. Writes through the CRM
+  // (single source of truth) via the existing bulk-status endpoint, then reflects
+  // the new status locally so the badge updates without a refetch. One-way: only
+  // enabled while the lead is still 'new', mirroring the Leads screen action.
+  //
+  // Lead status is PER-PERSON, so the same lead can back several requester rows
+  // (the person waiting on multiple products, across expanded groups). Patch every
+  // cached row that shares this leadId so they don't disagree.
+  const markContacted = async (requester: Requester) => {
+    const leadId = requester.leadId;
+    if (!leadId) return;
+    setMarkingLead(requester._id);
+    try {
+      await apiClient.post('/leads/bulk/status', { leadIds: [leadId], status: 'contacted' });
+      setRequesters((prev) => {
+        const next: Record<string, Requester[]> = {};
+        for (const [k, rows] of Object.entries(prev)) {
+          next[k] = rows.map((r) => (r.leadId === leadId ? { ...r, leadStatus: 'contacted' } : r));
+        }
+        return next;
+      });
+      toast.success('Marked as contacted');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update the lead');
+    } finally {
+      setMarkingLead(null);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center gap-3 mb-2">
         <Bell className="h-7 w-7 text-blue-600" />
         <h1 className="text-3xl font-bold">Stock Requests</h1>
       </div>
-      <p className="text-gray-500 mb-8">
-        Customers waiting on out-of-stock items. The busiest items sit at the top — a live demand signal for restocking.
-        Everyone here is emailed automatically the moment the item comes back.
+      <p className="text-gray-500 mb-6">
+        {kind === 'restock'
+          ? 'Customers waiting on out-of-stock items. The busiest items sit at the top — a live demand signal for restocking. Everyone here is emailed automatically the moment the item comes back.'
+          : 'Customers who joined the waiting list for on-backorder items. A live demand signal — and each one is a warm lead in the CRM. Sales follows up manually (no automatic email); mark who you’ve reached below.'}
       </p>
+
+      {/* Kind toggle: which demand list are we looking at */}
+      <div className="mb-6 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+        {([
+          ['restock', 'Out of stock', PackageX] as const,
+          ['backorder', 'On backorder', ClipboardList] as const,
+        ]).map(([k, label, Icon]) => (
+          <button
+            key={k}
+            onClick={() => selectKind(k)}
+            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              kind === k ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Status tabs */}
       <div className="flex gap-2 mb-6">
@@ -199,7 +274,8 @@ export default function AdminStockRequestsPage() {
                                   <th className="text-left py-1 pr-4">Customer</th>
                                   <th className="text-left py-1 pr-4">Email</th>
                                   <th className="text-left py-1 pr-4">Requested</th>
-                                  {status === 'notified' && <th className="text-left py-1">Notified</th>}
+                                  {status === 'notified' && <th className="text-left py-1 pr-4">Notified</th>}
+                                  {kind === 'backorder' && <th className="text-left py-1">Lead status</th>}
                                 </tr>
                               </thead>
                               <tbody>
@@ -209,8 +285,39 @@ export default function AdminStockRequestsPage() {
                                     <td className="py-1.5 pr-4">{req.user?.email || req.email || '—'}</td>
                                     <td className="py-1.5 pr-4 text-gray-600">{new Date(req.createdAt).toLocaleString()}</td>
                                     {status === 'notified' && (
-                                      <td className="py-1.5 text-gray-600">
+                                      <td className="py-1.5 pr-4 text-gray-600">
                                         {req.notifiedAt ? new Date(req.notifiedAt).toLocaleString() : '—'}
+                                      </td>
+                                    )}
+                                    {kind === 'backorder' && (
+                                      <td className="py-1.5">
+                                        {req.leadStatus ? (
+                                          <div className="flex items-center gap-2">
+                                            <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${LEAD_STATUS_COLORS[req.leadStatus]}`}>
+                                              {LEAD_STATUS_LABELS[req.leadStatus]}
+                                            </span>
+                                            {req.leadStatus === 'new' && (
+                                              <button
+                                                onClick={() => markContacted(req)}
+                                                disabled={markingLead === req._id}
+                                                className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                title="Mark this person contacted (updates the CRM lead)"
+                                              >
+                                                {markingLead === req._id ? 'Saving…' : 'Mark contacted'}
+                                              </button>
+                                            )}
+                                            {req.leadId && (
+                                              <Link
+                                                href={`/admin/leads/${req.leadId}`}
+                                                className="text-blue-600 hover:underline"
+                                              >
+                                                View lead ↗
+                                              </Link>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-gray-400">No lead</span>
+                                        )}
                                       </td>
                                     )}
                                   </tr>
