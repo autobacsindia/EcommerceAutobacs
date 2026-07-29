@@ -82,9 +82,24 @@ export const getCareersResource = async (publicId, resourceType) => {
 };
 
 /**
- * Mint a signed delivery URL for a private (authenticated) careers asset so an
- * admin can view/download it. The signature is required to fetch the asset — a
- * leaked plain URL is useless — and generation itself is behind admin auth.
+ * How long an admin's signed view/download link stays valid (raw assets). Long
+ * enough to open from the inbox, short enough that a copied link soon dies.
+ */
+const CAREERS_DOWNLOAD_TTL_SECONDS = 60 * 60; // 1 hour
+
+/**
+ * Mint a signed URL for a private (authenticated) careers asset so an admin can
+ * view/download it. The signature is required to fetch the asset — a leaked
+ * plain URL is useless — and generation itself is behind admin auth.
+ *
+ * RAW (PDF) vs VIDEO need different mechanisms:
+ *   - RAW: a normal signed DELIVERY URL 401s, because Cloudinary blocks raw/PDF
+ *     delivery by default (account "restricted media types"). The private-download
+ *     API is the supported path — a short-lived signed link that serves the
+ *     private asset regardless of that setting. The public_id already carries the
+ *     extension, so `format` is passed empty.
+ *   - VIDEO/IMAGE: decoded media delivers fine via a standard signed URL, which
+ *     also allows inline playback (better than forcing a download).
  *
  * @param {string} publicId
  * @param {'video'|'raw'|'image'} resourceType
@@ -92,8 +107,16 @@ export const getCareersResource = async (publicId, resourceType) => {
  */
 export const signedCareersAssetUrl = (publicId, resourceType) => {
   if (!publicId) return '';
+  const rt = resourceType || 'raw';
+  if (rt === 'raw') {
+    return cloudinary.utils.private_download_url(publicId, '', {
+      resource_type: 'raw',
+      type: 'authenticated',
+      expires_at: Math.round(Date.now() / 1000) + CAREERS_DOWNLOAD_TTL_SECONDS,
+    });
+  }
   return cloudinary.url(publicId, {
-    resource_type: resourceType || 'raw',
+    resource_type: rt,
     type: 'authenticated',
     sign_url: true,
     secure: true,
