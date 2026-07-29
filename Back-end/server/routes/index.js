@@ -36,6 +36,7 @@ import categoryRoutes from './categories.js';
 import brandRoutes from './brands.js';
 import vehicleRoutes from './vehicles.js';
 import productQuestionRoutes from './productQuestions.js';
+import feedRoutes from './feeds.js';
 
 import userRoutes from './users.js';
 import profileRoutes from './profile.js';
@@ -94,6 +95,8 @@ apiRouter.use('/admin/token', tokenIntrospectionRoutes);
 // ============================================================================
 apiRouter.use('/products/search', setRequestTimeout(60000), publicBrowsingRateLimit, productRoutes);
 apiRouter.use('/products', publicBrowsingRateLimit, productRoutes);
+// Marketing catalogue feeds (Meta Commerce, etc.) — pulled by external platforms.
+apiRouter.use('/feeds', feedRoutes);
 apiRouter.use('/categories', publicBrowsingRateLimit, categoryRoutes);
 apiRouter.use('/brands', publicBrowsingRateLimit, brandRoutes);
 apiRouter.use('/vehicles', publicBrowsingRateLimit, vehicleRoutes);
