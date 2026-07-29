@@ -25,7 +25,7 @@ import {
   generateCareersUploadSignature,
   getCareersResource,
   signedCareersAssetUrl,
-} from '../utils/cloudinaryHelpers.js';
+} from '../utils/careersCloudinary.js';
 import { enqueueNotification } from '../queue/queues.js';
 
 const MB = 1024 * 1024;

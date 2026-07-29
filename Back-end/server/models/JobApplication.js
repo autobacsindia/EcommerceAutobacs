@@ -5,8 +5,8 @@ import mongoose from "mongoose";
  * Sheet. Applicant PII + file references live here instead of in Drive/Sheets.
  *
  * Files are uploaded by the browser directly to Cloudinary (signed, private
- * `authenticated` delivery — see utils/cloudinaryHelpers.generateCareersUploadSignature)
- * and only their { url, publicId } land here. The public `url` of an
+ * `authenticated` delivery — see utils/careersCloudinary.generateCareersUploadSignature)
+ * and only their { publicId } lands here. The public `url` of an
  * authenticated asset is NOT fetchable without a signature, so admins view them
  * via short signed URLs minted on read — never the "anyone with the link" access
  * the Drive flow used.

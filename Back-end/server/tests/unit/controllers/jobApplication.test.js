@@ -16,7 +16,7 @@ import { jest } from '@jest/globals';
 const getCareersResource = jest.fn();
 const enqueueNotification = jest.fn();
 
-jest.unstable_mockModule('../../../utils/cloudinaryHelpers.js', () => ({
+jest.unstable_mockModule('../../../utils/careersCloudinary.js', () => ({
   CAREERS_FOLDER_BASE: 'autobacs/careers',
   CAREERS_MAX_UPLOAD_BYTES: 30 * 1024 * 1024,
   generateCareersUploadSignature: ({ folder }) => ({
