@@ -76,6 +76,21 @@ const pickPublicId = (raw) => {
   return typeof raw.publicId === 'string' ? raw.publicId.trim() : '';
 };
 
+/**
+ * Effective format for a Cloudinary resource. Cloudinary populates `format` for
+ * DECODED media (video/image) but leaves it undefined for `raw` resources —
+ * there the extension is carried in the public_id instead (…/abc.pdf). Fall back
+ * to the public_id suffix so raw (PDF) slots validate instead of always failing
+ * the format check. NOTE: for raw this is an extension check (the bytes are not
+ * decoded); it is one layer alongside the folder scope, size cap, and private
+ * `authenticated` storage — not a content-sniff.
+ */
+const resourceFormat = (resource, publicId) => {
+  if (resource.format) return String(resource.format).toLowerCase();
+  const m = String(publicId).match(/\.([a-z0-9]+)$/i);
+  return m ? m[1].toLowerCase() : '';
+};
+
 // @desc    Submit a careers application (files already uploaded to Cloudinary)
 // @route   POST /careers/applications
 // @access  Public (rate-limited)
@@ -131,7 +146,7 @@ export const submitApplication = async (req, res) => {
     }
     // Reject a mismatched asset type (e.g. an HTML/exe smuggled into a raw PDF
     // slot) — the byte cap alone would let it through.
-    const format = String(resource.format || '').toLowerCase();
+    const format = resourceFormat(resource, publicId);
     if (slot.formats && !slot.formats.includes(format)) {
       const want = slot.resourceType === 'raw' ? 'a PDF' : 'a video (MP4/MOV/WEBM)';
       return res.status(400).json({ success: false, message: `${slot.label} must be ${want}.` });

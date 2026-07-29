@@ -41,10 +41,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   getCareersResource.mockReset();
-  // Default: valid asset whose format matches the slot (video slots ask for
-  // resourceType 'video', PDF slots ask for 'raw').
+  // Default: valid asset, shaped like Cloudinary's REAL Admin API response.
+  // Decoded media (video) carries `format`; `raw` resources (PDFs) do NOT — the
+  // extension lives in the public_id instead. The controller must derive the raw
+  // format from the id suffix, so the fixtures use `.pdf`-suffixed resume ids.
   getCareersResource.mockImplementation((publicId, rt) =>
-    Promise.resolve({ public_id: publicId, bytes: 1000, format: rt === 'raw' ? 'pdf' : 'mp4' }));
+    Promise.resolve({ public_id: publicId, bytes: 1000, format: rt === 'raw' ? undefined : 'mp4' }));
   enqueueNotification.mockReset();
 });
 
@@ -66,7 +68,8 @@ const F = (publicId) => ({ publicId, url: `https://res/${publicId}` });
 const goodFiles = () => ({
   videoOne: F('autobacs/careers/n1/v1'),
   videoTwo: F('autobacs/careers/n1/v2'),
-  resume: F('autobacs/careers/n1/cv'),
+  // Real raw (PDF) public_ids carry the extension — that's where the format lives.
+  resume: F('autobacs/careers/n1/cv.pdf'),
 });
 
 const baseBody = (over = {}) => ({
@@ -144,13 +147,22 @@ describe('submitApplication — validation', () => {
   });
 
   test('400 when a raw slot holds a non-PDF (e.g. HTML smuggled as a resume)', async () => {
-    // Resume slot (resourceType 'raw') comes back as an html asset within size.
-    getCareersResource.mockImplementation((publicId, rt) =>
-      Promise.resolve({ public_id: publicId, bytes: 1000, format: rt === 'raw' ? 'html' : 'mp4' }));
+    // A raw asset's type is judged by the public_id extension (Cloudinary does not
+    // decode raw bytes → `format` is undefined). An .html id must be rejected.
     const res = mockRes();
-    await controller.submitApplication(reqOf(baseBody()), res);
+    await controller.submitApplication(reqOf(baseBody({
+      files: { ...goodFiles(), resume: F('autobacs/careers/n1/evil.html') },
+    })), res);
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toMatch(/must be a PDF/i);
+  });
+
+  test('accepts a raw PDF whose Cloudinary `format` is undefined (regression: format from public_id)', async () => {
+    // The exact real-world shape that used to be rejected: raw resource with no
+    // `format`, id ending in `.pdf`. Must now pass the format check → 201.
+    const res = mockRes();
+    await controller.submitApplication(reqOf(baseBody()), res);
+    expect(res.statusCode).toBe(201);
   });
 });
 
@@ -166,7 +178,7 @@ describe('submitApplication — success', () => {
     expect(saved).not.toBeNull();
     expect(saved.roleTitle).toBe('Marketing Manager');
     expect(saved.posting).not.toBeNull(); // matched the open role
-    expect(saved.files.resume.publicId).toBe('autobacs/careers/n1/cv');
+    expect(saved.files.resume.publicId).toBe('autobacs/careers/n1/cv.pdf');
     expect(saved.files.resume.bytes).toBe(1000);
     expect(enqueueNotification).toHaveBeenCalledWith('send-admin-careers-alert', { applicationId: saved._id.toString() });
   });
@@ -211,7 +223,7 @@ describe('submitApplication — cannot be manipulated via crafted requests', () 
       files: {
         videoOne: F('autobacs/careers/n1/v1'),
         videoTwo: F('autobacs/careers/n1/v2'),
-        resume: { publicId: 'autobacs/careers/n1/cv', url: 'https://evil.example/x', bytes: 999999, resourceType: 'image' },
+        resume: { publicId: 'autobacs/careers/n1/cv.pdf', url: 'https://evil.example/x', bytes: 999999, resourceType: 'image' },
       },
     })), res);
     expect(res.statusCode).toBe(201);
