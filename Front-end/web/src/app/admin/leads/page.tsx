@@ -36,7 +36,7 @@ interface StatsResponse {
 }
 
 const SOURCE_OPTIONS: LeadSourceType[] = [
-  'consultation', 'payment_pending', 'payment_failed', 'payment_cancelled', 'order_cancelled', 'cart_abandoned', 'dormant_user',
+  'consultation', 'payment_pending', 'payment_failed', 'payment_cancelled', 'order_cancelled', 'cart_abandoned', 'backorder_waitlist', 'dormant_user',
 ];
 
 export default function AdminLeadsPage() {

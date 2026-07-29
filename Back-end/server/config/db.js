@@ -306,15 +306,48 @@ async function ensureCriticalIndexes() {
     // duplicate back-in-stock emails. Partial on status:'pending' so notified/
     // cancelled rows don't block a fresh sign-up on the next out-of-stock cycle.
     // autoIndex is off in prod, so this safety net is what actually builds it there.
+    //
+    // Backfill `kind` FIRST. The field was added with a schema default of
+    // 'restock', but a default only applies to new inserts — rows written before
+    // this deploy have no `kind` at all. Every kind-scoped read ({kind:'restock'})
+    // silently skips a document whose `kind` is absent, which would orphan every
+    // in-flight back-in-stock signup (never emailed, gone from the admin list). So
+    // stamp the legacy rows before the kind-scoped indexes/reads take effect.
+    // Idempotent: once stamped, {kind:{$exists:false}} matches nothing.
+    const kindBackfill = await db.collection('stocknotificationrequests')
+      .updateMany({ kind: { $exists: false } }, { $set: { kind: 'restock' } });
+    if (kindBackfill.modifiedCount > 0) {
+      console.log(`✓ Backfilled kind:'restock' on ${kindBackfill.modifiedCount} legacy stock-request rows`);
+    }
+
+    // The unique key now includes `kind` so a shopper can be on BOTH the restock
+    // and backorder waiting lists for the same target. The pre-`kind` unique index
+    // (product_1_variantId_1_user_1) would otherwise block that second signup, so
+    // drop it before creating the widened one (both no-ops once settled).
+    try {
+      await db.collection('stocknotificationrequests').dropIndex('product_1_variantId_1_user_1');
+      console.log('✓ Dropped legacy pre-kind StockNotificationRequest unique index');
+    } catch (e) {
+      // IndexNotFound (27) is expected on fresh envs / after the first run.
+      if (e.codeName !== 'IndexNotFound' && e.code !== 27) throw e;
+    }
     await db.collection('stocknotificationrequests').createIndex(
-      { product: 1, variantId: 1, user: 1 },
+      { product: 1, variantId: 1, user: 1, kind: 1 },
       { unique: true, partialFilterExpression: { status: 'pending' }, background: true }
     );
-    // Fan-out + admin-list read path: pending rows for a product/variant.
+    // Fan-out + admin-list read path: pending rows for a product/variant of a kind.
     await db.collection('stocknotificationrequests').createIndex(
-      { product: 1, variantId: 1, status: 1 },
+      { product: 1, variantId: 1, kind: 1, status: 1 },
       { background: true }
     );
+    // Drop the pre-`kind` read index — every read path now includes `kind`, so
+    // {product,variantId,status} is dead weight (write amplification only).
+    try {
+      await db.collection('stocknotificationrequests').dropIndex('product_1_variantId_1_status_1');
+      console.log('✓ Dropped legacy pre-kind StockNotificationRequest read index');
+    } catch (e) {
+      if (e.codeName !== 'IndexNotFound' && e.code !== 27) throw e;
+    }
     console.log('✓ StockNotificationRequest indexes confirmed');
   } catch (err) {
     // Log but never crash the server over index verification

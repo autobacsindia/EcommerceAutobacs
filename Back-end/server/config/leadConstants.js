@@ -6,12 +6,13 @@
 
 export const SOURCE_TYPES = [
   'consultation',
-  'payment_pending',   // Order created, awaiting payment ("left at checkout")
-  'payment_failed',    // Order payment attempt failed
-  'payment_cancelled', // Customer cancelled the payment popup (vs admin order-cancel)
-  'order_cancelled',   // A placed order was cancelled (admin or customer) → re-engagement target
-  'cart_abandoned',    // Cart with items, no order placed
-  'dormant_user',      // Registered account, never placed a paid order
+  'payment_pending',    // Order created, awaiting payment ("left at checkout")
+  'payment_failed',     // Order payment attempt failed
+  'payment_cancelled',  // Customer cancelled the payment popup (vs admin order-cancel)
+  'order_cancelled',    // A placed order was cancelled (admin or customer) → re-engagement target
+  'cart_abandoned',     // Cart with items, no order placed
+  'backorder_waitlist', // Joined the waiting list for an on-backorder product → warm prospect
+  'dormant_user',       // Registered account, never placed a paid order
 ];
 
 export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'won', 'lost'];
@@ -32,11 +33,12 @@ export const REOPEN_SOURCE_TYPES = SOURCE_TYPES.filter((t) => t !== 'dormant_use
 
 // Badge priority when a person has several signals — highest wins `primarySource`.
 export const SOURCE_PRIORITY = {
-  order_cancelled: 7,  // strongest re-engagement signal — they placed AND cancelled a real order
-  payment_failed: 6,
-  payment_cancelled: 5,
-  payment_pending: 4,
-  consultation: 3,
+  order_cancelled: 8,  // strongest re-engagement signal — they placed AND cancelled a real order
+  payment_failed: 7,
+  payment_cancelled: 6,
+  payment_pending: 5,
+  consultation: 4,
+  backorder_waitlist: 3, // named a specific product they want — warm, on par with a consultation
   cart_abandoned: 2,
   dormant_user: 1,
 };
@@ -49,9 +51,10 @@ export const SOURCE_INTENT_SCORE = {
   order_cancelled: 45,   // placed a real order then cancelled — hottest re-engagement
   payment_failed: 42,    // tried to pay, card/bank declined — very live
   payment_cancelled: 38, // dismissed the payment popup
-  payment_pending: 34,   // reached checkout, never paid ("left at checkout")
-  consultation: 26,      // asked for advice — warm, needs nurture
-  cart_abandoned: 16,    // items in cart, never checked out
+  payment_pending: 34,     // reached checkout, never paid ("left at checkout")
+  consultation: 26,        // asked for advice — warm, needs nurture
+  backorder_waitlist: 24,  // wants a specific out-of-stock product — warm buy intent
+  cart_abandoned: 16,      // items in cart, never checked out
   dormant_user: 4,       // passive: registered, never bought
 };
 

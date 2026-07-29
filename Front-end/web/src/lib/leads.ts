@@ -13,6 +13,7 @@ export type LeadSourceType =
   | 'payment_cancelled'
   | 'order_cancelled'
   | 'cart_abandoned'
+  | 'backorder_waitlist'
   | 'dormant_user';
 
 export interface LeadSource {
@@ -135,6 +136,7 @@ export const LEAD_SOURCE_LABELS: Record<LeadSourceType, string> = {
   payment_cancelled: 'Payment cancelled',
   order_cancelled: 'Order cancelled',
   cart_abandoned: 'Abandoned cart',
+  backorder_waitlist: 'Backorder waitlist',
   dormant_user: 'Never purchased',
 };
 
@@ -168,6 +170,7 @@ export const LEAD_SOURCE_COLORS: Record<LeadSourceType, string> = {
   payment_cancelled: 'bg-rose-100 text-rose-800',
   order_cancelled: 'bg-red-200 text-red-900',
   cart_abandoned: 'bg-yellow-100 text-yellow-800',
+  backorder_waitlist: 'bg-amber-100 text-amber-800',
   dormant_user: 'bg-slate-100 text-slate-700',
 };
 

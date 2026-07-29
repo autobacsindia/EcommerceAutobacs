@@ -155,6 +155,19 @@ class LeadSyncService {
     const refId = source.ref ? source.ref.toString() : null;
     let existing = refId ? lead.sources.find((s) => s.ref?.toString() === refId) : null;
 
+    // Product-scoped signals (e.g. backorder_waitlist) carry a distinct `ref` per
+    // occurrence — a leave/rejoin cycle mints a brand-new StockNotificationRequest,
+    // so ref-only dedup would stack a fresh source on every rejoin and grow
+    // sources[] unbounded. Fold those onto the existing same-type source for the
+    // same product so a rejoin REFRESHES (and re-points the ref to the live row)
+    // instead of duplicating. Only kicks in when a snapshot productId is present.
+    const productId = source.snapshot?.productId;
+    if (!existing && productId) {
+      existing = lead.sources.find(
+        (s) => s.type === source.type && s.snapshot?.productId?.toString() === productId.toString()
+      );
+    }
+
     // A genuinely NEW signal = a new ref, OR a known ref whose TYPE is PROGRESSING
     // (e.g. the same order going payment_pending → order_cancelled). A same-type
     // re-sync (webhook retry) is not new. Using type-progression — not just a new
@@ -179,6 +192,14 @@ class LeadSyncService {
       existing.type = source.type;
       existing.snapshot = source.snapshot || existing.snapshot;
       existing.capturedAt = new Date();
+      // Re-point ref to the latest live source doc. A no-op for ref-matched
+      // dedup; for product-scoped dedup (rejoin) it keeps the lead pointing at the
+      // current pending StockNotificationRequest so the reverse-lookup that drives
+      // the Stock Requests "contacted" mirror resolves to this lead.
+      if (source.ref) {
+        existing.ref = source.ref;
+        existing.refModel = source.refModel;
+      }
     } else {
       lead.sources.push({
         type: source.type,
@@ -217,6 +238,32 @@ class LeadSyncService {
           mode: consultation.mode,
         },
       }
+    );
+  }
+
+  /**
+   * Joined the waiting list for an on-backorder product → warm lead. The signing
+   * customer is always logged in (the button is login-only), so identity comes
+   * from their account. `ref` is the StockNotificationRequest so the Stock
+   * Requests screen can reverse-look-up the lead to mirror its "contacted" state.
+   *
+   * @param {{ request: object, user: object, product: object, variantLabel?: string|null }} args
+   */
+  async upsertFromWaitlist({ request, user, product, variantLabel = null }) {
+    return this._upsertSource(
+      { name: user.name, email: user.email, phone: user.phone },
+      {
+        type: 'backorder_waitlist',
+        ref: request._id,
+        refModel: 'StockNotificationRequest',
+        snapshot: {
+          productId: product._id,
+          productName: product.name,
+          productSlug: product.slug,
+          variantLabel: variantLabel || null,
+        },
+      },
+      { linkedUser: user._id },
     );
   }
 

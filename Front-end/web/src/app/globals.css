@@ -356,6 +356,9 @@ textarea::placeholder {
 .rte-content .ProseMirror strong { font-weight: 700; }
 .rte-content .ProseMirror em { font-style: italic; }
 .rte-content .ProseMirror a { color: var(--color-gold); text-decoration: underline; }
+/* Images stay within the editor width and keep their aspect ratio — no crop, fully responsive */
+.rte-content .ProseMirror img { max-width: 100%; height: auto; border-radius: 0.5rem; margin: 0.75em auto; display: block; }
+.rte-content .ProseMirror img.ProseMirror-selectednode { outline: 2px solid var(--color-gold); outline-offset: 2px; }
 .rte-content .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--color-ink-muted); pointer-events: none; float: left; height: 0; }
 
 /* Light variant — dark text on a white form (e.g. legacy admin blog editor) */

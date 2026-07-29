@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { Bebas_Neue, Inter } from 'next/font/google';
 import { buildPageMetadata } from '@/lib/pageSeo';
-import CareersApplication from './CareersApplication';
+import { getServerApiBase } from '@/lib/server-api';
+import CareersApplication, { type CareerPosting } from './CareersApplication';
 
 // Self-hosted via next/font (CSP blocks fonts.gstatic.com). Exposed as CSS
 // variables the ported inline styles reference (--font-bebas / --font-inter).
@@ -26,10 +27,29 @@ export const generateMetadata = (): Promise<Metadata> =>
       'We don’t hire for titles — we hire for impact. Join Roavion Automotive (Autobacs India) and help build India’s premium automotive ecosystem.',
   });
 
-export default function CareersPage() {
+// Open roles are now admin-managed (JobPosting) and fetched server-side. ISR: a
+// short revalidate keeps the page fresh after an admin publishes/edits a role
+// without going fully dynamic; the `careers` cache tag also bounds staleness.
+async function getOpenPostings(): Promise<CareerPosting[]> {
+  try {
+    const res = await fetch(`${getServerApiBase()}/careers/postings`, {
+      next: { revalidate: 300, tags: ['careers'] },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.postings) ? data.postings : [];
+  } catch {
+    // A careers backend hiccup must never 500 the page — render the static shell
+    // with the open-application fallback instead.
+    return [];
+  }
+}
+
+export default async function CareersPage() {
+  const postings = await getOpenPostings();
   return (
     <div className={`${bebas.variable} ${inter.variable}`}>
-      <CareersApplication />
+      <CareersApplication postings={postings} />
     </div>
   );
 }

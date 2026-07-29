@@ -46,7 +46,7 @@ import {
   deleteProductImage,
 } from "../controllers/productImageController.js";
 import { uploadCSV, importProductsCSV } from "../controllers/productBulkController.js";
-import { createNotifyRequest } from "../controllers/stockNotificationController.js";
+import { createNotifyRequest, createWaitlistRequest } from "../controllers/stockNotificationController.js";
 import {
   getBrandProducts,
   getBrandDetails,
@@ -316,6 +316,12 @@ router.get("/:id", validateProductIdParam, httpCache('PRODUCT_DETAIL'), asyncHan
 // @desc    Register the logged-in customer for a back-in-stock alert (idempotent)
 // @access  Private
 router.post("/:id/notify-me", protect, validateProductIdParam, asyncHandler(createNotifyRequest));
+
+// @route   POST /products/:id/join-waitlist
+// @desc    Add the logged-in customer to an on-backorder product's waiting list
+//          (idempotent) — also seeds a warm CRM lead.
+// @access  Private
+router.post("/:id/join-waitlist", protect, validateProductIdParam, asyncHandler(createWaitlistRequest));
 
 // @route   GET /products/:id/similar
 // @desc    Get products similar to the specified product (same category/brand/tags)

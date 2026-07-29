@@ -29,6 +29,31 @@ const UPLOAD_MARKER = '/image/upload/';
  * candidate at the source width, so extra rungs are harmless on small sources. */
 export const DEFAULT_WIDTHS = [640, 828, 1080, 1440, 1920, 2560] as const;
 
+/** Width ladder for product/vehicle GRID CARDS (aspect-square tiles in 2–5 col
+ * grids). Small rungs keep phones cheap; the top rung (1440) covers a full-bleed
+ * (100vw) phone card at ~3x DPR (~430 CSS px × 3 ≈ 1290). c_limit caps every
+ * candidate at the source width, so higher rungs are harmless on small sources.
+ * Shared so a tuning change lands in one place, not three. */
+export const CARD_WIDTHS = [256, 384, 512, 768, 1080, 1440] as const;
+
+/**
+ * onError handler body for a plain `<img>` that carries a `cloudinarySrcSet()`
+ * `srcSet`. A swapped `src` alone does NOT restore a fallback: while a `srcSet`
+ * still resolves, the browser selects from it and ignores `src` entirely. So we
+ * must clear `srcSet` (and `sizes`) BEFORE pointing `src` at the static
+ * fallback. Idempotent via a data flag so a missing fallback file can't loop.
+ */
+export function swapImageToFallback(
+  img: HTMLImageElement,
+  fallbackSrc = '/images/fallback-product.png',
+): void {
+  if (img.dataset.fallbackApplied) return;
+  img.dataset.fallbackApplied = 'true';
+  img.srcset = '';
+  img.sizes = '';
+  img.src = fallbackSrc;
+}
+
 // A Cloudinary transformation segment is a comma-separated list of `key_value`
 // params. Same test as cloudinaryLoader.ts: every part starts with `^[a-z]+_`.
 // A version (`v12345`) or a bare folder never matches, so those are treated as

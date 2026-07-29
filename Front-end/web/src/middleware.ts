@@ -169,17 +169,16 @@ function buildCsp(nonce: string): string {
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
-    // Careers page (/careers) uploads applicant videos/PDFs straight to Google
-    // Drive and talks to a Google Apps Script web app: script.google.com issues
-    // the token and 302-redirects its JSON response to script.googleusercontent.com;
-    // www.googleapis.com receives the resumable Drive uploads + permission calls.
-    // api.cloudinary.com: admin image uploads go browser→Cloudinary directly
-    // (signed), bypassing our API + the proxy request-body limit.
+    // api.cloudinary.com: admin image uploads AND careers applicant videos/PDFs
+    // go browser→Cloudinary directly (signed), bypassing our API + the proxy
+    // request-body limit. (The careers flow previously used Google Drive + a
+    // Google Apps Script web app — script.google.com / script.googleusercontent.com
+    // / www.googleapis.com — now removed after the in-house migration.)
     // Trailing Google Tag / Ads entries: gtag.js XHR/beacon endpoints for
     // loading config and posting the purchase conversion. googleadservices.com +
     // ad.doubleclick.net + the regional google.co.in are the enhanced-conversion /
     // conversion-linker fetch targets (were CSP-blocked on the preview until added).
-    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://script.google.com https://script.googleusercontent.com https://www.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net",
+    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net",
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes.
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",

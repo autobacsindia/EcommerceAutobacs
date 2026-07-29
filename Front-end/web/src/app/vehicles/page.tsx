@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { vehicleService, Vehicle } from '@/services/vehicleService';
+import { cloudinarySrcSet, CARD_WIDTHS, swapImageToFallback } from '@/lib/cloudinarySrcSet';
 
 /**
  * "Browse by Vehicle" grid. Sourced from the backend `/vehicles` API (the single
@@ -95,11 +96,11 @@ export default function VehiclesPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={vehicle.image?.url || '/images/fallback-product.png'}
+                      srcSet={cloudinarySrcSet(vehicle.image?.url || '', CARD_WIDTHS)}
+                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
                       alt={vehicle.image?.alt || `${vehicle.make} ${vehicle.model}`}
                       className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/images/fallback-product.png';
-                      }}
+                      onError={(e) => swapImageToFallback(e.currentTarget)}
                       loading="lazy"
                     />
                   </div>

@@ -21,7 +21,7 @@ const LeadSourceSchema = new mongoose.Schema(
   {
     type: { type: String, enum: SOURCE_TYPES, required: true },
     ref: { type: mongoose.Schema.Types.ObjectId, refPath: "sources.refModel" },
-    refModel: { type: String, enum: ["Consultation", "Order", "Cart", "User"] },
+    refModel: { type: String, enum: ["Consultation", "Order", "Cart", "User", "StockNotificationRequest"] },
     capturedAt: { type: Date, default: Date.now },
     // Small denormalized detail for list display without a join (cart total,
     // vehicle/makeModel, item count). Kept intentionally tiny.

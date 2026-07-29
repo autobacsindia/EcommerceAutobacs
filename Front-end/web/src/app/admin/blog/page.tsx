@@ -824,9 +824,13 @@ export default function AdminBlogPage() {
                     onChange={html => setPostForm(f => ({ ...f, content: html }))}
                     placeholder="Write your post here…"
                     minHeight="260px"
+                    onImageUpload={async (file) => {
+                      const { url } = await uploadImageToCloudinary(file, 'articles', editingPost?._id);
+                      return url;
+                    }}
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Use the toolbar to add headings, bold, lists and links — no coding needed.
+                    Use the toolbar to add headings, bold, lists, links and images — no coding needed.
                   </p>
                 </div>
                 <div className="col-span-2">

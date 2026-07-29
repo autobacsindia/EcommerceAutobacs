@@ -10,6 +10,7 @@
  *   send-back-in-stock-email   { requestId }            — provider send for one claimed request
  *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
  *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
+ *   send-admin-careers-alert         { applicationId }  — notify support inbox of a new careers application
  *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
  *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
  *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
@@ -25,6 +26,7 @@ import { fanOutRestock, emailBackInStock } from '../../services/restockNotificat
 import {
   emailAdminReviewAlert,
   emailAdminConsultationAlert,
+  emailAdminCareersAlert,
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
@@ -73,6 +75,11 @@ const handlers = {
   'send-admin-consultation-alert': async (job) => {
     const { consultationId } = job.data;
     await emailAdminConsultationAlert(consultationId);
+  },
+
+  'send-admin-careers-alert': async (job) => {
+    const { applicationId } = job.data;
+    await emailAdminCareersAlert(applicationId);
   },
 
   'send-admin-order-placed-alert': async (job) => {

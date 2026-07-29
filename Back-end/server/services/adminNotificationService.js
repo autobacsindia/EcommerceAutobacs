@@ -14,6 +14,7 @@
 
 import reviewRepository from '../repositories/reviewRepository.js';
 import consultationRepository from '../repositories/consultationRepository.js';
+import jobApplicationRepository from '../repositories/jobApplicationRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
@@ -260,6 +261,46 @@ export const emailAdminConsultationAlert = async (consultationId) => {
 };
 
 /**
+ * Notify the support inbox that a new careers application was submitted (files
+ * live in Cloudinary; admins open them from the review inbox via signed URLs).
+ * Best-effort, safe to retry — a rare duplicate alert is harmless.
+ *
+ * @param {string} applicationId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
+ */
+export const emailAdminCareersAlert = async (applicationId) => {
+  const a = await jobApplicationRepository.findById(applicationId);
+  if (!a) return { status: 'not-found' };
+
+  const adminLink = `${appUrl()}/admin/careers/applications`;
+  const subject = `New job application — ${a.fullName} (${a.roleTitle})`;
+  const intro = 'A new careers application was submitted.';
+
+  const fields = [
+    ['Role', a.roleTitle],
+    ['Name', a.fullName],
+    ['Email', a.email],
+    ['Phone', a.phone],
+    ['City', a.city],
+    ['How found', a.howFound],
+    ['What they bring', a.whatYouBring],
+  ];
+
+  const text = [
+    intro,
+    '',
+    ...fields.filter(([, v]) => v != null && String(v).trim() !== '').map(([k, v]) => `${k}: ${v}`),
+    '',
+    `Review (with resume + video answers): ${adminLink}`,
+  ].join('\n');
+
+  const htmlRows = fields.map(([k, v]) => [k, escapeHtml(String(v ?? '')).replace(/\n/g, '<br>')]);
+  const html = renderEmail(subject, intro, htmlRows, 'Review application', adminLink);
+
+  return sendToAdmins({ subject, text, html }, `careers application ${applicationId}`);
+};
+
+/**
  * Notify the support inbox that an order was paid for and is ready to fulfil.
  *
  * Enqueued from razorpayService.processPaymentSuccess *after* the payment
@@ -494,6 +535,7 @@ export const emailAdminRefundFailedAlert = async (orderId) => {
 export default {
   emailAdminReviewAlert,
   emailAdminConsultationAlert,
+  emailAdminCareersAlert,
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,

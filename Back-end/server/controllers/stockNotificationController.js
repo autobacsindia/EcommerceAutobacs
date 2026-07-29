@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import productRepository from "../repositories/productRepository.js";
 import stockNotificationRequestRepository from "../repositories/stockNotificationRequestRepository.js";
+import leadRepository from "../repositories/leadRepository.js";
+import leadSyncService from "../services/leadSyncService.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
 
 /**
@@ -28,10 +30,15 @@ function resolveTarget(product, rawVariantId) {
   return { ok: true, status: product.stock, variantId: null };
 }
 
-// @route   POST /products/:id/notify-me
-// @desc    Register the logged-in customer for a back-in-stock alert (idempotent)
-// @access  Private
-export async function createNotifyRequest(req, res) {
+/**
+ * Shared idempotent-signup path for both PDP interest buttons. Validates the
+ * target's availability against `requiredStatus`, upserts a pending request of
+ * `kind` on the partial-unique (product, variant, user, kind, pending) key, and
+ * hands the created/existing request + product back to the caller's `afterUpsert`
+ * hook (used by the waitlist path to seed a CRM lead). Returns nothing — it owns
+ * the HTTP response.
+ */
+async function createInterestRequest(req, res, { kind, requiredStatus, notEligible, afterUpsert }) {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ success: false, message: 'Invalid product id' });
@@ -47,28 +54,18 @@ export async function createNotifyRequest(req, res) {
     return res.status(target.error.status).json({ success: false, message: target.error.message });
   }
 
-  // Only out-of-stock items are notifiable. Backorder is enquiry-only (routed to
-  // the consultation flow), and in/low items are already purchasable.
-  if (target.status !== STOCK_STATUS.OUT) {
-    return res.status(409).json({
-      success: false,
-      code: 'NOT_OUT_OF_STOCK',
-      message: 'This item is not out of stock.',
-    });
+  if (target.status !== requiredStatus) {
+    return res.status(409).json({ success: false, code: notEligible.code, message: notEligible.message });
   }
 
-  // Idempotent upsert on the partial-unique (product, variant, user, pending) key:
-  // creates a pending request or returns the existing one. `created` comes from the
-  // write metadata (no extra pre-read). The 11000 catch closes the concurrent-insert
-  // race, and still returns the winning request's id so the client can manage it.
-  const filter = { product: id, variantId: target.variantId, user: req.user._id, status: 'pending' };
+  // Idempotent upsert on the partial-unique key: creates a pending request or
+  // returns the existing one. `created` comes from the write metadata (no extra
+  // pre-read). The 11000 catch closes the concurrent-insert race, and still
+  // returns the winning request's id so the client can manage it.
+  const filter = { product: id, variantId: target.variantId, user: req.user._id, kind, status: 'pending' };
+  let request, created;
   try {
-    const { request, created } = await stockNotificationRequestRepository.upsertPending(filter, req.user.email);
-    return res.status(created ? 201 : 200).json({
-      success: true,
-      alreadyRequested: !created,
-      request: { _id: request._id, variantId: request.variantId, status: request.status },
-    });
+    ({ request, created } = await stockNotificationRequestRepository.upsertPending(filter, req.user.email));
   } catch (err) {
     if (err.code === 11000) {
       const existing = await stockNotificationRequestRepository.findPending(filter);
@@ -80,6 +77,50 @@ export async function createNotifyRequest(req, res) {
     }
     throw err;
   }
+
+  // Post-signup side effects (e.g. seed a lead). Best-effort — never fail the
+  // signup because a downstream sync hiccuped; the hook owns its own guard.
+  if (afterUpsert) await afterUpsert({ request, created, product, variantId: target.variantId });
+
+  return res.status(created ? 201 : 200).json({
+    success: true,
+    alreadyRequested: !created,
+    request: { _id: request._id, variantId: request.variantId, status: request.status },
+  });
+}
+
+// @route   POST /products/:id/notify-me
+// @desc    Register the logged-in customer for a back-in-stock alert (idempotent)
+// @access  Private
+export async function createNotifyRequest(req, res) {
+  // Only out-of-stock items are notifiable. Backorder has its own waiting list,
+  // and in/low items are already purchasable.
+  return createInterestRequest(req, res, {
+    kind: 'restock',
+    requiredStatus: STOCK_STATUS.OUT,
+    notEligible: { code: 'NOT_OUT_OF_STOCK', message: 'This item is not out of stock.' },
+  });
+}
+
+// @route   POST /products/:id/join-waitlist
+// @desc    Add the logged-in customer to an on-backorder product's waiting list
+//          (idempotent) and surface them in the Sales CRM as a warm lead.
+// @access  Private
+export async function createWaitlistRequest(req, res) {
+  return createInterestRequest(req, res, {
+    kind: 'backorder',
+    requiredStatus: STOCK_STATUS.BACKORDER,
+    notEligible: { code: 'NOT_ON_BACKORDER', message: 'This item is not on backorder.' },
+    afterUpsert: async ({ request, product, variantId }) => {
+      const variantLabel = variantId
+        ? (product.variants || []).find(v => v._id.toString() === variantId.toString())?.label || null
+        : null;
+      // Best-effort CRM seed — a sync failure must not break the signup.
+      await leadSyncService.safeSync(() =>
+        leadSyncService.upsertFromWaitlist({ request, user: req.user, product, variantLabel })
+      );
+    },
+  });
 }
 
 // @route   GET /stock-notifications/mine?productId=
@@ -90,8 +131,9 @@ export async function listMyRequests(req, res) {
   const productId = req.query.productId && mongoose.Types.ObjectId.isValid(req.query.productId)
     ? req.query.productId
     : null;
+  const kind = req.query.kind === 'backorder' ? 'backorder' : 'restock';
 
-  const requests = await stockNotificationRequestRepository.findMinePending(req.user._id, productId);
+  const requests = await stockNotificationRequestRepository.findMinePending(req.user._id, productId, kind);
   res.json({ success: true, requests });
 }
 
@@ -120,10 +162,11 @@ export async function adminListRequests(req, res) {
   const status = ['pending', 'notified', 'cancelled'].includes(req.query.status)
     ? req.query.status
     : 'pending';
+  const kind = req.query.kind === 'backorder' ? 'backorder' : 'restock';
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
 
-  const { rows, total } = await stockNotificationRequestRepository.groupedByTarget(status, page, limit);
+  const { rows, total } = await stockNotificationRequestRepository.groupedByTarget(status, page, limit, kind);
 
   // Attach product name/slug/current-stock + the variant label/stock for the page's rows.
   const productIds = [...new Set(rows.map(r => r._id.product.toString()))];
@@ -172,13 +215,34 @@ export async function adminListRequesters(req, res) {
   const status = ['pending', 'notified', 'cancelled'].includes(req.query.status)
     ? req.query.status
     : 'pending';
+  const kind = req.query.kind === 'backorder' ? 'backorder' : 'restock';
 
   const query = {
     product: productId,
+    kind,
     status,
     variantId: variantId && mongoose.Types.ObjectId.isValid(variantId) ? variantId : null,
   };
 
   const requesters = await stockNotificationRequestRepository.findRequesters(query);
+
+  // For the backorder waiting list, pair each requester with its CRM lead so the
+  // Stock Requests screen can show the lead's status and drive the one-way "Mark
+  // contacted" action (mirrored to Leads — single source of truth). Restock rows
+  // don't seed leads, so this join is skipped for them.
+  if (kind === 'backorder' && requesters.length) {
+    const reqIds = requesters.map(r => r._id);
+    const leads = await leadRepository.findBySourceRefs(reqIds);
+    // Map each request ref → its lead (id + status).
+    const leadByRef = new Map();
+    for (const lead of leads) {
+      for (const src of lead.sources || []) {
+        if (src.ref) leadByRef.set(src.ref.toString(), { leadId: lead._id, leadStatus: lead.status });
+      }
+    }
+    const enriched = requesters.map(r => ({ ...r, ...(leadByRef.get(r._id.toString()) || { leadId: null, leadStatus: null }) }));
+    return res.json({ success: true, requesters: enriched });
+  }
+
   res.json({ success: true, requesters });
 }

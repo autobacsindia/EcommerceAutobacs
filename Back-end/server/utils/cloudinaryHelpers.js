@@ -293,4 +293,3 @@ export const buildOptimizedUrl = (publicId, transforms = {}) => {
     ...transforms,
   });
 };
-

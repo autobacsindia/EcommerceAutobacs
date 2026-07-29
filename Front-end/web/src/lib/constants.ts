@@ -17,8 +17,10 @@ export const API_ENDPOINTS = {
   PRODUCT_DETAIL: (id: string) => `/products/${id}`,
   FEATURED_PRODUCTS: '/products/featured',
 
-  // Back-in-stock ("Notify me")
+  // Back-in-stock ("Notify me") + on-backorder ("Join the waiting list").
+  // Both are StockNotificationRequest rows, distinguished by `kind` on the query.
   NOTIFY_ME: (id: string) => `/products/${id}/notify-me`,
+  JOIN_WAITLIST: (id: string) => `/products/${id}/join-waitlist`,
   STOCK_NOTIFICATIONS_MINE: '/stock-notifications/mine',
   STOCK_NOTIFICATION_CANCEL: (id: string) => `/stock-notifications/${id}`,
   ADMIN_STOCK_REQUESTS: '/stock-notifications/admin',
@@ -145,6 +147,17 @@ export const API_ENDPOINTS = {
   ADMIN_CONSULTATIONS: '/consultation/admin',
   ADMIN_CONSULTATION: (id: string) => `/consultation/admin/${id}`,
   ADMIN_CONSULTATION_STATUS: (id: string) => `/consultation/admin/${id}/status`,
+
+  // Careers — public open roles (read) + admin CRUD
+  CAREERS_POSTINGS: '/careers/postings',
+  CAREERS_POSTING: (slug: string) => `/careers/postings/${slug}`,
+  ADMIN_CAREERS_POSTINGS: '/careers/admin/postings',
+  ADMIN_CAREERS_POSTING: (id: string) => `/careers/admin/postings/${id}`,
+  // Careers — public application submission + admin review inbox
+  CAREERS_UPLOAD_SIGNATURE: '/careers/applications/upload-signature',
+  CAREERS_APPLICATIONS: '/careers/applications',
+  ADMIN_CAREERS_APPLICATIONS: '/careers/admin/applications',
+  ADMIN_CAREERS_APPLICATION: (id: string) => `/careers/admin/applications/${id}`,
 };
 
 // Order Status

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   Phone, Mail, StickyNote, GitBranch, UserCheck, UserCog, Check,
-  Package, XCircle, AlertTriangle, Clock, ShoppingCart, Moon, MessageCircle, Circle,
+  Package, XCircle, AlertTriangle, Clock, ShoppingCart, Moon, MessageCircle, Circle, ClipboardList,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -20,6 +20,7 @@ const SIGNAL_ICONS: Record<LeadSourceType, LucideIcon> = {
   payment_cancelled: XCircle,
   order_cancelled: XCircle,
   cart_abandoned: ShoppingCart,
+  backorder_waitlist: ClipboardList,
   dormant_user: Moon,
 };
 
