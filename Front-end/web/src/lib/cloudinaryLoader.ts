@@ -6,11 +6,12 @@
  *   res.cloudinary.com/<cloud>/image/upload/v1783950357/autobacs/products/x.jpg
  * so Cloudinary serves the FULL-RESOLUTION original JPEG for every request —
  * even a 300px card thumbnail. This loader injects a responsive transform
- * (`f_auto,q_auto,c_limit,w_<width>`) right after `/upload/`, so Cloudinary
+ * (`f_auto,q_auto:best,c_limit,w_<width>`) right after `/upload/`, so Cloudinary
  * generates + edge-caches an appropriately sized WebP/AVIF variant. No
  * re-upload or data migration is needed; the stored URL is unchanged.
  *
- * Measured: a stored 215 KB JPEG → 54 KB WebP at w_600 (−75%).
+ * `f_auto` (AVIF/WebP) already saves ~70–75% vs the stored original; the
+ * quality tier is discussed at the `q_` line below.
  *
  * Safety:
  *   - Non-Cloudinary URLs (local /public fallbacks, any other host) pass through
@@ -52,9 +53,37 @@ export default function cloudinaryLoader({ src, width, quality }: LoaderArgs): s
   const firstSegment = rest.split('/')[0];
   if (isTransformSegment(firstSegment)) return src;
 
+  // Quality tier — this is what keeps images crisp on standard (DPR-1) monitors.
+  //
+  // Bare `q_auto` (≈ `q_auto:good`) is tuned for byte savings and softens
+  // photographic detail. A DPR-1 display (most Windows laptops/desktops at 100%
+  // scaling) fetches a rendition and views it ~1:1, with no supersampling
+  // headroom to hide that softening — so product shots read blurry there, while
+  // a Retina/4K (DPR-2/3) screen fetches a larger rendition and packs 4–9 device
+  // pixels per CSS pixel, masking the same artifacts. That is the entire "sharp
+  // on my Mac, soft on that Windows monitor" report: same page, same served
+  // pixels, but only the DPR-1 screen sees the compression at 1:1.
+  //
+  // The fix is content-crisp delivery at `q_auto:best` for EVERY rendition. We
+  // deliberately do NOT tier by width: DPR is invisible to a loader (it only
+  // sees the srcset width next/image picked), so a width threshold can't tell a
+  // 1920-wide rendition fetched by a DPR-2 phone (supersampled — `good` is fine)
+  // from the same width fetched 1:1 by a 1920px DPR-1 monitor (needs `best`).
+  // Any cutoff therefore leaves some common DPR-1 screen soft — the exact bug.
+  //
+  // Cost is bounded and measured against prod: our product originals top out
+  // around ~1080px (Cloudinary `c_limit` clamps there), so `best` maxes at
+  // ~200 KB for the heaviest PDP shot and 13–99 KB per card; the largest
+  // full-bleed marketing banner is ~212 KB at w_1920. `f_auto` (AVIF/WebP) is
+  // doing the heavy lifting; `best` trades ~20–85% more bytes on top for
+  // artifact-free detail — the right call for a product where the image is the
+  // sell. A byte-sensitive caller can still pass an explicit numeric `quality`
+  // (via next/image's `quality` prop); it always wins over this default.
+  const q = quality != null ? String(quality) : 'auto:best';
+
   const transform = [
     'f_auto',                       // best format the browser accepts (AVIF/WebP)
-    `q_${quality ?? 'auto'}`,       // smart quality unless an explicit one is passed
+    `q_${q}`,                       // crisp-at-1:1 tier (see above); explicit prop wins
     'c_limit',                      // downscale-only, preserve aspect ratio
     `w_${width}`,                   // width chosen by next/image's srcset
   ].join(',');
