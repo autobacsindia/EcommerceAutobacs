@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { vehicleService, Vehicle } from '@/services/vehicleService';
+import { cloudinarySrcSet, CARD_WIDTHS, swapImageToFallback } from '@/lib/cloudinarySrcSet';
 
 export default function VehicleMakePage({ params }: { params: Promise<{ make: string }> }) {
   const router = useRouter();
@@ -104,9 +105,11 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
                       {vehicle.image?.url ? (
                         <img
                           src={vehicle.image.url}
+                          srcSet={cloudinarySrcSet(vehicle.image.url, CARD_WIDTHS)}
+                          sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
                           alt={vehicle.image.alt || `${vehicle.make} ${vehicle.model}`}
                           className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                          onError={(e) => { (e.target as HTMLImageElement).src = '/images/fallback-product.png'; }}
+                          onError={(e) => swapImageToFallback(e.currentTarget)}
                           loading="lazy"
                         />
                       ) : (

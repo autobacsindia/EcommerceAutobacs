@@ -9,6 +9,7 @@ import apiClient from '@/lib/api';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
 import type { Product } from '@/lib/types';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
+import { cloudinarySrcSet, CARD_WIDTHS, swapImageToFallback } from '@/lib/cloudinarySrcSet';
 
 /**
  * Single source of truth for the `/model/[slug]` vehicle listing — rendered by
@@ -542,11 +543,11 @@ export default function VehicleModelListing({
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={imageUrl}
+                              srcSet={cloudinarySrcSet(imageUrl, CARD_WIDTHS)}
+                              sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 20vw"
                               alt={relatedVehicle.name || `${relatedVehicle.make} ${relatedVehicle.model}`}
                               className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = '/images/fallback-product.png';
-                              }}
+                              onError={(e) => swapImageToFallback(e.currentTarget)}
                               loading="lazy"
                             />
                           ) : (

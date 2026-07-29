@@ -153,6 +153,11 @@ export const API_ENDPOINTS = {
   CAREERS_POSTING: (slug: string) => `/careers/postings/${slug}`,
   ADMIN_CAREERS_POSTINGS: '/careers/admin/postings',
   ADMIN_CAREERS_POSTING: (id: string) => `/careers/admin/postings/${id}`,
+  // Careers — public application submission + admin review inbox
+  CAREERS_UPLOAD_SIGNATURE: '/careers/applications/upload-signature',
+  CAREERS_APPLICATIONS: '/careers/applications',
+  ADMIN_CAREERS_APPLICATIONS: '/careers/admin/applications',
+  ADMIN_CAREERS_APPLICATION: (id: string) => `/careers/admin/applications/${id}`,
 };
 
 // Order Status

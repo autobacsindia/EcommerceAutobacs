@@ -14,9 +14,12 @@
  * admin without a code change. Dynamic values are HTML-escaped before injection.
  * Two placeholder tokens in the template mark where they go.
  *
- * Submission flow is UNCHANGED here (still the Google Apps Script → Drive upload
- * — that migration is Phase 4). The GAS URL is injected via
- * NEXT_PUBLIC_CAREERS_FORM_URL (no hardcoded deployment URL in source).
+ * Submission is IN-HOUSE (no Google): the browser fetches a signed upload params
+ * set from our backend, uploads each video/PDF directly to Cloudinary (private
+ * `authenticated` delivery), then POSTs only the { publicId, url } refs + form
+ * fields to /careers/applications. Files never touch our server; the backend
+ * re-validates every ref against Cloudinary. Requires api.cloudinary.com in the
+ * page CSP connect-src.
  *
  * Fonts: dynamic role markup references the next/font CSS variables
  * (var(--font-bebas) / var(--font-inter)) directly; the static template literals
@@ -25,14 +28,14 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
+import apiClient from '@/lib/api';
 import './careers.css';
-
-const SCRIPT_URL = process.env.NEXT_PUBLIC_CAREERS_FORM_URL || '';
 
 /** A public job posting as returned by GET /careers/postings. */
 export interface CareerPosting {
   _id: string;
   department: string;
+  category?: string;
   title: string;
   slug: string;
   tagline?: string;
@@ -142,9 +145,7 @@ const MARKUP_TEMPLATE = `
   <div style="max-width:860px;margin:0 auto;">
     <div style="margin-bottom:1rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#C93F1A;display:block;font-family:'Inter',sans-serif;">Open Roles</span></div>
     <h2 style="font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,52px);letter-spacing:0.03em;line-height:1.0;color:#F7F5F0;margin:0 0 3rem 0;padding:0;border:none;background:none;font-weight:normal;">THE SEATS<br>WE'RE FILLING NOW.</h2>
-    <div style="border-top:1px solid #2E2D2B;">
 <!--ROLE_CARDS-->
-    </div>
 
     <div style="margin-top:3rem;padding:2rem;border:1px solid #2E2D2B;border-radius:2px;background:#1E1D1B;">
       <p style="font-size:14px;font-weight:300;line-height:1.75;color:#8A8880;margin:0 0 1rem 0;font-family:'Inter',sans-serif;">Don't see your role above? If you believe you belong here, tell us anyway.</p>
@@ -305,13 +306,64 @@ const MARKUP_TEMPLATE = `
   .replaceAll("'Bebas Neue',sans-serif", 'var(--font-bebas),sans-serif')
   .replaceAll("'Inter',sans-serif", 'var(--font-inter),sans-serif');
 
-/** Assemble the final markup: static template + data-driven roles + options. */
+/** A category section: an uppercase heading + count, then that group's cards. */
+function sectionHtml(title: string, count: number, cardsHtml: string) {
+  const header = title
+    ? `<div style="margin-top:3.5rem;margin-bottom:1rem;display:flex;align-items:baseline;gap:12px;">` +
+        `<span style="font-family:${BEBAS};font-size:22px;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;">${esc(title)}</span>` +
+        `<span style="font-size:11px;font-weight:600;letter-spacing:0.08em;color:#C93F1A;font-family:${INTER};">${count}</span>` +
+      `</div>`
+    : '';
+  return `${header}<div style="border-top:1px solid #2E2D2B;">${cardsHtml}</div>`;
+}
+
+/**
+ * Assemble the final markup: static template + data-driven roles + options.
+ *
+ * When any role has a `category`, roles are grouped into labelled sections.
+ * Section order follows the order roles arrive in (the API sorts by sortOrder,
+ * so a category's position is driven by its lowest-sorted role); the
+ * uncategorised bucket, if any, renders last under "More Roles". With no
+ * categories at all it falls back to the original single flat list. Card ids
+ * (`r1`, `r2`, …) stay globally unique across sections for the accordion.
+ */
 function buildMarkup(postings: CareerPosting[]) {
-  const cards = postings.length
-    ? postings.map(roleCardHtml).join('\n')
-    : `<div style="padding:2rem 0;color:#8A8880;font-size:14px;font-family:${INTER};">New roles are being finalised — check back shortly, or submit an open application below.</div>`;
+  if (postings.length === 0) {
+    const fallback =
+      `<div style="border-top:1px solid #2E2D2B;"><div style="padding:2rem 0;color:#8A8880;font-size:14px;font-family:${INTER};">` +
+      `New roles are being finalised — check back shortly, or submit an open application below.</div></div>`;
+    return MARKUP_TEMPLATE
+      .replace('<!--ROLE_CARDS-->', fallback)
+      .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
+  }
+
+  let idx = 0;
+  const nextCard = (p: CareerPosting) => roleCardHtml(p, idx++);
+  let cardsBlock: string;
+
+  if (!postings.some((p) => (p.category || '').trim())) {
+    // No categories anywhere → original flat list.
+    cardsBlock = `<div style="border-top:1px solid #2E2D2B;">${postings.map(nextCard).join('\n')}</div>`;
+  } else {
+    // Group preserving first-seen (sortOrder) order; empty category goes last.
+    const groups = new Map<string, CareerPosting[]>();
+    for (const p of postings) {
+      const key = (p.category || '').trim();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(p);
+    }
+    const entries = [...groups.entries()].sort((a, b) => {
+      if (a[0] === '' && b[0] !== '') return 1;
+      if (b[0] === '' && a[0] !== '') return -1;
+      return 0; // stable sort preserves insertion order
+    });
+    cardsBlock = entries
+      .map(([category, roles]) => sectionHtml(category || 'More Roles', roles.length, roles.map(nextCard).join('\n')))
+      .join('\n');
+  }
+
   return MARKUP_TEMPLATE
-    .replace('<!--ROLE_CARDS-->', cards)
+    .replace('<!--ROLE_CARDS-->', cardsBlock)
     .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
 }
 
@@ -336,7 +388,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
     // ── Local state (mirrors the original closure) ──────────────────────────
     const files: Record<string, File> = {};       // q1, q2
     const docs: Record<string, File> = {};         // resume, support
-    const driveUrls: Record<string, string> = {};  // populated after upload
     let selectedSource = '';
 
     // ── Role card accordion ─────────────────────────────────────────────────
@@ -396,7 +447,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
 
       function attach(f: File) {
         store[key] = f;
-        delete driveUrls[key]; // clear any previous upload URL if user re-selects
         if (fname) fname.textContent = f.name;
         if (chip) chip.style.display = 'flex';
         zone!.style.display = 'none';
@@ -404,7 +454,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
       }
       function detach() {
         delete store[key];
-        delete driveUrls[key];
         if (chip) chip.style.display = 'none';
         zone!.style.display = '';
         input!.value = '';
@@ -428,62 +477,53 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
     wireZone('resume-zone', 'resume-file', 'resume-chip', 'resume-fname', 'resume-remove', docs, 'resume', 'application/pdf');
     wireZone('support-zone', 'support-file', 'support-chip', 'support-fname', 'support-remove', docs, 'support', 'application/pdf');
 
-    // ── Upload a single file directly to Google Drive (resumable) ─────────────
-    function uploadFileToDrive(
-      file: File, token: string, folderId: string,
+    // ── Signed direct upload of a single file to Cloudinary ───────────────────
+    // `sig` is the params set our backend signed (folder + timestamp + type +
+    // signature). resourceType is 'video' for answers, 'raw' for PDFs. Resolves
+    // to the { publicId, url } we send back to our API for re-validation.
+    interface UploadSig {
+      cloudName: string; apiKey: string; timestamp: number;
+      folder: string; type: string; maxFileSize: number; signature: string;
+    }
+    function uploadFileToCloudinary(
+      file: File, sig: UploadSig, resourceType: 'video' | 'raw',
       labelEl: HTMLElement | null, progressWrapEl: HTMLElement | null, progressBarEl: HTMLElement | null,
-    ): Promise<string> {
+    ): Promise<{ publicId: string; url: string }> {
       return new Promise((resolve, reject) => {
-        const meta = JSON.stringify({ name: file.name, parents: [folderId] });
-        const initXhr = new XMLHttpRequest();
-        initXhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', true);
-        initXhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        initXhr.setRequestHeader('Content-Type', 'application/json');
-        initXhr.setRequestHeader('X-Upload-Content-Type', file.type || 'application/octet-stream');
-        initXhr.setRequestHeader('X-Upload-Content-Length', String(file.size));
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('api_key', sig.apiKey);
+        fd.append('timestamp', String(sig.timestamp));
+        fd.append('folder', sig.folder);
+        fd.append('type', sig.type);
+        // Signed cap — Cloudinary rejects anything larger server-side.
+        fd.append('max_file_size', String(sig.maxFileSize));
+        fd.append('signature', sig.signature);
 
-        initXhr.onload = () => {
-          if (initXhr.status !== 200) { reject(new Error(`Drive session init failed: ${initXhr.status}`)); return; }
-          const uploadUrl = initXhr.getResponseHeader('Location');
-          if (!uploadUrl) { reject(new Error('No upload URL returned from Drive.')); return; }
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${sig.cloudName}/${resourceType}/upload`, true);
 
-          const uploadXhr = new XMLHttpRequest();
-          uploadXhr.open('PUT', uploadUrl, true);
-          uploadXhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-
-          if (progressWrapEl) progressWrapEl.style.display = 'block';
-          uploadXhr.upload.onprogress = (ev) => {
-            if (ev.lengthComputable && progressBarEl) {
-              const pct = Math.round((ev.loaded / ev.total) * 100);
-              progressBarEl.style.width = `${pct}%`;
-              if (labelEl) labelEl.textContent = `Uploading… ${pct}%`;
-            }
-          };
-
-          uploadXhr.onload = () => {
-            if (uploadXhr.status === 200 || uploadXhr.status === 201) {
-              let resp: { id: string };
-              try { resp = JSON.parse(uploadXhr.responseText); } catch { reject(new Error('Bad Drive response.')); return; }
-              const fileId = resp.id;
-              const shareXhr = new XMLHttpRequest();
-              shareXhr.open('POST', `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, true);
-              shareXhr.setRequestHeader('Authorization', `Bearer ${token}`);
-              shareXhr.setRequestHeader('Content-Type', 'application/json');
-              shareXhr.onload = () => {
-                if (labelEl) labelEl.textContent = 'Uploaded ✓';
-                resolve(`https://drive.google.com/file/d/${fileId}/view`);
-              };
-              shareXhr.onerror = () => reject(new Error('Failed to set file permissions.'));
-              shareXhr.send(JSON.stringify({ role: 'reader', type: 'anyone' }));
-            } else {
-              reject(new Error(`Drive upload failed: HTTP ${uploadXhr.status}`));
-            }
-          };
-          uploadXhr.onerror = () => reject(new Error('Network error during upload.'));
-          uploadXhr.send(file);
+        if (progressWrapEl) progressWrapEl.style.display = 'block';
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable && progressBarEl) {
+            const pct = Math.round((ev.loaded / ev.total) * 100);
+            progressBarEl.style.width = `${pct}%`;
+            if (labelEl) labelEl.textContent = `Uploading… ${pct}%`;
+          }
         };
-        initXhr.onerror = () => reject(new Error('Network error initiating upload.'));
-        initXhr.send(meta);
+        xhr.onload = () => {
+          if (xhr.status === 200 || xhr.status === 201) {
+            let resp: { public_id: string; secure_url: string };
+            try { resp = JSON.parse(xhr.responseText); } catch { reject(new Error('Bad upload response.')); return; }
+            if (!resp.public_id) { reject(new Error('Upload did not return a file id.')); return; }
+            if (labelEl) labelEl.textContent = 'Uploaded ✓';
+            resolve({ publicId: resp.public_id, url: resp.secure_url });
+          } else {
+            reject(new Error(`Upload failed: HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload.'));
+        xhr.send(fd);
       });
     }
 
@@ -541,8 +581,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
       if (docs.resume.size > 10 * 1024 * 1024) { showErr('Resume must be under 10MB.'); return; }
       if (docs.support && docs.support.size > 10 * 1024 * 1024) { showErr('Supporting document must be under 10MB.'); return; }
 
-      if (!SCRIPT_URL) { showErr('Applications are temporarily unavailable. Please email careers@autobacsindia.com.'); return; }
-
       // ── Lock UI ────────────────────────────────────────────────────────────
       const btn = byId<HTMLButtonElement>('rv-submitBtn');
       if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; btn.style.opacity = '0.6'; }
@@ -554,86 +592,76 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
         ? (byId<HTMLInputElement>('rv-other-text')?.value.trim() || 'Other')
         : sourceVal;
 
-      // ── Step 1: fetch OAuth token from GAS doGet ─────────────────────────────
-      fetch(`${SCRIPT_URL}?action=token`, { redirect: 'follow' })
-        .then((r) => r.json())
-        .then((tokenData) => {
-          if (!tokenData.ok) throw new Error(tokenData.error || 'Could not get upload token.');
-          const token: string = tokenData.token;
-          const folderId: string = tokenData.folderId;
+      const resetBtn = () => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Submit'; btn.style.opacity = '1'; }
+        if (overallWrap) overallWrap.style.display = 'none';
+      };
 
+      (async () => {
+        try {
+          // Step 1: signed upload params from our backend (files never touch us).
+          setOverall(3, 'Preparing secure upload…');
+          const sig = await apiClient.post<UploadSig & { success: boolean }>(
+            '/careers/applications/upload-signature',
+            {},
+          );
+
+          // Step 2: upload every file straight to Cloudinary (parallel).
           setOverall(5, 'Uploading files…');
-
-          const toUpload = [
-            { file: files.q1, key: 'q1', statusId: 'q1-status', progressWrap: 'q1-progress-wrap', progressBar: 'q1-progress-bar' },
-            { file: files.q2, key: 'q2', statusId: 'q2-status', progressWrap: 'q2-progress-wrap', progressBar: 'q2-progress-bar' },
-            { file: docs.resume, key: 'resume', statusId: 'resume-status', progressWrap: 'resume-progress-wrap', progressBar: 'resume-progress-bar' },
+          const toUpload: {
+            file: File; key: 'videoOne' | 'videoTwo' | 'resume' | 'support';
+            resourceType: 'video' | 'raw'; statusId: string; progressWrap: string; progressBar: string;
+          }[] = [
+            { file: files.q1, key: 'videoOne', resourceType: 'video', statusId: 'q1-status', progressWrap: 'q1-progress-wrap', progressBar: 'q1-progress-bar' },
+            { file: files.q2, key: 'videoTwo', resourceType: 'video', statusId: 'q2-status', progressWrap: 'q2-progress-wrap', progressBar: 'q2-progress-bar' },
+            { file: docs.resume, key: 'resume', resourceType: 'raw', statusId: 'resume-status', progressWrap: 'resume-progress-wrap', progressBar: 'resume-progress-bar' },
           ];
           if (docs.support) {
-            toUpload.push({ file: docs.support, key: 'support', statusId: 'support-status', progressWrap: 'support-progress-wrap', progressBar: 'support-progress-bar' });
+            toUpload.push({ file: docs.support, key: 'support', resourceType: 'raw', statusId: 'support-status', progressWrap: 'support-progress-wrap', progressBar: 'support-progress-bar' });
           }
 
+          const uploaded: Record<string, { publicId: string; url: string }> = {};
           let completed = 0;
           const total = toUpload.length;
-
-          return Promise.all(toUpload.map((item) => {
-            const labelEl = byId(item.statusId);
-            const wrapEl = byId(item.progressWrap);
-            const barEl = byId(item.progressBar);
-            return uploadFileToDrive(item.file, token, folderId, labelEl, wrapEl, barEl).then((url) => {
-              driveUrls[item.key] = url;
+          await Promise.all(toUpload.map((item) =>
+            uploadFileToCloudinary(
+              item.file, sig, item.resourceType,
+              byId(item.statusId), byId(item.progressWrap), byId(item.progressBar),
+            ).then((ref) => {
+              uploaded[item.key] = ref;
               completed++;
               setOverall(5 + Math.round((completed / total) * 85), `Uploading files… (${completed}/${total} done)`);
-            });
-          }));
-        })
-        .then(() => {
+            }),
+          ));
+
+          // Step 3: submit the application (refs + fields) to our API.
           setOverall(92, 'Saving your application…');
           if (btn) btn.textContent = 'Saving…';
-
-          const payload = {
+          await apiClient.post('/careers/applications', {
             role,
-            full_name: el('fullName')?.value || '',
+            fullName: el('fullName')?.value || '',
             city: el('city')?.value || '',
             email: el('email')?.value || '',
             phone: el('phone')?.value || '',
-            what_you_bring: el('whatYouBring')?.value || '',
-            how_found: howFound,
-            video_one_url: driveUrls.q1,
-            video_two_url: driveUrls.q2,
-            resume_url: driveUrls.resume,
-            support_url: driveUrls.support || '',
-          };
-
-          // text/plain avoids a CORS preflight (GAS does not answer OPTIONS).
-          return fetch(SCRIPT_URL, {
-            method: 'POST',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(payload),
+            whatYouBring: el('whatYouBring')?.value || '',
+            howFound,
+            files: uploaded,
           });
-        })
-        .then((r) => r.json())
-        .then((data) => {
+
           if (unmounted) return;
-          if (data.ok) {
-            setOverall(100, 'Done.');
-            const formSection = byId('rv-form');
-            if (formSection) formSection.style.display = 'none';
-            all('section').forEach((s) => { if (s.id !== 'rv-success') s.style.display = 'none'; });
-            const success = byId('rv-success');
-            if (success) success.style.display = 'flex';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          } else {
-            throw new Error(data.error || 'Submission failed. Please try again.');
-          }
-        })
-        .catch((err) => {
+          setOverall(100, 'Done.');
+          const formSection = byId('rv-form');
+          if (formSection) formSection.style.display = 'none';
+          all('section').forEach((s) => { if (s.id !== 'rv-success') s.style.display = 'none'; });
+          const success = byId('rv-success');
+          if (success) success.style.display = 'flex';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (err) {
           if (unmounted) return;
-          showErr(err.message || 'Something went wrong. Please check your connection and try again.');
-          if (btn) { btn.disabled = false; btn.textContent = 'Submit'; btn.style.opacity = '1'; }
-          if (overallWrap) overallWrap.style.display = 'none';
-        });
+          showErr(err instanceof Error ? err.message : 'Something went wrong. Please check your connection and try again.');
+          resetBtn();
+        }
+      })();
     }, { signal });
 
     return () => { unmounted = true; ac.abort(); };

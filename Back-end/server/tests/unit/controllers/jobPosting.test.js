@@ -80,6 +80,16 @@ describe('createPosting — validation + slug', () => {
     expect(b.body.posting.slug).toBe('marketing-manager-2');
   });
 
+  test('persists a category and updates it', async () => {
+    const created = mockRes();
+    await controller.createPosting({ body: baseBody({ category: 'Growth' }), user: admin }, created);
+    expect(created.body.posting.category).toBe('Growth');
+
+    const updated = mockRes();
+    await controller.updatePosting({ params: { id: created.body.posting._id.toString() }, body: { category: 'Leadership / Executive' } }, updated);
+    expect(updated.body.posting.category).toBe('Leadership / Executive');
+  });
+
   test('new roles append to the end of the sort order', async () => {
     const a = mockRes();
     await controller.createPosting({ body: baseBody({ title: 'First' }), user: admin }, a);

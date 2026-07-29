@@ -10,7 +10,7 @@ import { generateUniqueSlug } from '../utils/slug.js';
 // Public projection: everything the careers page needs to render a card + the
 // apply-form <select>, minus internal bookkeeping.
 const PUBLIC_FIELDS =
-  'department title slug tagline experience intro responsibilities requirements closer location employmentType seo publishedAt';
+  'department category title slug tagline experience intro responsibilities requirements closer location employmentType seo publishedAt';
 
 class JobPostingRepository {
   findById(...args) { return JobPosting.findById(...args); }
@@ -28,6 +28,11 @@ class JobPostingRepository {
   /** A single open role by slug (public single-page + JSON-LD). */
   findOpenBySlug(slug) {
     return JobPosting.findOne({ slug, status: 'open' }).select(PUBLIC_FIELDS).lean();
+  }
+
+  /** _id of an open role whose exact title matches — for application linkage. */
+  findOpenIdByTitle(title) {
+    return JobPosting.findOne({ status: 'open', title }).select('_id').lean();
   }
 
   /** All roles (any status) for admin management, in display order. */

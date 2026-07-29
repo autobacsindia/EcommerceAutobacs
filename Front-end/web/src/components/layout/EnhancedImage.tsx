@@ -131,6 +131,45 @@ export default function EnhancedImage({
   const imageWidth = !isFill ? (width || 200) : undefined;
   const imageHeight = !isFill ? (height || 200) : undefined;
 
+  // Sharpness on high-DPR (Retina/4K/scaled) displays — WITHOUT over-fetching.
+  //
+  // Two very different cases share this component:
+  //
+  //   (a) CSS-STRETCHED images: the caller passes no width/height (we fall back
+  //       to a nominal 200×200) or uses `fill`, and CSS (`object-cover w-full
+  //       h-full`) stretches the image to fill a card/grid cell. Here next/image
+  //       with a fixed width + NO `sizes` emits only a 1x/2x srcset (w_200 +
+  //       w_400). On a 2x/3x monitor a ~300px card needs ~600–900 real px, so it
+  //       downloads the too-small w_400 and looks blurry — while a 1x monitor
+  //       looks fine. Same page, different DPR = different result. These NEED a
+  //       responsive `sizes` so next builds a width-based srcset from
+  //       `deviceSizes` and each browser picks the right width for its own DPR.
+  //
+  //   (b) TRULY FIXED-SIZE images: the caller passes explicit width/height for a
+  //       small box that is displayed at that exact size (cart 96px thumb,
+  //       avatar). Here next's native 1x/2x srcset is already correct and LEAN —
+  //       forcing a viewport-relative `sizes` would make a 96px thumbnail fetch
+  //       a ~640px variant (≈6× the bytes) for no visible gain. Leave these
+  //       alone (sizes = undefined).
+  //
+  // Heuristic: apply the responsive default ONLY to the case-(a) fallback path —
+  // non-`fill`, no dimensions given (the nominal 200×200 CSS-stretched card).
+  //
+  // We deliberately do NOT touch `fill` here. A `fill` image sizes to whatever
+  // its container is — which can be a full-bleed hero (100vw) just as easily as
+  // a small grid cell. next/image already defaults `fill` to `sizes="100vw"`,
+  // which is sharp everywhere (at worst it over-fetches a tiny fill, and those
+  // callers should pass their own tight `sizes`). Forcing 25vw here would make a
+  // full-bleed fill fetch a quarter-width variant and render blurry — the exact
+  // bug this whole change exists to prevent. An explicit caller `sizes` always
+  // wins in every case.
+  const callerGaveDimensions = width != null || height != null;
+  const resolvedSizes =
+    (props.sizes as string | undefined) ??
+    (!isFill && !callerGaveDimensions
+      ? '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw'
+      : undefined);
+
   const handleLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     setImageLoaded(true);
     if (props.onLoad) {
@@ -164,6 +203,7 @@ export default function EnhancedImage({
       className={`${className} ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
       onError={() => setImageError(true)}
       {...props}
+      sizes={resolvedSizes}
       onLoad={handleLoad}
     />
   );

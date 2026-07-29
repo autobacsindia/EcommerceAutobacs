@@ -18,6 +18,11 @@ const JobPostingSchema = new mongoose.Schema(
   {
     // Eyebrow label above the title, e.g. "Marketing", "Business Development".
     department: { type: String, required: true, trim: true, maxlength: 80 },
+    // Section the role is grouped under on the /careers page, e.g. "Leadership /
+    // Executive", "Growth". Free-text (admin picks from suggestions or types a
+    // new one). Section order on the page follows each category's lowest
+    // sortOrder, so categories are fully data-driven — no code change to add one.
+    category: { type: String, trim: true, maxlength: 80, default: "" },
     title: { type: String, required: true, trim: true, maxlength: 140 },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
 

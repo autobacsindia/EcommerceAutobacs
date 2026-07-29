@@ -88,6 +88,7 @@ export const createPosting = async (req, res) => {
   const doc = {
     title,
     department,
+    category: typeof b.category === 'string' ? b.category.trim() : '',
     slug,
     tagline: typeof b.tagline === 'string' ? b.tagline.trim() : '',
     experience: typeof b.experience === 'string' ? b.experience.trim() : '',
@@ -140,6 +141,7 @@ export const updatePosting = async (req, res) => {
     if (!base) return res.status(400).json({ success: false, message: 'Slug cannot be empty' });
     posting.slug = await jobPostingRepository.uniqueSlug(base, { excludeId: posting._id });
   }
+  if (b.category !== undefined) posting.category = String(b.category).trim();
   if (b.tagline !== undefined) posting.tagline = String(b.tagline).trim();
   if (b.experience !== undefined) posting.experience = String(b.experience).trim();
   if (b.intro !== undefined) posting.intro = String(b.intro).trim();

@@ -11,16 +11,28 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Eye, EyeOff, GripVertical, Briefcase } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, Edit2, Trash2, Eye, EyeOff, GripVertical, Briefcase, Inbox } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 
 type Status = 'draft' | 'open' | 'closed' | 'filled';
 
+// Canonical category suggestions (admin can also type a new one). Section order
+// on the public page is driven by sortOrder, not this list.
+const CATEGORY_OPTIONS = [
+  'Leadership / Executive',
+  'Growth',
+  'Content & Design',
+  'Supply & Operations',
+  'People',
+];
+
 interface Posting {
   _id: string;
   department: string;
+  category?: string;
   title: string;
   slug: string;
   tagline?: string;
@@ -40,6 +52,7 @@ interface Posting {
 const EMPTY_FORM = {
   title: '',
   department: '',
+  category: '',
   slug: '',
   tagline: '',
   experience: '',
@@ -105,6 +118,7 @@ export default function AdminCareersPage() {
     setForm({
       title: p.title,
       department: p.department,
+      category: p.category || '',
       slug: p.slug,
       tagline: p.tagline || '',
       experience: p.experience || '',
@@ -131,6 +145,7 @@ export default function AdminCareersPage() {
       const payload = {
         title: form.title,
         department: form.department,
+        category: form.category,
         // Only send slug when the admin typed one (blank => backend derives/keeps).
         ...(form.slug.trim() ? { slug: form.slug } : {}),
         tagline: form.tagline,
@@ -181,13 +196,22 @@ export default function AdminCareersPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Careers</h1>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-        >
-          <Plus className="h-4 w-4" />
-          New Role
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/careers/applications"
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+          >
+            <Inbox className="h-4 w-4 text-gray-500" />
+            Applications
+          </Link>
+          <button
+            onClick={openNew}
+            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+          >
+            <Plus className="h-4 w-4" />
+            New Role
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-5">
@@ -220,6 +244,7 @@ export default function AdminCareersPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 w-10"></th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Role</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Category</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Department</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Actions</th>
@@ -233,6 +258,7 @@ export default function AdminCareersPage() {
                     <span className="font-medium text-gray-900 line-clamp-1">{p.title}</span>
                     <span className="block text-xs text-gray-400">/{p.slug}</span>
                   </td>
+                  <td className="px-4 py-3 text-gray-500">{p.category || <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3 text-gray-500">{p.department}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${STATUS_STYLE[p.status]}`}>
@@ -300,6 +326,21 @@ export default function AdminCareersPage() {
                     placeholder="Marketing"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
                   />
+                  <p className="text-xs text-gray-400 mt-1">Small label above the title on the card.</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Category (page section)</label>
+                  <input
+                    list="career-category-options"
+                    value={form.category}
+                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                    placeholder="Leadership / Executive"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  />
+                  <datalist id="career-category-options">
+                    {CATEGORY_OPTIONS.map((c) => <option key={c} value={c} />)}
+                  </datalist>
+                  <p className="text-xs text-gray-400 mt-1">Groups roles into a section. Section order follows sort order.</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Tagline</label>
