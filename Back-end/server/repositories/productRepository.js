@@ -52,6 +52,34 @@ class ProductRepository {
   }
 
   /**
+   * Meta (Facebook/Instagram) catalogue feed data.
+   *
+   * Same visibility rules as the sitemap — active, non-noindex, has a slug — but a
+   * richer projection because the feed carries price/stock/brand/images and the
+   * per-variant rows of variable products. Out-of-stock items are INCLUDED on
+   * purpose: Meta expects them present (marked `out of stock`) so ad delivery
+   * pauses rather than the item vanishing and its ad history resetting.
+   *
+   * `wpId` / `variants.wpVariationId` are what let the feed reproduce the exact
+   * retailer_id the old Facebook-for-WooCommerce plugin wrote, so Meta updates the
+   * existing catalogue items in place instead of creating duplicates.
+   */
+  async findForFeed() {
+    return Product.find({
+      isActive: true,
+      slug: { $exists: true, $nin: [null, ''] },
+      'seo.noindex': { $ne: true },
+    })
+      .select(
+        'name shortDescription description slug price originalPrice salePrice ' +
+        'saleEndsAt stock brand images wpId productType variants updatedAt'
+      )
+      .sort({ updatedAt: -1 })
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
    * Find products by query
    */
   async find(query, options = {}) {
