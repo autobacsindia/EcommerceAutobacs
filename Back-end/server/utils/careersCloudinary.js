@@ -18,37 +18,36 @@ import cloudinary from '../config/cloudinary.js';
 export const CAREERS_FOLDER_BASE = 'autobacs/careers';
 
 /**
- * Absolute per-file ceiling Cloudinary itself enforces on careers uploads (the
- * largest slot — 30MB video). Signed into the params so a client cannot raise
- * it; Cloudinary rejects anything bigger at upload time, which caps abuse even
- * when the attacker never calls our submit endpoint (where the finer per-slot
- * byte + format checks run). Kept in sync with VIDEO_MAX_BYTES in the controller.
- */
-export const CAREERS_MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
-
-/**
  * Issue a short-lived signature for a browser-side DIRECT upload of a careers
  * asset (video answer / resume PDF). Unlike the admin image signature this does
  * NOT restrict allowed_formats (videos + PDFs are expected) and forces
  * `type: authenticated` so the resulting asset is NOT publicly fetchable — only
  * a signed URL minted server-side (signedCareersAssetUrl) can read it back.
- * `max_file_size` is signed so Cloudinary hard-rejects oversized uploads server
- * side regardless of what the client claims.
+ *
+ * IMPORTANT: sign ONLY parameters Cloudinary recognises as signable. `max_file_size`
+ * is NOT a Cloudinary upload parameter — it never appears in Cloudinary's
+ * string-to-sign, so including it here produces a signature Cloudinary can never
+ * reproduce → every upload 401s ("Invalid Signature"). The real per-slot byte cap
+ * is enforced (a) client-side before upload and (b) authoritatively at submit,
+ * where the controller re-reads each asset's `bytes` from the Cloudinary Admin API
+ * and rejects anything over the slot limit. Abuse of the signature endpoint itself
+ * is bounded by its rate limiter. (For a hard Cloudinary-side size cap, the correct
+ * mechanism is a signed `upload_preset` configured with a max file size — not
+ * shipped; add it as a unit if abuse volume warrants it.)
  *
  * The same signature signs every file in one submission (folder + timestamp +
- * type + max_file_size match), so the browser fetches it once. `folder` is
- * server-chosen (base + nonce) — never client-supplied.
+ * type match), so the browser fetches it once. `folder` is server-chosen
+ * (base + nonce) — never client-supplied.
  *
  * @param {object} opts
  * @param {string} opts.folder  server-computed careers subfolder
- * @returns {{ cloudName, apiKey, timestamp, folder, type, maxFileSize, signature }}
+ * @returns {{ cloudName, apiKey, timestamp, folder, type, signature }}
  */
 export const generateCareersUploadSignature = ({ folder }) => {
   const timestamp = Math.round(Date.now() / 1000);
   const type = 'authenticated';
-  const maxFileSize = CAREERS_MAX_UPLOAD_BYTES;
   const signature = cloudinary.utils.api_sign_request(
-    { folder, max_file_size: maxFileSize, timestamp, type },
+    { folder, timestamp, type },
     process.env.CLOUDINARY_API_SECRET,
   );
   return {
@@ -57,7 +56,6 @@ export const generateCareersUploadSignature = ({ folder }) => {
     timestamp,
     folder,
     type,
-    maxFileSize,
     signature,
   };
 };

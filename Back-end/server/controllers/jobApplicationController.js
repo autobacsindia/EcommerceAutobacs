@@ -3,8 +3,7 @@
  * + admin review inbox. Replaces the Google Apps Script → Drive → Sheet flow.
  *
  * Trust boundary: the two public endpoints are unauthenticated, so they are
- * rate-limited (route layer), the upload signature caps file size at the
- * Cloudinary level (max_file_size), and — critically — the submit handler
+ * rate-limited (route layer) and — critically — the submit handler
  * RE-VALIDATES every file server-side against the Cloudinary Admin API: each
  * publicId must actually exist, live under the careers folder, be within the
  * per-slot size cap, and match the expected format (PDF / video). A client

@@ -18,6 +18,14 @@ describe('cloudinaryLoader', () => {
     expect(out.endsWith(`/${rest}`)).toBe(true);
   });
 
+  it('applies a light sharpen (counters downscale + fractional-DPR softening)', () => {
+    const out = cloudinaryLoader({ src: `${CLOUD}/${rest}`, width: 400 });
+    // e_sharpen must land on the resized rendition, so it precedes the c_limit/w_ resize
+    // in the component; keep it subtle (:60) — higher values push Cloudinary off WebP.
+    expect(out).toContain('e_sharpen:60');
+    expect(out).toMatch(/e_sharpen:60,c_limit,w_400/);
+  });
+
   it('never double-transforms a URL that already carries a transform segment', () => {
     const already = `${CLOUD}/e_trim,f_auto,q_auto/${rest}`;
     expect(cloudinaryLoader({ src: already, width: 400 })).toBe(already);

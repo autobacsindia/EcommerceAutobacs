@@ -483,7 +483,7 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
     // to the { publicId, url } we send back to our API for re-validation.
     interface UploadSig {
       cloudName: string; apiKey: string; timestamp: number;
-      folder: string; type: string; maxFileSize: number; signature: string;
+      folder: string; type: string; signature: string;
     }
     function uploadFileToCloudinary(
       file: File, sig: UploadSig, resourceType: 'video' | 'raw',
@@ -496,8 +496,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
         fd.append('timestamp', String(sig.timestamp));
         fd.append('folder', sig.folder);
         fd.append('type', sig.type);
-        // Signed cap — Cloudinary rejects anything larger server-side.
-        fd.append('max_file_size', String(sig.maxFileSize));
         fd.append('signature', sig.signature);
 
         const xhr = new XMLHttpRequest();
