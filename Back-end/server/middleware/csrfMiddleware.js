@@ -135,8 +135,8 @@ export const csrfProtection = async (req, res, next) => {
     '/api/v1/media/articles',
     // Public careers submission: upload-signature + application POST. No
     // cookie-based auth (unauthenticated applicants); protected instead by rate
-    // limits + a signed max_file_size + server-side Cloudinary re-validation
-    // (existence, folder, size, format). The prefix covers both nested paths.
+    // limits + server-side Cloudinary re-validation at submit (existence, folder,
+    // size, format). The prefix covers both nested paths.
     // Admin careers routes are under /careers/admin/ and are NOT covered here,
     // so they keep CSRF protection.
     '/api/v1/careers/applications',

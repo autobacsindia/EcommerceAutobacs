@@ -6,12 +6,12 @@
  *   res.cloudinary.com/<cloud>/image/upload/v1783950357/autobacs/products/x.jpg
  * so Cloudinary serves the FULL-RESOLUTION original JPEG for every request —
  * even a 300px card thumbnail. This loader injects a responsive transform
- * (`f_auto,q_auto:best,c_limit,w_<width>`) right after `/upload/`, so Cloudinary
- * generates + edge-caches an appropriately sized WebP/AVIF variant. No
- * re-upload or data migration is needed; the stored URL is unchanged.
+ * (`f_auto,q_auto:best,e_sharpen:60,c_limit,w_<width>`) right after `/upload/`,
+ * so Cloudinary generates + edge-caches an appropriately sized WebP/AVIF
+ * variant. No re-upload or data migration is needed; the stored URL is unchanged.
  *
- * `f_auto` (AVIF/WebP) already saves ~70–75% vs the stored original; the
- * quality tier is discussed at the `q_` line below.
+ * `f_auto` (AVIF/WebP) already saves ~70–75% vs the stored original; the quality
+ * tier and the light sharpen are each discussed at their param lines below.
  *
  * Safety:
  *   - Non-Cloudinary URLs (local /public fallbacks, any other host) pass through
@@ -81,9 +81,25 @@ export default function cloudinaryLoader({ src, width, quality }: LoaderArgs): s
   // (via next/image's `quality` prop); it always wins over this default.
   const q = quality != null ? String(quality) : 'auto:best';
 
+  // Light output sharpening — recovers acuity that `best` quality alone can't.
+  //
+  // Two per-machine effects soften an image AFTER delivery, independent of
+  // compression: (1) downscaling a rendition to its final box, and (2) a browser
+  // resampling to a FRACTIONAL device-pixel-ratio — Windows at 125%/150% display
+  // scaling (DPR 1.25/1.5) never lands on an integer pixel grid, so every image
+  // is bilinearly resampled and reads soft. macOS/Retina at a clean DPR 2.0 sits
+  // on-grid and dodges this, which is exactly why "sharp on the Mac, soft on that
+  // Windows laptop" persists even at `q_auto:best`. A mild unsharp pass restores
+  // perceived edge acuity on those screens (and on lower-quality panels) without
+  // the crunchy halos of an aggressive value. `:60` is deliberately subtle and,
+  // measured on prod, stays on WebP (+~11% bytes); higher values (`:100`) push
+  // Cloudinary off WebP back to JPEG and start haloing on good displays, so don't
+  // raise it without eyeballing the result. Cloudinary applies effects after the
+  // resize, so this sharpens the final downscaled rendition, not the original.
   const transform = [
     'f_auto',                       // best format the browser accepts (AVIF/WebP)
     `q_${q}`,                       // crisp-at-1:1 tier (see above); explicit prop wins
+    'e_sharpen:60',                 // subtle unsharp — counters downscale + fractional-DPR softening
     'c_limit',                      // downscale-only, preserve aspect ratio
     `w_${width}`,                   // width chosen by next/image's srcset
   ].join(',');

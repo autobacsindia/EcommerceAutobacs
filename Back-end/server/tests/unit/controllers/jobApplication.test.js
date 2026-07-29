@@ -18,9 +18,8 @@ const enqueueNotification = jest.fn();
 
 jest.unstable_mockModule('../../../utils/careersCloudinary.js', () => ({
   CAREERS_FOLDER_BASE: 'autobacs/careers',
-  CAREERS_MAX_UPLOAD_BYTES: 30 * 1024 * 1024,
   generateCareersUploadSignature: ({ folder }) => ({
-    cloudName: 'demo', apiKey: 'k', timestamp: 1, folder, type: 'authenticated', maxFileSize: 30 * 1024 * 1024, signature: 'sig',
+    cloudName: 'demo', apiKey: 'k', timestamp: 1, folder, type: 'authenticated', signature: 'sig',
   }),
   getCareersResource,
   signedCareersAssetUrl: (publicId, rt) => `signed:${rt}:${publicId}`,
