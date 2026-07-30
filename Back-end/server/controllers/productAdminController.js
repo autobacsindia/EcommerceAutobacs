@@ -1,5 +1,6 @@
 import Product from '../models/Product.js';
 import { cleanupWordPressProducts } from '../utils/wordpressProductCleanup.js';
+import { attachContentIds } from '../utils/metaCatalogId.js';
 
 // @route   GET /products/:id
 // @desc    Get product by ID
@@ -15,7 +16,7 @@ export async function getProduct(req, res) {
     return res.status(404).json({ success: false, message: 'Product not found' });
   }
 
-  res.json({ success: true, product });
+  res.json({ success: true, product: attachContentIds(product.toObject()) });
 }
 
 // @desc    Get product by slug (SEO-friendly URL lookup)
@@ -32,7 +33,7 @@ export async function getProductBySlug(req, res) {
     return res.status(404).json({ success: false, message: 'Product not found' });
   }
 
-  res.json({ success: true, product });
+  res.json({ success: true, product: attachContentIds(product.toObject()) });
 }
 
 // @route   POST /products/:id/stock

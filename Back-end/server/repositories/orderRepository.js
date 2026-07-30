@@ -27,8 +27,11 @@ class OrderRepository extends BaseRepository {
   // Full populate for getOrderById — returns lean object (read-only)
   async findWithPopulated(id) {
     return Order.findById(id)
-      .populate('items.product', 'name images price')
-      .populate('user', 'name email')
+      // wpId + variants (id/wpVariationId) are needed to derive the Meta catalogue
+      // content_id per line item (utils/metaCatalogId.js) for CAPI + the order API.
+      // The order API strips `variants` before responding (see getOrderById).
+      .populate('items.product', 'name images price wpId variants._id variants.wpVariationId')
+      .populate('user', 'name email phone')
       .populate('payment')
       .lean();
   }

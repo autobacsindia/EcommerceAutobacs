@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { trackPurchase, type MetaPurchaseItem } from '@/lib/metaPixel';
 
 /**
  * Google Ads `purchase` conversion payload — GA4/Ads item schema.
@@ -63,40 +64,50 @@ function isCapturedPurchase(orderId: string, paymentStatus?: string, orderStatus
 export default function PurchaseTracker({
   orderId,
   purchase,
+  metaItems,
+  metaValue,
   paymentStatus,
   orderStatus,
 }: {
   orderId: string;
   purchase: PurchasePayload;
+  /** Meta Pixel Purchase line items (content_ids matching the catalogue feed). */
+  metaItems?: MetaPurchaseItem[];
+  /** Order total in RUPEES for the Meta Purchase value. */
+  metaValue?: number;
   paymentStatus?: string;
   orderStatus?: string;
 }) {
   useEffect(() => {
-    // Gate: only count captured payments.
+    // Gate: only count captured payments. Shared by both trackers.
     if (!isCapturedPurchase(orderId, paymentStatus, orderStatus)) return;
 
-    const flagKey = `gtag_fired_${orderId}`;
-    let alreadyFired = false;
-    try {
-      alreadyFired = sessionStorage.getItem(flagKey) === '1';
-    } catch {
-      // sessionStorage unavailable — fall through; the tag de-dups on
-      // transaction_id server-side.
-    }
-    if (alreadyFired) return;
+    const fireOnce = (flagKey: string, fire: () => void, isLoaded: () => boolean) => {
+      let already = false;
+      try { already = sessionStorage.getItem(flagKey) === '1'; } catch { /* no storage */ }
+      if (already) return;
+      // Not loaded (id unset / blocked): do NOT set the flag, so it can still
+      // fire on a later visit once the tag is available. Both platforms also
+      // de-dup server-side (gtag on transaction_id; Meta on eventID).
+      if (!isLoaded()) return;
+      fire();
+      try { sessionStorage.setItem(flagKey, '1'); } catch { /* best-effort */ }
+    };
 
-    if (typeof window === 'undefined' || typeof window.gtag !== 'function') {
-      // gtag.js not loaded (id unset / blocked). Do NOT set the flag, so the
-      // conversion can still fire on a later visit once the tag is available.
-      return;
-    }
+    // Google Ads purchase conversion.
+    fireOnce(
+      `gtag_fired_${orderId}`,
+      () => window.gtag!('event', 'purchase', purchase),
+      () => typeof window !== 'undefined' && typeof window.gtag === 'function'
+    );
 
-    window.gtag('event', 'purchase', purchase);
-
-    try {
-      sessionStorage.setItem(flagKey, '1');
-    } catch {
-      /* ignore — best-effort de-dupe */
+    // Meta Pixel Purchase — eventID = orderId dedupes it with the server CAPI event.
+    if (metaItems && metaItems.length > 0) {
+      fireOnce(
+        `metapixel_fired_${orderId}`,
+        () => trackPurchase(orderId, metaItems, Number(metaValue) || 0),
+        () => typeof window !== 'undefined' && typeof window.fbq === 'function'
+      );
     }
     // Re-run when the order (route param) changes on a client-side navigation
     // between two success pages, which reuses this component without remounting.

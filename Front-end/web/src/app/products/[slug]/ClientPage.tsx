@@ -11,6 +11,7 @@ import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
 import { productKeys } from '@/hooks/queries/keys';
 import { trackProductView } from '@/lib/analytics';
+import { trackViewContent } from '@/lib/metaPixel';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
 import StickyCartBar from '@/components/products/StickyCartBar';
@@ -41,6 +42,8 @@ interface Product {
   price: number;
   originalPrice?: number;
   saleEndsAt?: string | null;
+  /** Meta catalogue content_id (backend-computed, matches the feed). */
+  metaContentId?: string;
   category?: { _id: string; name: string; slug: string } | string;
   brand?: string;
   images?: Array<{ url: string; alt?: string; _id?: string }>;
@@ -130,6 +133,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         brand: product.brand,
         category: typeof product.category === 'object' ? product.category?.name : product.category,
       });
+      // Meta Pixel ViewContent — content_id matches the catalogue feed so this
+      // product page view feeds dynamic retargeting / Advantage+ catalogue ads.
+      if (product.metaContentId) trackViewContent(product.metaContentId, product.price);
     }
   }, [product?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
