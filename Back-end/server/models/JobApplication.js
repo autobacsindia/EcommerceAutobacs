@@ -61,6 +61,12 @@ const JobApplicationSchema = new mongoose.Schema(
     },
     adminNotes: { type: String, trim: true, maxlength: 5000, default: "" },
 
+    // Applicant-facing email idempotency stamps — set only once the provider
+    // accepts the send, so a BullMQ retry (or an admin toggling status back and
+    // forth) never double-mails the candidate.
+    acknowledgementEmailedAt: { type: Date, default: null },
+    rejectionEmailedAt: { type: Date, default: null },
+
     // Abuse triage only — never surfaced to the applicant.
     meta: {
       ip: { type: String, default: "" },

@@ -175,8 +175,11 @@ export const submitApplication = async (req, res) => {
     meta: { ip: clientIp(req), userAgent: str(req.headers['user-agent'], 400) },
   });
 
-  // Notify the support inbox — best-effort, async (mirrors consultation flow).
-  enqueueNotification('send-admin-careers-alert', { applicationId: application._id.toString() });
+  // Notify the support inbox + acknowledge to the candidate — best-effort, async
+  // (mirrors consultation flow). Never block the submit response on email.
+  const applicationId = application._id.toString();
+  enqueueNotification('send-admin-careers-alert', { applicationId });
+  enqueueNotification('send-careers-acknowledgement', { applicationId });
 
   res.status(201).json({ success: true, message: 'Application received.' });
 };
@@ -230,6 +233,8 @@ export const updateApplication = async (req, res) => {
   const app = await jobApplicationRepository.findById(req.params.id);
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
 
+  const wasRejected = app.status === 'rejected';
+
   if (req.body.status !== undefined) {
     if (!STATUSES.includes(req.body.status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
@@ -240,5 +245,13 @@ export const updateApplication = async (req, res) => {
     app.adminNotes = str(req.body.adminNotes, 5000);
   }
   await app.save();
+
+  // On the transition INTO "rejected", mail the candidate the rejection notice —
+  // async + idempotent (the service guards on status + rejectionEmailedAt, so a
+  // re-enqueue or later status change can't double-send).
+  if (app.status === 'rejected' && !wasRejected) {
+    enqueueNotification('send-careers-rejection', { applicationId: app._id.toString() });
+  }
+
   res.json({ success: true, application: app });
 };

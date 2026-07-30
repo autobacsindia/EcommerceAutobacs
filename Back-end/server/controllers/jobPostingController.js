@@ -9,6 +9,7 @@
  */
 
 import jobPostingRepository from '../repositories/jobPostingRepository.js';
+import careerCategoryRepository from '../repositories/careerCategoryRepository.js';
 import { slugify } from '../utils/slug.js';
 import { normalizeSeo } from '../utils/seo.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
@@ -35,8 +36,35 @@ const cleanBullets = (value, cap = 30) => {
 // @route   GET /careers/postings
 // @access  Public
 export const listOpenPostings = async (_req, res) => {
+  // findOpen() already returns roles by their own sortOrder. Re-sort so sections
+  // render in the admin-managed CATEGORY order: a category's position on the page
+  // is driven by its CareerCategory.sortOrder, and roles keep their relative
+  // order within each section. Uncategorised roles (and any category with no
+  // managed entry) sort last. The regroup itself happens on the frontend.
   const postings = await jobPostingRepository.findOpen();
-  res.json({ success: true, postings });
+
+  // Skip the (small) category lookup entirely when nothing is categorised —
+  // the common case — so the public path keeps its single query. Otherwise load
+  // the managed order to drive section ordering.
+  if (!postings.some((p) => (p.category || '').trim())) {
+    return res.json({ success: true, postings });
+  }
+  const categories = await careerCategoryRepository.findAllOrdered();
+
+  const LAST = Number.MAX_SAFE_INTEGER;
+  const order = new Map(categories.map((c, i) => [c.name.toLowerCase(), i]));
+  const rank = (p) => {
+    const key = (p.category || '').trim().toLowerCase();
+    return key ? order.get(key) ?? LAST : LAST;
+  };
+  // Stable sort: Array.prototype.sort is stable, so equal ranks preserve the
+  // sortOrder,createdAt ordering findOpen() already applied.
+  const sorted = postings
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+    .map((x) => x.p);
+
+  res.json({ success: true, postings: sorted });
 };
 
 // @desc    Single open role (own page + JSON-LD)

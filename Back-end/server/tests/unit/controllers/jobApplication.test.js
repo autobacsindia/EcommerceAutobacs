@@ -181,6 +181,8 @@ describe('submitApplication — success', () => {
     expect(saved.files.resume.publicId).toBe('autobacs/careers/n1/cv.pdf');
     expect(saved.files.resume.bytes).toBe(1000);
     expect(enqueueNotification).toHaveBeenCalledWith('send-admin-careers-alert', { applicationId: saved._id.toString() });
+    // The candidate also gets an acknowledgement.
+    expect(enqueueNotification).toHaveBeenCalledWith('send-careers-acknowledgement', { applicationId: saved._id.toString() });
   });
 
   test('open application (no matching posting) still succeeds with a null posting ref', async () => {
@@ -286,5 +288,26 @@ describe('admin inbox', () => {
     const missing = mockRes();
     await controller.updateApplication({ params: { id: new JobApplication.base.Types.ObjectId().toString() }, body: {} }, missing);
     expect(missing.statusCode).toBe(404);
+  });
+
+  test('enqueues the rejection email only on the transition INTO rejected', async () => {
+    const app = await seed({ status: 'reviewing' });
+    const id = app._id.toString();
+
+    // reviewing → rejected: fires once.
+    const rej = mockRes();
+    await controller.updateApplication({ params: { id }, body: { status: 'rejected' } }, rej);
+    expect(enqueueNotification).toHaveBeenCalledWith('send-careers-rejection', { applicationId: id });
+
+    // rejected → rejected (e.g. an unrelated notes edit): must NOT re-enqueue.
+    enqueueNotification.mockClear();
+    await controller.updateApplication({ params: { id }, body: { status: 'rejected', adminNotes: 'note' } }, mockRes());
+    expect(enqueueNotification).not.toHaveBeenCalledWith('send-careers-rejection', expect.anything());
+  });
+
+  test('does not enqueue a rejection for a non-rejection status change', async () => {
+    const app = await seed({ status: 'new' });
+    await controller.updateApplication({ params: { id: app._id.toString() }, body: { status: 'shortlisted' } }, mockRes());
+    expect(enqueueNotification).not.toHaveBeenCalledWith('send-careers-rejection', expect.anything());
   });
 });

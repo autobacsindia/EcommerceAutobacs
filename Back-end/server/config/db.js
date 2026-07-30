@@ -349,6 +349,19 @@ async function ensureCriticalIndexes() {
       if (e.codeName !== 'IndexNotFound' && e.code !== 27) throw e;
     }
     console.log('✓ StockNotificationRequest indexes confirmed');
+
+    // CareerCategory — managed section vocabulary for /careers. autoIndex is off
+    // in prod, so this safety net is what actually builds the uniqueness guards
+    // that keep two categories from colliding (by slug or case-insensitive name).
+    await db.collection('careercategories').createIndex(
+      { slug: 1 },
+      { unique: true, background: true }
+    );
+    await db.collection('careercategories').createIndex(
+      { name: 1 },
+      { unique: true, collation: { locale: 'en', strength: 2 }, background: true }
+    );
+    console.log('✓ CareerCategory indexes confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);

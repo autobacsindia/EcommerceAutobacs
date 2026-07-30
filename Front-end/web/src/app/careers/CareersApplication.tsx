@@ -306,26 +306,47 @@ const MARKUP_TEMPLATE = `
   .replaceAll("'Bebas Neue',sans-serif", 'var(--font-bebas),sans-serif')
   .replaceAll("'Inter',sans-serif", 'var(--font-inter),sans-serif');
 
-/** A category section: an uppercase heading + count, then that group's cards. */
-function sectionHtml(title: string, count: number, cardsHtml: string) {
-  const header = title
-    ? `<div style="margin-top:3.5rem;margin-bottom:1rem;display:flex;align-items:baseline;gap:12px;">` +
-        `<span style="font-family:${BEBAS};font-size:22px;letter-spacing:0.06em;text-transform:uppercase;color:#F7F5F0;">${esc(title)}</span>` +
-        `<span style="font-size:11px;font-weight:600;letter-spacing:0.08em;color:#C93F1A;font-family:${INTER};">${count}</span>` +
-      `</div>`
-    : '';
-  return `${header}<div style="border-top:1px solid #2E2D2B;">${cardsHtml}</div>`;
+const plural = (n: number) => (n === 1 ? '' : 's');
+
+/** A category CARD — the drill-down entry point in the roles browser grid. */
+function categoryCardHtml(cId: string, name: string, count: number) {
+  const label = name || 'More Roles';
+  return `
+      <div class="rv-cat-card" data-cat-target="${cId}" role="button" tabindex="0" aria-label="${esc(label)}, ${count} open role${plural(count)}">
+        <div>
+          <div class="rv-cat-card-count">${count} Open Role${plural(count)}</div>
+          <div class="rv-cat-card-name">${esc(label)}</div>
+        </div>
+        <span class="rv-cat-card-cta">View roles <span aria-hidden="true">&rarr;</span></span>
+      </div>`;
+}
+
+/** A per-category PANEL (hidden until its card is clicked): back link + heading + role cards. */
+function categoryPanelHtml(cId: string, name: string, count: number, cardsHtml: string) {
+  const label = name || 'More Roles';
+  return `
+      <div class="rv-cat-panel" data-cat-panel="${cId}" style="display:none;">
+        <button type="button" class="rv-cat-back" data-cat-back><span aria-hidden="true">&larr;</span> All departments</button>
+        <div class="rv-cat-panel-head">
+          <span class="rv-cat-panel-name">${esc(label)}</span>
+          <span class="rv-cat-panel-count">${count} Open Role${plural(count)}</span>
+        </div>
+        <div style="border-top:1px solid #2E2D2B;">${cardsHtml}</div>
+      </div>`;
 }
 
 /**
  * Assemble the final markup: static template + data-driven roles + options.
  *
- * When any role has a `category`, roles are grouped into labelled sections.
- * Section order follows the order roles arrive in (the API sorts by sortOrder,
- * so a category's position is driven by its lowest-sorted role); the
- * uncategorised bucket, if any, renders last under "More Roles". With no
- * categories at all it falls back to the original single flat list. Card ids
- * (`r1`, `r2`, …) stay globally unique across sections for the accordion.
+ * When any role has a `category`, the OPEN ROLES section becomes a two-level
+ * browser: a grid of category CARDS (`.rv-cat-grid`), each opening a hidden
+ * per-category PANEL (`.rv-cat-panel`) that holds that category's accordion
+ * cards. The card→panel drill-down (and the "All departments" back link) is
+ * wired imperatively in the effect. Category order follows the order roles
+ * arrive in (the API pre-sorts by managed category order); the uncategorised
+ * bucket, if any, is the last card ("More Roles"). With no categories at all it
+ * falls back to the original single flat list. Card ids (`r1`, `r2`, …) stay
+ * globally unique across panels so the accordion targeting never collides.
  */
 function buildMarkup(postings: CareerPosting[]) {
   if (postings.length === 0) {
@@ -342,7 +363,7 @@ function buildMarkup(postings: CareerPosting[]) {
   let cardsBlock: string;
 
   if (!postings.some((p) => (p.category || '').trim())) {
-    // No categories anywhere → original flat list.
+    // No categories anywhere → original flat list (no card layer).
     cardsBlock = `<div style="border-top:1px solid #2E2D2B;">${postings.map(nextCard).join('\n')}</div>`;
   } else {
     // Group preserving first-seen (sortOrder) order; empty category goes last.
@@ -357,9 +378,17 @@ function buildMarkup(postings: CareerPosting[]) {
       if (b[0] === '' && a[0] !== '') return -1;
       return 0; // stable sort preserves insertion order
     });
-    cardsBlock = entries
-      .map(([category, roles]) => sectionHtml(category || 'More Roles', roles.length, roles.map(nextCard).join('\n')))
-      .join('\n');
+    const cards: string[] = [];
+    const panels: string[] = [];
+    entries.forEach(([category, roles], i) => {
+      const cId = `cat${i + 1}`;
+      cards.push(categoryCardHtml(cId, category, roles.length));
+      // nextCard is only invoked here, so ids stay globally unique across panels.
+      panels.push(categoryPanelHtml(cId, category, roles.length, roles.map(nextCard).join('\n')));
+    });
+    cardsBlock =
+      `<div class="rv-cat-grid">${cards.join('\n')}</div>` +
+      `<div class="rv-cat-panels">${panels.join('\n')}</div>`;
   }
 
   return MARKUP_TEMPLATE
@@ -405,6 +434,42 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
         if (!isOpen) { body.classList.add('open'); arr.classList.add('open'); }
       }, { signal });
     });
+
+    // ── Category drill-down: card grid ⇄ per-category role panels ─────────────
+    // Clicking a category card hides the grid and reveals only that category's
+    // panel; the "All departments" back link reverses it. No-op when the page
+    // rendered the flat list (no categories) — the grid/panels aren't present.
+    const catGrid = root.querySelector<HTMLElement>('.rv-cat-grid');
+    const catPanels = all('.rv-cat-panel');
+    if (catGrid && catPanels.length) {
+      const showGrid = () => {
+        catGrid.style.display = '';
+        catPanels.forEach((p) => { p.style.display = 'none'; });
+      };
+      const showPanel = (id: string | null) => {
+        if (!id) return;
+        catGrid.style.display = 'none';
+        catPanels.forEach((p) => {
+          const match = p.getAttribute('data-cat-panel') === id;
+          p.style.display = match ? 'block' : 'none';
+          if (match) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      };
+      all('.rv-cat-card').forEach((card) => {
+        const open = () => showPanel(card.getAttribute('data-cat-target'));
+        card.addEventListener('click', open, { signal });
+        card.addEventListener('keydown', (e) => {
+          const k = (e as KeyboardEvent).key;
+          if (k === 'Enter' || k === ' ') { e.preventDefault(); open(); }
+        }, { signal });
+      });
+      all('[data-cat-back]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          showGrid();
+          root.querySelector('#rv-roles')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, { signal });
+      });
+    }
 
     // ── Apply button → auto-fill role dropdown ───────────────────────────────
     all('.rv-apply-btn').forEach((btn) => {

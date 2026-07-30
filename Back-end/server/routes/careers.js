@@ -27,8 +27,23 @@ import {
   getApplication,
   updateApplication,
 } from '../controllers/jobApplicationController.js';
+import {
+  listCategories,
+  createCategory,
+  updateCategory,
+  reorderCategories,
+  deleteCategory,
+} from '../controllers/careerCategoryController.js';
 
 const router = express.Router();
+
+// ── Admin categories (managed section vocabulary for grouping roles) ──
+// "/reorder" is declared before "/:id" so the literal wins over the param.
+router.get('/admin/categories', protect, admin, asyncHandler(listCategories));
+router.post('/admin/categories', protect, admin, asyncHandler(createCategory));
+router.put('/admin/categories/reorder', protect, admin, asyncHandler(reorderCategories));
+router.put('/admin/categories/:id', protect, admin, asyncHandler(updateCategory));
+router.delete('/admin/categories/:id', protect, admin, asyncHandler(deleteCategory));
 
 // ── Admin postings (declared before public "/postings/:slug" so literals win) ──
 router.get('/admin/postings', protect, admin, asyncHandler(listAllPostings));

@@ -16,18 +16,9 @@ import { Plus, Edit2, Trash2, Eye, EyeOff, GripVertical, Briefcase, Inbox } from
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
+import CareerCategoriesPanel, { type CareerCategory } from './CareerCategoriesPanel';
 
 type Status = 'draft' | 'open' | 'closed' | 'filled';
-
-// Canonical category suggestions (admin can also type a new one). Section order
-// on the public page is driven by sortOrder, not this list.
-const CATEGORY_OPTIONS = [
-  'Leadership / Executive',
-  'Growth',
-  'Content & Design',
-  'Supply & Operations',
-  'People',
-];
 
 interface Posting {
   _id: string;
@@ -78,6 +69,8 @@ const arrayToLines = (a?: string[]) => (a || []).join('\n');
 
 export default function AdminCareersPage() {
   const [postings, setPostings] = useState<Posting[]>([]);
+  const [categories, setCategories] = useState<CareerCategory[]>([]);
+  const [categoriesError, setCategoriesError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -102,7 +95,21 @@ export default function AdminCareersPage() {
     finally { setLoading(false); }
   }, [statusFilter]);
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{ success: boolean; categories: CareerCategory[] }>(
+        API_ENDPOINTS.ADMIN_CAREERS_CATEGORIES,
+      );
+      if (res.success) { setCategories(res.categories); setCategoriesError(false); }
+    } catch (_) {
+      // Surface the failure: without categories the role form can't assign a
+      // section, so the admin must know the list didn't load (vs. "none exist").
+      setCategoriesError(true);
+    }
+  }, []);
+
   useEffect(() => { fetchPostings(); }, [fetchPostings]);
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
   function openNew() {
     setEditing(null);
@@ -295,6 +302,9 @@ export default function AdminCareersPage() {
         </div>
       )}
 
+      {/* Managed section categories */}
+      <CareerCategoriesPanel categories={categories} onChanged={fetchCategories} loadError={categoriesError} />
+
       {/* Role Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
@@ -330,17 +340,24 @@ export default function AdminCareersPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Category (page section)</label>
-                  <input
-                    list="career-category-options"
+                  <select
                     value={form.category}
                     onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                    placeholder="Leadership / Executive"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                  />
-                  <datalist id="career-category-options">
-                    {CATEGORY_OPTIONS.map((c) => <option key={c} value={c} />)}
-                  </datalist>
-                  <p className="text-xs text-gray-400 mt-1">Groups roles into a section. Section order follows sort order.</p>
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white"
+                  >
+                    <option value="">— No category —</option>
+                    {categories.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
+                    {/* Preserve a legacy/orphan category the role already has that
+                        isn't in the managed list, so editing doesn't silently drop it. */}
+                    {form.category && !categories.some((c) => c.name === form.category) && (
+                      <option value={form.category}>{form.category} (unmanaged)</option>
+                    )}
+                  </select>
+                  {categoriesError ? (
+                    <p className="text-xs text-red-500 mt-1">Couldn&apos;t load categories — reopen this form once the list loads to assign a section.</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-1">Groups roles into a section. Manage the list below; section order follows the category order.</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Tagline</label>

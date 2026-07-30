@@ -63,6 +63,110 @@
 
 .rv-careers-page .rv-mini-nav a:hover    { color: #C93F1A !important; }
 
+/* ── Category drill-down: card grid ⇄ per-category role panels ──────────────
+ * The OPEN ROLES section shows one card per category; clicking a card reveals
+ * that category's roles (the accordion cards) and hides the grid. A back link
+ * returns to the grid. Built in CareersApplication.tsx buildMarkup(). */
+.rv-careers-page #rv-roles          { scroll-margin-top: 72px; }
+.rv-careers-page .rv-cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.rv-careers-page .rv-cat-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2.5rem;
+  min-height: 168px;
+  padding: 1.75rem;
+  border: 1px solid #2E2D2B;
+  border-radius: 2px;
+  background: #1A1917;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+.rv-careers-page .rv-cat-card:hover {
+  border-color: #C93F1A;
+  background: #1E1D1B;
+  transform: translateY(-2px);
+}
+.rv-careers-page .rv-cat-card:focus-visible {
+  outline: none;
+  border-color: #C93F1A;
+  box-shadow: 0 0 0 1px #C93F1A;
+}
+.rv-careers-page .rv-cat-card-count {
+  font-family: var(--font-inter), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #C93F1A;
+  margin-bottom: 0.75rem;
+}
+.rv-careers-page .rv-cat-card-name {
+  font-family: var(--font-bebas), sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  color: #F7F5F0;
+}
+.rv-careers-page .rv-cat-card-cta {
+  font-family: var(--font-inter), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8A8880;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.2s, gap 0.2s;
+}
+.rv-careers-page .rv-cat-card:hover .rv-cat-card-cta { color: #F7F5F0; gap: 12px; }
+
+.rv-careers-page .rv-cat-panel      { scroll-margin-top: 72px; }
+.rv-careers-page .rv-cat-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0.25rem 0 1.75rem;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-inter), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8A8880;
+  transition: color 0.2s, gap 0.2s;
+}
+.rv-careers-page .rv-cat-back:hover { color: #C93F1A; gap: 12px; }
+.rv-careers-page .rv-cat-panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+.rv-careers-page .rv-cat-panel-name {
+  font-family: var(--font-bebas), sans-serif;
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #F7F5F0;
+}
+.rv-careers-page .rv-cat-panel-count {
+  font-family: var(--font-inter), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #C93F1A;
+}
+
 .rv-careers-page .rv-pdf-zone            { border: 1px dashed #2E2D2B; border-radius: 2px; padding: 1.5rem; text-align: center; cursor: pointer; background: #1E1D1B; transition: border-color 0.2s, background 0.2s; }
 .rv-careers-page .rv-pdf-zone:hover      { border-color: #C93F1A !important; background: #1A1917 !important; }
 .rv-careers-page .rv-pdf-zone.drag       { border-color: #C93F1A !important; }
@@ -79,6 +183,7 @@
   .rv-careers-page .rv-pillars-grid { grid-template-columns: 1fr !important; }
   .rv-careers-page .rv-form-row     { grid-template-columns: 1fr !important; }
   .rv-careers-page .rv-docs-grid    { grid-template-columns: 1fr !important; }
+  .rv-careers-page .rv-cat-grid     { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 480px) {
   .rv-careers-page .rv-hero-h1      { font-size: 52px !important; }

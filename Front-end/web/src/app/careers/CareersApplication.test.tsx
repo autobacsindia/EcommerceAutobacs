@@ -71,7 +71,7 @@ describe('CareersApplication — data-driven roles', () => {
     expect(Array.from(select.options).map((o) => o.value)).toContain('Jr. Accounts & Finance');
   });
 
-  it('groups roles into category sections in first-seen order with counts', () => {
+  it('renders a category-card grid (drill-down) in first-seen order with counts', () => {
     const postings = [
       posting({ _id: '1', title: 'CMO', slug: 'cmo', category: 'Leadership / Executive' }),
       posting({ _id: '2', title: 'COO', slug: 'coo', category: 'Leadership / Executive' }),
@@ -79,25 +79,32 @@ describe('CareersApplication — data-driven roles', () => {
     ];
     const { container } = render(<CareersApplication postings={postings} />);
 
-    // Two section headers, in arrival order. Scope the search to the roles
-    // region so the static "03 — Growth" pillar above doesn't interfere.
-    const html = container.innerHTML;
-    const rolesStart = html.indexOf("WE'RE FILLING NOW");
-    const leadershipAt = html.indexOf('Leadership / Executive', rolesStart);
-    const growthAt = html.indexOf('Growth', rolesStart);
-    expect(leadershipAt).toBeGreaterThan(-1);
-    expect(growthAt).toBeGreaterThan(leadershipAt); // leadership section first
+    // One card per category (not per role), in arrival order.
+    const cards = Array.from(container.querySelectorAll('.rv-cat-card'));
+    expect(cards).toHaveLength(2);
+    const names = cards.map((c) => c.querySelector('.rv-cat-card-name')?.textContent);
+    expect(names).toEqual(['Leadership / Executive', 'Growth']); // leadership first
 
-    // All three cards still render, with globally-unique accordion ids.
+    // Each card targets a panel; the counts reflect the group sizes.
+    const leadershipCard = cards[0];
+    expect(leadershipCard.querySelector('.rv-cat-card-count')?.textContent).toContain('2');
+    const targetId = leadershipCard.getAttribute('data-cat-target');
+    const panel = container.querySelector(`.rv-cat-panel[data-cat-panel="${targetId}"]`) as HTMLElement;
+    expect(panel).toBeTruthy();
+    expect(panel.style.display).toBe('none'); // panels are hidden until a card is clicked
+    expect(panel.querySelectorAll('.rv-role-card')).toHaveLength(2); // CMO + COO live inside
+
+    // All three role cards still render across panels, with globally-unique ids.
     expect(container.querySelectorAll('.rv-role-card')).toHaveLength(3);
     const ids = Array.from(container.querySelectorAll('.rv-role-card')).map((c) => c.getAttribute('data-role-id'));
     expect(new Set(ids).size).toBe(3);
   });
 
-  it('renders a flat list (no section headers) when no role has a category', () => {
+  it('renders a flat list (no cards) when no role has a category', () => {
     const postings = [posting({ title: 'Solo Role', slug: 'solo' })];
     const { container } = render(<CareersApplication postings={postings} />);
     expect(container.querySelectorAll('.rv-role-card')).toHaveLength(1);
+    expect(container.querySelectorAll('.rv-cat-card')).toHaveLength(0);
   });
 
   it('falls back gracefully when there are no open roles', () => {
