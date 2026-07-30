@@ -227,6 +227,14 @@ class ElasticsearchService {
         await this.client.indices.create({
           index: this.indexName,
           body: {
+            // Single-node deployment: one shard, zero replicas. A replica cannot
+            // allocate on a one-node cluster and would leave health permanently
+            // yellow. The index is fully rebuildable from Mongo (reindex-products),
+            // so we don't need in-cluster redundancy here.
+            settings: {
+              number_of_shards: 1,
+              number_of_replicas: 0
+            },
             mappings: {
               properties: {
                 productId: { type: 'keyword' },
@@ -283,6 +291,23 @@ class ElasticsearchService {
       console.error('Error creating Elasticsearch index:', error);
       throw error;
     }
+  }
+
+  /**
+   * Drop and rebuild the index with the explicit mapping above. Used by the
+   * reindex-products script so a full reindex is deterministic: without this,
+   * an empty cluster auto-creates `products` via dynamic mapping on the first
+   * document (turning keyword facet fields into text and breaking aggregations).
+   * Safe to run against prod — the index is derived data, rebuilt from Mongo
+   * immediately after by indexAllProducts().
+   */
+  async recreateIndex() {
+    const exists = await this.client.indices.exists({ index: this.indexName });
+    if (exists) {
+      await this.client.indices.delete({ index: this.indexName });
+      console.log(`Deleted existing Elasticsearch index: ${this.indexName}`);
+    }
+    await this.createIndex();
   }
 
   /**
