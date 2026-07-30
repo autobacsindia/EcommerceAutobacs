@@ -57,10 +57,9 @@ const ProductSchema = new mongoose.Schema({
   slug: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
     trim: true
-  },
+  }, // unique index declared in the index block below (avoids duplicate-index warning)
   originalPrice: {
     type: Number,
     min: 0
@@ -201,17 +200,13 @@ const ProductSchema = new mongoose.Schema({
   
   // WordPress/WooCommerce sync fields
   wpId: {
-    type: Number,
-    unique: true,
-    sparse: true, // Allow null for non-WP products
-    index: true
-  },
+    type: Number
+  }, // unique + sparse index declared in the index block below
   wpSlug: String,
   syncedFromWordPress: {
     type: Boolean,
-    default: false,
-    index: true
-  },
+    default: false
+  }, // index declared in the index block below
   lastSyncedAt: Date,
   salePrice: {
     type: Number,
@@ -259,7 +254,7 @@ ProductSchema.index({ compatibleVehicles: 1 }); // Vehicle-specific products
 ProductSchema.index({ isFastMoving: 1 }); // Fast-moving products
 
 // WordPress sync indexes
-ProductSchema.index({ wpId: 1 }); // Fast lookup by WordPress ID
+ProductSchema.index({ wpId: 1 }, { unique: true, sparse: true }); // Fast lookup by WordPress ID (unique; sparse allows null for non-WP products)
 ProductSchema.index({ syncedFromWordPress: 1 }); // Filter synced products
 
 // Sparse index for admin "show deleted products" queries
