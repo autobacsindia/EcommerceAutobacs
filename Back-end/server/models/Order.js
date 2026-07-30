@@ -27,6 +27,21 @@ const OrderSchema = new mongoose.Schema({
   crmLeadId: { type: mongoose.Schema.Types.ObjectId, ref: "Lead", default: null },
   legacyStatus: String,
 
+  // Marketing-attribution signals captured from the buyer's browser at order
+  // creation, replayed to Meta's Conversions API on payment success (services/
+  // metaCapiService.js). Improves ad match quality; server-side so it survives
+  // iOS/ad-blocker loss of the client Pixel. All optional — absent for offline
+  // orders and pre-Pixel orders.
+  // All fields are client-controlled → length-capped (utils/metaTracking.js also
+  // truncates/validates before write; these are defense-in-depth).
+  tracking: {
+    fbp: { type: String, maxlength: 256 },            // Meta browser id cookie (_fbp)
+    fbc: { type: String, maxlength: 256 },            // Meta click id cookie (_fbc), set from fbclid
+    clientIp: { type: String, maxlength: 64 },        // buyer IP at checkout (req.ip, trust proxy=2)
+    userAgent: { type: String, maxlength: 512 },      // buyer UA at checkout
+    eventSourceUrl: { type: String, maxlength: 1024 },// the checkout page URL (validated http/https)
+  },
+
   items: [
     {
       product: {

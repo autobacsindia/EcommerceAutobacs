@@ -20,6 +20,7 @@ import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
 import { GOOGLE_ADS_ID, isGoogleAdsEnabled } from "@/lib/googleAds";
+import { META_PIXEL_ID, isMetaPixelEnabled } from "@/lib/metaPixel";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -216,6 +217,29 @@ export default async function RootLayout({
               `}
             </Script>
           </>
+        )}
+
+        {/* Meta Pixel base. Rendered only when a real numeric pixel id is set
+            (isMetaPixelEnabled), so unset/preview builds never load it or fire
+            events into the live dataset. nonce={nonce} is REQUIRED for the strict
+            CSP; 'strict-dynamic' then trusts the fbevents.js the snippet injects.
+            Fires PageView here; ViewContent/AddToCart/Purchase fire from their
+            pages via lib/metaPixel.ts (Purchase is deduped with server CAPI). */}
+        {isMetaPixelEnabled && (
+          <Script id="meta-pixel-init" strategy="afterInteractive" nonce={nonce}>
+            {`
+              !function(f,b,e,v,n,t,s)
+              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+              n.queue=[];t=b.createElement(e);t.async=!0;
+              t.src=v;s=b.getElementsByTagName(e)[0];
+              s.parentNode.insertBefore(t,s)}(window,document,'script',
+              'https://connect.facebook.net/en_US/fbevents.js');
+              fbq('init', '${META_PIXEL_ID}');
+              fbq('track', 'PageView');
+            `}
+          </Script>
         )}
       </head>
       <body

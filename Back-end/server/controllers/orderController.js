@@ -7,6 +7,8 @@ import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
+import { extractMetaTracking } from '../utils/metaTracking.js';
+import { contentIdForLineItem } from '../utils/metaCatalogId.js';
 import { hashToken } from '../utils/tokenUtils.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
@@ -98,17 +100,21 @@ export const getOrderById = async (req, res) => {
 
   // Normalize items: product may be null if it was deleted after the order.
   // Replace null with a tombstone object so the frontend never receives null.
+  // Also attach `metaContentId` (the Meta catalogue retailer_id) per item so the
+  // client Pixel's Purchase event uses ids that match the feed, and strip the
+  // heavy `variants` array we only populated to derive that id.
   const normalizedOrder = {
     ...order,
-    items: order.items.map(item => ({
-      ...item,
-      product: item.product ?? {
-        _id: item.product,
-        name: '[Product no longer available]',
-        images: [],
-        price: item.price
-      }
-    }))
+    items: order.items.map(item => {
+      const metaContentId = contentIdForLineItem(item.product, item.variantId);
+      // Strip internal-only fields we populated solely to derive metaContentId —
+      // `variants` (heavy) and `wpId` (internal WooCommerce migration id) must not
+      // leak to the client.
+      const product = item.product
+        ? (() => { const { variants: _variants, wpId: _wpId, ...rest } = item.product; return rest; })()
+        : { _id: item.product, name: '[Product no longer available]', images: [], price: item.price };
+      return { ...item, product, metaContentId };
+    })
   };
 
   res.json({ success: true, order: normalizedOrder });
@@ -177,7 +183,7 @@ export const createOrder = async (req, res) => {
       req.user.id,
       items,
       shippingAddress,
-      { ...req.body, sessionId: req.headers['x-session-id'] }
+      { ...req.body, sessionId: req.headers['x-session-id'], tracking: extractMetaTracking(req) }
     );
 
     res.status(201).json({

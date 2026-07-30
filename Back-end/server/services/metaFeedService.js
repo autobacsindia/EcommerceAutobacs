@@ -26,23 +26,19 @@
 import { effectivePrice } from './pricingService.js';
 import { roundRupees } from '../utils/money.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
+import { productContentId, variantContentId, itemGroupId } from '../utils/metaCatalogId.js';
 
 const MAX_TITLE = 200;        // Meta title hard cap
 const MAX_DESCRIPTION = 9000; // Meta description cap is 9999; leave headroom
 const MAX_ADDITIONAL_IMAGES = 10;
 
-// ── retailer_id / group_id construction (see contract above) ──────────────────
-export function feedId(product) {
-  return product.wpId != null ? String(product.wpId) : `ab_${product._id}`;
-}
-export function variantFeedId(product, variant) {
-  return variant.wpVariationId != null
-    ? String(variant.wpVariationId)
-    : `ab_${product._id}_${variant._id}`;
-}
-export function itemGroupId(product) {
-  return product.wpId != null ? `wc_post_id_${product.wpId}` : `ab_${product._id}`;
-}
+// ── retailer_id / group_id construction ───────────────────────────────────────
+// The scheme lives in utils/metaCatalogId.js so the feed, the client Pixel, and
+// server CAPI share ONE definition. Re-exported under the old names for callers
+// (and tests) that import them from here.
+export { itemGroupId };
+export const feedId = productContentId;
+export const variantFeedId = variantContentId;
 
 // ── field mapping helpers ─────────────────────────────────────────────────────
 

@@ -30,6 +30,8 @@ interface OrderItem {
   image?: string;
   price: number; // rupees
   quantity: number;
+  /** Meta catalogue content_id (backend-computed, matches the feed). */
+  metaContentId?: string;
 }
 
 interface OrderResponse {
@@ -82,6 +84,16 @@ export default async function OrderSuccessPage({
   // for genuinely-paid orders only.
   const purchase = buildPurchasePayload(order, GOOGLE_ADS_PURCHASE_SEND_TO);
 
+  // Meta Pixel Purchase line items — content_ids come from the backend so they
+  // match the catalogue feed; only items with a resolved id are included.
+  const metaItems = (order.items ?? [])
+    .filter((item) => item.metaContentId)
+    .map((item) => ({
+      id: item.metaContentId as string,
+      quantity: item.quantity ?? 1,
+      item_price: Number(item.price) || 0,
+    }));
+
   const estimatedDelivery = order.estimatedDelivery
     ? new Date(order.estimatedDelivery).toLocaleDateString('en-IN', {
         year: 'numeric',
@@ -99,6 +111,8 @@ export default async function OrderSuccessPage({
         key={order._id}
         orderId={order._id}
         purchase={purchase}
+        metaItems={metaItems}
+        metaValue={order.totalAmount}
         paymentStatus={order.paymentStatus}
         orderStatus={order.status}
       />

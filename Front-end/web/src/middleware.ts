@@ -146,6 +146,9 @@ function buildCsp(nonce: string): string {
     // googleadservices.com serves the conversion linker / conversion_async.js.
     'https://www.googletagmanager.com',
     'https://www.googleadservices.com',
+    // Meta Pixel loader (fbevents.js). 'strict-dynamic' already trusts it via the
+    // nonce'd init snippet; this is the fallback for browsers ignoring strict-dynamic.
+    'https://connect.facebook.net',
   ].join(' ');
 
   return [
@@ -165,7 +168,8 @@ function buildCsp(nonce: string): string {
     // without these the conversion never reaches Google even though the script ran.
     // (Verified against a live Vercel preview: the googleadservices.com + doubleclick
     // beacons were CSP-blocked until added here.)
-    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net",
+    // Meta Pixel fires tracking as <img> beacons to www.facebook.com/tr.
+    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
@@ -178,7 +182,7 @@ function buildCsp(nonce: string): string {
     // loading config and posting the purchase conversion. googleadservices.com +
     // ad.doubleclick.net + the regional google.co.in are the enhanced-conversion /
     // conversion-linker fetch targets (were CSP-blocked on the preview until added).
-    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net",
+    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes.
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",

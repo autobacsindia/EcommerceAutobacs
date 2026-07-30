@@ -10,6 +10,7 @@ import paymentRepository from '../repositories/paymentRepository.js';
 import orderStatusService from './orderStatusService.js';
 import leadSyncService from './leadSyncService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
+import metaCapiService from './metaCapiService.js';
 import * as Sentry from '@sentry/node';
 
 class RazorpayService {
@@ -313,6 +314,18 @@ class RazorpayService {
           .catch((err) =>
             console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
           );
+      }
+
+      // ── Meta Conversions API: server-side Purchase (best-effort, once) ────────
+      // Same create-once gate as the emails, so duplicate webhooks never double-
+      // count. Deduped against the client Pixel by event_id = order id. Fetched
+      // WITH product+user populated so content_ids and hashed identifiers resolve.
+      // Fire-and-forget: a Meta outage must never fail a captured payment.
+      if (createdHere && metaCapiService.isEnabled()) {
+        orderRepository
+          .findWithPopulated(orderId)
+          .then((populated) => (populated ? metaCapiService.sendPurchaseEvent(populated) : null))
+          .catch((err) => console.error(`[MetaCAPI] Purchase dispatch failed for ${orderId}:`, err.message));
       }
 
       return {

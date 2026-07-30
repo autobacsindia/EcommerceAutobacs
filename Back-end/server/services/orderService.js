@@ -127,7 +127,8 @@ class OrderService {
             totalAmount: quote.totalAmount,
             status: 'awaiting_payment',
             ...(paymentMethod && { paymentMethod }),
-            ...(orderData.sessionId && { sessionId: orderData.sessionId })
+            ...(orderData.sessionId && { sessionId: orderData.sessionId }),
+            ...(orderData.tracking && { tracking: orderData.tracking })
           },
           session
         );
