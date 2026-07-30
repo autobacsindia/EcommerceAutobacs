@@ -8,6 +8,7 @@ class JobApplicationRepository {
   findById(...args) { return JobApplication.findById(...args); }
   create(...args) { return JobApplication.create(...args); }
   countDocuments(...args) { return JobApplication.countDocuments(...args); }
+  save(doc) { return doc.save(); }
 
   /** Paginated admin list, newest first, optional status filter. */
   async listPaged({ filter = {}, page = 1, limit = 25 }) {

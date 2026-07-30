@@ -479,6 +479,47 @@ class EmailHandler {
   }
 
   /**
+   * Careers: acknowledge a submitted application to the candidate. Sent under the
+   * hiring brand (fromName), optionally from a dedicated careers sender if the
+   * verified address CAREERS_FROM_EMAIL is configured (else the default sender).
+   * @param {Object} params
+   * @param {string} params.to - Candidate email
+   * @param {Object} params.application - JobApplication doc (fullName, roleTitle)
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async sendCareersAcknowledgement({ to, application }) {
+    const { careersAcknowledgementEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = careersAcknowledgementEmail({ application, company: companyInfo });
+
+    return this.sendEmail({
+      to, subject, text, html,
+      fromEmail: process.env.CAREERS_FROM_EMAIL || undefined,
+      fromName: 'ROAVION Automotive',
+    });
+  }
+
+  /**
+   * Careers: notify a candidate their application was not selected. Same sender
+   * treatment as the acknowledgement.
+   * @param {Object} params
+   * @param {string} params.to - Candidate email
+   * @param {Object} params.application - JobApplication doc (fullName, roleTitle)
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async sendCareersRejection({ to, application }) {
+    const { careersRejectionEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = careersRejectionEmail({ application, company: companyInfo });
+
+    return this.sendEmail({
+      to, subject, text, html,
+      fromEmail: process.env.CAREERS_FROM_EMAIL || undefined,
+      fromName: 'ROAVION Automotive',
+    });
+  }
+
+  /**
    * Send the "back in stock" email for an item a customer asked to be notified about.
    * The request/product/variant are pre-resolved by restockNotificationService, so
    * this stays provider-only (no DB access).

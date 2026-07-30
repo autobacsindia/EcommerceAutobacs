@@ -952,6 +952,129 @@ ${companyName}
   return { subject, text, html };
 };
 
+// Careers-facing emails are sent under the hiring legal entity, which differs
+// from the storefront brand (companyInfo.name = "Autobacs India").
+const CAREERS_ENTITY = 'ROAVION Automotive Private Limited';
+
+/** Shared dark-header shell for the two candidate-facing careers emails. */
+const careersShell = (headerTitle, bodyHtml, supportEmail) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(headerTitle)}</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.65;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111210;padding:24px 30px;">
+      <span style="color:#C93F1A;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;">ROAVION Automotive</span>
+      <h1 style="color:#F7F5F0;margin:6px 0 0;font-size:20px;font-weight:600;">${escapeHtml(headerTitle)}</h1>
+    </div>
+    <div style="padding:30px;font-size:14px;color:#333;">
+      ${bodyHtml}
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">Questions? Contact us at <a href="mailto:${escapeHtml(supportEmail)}" style="color:#999;">${escapeHtml(supportEmail)}</a>.</p>
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} ${escapeHtml(CAREERS_ENTITY)}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+/**
+ * Careers application ACKNOWLEDGEMENT. Sent once, immediately after a candidate
+ * submits an application, confirming receipt and setting expectations.
+ *
+ * @param {Object} params
+ * @param {Object} params.application - JobApplication doc ({ fullName, roleTitle })
+ * @param {Object} [params.company]   - companyInfo (for the support email)
+ * @returns {{ subject: string, text: string, html: string }}
+ */
+export const careersAcknowledgementEmail = ({ application, company = {} }) => {
+  const name = application.fullName || 'there';
+  const role = application.roleTitle || 'the role';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+
+  const subject = `We've received your application — ${CAREERS_ENTITY}`;
+
+  const text = `
+Dear ${name},
+
+Thank you for applying to ${CAREERS_ENTITY}${role ? ` for the ${role} position` : ''}.
+
+This is to confirm that we have received your application. Our team will review it carefully, and you will be notified if your application is shortlisted by our team.
+
+We appreciate your interest in joining us.
+
+Questions? Contact us at ${supportEmail}.
+
+Kind regards,
+Human Resources Department
+${CAREERS_ENTITY}
+  `.trim();
+
+  const nameHtml = escapeHtml(name);
+  const roleHtml = escapeHtml(role);
+
+  const body = `
+      <p style="margin:0 0 16px;">Dear ${nameHtml},</p>
+      <p style="margin:0 0 16px;">Thank you for applying to <strong>${escapeHtml(CAREERS_ENTITY)}</strong> for the <strong>${roleHtml}</strong> position.</p>
+      <p style="margin:0 0 16px;">This is to confirm that we have <strong>received your application</strong>. Our team will review it carefully, and <strong>you will be notified if your application is shortlisted by our team</strong>.</p>
+      <p style="margin:0 0 16px;">We appreciate your interest in joining us.</p>
+      <p style="margin:24px 0 0;">Kind regards,<br>Human Resources Department<br>${escapeHtml(CAREERS_ENTITY)}</p>`;
+
+  const html = careersShell('Application received', body, supportEmail);
+
+  return { subject, text, html };
+};
+
+/**
+ * Careers application REJECTION. Sent when an admin moves an application to the
+ * "rejected" status. Verbatim HR template with the candidate name + role filled.
+ *
+ * @param {Object} params
+ * @param {Object} params.application - JobApplication doc ({ fullName, roleTitle })
+ * @param {Object} [params.company]   - companyInfo (for the support email)
+ * @returns {{ subject: string, text: string, html: string }}
+ */
+export const careersRejectionEmail = ({ application, company = {} }) => {
+  const name = application.fullName || 'Candidate';
+  const role = application.roleTitle || 'the applied';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+
+  const subject = `Update on your application — ${CAREERS_ENTITY}`;
+
+  const paragraphs = [
+    `Thank you for your interest in joining ${CAREERS_ENTITY} and for taking the time to complete our assessment as part of the recruitment process.`,
+    `We sincerely appreciate the time, effort, and commitment you invested throughout the selection process. It was a pleasure to learn more about your background and interest in becoming part of our team.`,
+    `Following a comprehensive review of your assessment and application, we regret to inform you that you have not been selected to proceed to the interview stage for the ${role} position.`,
+    `This decision was made after careful consideration of all applications received. As we had the opportunity to assess many highly qualified candidates, we have selected those whose qualifications, experience, and competencies most closely align with the current requirements of the role.`,
+    `Please understand that this outcome is specific to the requirements of this position and should not be viewed as a reflection of your overall abilities or professional potential.`,
+    `We genuinely appreciate your interest in ${CAREERS_ENTITY} and thank you for considering us as a potential employer. With your permission, we would be pleased to retain your application in our talent database for consideration should a suitable opportunity arise in the future.`,
+    `On behalf of the entire recruitment team, we extend our sincere appreciation for your participation and wish you every success in your future career and professional endeavors.`,
+    `Thank you once again for your interest in ${CAREERS_ENTITY}.`,
+  ];
+
+  const text = [
+    `Dear ${name},`,
+    '',
+    ...paragraphs.flatMap((p) => [p, '']),
+    'Kind regards,',
+    'Human Resources Department',
+    CAREERS_ENTITY,
+  ].join('\n').trim();
+
+  const body = `
+      <p style="margin:0 0 16px;">Dear ${escapeHtml(name)},</p>
+      ${paragraphs.map((p) => `<p style="margin:0 0 16px;">${escapeHtml(p)}</p>`).join('\n      ')}
+      <p style="margin:24px 0 0;">Kind regards,<br>Human Resources Department<br>${escapeHtml(CAREERS_ENTITY)}</p>`;
+
+  const html = careersShell('Application update', body, supportEmail);
+
+  return { subject, text, html };
+};
+
 /**
  * Back-in-stock notification. Sent once, to a logged-in customer who tapped
  * "Notify me" on an out-of-stock item that has since returned. `variantLabel`

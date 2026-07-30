@@ -11,6 +11,8 @@
  *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
  *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
  *   send-admin-careers-alert         { applicationId }  — notify support inbox of a new careers application
+ *   send-careers-acknowledgement     { applicationId }  — confirm receipt to the applicant (idempotent)
+ *   send-careers-rejection           { applicationId }  — notify the applicant they weren't selected (idempotent)
  *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
  *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
  *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
@@ -23,6 +25,7 @@ import { emailOrderInvoice } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
 import { fanOutRestock, emailBackInStock } from '../../services/restockNotificationService.js';
+import { emailCareersAcknowledgement, emailCareersRejection } from '../../services/careersApplicantEmailService.js';
 import {
   emailAdminReviewAlert,
   emailAdminConsultationAlert,
@@ -80,6 +83,16 @@ const handlers = {
   'send-admin-careers-alert': async (job) => {
     const { applicationId } = job.data;
     await emailAdminCareersAlert(applicationId);
+  },
+
+  'send-careers-acknowledgement': async (job) => {
+    const { applicationId } = job.data;
+    await emailCareersAcknowledgement(applicationId);
+  },
+
+  'send-careers-rejection': async (job) => {
+    const { applicationId } = job.data;
+    await emailCareersRejection(applicationId);
   },
 
   'send-admin-order-placed-alert': async (job) => {

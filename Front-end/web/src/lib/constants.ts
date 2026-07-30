@@ -153,6 +153,10 @@ export const API_ENDPOINTS = {
   CAREERS_POSTING: (slug: string) => `/careers/postings/${slug}`,
   ADMIN_CAREERS_POSTINGS: '/careers/admin/postings',
   ADMIN_CAREERS_POSTING: (id: string) => `/careers/admin/postings/${id}`,
+  // Careers — managed section categories (admin CRUD)
+  ADMIN_CAREERS_CATEGORIES: '/careers/admin/categories',
+  ADMIN_CAREERS_CATEGORIES_REORDER: '/careers/admin/categories/reorder',
+  ADMIN_CAREERS_CATEGORY: (id: string) => `/careers/admin/categories/${id}`,
   // Careers — public application submission + admin review inbox
   CAREERS_UPLOAD_SIGNATURE: '/careers/applications/upload-signature',
   CAREERS_APPLICATIONS: '/careers/applications',
