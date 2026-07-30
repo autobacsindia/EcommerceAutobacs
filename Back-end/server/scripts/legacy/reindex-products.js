@@ -39,7 +39,14 @@ const reindexProducts = async () => {
     }
     
     console.log('✅ Elasticsearch is connected');
-    
+
+    // Rebuild the index with the explicit mapping FIRST. Without this, indexing
+    // the first product auto-creates `products` via dynamic mapping (keyword
+    // facet fields become text → aggregations/facets break). recreateIndex drops
+    // any existing index and recreates it with the correct mapping + settings.
+    await elasticsearchService.recreateIndex();
+    console.log('✅ Index (re)created with explicit mapping');
+
     // Index all products
     const count = await elasticsearchService.indexAllProducts();
     console.log(`✅ Indexed ${count} products`);
