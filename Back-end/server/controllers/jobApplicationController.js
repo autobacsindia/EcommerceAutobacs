@@ -233,8 +233,6 @@ export const updateApplication = async (req, res) => {
   const app = await jobApplicationRepository.findById(req.params.id);
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
 
-  const wasRejected = app.status === 'rejected';
-
   if (req.body.status !== undefined) {
     if (!STATUSES.includes(req.body.status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
@@ -246,10 +244,14 @@ export const updateApplication = async (req, res) => {
   }
   await app.save();
 
-  // On the transition INTO "rejected", mail the candidate the rejection notice —
-  // async + idempotent (the service guards on status + rejectionEmailedAt, so a
-  // re-enqueue or later status change can't double-send).
-  if (app.status === 'rejected' && !wasRejected) {
+  // Mail the candidate the rejection notice whenever the application is rejected
+  // and hasn't been emailed yet — async + idempotent. Keying on rejectionEmailedAt
+  // (rather than only the status transition) means a backlog of applications that
+  // were rejected BEFORE this feature shipped also gets the email on their next
+  // save, and the service's status + rejectionEmailedAt guards make a repeat
+  // enqueue a no-op, so the candidate is never mailed twice.
+  if (app.status === 'rejected' && !app.rejectionEmailedAt) {
+    console.log(`[CareersEmail] rejection: enqueuing for application ${app._id} (${app.email})`);
     enqueueNotification('send-careers-rejection', { applicationId: app._id.toString() });
   }
 
