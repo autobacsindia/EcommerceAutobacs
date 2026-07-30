@@ -151,9 +151,28 @@ export const generateInvoicePdf = async (order, user = null) => {
 
       // ── Header: logo (left) + seller identity (right) ────────────────────────
       const headerTop = 45;
+      // The Roavion primary logo is white-on-transparent (built for the dark
+      // navbar), so it would be invisible on the white page. Render it the way
+      // the brand intends — on a dark rounded chip — which also keeps it legible
+      // regardless of the asset's internal colours. Height drives the header band.
+      let logoBottom = headerTop + 66;
       if (logo) {
         try {
-          doc.image(logo, LEFT, headerTop, { fit: [150, 60] });
+          const FIT_W = 210;
+          const FIT_H = 84;
+          const PAD_X = 18;
+          const PAD_Y = 14;
+          const img = doc.openImage(logo);
+          const scale = Math.min(FIT_W / img.width, FIT_H / img.height);
+          const drawnW = img.width * scale;
+          const drawnH = img.height * scale;
+          const chipW = drawnW + PAD_X * 2;
+          const chipH = drawnH + PAD_Y * 2;
+          doc.save();
+          doc.roundedRect(LEFT, headerTop, chipW, chipH, 10).fill('#111');
+          doc.restore();
+          doc.image(logo, LEFT + PAD_X, headerTop + PAD_Y, { fit: [drawnW, drawnH] });
+          logoBottom = headerTop + chipH;
         } catch (err) {
           console.warn(`[Invoice] Logo embed failed: ${err.message}`);
         }
@@ -175,7 +194,7 @@ export const generateInvoicePdf = async (order, user = null) => {
       ].filter(Boolean).forEach((line) => doc.text(line, sellerX, doc.y, { width: sellerW }));
 
       // ── Invoice title ────────────────────────────────────────────────────────
-      let y = Math.max(doc.y, headerTop + 66) + 24;
+      let y = Math.max(doc.y, logoBottom) + 24;
       doc.font(FONT_BOLD).fontSize(28).fillColor('#111').text('INVOICE', LEFT, y);
       y = doc.y + 16;
 
@@ -266,7 +285,7 @@ export const generateInvoicePdf = async (order, user = null) => {
       if (order.tax) sumRow('Tax (incl.):', rs(order.tax));
       sumRow(
         'Shipping Charges (Extra):',
-        shippingExtra ? 'Shipping charges extra' : rs(order.shippingCost),
+        shippingExtra ? 'Calculated at delivery' : rs(order.shippingCost),
         { muted: shippingExtra }
       );
       doc.moveTo(sumLabelX, y).lineTo(RIGHT, y).strokeColor('#111').lineWidth(1).stroke();

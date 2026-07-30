@@ -534,6 +534,11 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
   const supportEmail = company.email || 'support@autobacsindia.com';
   const items = order.items || [];
 
+  // Mirror the invoice PDF: when no shipping charge is on the order (the common
+  // case), shipping is collected at delivery — never render it as ₹0.00.
+  const shippingExtra = !(Number(order.shippingCost) > 0);
+  const shippingValue = shippingExtra ? 'Calculated at delivery' : inr(order.shippingCost);
+
   const subject = `Order confirmed — ${invNo}`;
 
   const itemsText = items
@@ -551,8 +556,8 @@ Items:
 ${itemsText}
 
 Subtotal: ${inr(order.subtotal)}
-${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}Shipping: ${inr(order.shippingCost)}
-Total Paid: ${inr(order.totalAmount)}
+${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}Shipping: ${shippingValue}
+${shippingExtra ? 'Total (excl. shipping)' : 'Total Paid'}: ${inr(order.totalAmount)}${shippingExtra ? '\n\nShipping is calculated and collected at the time of delivery.' : ''}
 
 Your tax invoice is attached to this email as a PDF.
 
@@ -610,11 +615,12 @@ ${companyName}
           ${totalsRow('Subtotal', inr(order.subtotal))}
           ${order.couponDiscount ? totalsRow(`Coupon${order.couponCode ? ` (${order.couponCode})` : ''}`, `- ${inr(order.couponDiscount)}`) : ''}
           ${order.karmaDiscount ? totalsRow('Karma points', `- ${inr(order.karmaDiscount)}`) : ''}
-          ${totalsRow('Shipping', inr(order.shippingCost))}
+          ${totalsRow('Shipping', shippingValue)}
           ${order.tax ? totalsRow('Tax (incl.)', inr(order.tax)) : ''}
-          ${totalsRow('Total Paid', inr(order.totalAmount), true)}
+          ${totalsRow(shippingExtra ? 'Total (excl. shipping)' : 'Total Paid', inr(order.totalAmount), true)}
         </tfoot>
       </table>
+      ${shippingExtra ? `<p style="margin-top:12px;font-size:13px;color:#666;">Shipping is calculated and collected at the time of delivery.</p>` : ''}
 
       <p style="margin-top:24px;background:#f0f9ff;border:1px solid #bae6fd;padding:12px;border-radius:6px;font-size:14px;">
         📎 Your tax invoice is attached to this email as a PDF.
