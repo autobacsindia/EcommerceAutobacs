@@ -97,6 +97,19 @@ export default function AdminCareersApplicationsPage() {
     finally { setDetailLoading(false); }
   }
 
+  // Confirm before any status change — it's an outward-facing action (a move to
+  // "rejected" emails the candidate the rejection notice), so it shouldn't fire
+  // on a stray click. No-op when the status isn't actually changing.
+  function changeStatus(next: Status) {
+    if (!detail || savingStatus || detail.status === next) return;
+    const message =
+      next === 'rejected'
+        ? `Reject ${detail.fullName}'s application?\n\nThe candidate will be emailed the rejection notice (sent once). Continue?`
+        : `Change ${detail.fullName}'s status to "${next}"?`;
+    if (!window.confirm(message)) return;
+    patchApplication(detail._id, { status: next });
+  }
+
   async function patchApplication(id: string, body: Record<string, unknown>) {
     setSavingStatus(true);
     try {
@@ -251,7 +264,7 @@ export default function AdminCareersApplicationsPage() {
                         <button
                           key={s}
                           disabled={savingStatus}
-                          onClick={() => patchApplication(detail._id, { status: s })}
+                          onClick={() => changeStatus(s)}
                           className={`text-xs font-medium px-3 py-1.5 rounded-full capitalize transition-colors disabled:opacity-50 ${detail.status === s ? STATUS_STYLE[s] : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
                         >
                           {s}

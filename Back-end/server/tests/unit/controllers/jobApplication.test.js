@@ -290,18 +290,25 @@ describe('admin inbox', () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  test('enqueues the rejection email only on the transition INTO rejected', async () => {
+  test('enqueues the rejection email when an application becomes rejected', async () => {
     const app = await seed({ status: 'reviewing' });
     const id = app._id.toString();
 
-    // reviewing → rejected: fires once.
     const rej = mockRes();
     await controller.updateApplication({ params: { id }, body: { status: 'rejected' } }, rej);
     expect(enqueueNotification).toHaveBeenCalledWith('send-careers-rejection', { applicationId: id });
+  });
 
-    // rejected → rejected (e.g. an unrelated notes edit): must NOT re-enqueue.
-    enqueueNotification.mockClear();
-    await controller.updateApplication({ params: { id }, body: { status: 'rejected', adminNotes: 'note' } }, mockRes());
+  test('enqueues for a BACKLOG rejection (already rejected, never emailed) on the next save', async () => {
+    // Pre-feature rejections have status:'rejected' but no rejectionEmailedAt.
+    const app = await seed({ status: 'rejected', rejectionEmailedAt: null });
+    await controller.updateApplication({ params: { id: app._id.toString() }, body: { adminNotes: 'reviewed' } }, mockRes());
+    expect(enqueueNotification).toHaveBeenCalledWith('send-careers-rejection', { applicationId: app._id.toString() });
+  });
+
+  test('does NOT re-enqueue once the rejection email has been sent (rejectionEmailedAt set)', async () => {
+    const app = await seed({ status: 'rejected', rejectionEmailedAt: new Date() });
+    await controller.updateApplication({ params: { id: app._id.toString() }, body: { adminNotes: 'note' } }, mockRes());
     expect(enqueueNotification).not.toHaveBeenCalledWith('send-careers-rejection', expect.anything());
   });
 
