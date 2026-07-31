@@ -26,6 +26,17 @@ export interface PurchasePayload {
 const NON_CAPTURED_ORDER_STATUS = ['cancelled', 'failed', 'returned'];
 const NON_CAPTURED_PAYMENT_STATUS = ['failed', 'cancelled'];
 
+// How long to keep waiting for a tag global to appear before giving up.
+// Both gtag.js and fbevents.js are injected by next/script `afterInteractive`,
+// i.e. from an effect in the root layout AFTER hydration — so when this effect
+// first runs the global may legitimately not exist yet, and on a slow connection
+// it can be seconds away. Checking once and bailing silently drops the
+// conversion for that visit, which is exactly the failure we cannot observe.
+// 15s comfortably covers a slow 3G tag load while still ending the polling on a
+// page users often leave quickly.
+const TAG_WAIT_TIMEOUT_MS = 15_000;
+const TAG_POLL_INTERVAL_MS = 200;
+
 function hasJustPaidMarker(orderId: string): boolean {
   // Set by useRazorpay right after a verified payment — means "this session just
   // paid for this order" (the webhook confirmation may still be in flight).
@@ -82,16 +93,35 @@ export default function PurchaseTracker({
     // Gate: only count captured payments. Shared by both trackers.
     if (!isCapturedPurchase(orderId, paymentStatus, orderStatus)) return;
 
+    const timers: ReturnType<typeof setInterval>[] = [];
+
     const fireOnce = (flagKey: string, fire: () => void, isLoaded: () => boolean) => {
       let already = false;
       try { already = sessionStorage.getItem(flagKey) === '1'; } catch { /* no storage */ }
       if (already) return;
-      // Not loaded (id unset / blocked): do NOT set the flag, so it can still
-      // fire on a later visit once the tag is available. Both platforms also
-      // de-dup server-side (gtag on transaction_id; Meta on eventID).
-      if (!isLoaded()) return;
-      fire();
-      try { sessionStorage.setItem(flagKey, '1'); } catch { /* best-effort */ }
+
+      // Fire as soon as the tag global exists; the flag is set ONLY after an
+      // actual send, so a visit where the tag never loads (id unset, ad
+      // blocker) leaves it unset and a later visit can still convert. Both
+      // platforms also de-dup server-side (gtag on transaction_id; Meta on
+      // eventID), so a retry across visits is safe.
+      const attempt = (): boolean => {
+        if (!isLoaded()) return false;
+        fire();
+        try { sessionStorage.setItem(flagKey, '1'); } catch { /* best-effort */ }
+        return true;
+      };
+
+      if (attempt()) return;
+
+      // Not loaded yet — poll instead of giving up (see TAG_WAIT_TIMEOUT_MS).
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        if (attempt() || Date.now() - startedAt >= TAG_WAIT_TIMEOUT_MS) {
+          clearInterval(timer);
+        }
+      }, TAG_POLL_INTERVAL_MS);
+      timers.push(timer);
     };
 
     // Google Ads purchase conversion.
@@ -109,6 +139,9 @@ export default function PurchaseTracker({
         () => typeof window !== 'undefined' && typeof window.fbq === 'function'
       );
     }
+
+    // Stop polling if the user navigates away before a tag shows up.
+    return () => { for (const timer of timers) clearInterval(timer); };
     // Re-run when the order (route param) changes on a client-side navigation
     // between two success pages, which reuses this component without remounting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
