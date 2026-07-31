@@ -5,6 +5,7 @@
 
 import orderStatusService from '../services/orderStatusService.js';
 import Order from '../models/Order.js';
+import Product from '../models/Product.js';
 
 /**
  * Validate status transition request
@@ -92,6 +93,30 @@ export const validateCancellation = async (req, res, next) => {
           success: false,
           message: canCancel.reason
         });
+      }
+    }
+
+    // Policy: custom builds / installation bookings (Product.returnPolicy.cancellable
+    // === false) are NON-CANCELLABLE once the order is confirmed (payment captured) —
+    // procurement is committed and any advance is forfeited. Blocks both customer and
+    // admin cancels via this route; an admin who genuinely must cancel handles the
+    // forfeiture manually. Only enforced once paid, so an unpaid/abandoned checkout of
+    // the same item can still drop out normally.
+    if (order.paymentStatus === 'paid') {
+      const productIds = (order.items || []).map((it) => it.product).filter(Boolean);
+      if (productIds.length) {
+        const nonCancellable = await Product.find(
+          { _id: { $in: productIds }, 'returnPolicy.cancellable': false },
+          { name: 1 }
+        ).lean();
+        if (nonCancellable.length) {
+          return res.status(400).json({
+            success: false,
+            message: `This order contains a custom / made-to-order or installation item (${nonCancellable
+              .map((p) => p.name)
+              .join(', ')}) which cannot be cancelled once confirmed. Any advance paid is non-refundable.`,
+          });
+        }
       }
     }
 

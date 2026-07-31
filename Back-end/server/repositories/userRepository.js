@@ -129,6 +129,30 @@ class UserRepository extends BaseRepository {
       { new: true, ...(session && { session }) }
     );
   }
+
+  /**
+   * Reduce net LTV by a refunded amount WITHOUT touching the paid-order count — for a
+   * PARTIAL return refund, where the order still counts as a purchase but the customer
+   * got some money back. Spend-only counterpart to reversePurchase (ADR-006).
+   * @param {string} userId
+   * @param {{ amountPaise: number }} args
+   */
+  async decrementSpend(userId, { amountPaise = 0 } = {}, session = null) {
+    if (!userId) return null;
+    const dec = Math.max(0, Math.round(amountPaise));
+    if (dec === 0) return null;
+    return User.findByIdAndUpdate(
+      userId,
+      [
+        {
+          $set: {
+            totalSpentPaise: { $max: [0, { $subtract: [{ $ifNull: ['$totalSpentPaise', 0] }, dec] }] },
+          },
+        },
+      ],
+      { new: true, ...(session && { session }) }
+    );
+  }
 }
 
 export default new UserRepository();

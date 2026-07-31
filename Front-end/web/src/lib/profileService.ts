@@ -90,18 +90,6 @@ class ProfileService {
       count: response.count
     };
   }
-
-  async getWalletBalance(): Promise<{ balance: number; currency: string; history: any[] }> {
-    const response = await apiClient.get<{
-      success: boolean;
-      wallet: {
-        balance: number;
-        currency: string;
-        history: any[];
-      };
-    }>('/returns/wallet');
-    return response.wallet;
-  }
 }
 
 const profileService = new ProfileService();

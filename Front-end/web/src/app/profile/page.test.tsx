@@ -87,11 +87,6 @@ describe('ProfilePage', () => {
     count: 0,
   };
 
-  const mockWallet = {
-    balance: 500,
-    currency: 'INR',
-    history: [],
-  };
 
   const mockPaymentMethods = {
     paymentMethods: [],
@@ -111,7 +106,6 @@ describe('ProfilePage', () => {
     (profileService.getOrders as jest.Mock).mockResolvedValue(mockOrders);
     (profileService.getMyReviews as jest.Mock).mockResolvedValue(mockReviews);
     (profileService.getMyReturnRequests as jest.Mock).mockResolvedValue(mockReturnRequests);
-    (profileService.getWalletBalance as jest.Mock).mockResolvedValue(mockWallet);
     (profileService.getPaymentMethods as jest.Mock).mockResolvedValue(mockPaymentMethods);
 
     (apiClient.get as jest.Mock).mockImplementation((url) => {
@@ -145,18 +139,5 @@ describe('ProfilePage', () => {
     // The component likely renders sections. Let's check for Order ID.
     // Logic uses _id substring(0,8) to display Order ID
     expect(screen.getByText(/Order #O1/i)).toBeInTheDocument();
-  });
-
-  it('displays wallet balance', async () => {
-    render(<ProfilePage />);
-
-    await waitFor(() => {
-      // Assuming wallet balance is displayed somewhere
-      // Need to check how wallet is rendered. 
-      // If it's in a tab, we might need to click it.
-      // Based on typical profile pages, it might be a section.
-    });
-    // Checking for text "Wallet" or balance if visible. 
-    // Since I can't see the full render logic, I'll assume it renders sections or tabs.
   });
 });

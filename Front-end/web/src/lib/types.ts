@@ -166,7 +166,6 @@ export interface UserProfile {
   email: string;
   role: string;
   addresses: Address[];
-  walletBalance?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -176,22 +175,19 @@ export interface ReturnRequestItem {
   product: {
     _id: string;
     name: string;
-    images: ProductImage[];
-    price: number;
+    images?: ProductImage[];
+    price?: number;
   };
   quantity: number;
   reason: string;
-  condition: string;
+  unitPrice?: number;
 }
 
-export interface ReturnRequestImage {
+/** A signed, viewable copy of a private return asset (admin detail response). */
+export interface ReturnSignedAsset {
   url: string;
-  description?: string;
-}
-
-export interface ReturnRequestVideo {
-  url: string;
-  description?: string;
+  bytes?: number;
+  resourceType?: 'video' | 'image' | 'raw';
 }
 
 export interface ReturnRequestTimeline {
@@ -201,21 +197,38 @@ export interface ReturnRequestTimeline {
   updatedBy?: string;
 }
 
+export type ReturnStatus =
+  | 'pending' | 'approved' | 'courier_booked' | 'received' | 'refunded' | 'rejected' | 'cancelled';
+
+export interface ReturnRefund {
+  productValue: number;
+  shippingDeduction?: number;
+  restockingDeduction?: number;
+  finalAmount?: number;
+  method?: 'original_payment';
+  razorpayRefundId?: string;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  initiatedAt?: string;
+  failureReason?: string;
+}
+
 export interface ReturnRequest {
   _id: string;
-  order: {
-    _id: string;
-    createdAt: string;
-  };
-  user: string;
+  order: { _id: string; orderNumber?: string; totalAmount?: number; createdAt?: string };
+  user: string | { _id?: string; name?: string; email?: string };
   items: ReturnRequestItem[];
-  type: 'return' | 'exchange';
-  status: 'pending' | 'approved' | 'rejected' | 'item_received' | 'completed' | 'cancelled';
-  images?: ReturnRequestImage[];
-  video?: ReturnRequestVideo;
-  refundMethod: 'store_credit' | 'original_payment';
-  refundAmount?: number;
-  replacementOrder?: string;
+  type: 'return';
+  status: ReturnStatus;
+  problemDescription?: string;
+  // On the admin DETAIL response these are signed { url } objects; on the list
+  // response the private refs are omitted.
+  video?: ReturnSignedAsset | null;
+  proofOfPurchase?: ReturnSignedAsset | null;
+  images?: ReturnSignedAsset[];
+  shippingBorneBy?: 'roavion' | 'customer';
+  courier?: { provider?: string; trackingNumber?: string; bookedAt?: string };
+  inspection?: { passed?: boolean | null; notes?: string; at?: string };
+  refund?: ReturnRefund;
   adminNotes?: string;
   rejectionReason?: string;
   timeline: ReturnRequestTimeline[];

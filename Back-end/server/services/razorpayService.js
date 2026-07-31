@@ -7,8 +7,10 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
+import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderStatusService from './orderStatusService.js';
 import leadSyncService from './leadSyncService.js';
+import { reverseReturnLtvOnce } from './returnRefundLtvService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import metaCapiService from './metaCapiService.js';
 import * as Sentry from '@sentry/node';
@@ -385,11 +387,15 @@ class RazorpayService {
    * @param {Object} [opts]
    * @param {string} [opts.orderId] - Internal order id, stamped into refund notes so the
    *                                  webhook can resolve the order (mirrors payment.notes).
+   * @param {string} [opts.returnId] - ReturnRequest id, stamped into refund notes so the
+   *                                  webhook reconciles the authoritative per-return record
+   *                                  (an order may have several returns; the order-level
+   *                                  refundDetails summary can only hold one).
    * @param {string} [opts.reason] - Free-text reason, stored in refund notes.
    * @param {string} [opts.speed='normal'] - 'normal' (free) or 'optimum' (instant, fee).
    * @returns {Promise<{success: boolean, refundId: string, status: string, amount: number}>}
    */
-  async refundPayment(paymentId, amountPaise, { orderId, reason, speed = 'normal' } = {}) {
+  async refundPayment(paymentId, amountPaise, { orderId, returnId, reason, speed = 'normal' } = {}) {
     if (!paymentId || !amountPaise) {
       throw new Error('paymentId and amount are required');
     }
@@ -406,6 +412,9 @@ class RazorpayService {
         speed,
         notes: {
           orderId: orderId || '',
+          // Present only for return-refunds; routes the webhook to the authoritative
+          // ReturnRequest so multi-return orders reconcile per-return, not per-order.
+          ...(returnId ? { returnId } : {}),
           reason: reason || 'order_cancelled'
         }
       });
@@ -724,6 +733,15 @@ class RazorpayService {
   async applyRefundWebhook(refundEntity, finalStatus) {
     const refundId = refundEntity.id;
     const orderId = refundEntity.notes?.orderId;
+    const returnId = refundEntity.notes?.returnId;
+
+    // Return refunds are reconciled against their authoritative ReturnRequest.refund
+    // record (per-line, keyed by razorpayRefundId), which is correct even when one
+    // order has several returns. The order.refundDetails path below is only for the
+    // one-refund order-cancellation flow (no returnId).
+    if (returnId) {
+      return this.applyReturnRefundWebhook(refundId, returnId, refundEntity, finalStatus);
+    }
 
     let order = null;
     if (orderId) {
@@ -803,6 +821,96 @@ class RazorpayService {
           );
       }
     }
+  }
+
+  /**
+   * Apply a terminal refund webhook to a RETURN refund. The authoritative record is
+   * ReturnRequest.refund (per-line, keyed by razorpayRefundId), so this reconciles
+   * THAT — safe when an order has multiple returns whose refunds would otherwise fight
+   * over the single order.refundDetails summary. Idempotent: a replayed webhook or an
+   * already-terminal refund is a no-op.
+   *
+   * @param {string} refundId - Razorpay refund id (payload.refund.entity.id)
+   * @param {string} returnId - ReturnRequest id from refund notes
+   * @param {Object} refundEntity - Razorpay refund entity
+   * @param {'completed'|'failed'} finalStatus
+   */
+  async applyReturnRefundWebhook(refundId, returnId, refundEntity, finalStatus) {
+    // Resolve the return by id, falling back to the stored refund id (parity with the
+    // order path's notes-then-refundId resolution).
+    let rr = await returnRequestRepository.findById(returnId).catch(() => null);
+    if (!rr) {
+      rr = await returnRequestRepository.findOne({ 'refund.razorpayRefundId': refundId });
+    }
+    if (!rr || !rr.refund) {
+      console.error(`[Webhook] return refund.${finalStatus} for unresolvable return | refundId: ${refundId} | returnId: ${returnId || 'n/a'}`);
+      return;
+    }
+
+    // Guard: only act on OUR refund. A mismatched id means a stale/different refund.
+    if (rr.refund.razorpayRefundId && rr.refund.razorpayRefundId !== refundId) {
+      console.warn(`[Webhook] return refund id mismatch for return ${rr._id} | stored: ${rr.refund.razorpayRefundId} | webhook: ${refundId}`);
+      return;
+    }
+    // Idempotency: already in this terminal state → nothing to do.
+    if (rr.refund.status === finalStatus) return;
+
+    rr.refund.razorpayRefundId = refundId;
+    rr.refund.status = finalStatus;
+    if (finalStatus === 'completed') {
+      rr.refund.completedAt = rr.refund.completedAt || new Date();
+    } else {
+      rr.refund.failureReason = refundEntity.error?.description || 'Refund failed at gateway';
+    }
+    await returnRequestRepository.save(rr);
+
+    // Net-LTV reversal for a normal-speed refund that settles here (the immediate
+    // path handles instant refunds). Once-only claim de-dupes across both paths.
+    if (finalStatus === 'completed') await reverseReturnLtvOnce(rr._id.toString());
+
+    // Best-effort order-level reflection. The order summary is a LATEST-refund pointer,
+    // not the source of truth (see returnController), so we update it and the payment
+    // axis carefully: the order is only marked fully `refunded` when a single return's
+    // refund covers the whole order value — a partial per-line return leaves it `paid`.
+    const order = await orderRepository.findById(rr.order).catch(() => null);
+    if (order) {
+      order.refundDetails = order.refundDetails || {};
+      order.refundDetails.status = finalStatus;
+      order.refundDetails.transactionId = refundId;
+      if (finalStatus === 'completed') {
+        order.refundDetails.amount = rr.refund.finalAmount;
+        order.refundDetails.processedAt = order.refundDetails.processedAt || new Date();
+        if (rr.refund.finalAmount >= order.totalAmount) {
+          order.paymentStatus = 'refunded';
+          if (order.payment) {
+            const payment = await paymentRepository.findById(order.payment);
+            if (payment) {
+              payment.status = 'refunded';
+              payment.refundAmount = (refundEntity.amount || 0) / 100;
+              payment.refundReason = 'return_refund';
+              payment.refundedAt = new Date();
+              await paymentRepository.save(payment);
+            }
+          }
+        }
+      } else {
+        order.refundDetails.failureReason = refundEntity.error?.description || 'Refund failed at gateway';
+      }
+      await orderRepository.save(order);
+
+      // Notifications. The customer "refund initiated" email is already sent at
+      // initiation; here we only alert support on a terminal FAILURE (money still
+      // owed). Reuse the wired order-level refund-failed alert — it reads the
+      // order.refundDetails we just stamped to 'failed'.
+      if (finalStatus === 'failed' && process.env.REDIS_URL) {
+        getNotificationsQueue()
+          .add('send-admin-refund-failed-alert', { orderId: order._id.toString() })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue return refund-failed alert for order ${order._id}:`, err.message)
+          );
+      }
+    }
+    console.log(`[Webhook] return refund.${finalStatus} applied to return ${rr._id} (refundId ${refundId})`);
   }
 }
 

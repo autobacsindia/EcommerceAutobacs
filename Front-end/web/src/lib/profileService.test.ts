@@ -162,22 +162,5 @@ describe("profileService", () => {
     });
   });
 
-  it("getWalletBalance requests /returns/wallet", async () => {
-    const apiResponse = {
-      success: true,
-      wallet: {
-        balance: 100,
-        currency: "INR",
-        history: [],
-      },
-    };
-
-    mockedApiClient.get.mockResolvedValue(apiResponse);
-
-    const result = await profileService.getWalletBalance();
-
-    expect(mockedApiClient.get).toHaveBeenCalledWith("/returns/wallet");
-    expect(result).toEqual(apiResponse.wallet);
-  });
 });
 

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { ACTIVE_RETURN_STATUSES } from './returnPolicy.js';
 
 const execPromise = promisify(exec);
 
@@ -362,6 +363,26 @@ async function ensureCriticalIndexes() {
       { unique: true, collation: { locale: 'en', strength: 2 }, background: true }
     );
     console.log('✓ CareerCategory indexes confirmed');
+
+    // MONEY-ADJACENT: one ACTIVE (non-cancelled) return per (order, product). This
+    // is the DB race-safe backstop returnController.createReturnRequest relies on —
+    // its findOne pre-check can be beaten by two concurrent submissions, and only
+    // this unique index stops the second create() from booking a duplicate return
+    // (which would let the same line be refunded twice). autoIndex is off in prod,
+    // so this is what actually builds it there. Partial filter uses $in (NOT $ne,
+    // which is unsupported in partial indexes) over the shared active-status set.
+    // NOTE: if pre-existing duplicate active returns exist this build fails — dedupe
+    // (cancel/refund the extras) before it can succeed.
+    await db.collection('returnrequests').createIndex(
+      { order: 1, 'items.product': 1 },
+      {
+        name: 'unique_active_return_per_order_product',
+        unique: true,
+        partialFilterExpression: { status: { $in: ACTIVE_RETURN_STATUSES } },
+        background: true
+      }
+    );
+    console.log('✓ ReturnRequest unique active-return index confirmed');
   } catch (err) {
     // Log but never crash the server over index verification
     console.error('✗ ensureCriticalIndexes error:', err.message);

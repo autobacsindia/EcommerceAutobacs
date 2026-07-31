@@ -16,6 +16,10 @@
  *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
  *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
  *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
+ *   send-return-submitted            { returnId }        — acknowledge a new return request to the customer (idempotent)
+ *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/received/rejected/refunded)
+ *   send-admin-return-alert          { returnId }        — notify support inbox of a new return request
+ *   send-admin-return-refunded-alert { returnId }        — log to support inbox that a return refund was initiated
  */
 
 import { Worker } from 'bullmq';
@@ -33,7 +37,10 @@ import {
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
+  emailAdminReturnAlert,
+  emailAdminReturnRefundedAlert,
 } from '../../services/adminNotificationService.js';
+import { emailReturnSubmitted, emailReturnStatus } from '../../services/returnCustomerEmailService.js';
 import * as Sentry from '@sentry/node';
 
 const handlers = {
@@ -108,6 +115,26 @@ const handlers = {
   'send-admin-refund-failed-alert': async (job) => {
     const { orderId } = job.data;
     await emailAdminRefundFailedAlert(orderId);
+  },
+
+  'send-return-submitted': async (job) => {
+    const { returnId } = job.data;
+    await emailReturnSubmitted(returnId);
+  },
+
+  'send-return-status-email': async (job) => {
+    const { returnId, event } = job.data;
+    await emailReturnStatus(returnId, event);
+  },
+
+  'send-admin-return-alert': async (job) => {
+    const { returnId } = job.data;
+    await emailAdminReturnAlert(returnId);
+  },
+
+  'send-admin-return-refunded-alert': async (job) => {
+    const { returnId } = job.data;
+    await emailAdminReturnRefundedAlert(returnId);
   },
 };
 
