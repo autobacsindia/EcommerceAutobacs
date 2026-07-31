@@ -11,7 +11,7 @@ import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS } from '@/lib/constants';
 import {
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle,
-  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle
+  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle, ChevronDown
 } from 'lucide-react';
 import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
@@ -92,6 +92,7 @@ export default function OrderDetailPage() {
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [selectedItemForReview, setSelectedItemForReview] = useState<any>(null);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
 
   const { processPayment, isProcessing: isPaymentProcessing } = useRazorpay({
     onSuccess: () => fetchOrderDetail(),
@@ -565,8 +566,19 @@ export default function OrderDetailPage() {
         {/* Status History */}
         {order.statusHistory && order.statusHistory.length > 0 && (
           <div className={cardClass}>
-            <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-6">Order Timeline</h3>
-            <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowTimeline((v) => !v)}
+              aria-expanded={showTimeline}
+              className="w-full flex items-center justify-between gap-2 group"
+            >
+              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">
+                Order Timeline
+                <span className="ml-2 text-ink/40 normal-case tracking-normal">({order.statusHistory.length})</span>
+              </h3>
+              <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${showTimeline ? 'rotate-180' : ''}`} />
+            </button>
+            <div className={`space-y-4 ${showTimeline ? 'mt-6' : 'hidden'}`}>
               {order.statusHistory.map((history, index) => (
                 <div key={index} className="flex gap-4">
                   <div className="flex flex-col items-center">
