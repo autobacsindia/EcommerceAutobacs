@@ -50,6 +50,73 @@ class OrderRepository extends BaseRepository {
   }
 
   /**
+   * Move the FULFILLMENT axis to `returned` the moment operations approves a return,
+   * so the admin Orders column stops reading "Delivered" while a return is in flight.
+   *
+   * Deliberately NOT routed through orderStatusService.updateOrderStatus(): that path
+   * treats `returned` as "the money is back" — it maps paymentStatus → `refunded`,
+   * claws back earned karma, releases the coupon, and emails the customer that their
+   * order was returned. None of that is true at approval: the goods are still with the
+   * customer and the refund amount is decided by hand after inspection. So we move the
+   * fulfillment axis ONLY; the payment axis stays `paid` until the real refund lands
+   * (returnController.initiateReturnRefund / the refund.* webhook), and the customer
+   * already gets the "return approved" email from the return flow.
+   *
+   * Compare-and-set on `status: 'delivered'` is what makes it idempotent and race-safe:
+   * a double-approval, or an order an admin has already moved by hand, matches zero
+   * docs and no-ops instead of appending a duplicate history entry.
+   *
+   * @returns {Promise<boolean>} true when THIS call flipped the order.
+   */
+  async markReturnedOnReturnApproval(orderId, userId, note = 'Return approved — order marked returned') {
+    const res = await Order.updateOne(
+      { _id: orderId, status: 'delivered' },
+      {
+        $set: { status: 'returned' },
+        $push: {
+          statusHistory: {
+            status: 'returned',
+            timestamp: new Date(),
+            updatedBy: userId,
+            reason: 'return_completed',
+            notes: note,
+          },
+        },
+      }
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Undo the approval-time flip above when the return does NOT go through (failed
+   * inspection, or the customer withdrew an approved request) — the order was in fact
+   * delivered and kept, so it must not be stranded in the terminal `returned` state.
+   *
+   * Guarded on `status: 'returned'` AND a payment axis that hasn't been refunded, so a
+   * return that already paid money back can never be walked backwards by a late call.
+   *
+   * @returns {Promise<boolean>} true when THIS call reverted the order.
+   */
+  async revertReturnToDelivered(orderId, userId, note = 'Return did not complete — order restored to delivered') {
+    const res = await Order.updateOne(
+      { _id: orderId, status: 'returned', paymentStatus: { $ne: 'refunded' }, 'refundDetails.status': { $ne: 'completed' } },
+      {
+        $set: { status: 'delivered' },
+        $push: {
+          statusHistory: {
+            status: 'delivered',
+            timestamp: new Date(),
+            updatedBy: userId,
+            reason: 'customer_received',
+            notes: note,
+          },
+        },
+      }
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
    * Resolve an order by the Razorpay refund id we stored at initiation. Fallback path
    * for the refund webhook when notes.orderId is absent.
    */
@@ -157,13 +224,19 @@ class OrderRepository extends BaseRepository {
       'refundDetails.status': { $exists: false }
     };
 
+    // A *real* refund is always stamped with `refundDetails.requestedAt` at write
+    // time. Requiring it excludes phantom subdocs (the removed `status: 'pending'`
+    // schema default left every order with an empty refundDetails), so the queue is
+    // correct even before the cleanup migration has run.
+    const realRefund = { 'refundDetails.requestedAt': { $exists: true } };
+
     let query;
     if (statusFilter && statusFilter !== 'all') {
       query = statusFilter === 'pending'
-        ? { $or: [{ 'refundDetails.status': 'pending' }, legacyDue] }
-        : { 'refundDetails.status': statusFilter };
+        ? { $or: [{ ...realRefund, 'refundDetails.status': 'pending' }, legacyDue] }
+        : { ...realRefund, 'refundDetails.status': statusFilter };
     } else {
-      query = { $or: [{ refundDetails: { $exists: true, $ne: null } }, legacyDue] };
+      query = { $or: [realRefund, legacyDue] };
     }
 
     let q = Order.find(query)

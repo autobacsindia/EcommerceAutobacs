@@ -139,7 +139,12 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Order not found');
   }
-  if (order.status !== 'delivered') {
+  // `returned` is accepted alongside `delivered` because an APPROVED return now moves
+  // the order onto the `returned` fulfillment stage (orderRepository.markReturnedOnReturnApproval).
+  // A multi-line order must still be able to raise a return for a DIFFERENT item while
+  // the first one is in flight — the 4-day window below and the per-product active-return
+  // guard further down are what actually bound eligibility.
+  if (!['delivered', 'returned'].includes(order.status)) {
     res.status(400);
     throw new Error('Only delivered orders can be returned.');
   }
@@ -314,6 +319,9 @@ export const cancelMyReturn = asyncHandler(async (req, res) => {
   transition(rr, 'cancelled', 'Cancelled by customer', req.user._id);
   await returnRequestRepository.save(rr);
   await orderRepository.setReturnRequestStatus(rr.order, 'cancelled');
+  // Withdrawing an APPROVED return leaves the customer holding the goods — put the
+  // order back to `delivered` (no-op when the return was still `pending`).
+  await orderRepository.revertReturnToDelivered(rr.order, req.user._id, `Return ${rr._id} withdrawn by customer`);
   res.json({ success: true, request: rr });
 });
 
@@ -391,6 +399,10 @@ export const reviewReturn = asyncHandler(async (req, res) => {
     transition(rr, 'approved', adminNotes || 'Approved — return courier will be arranged', req.user._id);
     await returnRequestRepository.save(rr);
     await orderRepository.setReturnRequestStatus(rr.order, 'approved');
+    // Fulfillment axis follows the approval: the Orders column reads "Returned", not a
+    // stale "Delivered", for the whole return-in-flight period. Payment/karma/customer
+    // email are untouched here — see orderRepository.markReturnedOnReturnApproval.
+    await orderRepository.markReturnedOnReturnApproval(rr.order, req.user._id, `Return ${rr._id} approved`);
     enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'approved' });
   } else if (decision === 'reject') {
     if (!rejectionReason) {
@@ -478,6 +490,9 @@ export const recordInspection = asyncHandler(async (req, res) => {
     transition(rr, 'rejected', `Failed inspection: ${reason}`, req.user._id);
     await returnRequestRepository.save(rr);
     await orderRepository.setReturnRequestStatus(rr.order, 'rejected');
+    // The goods go back to the customer, so undo the approval-time `returned` flip —
+    // no-ops for a return that never reached approval or already refunded.
+    await orderRepository.revertReturnToDelivered(rr.order, req.user._id, `Return ${rr._id} failed inspection`);
     enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'rejected' });
     return res.json({ success: true, request: rr });
   }

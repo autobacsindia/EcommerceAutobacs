@@ -115,7 +115,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -140,6 +140,33 @@ describe('Orders Integration API', () => {
       expect(res.body.order.totalAmount).toBe(1050); // 500*2 + 50
     });
 
+    it('should reject a junk phone that would normalize away (regression: phone-less lead)', async () => {
+      // "533201" (6 digits) once passed notEmpty() and reached the order, but the
+      // CRM's normalizePhone drops sub-7-digit numbers, so the payment_failed lead
+      // was created with no callable phone. The validator must now block it upfront.
+      const orderData = {
+        items: [{ product: productId, quantity: 1 }],
+        shippingAddress: {
+          fullName: 'Test User',
+          phone: '533201',
+          addressLine1: '123 Test St',
+          city: 'Test City',
+          state: 'Test State',
+          postalCode: '12345',
+          country: 'India'
+        }
+      };
+
+      const res = await request(app)
+        .post('/orders')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send(orderData)
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      expect(JSON.stringify(res.body)).toMatch(/valid.*mobile/i);
+    });
+
     it('should fail if product is out of stock', async () => {
        // Mark the product out of stock
        await Product.findByIdAndUpdate(productId, { stock: 'out' });
@@ -151,7 +178,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -184,7 +211,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -217,7 +244,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -251,7 +278,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -298,7 +325,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Other User',
-          phone: '0987654321',
+          phone: '9876501234',
           addressLine1: '456 Other St',
           city: 'Other City',
           state: 'Other State',
@@ -327,7 +354,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -355,7 +382,7 @@ describe('Orders Integration API', () => {
         items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -391,7 +418,7 @@ describe('Orders Integration API', () => {
         }],
         shippingAddress: {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -426,7 +453,7 @@ describe('Orders Integration API', () => {
       user: userId,
       items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
       shippingAddress: {
-        fullName: 'Test User', phone: '1234567890', addressLine1: '123 Test St',
+        fullName: 'Test User', phone: '9876543210', addressLine1: '123 Test St',
         city: 'Test City', state: 'Test State', postalCode: '12345', country: 'India'
       },
       subtotal: 500,

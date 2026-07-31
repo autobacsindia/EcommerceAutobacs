@@ -14,7 +14,21 @@ export const validateOrder = [
     .withMessage('Full name is required in shipping address'),
   body('shippingAddress.phone')
     .notEmpty()
-    .withMessage('Phone number is required'),
+    .withMessage('Phone number is required')
+    .bail()
+    .custom((value) => {
+      // Enforce a dialable Indian mobile. notEmpty() alone let junk like "533201"
+      // (6 digits) through — it satisfied the model's required:true, but the CRM's
+      // normalizePhone (utils/identity.js) drops anything under 7 digits, so the
+      // resulting payment_failed/abandoned lead was created with phone:null and no
+      // way for sales to call the customer back. Mirror normalizePhone's "last 10
+      // significant digits" logic (tolerating +91/91/0 prefixes and separators) so
+      // a phone that passes here is guaranteed to survive normalization downstream.
+      const digits = String(value).replace(/\D/g, '');
+      const national = digits.length > 10 ? digits.slice(-10) : digits;
+      return /^[6-9]\d{9}$/.test(national);
+    })
+    .withMessage('Enter a valid 10-digit Indian mobile number'),
   body('shippingAddress.addressLine1')
     .notEmpty()
     .withMessage('Address line 1 is required'),

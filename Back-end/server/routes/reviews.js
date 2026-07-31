@@ -283,10 +283,13 @@ router.post("/products/:productId", protect, reviewSubmitRateLimit, validateRevi
     });
   }
 
+  // `returned` counts too: an approved return moves the WHOLE order onto that stage,
+  // and one returned line must not strip the verified-purchase badge from the other
+  // items the customer actually received and kept.
   const isVerifiedPurchase = !!(await Order.exists({
     user: userId,
     "items.product": productId,
-    status: "delivered"
+    status: { $in: ["delivered", "returned"] }
   }));
 
   // Create review

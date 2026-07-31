@@ -34,6 +34,8 @@
     "backfill-normalize-emails": "node --import=dotenv/config scripts/backfill-normalize-emails.js",
     "backfill-career-categories": "node --import=dotenv/config scripts/backfill-career-categories.js",
     "backfill-return-policy-flags": "node --import=dotenv/config scripts/backfill-return-policy-flags.js",
+    "cleanup-phantom-order-subdocs": "node --import=dotenv/config scripts/cleanup-phantom-order-subdocs.js",
+    "backfill-returned-order-status": "node --import=dotenv/config scripts/backfill-returned-order-status.js",
     "reconcile-user-ltv": "node --import=dotenv/config scripts/reconcile-user-ltv.js",
     "migrate-order-status-phase2": "node --import=dotenv/config scripts/migrate-order-status-phase2.js",
     "sync-wordpress": "node --import=dotenv/config scripts/run-wordpress-sync.js",
