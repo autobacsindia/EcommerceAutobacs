@@ -13,6 +13,7 @@ import {
 } from '@/lib/analytics';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
+import { isValidIndianMobile } from '@/lib/utils';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
@@ -214,7 +215,14 @@ function CheckoutPageContent() {
 
   useEffect(() => {
     if (!authLoading && !cartLoading) {
-      if (!cart || cart.items?.length === 0) router.push('/cart');
+      // Guard against bouncing to /cart once a purchase has completed: the
+      // success handlers call clearCart() (emptying the cart) *before* navigating
+      // to the order-success / confirmation page. Without this ref check that
+      // empty-cart transition would race and clobber the redirect, dropping the
+      // shopper on /cart — and the success page's PurchaseTracker (Google Ads /
+      // Meta conversions) would never mount. purchasedRef is set synchronously
+      // before clearCart() in both payment paths, so it's already true here.
+      if (!purchasedRef.current && (!cart || cart.items?.length === 0)) router.push('/cart');
     }
   }, [cart, router, authLoading, cartLoading]);
 
@@ -223,6 +231,13 @@ function CheckoutPageContent() {
     if (!showAddressForm && selectedAddressIndex !== null) { setCurrentStep('payment'); return; }
     if (!address.fullName || !address.street || !address.city || !address.state || !address.postalCode || !address.phone) {
       toast.error('Please fill all address fields');
+      return;
+    }
+    // Mirror the backend validator (middleware/validators/order.js): a dialable
+    // Indian mobile. Blocks junk like "533201" that would otherwise reach the
+    // order and leave any resulting CRM lead with no callable phone.
+    if (!isValidIndianMobile(address.phone)) {
+      toast.error('Enter a valid 10-digit mobile number');
       return;
     }
     if (shouldSaveAddress && isAuthenticated) {
@@ -345,6 +360,9 @@ function CheckoutPageContent() {
           phone: address.phone,
         });
       } else {
+        // Mark the purchase BEFORE clearCart() so the empty-cart guard effect
+        // doesn't redirect us to /cart instead of showing the confirmation step.
+        purchasedRef.current = true;
         setOrderId(newOrderId);
         await clearCart();
         setCurrentStep('confirmation');

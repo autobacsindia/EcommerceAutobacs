@@ -180,7 +180,7 @@ describe('E2E User Journey Integration Test', () => {
       ],
       shippingAddress: {
         fullName: 'Test User',
-        phone: '1234567890',
+        phone: '9876543210',
         addressLine1: '123 Test St',
         city: 'Test City',
         state: 'Test State',

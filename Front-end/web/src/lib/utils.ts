@@ -119,6 +119,18 @@ export function getInitials(name: string): string {
 }
 
 /**
+ * Validate a dialable Indian mobile number. Tolerates +91/91/0 prefixes and
+ * separators, then checks the last 10 significant digits form a real mobile
+ * (starts 6-9). Mirrors the backend order validator and the CRM's normalizePhone
+ * so a number accepted at checkout survives lead normalization and stays callable.
+ */
+export function isValidIndianMobile(phone: string): boolean {
+  const digits = String(phone || '').replace(/\D/g, '');
+  const national = digits.length > 10 ? digits.slice(-10) : digits;
+  return /^[6-9]\d{9}$/.test(national);
+}
+
+/**
  * Check if value is empty
  */
 export function isEmpty(value: any): boolean {

@@ -39,7 +39,7 @@ describe('Orders API', () => {
     state: 'Test State',
     postalCode: '12345',
     country: 'Test Country',
-    phone: '1234567890'
+    phone: '9876543210'
   };
 
   beforeAll(async () => {
