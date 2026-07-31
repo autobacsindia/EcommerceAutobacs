@@ -70,6 +70,20 @@ const OrderSchema = new mongoose.Schema({
         type: Number,
         required: true
       },
+      // Catalogue (list) price at the time of sale for an OFFLINE order line,
+      // snapshotted ONLY when the sales rep charged `price` below list (a genuine
+      // rep markdown). null = "no rep markdown on this line" — which is the case
+      // for full-price offline sales AND for every online / legacy order.
+      // Per-line rep discount = listPrice ? (listPrice - price) : 0.
+      // IMPORTANT: this captures the OFFLINE rep markdown ONLY. Online-order
+      // discounts (coupons, redeemed karma, sale markdowns) are NOT recorded here —
+      // they live in the order-level `discount` / `couponDiscount` / `karmaDiscount`
+      // fields. Any total-discount report must sum those too, never listPrice alone,
+      // or online discounts will be under-reported as ₹0.
+      listPrice: {
+        type: Number,
+        default: null
+      },
       name: String,
       image: String
     }

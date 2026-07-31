@@ -8,6 +8,8 @@
 
 ---
 
+
+
 ## 0. The database question (read this first)
 
 You have **one** MongoDB. Three ways to run this test, worst → best:

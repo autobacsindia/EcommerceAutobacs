@@ -411,6 +411,14 @@ export const createOfflineOrder = async (req, res) => {
       variantLabel: i.variantLabel || null,
       quantity: Number(i.quantity),
       price: Number(i.price),
+      // Snapshot the catalogue list price ONLY when the rep gave a genuine
+      // markdown (list strictly above the charged price). A full-price sale
+      // stays null — i.e. null canonically means "sold at the original price,
+      // no discount", so reporting is simply: listPrice ? listPrice - price : 0.
+      listPrice:
+        i.listPrice != null && Number(i.listPrice) > Number(i.price)
+          ? Number(i.listPrice)
+          : null,
       name: i.name || '',
       image: i.image || '',
     }));
