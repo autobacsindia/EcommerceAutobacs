@@ -20,6 +20,8 @@ const mockOrderRepo = {
   findOwnedWithProducts: jest.fn(),
   setReturnRequestStatus: jest.fn(),
   findById: jest.fn(),
+  markReturnedOnReturnApproval: jest.fn(),
+  revertReturnToDelivered: jest.fn(),
 };
 const mockPaymentRepo = { findById: jest.fn() };
 const mockRazorpay = { refundPayment: jest.fn() };
@@ -44,6 +46,9 @@ jest.unstable_mockModule('../../../utils/returnsCloudinary.js', () => ({
 const {
   createReturnRequest,
   initiateReturnRefund,
+  reviewReturn,
+  recordInspection,
+  cancelMyReturn,
 } = await import('../../../controllers/returnController.js');
 
 const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
@@ -237,5 +242,90 @@ describe('initiateReturnRefund — deductions + gate', () => {
     expect(res.status).toHaveBeenCalledWith(409);
     expect(error.message).toMatch(/already being processed/i);
     expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Order fulfillment-axis follow-through. Operations wanted the Orders column to stop
+ * reading "Delivered" the moment a return is approved — and, just as importantly, to
+ * go BACK when the return doesn't complete, so no order is stranded in the terminal
+ * `returned` state.
+ */
+describe('return approval → order fulfillment status', () => {
+  // reviewReturn/recordInspection chain .populate() off findById; cancelMyReturn awaits it directly.
+  const populated = (rr) => ({ populate: jest.fn().mockResolvedValue(rr) });
+
+  function makeReturn(overrides = {}) {
+    return {
+      _id: 'ret-1',
+      order: 'order-1',
+      user: 'u1',
+      status: 'pending',
+      timeline: [],
+      items: [{ product: 'prod-1', quantity: 1, unitPrice: 500 }],
+      refund: { productValue: 500, status: 'pending' },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReturnRepo.save.mockResolvedValue(true);
+  });
+
+  it('marks the order returned when the return is approved', async () => {
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn()));
+    const { next } = await run(reviewReturn, { params: { id: 'ret-1' }, body: { decision: 'approve' }, user: { _id: 'a1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockOrderRepo.markReturnedOnReturnApproval).toHaveBeenCalledWith('order-1', 'a1', expect.any(String));
+    expect(mockOrderRepo.revertReturnToDelivered).not.toHaveBeenCalled();
+  });
+
+  it('leaves the order alone when the return is rejected at review', async () => {
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn()));
+    await run(reviewReturn, {
+      params: { id: 'ret-1' },
+      body: { decision: 'reject', rejectionReason: 'Outside policy' },
+      user: { _id: 'a1' },
+    });
+    expect(mockOrderRepo.markReturnedOnReturnApproval).not.toHaveBeenCalled();
+  });
+
+  it('restores the order to delivered when the item fails inspection', async () => {
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn({ status: 'received' })));
+    await run(recordInspection, { params: { id: 'ret-1' }, body: { passed: false, notes: 'Used' }, user: { _id: 'a1' } });
+    expect(mockOrderRepo.revertReturnToDelivered).toHaveBeenCalledWith('order-1', 'a1', expect.any(String));
+  });
+
+  it('does NOT restore the order when the item passes inspection', async () => {
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn({ status: 'received', timeline: [] })));
+    await run(recordInspection, { params: { id: 'ret-1' }, body: { passed: true }, user: { _id: 'a1' } });
+    expect(mockOrderRepo.revertReturnToDelivered).not.toHaveBeenCalled();
+  });
+
+  it('restores the order when the customer withdraws an approved return', async () => {
+    mockReturnRepo.findById.mockResolvedValue(makeReturn({ status: 'approved' }));
+    await run(cancelMyReturn, { params: { id: 'ret-1' }, user: { _id: 'u1' } });
+    expect(mockOrderRepo.revertReturnToDelivered).toHaveBeenCalledWith('order-1', 'u1', expect.any(String));
+  });
+
+  it('still accepts a return for another item while the order sits in `returned`', async () => {
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-2', ...doc }));
+    mockGetResource.mockImplementation(async (publicId, type) => ({ bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg' }));
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ status: 'returned' }));
+
+    const { res, next } = await run(createReturnRequest, {
+      body: {
+        orderId: 'order-1',
+        items: [{ productId: 'prod-1', quantity: 1, reason: 'transit_damage' }],
+        problemDescription: 'Cracked on arrival',
+        video: { publicId: 'autobacs/returns/abc/vid', resourceType: 'video' },
+        proofOfPurchase: { publicId: 'autobacs/returns/abc/proof.jpg', resourceType: 'image' },
+      },
+      user: { _id: 'u1' },
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 });

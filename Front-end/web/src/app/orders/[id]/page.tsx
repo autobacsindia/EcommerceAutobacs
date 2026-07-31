@@ -550,7 +550,9 @@ export default function OrderDetailPage() {
                         Buy Again
                       </button>
                     )}
-                    {order.status === 'delivered' && product?._id && (
+                    {/* `returned` too: an approved return moves the whole order onto that
+                        stage, but the items the customer kept are still reviewable. */}
+                    {['delivered', 'returned'].includes(order.status) && product?._id && (
                       <button onClick={() => handleWriteReview(item)} className="flex items-center gap-1 text-xs text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-sm transition-colors font-display font-bold uppercase tracking-widest">
                         <Star className="h-3 w-3" />
                         Review
