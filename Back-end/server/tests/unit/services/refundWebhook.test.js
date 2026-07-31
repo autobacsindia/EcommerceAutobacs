@@ -11,6 +11,12 @@ const mockPaymentRepository = {
   findById: jest.fn(),
   save: jest.fn(),
 };
+// Return refunds (notes.returnId present) reconcile the authoritative ReturnRequest.
+const mockReturnRequestRepository = {
+  findById: jest.fn(),
+  findOne: jest.fn(),
+  save: jest.fn(),
+};
 
 // Post-save notification enqueue is gated on REDIS_URL and fans out through the
 // notifications queue — mock it so we can assert what gets enqueued on each outcome.
@@ -18,6 +24,7 @@ const mockNotificationsAdd = jest.fn().mockResolvedValue(undefined);
 
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({ default: mockOrderRepository }));
 jest.unstable_mockModule('../../../repositories/paymentRepository.js', () => ({ default: mockPaymentRepository }));
+jest.unstable_mockModule('../../../repositories/returnRequestRepository.js', () => ({ default: mockReturnRequestRepository }));
 jest.unstable_mockModule('../../../queue/queues.js', () => ({
   getNotificationsQueue: () => ({ add: mockNotificationsAdd }),
   getOrderQueue: () => ({ add: jest.fn().mockResolvedValue(undefined) }),
@@ -137,5 +144,79 @@ describe('razorpayService.applyRefundWebhook', () => {
 
       expect(mockNotificationsAdd).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('razorpayService.applyRefundWebhook — return refunds (notes.returnId)', () => {
+  function makeReturn(overrides = {}) {
+    return {
+      _id: 'ret-1',
+      order: 'order-1',
+      refund: { status: 'processing', razorpayRefundId: 'rfnd_1', finalAmount: 1000 },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOrderRepository.save.mockResolvedValue(undefined);
+    mockPaymentRepository.save.mockResolvedValue(undefined);
+    mockPaymentRepository.findById.mockResolvedValue({ _id: 'payment-1', status: 'completed' });
+    mockReturnRequestRepository.save.mockResolvedValue(undefined);
+    mockReturnRequestRepository.findOne.mockResolvedValue(null);
+  });
+
+  it('reconciles the authoritative ReturnRequest, not order.refundDetails', async () => {
+    const rr = makeReturn();
+    mockReturnRequestRepository.findById.mockResolvedValue(rr);
+    // A DIFFERENT return owns the order summary — proving we do NOT key off it.
+    mockOrderRepository.findById.mockResolvedValue(makeOrder({ totalAmount: 1500, refundDetails: { status: 'processing', transactionId: 'rfnd_OTHER' } }));
+
+    await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 100000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
+
+    expect(rr.refund.status).toBe('completed');
+    expect(mockReturnRequestRepository.save).toHaveBeenCalledWith(rr);
+  });
+
+  it('leaves the order `paid` on a PARTIAL return refund (finalAmount < order total)', async () => {
+    mockReturnRequestRepository.findById.mockResolvedValue(makeReturn({ refund: { status: 'processing', razorpayRefundId: 'rfnd_1', finalAmount: 1000 } }));
+    const order = makeOrder({ totalAmount: 1500 });
+    mockOrderRepository.findById.mockResolvedValue(order);
+
+    await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 100000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
+
+    expect(order.paymentStatus).toBe('paid'); // partial — NOT flipped to refunded
+    expect(mockPaymentRepository.save).not.toHaveBeenCalled();
+    expect(order.refundDetails.status).toBe('completed');
+    expect(order.refundDetails.transactionId).toBe('rfnd_1');
+  });
+
+  it('marks the order refunded when a single return refund covers the whole order', async () => {
+    mockReturnRequestRepository.findById.mockResolvedValue(makeReturn({ refund: { status: 'processing', razorpayRefundId: 'rfnd_1', finalAmount: 1500 } }));
+    const order = makeOrder({ totalAmount: 1500 });
+    mockOrderRepository.findById.mockResolvedValue(order);
+
+    await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 150000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
+
+    expect(order.paymentStatus).toBe('refunded');
+    expect(mockPaymentRepository.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('is idempotent when the return refund is already terminal', async () => {
+    mockReturnRequestRepository.findById.mockResolvedValue(makeReturn({ refund: { status: 'completed', razorpayRefundId: 'rfnd_1', finalAmount: 1000 } }));
+
+    await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 100000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
+
+    expect(mockReturnRequestRepository.save).not.toHaveBeenCalled();
+    expect(mockOrderRepository.findById).not.toHaveBeenCalled();
+  });
+
+  it('ignores a webhook whose refund id does not match the stored return refund', async () => {
+    mockReturnRequestRepository.findById.mockResolvedValue(makeReturn({ refund: { status: 'processing', razorpayRefundId: 'rfnd_OTHER', finalAmount: 1000 } }));
+
+    await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 100000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
+
+    expect(mockReturnRequestRepository.save).not.toHaveBeenCalled();
+    expect(mockOrderRepository.findById).not.toHaveBeenCalled();
   });
 });

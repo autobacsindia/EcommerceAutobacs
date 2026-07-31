@@ -74,17 +74,21 @@ export const API_ENDPOINTS = {
   ORDER_ANALYTICS: '/orders/analytics/summary',
   ORDER_STATUS_HISTORY: (id: string) => `/orders/${id}/status-history`,
   
-  // Returns
-  RETURNS_LIST: '/orders/admin/returns',
+  // Returns — customer
   RETURN_CREATE: '/returns',
+  RETURN_UPLOAD_SIGNATURE: '/returns/upload-signature',
   MY_RETURNS: '/returns/my-returns',
-  WALLET: '/returns/wallet',
+  RETURN_CANCEL: (id: string) => `/returns/${id}/cancel`,
+  // Returns — admin
   ADMIN_RETURNS: '/returns/admin/all',
-  RETURN_STATUS: (id: string) => `/returns/${id}/status`,
-  RETURN_APPROVE: (orderId: string) => `/orders/${orderId}/return/approve`,
-  RETURN_REJECT: (orderId: string) => `/orders/${orderId}/return/reject`,
-  RETURN_ITEM_RECEIVED: (orderId: string) => `/orders/${orderId}/return/item-received`,
-  
+  ADMIN_RETURN_DETAIL: (id: string) => `/returns/admin/${id}`,
+  RETURN_REVIEW: (id: string) => `/returns/admin/${id}/review`,
+  RETURN_COURIER: (id: string) => `/returns/admin/${id}/courier`,
+  RETURN_RECEIVED: (id: string) => `/returns/admin/${id}/received`,
+  RETURN_INSPECTION: (id: string) => `/returns/admin/${id}/inspection`,
+  RETURN_REFUND_PREVIEW: (id: string) => `/returns/admin/${id}/refund-preview`,
+  RETURN_REFUND: (id: string) => `/returns/admin/${id}/refund`,
+
   // Refunds
   REFUNDS_LIST: '/orders/refunds',
   REFUND_PROCESS: (orderId: string) => `/orders/${orderId}/refund`,
@@ -309,18 +313,24 @@ export const CANCELLATION_REASONS = [
   { value: 'customer_request', label: 'Other' },
 ] as const;
 
-// Return Reasons
+// Return Reasons — the ONLY accepted reasons per the signed policy (all
+// Roavion-attributable). No change-of-mind / "other" path. Mirrors the backend
+// config/returnPolicy.js RETURN_REASONS — keep both in sync.
 export const RETURN_REASONS = [
-  { value: 'defective', label: 'Defective or damaged', description: 'Item has defects or arrived damaged' },
-  { value: 'wrong_item', label: 'Wrong item received', description: 'Received incorrect product' },
-  { value: 'other', label: 'Other reason', description: 'Please specify your reason' },
+  { value: 'wrong_item', label: 'Wrong item shipped', description: 'The item received differs from what was ordered' },
+  { value: 'transit_damage', label: 'Damaged in transit', description: 'The product arrived damaged (shown in your unboxing video)' },
+  { value: 'manufacturing_defect', label: 'Manufacturing defect', description: 'A genuine defect in the product as supplied' },
 ] as const;
 
+// Return window (days from delivery). Mirrors backend RETURN_WINDOW_DAYS.
+export const RETURN_WINDOW_DAYS = 4;
+
 export const RETURN_POLICY_POINTS = [
-  'Items must be unused and in original packaging',
-  'Return shipping label will be provided after approval',
-  'Refund processed within 5-7 days after item received',
-  'Shipping costs may not be refunded',
+  'Requests must be raised within 4 days of delivery',
+  'A continuous unboxing video and proof of purchase are mandatory',
+  'We arrange the return pickup after approval',
+  'Refund is issued to your original payment method after the item passes inspection',
+  'Electrical/electronic, custom-made and imported items are not returnable',
 ];
 
 // Image Upload Constants

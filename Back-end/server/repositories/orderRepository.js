@@ -37,6 +37,19 @@ class OrderRepository extends BaseRepository {
   }
 
   /**
+   * Load a user's own order with product docs populated (savable Mongoose doc).
+   * Used by the return flow to snapshot line prices + read Product.returnPolicy.
+   */
+  async findOwnedWithProducts(orderId, userId) {
+    return Order.findOne({ _id: orderId, user: userId }).populate('items.product');
+  }
+
+  /** Mirror the return-request status onto the order summary subdoc. */
+  async setReturnRequestStatus(orderId, status) {
+    return Order.findByIdAndUpdate(orderId, { 'returnRequest.status': status });
+  }
+
+  /**
    * Resolve an order by the Razorpay refund id we stored at initiation. Fallback path
    * for the refund webhook when notes.orderId is absent.
    */

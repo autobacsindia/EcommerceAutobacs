@@ -62,6 +62,11 @@ export default function CreateProductPage() {
     isFeatured: false,
     isFastMoving: false,
     isActive: true,
+    // Return / cancellation eligibility (signed policy). Default returnable +
+    // cancellable; flip for electrical / custom / imported / installed items.
+    returnable: true,
+    cancellable: true,
+    nonReturnReason: '',
   });
   
   const [images, setImages] = useState<File[]>([]);
@@ -178,6 +183,11 @@ export default function CreateProductPage() {
       fd.append('isActive',         String(formData.isActive));
       fd.append('isFeatured',       String(formData.isFeatured));
       fd.append('isFastMoving',     String(formData.isFastMoving));
+      fd.append('returnPolicy',     JSON.stringify({
+        returnable: formData.returnable,
+        cancellable: formData.cancellable,
+        nonReturnReason: formData.returnable ? null : (formData.nonReturnReason || null),
+      }));
       if (formData.shortDescription) fd.append('shortDescription', formData.shortDescription);
       if (formData.brand)            fd.append('brand',            formData.brand);
       if (formData.sku)              fd.append('sku',              formData.sku);
@@ -527,7 +537,52 @@ export default function CreateProductPage() {
                 <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Active</label>
               </div>
             </div>
-            
+
+            {/* Return / cancellation policy (per the signed Roavion policy) */}
+            <div className="mb-4 border-t border-gray-200 pt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Returns &amp; cancellation</label>
+              <div className="flex items-center mb-2">
+                <input
+                  id="returnable"
+                  type="checkbox"
+                  name="returnable"
+                  checked={formData.returnable}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="returnable" className="ml-2 text-sm text-gray-700">Returnable (within the 4-day window)</label>
+              </div>
+              <div className="flex items-center mb-2">
+                <input
+                  id="cancellable"
+                  type="checkbox"
+                  name="cancellable"
+                  checked={formData.cancellable}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="cancellable" className="ml-2 text-sm text-gray-700">Cancellable before dispatch (uncheck for custom builds / installation — advance forfeited)</label>
+              </div>
+              {!formData.returnable && (
+                <div className="mt-2">
+                  <label htmlFor="nonReturnReason" className="block text-xs text-gray-500 mb-1">Why is it non-returnable?</label>
+                  <select
+                    id="nonReturnReason"
+                    name="nonReturnReason"
+                    value={formData.nonReturnReason}
+                    onChange={handleInputChange}
+                    className="border border-gray-300 rounded px-3 py-2 text-sm"
+                  >
+                    <option value="">Select a reason…</option>
+                    <option value="electrical">Electrical / electronic</option>
+                    <option value="custom">Custom / made-to-order</option>
+                    <option value="imported">Imported / special-order</option>
+                    <option value="installed">Installed / fitted</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Featured Product

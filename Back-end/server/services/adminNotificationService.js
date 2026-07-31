@@ -15,7 +15,9 @@
 import reviewRepository from '../repositories/reviewRepository.js';
 import consultationRepository from '../repositories/consultationRepository.js';
 import jobApplicationRepository from '../repositories/jobApplicationRepository.js';
+import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
+import { RETURN_REASON_LABELS } from '../config/returnPolicy.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
 // Same customer-facing reference the invoice PDF prints, so an alert and the
@@ -532,6 +534,119 @@ export const emailAdminRefundFailedAlert = async (orderId) => {
   return sendToAdmins({ subject, text, html }, `refund-failed ${orderId}`);
 };
 
+/**
+ * Notify the support inbox that a customer raised a return request — so the team
+ * can review it (target: within 3–5 business days) from the admin returns queue.
+ * Best-effort, safe to retry.
+ *
+ * @param {string} returnId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
+ */
+export const emailAdminReturnAlert = async (returnId) => {
+  const rr = await returnRequestRepository
+    .findById(returnId)
+    .populate('user', 'name email')
+    .populate('order', 'orderNumber')
+    .populate('items.product', 'name');
+  if (!rr) return { status: 'not-found' };
+
+  const ref = rr.order?.orderNumber || String(rr.order);
+  const user = rr.user && typeof rr.user === 'object' ? rr.user : null;
+  const customerName = user?.name || 'Customer';
+  const customerEmail = user?.email || '';
+  const adminLink = `${appUrl()}/admin/returns`;
+  const items = (rr.items || []).map((it) => {
+    const label = RETURN_REASON_LABELS[it.reason] || it.reason;
+    return `${it.product?.name || 'Item'} × ${it.quantity} — ${label}`;
+  });
+
+  const subject = `New return request — ${customerName} — Order #${ref}`;
+  const intro = 'A customer raised a return request. Please review it (target: 3–5 business days).';
+
+  const text = [
+    intro,
+    '',
+    `Order    : ${ref}`,
+    `Customer : ${customerName}${customerEmail ? ` <${customerEmail}>` : ''}`,
+    `Est. value: ${inr(rr.refund?.productValue)}`,
+    '',
+    'Items:',
+    ...items.map((l) => `  - ${l}`),
+    '',
+    `Problem  : ${rr.problemDescription || ''}`,
+    '',
+    `Review (with video + proof): ${adminLink}`,
+  ].join('\n');
+
+  const html = renderEmail(
+    subject,
+    intro,
+    [
+      ['Order', escapeHtml(ref)],
+      ['Customer', `${escapeHtml(customerName)}${customerEmail ? ` &lt;${escapeHtml(customerEmail)}&gt;` : ''}`],
+      ['Est. value', escapeHtml(inr(rr.refund?.productValue))],
+      ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
+      ['Problem', escapeHtml(rr.problemDescription || '').replace(/\n/g, '<br>')],
+    ],
+    'Review return',
+    adminLink
+  );
+
+  return sendToAdmins({ subject, text, html }, `return ${returnId}`);
+};
+
+/**
+ * Log to the support inbox that a return refund was initiated (FYI / audit trail).
+ *
+ * @param {string} returnId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
+ */
+export const emailAdminReturnRefundedAlert = async (returnId) => {
+  const rr = await returnRequestRepository
+    .findById(returnId)
+    .populate('user', 'name email')
+    .populate('order', 'orderNumber');
+  if (!rr) return { status: 'not-found' };
+
+  const ref = rr.order?.orderNumber || String(rr.order);
+  const user = rr.user && typeof rr.user === 'object' ? rr.user : null;
+  const customerName = user?.name || 'Customer';
+  const refund = rr.refund || {};
+  const adminLink = `${appUrl()}/admin/returns`;
+
+  const subject = `Return refunded — ${inr(refund.finalAmount)} — Order #${ref}`;
+  const intro = `A return refund was initiated to the customer's original payment method.`;
+
+  const rows = [
+    ['Order', ref],
+    ['Customer', customerName],
+    ['Product value', inr(refund.productValue)],
+    ['Shipping deducted', refund.shippingDeduction ? inr(refund.shippingDeduction) : '—'],
+    ['Restocking deducted', refund.restockingDeduction ? inr(refund.restockingDeduction) : '—'],
+    ['Refunded', inr(refund.finalAmount)],
+    ['Refund id', refund.razorpayRefundId || ''],
+    ['Status', refund.status || ''],
+  ];
+
+  const text = [
+    intro,
+    '',
+    ...rows.filter(([, v]) => v != null && String(v).trim() !== '').map(([k, v]) => `${k}: ${v}`),
+    '',
+    `Open: ${adminLink}`,
+  ].join('\n');
+
+  const html = renderEmail(
+    subject,
+    intro,
+    rows.map(([k, v]) => [k, escapeHtml(String(v ?? ''))]),
+    'Open returns',
+    adminLink
+  );
+
+  return sendToAdmins({ subject, text, html }, `return-refunded ${returnId}`);
+};
+
 export default {
   emailAdminReviewAlert,
   emailAdminConsultationAlert,
@@ -539,4 +654,6 @@ export default {
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
+  emailAdminReturnAlert,
+  emailAdminReturnRefundedAlert,
 };

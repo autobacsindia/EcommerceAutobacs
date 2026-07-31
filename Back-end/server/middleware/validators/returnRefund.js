@@ -1,21 +1,20 @@
 import { body, param } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
+import { RETURN_REASONS } from '../../config/returnPolicy.js';
 
+// Create a return. Shape validation only — business rules (4-day window,
+// non-returnable products, mandatory-doc verification against Cloudinary) live in
+// the controller, which owns the order + product context.
 export const validateReturnRequest = [
   body('orderId')
     .notEmpty()
     .withMessage('Valid Order ID is required')
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
     .withMessage('Invalid Order ID'),
-  body('type')
-    .notEmpty()
-    .withMessage('Return type is required')
-    .isIn(['return', 'exchange'])
-    .withMessage('Invalid return type'),
   body('items')
     .isArray({ min: 1 })
-    .withMessage('Items must be an array with at least one item'),
+    .withMessage('Select at least one item to return'),
   body('items.*.productId')
     .notEmpty()
     .withMessage('Valid Product ID is required')
@@ -25,23 +24,47 @@ export const validateReturnRequest = [
     .isInt({ min: 1 })
     .withMessage('Quantity must be at least 1'),
   body('items.*.reason')
-    .isIn(['defective', 'wrong_item', 'other'])
-    .withMessage('Invalid reason'),
-  body('items.*.condition')
-    .optional()
-    .isIn(['unopened', 'opened', 'damaged'])
-    .withMessage('Invalid condition'),
-  body('refundMethod')
-    .optional()
-    .isIn(['store_credit', 'original_payment'])
-    .withMessage('Invalid refund method'),
-  body('comments')
-    .optional()
-    .trim(),
+    .isIn(RETURN_REASONS)
+    .withMessage('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect'),
+  body('problemDescription')
+    .isString().withMessage('A problem description is required')
+    .bail()
+    .trim()
+    .notEmpty().withMessage('A problem description is required')
+    .isLength({ max: 2000 }).withMessage('Description cannot exceed 2000 characters'),
+  body('video')
+    .notEmpty().withMessage('A continuous unboxing video is required'),
+  body('video.publicId')
+    .isString().withMessage('A continuous unboxing video is required'),
+  body('proofOfPurchase')
+    .notEmpty().withMessage('Proof of purchase is required'),
+  body('proofOfPurchase.publicId')
+    .isString().withMessage('Proof of purchase is required'),
   body('images')
     .optional()
     .isArray()
     .withMessage('Images must be an array'),
+  validateRequest
+];
+
+// Admin approve/reject at review.
+export const validateReturnReview = [
+  param('id')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Return Request ID'),
+  body('decision')
+    .isIn(['approve', 'reject'])
+    .withMessage('Decision must be "approve" or "reject"'),
+  body('shippingBorneBy')
+    .optional()
+    .isIn(['roavion', 'customer'])
+    .withMessage('Invalid shipping-borne-by value'),
+  body('rejectionReason')
+    .if(body('decision').equals('reject'))
+    .notEmpty()
+    .withMessage('A rejection reason is required when rejecting')
+    .trim(),
+  body('adminNotes').optional().trim(),
   validateRequest
 ];
 

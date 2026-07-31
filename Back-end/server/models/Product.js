@@ -187,6 +187,25 @@ const ProductSchema = new mongoose.Schema({
   },
   tags: [String],
 
+  // Return / cancellation eligibility for this product (see config/returnPolicy.js
+  // and the signed Roavion policy). Defaults keep every product returnable +
+  // cancellable so existing/imported products behave exactly as before; the admin
+  // product editor flips these for the policy's non-returnable classes.
+  //   returnable  = false → the item can never be returned (electrical/electronic,
+  //                 custom/made-to-order, imported kits, or installed items).
+  //   cancellable = false → the order cannot be cancelled once confirmed (custom
+  //                 builds / installation bookings — advance is forfeited).
+  //   nonReturnReason = which policy class made it non-returnable (label/audit only).
+  returnPolicy: {
+    returnable:  { type: Boolean, default: true },
+    cancellable: { type: Boolean, default: true },
+    nonReturnReason: {
+      type: String,
+      enum: ['electrical', 'custom', 'imported', 'installed', null],
+      default: null,
+    },
+  },
+
   // SEO metadata overrides (meta title/description, canonical, OG image,
   // noindex, internal focus keyword). All optional — blank fields fall back to
   // values derived from the product on the frontend. See models/shared/seoSchema.js.
