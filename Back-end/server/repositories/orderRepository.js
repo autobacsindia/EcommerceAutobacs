@@ -157,13 +157,19 @@ class OrderRepository extends BaseRepository {
       'refundDetails.status': { $exists: false }
     };
 
+    // A *real* refund is always stamped with `refundDetails.requestedAt` at write
+    // time. Requiring it excludes phantom subdocs (the removed `status: 'pending'`
+    // schema default left every order with an empty refundDetails), so the queue is
+    // correct even before the cleanup migration has run.
+    const realRefund = { 'refundDetails.requestedAt': { $exists: true } };
+
     let query;
     if (statusFilter && statusFilter !== 'all') {
       query = statusFilter === 'pending'
-        ? { $or: [{ 'refundDetails.status': 'pending' }, legacyDue] }
-        : { 'refundDetails.status': statusFilter };
+        ? { $or: [{ ...realRefund, 'refundDetails.status': 'pending' }, legacyDue] }
+        : { ...realRefund, 'refundDetails.status': statusFilter };
     } else {
-      query = { $or: [{ refundDetails: { $exists: true, $ne: null } }, legacyDue] };
+      query = { $or: [realRefund, legacyDue] };
     }
 
     let q = Order.find(query)

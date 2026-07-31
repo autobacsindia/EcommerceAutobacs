@@ -103,8 +103,19 @@ export const getOrderById = async (req, res) => {
   // Also attach `metaContentId` (the Meta catalogue retailer_id) per item so the
   // client Pixel's Purchase event uses ids that match the feed, and strip the
   // heavy `variants` array we only populated to derive that id.
+  // Drop phantom return/refund summaries. Historically these nested-path subdocs
+  // got a `status: 'pending'` schema default, so every order carried an empty
+  // returnRequest/refundDetails with no `requestedAt`. Real ones are always stamped
+  // with `requestedAt` at write time, so that field is the authoritative marker.
+  // The model default is now removed, but existing orders stay polluted until the
+  // cleanup migration runs — so guard the response here too.
+  const hasRealReturnRequest = !!order.returnRequest?.requestedAt;
+  const hasRealRefund = !!order.refundDetails?.requestedAt;
+
   const normalizedOrder = {
     ...order,
+    returnRequest: hasRealReturnRequest ? order.returnRequest : undefined,
+    refundDetails: hasRealRefund ? order.refundDetails : undefined,
     items: order.items.map(item => {
       const metaContentId = contentIdForLineItem(item.product, item.variantId);
       // Strip internal-only fields we populated solely to derive metaContentId —

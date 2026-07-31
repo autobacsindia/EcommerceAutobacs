@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
 import orderService from '@/lib/services/orderService';
-import { API_ENDPOINTS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS } from '@/lib/constants';
 import {
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle,
   XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle
@@ -72,8 +72,8 @@ interface OrderDetail {
     reason?: string;
     notes?: string;
   }>;
-  returnRequest?: { status: string; reason: string; requestedAt: string };
-  refundDetails?: { amount: number; status: string; refundMethod: string };
+  returnRequest?: { status: string; reason?: string; requestedAt?: string };
+  refundDetails?: { amount: number; status: string; refundMethod: string; requestedAt?: string };
   fulfillmentMetrics?: { deliveredAt?: string; confirmedAt?: string; processingStartedAt?: string; shippedAt?: string };
 }
 
@@ -226,9 +226,26 @@ export default function OrderDetailPage() {
     if (order.status.toLowerCase() !== 'delivered') return false;
     const deliveredDate = order.deliveredAt || order.fulfillmentMetrics?.deliveredAt;
     if (!deliveredDate) return false;
-    return (new Date().getTime() - new Date(deliveredDate).getTime()) / (1000 * 60 * 60 * 24) <= 7;
+    // Mirror the signed policy's RETURN_WINDOW_DAYS (4). Kept in sync with the
+    // backend config/returnPolicy.js via lib/constants.ts.
+    return (new Date().getTime() - new Date(deliveredDate).getTime()) / (1000 * 60 * 60 * 24) <= RETURN_WINDOW_DAYS;
   };
   const canDeleteOrder = (status: string) => ['cancelled'].includes(status.toLowerCase());
+
+  // A return/refund summary is only real once it has been actually requested
+  // (`requestedAt`). Legacy orders carried an empty, phantom subdoc from a schema
+  // default; guarding on requestedAt keeps those bogus "PENDING / Invalid Date /
+  // ₹0.00" cards off the page even before the backend cleanup migration runs.
+  const hasReturnRequest = (order: OrderDetail) => !!order.returnRequest?.requestedAt;
+  const hasRefund = (order: OrderDetail) =>
+    !!(order.refundDetails && (order.refundDetails.requestedAt || (order.refundDetails.amount || 0) > 0));
+
+  // Never render "Invalid Date" — fall back to a dash when the timestamp is missing.
+  const formatDate = (value?: string) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN');
+  };
 
   if (authLoading || loading) return <OrderDetailSkeleton />;
   if (!isAuthenticated) return null;
@@ -322,7 +339,7 @@ export default function OrderDetailPage() {
                 Track Package
               </Link>
             )}
-            {canReturnOrder(order) && (!order.returnRequest || !order.returnRequest.status) && (
+            {canReturnOrder(order) && !hasReturnRequest(order) && (
               <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <RotateCcw className="h-4 w-4" />
                 Return / Exchange
@@ -378,20 +395,22 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        {/* Return Request */}
-        {order.returnRequest && (
+        {/* Return Request — only when a return was actually raised */}
+        {hasReturnRequest(order) && order.returnRequest && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-sm p-6 mb-6">
             <h2 className="font-display font-bold text-orange-400 uppercase tracking-wide mb-4">Return Request</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <div><p className="text-xs text-orange-400/70 font-display mb-1">Status</p><p className="text-orange-300 font-display font-bold">{order.returnRequest.status.toUpperCase()}</p></div>
-              <div><p className="text-xs text-orange-400/70 font-display mb-1">Reason</p><p className="text-orange-300 font-display text-sm">{order.returnRequest.reason}</p></div>
-              <div><p className="text-xs text-orange-400/70 font-display mb-1">Requested On</p><p className="text-orange-300 font-display text-sm">{new Date(order.returnRequest.requestedAt).toLocaleDateString('en-IN')}</p></div>
+              <div><p className="text-xs text-orange-400/70 font-display mb-1">Status</p><p className="text-orange-300 font-display font-bold">{(order.returnRequest.status || 'pending').toUpperCase()}</p></div>
+              {order.returnRequest.reason && (
+                <div><p className="text-xs text-orange-400/70 font-display mb-1">Reason</p><p className="text-orange-300 font-display text-sm">{order.returnRequest.reason}</p></div>
+              )}
+              <div><p className="text-xs text-orange-400/70 font-display mb-1">Requested On</p><p className="text-orange-300 font-display text-sm">{formatDate(order.returnRequest.requestedAt)}</p></div>
             </div>
           </div>
         )}
 
-        {/* Refund Info */}
-        {order.refundDetails && (
+        {/* Refund Info — only when a refund was actually initiated */}
+        {hasRefund(order) && order.refundDetails && (
           <div className="bg-gold/10 border border-gold/30 rounded-sm p-6 mb-6">
             <h2 className="font-display font-bold text-gold uppercase tracking-wide mb-4">Refund Information</h2>
             <div className="grid md:grid-cols-3 gap-4">

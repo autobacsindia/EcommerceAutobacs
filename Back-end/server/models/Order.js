@@ -294,8 +294,14 @@ const OrderSchema = new mongoose.Schema({
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected", "item_received", "completed", "cancelled", "refund_processed"],
-      default: "pending"
+      enum: ["pending", "approved", "rejected", "item_received", "completed", "cancelled", "refund_processed"]
+      // NO `default` here on purpose. `returnRequest` is a Mongoose *nested path*
+      // (a plain object, not a sub-schema), so a leaf default would materialize the
+      // whole subdoc on EVERY order at creation — a phantom "pending" return with no
+      // requestedAt. That polluted the customer order page, hid the Return button
+      // (its gate checks !returnRequest.status), and flooded the admin queue. The
+      // status is always set explicitly by the real write paths (returnController /
+      // orderController), which also stamp `requestedAt` — the "is this real?" marker.
     },
     items: [{
       product: {
@@ -341,8 +347,11 @@ const OrderSchema = new mongoose.Schema({
     }],
     status: {
       type: String,
-      enum: ["pending", "processing", "completed", "failed"],
-      default: "pending"
+      enum: ["pending", "processing", "completed", "failed"]
+      // NO `default` — same nested-path footgun as returnRequest above. A default
+      // here stamped every order with a phantom ₹0 "pending" refund, which showed on
+      // the order page and matched the admin refunds-queue filter. Real refunds are
+      // always written with an explicit status + `requestedAt` by the refund flow.
     },
     processedBy: {
       type: mongoose.Schema.Types.ObjectId,
