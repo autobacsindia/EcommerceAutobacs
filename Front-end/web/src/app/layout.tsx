@@ -202,20 +202,34 @@ export default async function RootLayout({
             event itself fires from app/order/[orderId]/success (PurchaseTracker). */}
         {isGoogleAdsEnabled && (
           <>
+            {/* The stub + config MUST run beforeInteractive, i.e. before React
+                hydrates. Page-mount effects fire events the moment a route
+                hydrates (products/[slug] sends view_item from SSR'd data), and
+                with an afterInteractive stub `window.gtag` did not exist yet at
+                that point — every such event was dropped SILENTLY. Events that
+                happen a beat later (begin_checkout, which waits on the cart
+                fetch) got through, which is exactly the half-working funnel we
+                saw in Google Ads.
+
+                The library itself stays afterInteractive: the stub queues
+                commands into window.dataLayer and gtag.js drains that queue in
+                order when it lands, so nothing is lost by loading it late — and
+                'config' is always queued ahead of any event. */}
+            <Script id="gtag-init" strategy="beforeInteractive" nonce={nonce}>
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                window.gtag = gtag;
+                gtag('js', new Date());
+                gtag('config', '${GOOGLE_ADS_ID}');
+              `}
+            </Script>
             <Script
               id="gtag-src"
               src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
               strategy="afterInteractive"
               nonce={nonce}
             />
-            <Script id="gtag-init" strategy="afterInteractive" nonce={nonce}>
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${GOOGLE_ADS_ID}');
-              `}
-            </Script>
           </>
         )}
 

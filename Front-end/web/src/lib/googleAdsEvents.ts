@@ -29,7 +29,8 @@
  * an ad blocker), exactly like trackMeta().
  */
 
-import { GOOGLE_ADS_ID, isGoogleAdsEnabled } from './googleAds';
+import { GOOGLE_ADS_ID, conversionSendTo, isGoogleAdsEnabled } from './googleAds';
+import type { GoogleAdsConversionEvent } from './googleAds';
 
 /** All money is RUPEES (Order/Product store rupees) — never divide by 100. */
 const CURRENCY = 'INR';
@@ -48,14 +49,38 @@ export interface GoogleAdsItem {
 /**
  * Safe wrapper — no-op when Google Ads isn't configured or gtag hasn't loaded.
  *
- * Events are addressed to the Ads account itself (`send_to: AW-…`, no
- * conversion label): these are remarketing/behaviour signals, not conversions.
- * Only the purchase event routes to a labelled conversion action.
+ * Sends the event TWICE when the event also exists as a Google Ads conversion
+ * action, because the two destinations need different `send_to` values and one
+ * call cannot serve both:
+ *
+ *   1. `send_to: "AW-123"` (always) — the account-level remarketing signal that
+ *      builds audiences and feeds dynamic ads.
+ *   2. `send_to: "AW-123/LABEL"` (only when that label is configured) — the
+ *      conversion action, which is the ONLY form Google Ads counts in the
+ *      Conversions column and its goal groups.
+ *
+ * Without (2) the event still fires and still shows in the dataLayer while the
+ * conversion action reports "no entries yet" forever. Without (1) remarketing
+ * gets nothing. Labels are optional per event, so an event with no conversion
+ * action configured simply stays remarketing-only.
+ *
+ * gtag itself is available from the beforeInteractive stub in app/layout.tsx, so
+ * callers may fire during hydration; commands queue in window.dataLayer until
+ * gtag.js lands. The typeof guard remains for ad blockers and unset builds.
  */
-function sendGoogleAdsEvent(name: string, params: Record<string, unknown>): void {
+function sendGoogleAdsEvent(
+  name: GoogleAdsConversionEvent,
+  params: Record<string, unknown>
+): void {
   if (!isGoogleAdsEnabled) return;
   if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+
   window.gtag('event', name, { send_to: GOOGLE_ADS_ID, ...params });
+
+  const conversionTarget = conversionSendTo(name);
+  if (conversionTarget) {
+    window.gtag('event', name, { send_to: conversionTarget, ...params });
+  }
 }
 
 /** Build the retail item payload from a catalogue id. */

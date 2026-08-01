@@ -124,6 +124,16 @@ export default function PurchaseTracker({
       timers.push(timer);
     };
 
+    // A purchase without a conversion label reaches the account but is never
+    // counted by any conversion action — the dataLayer looks healthy while Ads
+    // reports "no entries yet". Surface it where someone debugging this page
+    // will actually see it, instead of failing silently for months.
+    if (!purchase.send_to) {
+      console.warn(
+        '[google-ads] purchase sent without a conversion label — set NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_LABEL and redeploy, or Google Ads will not count this conversion.'
+      );
+    }
+
     // Google Ads purchase conversion.
     fireOnce(
       `gtag_fired_${orderId}`,
