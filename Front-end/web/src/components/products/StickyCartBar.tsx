@@ -7,12 +7,16 @@ import { ShoppingCart, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
+import { trackAddToCart } from '@/lib/metaPixel';
+import { trackGoogleAddToCart } from '@/lib/googleAdsEvents';
 
 interface StickyVariant {
   _id: string;
   label: string;
   price: number;
   stock: StockStatus;
+  /** Meta/Google catalogue content_id (backend-computed, matches the feeds). */
+  metaContentId?: string;
 }
 
 interface StickyCartBarProps {
@@ -21,6 +25,8 @@ interface StickyCartBarProps {
     name: string;
     price: number;
     stock: StockStatus;
+    /** Meta/Google catalogue content_id (backend-computed, matches the feeds). */
+    metaContentId?: string;
   };
   isDark?: boolean;
   // Variable-product context (mirrors the BuyBox selection, lifted to the page).
@@ -49,6 +55,9 @@ export default function StickyCartBar({
   const needsSelection = isVariable && !variant;
   const activePrice = variant ? variant.price : product.price;
   const activeStock: StockStatus = variant ? variant.stock : product.stock;
+  // Catalogue id of the buyable unit (selected variant, else the product) — the
+  // same id the Meta/Google feeds use.
+  const activeContentId = variant?.metaContentId ?? product.metaContentId;
   const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
   const promptSelect = () => {
@@ -74,6 +83,20 @@ export default function StickyCartBar({
     variantLabel: variant?.label ?? null,
   });
 
+  /**
+   * Ad-platform AddToCart, shared by both buttons.
+   *
+   * This bar is the ONLY add-to-cart on mobile past the fold, so leaving it
+   * uninstrumented (as it was) silently lost most real add_to_cart events —
+   * BuyBox alone covers desktop and the top of the page. Quantity is always 1
+   * here, so total value == unit price.
+   */
+  const trackCartAddition = () => {
+    if (!activeContentId) return;
+    trackAddToCart(activeContentId, activePrice, 1);
+    trackGoogleAddToCart(activeContentId, activePrice, 1);
+  };
+
   const handleAddToCart = async () => {
     if (needsSelection) return promptSelect();
     setLoading(true);
@@ -82,6 +105,7 @@ export default function StickyCartBar({
     toast.success('Added to cart!');
     try {
       await addToCart(product._id, 1, snapshot(), variant?._id ?? null);
+      trackCartAddition();
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
     } finally {
@@ -94,6 +118,7 @@ export default function StickyCartBar({
     setBuyNowLoading(true);
     try {
       await addToCart(product._id, 1, snapshot(), variant?._id ?? null);
+      trackCartAddition();
       router.push('/checkout');
     } catch (error: any) {
       toast.error(error.message || 'Failed to add to cart');
