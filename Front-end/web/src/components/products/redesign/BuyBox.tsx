@@ -16,6 +16,7 @@ import EmiOptions from '@/components/products/redesign/EmiOptions';
 import NotifyMeButton from '@/components/products/redesign/NotifyMeButton';
 import JoinWaitlistButton from '@/components/products/redesign/JoinWaitlistButton';
 import { trackAddToCart } from '@/lib/metaPixel';
+import { trackGoogleAddToCart } from '@/lib/googleAdsEvents';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 const MAX_QTY = 99;
@@ -134,7 +135,10 @@ export default function BuyBox({
     try {
       await addToCart(product._id, qty, snapshot(), selectedVariant?._id ?? null);
       // value is the TOTAL added (unit price × qty), not the unit price.
-      if (activeContentId) trackAddToCart(activeContentId, activePrice * qty, qty);
+      if (activeContentId) {
+        trackAddToCart(activeContentId, activePrice * qty, qty);
+        trackGoogleAddToCart(activeContentId, activePrice * qty, qty);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add to cart');
     } finally {
@@ -148,7 +152,10 @@ export default function BuyBox({
     try {
       await addToCart(product._id, qty, snapshot(), selectedVariant?._id ?? null);
       // value is the TOTAL added (unit price × qty), not the unit price.
-      if (activeContentId) trackAddToCart(activeContentId, activePrice * qty, qty);
+      if (activeContentId) {
+        trackAddToCart(activeContentId, activePrice * qty, qty);
+        trackGoogleAddToCart(activeContentId, activePrice * qty, qty);
+      }
       router.push('/checkout');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add to cart');

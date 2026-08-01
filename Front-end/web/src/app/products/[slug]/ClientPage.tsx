@@ -12,6 +12,7 @@ import apiClient from '@/lib/api';
 import { productKeys } from '@/hooks/queries/keys';
 import { trackProductView } from '@/lib/analytics';
 import { trackViewContent } from '@/lib/metaPixel';
+import { trackGoogleViewItem } from '@/lib/googleAdsEvents';
 import SimilarProductsSection from '@/components/products/SimilarProductsSection';
 import ComplementaryProductsSection from '@/components/products/ComplementaryProductsSection';
 import StickyCartBar from '@/components/products/StickyCartBar';
@@ -135,7 +136,12 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       });
       // Meta Pixel ViewContent — content_id matches the catalogue feed so this
       // product page view feeds dynamic retargeting / Advantage+ catalogue ads.
-      if (product.metaContentId) trackViewContent(product.metaContentId, product.price);
+      // The same catalogue id is also the Merchant Center offer id, so one value
+      // drives both platforms' remarketing (see lib/googleAdsEvents.ts).
+      if (product.metaContentId) {
+        trackViewContent(product.metaContentId, product.price);
+        trackGoogleViewItem(product.metaContentId, product.price);
+      }
     }
   }, [product?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 

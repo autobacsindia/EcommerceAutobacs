@@ -11,6 +11,7 @@ import {
   trackBeginCheckout, trackPurchase, trackViewCart, trackCheckoutStep,
   trackAddPaymentInfo, trackCheckoutAbandoned,
 } from '@/lib/analytics';
+import { trackGoogleBeginCheckout } from '@/lib/googleAdsEvents';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { isValidIndianMobile } from '@/lib/utils';
@@ -96,6 +97,9 @@ function CheckoutPageContent() {
       beganCheckoutRef.current = true;
       trackViewCart({ value: cart.total, itemCount: cart.items.length });
       trackBeginCheckout({ value: cart.total, itemCount: cart.items.length });
+      // Google Ads mid-funnel signal. Value-only: the cart API does not expose
+      // per-line catalogue ids (see lib/googleAdsEvents.ts).
+      trackGoogleBeginCheckout(cart.total);
     }
   }, [cart?.items?.length]);
   // checkout_step — each step the shopper reaches (step-by-step drop-off).
