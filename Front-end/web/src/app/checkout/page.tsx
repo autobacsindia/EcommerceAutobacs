@@ -11,6 +11,7 @@ import {
   trackBeginCheckout, trackPurchase, trackViewCart, trackCheckoutStep,
   trackAddPaymentInfo, trackCheckoutAbandoned,
 } from '@/lib/analytics';
+import { trackGoogleBeginCheckout } from '@/lib/googleAdsEvents';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { isValidIndianMobile } from '@/lib/utils';
@@ -96,6 +97,17 @@ function CheckoutPageContent() {
       beganCheckoutRef.current = true;
       trackViewCart({ value: cart.total, itemCount: cart.items.length });
       trackBeginCheckout({ value: cart.total, itemCount: cart.items.length });
+      // Google Ads mid-funnel signal. Catalogue ids come from the cart API
+      // (`metaContentId`) and match the Merchant Center feed, so this event can
+      // feed dynamic remarketing rather than only bidding.
+      trackGoogleBeginCheckout(
+        cart.total,
+        (cart.items || []).map((it: any) => ({
+          contentId: it.metaContentId,
+          price: it.price,
+          quantity: it.quantity,
+        }))
+      );
     }
   }, [cart?.items?.length]);
   // checkout_step — each step the shopper reaches (step-by-step drop-off).
