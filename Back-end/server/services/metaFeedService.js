@@ -23,10 +23,9 @@
  * against Commerce Manager if the plugin's format is ever re-checked.
  */
 
-import { effectivePrice } from './pricingService.js';
-import { roundRupees } from '../utils/money.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
 import { productContentId, variantContentId, itemGroupId } from '../utils/metaCatalogId.js';
+import { escapeXml, stripHtml, priceFields as sharedPriceFields } from '../utils/feedFormat.js';
 
 const MAX_TITLE = 200;        // Meta title hard cap
 const MAX_DESCRIPTION = 9000; // Meta description cap is 9999; leave headroom
@@ -41,29 +40,9 @@ export const feedId = productContentId;
 export const variantFeedId = variantContentId;
 
 // ── field mapping helpers ─────────────────────────────────────────────────────
-
-function escapeXml(value = '') {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-/** Strip HTML/entities down to plain text for the feed description. */
-function stripHtml(value = '') {
-  return String(value)
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#0?39;|&apos;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// escapeXml / stripHtml / money / priceFields are shared with the Google
+// Merchant feed (utils/feedFormat.js) so the two channels can never disagree
+// about escaping or about an expired sale price.
 
 /** Meta availability values from our coarse stock status. */
 function availability(stock) {
@@ -77,25 +56,14 @@ function availability(stock) {
   }
 }
 
-/** Format a rupee amount the way Meta expects: "45000.00 INR". */
-function money(rupees) {
-  return `${roundRupees(rupees).toFixed(2)} INR`;
-}
-
 /**
- * `price` / `sale_price` from a price source (a product or a variant — both share
- * price/originalPrice/saleEndsAt semantics). Honours the sale-expiry guard via
- * effectivePrice(): if a sale window has passed, the price reverts to
- * originalPrice and no sale_price is emitted, so ads never show a stale discount.
+ * `price` / `sale_price` for a Meta row. The sale-expiry guard lives in the
+ * shared helper; here we keep only the two fields Meta rows carry (the helper's
+ * numeric `effectiveRupees` is a Google-side validity check).
  */
 function priceFields(source) {
-  const eff = roundRupees(effectivePrice(source));
-  const orig = typeof source.originalPrice === 'number' ? roundRupees(source.originalPrice) : null;
-  const onSale = orig != null && orig > eff;
-  return {
-    price: money(onSale ? orig : eff),
-    salePrice: onSale ? money(eff) : null,
-  };
+  const { price, salePrice } = sharedPriceFields(source);
+  return { price, salePrice };
 }
 
 function primaryImage(product) {
