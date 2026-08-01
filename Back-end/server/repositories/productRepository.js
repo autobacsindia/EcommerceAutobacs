@@ -63,6 +63,12 @@ class ProductRepository {
    * `wpId` / `variants.wpVariationId` are what let the feed reproduce the exact
    * retailer_id the old Facebook-for-WooCommerce plugin wrote, so Meta updates the
    * existing catalogue items in place instead of creating duplicates.
+   *
+   * Also feeds the Google Merchant Center feed, which needs two extra fields:
+   * `sku` (emitted as MPN — brand + MPN is the identifier pair Google accepts for
+   * parts with no GTIN) and `categories` (populated to names for `product_type`).
+   * Both are cheap and both improve the Meta feed too, so one projection serves
+   * both channels rather than two near-identical reads of the same collection.
    */
   async findForFeed() {
     return Product.find({
@@ -72,8 +78,10 @@ class ProductRepository {
     })
       .select(
         'name shortDescription description slug price originalPrice salePrice ' +
-        'saleEndsAt stock brand images wpId productType variants updatedAt'
+        'saleEndsAt stock brand images wpId productType variants updatedAt ' +
+        'sku categories'
       )
+      .populate({ path: 'categories', select: 'name' })
       .sort({ updatedAt: -1 })
       .lean()
       .maxTimeMS(QUERY_TIMEOUTS.listing);
