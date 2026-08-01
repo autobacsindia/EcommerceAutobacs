@@ -97,9 +97,17 @@ function CheckoutPageContent() {
       beganCheckoutRef.current = true;
       trackViewCart({ value: cart.total, itemCount: cart.items.length });
       trackBeginCheckout({ value: cart.total, itemCount: cart.items.length });
-      // Google Ads mid-funnel signal. Value-only: the cart API does not expose
-      // per-line catalogue ids (see lib/googleAdsEvents.ts).
-      trackGoogleBeginCheckout(cart.total);
+      // Google Ads mid-funnel signal. Catalogue ids come from the cart API
+      // (`metaContentId`) and match the Merchant Center feed, so this event can
+      // feed dynamic remarketing rather than only bidding.
+      trackGoogleBeginCheckout(
+        cart.total,
+        (cart.items || []).map((it: any) => ({
+          contentId: it.metaContentId,
+          price: it.price,
+          quantity: it.quantity,
+        }))
+      );
     }
   }, [cart?.items?.length]);
   // checkout_step — each step the shopper reaches (step-by-step drop-off).

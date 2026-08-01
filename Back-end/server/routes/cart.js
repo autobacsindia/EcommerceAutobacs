@@ -5,6 +5,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import pricingService, { effectivePrice, resolveVariant } from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
+import { serializeCart } from "../utils/cartSerializer.js";
 
 // Resolve the buyable unit for an add/update: a simple product prices from itself;
 // a variable product prices from its SELECTED variant (which carries its own price
@@ -96,7 +97,7 @@ router.get("/", asyncHandler(async (req, res) => {
     if (isAuthenticated) {
       // Authenticated user - find by user ID
       cart = await Cart.findOne({ user: req.user.id })
-        .populate('items.product', 'name price images stock isActive productType variants');
+        .populate('items.product', 'name price images stock isActive productType variants wpId');
       
       if (!cart) {
         cart = await Cart.create({ user: req.user.id, items: [], isGuest: false });
@@ -111,7 +112,7 @@ router.get("/", asyncHandler(async (req, res) => {
       }
       
       cart = await Cart.findOne({ sessionId })
-        .populate('items.product', 'name price images stock isActive productType variants');
+        .populate('items.product', 'name price images stock isActive productType variants wpId');
       
       if (!cart) {
         cart = await Cart.create({ sessionId, items: [], isGuest: true });
@@ -173,7 +174,7 @@ router.get("/", asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    cart,
+    cart: serializeCart(cart),
     stockMessages: stockMessages.length > 0 ? stockMessages : undefined,
     recentChanges: cart.recentChanges.filter(c => c.createdAt > Date.now() - 300000) // Last 5 min
   });
@@ -220,7 +221,7 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   if (isAuthenticated) {
     // Authenticated user - find by user ID
     cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price images stock isActive productType variants');
+      .populate('items.product', 'name price images stock isActive productType variants wpId');
     
     if (!cart) {
       cart = new Cart({ user: req.user.id, items: [], isGuest: false });
@@ -235,7 +236,7 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     }
     
     cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price images stock isActive productType variants');
+      .populate('items.product', 'name price images stock isActive productType variants wpId');
     
     if (!cart) {
       cart = new Cart({ sessionId, items: [], isGuest: true });
@@ -264,12 +265,12 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   }
 
   await cart.save();
-  await cart.populate('items.product', 'name price images stock isActive productType variants');
+  await cart.populate('items.product', 'name price images stock isActive productType variants wpId');
 
   res.json({
     success: true,
     message: 'Item added to cart',
-    cart
+    cart: serializeCart(cart)
   });
 }));
 
@@ -336,12 +337,12 @@ router.post("/merge", asyncHandler(async (req, res) => {
     await Cart.deleteOne({ _id: guestCart._id });
   }
 
-  await userCart.populate('items.product', 'name price images stock isActive productType variants');
+  await userCart.populate('items.product', 'name price images stock isActive productType variants wpId');
 
   res.json({
     success: true,
     message: 'Cart merged',
-    cart: userCart
+    cart: serializeCart(userCart)
   });
 }));
 
@@ -409,12 +410,12 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
   cart.items[itemIndex].price = resolved.price; // Update price to current (variant) price
 
   await cart.save();
-  await cart.populate('items.product', 'name price images stock isActive productType variants');
+  await cart.populate('items.product', 'name price images stock isActive productType variants wpId');
 
   res.json({
     success: true,
     message: 'Cart updated',
-    cart
+    cart: serializeCart(cart)
   });
 }));
 
@@ -457,12 +458,12 @@ router.delete("/remove/:productId", validateCartProductIdParam, asyncHandler(asy
   );
 
   await cart.save();
-  await cart.populate('items.product', 'name price images stock isActive productType variants');
+  await cart.populate('items.product', 'name price images stock isActive productType variants wpId');
 
   res.json({
     success: true,
     message: 'Item removed from cart',
-    cart
+    cart: serializeCart(cart)
   });
 }));
 
@@ -502,7 +503,7 @@ router.delete("/clear", asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Cart cleared',
-    cart
+    cart: serializeCart(cart)
   });
 }));
 
@@ -550,7 +551,7 @@ router.put("/coupon", asyncHandler(async (req, res) => {
   cart.couponCode = code;
   await cart.save();
 
-  res.json({ success: true, message: `${code} applied`, cart, quote });
+  res.json({ success: true, message: `${code} applied`, cart: serializeCart(cart), quote });
 }));
 
 // @route   DELETE /cart/coupon
@@ -563,7 +564,7 @@ router.delete("/coupon", asyncHandler(async (req, res) => {
   cart.couponCode = null;
   await cart.save();
 
-  res.json({ success: true, message: 'Coupon removed', cart });
+  res.json({ success: true, message: 'Coupon removed', cart: serializeCart(cart) });
 }));
 
 // @route   GET /cart/validate
@@ -578,13 +579,13 @@ router.get("/validate", asyncHandler(async (req, res) => {
   let cart;
   if (isAuthenticated) {
     cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price stock isActive productType variants');
+      .populate('items.product', 'name price stock isActive productType variants wpId');
   } else {
     if (!sessionId) {
       return res.status(400).json({ success: false, message: 'Session ID required for guest cart operations' });
     }
     cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price stock isActive productType variants');
+      .populate('items.product', 'name price stock isActive productType variants wpId');
   }
 
   if (!cart || cart.items.length === 0) {
@@ -646,7 +647,7 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
   let cart;
   if (isAuthenticated) {
     cart = await Cart.findOne({ user: req.user.id })
-      .populate('items.product', 'name price images stock isActive productType variants');
+      .populate('items.product', 'name price images stock isActive productType variants wpId');
   } else {
     if (!sessionId) {
       return res.status(400).json({
@@ -656,7 +657,7 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
     }
     
     cart = await Cart.findOne({ sessionId })
-      .populate('items.product', 'name price images stock isActive productType variants');
+      .populate('items.product', 'name price images stock isActive productType variants wpId');
   }
 
   if (!cart || cart.items.length === 0) {

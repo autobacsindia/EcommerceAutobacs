@@ -94,11 +94,47 @@ describe('googleAdsEvents', () => {
     expect(params.send_to).not.toContain('/');
   });
 
-  it('sends begin_checkout with value only when no catalogue ids are available', async () => {
+  it('sends begin_checkout with the cart catalogue ids', async () => {
     const gtag = installGtag();
     const { trackGoogleBeginCheckout } = await loadModule(ADS_ID);
 
-    trackGoogleBeginCheckout(4999);
+    trackGoogleBeginCheckout(6499, [
+      { contentId: '11466', price: 4999, quantity: 1 },
+      { contentId: '11475', price: 750, quantity: 2 },
+    ]);
+
+    expect(gtag).toHaveBeenCalledWith('event', 'begin_checkout', {
+      send_to: ADS_ID,
+      currency: 'INR',
+      value: 6499,
+      items: [
+        { id: '11466', item_id: '11466', google_business_vertical: 'retail', price: 4999, quantity: 1 },
+        { id: '11475', item_id: '11475', google_business_vertical: 'retail', price: 750, quantity: 2 },
+      ],
+    });
+  });
+
+  it('drops checkout lines with no catalogue id rather than sending an internal id', async () => {
+    const gtag = installGtag();
+    const { trackGoogleBeginCheckout } = await loadModule(ADS_ID);
+
+    trackGoogleBeginCheckout(4999, [
+      { contentId: null, price: 999, quantity: 1 },
+      { contentId: '11466', price: 4000, quantity: 1 },
+    ]);
+
+    const params = gtag.mock.calls[0][2] as { items: Array<{ id: string }>; value: number };
+    expect(params.items).toHaveLength(1);
+    expect(params.items[0].id).toBe('11466');
+    // The value still reflects the WHOLE cart, identified lines or not.
+    expect(params.value).toBe(4999);
+  });
+
+  it('sends begin_checkout with value only when no line is identifiable', async () => {
+    const gtag = installGtag();
+    const { trackGoogleBeginCheckout } = await loadModule(ADS_ID);
+
+    trackGoogleBeginCheckout(4999, [{ contentId: null }]);
 
     expect(gtag).toHaveBeenCalledWith('event', 'begin_checkout', {
       send_to: ADS_ID,

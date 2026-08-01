@@ -89,21 +89,33 @@ export function trackGoogleAddToCart(contentId: string, value?: number, quantity
   });
 }
 
+/** One checkout line as the cart API returns it. */
+export interface CheckoutLine {
+  /** Catalogue id from the cart API (`metaContentId`); null for a stale line. */
+  contentId?: string | null;
+  /** Unit price in rupees. */
+  price?: number;
+  quantity?: number;
+}
+
 /**
  * Checkout started.
  *
- * `items` is optional and currently omitted by the checkout page: the cart API
- * does not expose catalogue ids per line (unlike the order API, which attaches
- * `metaContentId`), and an internal product id here would be worse than no id —
- * it would match no offer while looking like it should. The event still carries
- * value + currency, which is what Smart Bidding needs from this step. Attaching
- * ids is a follow-up that requires a shared cart serializer on the backend.
+ * Lines without a catalogue id are dropped rather than sent with an internal
+ * product id: an id that matches no Merchant Center offer is worse than no id,
+ * because it looks correct in the payload while contributing nothing. The event
+ * still reports value + currency, which is what Smart Bidding needs even when
+ * every line is unidentified.
  */
-export function trackGoogleBeginCheckout(value: number, items?: GoogleAdsItem[]): void {
+export function trackGoogleBeginCheckout(value: number, lines?: CheckoutLine[]): void {
+  const items = (lines ?? [])
+    .filter((line) => !!line.contentId)
+    .map((line) => retailItem(String(line.contentId), line.price, line.quantity ?? 1));
+
   sendGoogleAdsEvent('begin_checkout', {
     currency: CURRENCY,
     value,
-    ...(items && items.length ? { items } : {}),
+    ...(items.length ? { items } : {}),
   });
 }
 
