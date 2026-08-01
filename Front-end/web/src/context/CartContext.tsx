@@ -8,6 +8,8 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
 import { ProductImage } from '@/lib/types';
 import { trackAddToCart, trackRemoveFromCart } from '@/lib/analytics';
+import { trackAddToCart as trackMetaAddToCart } from '@/lib/metaPixel';
+import { trackGoogleAddToCart } from '@/lib/googleAdsEvents';
 
 interface CartItem {
   product: {
@@ -25,6 +27,15 @@ interface CartItem {
   // Prefer this over product.price, which for variable products is only the range min.
   price?: number;
   quantity: number;
+  /**
+   * Catalogue id for this line, computed by the backend (utils/cartSerializer.js)
+   * so it matches the Meta catalogue + Google Merchant Center feeds exactly.
+   * Null when the product ref could not be populated (a stale line).
+   *
+   * This is the ONLY id the ad platforms can match an event to; our Mongo _id
+   * matches no offer while looking like it should.
+   */
+  metaContentId?: string | null;
 }
 
 // Two cart lines are the same only when product AND variant match.
@@ -48,6 +59,10 @@ const mapServerCart = (serverCart: any): Cart => ({
     // the populated product.price is only the parent/range min.
     price: item.price,
     quantity: item.quantity,
+    // Carried through deliberately: dropping it here silently disabled every
+    // downstream ad event that needs a catalogue id (checkout's begin_checkout
+    // reads cart.items[].metaContentId, and add_to_cart is fired below).
+    metaContentId: item.metaContentId ?? null,
   })),
   total: serverCart.totalPrice || serverCart.total || 0,
   couponCode: serverCart.couponCode ?? null,
@@ -240,6 +255,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const added = cartData.items.find(i => isSameLine(i, productId, vId));
         if (added) {
           trackAddToCart({ id: productId, name: added.product.name, price: added.price ?? added.product.price, quantity });
+
+          // Ad-platform AddToCart fires HERE, for every add path in the app —
+          // PDP buy box, mobile sticky bar, every product card and carousel,
+          // wishlist, "buy it again". Instrumenting call sites individually is
+          // how the grids and the mobile bar ended up silently untracked; there
+          // is exactly one way into the cart, so there is exactly one place to
+          // report it.
+          //
+          // The id comes from the SERVER response (cartSerializer), not from
+          // whatever list payload the caller happened to render with, so it is
+          // always the real catalogue id. A line with no id (unpopulated/stale
+          // product) is skipped rather than sent with an internal Mongo id that
+          // matches no offer.
+          const unitPrice = added.price ?? added.product.price ?? 0;
+          if (added.metaContentId) {
+            trackMetaAddToCart(added.metaContentId, unitPrice * quantity, quantity);
+            trackGoogleAddToCart(added.metaContentId, unitPrice * quantity, quantity);
+          }
         }
       } else {
         setCart(previousCart);

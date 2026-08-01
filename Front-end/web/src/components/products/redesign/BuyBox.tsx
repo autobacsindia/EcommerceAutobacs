@@ -15,8 +15,6 @@ import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCount
 import EmiOptions from '@/components/products/redesign/EmiOptions';
 import NotifyMeButton from '@/components/products/redesign/NotifyMeButton';
 import JoinWaitlistButton from '@/components/products/redesign/JoinWaitlistButton';
-import { trackAddToCart } from '@/lib/metaPixel';
-import { trackGoogleAddToCart } from '@/lib/googleAdsEvents';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 const MAX_QTY = 99;
@@ -109,8 +107,10 @@ export default function BuyBox({
   const backorder = activeStock === 'backorder';
   const wished = isInWishlist(product._id);
 
-  // Meta Pixel content_id for the buyable unit (selected variant, else product).
-  const activeContentId = selectedVariant?.metaContentId ?? product.metaContentId;
+  // Ad-platform AddToCart is fired centrally by CartContext.addToCart (from the
+  // server's catalogue id), so this component no longer reports it — see the
+  // note there. `metaContentId` stays on the types because the PDP still uses it
+  // for the page-level ViewContent / view_item.
 
   // Backorder items aren't directly purchasable — the shopper joins a waiting list
   // (a warm CRM lead + restock-demand signal) instead of Add to cart / Buy now.
@@ -134,11 +134,6 @@ export default function BuyBox({
     toast.success(`Added ${qty} to cart`);
     try {
       await addToCart(product._id, qty, snapshot(), selectedVariant?._id ?? null);
-      // value is the TOTAL added (unit price × qty), not the unit price.
-      if (activeContentId) {
-        trackAddToCart(activeContentId, activePrice * qty, qty);
-        trackGoogleAddToCart(activeContentId, activePrice * qty, qty);
-      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add to cart');
     } finally {
@@ -151,11 +146,6 @@ export default function BuyBox({
     setBuying(true);
     try {
       await addToCart(product._id, qty, snapshot(), selectedVariant?._id ?? null);
-      // value is the TOTAL added (unit price × qty), not the unit price.
-      if (activeContentId) {
-        trackAddToCart(activeContentId, activePrice * qty, qty);
-        trackGoogleAddToCart(activeContentId, activePrice * qty, qty);
-      }
       router.push('/checkout');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add to cart');
