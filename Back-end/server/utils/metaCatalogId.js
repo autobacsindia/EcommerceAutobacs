@@ -14,18 +14,39 @@
  *   • variable product item_group_id = "wc_post_id_" + Woo post id
  * Products created natively after the WooCommerce migration have no wpId →
  * deterministic `ab_<mongoId>` fallback (created fresh in Meta).
+ *
+ * ── 50-CHARACTER BUDGET (hard constraint) ────────────────────────────────────
+ * Google Merchant Center caps `id` at 50 characters and warns above it; the same
+ * ids feed Google (utils/googleCatalogId.js), so every form below MUST stay
+ * inside that budget. A Mongo ObjectId is 24 hex chars, so `ab_<id>` = 27 and a
+ * naive `ab_<productId>_<variantId>` = 52 — which is exactly the overflow
+ * Merchant Center reported on 2026-08-01. Variant subdocument _ids are
+ * themselves globally-unique ObjectIds, so the parent id adds nothing but
+ * length: the variant fallback carries the VARIANT id alone (27 chars).
+ * Any future change here must keep the longest possible id ≤ 50 (enforced by
+ * tests in tests/unit/services/googleFeedService.test.js).
  */
+
+/** Google Merchant Center's hard cap on the `id` attribute. */
+export const MAX_CONTENT_ID_LENGTH = 50;
 
 /** retailer_id for a simple product (or a variable product's parent fallback). */
 export function productContentId(product) {
   return product?.wpId != null ? String(product.wpId) : `ab_${product?._id}`;
 }
 
-/** retailer_id for one purchasable variant of a variable product. */
+/**
+ * retailer_id for one purchasable variant of a variable product.
+ *
+ * The no-wpVariationId fallback uses the variant's own ObjectId — unique on its
+ * own, and 25 characters shorter than pairing it with the parent (see the
+ * 50-character budget above). Only if a variant somehow has no _id do we fall
+ * back to the parent-qualified form, which at least stays deterministic.
+ */
 export function variantContentId(product, variant) {
-  return variant?.wpVariationId != null
-    ? String(variant.wpVariationId)
-    : `ab_${product?._id}_${variant?._id}`;
+  if (variant?.wpVariationId != null) return String(variant.wpVariationId);
+  if (variant?._id) return `ab_${variant._id}`;
+  return `ab_${product?._id}_${variant?._id}`;
 }
 
 /** item_group_id grouping a variable product's variant rows. */

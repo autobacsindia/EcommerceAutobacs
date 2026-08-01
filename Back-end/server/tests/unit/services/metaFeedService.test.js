@@ -33,7 +33,12 @@ describe('metaFeedService — retailer_id scheme', () => {
   test('native (post-migration) product with no wpId gets a deterministic ab_ fallback', () => {
     expect(feedId({ _id: 'abc123' })).toBe('ab_abc123');
     expect(itemGroupId({ _id: 'abc123' })).toBe('ab_abc123');
-    expect(variantFeedId({ _id: 'abc123' }, { _id: 'v9' })).toBe('ab_abc123_v9');
+    // The variant's own ObjectId is globally unique, so it stands alone — pairing
+    // it with the parent pushed the id past Google's 50-char cap. See the
+    // 50-character budget in utils/metaCatalogId.js.
+    expect(variantFeedId({ _id: 'abc123' }, { _id: 'v9' })).toBe('ab_v9');
+    // Only a variant with no _id at all falls back to the parent-qualified form.
+    expect(variantFeedId({ _id: 'abc123' }, {})).toBe('ab_abc123_undefined');
   });
 });
 

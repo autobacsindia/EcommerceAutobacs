@@ -3,7 +3,12 @@ import {
   buildItemsForProduct,
 } from '../../../services/googleFeedService.js';
 import { googleOfferId, googleVariantOfferId, googleItemGroupId } from '../../../utils/googleCatalogId.js';
-import { productContentId, variantContentId, itemGroupId } from '../../../utils/metaCatalogId.js';
+import {
+  productContentId,
+  variantContentId,
+  itemGroupId,
+  MAX_CONTENT_ID_LENGTH,
+} from '../../../utils/metaCatalogId.js';
 
 // What these tests lock down, in order of how expensive the mistake would be:
 //   1. Offer ids stay IDENTICAL to the Meta catalogue ids — that shared id is
@@ -49,6 +54,27 @@ describe('googleFeedService — offer ids match the Meta catalogue ids', () => {
 
   test('natively-created products fall back to the deterministic ab_ id', () => {
     expect(googleOfferId({ _id: 'abc123' })).toBe('ab_abc123');
+  });
+
+  // Merchant Center caps `id` at 50 chars and warned on 2026-08-01 when a native
+  // variable product produced `ab_<productId>_<variantId>` = 52. Real Mongo
+  // ObjectIds (24 hex) are the worst case, so assert against those, not short
+  // fixtures — short fixtures are exactly why the overflow shipped.
+  test('every id form stays within Google\'s 50-character cap for real ObjectIds', () => {
+    const product = { _id: '6a61b935c7dbb8d2b6e6d9ef' };          // 24 hex, no wpId
+    const variant = { _id: '6a61b935c7dbb8d2b6e6d9f2' };           // 24 hex, no wpVariationId
+
+    const ids = [
+      googleOfferId(product),
+      googleVariantOfferId(product, variant),
+      googleItemGroupId(product),
+    ];
+
+    for (const id of ids) {
+      expect(id.length).toBeLessThanOrEqual(MAX_CONTENT_ID_LENGTH);
+    }
+    // The variant id carries the variant's own ObjectId, not the pair.
+    expect(googleVariantOfferId(product, variant)).toBe('ab_6a61b935c7dbb8d2b6e6d9f2');
   });
 });
 
