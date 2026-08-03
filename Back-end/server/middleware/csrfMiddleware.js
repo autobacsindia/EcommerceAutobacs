@@ -63,6 +63,55 @@ async function trackCsrfFailure(clientIP) {
   }
 }
 
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+
+/** A `Cache-Control` that starts with `public` means a shared cache may store it. */
+const PUBLIC_CACHEABLE = /^\s*public\b/i;
+
+export const mintCsrfToken = () => crypto.randomBytes(32).toString('hex');
+
+/** Attach the XSRF-TOKEN cookie to the current response. */
+export const setCsrfCookie = (res, token = mintCsrfToken()) => {
+  // SameSite/Domain follow COOKIE_SAMESITE/COOKIE_DOMAIN so this works cross-site during
+  // the Vercel↔Railway interim (was hardcoded 'strict', which silently broke cross-site).
+  // CSRF protection here relies on the double-submit token match; SameSite is defense-in-depth.
+  res.cookie('XSRF-TOKEN', token, buildCookieOptions({
+    httpOnly: false, // Must be readable by frontend JS
+  }));
+  return token;
+};
+
+/**
+ * Defer minting the CSRF cookie on a safe method until we know whether the
+ * response is publicly cacheable.
+ *
+ * WHY: minting the cookie eagerly on every GET put `Set-Cookie` on every
+ * anonymous catalogue response. httpCache refuses to store — and downgrades the
+ * CDN header on — any response carrying a Set-Cookie (it must: a shared cache
+ * would hand one visitor's token to the next). The result was a permanent
+ * `X-Cache: MISS` + `private, no-store` on /products, /categories, /brands, …:
+ * the whole Redis + Cloudflare layer was inert and every request reached Mongo.
+ *
+ * We wrap res.json BEFORE httpCache does, so our wrapper is the inner one and
+ * runs LAST — by which point httpCache has already resolved Cache-Control to
+ * either `public, …` (cacheable ⇒ suppress the cookie) or `private, no-store`
+ * (⇒ mint it as before). Authenticated and non-cacheable requests are therefore
+ * completely unaffected.
+ *
+ * Clients that need a token without ever touching a private route can force one
+ * from GET /api/v1/csrf-token.
+ */
+const deferCsrfCookie = (res) => {
+  const originalJson = res.json.bind(res);
+  res.json = function (body) {
+    const cacheControl = String(res.getHeader('Cache-Control') || '');
+    if (!PUBLIC_CACHEABLE.test(cacheControl) && !res.headersSent) {
+      setCsrfCookie(res);
+    }
+    return originalJson(body);
+  };
+};
+
 /**
  * CSRF Protection Middleware
  * Implements Double-Submit Cookie Pattern
@@ -91,22 +140,23 @@ export const csrfProtection = async (req, res, next) => {
     }
   }
 
+  const isSafeMethod = SAFE_METHODS.includes(req.method);
+
   // ── Generate CSRF cookie if absent ──────────────────────────────────────────
   if (!req.cookies['XSRF-TOKEN']) {
-    const token = crypto.randomBytes(32).toString('hex');
-    // SameSite/Domain follow COOKIE_SAMESITE/COOKIE_DOMAIN so this works cross-site during
-    // the Vercel↔Railway interim (was hardcoded 'strict', which silently broke cross-site).
-    // CSRF protection here relies on the double-submit token match; SameSite is defense-in-depth.
-    res.cookie('XSRF-TOKEN', token, buildCookieOptions({
-      httpOnly: false, // Must be readable by frontend JS
-    }));
-    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    if (isSafeMethod) {
+      // Deferred so we don't poison the shared cache — see deferCsrfCookie().
+      deferCsrfCookie(res);
       return next();
     }
+    // Unsafe method with no cookie: mint one so the client's retry can succeed,
+    // then fall through to verification, which fails by design (double-submit
+    // requires the cookie to have been established by an earlier request).
+    setCsrfCookie(res);
   }
 
   // ── Safe methods ─────────────────────────────────────────────────────────────
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  if (isSafeMethod) {
     return next();
   }
 

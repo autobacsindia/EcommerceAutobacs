@@ -31,8 +31,16 @@ const mongooseOptions = {
   ...(process.env.MONGO_TLS_CERTIFICATE_KEY_FILE ? { tlsCertificateKeyFile: process.env.MONGO_TLS_CERTIFICATE_KEY_FILE } : {}),
   
   retryWrites: true,
-  maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE) || 10,
-  minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE) || 2,
+  // Pool size is a THROUGHPUT CEILING, not just a resource cap: an in-flight
+  // request holds a connection for the whole query round-trip, so the pool caps
+  // us at (maxPoolSize / round-trip time) queries per second and everything past
+  // that queues — with CPU sitting near idle, which makes it look like the app is
+  // fine while requests time out. The app runs in Singapore and Atlas is in
+  // Mumbai (~55 ms RTT), so 10 connections meant ~180 queries/s ≈ 35 req/s at ~5
+  // queries per render. 50 is comfortably within Atlas M10's connection budget
+  // (~1500) even across several replicas.
+  maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE) || 50,
+  minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE) || 5,
   heartbeatFrequencyMS: 10000,
   // autoIndex builds every schema index at connect. In prod that risks a FOREGROUND
   // index build (latency/lock spike) the first time a NEW index is deployed on a large

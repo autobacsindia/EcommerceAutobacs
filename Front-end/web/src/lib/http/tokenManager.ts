@@ -14,10 +14,42 @@ export class TokenManager {
   // firing a separate rotation that would invalidate the preceding tokens.
   private _refreshPromise: Promise<string | null> | null = null;
 
+  // Single-inflight CSRF seed, same reasoning as above.
+  private _csrfPromise: Promise<void> | null = null;
+
   constructor() {
     if (typeof window !== 'undefined') {
       this.getSessionId();
     }
+  }
+
+  /**
+   * Guarantee an XSRF-TOKEN cookie exists before a state-changing request.
+   *
+   * The backend deliberately does NOT mint the cookie on publicly cacheable GETs
+   * — a Set-Cookie there makes the response unstorable by Redis and the CDN,
+   * which used to disable the whole cache layer. So a visitor who has only
+   * browsed catalogue pages holds no token, and their first mutation (e.g. guest
+   * "add to cart") would 403.
+   *
+   * Cheap in the common case: once the cookie exists this is a synchronous
+   * no-op, so it costs one extra request per session at most.
+   */
+  async ensureCsrfToken(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    if (this.getCookie('XSRF-TOKEN')) return;
+
+    if (!this._csrfPromise) {
+      this._csrfPromise = fetch('/api/v1/csrf-token', { credentials: 'include' })
+        .then(() => undefined)
+        // Never block the request we're seeding for: if this fails the mutation
+        // still goes out and gets the normal 403 + retry path.
+        .catch(() => undefined)
+        .finally(() => {
+          this._csrfPromise = null;
+        });
+    }
+    return this._csrfPromise;
   }
 
   /**
