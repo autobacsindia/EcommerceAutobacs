@@ -9,6 +9,7 @@ import { GOOGLE_ADS_PURCHASE_SEND_TO } from '@/lib/googleAds';
 import { buildPurchasePayload, itemName } from './purchase';
 import PurchaseTracker from './PurchaseTracker';
 import ConversionFallback from './ConversionFallback';
+import { formatLongDateIST } from '@/lib/datetime';
 
 // Transactional, per-user page — never index it.
 export const metadata: Metadata = {
@@ -94,13 +95,12 @@ export default async function OrderSuccessPage({
       item_price: Number(item.price) || 0,
     }));
 
-  const estimatedDelivery = order.estimatedDelivery
-    ? new Date(order.estimatedDelivery).toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    : 'Typically delivered in 5–7 business days';
+  // Server-rendered: without an explicit IST zone this took the container's
+  // timezone (UTC on Vercel) and showed the customer the wrong delivery day.
+  const estimatedDelivery = formatLongDateIST(
+    order.estimatedDelivery,
+    'Typically delivered in 5–7 business days'
+  );
 
   return (
     <div className="min-h-screen bg-obsidian-deep py-16">

@@ -12,6 +12,7 @@ import {
   cancelAttribution, type LeadSourceType,
 } from '@/lib/leads';
 import type { JourneyEvent, JourneyGroup } from '@/lib/leadJourney';
+import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
 
 const SIGNAL_ICONS: Record<LeadSourceType, LucideIcon> = {
   consultation: MessageCircle,
@@ -42,7 +43,7 @@ function iconFor(ev: JourneyEvent): LucideIcon {
 }
 
 function fmtDate(at: number) {
-  return new Date(at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatDateIST(at);
 }
 
 // Signal snapshot shape for order-backed signals (payment_* / order_cancelled). The
@@ -81,7 +82,13 @@ function EventRow({ ev }: { ev: JourneyEvent }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 text-sm">{renderBody(ev)}</div>
-          <time className="shrink-0 text-xs text-gray-400" title={ev.at ? new Date(ev.at).toLocaleString() : undefined}>
+          {/* Row shows the day; the hover title carries the exact IST clock time,
+              which is what a rep needs when reconstructing a same-day sequence. */}
+          <time
+            className="shrink-0 text-xs text-gray-400"
+            dateTime={toIsoAttr(ev.at)}
+            title={ev.at ? formatDateTimeIST(ev.at) : undefined}
+          >
             {ev.at ? fmtDate(ev.at) : ''}
           </time>
         </div>

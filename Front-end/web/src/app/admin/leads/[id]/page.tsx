@@ -10,6 +10,7 @@ import apiClient from '@/lib/api';
 import OfflineOrderForm from '@/components/admin/OfflineOrderForm';
 import JourneyTimeline from '@/components/admin/leads/JourneyTimeline';
 import { buildJourney } from '@/lib/leadJourney';
+import { formatDateIST } from '@/lib/datetime';
 import {
   Lead, LeadStatus, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, VIP_MIN_SPENT_PAISE, SalesRep,
@@ -268,13 +269,13 @@ export default function LeadDetailPage() {
                 {lead.linkedUser.firstPurchaseAt && (
                   <div className="flex items-center justify-between">
                     <dt className="text-gray-500">First order</dt>
-                    <dd className="text-gray-700">{new Date(lead.linkedUser.firstPurchaseAt).toLocaleDateString()}</dd>
+                    <dd className="text-gray-700">{formatDateIST(lead.linkedUser.firstPurchaseAt)}</dd>
                   </div>
                 )}
                 {lead.linkedUser.lastOrderAt && (
                   <div className="flex items-center justify-between">
                     <dt className="text-gray-500">Last order</dt>
-                    <dd className="text-gray-700">{new Date(lead.linkedUser.lastOrderAt).toLocaleDateString()}</dd>
+                    <dd className="text-gray-700">{formatDateIST(lead.linkedUser.lastOrderAt)}</dd>
                   </div>
                 )}
               </dl>

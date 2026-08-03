@@ -9,6 +9,7 @@ import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Package, Eye, Filter, Search, ChevronDown } from 'lucide-react';
 import OrderHistorySkeleton from '@/components/skeletons/OrderHistorySkeleton';
+import { formatLongDateTimeIST } from '@/lib/datetime';
 
 interface Order {
   _id: string;
@@ -253,13 +254,7 @@ export default function OrdersPage() {
                           Order #{order._id.slice(-8).toUpperCase()}
                         </h3>
                         <p className="text-ink-muted font-display text-sm">
-                          {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatLongDateTimeIST(order.createdAt)}
                         </p>
                       </div>
                     </div>

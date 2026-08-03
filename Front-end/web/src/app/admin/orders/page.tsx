@@ -15,6 +15,7 @@ import { getPageNumbers } from '@/lib/pagination';
 import BulkActionsBar from '@/components/orders/BulkActionsBar';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
+import { formatDateIST, formatTimeIST, formatIsoDateIST, formatIsoDateTimeIST } from '@/lib/datetime';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -333,12 +334,15 @@ function AdminOrdersPageInner() {
   const handleExport = () => {
     // Export visible orders as CSV
     const csv = [
-      ['Order Number', 'Customer', 'Email', 'Date', 'Items', 'Amount', 'Status'].join(','),
+      ['Order Number', 'Customer', 'Email', 'Date (IST)', 'Items', 'Amount', 'Status'].join(','),
       ...orders.map(order => [
         order.orderNumber || order._id.slice(-8),
         order.user?.name || 'N/A',
         order.user?.email || 'N/A',
-        new Date(order.createdAt).toLocaleDateString(),
+        // Sortable, unambiguous IST timestamp ("2026-08-01 02:00"). A localised
+        // date here was both machine-dependent and comma-bearing (which would
+        // silently shift every column right of it in this unquoted CSV).
+        formatIsoDateTimeIST(order.createdAt),
         order.items?.length || 0,
         order.totalAmount.toFixed(2),
         order.status
@@ -349,7 +353,7 @@ function AdminOrdersPageInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `orders-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `orders-${formatIsoDateIST(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -445,12 +449,15 @@ function AdminOrdersPageInner() {
     const selectedOrdersData = orders.filter(o => selectedOrders.includes(o._id));
     
     const csv = [
-      ['Order Number', 'Customer', 'Email', 'Date', 'Items', 'Amount', 'Status'].join(','),
+      ['Order Number', 'Customer', 'Email', 'Date (IST)', 'Items', 'Amount', 'Status'].join(','),
       ...selectedOrdersData.map(order => [
         order.orderNumber || order._id.slice(-8),
         order.user?.name || 'N/A',
         order.user?.email || 'N/A',
-        new Date(order.createdAt).toLocaleDateString(),
+        // Sortable, unambiguous IST timestamp ("2026-08-01 02:00"). A localised
+        // date here was both machine-dependent and comma-bearing (which would
+        // silently shift every column right of it in this unquoted CSV).
+        formatIsoDateTimeIST(order.createdAt),
         order.items?.length || 0,
         order.totalAmount.toFixed(2),
         order.status
@@ -461,7 +468,7 @@ function AdminOrdersPageInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `selected-orders-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `selected-orders-${formatIsoDateIST(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -612,17 +619,10 @@ function AdminOrdersPageInner() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
-                      {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
+                      {formatDateIST(order.createdAt)}
                     </div>
                     <div className="text-xs text-gray-400">
-                      {new Date(order.createdAt).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {formatTimeIST(order.createdAt, '')}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

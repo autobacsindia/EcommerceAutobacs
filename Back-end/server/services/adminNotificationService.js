@@ -27,6 +27,7 @@ import companyInfo from '../config/company.js';
 // sequential and only assigned once the invoice is issued, so it must not double
 // as an order reference here.
 import { orderNumber as orderRef } from './invoiceService.js';
+import { formatDateIST, formatDateTimeIST } from '../utils/datetime.js';
 
 /**
  * Internal alert recipients. Reads ADMIN_NOTIFICATION_EMAILS (comma-separated)
@@ -219,7 +220,7 @@ export const emailAdminConsultationAlert = async (consultationId) => {
   if (!c) return { status: 'not-found' };
 
   const adminLink = `${appUrl()}/admin/consultation`;
-  const preferredDate = c.preferredDate ? new Date(c.preferredDate).toLocaleDateString('en-IN') : '';
+  const preferredDate = formatDateIST(c.preferredDate, '');
   const upgrades = Array.isArray(c.upgrades) && c.upgrades.length ? c.upgrades.join(', ') : '';
   const waDigits = String(c.whatsapp || '').replace(/[^\d]/g, '');
   const waLink = waDigits ? `https://wa.me/${waDigits}` : '';
@@ -417,7 +418,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
     `Customer   : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
     customer.phone ? `Phone      : ${customer.phone}` : null,
     `Cancelled by: ${actor}`,
-    `Cancelled  : ${cancelledAt.toLocaleString('en-IN')}`,
+    `Cancelled  : ${formatDateTimeIST(cancelledAt)}`,
     order.cancellationReason ? `Reason     : ${order.cancellationReason}` : null,
     '',
     'Items:',
@@ -445,7 +446,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
       ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
       ['Phone', escapeHtml(customer.phone)],
       ['Cancelled by', escapeHtml(actor)],
-      ['Cancelled', escapeHtml(cancelledAt.toLocaleString('en-IN'))],
+      ['Cancelled', escapeHtml(formatDateTimeIST(cancelledAt))],
       ['Reason', escapeHtml(order.cancellationReason || '')],
       ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
     ],

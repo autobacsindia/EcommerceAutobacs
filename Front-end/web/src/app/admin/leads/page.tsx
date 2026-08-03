@@ -11,6 +11,7 @@ import {
   Lead, LeadStatus, LeadSourceType, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution, scoreBadge,
 } from '@/lib/leads';
+import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
 
 type Assignment = 'all' | 'unassigned';
 // Which segment of the pipeline to show. `active` (default) hides the passive
@@ -492,7 +493,13 @@ export default function AdminLeadsPage() {
                       {reps.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(lead.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {/* Was a bare toLocaleDateString(): US order on an en-US
+                        browser, and the viewer's timezone rather than IST. */}
+                    <time dateTime={toIsoAttr(lead.createdAt)} title={formatDateTimeIST(lead.createdAt)}>
+                      {formatDateIST(lead.createdAt)}
+                    </time>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <Link href={`/admin/leads/${lead._id}`} className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">

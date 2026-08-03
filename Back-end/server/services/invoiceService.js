@@ -24,6 +24,7 @@ import emailHandler from './emailHandler.js';
 import { companyInfo } from '../config/company.js';
 import counterRepository from '../repositories/counterRepository.js';
 import { formatInvoiceNumber, invoiceFileName } from '../utils/invoiceFormat.js';
+import { formatLongDateIST } from '../utils/datetime.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -78,9 +79,15 @@ const rs = (n) =>
     maximumFractionDigits: 2,
   })}`;
 
-/** Long human date, e.g. "July 2, 2026", matching the reference invoice. */
-const fmtDate = (d) =>
-  new Date(d).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+/**
+ * Long human date for the invoice, e.g. "2 July 2026", in IST.
+ *
+ * This is a tax document: the date must be the Indian calendar day the order was
+ * placed, not the UTC day the Railway container happens to be in. Formerly
+ * `toLocaleDateString('en-US')` on the host zone, which put every order placed
+ * between 00:00 and 05:30 IST on the *previous* day's invoice.
+ */
+const fmtDate = (d) => formatLongDateIST(d);
 
 // ── Company logo (fetched from the navbar's Cloudinary asset, cached) ──────────
 // pdfkit only embeds PNG/JPEG, so the configured URL is normalised to f_png for

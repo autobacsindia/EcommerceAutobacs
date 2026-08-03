@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { Search, DollarSign, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import { formatDateIST } from '@/lib/datetime';
 
 interface Refund {
   _id: string;
@@ -159,7 +160,7 @@ export default function AdminRefundsPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-500">
-                    {new Date(refund.requestedAt).toLocaleDateString()}
+                    {formatDateIST(refund.requestedAt)}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
