@@ -70,14 +70,26 @@ const PUBLIC_CACHEABLE = /^\s*public\b/i;
 
 export const mintCsrfToken = () => crypto.randomBytes(32).toString('hex');
 
-/** Attach the XSRF-TOKEN cookie to the current response. */
+/**
+ * Attach the XSRF-TOKEN cookie to the current response, once.
+ *
+ * Idempotent per response: a second call returns the token already issued rather
+ * than minting a new one. Without this, a handler that mints a token itself (the
+ * /csrf-token route) and the deferred minting below would BOTH fire, emitting two
+ * Set-Cookie headers with different values — the browser keeps the last one, so a
+ * client trusting the value in the response body would send a token that no
+ * longer matches its cookie and get a 403 on its next mutation.
+ */
 export const setCsrfCookie = (res, token = mintCsrfToken()) => {
+  if (res.locals?.csrfTokenIssued) return res.locals.csrfTokenIssued;
+
   // SameSite/Domain follow COOKIE_SAMESITE/COOKIE_DOMAIN so this works cross-site during
   // the Vercel↔Railway interim (was hardcoded 'strict', which silently broke cross-site).
   // CSRF protection here relies on the double-submit token match; SameSite is defense-in-depth.
   res.cookie('XSRF-TOKEN', token, buildCookieOptions({
     httpOnly: false, // Must be readable by frontend JS
   }));
+  if (res.locals) res.locals.csrfTokenIssued = token;
   return token;
 };
 
