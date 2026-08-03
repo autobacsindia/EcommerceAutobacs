@@ -8,12 +8,14 @@
     "startCommand": "node server.js",
     "runtime": "V2",
     "multiRegionConfig": {
-      "asia-southeast1-eqsg3a": { "numReplicas": 1 }
+      "asia-southeast1-eqsg3a": { "numReplicas": 2 }
     },
     "sleepApplication": false,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 120
+    "healthcheckTimeout": 120,
+    "overlapSeconds": 30,
+    "drainingSeconds": 25
   }
 }

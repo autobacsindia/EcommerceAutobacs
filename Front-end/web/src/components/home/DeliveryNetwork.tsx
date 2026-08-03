@@ -1,4 +1,5 @@
 import { MapPin, Warehouse, Store, Network, type LucideIcon } from 'lucide-react';
+import { internalApiHeaders } from '@/lib/server-api';
 
 interface PublicWarehouse {
   id: string;
@@ -20,6 +21,7 @@ async function fetchActiveWarehouses(): Promise<PublicWarehouse[]> {
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || 'http://127.0.0.1:8080';
     const res = await fetch(`${apiUrl}/api/v1/warehouses/public`, {
+      headers: internalApiHeaders(),
       next: { tags: ['warehouses'], revalidate: 3600 },
     });
     if (!res.ok) return [];

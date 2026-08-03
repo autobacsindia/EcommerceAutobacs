@@ -17,12 +17,19 @@ describe('APIClient Rate Limiting', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
-    
+
     // Reset the mock implementation
     (global.fetch as jest.Mock).mockReset();
 
     // Reset timers to real ones
     jest.useRealTimers();
+
+    // Before a state-changing request the client seeds an XSRF-TOKEN cookie if
+    // none exists (public GETs no longer mint one — it would make catalogue
+    // responses uncacheable). Pre-set it so that seeding fetch doesn't consume a
+    // mocked response here; a real browser is in this same steady state for all
+    // but the first mutation of a session.
+    document.cookie = 'XSRF-TOKEN=test-csrf-token';
   });
 
   describe('GET requests', () => {

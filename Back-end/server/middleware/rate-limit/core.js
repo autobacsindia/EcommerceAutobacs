@@ -3,6 +3,7 @@ import adaptiveThrottlingService from '../../services/adaptiveThrottlingService.
 import { redisClient, checkRedisHealth, markRedisDown } from './redisClient.js';
 import { handleRedisUnavailable } from './emergencyLimiter.js';
 import { isValidIP } from './ipValidator.js';
+import { isTrustedInternalClient, getInternalRateMultiplier } from './trustedClient.js';
 
 // Atomic fixed-window counter in a SINGLE Redis round-trip.
 //   KEYS[1] = counter key, ARGV[1] = window seconds → returns {count, ttl}.
@@ -46,11 +47,19 @@ export const rateLimit = (options = {}) => {
 
     const endpoint = req.originalUrl || req.url;
     const adjustedMax = adaptiveThrottlingService.getAdjustedLimit(endpoint, max);
-    const effectiveMax = adjustedMax;
 
-    const baseKey = keyGenerator
+    // Our own frontend calling server-side (SSR/ISR) arrives from a handful of
+    // Vercel egress IPs and would otherwise share one per-IP bucket across the
+    // whole fleet. Give it a separate, much larger bucket. See trustedClient.js.
+    const isInternal = isTrustedInternalClient(req);
+    const effectiveMax = isInternal ? adjustedMax * getInternalRateMultiplier() : adjustedMax;
+
+    const rawKey = keyGenerator
       ? keyGenerator(req)
       : req.user?.id || req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    // Namespaced separately so internal traffic can never exhaust — or be
+    // throttled by — a real visitor's counter, and stays visible in Redis.
+    const baseKey = isInternal ? `internal:${rawKey}` : rawKey;
 
     const now = Date.now();
     const windowSec = Math.ceil(windowMs / 1000);

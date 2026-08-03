@@ -35,6 +35,24 @@ export function getServerApiBase(): string {
   return `${raw.replace('localhost', '127.0.0.1')}/api/v1`;
 }
 
+/**
+ * Header proving to the backend that this call is our own server, not a browser.
+ *
+ * Server-side rendering leaves Vercel from a small pool of egress IPs, so every
+ * SSR request in the fleet lands in one per-IP rate-limit bucket (300/min) and
+ * starts returning 429 under load while real browsers are unaffected. The
+ * backend gives requests carrying this key their own, far larger bucket.
+ *
+ * INTERNAL_API_KEY is deliberately NOT prefixed NEXT_PUBLIC_ — it must never be
+ * inlined into client bundles. Unset ⇒ header omitted ⇒ normal per-IP limits,
+ * which is the safe default.
+ */
+export function internalApiHeaders(): Record<string, string> {
+  if (typeof window !== 'undefined') return {};
+  const key = process.env.INTERNAL_API_KEY;
+  return key ? { 'x-internal-key': key } : {};
+}
+
 interface ServerFetchOptions extends RequestInit {
   /** Optional bearer token for authenticated SSR requests. */
   token?: string;
@@ -61,6 +79,7 @@ export async function serverFetch<T>(
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    ...internalApiHeaders(),
     ...(rest.headers as Record<string, string> | undefined),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };

@@ -252,8 +252,15 @@ async function bootstrap() {
         } catch (_) {}
         process.exit(0);
       });
-      // Force exit after 10 s if close hangs
-      setTimeout(() => process.exit(1), 10000);
+      // Force exit if close hangs. MUST stay above the platform's draining window
+      // (railway.json drainingSeconds) — exiting first would kill in-flight
+      // requests the load balancer is still finishing, which is the very thing
+      // draining exists to prevent.
+      const graceMs = (parseInt(process.env.SHUTDOWN_GRACE_SECONDS, 10) || 30) * 1000;
+      setTimeout(() => {
+        console.error(`✗ Graceful shutdown exceeded ${graceMs}ms — forcing exit`);
+        process.exit(1);
+      }, graceMs);
     };
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));

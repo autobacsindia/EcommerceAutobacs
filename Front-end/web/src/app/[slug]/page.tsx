@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import ArticleDetailClient from '@/components/blog/ArticleDetailClient';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
+import { internalApiHeaders } from '@/lib/server-api';
 
 // JSON.stringify does not escape < > & — unicode-escape them so an article
 // field containing </script> can't break out of the JSON-LD script tag.
@@ -23,6 +24,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 async function fetchBlogArticle(slug: string) {
   try {
     const res = await fetch(`${API_BASE}/api/v1/media/articles/${slug}`, {
+      headers: internalApiHeaders(),
       next: { revalidate: 60 },
     });
     if (!res.ok) return null;

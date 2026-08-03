@@ -72,6 +72,7 @@ import rateLimitDashboardRoutes from './rateLimitDashboard.js';
 import adaptiveThrottlingRoutes from './adaptiveThrottling.js';
 import redisMonitorRoutes from './redisMonitor.js';
 import securityRoutes from './security.js';
+import csrfTokenRoutes from './csrfToken.js';
 import adminStatsRoutes from './adminStats.js';
 
 const apiRouter = express.Router();
@@ -179,5 +180,8 @@ apiRouter.use('/careers', publicBrowsingRateLimit, careersRoutes);
 // Rate Limit: None for CSP reports (browsers send automatically), protected by rate limiting middleware
 // ============================================================================
 apiRouter.use('/security', securityRoutes);
+// CSRF token seed. Public GET, always no-store — lets a client that has only
+// touched cached catalogue routes obtain a token before its first mutation.
+apiRouter.use('/csrf-token', publicBrowsingRateLimit, csrfTokenRoutes);
 
 export default apiRouter;

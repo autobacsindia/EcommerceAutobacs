@@ -152,6 +152,12 @@ class APIClient {
     }
 
     const startTime = performance.now();
+    // State-changing requests need the double-submit cookie in place before we
+    // read it into the X-XSRF-TOKEN header below. Public GETs no longer mint it
+    // (it would make catalogue responses uncacheable), so seed it on demand.
+    if (method !== 'GET' && method !== 'HEAD') {
+      await tokenManager.ensureCsrfToken();
+    }
     const headers = tokenManager.getHeaders(options?.headers);
     const ic = await this.runRequestInterceptors(method, endpoint, data, headers);
     if (this.enableLogging) console.log(`[API] ${ic.method} ${ic.endpoint}`);
