@@ -6,6 +6,7 @@ import { Package, ChevronRight } from 'lucide-react';
 import orderService from '@/lib/services/orderService';
 import { profileKeys } from '@/hooks/queries/keys';
 import { getOrderStatusBadgeClass, getOrderStatusLabel } from '@/lib/orderStatus';
+import { formatDateIST } from '@/lib/datetime';
 
 /**
  * Recent orders summary for the profile dashboard. Reads via TanStack Query so
@@ -64,11 +65,7 @@ export default function RecentOrdersCard() {
                     #{order.orderNumber || order._id.slice(-8).toUpperCase()}
                   </p>
                   <p className="text-xs text-ink-muted font-display mt-0.5">
-                    {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
+                    {formatDateIST(order.createdAt)}
                     {' · '}
                     ₹{Number(order.totalAmount || 0).toLocaleString('en-IN')}
                   </p>

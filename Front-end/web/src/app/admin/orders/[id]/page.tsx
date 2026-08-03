@@ -8,6 +8,7 @@ import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-
 import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
+import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 
 // Fulfillment stages an admin can move to (mirrors the list page + backend rules).
 const ALL_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
@@ -341,15 +342,7 @@ export default function AdminOrderDetailPage() {
               
               <div>
                 <p className="text-sm text-gray-500">Order Date</p>
-                <p className="font-medium">
-                  {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
+                <p className="font-medium">{formatLongDateTimeIST(order.createdAt)}</p>
               </div>
               
               <div>
@@ -401,9 +394,7 @@ export default function AdminOrderDetailPage() {
               {order.estimatedDelivery && (
                 <div>
                   <p className="text-sm text-gray-500">Estimated Delivery</p>
-                  <p className="font-medium">
-                    {new Date(order.estimatedDelivery).toLocaleDateString('en-IN')}
-                  </p>
+                  <p className="font-medium">{formatLongDateIST(order.estimatedDelivery)}</p>
                 </div>
               )}
             </div>

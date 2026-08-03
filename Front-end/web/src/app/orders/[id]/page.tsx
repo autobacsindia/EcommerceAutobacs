@@ -21,6 +21,7 @@ import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
 import { productUrl } from '@/lib/types';
 import OrderDetailSkeleton from '@/components/skeletons/OrderDetailSkeleton';
+import { formatDateIST, formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 
 interface OrderDetail {
   _id: string;
@@ -241,12 +242,9 @@ export default function OrderDetailPage() {
   const hasRefund = (order: OrderDetail) =>
     !!(order.refundDetails && (order.refundDetails.requestedAt || (order.refundDetails.amount || 0) > 0));
 
-  // Never render "Invalid Date" — fall back to a dash when the timestamp is missing.
-  const formatDate = (value?: string) => {
-    if (!value) return '—';
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN');
-  };
+  // Return/refund card dates. `formatDateIST` already collapses missing and
+  // unparseable timestamps to a dash, so "Invalid Date" can't reach the page.
+  const formatDate = (value?: string) => formatDateIST(value);
 
   if (authLoading || loading) return <OrderDetailSkeleton />;
   if (!isAuthenticated) return null;
@@ -284,7 +282,7 @@ export default function OrderDetailPage() {
                 #{order._id.slice(-8).toUpperCase()}
               </h1>
               <p className="text-ink-muted font-display text-sm">
-                Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                Placed on {formatLongDateTimeIST(order.createdAt)}
               </p>
             </div>
             <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-sm border text-sm font-display font-bold uppercase tracking-widest ${getStatusColor(order.status)}`}>
@@ -383,13 +381,13 @@ export default function OrderDetailPage() {
               {order.estimatedDelivery && (
                 <div>
                   <p className="text-xs text-ink-muted font-display mb-1">Estimated Delivery</p>
-                  <p className="text-ink/70 font-display font-bold">{new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-ink/70 font-display font-bold">{formatLongDateIST(order.estimatedDelivery)}</p>
                 </div>
               )}
               {order.deliveredAt && (
                 <div>
                   <p className="text-xs text-ink-muted font-display mb-1">Delivered On</p>
-                  <p className="text-green-400 font-display font-bold">{new Date(order.deliveredAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-green-400 font-display font-bold">{formatLongDateIST(order.deliveredAt)}</p>
                 </div>
               )}
             </div>
@@ -596,7 +594,7 @@ export default function OrderDetailPage() {
                       {history.status.charAt(0).toUpperCase() + history.status.slice(1)}
                     </p>
                     <p className="text-xs text-ink-muted font-display mt-0.5">
-                      {new Date(history.timestamp).toLocaleString('en-IN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {formatLongDateTimeIST(history.timestamp)}
                     </p>
                     {history.reason && <p className="text-xs text-ink/70 font-display mt-1">Reason: {history.reason}</p>}
                     {history.notes && <p className="text-xs text-ink/70 font-display mt-1">Notes: {history.notes}</p>}

@@ -3,6 +3,7 @@
  * HTML and text templates for password reset and email verification
  */
 import { formatInvoiceNumber } from './invoiceFormat.js';
+import { formatLongDateIST } from './datetime.js';
 
 /**
  * Escape a value for safe interpolation into HTML text/attribute contexts.
@@ -775,9 +776,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {} }) =
   const showTracking = status === 'shipped' && !!order.trackingNumber;
   const carrierName = order.carrier?.name;
   const trackingUrl = order.carrier?.trackingUrl;
-  const etaText = order.estimatedDelivery
-    ? new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
-    : null;
+  const etaText = order.estimatedDelivery ? formatLongDateIST(order.estimatedDelivery) : null;
   const hasSlip = status === 'shipped' && !!order.shippingSlip?.url;
 
   const subject = copy.subject(ref);

@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { Search, Eye, Package, Video, FileText, ExternalLink, X, Truck, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
 import { ReturnRequest, PaginatedReturnRequests } from '@/lib/types';
+import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -109,7 +110,7 @@ export default function AdminReturnsPage() {
                   <Link href={`/admin/orders/${req.order._id}`} className="text-sm text-blue-600 hover:underline flex items-center">
                     #{req.order.orderNumber || req.order._id.slice(-8).toUpperCase()}<ExternalLink className="h-3 w-3 ml-1" />
                   </Link>
-                  <div className="text-xs text-gray-500 mt-1">{new Date(req.createdAt).toLocaleDateString()}</div>
+                  <div className="text-xs text-gray-500 mt-1">{formatDateIST(req.createdAt)}</div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-900">{userName(req.user)}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{req.items.length} item(s)</td>
@@ -321,7 +322,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                     <div key={i} className="relative">
                       <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-gray-300" />
                       <p className="text-sm font-medium">{label(e.status)}</p>
-                      <p className="text-xs text-gray-500">{new Date(e.timestamp).toLocaleString()}</p>
+                      <p className="text-xs text-gray-500">{formatDateTimeIST(e.timestamp)}</p>
                       {e.note && <p className="text-sm text-gray-600">{e.note}</p>}
                     </div>
                   ))}
