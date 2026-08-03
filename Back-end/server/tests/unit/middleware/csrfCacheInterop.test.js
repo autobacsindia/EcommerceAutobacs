@@ -16,7 +16,7 @@
 
 const { default: cacheService } = await import('../../../services/cacheService.js');
 const { httpCache } = await import('../../../middleware/httpCache.js');
-const { csrfProtection } = await import('../../../middleware/csrfMiddleware.js');
+const { csrfProtection, setCsrfCookie } = await import('../../../middleware/csrfMiddleware.js');
 
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
@@ -30,6 +30,7 @@ const makeRes = (statusCode = 200) => {
   return {
     statusCode,
     headersSent: false,
+    locals: {},
     cookies: [],
     setHeader(k, v) { headers[k.toLowerCase()] = v; },
     getHeader(k) { return headers[k.toLowerCase()]; },
@@ -147,6 +148,28 @@ describe('requests that must still receive the cookie', () => {
     });
 
     expect(hasCsrfCookie(res)).toBe(true);
+  });
+
+  it('issues exactly ONE cookie when a handler mints its own (the /csrf-token route)', async () => {
+    const res = makeRes();
+    const req = makeReq({ path: '/api/v1/csrf-token', originalUrl: '/api/v1/csrf-token' });
+
+    await new Promise((resolve) => {
+      const origJson = res.json.bind(res);
+      res.json = function (b) { const out = origJson(b); resolve(); return out; };
+      csrfProtection(req, res, () => {
+        // Handler mints its own token and returns it in the body, exactly as
+        // routes/csrfToken.js does.
+        res.setHeader('Cache-Control', 'private, no-store');
+        const token = setCsrfCookie(res);
+        res.json({ csrfToken: token });
+      });
+    });
+
+    // Two Set-Cookie headers would mean the body token and the cookie disagree.
+    expect(res.cookies.filter((c) => c === 'XSRF-TOKEN')).toHaveLength(1);
+    const cookieValue = res.getHeader('Set-Cookie')[0].split('=')[1];
+    expect(res.body.csrfToken).toBe(cookieValue);
   });
 
   it('does not re-mint when the client already holds a token', async () => {
