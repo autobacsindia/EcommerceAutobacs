@@ -25,6 +25,55 @@ if (typeof global.ResizeObserver === 'undefined') {
   global.ResizeObserver = MockObserver;
 }
 
+// jsdom has no PointerEvent, so `fireEvent.pointerMove(el, { clientX })` builds a
+// bare Event and every coordinate arrives as `undefined` — tests for
+// pointer-driven UI then assert against NaN instead of failing honestly.
+// MouseEvent already implements the coordinate model; this just gives it the
+// pointer identity fields.
+if (typeof window !== 'undefined' && typeof window.PointerEvent !== 'function') {
+  class PointerEvent extends window.MouseEvent {
+    constructor(type, params = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? 'mouse';
+      this.isPrimary = params.isPrimary ?? true;
+      this.width = params.width ?? 1;
+      this.height = params.height ?? 1;
+      this.pressure = params.pressure ?? 0;
+    }
+  }
+  window.PointerEvent = PointerEvent;
+  global.PointerEvent = PointerEvent;
+}
+
+// jsdom (26.x) ships the <dialog> ELEMENT but none of its modal behaviour —
+// `showModal`/`close` are simply absent, so a component that opens a native
+// dialog throws on mount. Polyfill the open/closed state only; focus trapping,
+// the top layer and ::backdrop are real-browser concerns and belong in the
+// Playwright suite, not here. Production code still feature-detects these, so
+// this makes tests representative rather than papering over a crash.
+if (typeof window !== 'undefined' && window.HTMLDialogElement) {
+  const proto = window.HTMLDialogElement.prototype;
+  if (typeof proto.showModal !== 'function') {
+    proto.showModal = function showModal() {
+      this.open = true;
+    };
+  }
+  if (typeof proto.show !== 'function') {
+    proto.show = function show() {
+      this.open = true;
+    };
+  }
+  if (typeof proto.close !== 'function') {
+    proto.close = function close(returnValue) {
+      if (!this.open) return;
+      this.open = false;
+      if (returnValue !== undefined) this.returnValue = returnValue;
+      this.dispatchEvent(new window.Event('close'));
+    };
+  }
+}
+
 // Suppress specific console errors that are known issues in test environment
 const originalConsoleError = console.error;
 console.error = (...args) => {
