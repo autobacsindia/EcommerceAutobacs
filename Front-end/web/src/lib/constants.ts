@@ -326,12 +326,40 @@ export const RETURN_REASONS = [
 export const RETURN_WINDOW_DAYS = 4;
 
 export const RETURN_POLICY_POINTS = [
-  'Requests must be raised within 4 days of delivery',
+  `Requests must be raised within ${RETURN_WINDOW_DAYS} days of delivery`,
   'A continuous unboxing video and proof of purchase are mandatory',
   'We arrange the return pickup after approval',
   'Refund is issued to your original payment method after the item passes inspection',
   'Electrical/electronic, custom-made and imported items are not returnable',
 ];
+
+/**
+ * Canonical customer-facing answer to "what is your return policy?".
+ *
+ * Every public surface that states the policy in prose — the /faq page, the
+ * /contact and /help FAQ strips, and the FAQPage JSON-LD in app/layout.tsx —
+ * MUST render this string rather than hand-writing its own version. Those five
+ * surfaces had drifted to three different windows (30 / 7 / 4 days) and to an
+ * any-reason "unused items" promise the backend never honoured, which is both a
+ * consumer-protection exposure and a top support-ticket driver. Deriving the
+ * copy from RETURN_WINDOW_DAYS is what stops it re-drifting.
+ *
+ * The wording tracks the signed Roavion "Return, Refund, Exchange & Cancellation
+ * Policy" (v1.0) that Back-end/server/config/returnPolicy.js encodes: a
+ * RETURN_WINDOW_DAYS window, the three fault-only RETURN_REASONS, and refund to
+ * the original payment method. There is deliberately no change-of-mind path and
+ * no exchange path — do not reintroduce either here without a policy change.
+ */
+export const RETURN_POLICY_SUMMARY =
+  `Returns are accepted within ${RETURN_WINDOW_DAYS} days of delivery where the fault is ours — ` +
+  'a wrong item shipped, damage in transit, or a manufacturing defect. ' +
+  'A continuous unboxing video and proof of purchase are required, and we arrange ' +
+  'the pickup once the request is approved. Approved returns are refunded to your ' +
+  'original payment method after inspection; we do not offer exchanges or store credit. ' +
+  'Electrical/electronic, custom-made, imported and already-installed items are not returnable.';
+
+/** Shared question wording, so the FAQ strips and the JSON-LD stay identical. */
+export const RETURN_POLICY_QUESTION = 'What is your return policy?';
 
 // Image Upload Constants
 export const IMAGE_UPLOAD = {

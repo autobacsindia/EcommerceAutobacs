@@ -113,13 +113,20 @@ export interface LoyaltyData {
 export interface ReturnsPaymentsData {
   returns: { total: number; returnRatePct: number; reasons: { reason: string; count: number }[] };
   refunds: { methods: { method: string; count: number; amount: number }[] };
+  /**
+   * Captured payments by method & gateway. There is deliberately no success rate
+   * here: a Payment row only exists because a capture succeeded, so declined and
+   * abandoned attempts are invisible to this dataset (see the comment on the
+   * aggregation in analyticsReportService.js). Refund figures are the real signal.
+   */
   payments: {
     method: string;
     gateway: string;
-    count: number;
-    completed: number;
+    captured: number;
+    refunded: number;
     amount: number;
-    successRatePct: number;
+    refundedAmount: number;
+    netAmount: number;
   }[];
   fulfillment: {
     avgTimeToShipHours: number;

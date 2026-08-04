@@ -349,6 +349,11 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 const deductions = (Number(refund.shippingDeduction) || 0) + (Number(refund.restockingDeduction) || 0);
                 const payout = base - deductions;
                 const overHeadroom = preview != null && payout > preview.maxRefundable;
+                // Debit-card EMI: the issuer can only unwind the whole loan, so anything
+                // short of the full capture is rejected at the gateway. Mirrors the
+                // server-side 422 in returnController.partialRefundBlockReason.
+                const blockedPartialEmi =
+                  preview != null && preview.fullRefundOnly && payout < preview.orderTotal;
 
                 return (
                   <div className="space-y-3">
@@ -372,6 +377,9 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                           {inr(preview.alreadyRefunded)} of {inr(preview.orderTotal)} already refunded on this order — {inr(preview.maxRefundable)} still refundable.
                         </div>
                       )}
+                      {preview?.paidBy && (
+                        <div className="text-xs text-gray-500">Paid via {preview.paidBy}.</div>
+                      )}
                     </div>
 
                     <div className="flex gap-3 items-end flex-wrap">
@@ -382,7 +390,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                         <input type="number" min="0" value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
                       </label>
                       <button
-                        disabled={busy || payout <= 0 || overHeadroom}
+                        disabled={busy || payout <= 0 || overHeadroom || blockedPartialEmi}
                         onClick={() => call(() => apiClient.post(API_ENDPOINTS.RETURN_REFUND(request._id), {
                           shippingDeduction: Number(refund.shippingDeduction) || 0,
                           restockingDeduction: Number(refund.restockingDeduction) || 0,
@@ -398,6 +406,14 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                     {overHeadroom && (
                       <p className="text-xs text-red-600">
                         {inr(payout)} exceeds the {inr(preview!.maxRefundable)} still refundable on this order. Reduce the amount, or refund the balance manually in Razorpay.
+                      </p>
+                    )}
+                    {blockedPartialEmi && (
+                      <p className="text-xs text-red-600">
+                        This order was paid by {preview!.paidBy || 'Debit Card EMI'}, which the bank can only
+                        refund in full — a partial refund of {inr(payout)} will be rejected by Razorpay.
+                        Either refund the full {inr(preview!.orderTotal)}, or settle this return outside the
+                        gateway and record it manually.
                       </p>
                     )}
                     {payout <= 0 && <p className="text-xs text-red-600">Deductions leave nothing to refund.</p>}

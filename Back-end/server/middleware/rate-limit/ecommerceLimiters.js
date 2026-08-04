@@ -59,3 +59,19 @@ export const consultationRateLimit = rateLimit({
   max: 5,
   message: 'Too many consultation requests. Please wait before trying again.'
 });
+
+/**
+ * Support ticket creation and customer replies.
+ *
+ * Higher than the contact-form limit because this also covers replies on an
+ * existing conversation — a customer working through a problem legitimately
+ * sends several messages in a session, and rate-limiting someone mid-complaint
+ * is its own support incident. Abuse of ticket CREATION specifically is bounded
+ * further by the per-ticket outbound loop guard, which caps how much mail any
+ * one thread can generate regardless of how many requests arrive.
+ */
+export const supportSubmitRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: 'Too many support messages. Please wait before sending another.'
+});

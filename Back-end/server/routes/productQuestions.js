@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import AppError from "../utils/AppError.js";
+import { enqueueNotification } from "../queue/queues.js";
 import { 
   validateProductQuestion, 
   validateProductQuestionAnswer, 
@@ -49,6 +50,14 @@ router.post("/", questionSubmitRateLimit, validateProductQuestion, asyncHandler(
     userName: req.user ? req.user.name : userName,
     email: req.user ? req.user.email : email,
     question: cleanHTML(question)
+  });
+
+  // Open a linked support ticket so the question lands in the same inbox as
+  // everything else. Enqueued (never inline) so a support-side hiccup cannot
+  // fail the customer's submission.
+  enqueueNotification('create-support-ticket', {
+    sourceModel: 'ProductQuestion',
+    sourceId: productQuestion._id.toString(),
   });
 
   res.status(201).json({

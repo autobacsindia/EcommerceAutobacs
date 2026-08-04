@@ -32,6 +32,7 @@ import { setCronService } from './routes/scheduledTasks.js';
 import { protect, admin } from "./middleware/authMiddleware.js";
 import { errorHandler, notFound, requestLogger } from "./middleware/errorMiddleware.js";
 import razorpayWebhook from './middleware/razorpayWebhook.js';
+import supportInboundWebhook from './middleware/supportInboundWebhook.js';
 // Sanitization middleware
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
 import { sentryContextMiddleware } from "./middleware/sentryContext.js";
@@ -612,6 +613,19 @@ app.use(cookieParser());
 //      Mounting it after app.use(csrfProtection) would cause every webhook to get a
 //      403 "CSRF token missing or invalid" before the signature check ever runs.
 app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json', limit: '1mb' }), razorpayWebhook);
+
+// ── CRITICAL: Postmark inbound-email webhook (MUST be before csrfProtection) ──
+// Same reasoning as above: a server-to-server POST with no cookie and no CSRF
+// token would be rejected with 403 before the handler ran, and Postmark would
+// eventually disable the hook — silently cutting off every customer email.
+// Unlike Razorpay there is no signature over raw bytes, so this one takes the
+// parsed JSON body. The limit is generous because inbound payloads carry
+// base64-encoded attachments.
+app.use(
+  '/api/v1/support/inbound',
+  express.json({ limit: '30mb' }),
+  supportInboundWebhook
+);
 
 // Apply CSRF protection globally to all remaining routes.
 // This will set the XSRF-TOKEN cookie and validate headers for state-changing requests.

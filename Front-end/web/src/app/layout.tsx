@@ -15,6 +15,7 @@ import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import { getNavCategories } from "@/lib/navCategories";
+import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpWidget from "@/components/layout/HelpWidget";
@@ -141,10 +142,12 @@ export const metadata: Metadata = {
         },
         {
           '@type': 'Question',
-          'name': 'What is your return policy for automotive accessories?',
+          // Structured data is a machine-readable claim Google may surface directly
+          // in results, so it must state the policy the backend actually enforces.
+          'name': RETURN_POLICY_QUESTION,
           'acceptedAnswer': {
             '@type': 'Answer',
-            'text': 'We offer a 30-day return policy for unused and uninstalled automotive accessories. Items must be in original packaging with all components included.'
+            'text': RETURN_POLICY_SUMMARY
           }
         },
         {

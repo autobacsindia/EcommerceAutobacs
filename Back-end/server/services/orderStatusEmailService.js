@@ -11,6 +11,7 @@
  */
 
 import orderRepository from '../repositories/orderRepository.js';
+import paymentRepository from '../repositories/paymentRepository.js';
 import emailHandler from './emailHandler.js';
 
 /**
@@ -66,7 +67,19 @@ export const emailOrderStatusUpdate = async (orderId, status) => {
     }
   }
 
-  const result = await emailHandler.sendOrderStatusUpdate({ to, order, status, user, attachments });
+  // Refund emails carry the EMI caveat (principal-only refund; bank keeps the interest),
+  // which needs the Payment row. Fetched only for that status, and best-effort — a
+  // failed lookup drops the caveat rather than blocking the refund notification.
+  let payment = null;
+  if (status === 'refunded' && order.payment) {
+    try {
+      payment = await paymentRepository.findById(order.payment);
+    } catch (err) {
+      console.warn(`[StatusEmail] Could not load payment for order ${orderId}: ${err.message}`);
+    }
+  }
+
+  const result = await emailHandler.sendOrderStatusUpdate({ to, order, status, user, attachments, payment });
 
   // Only mark as notified when the provider actually accepted it, so a transient
   // failure lets BullMQ retry rather than silently dropping the notification.

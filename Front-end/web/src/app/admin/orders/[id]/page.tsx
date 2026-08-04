@@ -9,6 +9,8 @@ import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
+import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
+import type { OrderPaymentSummary } from '@/lib/types';
 
 // Fulfillment stages an admin can move to (mirrors the list page + backend rules).
 const ALL_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
@@ -54,6 +56,8 @@ interface Order {
     postalCode: string;
     country: string;
   };
+  /** Projected summary from GET /orders/:id — carries methodDetails/emiPlanLabel. */
+  payment?: OrderPaymentSummary | string | null;
   subtotal: number;
   shippingCost: number;
   tax: number;
@@ -397,6 +401,11 @@ export default function AdminOrderDetailPage() {
                   <p className="font-medium">{formatLongDateIST(order.estimatedDelivery)}</p>
                 </div>
               )}
+
+              {/* EMI plan + refund constraints. Renders only for EMI orders — support
+                  needs it to answer "why am I being charged interest?", and ops needs
+                  it before choosing a refund amount (debit-card EMI is full-only). */}
+              <EmiPaymentNotice payment={order.payment as OrderPaymentSummary} tone="light" />
             </div>
           </div>
           

@@ -4,6 +4,7 @@
  */
 import { formatInvoiceNumber } from './invoiceFormat.js';
 import { formatLongDateIST } from './datetime.js';
+import { describeEmiPlan } from './paymentMethodDetails.js';
 
 /**
  * Escape a value for safe interpolation into HTML text/attribute contexts.
@@ -747,7 +748,7 @@ const STATUS_COPY = {
  * @param {Object} [params.company] - Company info (name, email)
  * @returns {Object} - { subject, text, html }
  */
-export const orderStatusEmail = ({ order, user = null, status, company = {} }) => {
+export const orderStatusEmail = ({ order, user = null, status, company = {}, payment = null }) => {
   const copy = STATUS_COPY[status] || {
     subject: (ref) => `Order update — ${ref}`,
     heading: 'Your order status has been updated',
@@ -794,12 +795,21 @@ export const orderStatusEmail = ({ order, user = null, status, company = {} }) =
       (hasSlip ? '\n\nYour shipping slip is attached to this email.' : '')
     : '';
 
+  // EMI + refund: the money we send back is PRINCIPAL only. Interest the bank has
+  // already billed, and any cancellation charge it levies for unwinding the loan, stay
+  // with the bank — neither we nor Razorpay can reverse them. Told here, in the email
+  // that announces the refund, so the shortfall is never a surprise.
+  const emiPlan = status === 'refunded' ? describeEmiPlan(payment) : null;
+  const emiText = emiPlan
+    ? `\n\nPaid via ${emiPlan}. Your bank refunds the principal only — interest already billed on this EMI plan, and any cancellation charge your bank applies, are set by the bank and are not refundable.`
+    : '';
+
   const text = `
 Hi ${name},
 
 ${copy.blurb}
 
-Order: ${ref}${trackingText}${itemsText}
+Order: ${ref}${trackingText}${itemsText}${emiText}
 
 Questions? Contact us at ${supportEmail}.
 
@@ -838,6 +848,14 @@ ${companyName}
       </div>`
     : '';
 
+  const emiBlock = emiPlan
+    ? `
+      <div style="margin-top:20px;padding:16px 20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+        <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#92400e;">Paid via ${esc(emiPlan)}</p>
+        <p style="margin:0;font-size:13px;color:#92400e;">Your bank refunds the <strong>principal only</strong>. Interest already billed on this EMI plan, and any cancellation charge your bank applies, are set by the bank and cannot be refunded by us.</p>
+      </div>`
+    : '';
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -855,6 +873,7 @@ ${companyName}
       <p>Hi ${name},</p>
       <p>${copy.blurb}</p>
       <p style="color:#555;">Order: <strong>${ref}</strong></p>
+      ${emiBlock}
       ${trackingBlock}
       ${itemsTable}
       <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>

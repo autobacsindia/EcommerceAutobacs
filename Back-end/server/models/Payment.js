@@ -35,6 +35,33 @@ const PaymentSchema = new mongoose.Schema({
     enum: ["razorpay", "stripe", "payu", "cashfree"],
     required: true
   },
+  // Structured gateway sub-type, lifted out of the opaque `paymentDetails` blob so it
+  // is queryable and renderable. Built by utils/paymentMethodDetails.js.
+  //
+  // `emi.kind` is money-critical, not cosmetic: Razorpay rejects PARTIAL refunds on
+  // debit-card EMI (the issuer can only unwind the whole loan), so the return flow has
+  // to know which EMI product this was before it calls the refund API.
+  //
+  // All fields optional — a raw webhook payload carries less than an expanded fetch,
+  // and a partial record beats none.
+  // NOTE: declared as plain NESTED PATHS, not a sub-schema — nested paths carry no
+  // _id and, critically, no path here has a `default`. A `default` on a nested path
+  // materializes the whole parent object on every document (the phantom
+  // returnRequest/refundDetails subdocs that once put a bogus Return card on every
+  // order). Absent data must stay absent.
+  methodDetails: {
+    rawMethod: { type: String },   // Razorpay `method` verbatim (card, emi, cardless_emi…)
+    cardNetwork: { type: String },
+    cardType: { type: String },    // debit | credit | prepaid
+    cardIssuer: { type: String },
+    cardLast4: { type: String },
+    emi: {
+      kind: { type: String, enum: ["credit_card", "debit_card", "cardless", "unknown"] },
+      issuer: { type: String },    // bank for card EMI, lender for cardless
+      months: { type: Number },
+      ratePercent: { type: Number }
+    }
+  },
   transactionId: {
     type: String,
     unique: true,

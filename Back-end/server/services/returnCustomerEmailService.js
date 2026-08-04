@@ -12,6 +12,8 @@
  */
 
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
+import orderRepository from '../repositories/orderRepository.js';
+import paymentRepository from '../repositories/paymentRepository.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
 import { returnEmail } from '../utils/returnEmailTemplates.js';
@@ -28,6 +30,31 @@ const loadReturn = (returnId) =>
 
 const recipientEmail = (rr) =>
   (rr.user && typeof rr.user === 'object' ? rr.user.email : null) || null;
+
+/**
+ * Load the order's Payment row so the refund email can state the EMI caveat.
+ *
+ * Only fetched for the `refunded` event — the other lifecycle emails have no use for
+ * it, and this runs inside a BullMQ job where an extra round-trip per email is waste.
+ * Best-effort: a missing or unreadable payment drops the EMI block, never fails the send.
+ *
+ * `loadReturn` populates `order` with only `orderNumber`, so re-read the order for its
+ * payment pointer rather than widening that projection for every email.
+ *
+ * @param {Object} rr - ReturnRequest (order populated)
+ * @returns {Promise<Object|null>}
+ */
+const loadPaymentForRefundEmail = async (rr) => {
+  try {
+    const orderId = rr.order?._id || rr.order;
+    const order = await orderRepository.findById(orderId);
+    if (!order?.payment) return null;
+    return await paymentRepository.findById(order.payment);
+  } catch (err) {
+    warn(`could not load payment for return ${rr._id}: ${err.message}`);
+    return null;
+  }
+};
 
 /**
  * Acknowledge a freshly-submitted return, once.
@@ -66,7 +93,8 @@ export const emailReturnStatus = async (returnId, event) => {
   const to = recipientEmail(rr);
   if (!to) return { status: 'no-recipient' };
 
-  const { subject, text, html } = returnEmail({ event, rr, order: rr.order, company: companyInfo });
+  const payment = event === 'refunded' ? await loadPaymentForRefundEmail(rr) : null;
+  const { subject, text, html } = returnEmail({ event, rr, order: rr.order, company: companyInfo, payment });
   const result = await emailHandler.sendEmail({ to, subject, text, html });
 
   if (result?.fallbackToConsole) return { status: 'skipped-disabled' };

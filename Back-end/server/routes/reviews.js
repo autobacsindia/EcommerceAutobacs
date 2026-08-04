@@ -312,6 +312,14 @@ router.post("/products/:productId", protect, reviewSubmitRateLimit, validateRevi
   // Notify the support inbox of the new (pending) review — best-effort, async.
   enqueueNotification("send-admin-review-alert", { reviewId: savedReview._id.toString() });
 
+  // Open a linked support ticket. The adapter only does so for LOW-rated reviews
+  // — a happy customer needs no follow-up, and ticketing every 5★ would bury the
+  // queue in work that does not exist.
+  enqueueNotification("create-support-ticket", {
+    sourceModel: "Review",
+    sourceId: savedReview._id.toString(),
+  });
+
   res.status(201).json({
     success: true,
     message: "Review submitted successfully and pending approval",

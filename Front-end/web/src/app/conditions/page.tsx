@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { RETURN_WINDOW_DAYS } from '@/lib/constants';
 
 export default function ConditionsPage() {
   return (
@@ -32,7 +33,10 @@ export default function ConditionsPage() {
 
         <h2 className="text-xl font-semibold mt-6 mb-4">4. Returns and Refunds</h2>
         <p>
-          Items may be returned within 7 days of delivery in original, unused condition. Please visit our{' '}
+          Items may be returned within {RETURN_WINDOW_DAYS} days of delivery where the fault is ours — a wrong item
+          shipped, damage in transit, or a manufacturing defect — in original, unused condition and supported by a
+          continuous unboxing video. Approved returns are refunded to the original payment method; we do not offer
+          exchanges or store credit. Please visit our{' '}
           <Link href="/returns" className="text-gold hover:underline">Returns page</Link> for full details.
         </p>
 

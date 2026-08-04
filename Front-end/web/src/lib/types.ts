@@ -228,6 +228,15 @@ export interface ReturnRefundPreview {
   maxRefundable: number;
   suggestedRestocking: number;
   shippingDeductionDefault: number | null;
+  /** e.g. "Debit Card EMI · ICICI" — present only when the order was paid on EMI. */
+  paidBy: string | null;
+  /**
+   * True when the instrument accepts full refunds only (debit-card EMI: the issuer
+   * holds a loan against the whole capture and cannot unwind part of it). The server
+   * enforces this with a 422; the UI mirrors it so the operator sees it before typing
+   * an amount the gateway would reject.
+   */
+  fullRefundOnly: boolean;
   note: string;
 }
 
@@ -274,6 +283,40 @@ export interface OrderItem {
   image: string;
 }
 
+/**
+ * Safe projection of a Payment row, returned by `GET /orders/:id`. The raw Razorpay
+ * entity (MDR fee/tax, card id, acquirer data) is stripped server-side and is not
+ * available here by design.
+ */
+export interface OrderPaymentSummary {
+  _id: string;
+  paymentMethod: string;
+  paymentGateway: string;
+  methodDetails?: {
+    rawMethod?: string;
+    cardNetwork?: string;
+    cardType?: string;
+    cardIssuer?: string;
+    cardLast4?: string;
+    emi?: {
+      kind?: 'credit_card' | 'debit_card' | 'cardless' | 'unknown';
+      issuer?: string;
+      months?: number;
+      ratePercent?: number;
+    };
+  };
+  /** Pre-rendered by the backend, e.g. "Credit Card EMI · HDFC · 6 months @ 14%". */
+  emiPlanLabel?: string;
+  status: string;
+  amount: number;
+  currency?: string;
+  refundAmount?: number;
+  refundedAt?: string;
+  /** `pay_...` — appears on the customer's card statement; their bank-dispute reference. */
+  gatewayPaymentId?: string;
+  createdAt?: string;
+}
+
 export interface Order {
   _id: string;
   orderNumber?: string;
@@ -289,7 +332,11 @@ export interface Order {
     postalCode: string;
     country: string;
   };
-  payment: string;
+  /**
+   * Order detail (`GET /orders/:id`) returns a projected summary; list endpoints
+   * still return the bare id. The raw gateway entity is never sent.
+   */
+  payment: string | OrderPaymentSummary | null;
   subtotal: number;
   shippingCost: number;
   tax: number;

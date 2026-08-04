@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from '@/lib/constants';
 
 export default function FAQPage() {
   const faqCategories = [
@@ -26,7 +27,7 @@ export default function FAQPage() {
     {
       title: 'Returns & Warranty',
       faqs: [
-        { question: 'What is your return policy?', answer: 'We offer a 30-day return policy for unused items in their original packaging. Items must be in resalable condition. Some exceptions apply for certain product categories. Please contact our support team to initiate a return.' },
+        { question: RETURN_POLICY_QUESTION, answer: RETURN_POLICY_SUMMARY },
         { question: 'How do I return an item?', answer: "To return an item, log into your account, go to 'My Orders', select the order you want to return, and click 'Request Return'. Alternatively, you can contact our customer service team who will guide you through the process." },
         { question: 'How long does it take to process a refund?', answer: 'Once we receive your returned item and verify its condition, refunds are typically processed within 5-7 business days. The time it takes for the refund to appear in your account depends on your payment method.' },
         { question: 'What is covered under warranty?', answer: "Most of our products come with a manufacturer's warranty ranging from 6 months to 2 years depending on the product. Warranty covers manufacturing defects but does not cover damage caused by misuse, accidents, or normal wear and tear." },
