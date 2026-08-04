@@ -102,7 +102,7 @@ jobs:
           WORDPRESS_SITE_URL: http://localhost
           WORDPRESS_API_KEY: ck_placeholder
           WORDPRESS_API_SECRET: cs_placeholder
-        run: npm run test:coverage -- --forceExit --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle|pricingService|couponKarmaIntegration|processRefund|refundWebhook|feeds|FeedService|cartSerializer|adminStats"
+        run: npm run test:coverage -- --forceExit --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle|pricingService|couponKarmaIntegration|processRefund|refundWebhook|feeds|FeedService|cartSerializer|adminStats|storeTime"
 
       - name: Upload coverage report
         if: always() && steps.changes.outputs.run == 'true'

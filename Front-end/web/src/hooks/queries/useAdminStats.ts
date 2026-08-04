@@ -10,13 +10,22 @@ export interface AdminStatFilters {
   totalRevenue: string[];
 }
 
+/** The window `totalRevenue` covers — the Indian financial year to date. */
+export interface AdminRevenuePeriod {
+  /** e.g. "FY 26-27" */
+  label: string;
+  /** "YYYY-MM-DD", store-timezone anchored — feeds the Orders date filter directly. */
+  startDate: string;
+}
+
 export interface AdminStats {
   totalOrders: number;
   pendingOrders: number;
-  /** Rupees (Order.totalAmount is rupees, not paise). */
+  /** Rupees, financial-year to date (Order.totalAmount is rupees, not paise). */
   totalRevenue: number;
   totalProducts: number;
   totalUsers: number;
+  revenuePeriod?: AdminRevenuePeriod;
   filters?: AdminStatFilters;
 }
 

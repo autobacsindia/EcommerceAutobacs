@@ -18,6 +18,7 @@ import Product from '../models/Product.js';
 import User from '../models/User.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { SALE_STATUSES, PENDING_FULFILLMENT_STATUSES } from '../utils/orderStatusGroups.js';
+import { currentFiscalYear } from '../utils/storeTime.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 import cacheService from '../services/cacheService.js';
 
@@ -32,6 +33,12 @@ const STATS_TTL_SECONDS = 30;
 router.use(protect, admin);
 
 async function computeStats() {
+  // Revenue is scoped to the current Indian financial year (1 Apr → 31 Mar), IST-anchored.
+  // A lifetime total only ever grows and says nothing about how the business is doing
+  // now; FY-to-date is the window every GST return, P&L and board conversation uses, so
+  // this tile reconciles with what finance is already looking at.
+  const fy = currentFiscalYear();
+
   const [
     totalOrders,
     pendingOrders,
@@ -40,15 +47,18 @@ async function computeStats() {
     totalUsers,
   ] = await Promise.all([
     // Real orders only — abandoned checkouts (awaiting_payment) are CRM leads, not orders.
+    // Lifetime, unlike revenue: this one is a catalogue-size figure, not a performance one.
     Order.countDocuments({ status: { $in: SALE_STATUSES } }).maxTimeMS(QUERY_TIMEOUTS.listing),
 
-    // Open orders: paid/placed but not delivered yet — the admin's work queue.
+    // Open orders: paid/placed but not delivered yet — the admin's work queue. Deliberately
+    // NOT date-scoped; an order stuck since last FY is exactly the one that needs chasing.
     Order.countDocuments({ status: { $in: PENDING_FULFILLMENT_STATUSES } })
       .maxTimeMS(QUERY_TIMEOUTS.listing),
 
-    // Realised revenue (rupees — Order.totalAmount is rupees, not paise).
+    // Realised FY-to-date revenue (rupees — Order.totalAmount is rupees, not paise).
+    // Matches the { status, createdAt } compound index (models/Order.js).
     Order.aggregate([
-      { $match: { status: { $in: SALE_STATUSES } } },
+      { $match: { status: { $in: SALE_STATUSES }, createdAt: { $gte: fy.start } } },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } },
     ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation }),
 
@@ -64,6 +74,9 @@ async function computeStats() {
     totalRevenue: Math.round((revenueRows[0]?.total || 0) * 100) / 100,
     totalProducts,
     totalUsers,
+    // The window revenue covers, so the UI can label the tile honestly ("Revenue
+    // (FY 26-27)") instead of implying a lifetime total, and deep-link the same range.
+    revenuePeriod: { label: fy.label, startDate: fy.startDate },
     // The statuses behind each number, so the UI can deep-link the tiles to the
     // matching Orders view instead of hardcoding a second copy of the grouping.
     filters: {

@@ -483,6 +483,44 @@ describe('SearchService Unit Tests', () => {
         expect(result.map(p => p._id)).toEqual(['p-thar', 'p-scorpio', 'p-eco']);
       });
 
+      it('does not let a curated pick for another vehicle outrank a fitting one', async () => {
+        // Regression from real data: the Thar PDP had 6 curated complementary
+        // products (Isuzu, Innova, Endeavour, Jimny parts, inherited from the
+        // WooCommerce import). Treating curation as an absolute head-of-list
+        // filled 6 of 9 slots with parts that do not fit the vehicle at all.
+        const curatedIsuzu = { _id: 'p-isuzu', name: 'Isuzu D-Max Roller Shutter', isActive: true, compatibleVehicles: [] };
+        const tharItem     = { _id: 'p-thar',  name: 'Thar Thing',                 compatibleVehicles: [THAR] };
+        Product.findById = jest.fn().mockReturnValue(byIdDoc({
+          _id: ID, name: 'Generic Widget', complementaryProducts: [curatedIsuzu],
+          categories: [CAT_A], compatibleVehicles: [THAR],
+        }));
+        Product.find
+          .mockReturnValueOnce(findChain([tharItem])) // same make+model
+          .mockReturnValueOnce(findChain([]))
+          .mockReturnValueOnce(findChain([]));
+
+        const result = await SearchService.getComplementaryProducts(ID, 9);
+
+        expect(result.map(p => p._id)).toEqual(['p-thar', 'p-isuzu']);
+      });
+
+      it('keeps a curated pick first among items that fit equally well', async () => {
+        const curatedThar = { _id: 'p-cur-thar', name: 'Curated Thar Thing', isActive: true, compatibleVehicles: [THAR] };
+        const plainThar   = { _id: 'p-thar',     name: 'Thar Thing',                             compatibleVehicles: [THAR] };
+        Product.findById = jest.fn().mockReturnValue(byIdDoc({
+          _id: ID, name: 'Generic Widget', complementaryProducts: [curatedThar],
+          categories: [CAT_A], compatibleVehicles: [THAR],
+        }));
+        Product.find
+          .mockReturnValueOnce(findChain([plainThar]))
+          .mockReturnValueOnce(findChain([]))
+          .mockReturnValueOnce(findChain([]));
+
+        const result = await SearchService.getComplementaryProducts(ID, 9);
+
+        expect(result.map(p => p._id)).toEqual(['p-cur-thar', 'p-thar']);
+      });
+
       it('breaks ties inside a tier by signal strength (ecosystem over fitment)', async () => {
         Product.findById = jest.fn().mockReturnValue(byIdDoc({
           _id: ID, name: 'Bonnet Bracket', complementaryProducts: [],

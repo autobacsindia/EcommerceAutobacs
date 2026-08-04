@@ -867,12 +867,6 @@ class SearchService {
         if (ids.some(id => sameMake.has(id))) return 1;
         return 0;
       };
-      // Stable within a tier, so the DB's rating/reviews order survives.
-      const byFitment = (docs) => docs
-        .map((doc, i) => ({ doc, tier: fitmentTier(doc), i }))
-        .sort((a, b) => b.tier - a.tier || a.i - b.i)
-        .map(x => x.doc);
-
       const find = (filter) => Product.find(filter)
         .sort({ averageRating: -1, totalReviews: -1 })
         .limit(limit * 3)
@@ -896,23 +890,20 @@ class SearchService {
         }
       };
 
-      // Source 1: admin-curated. Always the head of the list — explicit intent
-      // outranks any derived signal. Ordered by fitment among themselves.
-      if (product.complementaryProducts?.length > 0) {
-        const curated = product.complementaryProducts
-          .filter(p => p && p.isActive && !similarIds.has(p._id.toString()));
-        collect(byFitment(curated));
-        console.log('[SearchService] Curated complementary:', curated.length, '→ picked:', picked.length);
-      }
-
-      // Everything below curated goes into ONE pool that is ranked globally by
-      // fitment, not per-source. Ranking inside each source instead lets a source
-      // that runs earlier fill the rail with tier-0 items — e.g. a Thar product
-      // returning Isuzu/Jimny ecosystem matches ahead of every Thar part.
+      // EVERY source feeds one pool that is ranked globally by fitment first.
+      // Ranking within each source instead lets whichever source runs earlier
+      // fill the rail with tier-0 items — that is how a Thar page ended up
+      // leading with Isuzu, Innova, Endeavour and Jimny parts.
+      //
       // Source rank only breaks ties WITHIN a fitment tier, where it encodes
-      // signal strength: a real "bought with" relationship beats bare fitment,
-      // which beats a shared category.
-      const SOURCE = { ECOSYSTEM: 0, FITMENT: 1, CATEGORY: 2 };
+      // signal strength: an admin's explicit pick beats a real "bought with"
+      // relationship, which beats bare fitment, which beats a shared category.
+      //
+      // Curation is deliberately NOT above fitment. Admin lists are inherited
+      // from the WooCommerce import and routinely name parts for other vehicles;
+      // a curated Isuzu shutter must never outrank a Thar part on a Thar page.
+      // A curated pick still wins among items that fit equally well.
+      const SOURCE = { CURATED: 0, ECOSYSTEM: 1, FITMENT: 2, CATEGORY: 3 };
       const pool = [];
       const pooled = new Set();
       const addToPool = (docs, source) => {
@@ -925,6 +916,16 @@ class SearchService {
       };
       const slots = limit - picked.length;
       const poolTierCount = (minTier) => pool.reduce((n, x) => n + (x.tier >= minTier ? 1 : 0), 0);
+
+      // Admin-curated. Exempt from the different-type filter — an admin naming a
+      // same-type accessory means it, whereas the derived sources need that guard
+      // to avoid recommending a near-duplicate of the product being viewed.
+      if (product.complementaryProducts?.length > 0) {
+        const curated = product.complementaryProducts
+          .filter(p => p && p.isActive && !similarIds.has(p._id.toString()));
+        console.log('[SearchService] Curated complementary:', curated.length);
+        addToPool(curated, SOURCE.CURATED);
+      }
 
       // Installation-ecosystem name match (e.g. bonnet bracket → LED lights).
       const complementRegex = SearchService.getComplementaryNameRegex(product.name);

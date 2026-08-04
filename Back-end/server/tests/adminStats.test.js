@@ -16,6 +16,7 @@ import Order from '../models/Order.js';
 import * as dbHandler from './db-handler.js';
 import cacheService from '../services/cacheService.js';
 import { SALE_STATUSES, PENDING_FULFILLMENT_STATUSES } from '../utils/orderStatusGroups.js';
+import { currentFiscalYear } from '../utils/storeTime.js';
 
 const admin = {
   name: 'Stats Admin',
@@ -32,8 +33,8 @@ const shippingAddress = {
   postalCode: '400001',
 };
 
-async function seedOrder(user, status, totalAmount, paymentStatus = 'paid') {
-  return Order.create({
+async function seedOrder(user, status, totalAmount, paymentStatus = 'paid', createdAt) {
+  const order = await Order.create({
     user,
     items: [{ product: user, quantity: 1, price: totalAmount, name: 'Item' }],
     shippingAddress,
@@ -42,6 +43,11 @@ async function seedOrder(user, status, totalAmount, paymentStatus = 'paid') {
     status,
     paymentStatus,
   });
+  // `createdAt` is managed by timestamps, so backdating needs an explicit write.
+  if (createdAt) {
+    await Order.collection.updateOne({ _id: order._id }, { $set: { createdAt } });
+  }
+  return order;
 }
 
 describe('GET /api/v1/admin/stats', () => {
@@ -126,6 +132,42 @@ describe('GET /api/v1/admin/stats', () => {
     const res = await getStats().expect(200);
 
     expect(res.body.stats.totalRevenue).toBe(6000.5);
+  });
+
+  it('counts revenue for the current financial year only', async () => {
+    const fy = currentFiscalYear();
+    await seedOrder(adminId, 'delivered', 5000);
+    // One millisecond before the FY opened, and a year earlier — both excluded.
+    await seedOrder(adminId, 'delivered', 111111, 'paid', new Date(fy.start.getTime() - 1));
+    await seedOrder(adminId, 'delivered', 222222, 'paid', new Date(fy.start.getTime() - 86_400_000 * 200));
+    // Exactly on the boundary — included ($gte).
+    await seedOrder(adminId, 'delivered', 1000, 'paid', fy.start);
+
+    const res = await getStats().expect(200);
+
+    expect(res.body.stats.totalRevenue).toBe(6000);
+    // Pending stays lifetime — an order stuck since last FY still needs chasing.
+    expect(res.body.stats.totalOrders).toBe(4);
+  });
+
+  it('reports the revenue window so the tile can label and deep-link it', async () => {
+    const fy = currentFiscalYear();
+
+    const res = await getStats().expect(200);
+
+    expect(res.body.stats.revenuePeriod).toEqual({ label: fy.label, startDate: fy.startDate });
+    expect(res.body.stats.revenuePeriod.label).toMatch(/^FY \d{2}-\d{2}$/);
+    expect(res.body.stats.revenuePeriod.startDate).toMatch(/^\d{4}-04-01$/);
+  });
+
+  it('keeps pending orders lifetime — an order stuck since last FY still needs chasing', async () => {
+    const fy = currentFiscalYear();
+    await seedOrder(adminId, 'processing', 1000, 'paid', new Date(fy.start.getTime() - 86_400_000 * 30));
+
+    const res = await getStats().expect(200);
+
+    expect(res.body.stats.pendingOrders).toBe(1);
+    expect(res.body.stats.totalRevenue).toBe(0);
   });
 
   it('returns zeros (not an error) when there are no orders', async () => {
