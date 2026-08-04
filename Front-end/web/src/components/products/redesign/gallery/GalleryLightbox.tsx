@@ -61,31 +61,56 @@ export default function GalleryLightbox({
     if (!el) return;
 
     if (open) {
-      // Guarded: `showModal` throws if the dialog is already open, and is absent
-      // in jsdom (see the polyfill in jest.setup.js).
-      if (!el.open && typeof el.showModal === 'function') el.showModal();
+      if (!el.open) {
+        // `showModal` throws if the dialog is already open, and is absent both
+        // in jsdom (see the polyfill in jest.setup.js) and on browsers older
+        // than the <dialog> API — Safari < 15.4, i.e. the same locked-iOS tier
+        // `useMediaQuery` still caters for. There, fall back to opening it
+        // non-modally: the element is positioned and sized by our own classes,
+        // so it still fills the screen and is still usable. What degrades is
+        // the free stuff — focus trapping, the top layer, ::backdrop — none of
+        // which is worth a second overlay implementation to recover.
+        if (typeof el.showModal === 'function') el.showModal();
+        else el.open = true;
+      }
       setContentMounted(true);
     } else {
-      if (el.open && typeof el.close === 'function') el.close();
+      if (el.open) {
+        if (typeof el.close === 'function') el.close();
+        else el.open = false;
+      }
       setContentMounted(false);
     }
   }, [open]);
 
   // `showModal` makes the background inert but does NOT stop it scrolling; on
   // touch devices the page visibly slides behind the viewer without this.
+  // Keyed off the dialog actually being open, never off intent — locking the
+  // page while nothing is on screen would strand the customer.
   useEffect(() => {
-    if (!open) return;
+    if (!contentMounted || !dialogRef.current?.open) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [open]);
+  }, [contentMounted]);
 
   const count = images.length;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDialogElement>) => {
-    if (index === null || count < 2) return;
+    if (index === null) return;
+
+    // Escape is handled natively by a modal dialog (cancel → close → onClose),
+    // but the non-modal fallback above has no such behaviour. Closing here too
+    // costs nothing — `onClose` only clears state, so the duplicate call on the
+    // native path is a no-op.
+    if (event.key === 'Escape') {
+      onClose();
+      return;
+    }
+
+    if (count < 2) return;
     if (event.key === 'ArrowRight') {
       event.preventDefault();
       onIndexChange((index + 1) % count);
@@ -98,12 +123,20 @@ export default function GalleryLightbox({
   return (
     <dialog
       ref={dialogRef}
-      // Fires for Escape and for `.close()` alike, so this is the single exit
-      // path — no separate Escape listener to keep in sync.
+      // Fires for Escape and for `.close()` alike on a browser with the dialog
+      // API. `handleKeyDown` covers Escape for the non-modal fallback, where no
+      // such event exists; both routes converge on the same `onClose`.
       onClose={onClose}
       onKeyDown={handleKeyDown}
       aria-label={`${name} image viewer`}
       className={cn(
+        // Hiding a closed dialog is normally the UA stylesheet's job. We assert
+        // it ourselves because a browser that does not implement <dialog> has no
+        // such rule, and these classes would then paint an opaque, full-screen,
+        // permanently-open panel over the entire PDP. Keyed off the `open`
+        // attribute rather than React state, so it stays correct through the
+        // frame between a native close and the re-render that follows it.
+        '[&:not([open])]:hidden',
         'fixed inset-0 m-0 h-full max-h-none w-full max-w-none overflow-hidden',
         'border-0 bg-obsidian p-0 font-display text-ink',
         'backdrop:bg-black/90 backdrop:backdrop-blur-sm'
@@ -178,7 +211,9 @@ function LightboxContent({ images, index, onIndexChange, onClose }: LightboxCont
         >
           {images.map((image, slideIndex) => (
             <div
-              key={`${image.src}-${slideIndex}`}
+              // Keyed by position — see the note in GalleryCarousel; the slide
+              // observer requires these nodes to survive a same-length list swap.
+              key={slideIndex}
               className="flex h-full w-full shrink-0 snap-center items-center justify-center p-4 sm:p-8"
               // `pan-x` keeps the swipe-to-page gesture; `pinch-zoom` hands the
               // two-finger gesture to the browser. Vertical panning is

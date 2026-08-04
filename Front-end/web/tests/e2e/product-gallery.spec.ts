@@ -6,21 +6,44 @@ import { test, expect, type Page } from '@playwright/test';
  * Hover, real scroll-snap paging, and native `<dialog>` modality all depend on a
  * layout engine and a compositor. The jest suite covers state and wiring; this
  * covers the parts that only exist in a browser. Runs against the dev server
- * (see playwright.config.js) — it navigates to whatever product is first in the
- * catalogue rather than hard-coding a slug, so it survives catalogue changes.
+ * (see playwright.config.js) — it resolves a product from the catalogue API
+ * rather than hard-coding a slug, so it survives catalogue changes.
  */
 
 const ZOOM_SOURCE = /w_1600/;
 
-async function openFirstProduct(page: Page): Promise<boolean> {
-  await page.goto('/products');
-  const link = page.locator('a[href^="/products/"]').first();
-  if ((await link.count()) === 0) return false;
-  await link.click();
-  await page.waitForURL(/\/products\/.+/);
-  // Park the cursor off the gallery. The click that navigated here leaves the
-  // mouse wherever the card was, which on the PDP can land inside the magnifier
-  // — the zoom then engages before the test has hovered anything.
+/** Mirrors MAX_DOTS in GalleryCarousel: past this the dot row is not rendered. */
+const MAX_DOTS = 8;
+
+/**
+ * Navigate to a real PDP whose image count falls in `[min, max]`.
+ *
+ * Resolved from the catalogue API rather than by clicking the first card. Most
+ * products carry one or two photos, so a "first product in the list" helper
+ * silently skipped every multi-slide assertion — the suite reported green while
+ * never running the checks that matter. Returns false only when the catalogue
+ * genuinely has nothing suitable.
+ */
+async function openProduct(
+  page: Page,
+  { min = 1, max = Number.MAX_SAFE_INTEGER }: { min?: number; max?: number } = {}
+): Promise<boolean> {
+  const response = await page.request.get('/api/v1/products?limit=60');
+  if (!response.ok()) return false;
+
+  const { products } = (await response.json()) as {
+    products?: Array<{ slug?: string; images?: unknown[] }>;
+  };
+  const match = products?.find((p) => {
+    const count = p.images?.length ?? 0;
+    return p.slug && count >= min && count <= max;
+  });
+  if (!match?.slug) return false;
+
+  await page.goto(`/products/${match.slug}`);
+  await expect(page.getByTestId('gallery-carousel')).toBeAttached();
+  // Park the cursor off the gallery — otherwise it can sit inside the magnifier
+  // from the moment the page loads and the zoom engages before we hover.
   await page.mouse.move(0, 0);
   return true;
 }
@@ -31,7 +54,7 @@ test.describe('PDP gallery', () => {
     isMobile,
   }) => {
     test.skip(!!isMobile, 'hover magnifier is desktop-only by design');
-    test.skip(!(await openFirstProduct(page)), 'no products in the catalogue');
+    test.skip(!(await openProduct(page)), 'no products in the catalogue');
 
     const frame = page.getByTestId('gallery-zoom');
     await expect(frame).toBeVisible();
@@ -74,7 +97,7 @@ test.describe('PDP gallery', () => {
     isMobile,
   }) => {
     test.skip(!!isMobile, 'covered by the touch spec on mobile');
-    test.skip(!(await openFirstProduct(page)), 'no products in the catalogue');
+    test.skip(!(await openProduct(page)), 'no products in the catalogue');
 
     await page.getByTestId('gallery-zoom').click();
 
@@ -95,16 +118,16 @@ test.describe('PDP gallery', () => {
     isMobile,
   }) => {
     test.skip(!isMobile, 'touch carousel replaces the magnifier below lg');
-    test.skip(!(await openFirstProduct(page)), 'no products in the catalogue');
+    test.skip(
+      !(await openProduct(page, { min: 3, max: MAX_DOTS })),
+      'no product with 3-8 images in the catalogue'
+    );
 
     const carousel = page.getByTestId('gallery-carousel');
     await expect(carousel).toBeVisible();
     await expect(page.getByTestId('gallery-zoom')).toBeHidden();
 
     const counter = carousel.getByText(/^\d+ \/ \d+$/);
-    if ((await counter.count()) === 0) {
-      test.skip(true, 'product has a single image');
-    }
     await expect(counter).toHaveText(/^1 \//);
 
     // Drive the native scroller and assert our observer reports the landing
@@ -115,9 +138,39 @@ test.describe('PDP gallery', () => {
     await expect(counter).toHaveText(/^2 \//);
   });
 
+  test('touch: a multi-slide jump lands on the slide that was asked for', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, 'touch carousel only');
+    test.skip(
+      !(await openProduct(page, { min: 3, max: MAX_DOTS })),
+      'no product with 3-8 images in the catalogue'
+    );
+
+    const carousel = page.getByTestId('gallery-carousel');
+    const dots = carousel.getByRole('button', { name: /^Go to image \d+ of \d+$/ });
+    const total = await dots.count();
+    test.skip(total < 3, 'needs at least three images to jump past one');
+
+    // The regression this locks: a smooth scroll across several slides sweeps
+    // every slide in between past the observer's 50% threshold. Reporting one
+    // of those retargets the in-flight animation, so asking for the last image
+    // used to strand the customer on the second.
+    const counter = carousel.getByText(/^\d+ \/ \d+$/);
+    await expect(counter).toHaveText(`1 / ${total}`);
+
+    await dots.nth(total - 1).click();
+
+    await expect(counter).toHaveText(`${total} / ${total}`);
+    // And it must still be there once the animation has fully settled.
+    await page.waitForTimeout(1500);
+    await expect(counter).toHaveText(`${total} / ${total}`);
+  });
+
   test('touch: tapping a slide opens the viewer at that image', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'touch path only');
-    test.skip(!(await openFirstProduct(page)), 'no products in the catalogue');
+    test.skip(!(await openProduct(page)), 'no products in the catalogue');
 
     await page.getByTestId('gallery-carousel').getByRole('button').first().click();
 

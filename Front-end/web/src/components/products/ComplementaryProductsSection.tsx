@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { getStockStatus } from '@/lib/stock';
+import { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './productRail';
 
 interface Product {
   _id: string;
@@ -68,7 +69,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
         setLoading(true);
         setError(null);
         
-        const response: any = await apiClient.get(`/products/${productId}/complementary?limit=4`);
+        const response: any = await apiClient.get(`/products/${productId}/complementary?limit=${RAIL_LIMIT}`);
         
         console.log('[ComplementaryProductsSection] API Response:', response);
         console.log('[ComplementaryProductsSection] Response.success:', response.success);
@@ -108,9 +109,9 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
             Frequently Bought Together
           </h2>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className={`${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
+          <div className={RAIL_CONTAINER}>
+            {[...Array(RAIL_LIMIT)].map((_, i) => (
+              <div key={i} className={`${RAIL_ITEM} ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
                 <div className={`aspect-square ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'}`} />
                 <div className="p-4 space-y-3">
                   <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-3/4`} />
@@ -154,7 +155,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
           </span>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className={RAIL_CONTAINER}>
           {products.map((product) => {
             const getImageUrl = () => {
               if (!product.images || product.images.length === 0) {
@@ -190,9 +191,11 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
               && product.priceMax > product.priceMin;
 
             return (
-              <article 
+              <article
                 key={product._id}
-                className={`${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+                // flex-col + mt-auto on the action row keeps the CTA bottom-aligned
+                // now that cards stretch to a common height in both layouts.
+                className={`${RAIL_ITEM} flex flex-col ${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
                 tabIndex={0}
                 role="link"
                 aria-label={`View ${product.name} - ₹${product.price}`}
@@ -203,7 +206,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                       src={getImageUrl()}
                       alt={getImageAlt()}
                       fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      sizes={RAIL_IMAGE_SIZES}
                       className="object-contain p-4 transition-transform duration-300 hover:scale-105"
                       loading="lazy"
                     />
@@ -258,7 +261,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                 {/* Action row — sibling of the Link (interactive controls can't nest
                     inside an <a>). Variable products can't be quick-added: a model
                     must be chosen on the PDP, so they get a "Select options" link. */}
-                <div className="px-4 pb-4">
+                <div className="mt-auto px-4 pb-4">
                   {isVariable ? (
                     <Link
                       href={`/products/${product.slug}`}

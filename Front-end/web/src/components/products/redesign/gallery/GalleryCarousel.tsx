@@ -71,7 +71,12 @@ export default function GalleryCarousel({
         >
           {images.map((image, index) => (
             <button
-              key={`${image.src}-${index}`}
+              // Keyed by POSITION, not by URL: `useSnapPager` observes the slide
+              // nodes present when the count last changed, so a same-length list
+              // with different URLs must reuse these nodes rather than replace
+              // them. Safe here because a slide holds no state of its own — only
+              // the image src, which React updates in place.
+              key={index}
               type="button"
               onClick={() => onOpen(index)}
               aria-label={`Open ${image.alt} in fullscreen`}

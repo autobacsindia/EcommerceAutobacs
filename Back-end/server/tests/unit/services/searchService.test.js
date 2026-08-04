@@ -401,5 +401,71 @@ describe('SearchService Unit Tests', () => {
 
       expect(result).toEqual([]);
     });
+
+    describe('complementary fitment tiers', () => {
+      const THAR    = new mongoose.Types.ObjectId();
+      const SCORPIO = new mongoose.Types.ObjectId();
+      const CAT_A   = new mongoose.Types.ObjectId();
+
+      // Vehicle.find(...).select(...).lean().maxTimeMS()
+      function vehicleChain(result) {
+        const chain = {};
+        chain.select = jest.fn(() => chain);
+        chain.lean = jest.fn(() => chain);
+        chain.maxTimeMS = jest.fn().mockResolvedValue(result);
+        return chain;
+      }
+
+      beforeEach(() => {
+        // The source product is a Mahindra Thar part. Its name matches no
+        // PRODUCT_TYPES pattern, so the different-type filter is a no-op and the
+        // test isolates fitment ordering.
+        Product.findById = jest.fn().mockReturnValue(byIdDoc({
+          _id: ID, name: 'Generic Widget', complementaryProducts: [],
+          categories: [CAT_A], compatibleVehicles: [THAR],
+        }));
+        // Isolate from the similar-set exclusion, which has its own coverage.
+        jest.spyOn(SearchService, 'getSimilarProducts').mockResolvedValue([]);
+        // 1st Vehicle.find = the source's vehicles; 2nd = every vehicle of that make.
+        Vehicle.find
+          .mockReturnValueOnce(vehicleChain([{ _id: THAR, make: 'Mahindra' }]))
+          .mockReturnValueOnce(vehicleChain([{ _id: THAR }, { _id: SCORPIO }]));
+      });
+
+      afterEach(() => {
+        SearchService.getSimilarProducts.mockRestore();
+      });
+
+      it('orders same make+model, then same make, then category-only', async () => {
+        const tharItem    = { _id: 'p-thar',    name: 'Thar Thing',    compatibleVehicles: [THAR] };
+        const scorpioItem = { _id: 'p-scorpio', name: 'Scorpio Thing', compatibleVehicles: [SCORPIO] };
+        const catItem     = { _id: 'p-cat',     name: 'Cat Thing',     compatibleVehicles: [] };
+        Product.find
+          .mockReturnValueOnce(findChain([tharItem]))
+          .mockReturnValueOnce(findChain([scorpioItem]))
+          .mockReturnValueOnce(findChain([catItem]));
+
+        const result = await SearchService.getComplementaryProducts(ID, 9);
+
+        expect(result.map(p => p._id)).toEqual(['p-thar', 'p-scorpio', 'p-cat']);
+      });
+
+      it('stops querying lower tiers once the limit is filled', async () => {
+        const tharItem = { _id: 'p-thar', name: 'Thar Thing', compatibleVehicles: [THAR] };
+        Product.find.mockReturnValueOnce(findChain([tharItem]));
+
+        const result = await SearchService.getComplementaryProducts(ID, 1);
+
+        expect(result.map(p => p._id)).toEqual(['p-thar']);
+        expect(Product.find).toHaveBeenCalledTimes(1); // same-make/category never run
+      });
+
+      it('does not double-count the exact vehicles as same-make matches', async () => {
+        const { exact, sameMake } = await SearchService.resolveFitmentTiers([THAR]);
+
+        expect([...exact]).toEqual([String(THAR)]);
+        expect([...sameMake]).toEqual([String(SCORPIO)]);
+      });
+    });
   });
 });

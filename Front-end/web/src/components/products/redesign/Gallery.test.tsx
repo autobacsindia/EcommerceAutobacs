@@ -52,8 +52,44 @@ const setMatchMedia = (matcher: (query: string) => boolean) => {
   }));
 };
 
+/**
+ * jsdom has no layout: every offset and width reads 0, so any code that decides
+ * "is this already in the right place?" trivially answers yes and never runs.
+ * These stubs give the strips just enough geometry to exercise that arithmetic.
+ * Slides/thumbnails are `item` px wide inside an `viewport` px scroller.
+ */
+function mockScrollGeometry({ item = 60, viewport = 300 } = {}) {
+  jest.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function (
+    this: HTMLElement
+  ) {
+    const parent = this.parentElement;
+    return parent ? Array.prototype.indexOf.call(parent.children, this) * item : 0;
+  });
+  jest.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (
+    this: Element
+  ) {
+    return this.tagName === 'BUTTON' ? item : viewport;
+  });
+  jest.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(function (
+    this: Element
+  ) {
+    return this.childElementCount * item;
+  });
+
+  const scrollTo = jest.fn();
+  (Element.prototype as unknown as { scrollTo: unknown }).scrollTo = scrollTo;
+  return scrollTo;
+}
+
+const originalScrollTo = (Element.prototype as unknown as { scrollTo?: unknown }).scrollTo;
+
 beforeEach(() => {
   setMatchMedia(() => false);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+  (Element.prototype as unknown as { scrollTo?: unknown }).scrollTo = originalScrollTo;
 });
 
 describe('Gallery', () => {
@@ -107,6 +143,34 @@ describe('Gallery', () => {
     expect(screen.getByRole('button', { name: 'Show image 3 of 4' })).toHaveAttribute(
       'aria-current',
       'true'
+    );
+  });
+
+  it('reuses slide nodes when a same-length list swaps every URL', () => {
+    // The pager's observer watches the slide nodes present when the count last
+    // changed. If React replaced them, it would be left observing detached
+    // elements: the strip would still scroll but the counter and dots would
+    // freeze. Position keys are what keep the nodes alive.
+    const slides = () =>
+      Array.from(
+        document.querySelectorAll('[data-testid="gallery-carousel"] [role="group"] > button')
+      );
+
+    const { rerender } = render(<Gallery images={makeImages(3)} name="Roav bumper" />);
+    const before = slides();
+
+    const replaced: GalleryImage[] = makeImages(3).map((image, i) => ({
+      src: `${CLOUDINARY}/replaced-${i}.jpg`,
+      alt: image.alt,
+    }));
+    rerender(<Gallery images={replaced} name="Roav bumper" />);
+
+    const after = slides();
+    expect(after).toHaveLength(3);
+    after.forEach((slide, i) => expect(slide).toBe(before[i]));
+    expect(within(after[0] as HTMLElement).getByRole('img')).toHaveAttribute(
+      'src',
+      `${CLOUDINARY}/replaced-0.jpg`
     );
   });
 
@@ -274,6 +338,55 @@ describe('Gallery', () => {
       fireEvent.click(zoomFrame());
       // Active slide plus its immediate neighbour — never all four at once.
       expect(fullSize()).toHaveLength(2);
+    });
+
+    it('brings the active thumbnail into view when it opens deep in the list', () => {
+      // The rail's scroll-on-mount was previously skipped to protect the page
+      // from being scrolled; the viewer renders its own copy of that rail and
+      // would open at image 8 showing thumbnails 1-5 with nothing selected.
+      const scrollTo = mockScrollGeometry();
+      render(<Gallery images={makeImages(10)} name="Roav bumper" />);
+      scrollTo.mockClear();
+
+      fireEvent.click(carousel().getByRole('button', { name: /image 8 in fullscreen/i }));
+
+      // Thumb 8 sits at 420px; centring it in a 300px rail scrolls to 300 (the
+      // clamped maximum), instantly rather than animating on first paint.
+      expect(scrollTo).toHaveBeenCalledWith(
+        expect.objectContaining({ left: 300, behavior: 'auto' })
+      );
+    });
+
+    it('still opens on a browser without the dialog API', () => {
+      // Safari < 15.4 has no showModal. Without a fallback the viewer silently
+      // never opens — and worse, the styled <dialog> has no UA `display: none`
+      // to hide it, so it paints an opaque panel over the whole PDP.
+      const proto = window.HTMLDialogElement.prototype;
+      const { showModal, close } = proto;
+      // @ts-expect-error simulating a browser that predates the dialog API
+      delete proto.showModal;
+      // @ts-expect-error simulating a browser that predates the dialog API
+      delete proto.close;
+
+      try {
+        render(<Gallery images={makeImages(3)} name="Roav bumper" />);
+        const element = document.querySelector('dialog')!;
+
+        expect(element.open).toBe(false); // hidden by `[&:not([open])]:hidden`
+
+        fireEvent.click(zoomFrame());
+        expect(element.open).toBe(true);
+        expect(
+          within(element).getByRole('button', { name: 'Close image viewer' })
+        ).toBeInTheDocument();
+
+        // Escape is the native dialog's job; the fallback needs it handled.
+        fireEvent.keyDown(element, { key: 'Escape' });
+        expect(element.open).toBe(false);
+      } finally {
+        proto.showModal = showModal;
+        proto.close = close;
+      }
     });
 
     it('unmounts its contents on close so full-size images are released', () => {

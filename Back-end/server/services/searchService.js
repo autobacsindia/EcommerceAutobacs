@@ -777,12 +777,59 @@ class SearchService {
   }
 
   /**
+   * Resolve the fitment tiers for a product's `compatibleVehicles`.
+   *
+   * Tier 2 = the very same Vehicle docs (same make AND model — "Mahindra Thar").
+   * Tier 1 = any Vehicle sharing a make with them ("Mahindra", other models).
+   *
+   * Make matching is anchored + case-insensitive as a cheap guard, NOT to repair
+   * existing data — as of 2026-08-04 prod holds 14 makes, all clean Title Case,
+   * no casing or whitespace variants. But `Vehicle.make` is free text with only
+   * `trim: true` (no enum, no normalization), so one admin typing "mahindra"
+   * would silently empty the same-make tier. The collection is 28 docs, so the
+   * collscan a case-insensitive regex forces costs nothing.
+   *
+   * @param {Array} vehicleRefs `product.compatibleVehicles`
+   * @returns {Promise<{exact: Set<string>, sameMake: Set<string>, makes: string[]}>}
+   */
+  static async resolveFitmentTiers(vehicleRefs) {
+    const exact = new Set((vehicleRefs || []).map(String));
+    if (exact.size === 0) return { exact, sameMake: new Set(), makes: [] };
+
+    const vehicles = await Vehicle.find({ _id: { $in: vehicleRefs } })
+      .select('make')
+      .lean()
+      .maxTimeMS(2000);
+
+    const makes = [...new Set(vehicles.map(v => v.make).filter(Boolean))];
+    if (makes.length === 0) return { exact, sameMake: new Set(), makes: [] };
+
+    const makePatterns = makes.map(m => new RegExp(`^${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+    const siblings = await Vehicle.find({ make: { $in: makePatterns } })
+      .select('_id')
+      .lean()
+      .maxTimeMS(2000);
+
+    // Same-make MINUS the exact vehicles, so the two tiers stay disjoint.
+    const sameMake = new Set(siblings.map(v => String(v._id)).filter(id => !exact.has(id)));
+    return { exact, sameMake, makes };
+  }
+
+  /**
    * Get complementary products (Frequently Bought Together) — items that go WITH
-   * the product, not items like it. Priority order, each requiring a real signal:
+   * the product, not items like it. Candidates come from three sources, each
+   * requiring a real signal:
    *   1. Admin-curated complementaryProducts.
    *   2. Installation-ecosystem name match (e.g. bonnet bracket → LED lights),
    *      restricted to a DIFFERENT product type.
-   *   3. Same-fitment / same-category products of a DIFFERENT product type.
+   *   3. Same-fitment / same-make / same-category products of a DIFFERENT type.
+   *
+   * Within each source, results are ordered by vehicle fitment: exact make+model
+   * first ("Mahindra Thar"), then same make ("Mahindra", other models), then the
+   * rest. Sources are consumed in order and topped up until `limit` is filled, so
+   * a curated pick always outranks an algorithmic one but never leaves the rail
+   * short.
+   *
    * The "similar" set is excluded so complementary never duplicates similar. There
    * is NO random last resort — an empty result hides the section.
    */
@@ -800,11 +847,32 @@ class SearchService {
 
       console.log('[SearchService] Complementary for:', product.name);
 
-      // Exclude the similar set so complementary results are genuinely different.
-      const similarProducts = await this.getSimilarProducts(productId, 20);
+      // Exclude the similar set so the two rails never show the same card.
+      // Scoped to `limit` — i.e. exactly what the Similar rail renders — because
+      // the similar score weights shared fitment heavily, so a wider exclusion
+      // would drop the very same-make/model items this function ranks first,
+      // for products the shopper never actually sees in the Similar rail.
+      const similarProducts = await this.getSimilarProducts(productId, limit);
       const similarIds = new Set(similarProducts.map(p => p._id.toString()));
       const excluded   = [new mongoose.Types.ObjectId(productId), ...similarProducts.map(p => p._id)];
       const currentType = SearchService.extractProductTypeSlug(product.name);
+
+      const { exact, sameMake } = await SearchService.resolveFitmentTiers(product.compatibleVehicles);
+      const sameMakeIds = [...sameMake].map(id => new mongoose.Types.ObjectId(id));
+
+      // 2 = same make+model, 1 = same make, 0 = no fitment overlap.
+      const fitmentTier = (p) => {
+        const ids = (p.compatibleVehicles || []).map(String);
+        if (ids.some(id => exact.has(id))) return 2;
+        if (ids.some(id => sameMake.has(id))) return 1;
+        return 0;
+      };
+      // Stable within a tier, so the DB's rating/reviews order survives.
+      const byFitment = (docs) => docs
+        .map((doc, i) => ({ doc, tier: fitmentTier(doc), i }))
+        .sort((a, b) => b.tier - a.tier || a.i - b.i)
+        .map(x => x.doc);
+
       const find = (filter) => Product.find(filter)
         .sort({ averageRating: -1, totalReviews: -1 })
         .limit(limit * 3)
@@ -816,39 +884,58 @@ class SearchService {
         ? docs.filter(p => SearchService.extractProductTypeSlug(p.name) !== currentType)
         : docs);
 
-      // Priority 1: admin-curated.
+      const picked = [];
+      const seen = new Set();
+      const collect = (docs) => {
+        for (const doc of byFitment(docs)) {
+          const key = String(doc._id);
+          if (picked.length >= limit) break;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          picked.push(doc);
+        }
+      };
+
+      // Source 1: admin-curated. Always the head of the list — explicit intent.
       if (product.complementaryProducts?.length > 0) {
         const curated = product.complementaryProducts
-          .filter(p => p && p.isActive && !similarIds.has(p._id.toString()))
-          .slice(0, limit);
-        if (curated.length > 0) {
-          console.log('[SearchService] Returning', curated.length, 'curated complementary products');
-          return curated;
-        }
+          .filter(p => p && p.isActive && !similarIds.has(p._id.toString()));
+        collect(curated);
+        console.log('[SearchService] Curated complementary:', curated.length, '→ picked:', picked.length);
       }
 
-      // Priority 2: installation-ecosystem name match (different product type).
+      // Source 2: installation-ecosystem name match (different product type).
       const complementRegex = SearchService.getComplementaryNameRegex(product.name);
-      if (complementRegex) {
+      if (picked.length < limit && complementRegex) {
         const docs = await find({ _id: { $nin: excluded }, isActive: true, name: { $regex: complementRegex, $options: 'i' } });
         const filtered = differentType(docs);
         console.log('[SearchService] Ecosystem match:', docs.length, '→ different-type:', filtered.length);
-        if (filtered.length > 0) return filtered.slice(0, limit);
+        collect(filtered);
       }
 
-      // Priority 3: same-fitment / same-category items of a DIFFERENT product type.
-      const or = [];
-      if ((product.compatibleVehicles || []).length) or.push({ compatibleVehicles: { $in: product.compatibleVehicles } });
-      if ((product.categories || []).length)         or.push({ categories: { $in: product.categories } });
-      if (or.length > 0) {
-        const docs = await find({ _id: { $nin: excluded }, isActive: true, $or: or });
+      // Source 3: fitment/category, DIFFERENT product type — as three ordered
+      // queries rather than one $or. A single query sorted by rating would let
+      // popular category-only items crowd exact-fitment ones out of the
+      // `limit * 3` window before tiering ever saw them; querying each tier
+      // separately guarantees make+model wins, and short-circuits once full.
+      const tierQueries = [
+        ['same make+model', (product.compatibleVehicles || []).length
+          ? { compatibleVehicles: { $in: product.compatibleVehicles } } : null],
+        ['same make', sameMakeIds.length
+          ? { compatibleVehicles: { $in: sameMakeIds } } : null],
+        ['same category', (product.categories || []).length
+          ? { categories: { $in: product.categories } } : null],
+      ];
+      for (const [label, clause] of tierQueries) {
+        if (picked.length >= limit || !clause) continue;
+        const docs = await find({ _id: { $nin: excluded }, isActive: true, ...clause });
         const filtered = differentType(docs);
-        console.log('[SearchService] Fitment/category complement:', docs.length, '→ different-type:', filtered.length);
-        if (filtered.length > 0) return filtered.slice(0, limit);
+        console.log(`[SearchService] Complement (${label}):`, docs.length, '→ different-type:', filtered.length);
+        collect(filtered);
       }
 
       // No random last resort — nothing genuinely complementary found.
-      return [];
+      return picked.slice(0, limit);
     } catch (error) {
       console.error('[SearchService] getComplementaryProducts failed:', error);
       return [];

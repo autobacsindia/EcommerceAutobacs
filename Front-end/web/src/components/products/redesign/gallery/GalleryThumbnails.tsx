@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import EnhancedImage from '@/components/layout/EnhancedImage';
+import { usePrefersReducedMotion } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import type { GalleryImage } from './types';
 
@@ -29,24 +30,36 @@ export default function GalleryThumbnails({
 }: GalleryThumbnailsProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
   const isFirstRun = useRef(true);
+  const reduceMotion = usePrefersReducedMotion();
 
-  // Keep the selected thumbnail in view when the index changes from elsewhere
-  // (a swipe on the carousel, arrow keys in the lightbox) — otherwise the rail
-  // silently disagrees with the main image once past the fifth photo.
+  // Keep the selected thumbnail in view — on mount as well as on every later
+  // change. Mount matters: the viewer renders its own copy of this rail and can
+  // open at image 8 of 10, which would otherwise show thumbnails 1–5 with no
+  // visible selection until the customer navigated once.
   //
-  // Skipped on mount: `block: 'nearest'` walks every scrollable ancestor, so on
-  // first render — before the customer has done anything — it would scroll the
-  // PAGE down to bring the rail into view, hijacking the landing position of
-  // every PDP where the gallery sits below the fold.
+  // Deliberately NOT `scrollIntoView`. That walks every scrollable ancestor, so
+  // running it on mount would scroll the PAGE down to reach the rail, hijacking
+  // the landing position of any PDP whose gallery sits below the fold. Scrolling
+  // the rail itself can only ever move the rail, which is what makes it safe to
+  // run unconditionally.
   useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
-      return;
-    }
-    const target = railRef.current?.children[active] as HTMLElement | undefined;
-    if (typeof target?.scrollIntoView !== 'function') return;
-    target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [active]);
+    // Read and clear before any early return, so a first run that happens to
+    // need no scrolling still counts as having happened.
+    const instant = isFirstRun.current || reduceMotion;
+    isFirstRun.current = false;
+
+    const rail = railRef.current;
+    const target = rail?.children[active] as HTMLElement | undefined;
+    if (!rail || !target || typeof rail.scrollTo !== 'function') return;
+
+    // Centre the active thumbnail, clamped to the ends so the first and last
+    // do not leave a gap.
+    const centred = target.offsetLeft - (rail.clientWidth - target.clientWidth) / 2;
+    const left = Math.max(0, Math.min(centred, rail.scrollWidth - rail.clientWidth));
+    if (Math.abs(rail.scrollLeft - left) < 2) return;
+
+    rail.scrollTo({ left, behavior: instant ? 'auto' : 'smooth' });
+  }, [active, reduceMotion]);
 
   return (
     <div
