@@ -20,6 +20,14 @@ module.exports = defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      // The PDP renders a different gallery below `lg` (swipe strip instead of
+      // hover magnifier), so the touch path needs a real touch-capable,
+      // mobile-viewport browser — a resized desktop Chrome still reports
+      // `hover: hover` and would exercise the wrong branch.
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
+    },
   ],
   webServer: {
     command: 'npm run dev',

@@ -268,12 +268,27 @@ export const getBrands = async (req, res, next) => {
   }
 };
 
+// Recommendation rails (similar / frequently-bought-together) ask for this many
+// cards. Clamped because `limit` is caller-supplied and fans out into both the
+// Mongo candidate window (`limit * 3`) and the Redis cache key — unbounded, it
+// is a cheap way to make the DB scan the catalog and to flood the cache with
+// one entry per distinct value.
+const RECO_LIMIT_DEFAULT = 9;
+const RECO_LIMIT_MAX = 24;
+
+const parseRecoLimit = (raw) => {
+  if (raw === undefined) return RECO_LIMIT_DEFAULT;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isInteger(n) || n < 1) return RECO_LIMIT_DEFAULT;
+  return Math.min(n, RECO_LIMIT_MAX);
+};
+
 export const getSimilarProducts = async (req, res) => {
   try {
     const { id } = req.params;
-    const { limit = 4 } = req.query;
-    
-    // Generate cache key
+    const limit = parseRecoLimit(req.query.limit);
+
+    // Key off the CLAMPED limit so out-of-range values collapse onto one entry.
     const cacheKey = `${CACHE_VERSION}:products:similar:${id}:${limit}`;
     
     try {
@@ -288,7 +303,7 @@ export const getSimilarProducts = async (req, res) => {
     }
     
     // Get similar products from service
-    const similarProducts = await SearchService.getSimilarProducts(id, Number(limit));
+    const similarProducts = await SearchService.getSimilarProducts(id, limit);
     
     // Ensure products have all required fields for frontend display
     const formattedProducts = similarProducts.map(product => {
@@ -349,9 +364,9 @@ export const getSimilarProducts = async (req, res) => {
 export const getComplementaryProducts = async (req, res) => {
   try {
     const { id } = req.params;
-    const { limit = 4 } = req.query;
-    
-    // Generate cache key
+    const limit = parseRecoLimit(req.query.limit);
+
+    // Key off the CLAMPED limit so out-of-range values collapse onto one entry.
     const cacheKey = `${CACHE_VERSION}:products:complementary:${id}:${limit}`;
     
     try {
@@ -366,7 +381,7 @@ export const getComplementaryProducts = async (req, res) => {
     }
     
     // Get complementary products from service
-    const complementaryProducts = await SearchService.getComplementaryProducts(id, Number(limit));
+    const complementaryProducts = await SearchService.getComplementaryProducts(id, limit);
     
     // Ensure products have all required fields for frontend display
     const formattedProducts = complementaryProducts.map(product => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
+import { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './productRail';
 
 interface Product {
   _id: string;
@@ -33,7 +34,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
         setLoading(true);
         setError(null);
         
-        const response: any = await apiClient.get(`/products/${productId}/similar?limit=4`);
+        const response: any = await apiClient.get(`/products/${productId}/similar?limit=${RAIL_LIMIT}`);
         
         if (response.success && Array.isArray(response.products)) {
           setProducts(response.products);
@@ -68,9 +69,9 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
       <section className={`py-8 ${isDark ? 'bg-obsidian-deep' : 'bg-obsidian-deep'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className={`text-2xl font-bold mb-6 ${isDark ? 'text-ink' : 'text-ink'}`}>Similar Products</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className={`${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
+          <div className={RAIL_CONTAINER}>
+            {[...Array(RAIL_LIMIT)].map((_, i) => (
+              <div key={i} className={`${RAIL_ITEM} ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
                 <div className={`h-48 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'}`} />
                 <div className="p-4">
                   <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-3/4 mb-2`} />
@@ -105,11 +106,11 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
           Similar Products
         </h2>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className={RAIL_CONTAINER}>
           {products.map((product) => (
-            <article 
+            <article
               key={product._id}
-              className={`${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+              className={`${RAIL_ITEM} ${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
               tabIndex={0}
             >
               <Link 
@@ -125,7 +126,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                         : product.images[0].url || '/placeholder.jpg'}
                       alt={product.name || 'Product image'}
                       fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 25vw, 20vw"
+                      sizes={RAIL_IMAGE_SIZES}
                       className="object-cover transition-transform duration-500 hover:scale-105"
                       priority={false}
                     />
