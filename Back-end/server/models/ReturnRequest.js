@@ -80,10 +80,16 @@ const ReturnRequestSchema = new mongoose.Schema({
   // so this defaults to 'roavion'; operations can flip it (goodwill/discretion)
   // and enter the actual shipping deduction when initiating the refund.
   shippingBorneBy: { type: String, enum: ["roavion", "customer"], default: "roavion" },
+  // Set by bookCourier; BOTH fields are required to enter `courier_booked`. Editable
+  // while still in `courier_booked` so a wrong AWB can be corrected (it is mandatory,
+  // customer-emailed, and our claim handle), frozen from `received` onward.
   courier: {
     provider:       String,
     trackingNumber: String,
+    // When the goods left the customer. Preserved across a correction — a courier
+    // claim turns on the original handover, not on when we fixed a typo.
     bookedAt:       Date,
+    correctedAt:    Date,
     bookedBy:       { type: mongoose.Schema.Types.ObjectId, ref: "User" }
   },
 
@@ -99,7 +105,18 @@ const ReturnRequestSchema = new mongoose.Schema({
   // Refund is decided BY HAND at initiation (full, or minus shipping / restocking).
   // All amounts in rupees. finalAmount is what is sent to Razorpay.
   refund: {
-    productValue:         { type: Number, default: 0 }, // Σ(unitPrice × qty) of returned lines
+    // What the customer ACTUALLY PAID for the returned lines: their gross value
+    // minus their prorated share of the order-level discount (coupon + karma).
+    // This — never the gross figure — is the base every refund is computed from.
+    // See services/refundMathService.js for why, and note it is RECOMPUTED from the
+    // order at refund-initiation time rather than trusted from this snapshot.
+    productValue:         { type: Number, default: 0 },
+    // Gross list value Σ(unitPrice × qty) and the discount share subtracted from it.
+    // Display-only (the admin screen strikes `listValue` through and shows the
+    // difference), but persisted so a past refund can be explained without
+    // re-deriving it from an order that may since have been edited.
+    listValue:            { type: Number, default: 0 },
+    discountShare:        { type: Number, default: 0 },
     shippingDeduction:    { type: Number, default: 0 }, // manual, variable
     restockingDeduction:  { type: Number, default: 0 }, // 10% on >₹1L (suggested) / oversized (manual)
     finalAmount:          { type: Number, default: 0 },
@@ -114,7 +131,13 @@ const ReturnRequestSchema = new mongoose.Schema({
     // customer's totalSpentPaise). Flipped atomically the first time a completed
     // refund reverses LTV, so the immediate-completion path and the refund.processed
     // webhook can't both decrement (PAY-2 / ADR-006, partial-refund variant).
-    ltvReversed:          { type: Boolean, default: false }
+    ltvReversed:          { type: Boolean, default: false },
+    // Same once-only shape, for the cumulative Payment.refundAmount write. That write
+    // is an atomic $inc and therefore NOT idempotent: an instant refund whose
+    // refund.processed webhook lands before this controller has persisted its status
+    // would otherwise be counted twice on the payment row. Reset to false by
+    // claimForRefund so a retry after a failed attempt can record again.
+    paymentRecorded:      { type: Boolean, default: false }
   },
 
   adminNotes:      String,

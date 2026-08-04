@@ -6,16 +6,23 @@ const mockOrderRepository = {
   findById: jest.fn(),
   findOneByRefundId: jest.fn(),
   save: jest.fn(),
+  // Once-only guard for the cumulative Payment.refundAmount $inc.
+  claimRefundPaymentRecord: jest.fn(),
 };
 const mockPaymentRepository = {
   findById: jest.fn(),
   save: jest.fn(),
+  // Cumulative $inc + conditional status flip; replaces the read-modify-write that
+  // overwrote refundAmount and lost earlier partial refunds.
+  recordRefund: jest.fn(),
 };
 // Return refunds (notes.returnId present) reconcile the authoritative ReturnRequest.
 const mockReturnRequestRepository = {
   findById: jest.fn(),
   findOne: jest.fn(),
   save: jest.fn(),
+  // Once-only guard for the cumulative Payment.refundAmount $inc.
+  claimPaymentRecord: jest.fn(),
 };
 
 // Post-save notification enqueue is gated on REDIS_URL and fans out through the
@@ -49,6 +56,9 @@ describe('razorpayService.applyRefundWebhook', () => {
     jest.clearAllMocks();
     mockOrderRepository.save.mockResolvedValue(undefined);
     mockPaymentRepository.save.mockResolvedValue(undefined);
+    mockPaymentRepository.recordRefund.mockResolvedValue({});
+    mockOrderRepository.claimRefundPaymentRecord.mockResolvedValue(true);
+    mockReturnRequestRepository.claimPaymentRecord.mockResolvedValue({ _id: 'ret-1' });
     mockPaymentRepository.findById.mockResolvedValue({ _id: 'payment-1', status: 'completed' });
     mockOrderRepository.findOneByRefundId.mockResolvedValue(null);
   });
@@ -64,10 +74,9 @@ describe('razorpayService.applyRefundWebhook', () => {
 
     expect(order.refundDetails.status).toBe('completed');
     expect(order.paymentStatus).toBe('refunded');
-    expect(mockPaymentRepository.save).toHaveBeenCalledTimes(1);
-    const payment = mockPaymentRepository.save.mock.calls[0][0];
-    expect(payment.status).toBe('refunded');
-    expect(payment.refundAmount).toBe(1500); // paise → rupees
+    // Cumulative, via the repository — not a read-modify-write on a loaded doc.
+    expect(mockPaymentRepository.recordRefund).toHaveBeenCalledWith('payment-1', 1500, 'order_cancelled');
+    expect(mockPaymentRepository.save).not.toHaveBeenCalled();
     expect(mockOrderRepository.save).toHaveBeenCalledTimes(1);
   });
 
@@ -161,6 +170,9 @@ describe('razorpayService.applyRefundWebhook — return refunds (notes.returnId)
     jest.clearAllMocks();
     mockOrderRepository.save.mockResolvedValue(undefined);
     mockPaymentRepository.save.mockResolvedValue(undefined);
+    mockPaymentRepository.recordRefund.mockResolvedValue({});
+    mockOrderRepository.claimRefundPaymentRecord.mockResolvedValue(true);
+    mockReturnRequestRepository.claimPaymentRecord.mockResolvedValue({ _id: 'ret-1' });
     mockPaymentRepository.findById.mockResolvedValue({ _id: 'payment-1', status: 'completed' });
     mockReturnRequestRepository.save.mockResolvedValue(undefined);
     mockReturnRequestRepository.findOne.mockResolvedValue(null);
@@ -186,9 +198,12 @@ describe('razorpayService.applyRefundWebhook — return refunds (notes.returnId)
     await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 100000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
 
     expect(order.paymentStatus).toBe('paid'); // partial — NOT flipped to refunded
-    expect(mockPaymentRepository.save).not.toHaveBeenCalled();
     expect(order.refundDetails.status).toBe('completed');
     expect(order.refundDetails.transactionId).toBe('rfnd_1');
+    // ...but the money MUST still be recorded on the payment row. It previously was
+    // not, so a partially-refunded order read ₹0 refunded and the headroom check that
+    // now guards the gateway would have had nothing to subtract.
+    expect(mockPaymentRepository.recordRefund).toHaveBeenCalledWith('payment-1', 1000, 'return_refund');
   });
 
   it('marks the order refunded when a single return refund covers the whole order', async () => {
@@ -199,7 +214,7 @@ describe('razorpayService.applyRefundWebhook — return refunds (notes.returnId)
     await razorpayService.applyRefundWebhook({ id: 'rfnd_1', amount: 150000, notes: { orderId: 'order-1', returnId: 'ret-1' } }, 'completed');
 
     expect(order.paymentStatus).toBe('refunded');
-    expect(mockPaymentRepository.save).toHaveBeenCalledTimes(1);
+    expect(mockPaymentRepository.recordRefund).toHaveBeenCalledWith('payment-1', 1500, 'return_refund');
   });
 
   it('is idempotent when the return refund is already terminal', async () => {

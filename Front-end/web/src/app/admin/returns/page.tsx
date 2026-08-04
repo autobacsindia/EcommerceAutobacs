@@ -5,7 +5,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Search, Eye, Package, Video, FileText, ExternalLink, X, Truck, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
-import { ReturnRequest, PaginatedReturnRequests } from '@/lib/types';
+import { ReturnRequest, PaginatedReturnRequests, ReturnRefundPreview } from '@/lib/types';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -151,7 +151,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
   const [courier, setCourier] = useState({ provider: '', trackingNumber: '' });
   const [inspectionNotes, setInspectionNotes] = useState('');
   const [refund, setRefund] = useState({ shippingDeduction: '', restockingDeduction: '' });
-  const [preview, setPreview] = useState<{ productValue: number; suggestedRestocking: number; note: string } | null>(null);
+  const [preview, setPreview] = useState<ReturnRefundPreview | null>(null);
 
   const call = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -162,7 +162,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
 
   const loadPreview = useCallback(async (id: string) => {
     try {
-      const res = await apiClient.get<{ preview: { productValue: number; suggestedRestocking: number; note: string } }>(API_ENDPOINTS.RETURN_REFUND_PREVIEW(id));
+      const res = await apiClient.get<{ preview: ReturnRefundPreview }>(API_ENDPOINTS.RETURN_REFUND_PREVIEW(id));
       setPreview(res.preview);
       setRefund((r) => ({ ...r, restockingDeduction: res.preview.suggestedRestocking ? String(res.preview.suggestedRestocking) : '' }));
     } catch { /* preview is best-effort */ }
@@ -171,6 +171,15 @@ function DetailModal({ request, loading, onClose, onActioned }: {
   useEffect(() => {
     if (request && request.status === 'received' && request.inspection?.passed === true) loadPreview(request._id);
   }, [request, loadPreview]);
+
+  // Seed the courier inputs from what was actually booked, so the correction form opens
+  // showing the current values instead of making the operator retype an AWB from memory.
+  useEffect(() => {
+    setCourier({
+      provider: request?.courier?.provider || '',
+      trackingNumber: request?.courier?.trackingNumber || '',
+    });
+  }, [request?._id, request?.courier?.provider, request?.courier?.trackingNumber]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -195,6 +204,19 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                   <p><span className="text-gray-500">Customer:</span> {userName(request.user)}</p>
                   <p><span className="text-gray-500">Shipping borne by:</span> {request.shippingBorneBy || 'roavion'}</p>
                   <p><span className="text-gray-500">Problem:</span> {request.problemDescription || '—'}</p>
+                  {/* Read the booked pickup back — this was captured and then never
+                      displayed anywhere, which is how the step became a dead form. */}
+                  {request.courier?.trackingNumber && (
+                    <p className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-gray-400" />
+                      <span>
+                        <span className="text-gray-500">Pickup:</span> {request.courier.provider || 'Courier'}
+                        {' · '}
+                        <span className="font-mono">{request.courier.trackingNumber}</span>
+                        {request.courier.bookedAt && <span className="text-gray-400"> · booked {formatDateIST(request.courier.bookedAt)}</span>}
+                      </span>
+                    </p>
+                  )}
                   {request.rejectionReason && <p className="text-red-600">Rejected: {request.rejectionReason}</p>}
                 </div>
 
@@ -241,7 +263,15 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 {request.refund && request.status === 'refunded' && (
                   <div className="mt-6 border rounded p-3 text-sm bg-green-50">
                     <p className="font-semibold mb-2">Refund</p>
-                    <Line k="Product value" v={inr(request.refund.productValue)} />
+                    {/* Show the list value and the discount that was taken off it, so a
+                        past refund can be explained without re-deriving it. */}
+                    {(request.refund.discountShare ?? 0) > 0 && (
+                      <>
+                        <Line k="List value" v={inr(request.refund.listValue)} />
+                        <Line k="Order discount" v={`−${inr(request.refund.discountShare)}`} />
+                      </>
+                    )}
+                    <Line k="Customer paid" v={inr(request.refund.productValue)} />
                     <Line k="Shipping deducted" v={inr(request.refund.shippingDeduction)} />
                     <Line k="Restocking deducted" v={inr(request.refund.restockingDeduction)} />
                     <Line k="Refunded" v={inr(request.refund.finalAmount)} bold />
@@ -265,18 +295,38 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 </div>
               )}
 
-              {request.status === 'approved' && (
-                <div className="flex gap-3 items-center flex-wrap">
-                  <Truck className="h-5 w-5 text-gray-500" />
-                  <input placeholder="Courier (e.g. Delhivery)" value={courier.provider} onChange={(e) => setCourier({ ...courier, provider: e.target.value })} className="border rounded px-3 py-2 text-sm" />
-                  <input placeholder="Tracking / AWB" value={courier.trackingNumber} onChange={(e) => setCourier({ ...courier, trackingNumber: e.target.value })} className="border rounded px-3 py-2 text-sm" />
-                  <button disabled={busy} onClick={() => call(() => apiClient.patch(API_ENDPOINTS.RETURN_COURIER(request._id), courier))} className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">Book courier</button>
-                  <button disabled={busy} onClick={() => call(() => apiClient.patch(API_ENDPOINTS.RETURN_RECEIVED(request._id), {}))} className="px-4 py-2 border rounded hover:bg-gray-50">Mark received</button>
+              {/* Courier is a REQUIRED step — no "Mark received" shortcut here. We book
+                  the pickup, so the AWB is the only handle for a claim if the goods go
+                  missing between the customer and the warehouse. It stays editable while
+                  in `courier_booked` so a wrong AWB — mandatory and already emailed to
+                  the customer — can be corrected; the backend freezes it after that. */}
+              {(request.status === 'approved' || request.status === 'courier_booked') && (
+                <div className="space-y-2">
+                  <div className="flex gap-3 items-center flex-wrap">
+                    <Truck className="h-5 w-5 text-gray-500" />
+                    <input required placeholder="Courier (e.g. Delhivery)" value={courier.provider} onChange={(e) => setCourier({ ...courier, provider: e.target.value })} className="border rounded px-3 py-2 text-sm" />
+                    <input required placeholder="Tracking / AWB" value={courier.trackingNumber} onChange={(e) => setCourier({ ...courier, trackingNumber: e.target.value })} className="border rounded px-3 py-2 text-sm" />
+                    <button
+                      disabled={busy || !courier.provider.trim() || !courier.trackingNumber.trim()}
+                      onClick={() => call(() => apiClient.patch(API_ENDPOINTS.RETURN_COURIER(request._id), {
+                        provider: courier.provider.trim(),
+                        trackingNumber: courier.trackingNumber.trim(),
+                      }))}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {request.status === 'courier_booked' ? 'Correct courier details' : 'Book courier'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {request.status === 'courier_booked'
+                      ? 'Correcting re-sends the pickup email with the new courier and AWB. The original booking time is kept.'
+                      : 'Both fields are required — the customer is emailed the courier and AWB, and it is our claim reference if the pickup goes missing.'}
+                  </p>
                 </div>
               )}
 
               {request.status === 'courier_booked' && (
-                <button disabled={busy} onClick={() => call(() => apiClient.patch(API_ENDPOINTS.RETURN_RECEIVED(request._id), {}))} className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">Mark received at warehouse</button>
+                <button disabled={busy} onClick={() => call(() => apiClient.patch(API_ENDPOINTS.RETURN_RECEIVED(request._id), {}))} className="mt-3 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">Mark received at warehouse</button>
               )}
 
               {request.status === 'received' && request.inspection?.passed !== true && (
@@ -290,27 +340,71 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 </div>
               )}
 
-              {request.status === 'received' && request.inspection?.passed === true && (
-                <div className="space-y-3">
-                  <p className="font-semibold">Initiate refund to original payment</p>
-                  <div className="text-sm text-gray-600">Product value: <strong>{inr(preview?.productValue ?? request.refund?.productValue)}</strong></div>
-                  <div className="flex gap-3 items-end flex-wrap">
-                    <label className="text-sm">Shipping deduction (₹)
-                      <input type="number" min="0" value={refund.shippingDeduction} onChange={(e) => setRefund({ ...refund, shippingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
-                    </label>
-                    <label className="text-sm">Restocking deduction (₹)
-                      <input type="number" min="0" value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
-                    </label>
-                    <button disabled={busy} onClick={() => call(() => apiClient.post(API_ENDPOINTS.RETURN_REFUND(request._id), {
-                      shippingDeduction: Number(refund.shippingDeduction) || 0,
-                      restockingDeduction: Number(refund.restockingDeduction) || 0,
-                    }))} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                      Refund {inr((preview?.productValue ?? request.refund?.productValue ?? 0) - (Number(refund.shippingDeduction) || 0) - (Number(refund.restockingDeduction) || 0))}
-                    </button>
+              {request.status === 'received' && request.inspection?.passed === true && (() => {
+                // The base is what the customer PAID (list value minus their share of any
+                // coupon/karma discount). Refunding the list value over-refunds every
+                // discounted order and is rejected outright by Razorpay once the gap
+                // exceeds the capture — the 2026-08-03 bug.
+                const base = preview?.productValue ?? request.refund?.productValue ?? 0;
+                const deductions = (Number(refund.shippingDeduction) || 0) + (Number(refund.restockingDeduction) || 0);
+                const payout = base - deductions;
+                const overHeadroom = preview != null && payout > preview.maxRefundable;
+
+                return (
+                  <div className="space-y-3">
+                    <p className="font-semibold">Initiate refund to original payment</p>
+
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div>
+                        Customer paid: <strong>{inr(base)}</strong>
+                        {preview != null && preview.discountShare > 0 && (
+                          <>
+                            {' '}
+                            <span className="line-through text-gray-400">{inr(preview.listValue)}</span>
+                            <span className="ml-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                              −{inr(preview.discountShare)} {preview.couponCode ? `(${preview.couponCode})` : 'discount'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {preview != null && preview.alreadyRefunded > 0 && (
+                        <div className="text-xs text-gray-500">
+                          {inr(preview.alreadyRefunded)} of {inr(preview.orderTotal)} already refunded on this order — {inr(preview.maxRefundable)} still refundable.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3 items-end flex-wrap">
+                      <label className="text-sm">Shipping deduction (₹)
+                        <input type="number" min="0" value={refund.shippingDeduction} onChange={(e) => setRefund({ ...refund, shippingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
+                      </label>
+                      <label className="text-sm">Restocking deduction (₹)
+                        <input type="number" min="0" value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
+                      </label>
+                      <button
+                        disabled={busy || payout <= 0 || overHeadroom}
+                        onClick={() => call(() => apiClient.post(API_ENDPOINTS.RETURN_REFUND(request._id), {
+                          shippingDeduction: Number(refund.shippingDeduction) || 0,
+                          restockingDeduction: Number(refund.restockingDeduction) || 0,
+                        }))}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                      >
+                        Refund {inr(payout)}
+                      </button>
+                    </div>
+
+                    {/* Mirrors the server-side 422. Better to say so here than to let the
+                        operator discover it as a gateway rejection. */}
+                    {overHeadroom && (
+                      <p className="text-xs text-red-600">
+                        {inr(payout)} exceeds the {inr(preview!.maxRefundable)} still refundable on this order. Reduce the amount, or refund the balance manually in Razorpay.
+                      </p>
+                    )}
+                    {payout <= 0 && <p className="text-xs text-red-600">Deductions leave nothing to refund.</p>}
+                    {preview?.note && <p className="text-xs text-gray-500">{preview.note}</p>}
                   </div>
-                  {preview?.note && <p className="text-xs text-gray-500">{preview.note}</p>}
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Timeline */}

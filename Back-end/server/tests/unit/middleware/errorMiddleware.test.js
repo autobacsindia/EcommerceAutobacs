@@ -20,13 +20,20 @@ const makeRes = () => {
   return res;
 };
 
-const makeReq = () => ({ originalUrl: '/api/v1/products', method: 'POST', body: {}, params: {}, query: {} });
+const makeReq = (over = {}) => ({ originalUrl: '/api/v1/products', method: 'POST', body: {}, params: {}, query: {}, ...over });
 
-const run = (err) => {
+const run = (err, req = makeReq()) => {
   const res = makeRes();
-  errorHandler(err, makeReq(), res, jest.fn());
+  errorHandler(err, req, res, jest.fn());
   return res;
 };
+
+/** An error raised deliberately by a controller (AppError shape). */
+const appError = (message, statusCode) =>
+  Object.assign(new Error(message), { statusCode, isOperational: true });
+
+const asAdmin = () => makeReq({ user: { _id: 'a1', role: 'admin' } });
+const asCustomer = () => makeReq({ user: { _id: 'u1', role: 'user' } });
 
 // jest.config sets resetMocks:true, which wipes implementations before every
 // test — so the resolved value has to be (re)installed here, not at construction.
@@ -90,5 +97,51 @@ describe('errorHandler — Mongoose error normalization', () => {
     const res = run(Object.assign(new Error('Product not found'), { statusCode: 404, isOperational: true }));
     expect(res.statusCode).toBe(404);
     expect(res.body.message).toBe('Product not found');
+  });
+});
+
+/**
+ * Admins get the real reason. The whitelist protects the PUBLIC surface; applying it
+ * to the admin console turned every actionable message ("this refund exceeds what is
+ * left on the order") into "Something went wrong", leaving the operator to guess.
+ */
+describe('errorHandler — message visibility by principal', () => {
+  const dynamic = () => appError('Refund of ₹1450 exceeds what is left on this order (₹700).', 422);
+
+  it('shows an authenticated admin the operational message verbatim', () => {
+    const res = run(dynamic(), asAdmin());
+    expect(res.statusCode).toBe(422);
+    expect(res.body.message).toMatch(/exceeds what is left/);
+  });
+
+  it('still gives a customer the generic message for the same error', () => {
+    const res = run(dynamic(), asCustomer());
+    expect(res.statusCode).toBe(422);
+    expect(res.body.message).toBe('Something went wrong. Please try again later.');
+  });
+
+  it('gives an anonymous caller the generic message', () => {
+    expect(run(dynamic()).body.message).toBe('Something went wrong. Please try again later.');
+  });
+
+  it('withholds a NON-operational message even from an admin', () => {
+    // Unexpected throws can carry connection strings or internal paths — never echo
+    // them, regardless of who is asking.
+    const res = run(new Error('connect ECONNREFUSED mongodb://user:pw@10.0.0.4:27017'), asAdmin());
+    expect(res.body.message).toBe('Something went wrong. Please try again later.');
+    expect(JSON.stringify(res.body)).not.toContain('27017');
+  });
+});
+
+describe('errorHandler — P1 alerting is for unexpected faults only', () => {
+  it('does not page on-call for an operational 502 (a gateway business rejection)', () => {
+    const res = run(appError('Refund failed at the gateway: amount exceeds capture', 502), asAdmin());
+    expect(res.statusCode).toBe(502);
+    expect(sendP1Alert).not.toHaveBeenCalled();
+  });
+
+  it('still pages for an unexpected 500', () => {
+    run(new Error('kaboom'));
+    expect(sendP1Alert).toHaveBeenCalledTimes(1);
   });
 });

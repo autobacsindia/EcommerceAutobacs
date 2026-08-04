@@ -98,3 +98,6 @@ api-test-report.json
 reports/
 reports-mapping/
 reports-header-nav/
+
+# Pre-delete backups from scripts/purge-test-account-data.js — contain customer PII
+purge-backups/

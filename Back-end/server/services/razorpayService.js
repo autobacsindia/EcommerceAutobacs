@@ -775,15 +775,14 @@ class RazorpayService {
       // Payment axis: mark the order and its Payment row refunded. amounts are stored in
       // rupees (see processPaymentSuccess); the webhook amount is paise → divide by 100.
       order.paymentStatus = 'refunded';
-      if (order.payment) {
-        const payment = await paymentRepository.findById(order.payment);
-        if (payment) {
-          payment.status = 'refunded';
-          payment.refundAmount = (refundEntity.amount || 0) / 100;
-          payment.refundReason = 'order_cancelled';
-          payment.refundedAt = new Date();
-          await paymentRepository.save(payment);
-        }
+      if (order.payment && await orderRepository.claimRefundPaymentRecord(order._id)) {
+        // Accumulate, don't assign: this used to overwrite refundAmount, so a second
+        // partial refund on the same payment erased the first. The guards above (id
+        // mismatch + already-in-finalStatus) are read-then-write and so cannot settle a
+        // race with processRefund's own completion path — the atomic claim can.
+        await paymentRepository.recordRefund(
+          order.payment, (refundEntity.amount || 0) / 100, 'order_cancelled'
+        );
       }
     } else {
       order.refundDetails.failureReason =
@@ -880,18 +879,20 @@ class RazorpayService {
       if (finalStatus === 'completed') {
         order.refundDetails.amount = rr.refund.finalAmount;
         order.refundDetails.processedAt = order.refundDetails.processedAt || new Date();
+        // Record the money on the Payment row for EVERY completed return refund, not
+        // just a full-value one — a partial refund used to leave the payment reading
+        // ₹0 refunded, so finance (and the headroom check) could not see it had gone.
+        // recordRefund accumulates and flips `refunded` itself once the total covers
+        // the capture; the order's own paymentStatus stays keyed to the full case.
+        // Claimed once, so this and initiateReturnRefund's completion path cannot both
+        // $inc the same refund when an instant refund races its own webhook.
+        if (order.payment && await returnRequestRepository.claimPaymentRecord(rr._id)) {
+          await paymentRepository.recordRefund(
+            order.payment, (refundEntity.amount || 0) / 100, 'return_refund'
+          );
+        }
         if (rr.refund.finalAmount >= order.totalAmount) {
           order.paymentStatus = 'refunded';
-          if (order.payment) {
-            const payment = await paymentRepository.findById(order.payment);
-            if (payment) {
-              payment.status = 'refunded';
-              payment.refundAmount = (refundEntity.amount || 0) / 100;
-              payment.refundReason = 'return_refund';
-              payment.refundedAt = new Date();
-              await paymentRepository.save(payment);
-            }
-          }
         }
       } else {
         order.refundDetails.failureReason = refundEntity.error?.description || 'Refund failed at gateway';

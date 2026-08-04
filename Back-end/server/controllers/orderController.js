@@ -1,11 +1,13 @@
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
+import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
 import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import orderTrackingService from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
+import { remainingRefundable } from '../services/refundMathService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
 import { extractMetaTracking } from '../utils/metaTracking.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
@@ -667,9 +669,33 @@ export const processRefund = async (req, res) => {
     });
   }
 
-  // Cancellation is always a FULL refund of what was captured. amounts are stored in
-  // rupees; Razorpay wants paise.
-  const amountPaise = Math.round(order.totalAmount * 100);
+  // Cancellation is always a FULL refund of what was captured. `totalAmount` is already
+  // net of any coupon/karma discount (pricingService computes it as the charged figure
+  // and the webhook integrity guard asserts it equals the captured paise), so unlike the
+  // per-line return path this needs no discount proration — it refunds exactly the
+  // capture. Amounts are stored in rupees; Razorpay wants paise.
+  //
+  // The cap is still applied: an order that already had money sent back via a return
+  // refund would otherwise over-draw and be rejected by the gateway with an opaque error.
+  //
+  // It is a guard, NOT a guarantee. It sees our own records plus `Payment.refundAmount`;
+  // a refund issued by hand in the Razorpay dashboard writes neither (its webhook
+  // resolves to no order), so that case still reaches the gateway and fails there. The
+  // catch below is what makes that survivable — it rolls the claim back to `failed` so
+  // the admin can retry with a corrected amount.
+  const siblingReturns = await returnRequestRepository.find({ order: order._id }).select('refund').lean();
+  const headroom = remainingRefundable(order, siblingReturns, null, payment);
+  const refundRupees = Math.min(order.totalAmount, headroom.remainingRupees);
+
+  if (refundRupees < order.totalAmount) {
+    return res.status(422).json({
+      success: false,
+      message: `Only ₹${headroom.remainingRupees} of ₹${headroom.capturedRupees} is still refundable on this order `
+        + `(₹${headroom.alreadyRefundedRupees} already refunded). Refund the balance manually in the Razorpay dashboard.`
+    });
+  }
+
+  const amountPaise = Math.round(refundRupees * 100);
 
   // A ₹0 order (e.g. a 100%-off coupon) has nothing to send to the gateway — Razorpay
   // rejects a zero-amount refund. Treat it as a no-op success instead of claiming the
@@ -705,12 +731,13 @@ export const processRefund = async (req, res) => {
     // clobbered (and can't clobber us). No-op if the webhook already completed the order.
     await orderRepository.recordRefundResult(order._id, { refundId: result.refundId, completed });
 
-    if (completed) {
-      payment.status = 'refunded';
-      payment.refundAmount = amountPaise / 100;
-      payment.refundReason = 'order_cancelled';
-      payment.refundedAt = new Date();
-      await paymentRepository.save(payment);
+    // Accumulate onto the payment row (see paymentRepository.recordRefund) rather than
+    // assigning, so a prior partial refund on the same payment is not erased. Gated on
+    // a once-only claim because that write is an atomic $inc: the refund.processed
+    // webhook for an instant refund can land before `recordRefundResult` above has
+    // persisted, and would otherwise count the same money a second time.
+    if (completed && await orderRepository.claimRefundPaymentRecord(order._id)) {
+      await paymentRepository.recordRefund(payment._id, amountPaise / 100, 'order_cancelled');
     }
 
     return res.json({

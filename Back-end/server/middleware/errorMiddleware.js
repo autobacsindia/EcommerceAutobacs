@@ -137,8 +137,12 @@ function deepSanitize(obj, level = 0, maxLevel = 5, seen = new WeakSet()) {
 
 /**
  * Get safe error message (whitelist-based, not trust-based)
+ *
+ * @param {Error}   err
+ * @param {boolean} isOperational
+ * @param {boolean} isPrivileged - the caller is an authenticated admin (see below)
  */
-function getSafeMessage(err, isOperational) {
+function getSafeMessage(err, isOperational, isPrivileged = false) {
   // Only show exact whitelisted messages
   if (isOperational && SAFE_ERROR_MESSAGES.has(err.message)) {
     return err.message;
@@ -146,6 +150,22 @@ function getSafeMessage(err, isOperational) {
 
   // Allow dynamic duplicate-key messages through — they contain field names, not internals
   if (isOperational && typeof err.message === 'string' && err.message.startsWith('Duplicate value:')) {
+    return err.message;
+  }
+
+  // ADMINS SEE THE REAL REASON.
+  //
+  // The whitelist exists to stop internals leaking to the PUBLIC. Applying it to the
+  // admin console instead hid every operational message behind "Something went wrong",
+  // which is how a refund rejected by Razorpay for a specific, fixable reason looked
+  // identical to a database outage. An operator who cannot read the error cannot act
+  // on it, and the workaround — reading production logs — is worse for security than
+  // showing an already-authenticated admin the sentence we wrote for them.
+  //
+  // Deliberately still gated on `isOperational`: these are messages we authored via
+  // AppError. A non-operational error (an unexpected throw, a driver fault) can carry
+  // connection strings or internal paths in its message and stays generic for everyone.
+  if (isPrivileged && isOperational && typeof err.message === 'string' && err.message) {
     return err.message;
   }
 
@@ -214,6 +234,9 @@ export const errorHandler = (err, req, res, next) => {
       || 500;
     const isOperational = err.isOperational === true;
     const isServerError = statusCode >= 500;
+    // Read off the authenticated principal only (set by protect/admin middleware),
+    // never off a header or body the caller controls.
+    const isPrivileged = req.user?.role === 'admin';
 
     // Sanitize and truncate body for logging (deep sanitization)
     let safeBodyForLog;
@@ -269,8 +292,15 @@ export const errorHandler = (err, req, res, next) => {
       } catch (_) { /* never let Sentry crash error handling */ }
     }
 
-    // P1 alert: fire for every 5xx in production (deduplicated by error name in alerting.js)
-    if (isServerError) {
+    // P1 alert: fire for every UNEXPECTED 5xx in production (deduplicated by error name
+    // in alerting.js).
+    //
+    // Operational 5xx are excluded on purpose. A 502 we raise ourselves to say "the
+    // payment gateway rejected this refund" is a business outcome an operator resolves
+    // from the admin screen — not a service fault, and not a reason to page on-call at
+    // 2am. It is still logged above and still captured by Sentry below. Only errors we
+    // did NOT anticipate (no AppError, no isOperational) constitute a real P1.
+    if (isServerError && !isOperational) {
       // Guarded: if sendP1Alert ever throws synchronously or returns a non-promise,
       // a bare `.catch()` would blow up the last-resort error handler and downgrade
       // *every* 5xx to a bare "Internal server error" with no errorId and no logging.
@@ -287,7 +317,7 @@ export const errorHandler = (err, req, res, next) => {
       } catch (_) { /* never let alerting crash error handling */ }
     }
 
-    const safeMessage = getSafeMessage(err, isOperational);
+    const safeMessage = getSafeMessage(err, isOperational, isPrivileged);
 
     if (!isOperational) {
       try {

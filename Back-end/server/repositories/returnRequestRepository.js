@@ -22,7 +22,10 @@ class ReturnRequestRepository {
    * loser matches zero docs and gets `null`, and never reaches the gateway. Returns
    * the updated document (or null if the claim was lost / the gate no longer holds).
    */
-  claimForRefund(id, { shippingDeduction, restockingDeduction, finalAmount, initiatedBy }) {
+  claimForRefund(id, {
+    productValue, listValue, discountShare,
+    shippingDeduction, restockingDeduction, finalAmount, initiatedBy,
+  }) {
     return ReturnRequest.findOneAndUpdate(
       {
         _id: id,
@@ -32,6 +35,12 @@ class ReturnRequestRepository {
       },
       {
         $set: {
+          // Recomputed from the order at initiation time (the create-time snapshot
+          // predates discount proration and may be a gross figure) — persisted in the
+          // same atomic claim so the stored breakdown always explains finalAmount.
+          'refund.productValue': productValue,
+          'refund.listValue': listValue,
+          'refund.discountShare': discountShare,
           'refund.shippingDeduction': shippingDeduction,
           'refund.restockingDeduction': restockingDeduction,
           'refund.finalAmount': finalAmount,
@@ -39,6 +48,9 @@ class ReturnRequestRepository {
           'refund.status': 'processing',
           'refund.initiatedBy': initiatedBy,
           'refund.initiatedAt': new Date(),
+          // Fresh attempt → re-arm the once-only payment-record claim, so a retry
+          // after a failed gateway call can still write to the Payment row.
+          'refund.paymentRecorded': false,
         },
       },
       { new: true }
@@ -55,6 +67,23 @@ class ReturnRequestRepository {
     return ReturnRequest.findOneAndUpdate(
       { _id: id, 'refund.ltvReversed': { $ne: true } },
       { $set: { 'refund.ltvReversed': true } },
+      { new: true }
+    );
+  }
+
+  /**
+   * Atomically claim the cumulative Payment.refundAmount write for this return, once.
+   *
+   * paymentRepository.recordRefund is an atomic `$inc` and so is NOT idempotent. The
+   * immediate-completion path (an instant/optimum refund that comes back `processed`)
+   * and the refund.processed webhook can BOTH decide to record: the webhook's
+   * "already terminal?" check reads a status the controller has not persisted yet.
+   * Whichever gets here first wins; the loser matches zero docs and gets null.
+   */
+  claimPaymentRecord(id) {
+    return ReturnRequest.findOneAndUpdate(
+      { _id: id, 'refund.paymentRecorded': { $ne: true } },
+      { $set: { 'refund.paymentRecorded': true } },
       { new: true }
     );
   }

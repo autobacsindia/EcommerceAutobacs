@@ -201,7 +201,11 @@ export type ReturnStatus =
   | 'pending' | 'approved' | 'courier_booked' | 'received' | 'refunded' | 'rejected' | 'cancelled';
 
 export interface ReturnRefund {
+  /** What the customer actually PAID for the returned lines — the refundable base. */
   productValue: number;
+  /** Gross list value of those lines, and their share of the order-level discount. */
+  listValue?: number;
+  discountShare?: number;
   shippingDeduction?: number;
   restockingDeduction?: number;
   finalAmount?: number;
@@ -210,6 +214,21 @@ export interface ReturnRefund {
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   initiatedAt?: string;
   failureReason?: string;
+}
+
+/** GET /returns/admin/:id/refund-preview — the operator's decision surface. */
+export interface ReturnRefundPreview {
+  productValue: number;
+  listValue: number;
+  discountShare: number;
+  couponCode: string | null;
+  /** Gateway headroom: Razorpay rejects anything above `maxRefundable` outright. */
+  orderTotal: number;
+  alreadyRefunded: number;
+  maxRefundable: number;
+  suggestedRestocking: number;
+  shippingDeductionDefault: number | null;
+  note: string;
 }
 
 export interface ReturnRequest {
@@ -226,7 +245,8 @@ export interface ReturnRequest {
   proofOfPurchase?: ReturnSignedAsset | null;
   images?: ReturnSignedAsset[];
   shippingBorneBy?: 'roavion' | 'customer';
-  courier?: { provider?: string; trackingNumber?: string; bookedAt?: string };
+  /** `bookedAt` is the original handover (preserved across a correction); `correctedAt` is the last edit. */
+  courier?: { provider?: string; trackingNumber?: string; bookedAt?: string; correctedAt?: string };
   inspection?: { passed?: boolean | null; notes?: string; at?: string };
   refund?: ReturnRefund;
   adminNotes?: string;

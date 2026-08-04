@@ -360,7 +360,16 @@ const OrderSchema = new mongoose.Schema({
     processedAt: Date,
     transactionId: String,
     failureReason: String,
-    notes: String
+    // Free-text marker. `refundMathService.remainingRefundable` keys off the
+    // "Return <id>" prefix to tell a return-sourced mirror apart from a real
+    // cancellation refund, so markRefundProcessing CLEARS it when claiming a
+    // cancellation — a stale note surviving from a prior return would otherwise
+    // make a genuine cancellation refund invisible to the already-refunded total.
+    notes: String,
+    // Once-only guard for the cumulative Payment.refundAmount write ($inc, hence not
+    // idempotent). Mirrors ReturnRequest.refund.paymentRecorded; reset by
+    // markRefundProcessing so a retry after a failed attempt can record again.
+    paymentRecorded: { type: Boolean, default: false }
   },
   notes: String
 }, { 
