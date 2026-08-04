@@ -12,6 +12,7 @@ import { resolveRep } from '../utils/salesRepResolver.js';
 import { extractMetaTracking } from '../utils/metaTracking.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
 import { hashToken } from '../utils/tokenUtils.js';
+import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -1312,9 +1313,9 @@ const ORDERS_DEFAULT_PAYMENT_STATUSES = ['pending', 'paid', 'refunded'];
 const ADMIN_ORDER_SORT_FIELDS = new Set(['createdAt', 'totalAmount', 'status']);
 // The store operates in a single timezone (India). Admin date-range filters send a
 // date-only string ("YYYY-MM-DD"); we anchor it to this offset so "14 Jul" means the
-// IST calendar day regardless of the server's own timezone. If the business ever goes
-// multi-region this should become configurable per store.
-const STORE_TZ_OFFSET = process.env.STORE_TZ_OFFSET || '+05:30';
+// IST calendar day regardless of the server's own timezone. Shared with the admin
+// stat tiles (utils/storeTime.js) so a period computed there and a date range filtered
+// here describe the same window.
 
 // An immediately-empty page (no rows can match) — used when a filter resolves to an
 // impossible set (e.g. a customer term matching no user) so we skip the DB round-trip.

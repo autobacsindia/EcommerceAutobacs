@@ -96,11 +96,15 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   // Header counters. Polled + cached by TanStack Query (see useAdminStats).
   const { stats, isError: statsFailed } = useAdminStats();
 
-  // Deep-link each counter to the Orders view it summarises, using the status
-  // groups the backend actually counted so the list can never disagree with the
-  // number. The fallbacks only apply to a cached pre-`filters` API response.
-  const ordersHref = (statuses: string[] | undefined, fallback: string) =>
-    `/admin/orders?status=${encodeURIComponent(statuses?.length ? statuses.join(',') : fallback)}`;
+  // Deep-link each counter to the Orders view it summarises, carrying the exact
+  // status group (and, for revenue, the exact date window) the backend counted —
+  // so the list can never disagree with the number above it. The fallbacks only
+  // apply to a cached pre-`filters` API response.
+  const ordersHref = (statuses: string[] | undefined, fallback: string, startDate?: string) => {
+    const params = new URLSearchParams({ status: statuses?.length ? statuses.join(',') : fallback });
+    if (startDate) params.set('startDate', startDate);
+    return `/admin/orders?${params.toString()}`;
+  };
 
   const navSections = NAV_SECTIONS;
 
@@ -267,11 +271,17 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
               </p>
             </Link>
             <Link
-              href={ordersHref(stats.filters?.totalRevenue, 'processing,shipped,delivered')}
-              title="Realised revenue — excludes cancelled, returned and abandoned orders"
+              href={ordersHref(
+                stats.filters?.totalRevenue,
+                'processing,shipped,delivered',
+                stats.revenuePeriod?.startDate
+              )}
+              title={`Realised revenue since ${stats.revenuePeriod?.startDate ?? 'the start of the financial year'} — excludes cancelled, returned and abandoned orders`}
               className="text-right px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <p className="text-sm text-gray-500">Total Revenue</p>
+              <p className="text-sm text-gray-500">
+                Revenue{stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
+              </p>
               <p className="text-lg font-bold text-green-600">
                 {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
               </p>
