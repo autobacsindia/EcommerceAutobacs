@@ -54,4 +54,6 @@ export const adminKeys = {
   resource: (resource: string) => [...adminKeys.all, resource] as const,
   list: (resource: string, params: Record<string, string | undefined>) =>
     [...adminKeys.resource(resource), normalizeParams(params)] as const,
+  /** Header counters (pending orders / revenue) — polled, shared by every admin screen. */
+  stats: () => [...adminKeys.all, 'stats'] as const,
 };

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useAdminStats } from '@/hooks/queries/useAdminStats';
+import { formatCurrency } from '@/lib/utils';
 
 interface NavItem {
   href?: string;
@@ -91,11 +93,14 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
       NAV_SECTIONS.filter((s) => s.title !== 'Main').map((s) => [s.title, false])
     )
   );
-  const [stats, setStats] = useState({
-    totalOrders: 0,
-    pendingOrders: 0,
-    totalRevenue: 0,
-  });
+  // Header counters. Polled + cached by TanStack Query (see useAdminStats).
+  const { stats, isError: statsFailed } = useAdminStats();
+
+  // Deep-link each counter to the Orders view it summarises, using the status
+  // groups the backend actually counted so the list can never disagree with the
+  // number. The fallbacks only apply to a cached pre-`filters` API response.
+  const ordersHref = (statuses: string[] | undefined, fallback: string) =>
+    `/admin/orders?status=${encodeURIComponent(statuses?.length ? statuses.join(',') : fallback)}`;
 
   const navSections = NAV_SECTIONS;
 
@@ -125,29 +130,6 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
     if (!href) return false;
     return pathname === href || pathname.startsWith(href + '/');
   };
-
-  // Fetch admin stats (polling every 30 seconds)
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('/api/v1/admin/stats', {
-          credentials: 'include',
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setStats(data.stats || stats);
-        }
-      } catch (error) {
-        console.error('[Admin] Failed to fetch stats:', error);
-      }
-    };
-
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   const handleLogout = async () => {
     try {
@@ -272,20 +254,28 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
             </Link>
           </div>
 
-          {/* Stats Overview */}
-          <div className="flex items-center space-x-6">
-            <div className="text-right">
+          {/* Stats Overview — each tile drills into the orders behind the number */}
+          <div className="flex items-center space-x-2">
+            <Link
+              href={ordersHref(stats.filters?.pendingOrders, 'processing,shipped')}
+              title="Orders placed but not delivered yet"
+              className="text-right px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
               <p className="text-sm text-gray-500">Pending Orders</p>
               <p className="text-lg font-bold text-orange-600">
-                {stats.pendingOrders}
+                {statsFailed ? '—' : stats.pendingOrders.toLocaleString('en-IN')}
               </p>
-            </div>
-            <div className="text-right">
+            </Link>
+            <Link
+              href={ordersHref(stats.filters?.totalRevenue, 'processing,shipped,delivered')}
+              title="Realised revenue — excludes cancelled, returned and abandoned orders"
+              className="text-right px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
               <p className="text-sm text-gray-500">Total Revenue</p>
               <p className="text-lg font-bold text-green-600">
-                ₹{stats.totalRevenue.toLocaleString()}
+                {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
               </p>
-            </div>
+            </Link>
           </div>
         </header>
 

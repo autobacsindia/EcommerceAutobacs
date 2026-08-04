@@ -460,6 +460,48 @@ describe('SearchService Unit Tests', () => {
         expect(Product.find).toHaveBeenCalledTimes(1); // same-make/category never run
       });
 
+      it('ranks fitment ABOVE an ecosystem name match from an earlier source', async () => {
+        // Regression: an ecosystem match runs before the fitment queries. Ranking
+        // per-source let it fill the rail with parts for other vehicles entirely
+        // (Isuzu/Jimny on a Thar page) while Thar parts fell to the bottom.
+        Product.findById = jest.fn().mockReturnValue(byIdDoc({
+          _id: ID, name: 'Bonnet Bracket', complementaryProducts: [],
+          categories: [CAT_A], compatibleVehicles: [THAR],
+        }));
+        const ecoOtherVehicle = { _id: 'p-eco',     name: 'LED light bar for Jimny', compatibleVehicles: [] };
+        const tharItem        = { _id: 'p-thar',    name: 'Thar Thing',              compatibleVehicles: [THAR] };
+        const scorpioItem     = { _id: 'p-scorpio', name: 'Scorpio Thing',           compatibleVehicles: [SCORPIO] };
+        Product.find
+          .mockReturnValueOnce(findChain([ecoOtherVehicle])) // ecosystem, runs first
+          .mockReturnValueOnce(findChain([tharItem]))        // same make+model
+          .mockReturnValueOnce(findChain([scorpioItem]))     // same make
+          .mockReturnValueOnce(findChain([]));               // same category
+
+        const result = await SearchService.getComplementaryProducts(ID, 9);
+
+        // Thar (tier 2) → Scorpio (tier 1) → the no-fitment ecosystem match last.
+        expect(result.map(p => p._id)).toEqual(['p-thar', 'p-scorpio', 'p-eco']);
+      });
+
+      it('breaks ties inside a tier by signal strength (ecosystem over fitment)', async () => {
+        Product.findById = jest.fn().mockReturnValue(byIdDoc({
+          _id: ID, name: 'Bonnet Bracket', complementaryProducts: [],
+          categories: [CAT_A], compatibleVehicles: [THAR],
+        }));
+        // Both fit the Thar exactly, so only the source rank separates them.
+        const ecoThar   = { _id: 'p-eco-thar',   name: 'LED light bar for Thar', compatibleVehicles: [THAR] };
+        const plainThar = { _id: 'p-plain-thar', name: 'Thar Thing',             compatibleVehicles: [THAR] };
+        Product.find
+          .mockReturnValueOnce(findChain([ecoThar]))
+          .mockReturnValueOnce(findChain([plainThar]))
+          .mockReturnValueOnce(findChain([]))
+          .mockReturnValueOnce(findChain([]));
+
+        const result = await SearchService.getComplementaryProducts(ID, 9);
+
+        expect(result.map(p => p._id)).toEqual(['p-eco-thar', 'p-plain-thar']);
+      });
+
       it('does not double-count the exact vehicles as same-make matches', async () => {
         const { exact, sameMake } = await SearchService.resolveFitmentTiers([THAR]);
 

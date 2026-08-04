@@ -887,7 +887,7 @@ class SearchService {
       const picked = [];
       const seen = new Set();
       const collect = (docs) => {
-        for (const doc of byFitment(docs)) {
+        for (const doc of docs) {
           const key = String(doc._id);
           if (picked.length >= limit) break;
           if (seen.has(key)) continue;
@@ -896,43 +896,77 @@ class SearchService {
         }
       };
 
-      // Source 1: admin-curated. Always the head of the list — explicit intent.
+      // Source 1: admin-curated. Always the head of the list — explicit intent
+      // outranks any derived signal. Ordered by fitment among themselves.
       if (product.complementaryProducts?.length > 0) {
         const curated = product.complementaryProducts
           .filter(p => p && p.isActive && !similarIds.has(p._id.toString()));
-        collect(curated);
+        collect(byFitment(curated));
         console.log('[SearchService] Curated complementary:', curated.length, '→ picked:', picked.length);
       }
 
-      // Source 2: installation-ecosystem name match (different product type).
+      // Everything below curated goes into ONE pool that is ranked globally by
+      // fitment, not per-source. Ranking inside each source instead lets a source
+      // that runs earlier fill the rail with tier-0 items — e.g. a Thar product
+      // returning Isuzu/Jimny ecosystem matches ahead of every Thar part.
+      // Source rank only breaks ties WITHIN a fitment tier, where it encodes
+      // signal strength: a real "bought with" relationship beats bare fitment,
+      // which beats a shared category.
+      const SOURCE = { ECOSYSTEM: 0, FITMENT: 1, CATEGORY: 2 };
+      const pool = [];
+      const pooled = new Set();
+      const addToPool = (docs, source) => {
+        for (const doc of docs) {
+          const key = String(doc._id);
+          if (seen.has(key) || pooled.has(key)) continue;
+          pooled.add(key);
+          pool.push({ doc, source, tier: fitmentTier(doc), i: pool.length });
+        }
+      };
+      const slots = limit - picked.length;
+      const poolTierCount = (minTier) => pool.reduce((n, x) => n + (x.tier >= minTier ? 1 : 0), 0);
+
+      // Installation-ecosystem name match (e.g. bonnet bracket → LED lights).
       const complementRegex = SearchService.getComplementaryNameRegex(product.name);
-      if (picked.length < limit && complementRegex) {
+      if (slots > 0 && complementRegex) {
         const docs = await find({ _id: { $nin: excluded }, isActive: true, name: { $regex: complementRegex, $options: 'i' } });
         const filtered = differentType(docs);
         console.log('[SearchService] Ecosystem match:', docs.length, '→ different-type:', filtered.length);
-        collect(filtered);
+        addToPool(filtered, SOURCE.ECOSYSTEM);
       }
 
-      // Source 3: fitment/category, DIFFERENT product type — as three ordered
-      // queries rather than one $or. A single query sorted by rating would let
-      // popular category-only items crowd exact-fitment ones out of the
-      // `limit * 3` window before tiering ever saw them; querying each tier
-      // separately guarantees make+model wins, and short-circuits once full.
-      const tierQueries = [
-        ['same make+model', (product.compatibleVehicles || []).length
-          ? { compatibleVehicles: { $in: product.compatibleVehicles } } : null],
-        ['same make', sameMakeIds.length
-          ? { compatibleVehicles: { $in: sameMakeIds } } : null],
-        ['same category', (product.categories || []).length
-          ? { categories: { $in: product.categories } } : null],
+      // Fitment/category as separate queries rather than one $or: a single query
+      // sorted by rating would let popular category-only items crowd exact-fitment
+      // ones out of the `limit * 3` window before tiering ever saw them.
+      //
+      // The skip guards are safe because the tiers are ordered — a same-make doc
+      // can never outrank a make+model one, and a category doc that DID fit would
+      // already have been returned by one of the fitment queries.
+      // Clauses are thunks: each guard must see the pool as the PREVIOUS queries
+      // left it, so they cannot be evaluated up front.
+      const poolQueries = [
+        ['same make+model', SOURCE.FITMENT, () =>
+          slots > 0 && (product.compatibleVehicles || []).length
+            ? { compatibleVehicles: { $in: product.compatibleVehicles } } : null],
+        ['same make', SOURCE.FITMENT, () =>
+          slots > poolTierCount(2) && sameMakeIds.length
+            ? { compatibleVehicles: { $in: sameMakeIds } } : null],
+        ['same category', SOURCE.CATEGORY, () =>
+          slots > poolTierCount(1) && (product.categories || []).length
+            ? { categories: { $in: product.categories } } : null],
       ];
-      for (const [label, clause] of tierQueries) {
-        if (picked.length >= limit || !clause) continue;
+      for (const [label, source, buildClause] of poolQueries) {
+        const clause = buildClause();
+        if (!clause) continue;
         const docs = await find({ _id: { $nin: excluded }, isActive: true, ...clause });
         const filtered = differentType(docs);
         console.log(`[SearchService] Complement (${label}):`, docs.length, '→ different-type:', filtered.length);
-        collect(filtered);
+        addToPool(filtered, source);
       }
+
+      // Stable: equal (tier, source) keeps the DB's rating/reviews order.
+      pool.sort((a, b) => b.tier - a.tier || a.source - b.source || a.i - b.i);
+      collect(pool.map(x => x.doc));
 
       // No random last resort — nothing genuinely complementary found.
       return picked.slice(0, limit);
