@@ -11,18 +11,33 @@
  *     RE-VALIDATED server-side (see utils/returnsCloudinary.js); a missing/invalid
  *     asset rejects the submission ("all three required or rejected").
  *   - Flow: pending → approved → courier_booked → received → (inspection) → refunded/rejected.
+ *     The courier step is MANDATORY and cannot be skipped: we book the pickup, so the
+ *     AWB is our only claim handle if the goods never reach the warehouse.
  *   - Refund is decided BY HAND at initiation (full, or minus shipping / restocking),
  *     and always paid to the ORIGINAL payment method via a partial Razorpay refund.
  *     Exchanges + store-credit were dropped by operations (2026-07-31).
+ *
+ * MONEY: every rupee figure here comes from services/refundMathService.js. Order lines
+ * store LIST prices; coupon/karma discounts live at order level, so the gross line sum
+ * is NOT what the customer paid. Refunding it over-refunds silently on small discounts
+ * and is rejected by Razorpay on large ones ("refund amount ... greater than amount
+ * captured"). Both were live until 2026-08-03. Never compute a refund inline here.
+ *
+ * ERRORS: throw AppError(message, status) — never `res.status(n); throw new Error()`.
+ * errorMiddleware derives the HTTP status from `err.statusCode` only and ignores any
+ * status already set on `res`, so the bare-Error form silently returned 500 for every
+ * business rejection in this file (and paged on-call for each one).
  */
 
 import crypto from 'crypto';
 import asyncHandler from '../middleware/asyncHandler.js';
+import AppError from '../utils/AppError.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import razorpayService from '../services/razorpayService.js';
 import { reverseReturnLtvOnce } from '../services/returnRefundLtvService.js';
+import { refundableForLines, remainingRefundable } from '../services/refundMathService.js';
 import { enqueueNotification } from '../queue/queues.js';
 import {
   RETURN_WINDOW_DAYS,
@@ -82,25 +97,51 @@ const validateAsset = async (raw, { label, allowedResourceTypes, maxBytes, forma
 
   let resourceType = typeof raw.resourceType === 'string' ? raw.resourceType.trim() : allowedResourceTypes[0];
   if (!allowedResourceTypes.includes(resourceType)) {
-    const e = new Error(`${label}: invalid upload type.`); e.statusCode = 400; throw e;
+    throw new AppError(`${label}: invalid upload type.`, 400);
   }
   // Must live under our returns folder — blocks attaching a foreign asset by id.
   if (!publicId.startsWith(`${RETURNS_FOLDER_BASE}/`)) {
-    const e = new Error(`${label}: invalid upload reference.`); e.statusCode = 400; throw e;
+    throw new AppError(`${label}: invalid upload reference.`, 400);
   }
 
   const resource = await getReturnResource(publicId, resourceType);
   if (!resource) {
-    const e = new Error(`${label}: upload could not be verified. Please re-upload.`); e.statusCode = 400; throw e;
+    throw new AppError(`${label}: upload could not be verified. Please re-upload.`, 400);
   }
   if (resource.bytes > maxBytes) {
-    const e = new Error(`${label} exceeds the ${capLabel} limit.`); e.statusCode = 400; throw e;
+    throw new AppError(`${label} exceeds the ${capLabel} limit.`, 400);
   }
   const fmt = resourceFormat(resource, publicId);
   if (formats && !formats.includes(fmt)) {
-    const e = new Error(`${label}: unsupported file type.`); e.statusCode = 400; throw e;
+    throw new AppError(`${label}: unsupported file type.`, 400);
   }
   return { publicId, resourceType, bytes: resource.bytes };
+};
+
+/**
+ * Resolve everything the money decision depends on, from the ORDER rather than the
+ * return's own snapshot. Shared by the preview and the refund so the number the
+ * operator sees is the number that gets claimed and sent — they can never diverge.
+ *
+ * Reading the order live also silently repairs returns created before discount
+ * proration existed (their stored productValue is a gross figure), so no backfill
+ * migration is needed for the ones already sitting in the queue.
+ *
+ * @returns {{ order, payment, refundable, headroom }}
+ */
+const resolveRefundBasis = async (rr) => {
+  const order = await orderRepository.findById(rr.order);
+  if (!order) {
+    throw new AppError('The order for this return no longer exists.', 404);
+  }
+  const refundable = refundableForLines(order, rr.items);
+  const siblings = await returnRequestRepository.find({ order: order._id }).select('refund').lean();
+  // The Payment row is loaded here (not just at refund time) so the headroom the
+  // operator PREVIEWS already accounts for money the payment knows about — otherwise
+  // the preview and the refund could disagree about what is left.
+  const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+  const headroom = remainingRefundable(order, siblings, rr._id, payment);
+  return { order, payment, refundable, headroom };
 };
 
 /** Signed, viewable copies of a return's private evidence (admin only). */
@@ -136,8 +177,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
 
   const order = await orderRepository.findOwnedWithProducts(orderId, userId);
   if (!order) {
-    res.status(404);
-    throw new Error('Order not found');
+    throw new AppError('Order not found', 404);
   }
   // `returned` is accepted alongside `delivered` because an APPROVED return now moves
   // the order onto the `returned` fulfillment stage (orderRepository.markReturnedOnReturnApproval).
@@ -145,15 +185,13 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   // the first one is in flight — the 4-day window below and the per-product active-return
   // guard further down are what actually bound eligibility.
   if (!['delivered', 'returned'].includes(order.status)) {
-    res.status(400);
-    throw new Error('Only delivered orders can be returned.');
+    throw new AppError('Only delivered orders can be returned.', 400);
   }
 
   // 1) 4-day window from delivery.
   const deliveredAt = order.fulfillmentMetrics?.deliveredAt || order.deliveredAt || order.updatedAt;
   if (daysSince(deliveredAt) > RETURN_WINDOW_DAYS) {
-    res.status(400);
-    throw new Error(`Return window closed. Returns must be raised within ${RETURN_WINDOW_DAYS} days of delivery.`);
+    throw new AppError(`Return window closed. Returns must be raised within ${RETURN_WINDOW_DAYS} days of delivery.`, 400);
   }
 
   // 2) Validate + snapshot each requested line.
@@ -161,18 +199,15 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   for (const item of items || []) {
     const orderLine = order.items.find((oi) => String(oi.product?._id || oi.product) === String(item.productId));
     if (!orderLine) {
-      res.status(400);
-      throw new Error('One of the selected items is not part of this order.');
+      throw new AppError('One of the selected items is not part of this order.', 400);
     }
     if (!RETURN_REASONS.includes(item.reason)) {
-      res.status(400);
-      throw new Error('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect.');
+      throw new AppError('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect.', 400);
     }
     // Non-returnable classes (electrical/custom/imported/installed) are blocked.
     const product = orderLine.product;
     if (product?.returnPolicy && product.returnPolicy.returnable === false) {
-      res.status(400);
-      throw new Error(`"${product.name}" is not eligible for return under our policy.`);
+      throw new AppError(`"${product.name}" is not eligible for return under our policy.`, 400);
     }
     const qty = Math.min(Number(item.quantity) || 1, orderLine.quantity);
     // DB unique index is the race-safe backstop; this gives a friendly message.
@@ -183,8 +218,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
       status: { $in: ACTIVE_RETURN_STATUSES },
     });
     if (existing) {
-      res.status(409);
-      throw new Error(`A return request already exists for "${product?.name || 'this item'}".`);
+      throw new AppError(`A return request already exists for "${product?.name || 'this item'}".`, 409);
     }
     returnItems.push({
       product: item.productId,
@@ -196,29 +230,25 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   }
 
   if (returnItems.length === 0) {
-    res.status(400);
-    throw new Error('Select at least one item to return.');
+    throw new AppError('Select at least one item to return.', 400);
   }
 
   // 3) Mandatory documentation — all three, or reject.
   const desc = typeof problemDescription === 'string' ? problemDescription.trim() : '';
   if (!desc) {
-    res.status(400);
-    throw new Error('A description of the problem is required.');
+    throw new AppError('A description of the problem is required.', 400);
   }
   const videoAsset = await validateAsset(video, {
     label: 'Unboxing video', allowedResourceTypes: ['video'], maxBytes: VIDEO_MAX_BYTES, formats: VIDEO_FORMATS, capLabel: '60MB',
   });
   if (!videoAsset) {
-    res.status(400);
-    throw new Error('A continuous unboxing video is required.');
+    throw new AppError('A continuous unboxing video is required.', 400);
   }
   const proofAsset = await validateAsset(proofOfPurchase, {
     label: 'Proof of purchase', allowedResourceTypes: ['image', 'raw'], maxBytes: PROOF_MAX_BYTES, formats: PROOF_FORMATS, capLabel: '15MB',
   });
   if (!proofAsset) {
-    res.status(400);
-    throw new Error('Proof of purchase (invoice or payment confirmation) is required.');
+    throw new AppError('Proof of purchase (invoice or payment confirmation) is required.', 400);
   }
   // Optional extra photos.
   const photoAssets = [];
@@ -229,7 +259,11 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     if (a) photoAssets.push(a);
   }
 
-  const productValue = money(returnItems.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0));
+  // Discount-adjusted from the start: Σ(unitPrice × qty) is the LIST value, not what
+  // was paid, and seeding the refund with it is what let a gross figure reach the
+  // gateway. `productValue` is the refundable base; the gross sits alongside it for
+  // display. Recomputed again at initiation — the order is the record, this is a hint.
+  const { grossRupees, netRupees, discountShareRupees } = refundableForLines(order, returnItems);
 
   const returnRequest = await returnRequestRepository.create({
     order: orderId,
@@ -241,7 +275,14 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     video: videoAsset,
     proofOfPurchase: proofAsset,
     images: photoAssets,
-    refund: { productValue, finalAmount: productValue, method: 'original_payment', status: 'pending' },
+    refund: {
+      productValue: netRupees,
+      listValue: grossRupees,
+      discountShare: discountShareRupees,
+      finalAmount: netRupees,
+      method: 'original_payment',
+      status: 'pending',
+    },
     timeline: [{ status: 'pending', note: 'Return request submitted', updatedBy: userId }],
   });
 
@@ -308,13 +349,11 @@ export const getMyReturns = asyncHandler(async (req, res) => {
 export const cancelMyReturn = asyncHandler(async (req, res) => {
   const rr = await returnRequestRepository.findById(req.params.id);
   if (!rr || String(rr.user) !== String(req.user._id)) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
   // Only before the courier is booked — once we've arranged pickup it's in motion.
   if (!['pending', 'approved'].includes(rr.status)) {
-    res.status(400);
-    throw new Error('This request can no longer be cancelled.');
+    throw new AppError('This request can no longer be cancelled.', 400);
   }
   transition(rr, 'cancelled', 'Cancelled by customer', req.user._id);
   await returnRequestRepository.save(rr);
@@ -371,8 +410,7 @@ export const getReturnById = asyncHandler(async (req, res) => {
     .populate('items.product', 'name images price')
     .lean();
   if (!rr) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
   res.json({ success: true, request: withSignedEvidence(rr) });
 });
@@ -384,12 +422,10 @@ export const reviewReturn = asyncHandler(async (req, res) => {
   const { decision, adminNotes, rejectionReason, shippingBorneBy } = req.body;
   const rr = await returnRequestRepository.findById(req.params.id).populate('user', 'email name');
   if (!rr) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
   if (rr.status !== 'pending') {
-    res.status(400);
-    throw new Error(`Only a pending request can be reviewed (this one is "${rr.status}").`);
+    throw new AppError(`Only a pending request can be reviewed (this one is "${rr.status}").`, 400);
   }
   if (adminNotes) rr.adminNotes = adminNotes;
 
@@ -406,8 +442,7 @@ export const reviewReturn = asyncHandler(async (req, res) => {
     enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'approved' });
   } else if (decision === 'reject') {
     if (!rejectionReason) {
-      res.status(400);
-      throw new Error('A rejection reason is required.');
+      throw new AppError('A rejection reason is required.', 400);
     }
     rr.rejectionReason = rejectionReason;
     transition(rr, 'rejected', rejectionReason, req.user._id);
@@ -415,8 +450,7 @@ export const reviewReturn = asyncHandler(async (req, res) => {
     await orderRepository.setReturnRequestStatus(rr.order, 'rejected');
     enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'rejected' });
   } else {
-    res.status(400);
-    throw new Error('Decision must be "approve" or "reject".');
+    throw new AppError('Decision must be "approve" or "reject".', 400);
   }
 
   res.json({ success: true, request: rr });
@@ -425,26 +459,75 @@ export const reviewReturn = asyncHandler(async (req, res) => {
 // @desc    Record that the return courier has been booked (Admin)
 // @route   PATCH /returns/admin/:id/courier
 // @access  Private/Admin
+//
+// Both fields are REQUIRED. We book the pickup ourselves, which means we own the
+// goods for the whole pickup→warehouse window; the AWB is the only handle we have
+// to raise a claim with the courier when a high-value item never arrives. Until
+// 2026-08-03 both were optional and never read back anywhere, so the step recorded
+// nothing. They are now surfaced to the customer (status email + /returns) too.
+// Accepted from `approved` (first booking) AND from `courier_booked` (correction).
+// The correction path is not a convenience: the AWB is now mandatory, emailed to the
+// customer, and our only claim handle — so a typo is exactly the case that most needs
+// fixing, and there is no other route to it once `approved` has been left behind. It
+// stays closed from `received` onward, where the pickup is already history.
 export const bookCourier = asyncHandler(async (req, res) => {
-  const { provider, trackingNumber } = req.body;
-  const rr = await returnRequestRepository.findById(req.params.id);
+  const provider = typeof req.body.provider === 'string' ? req.body.provider.trim() : '';
+  const trackingNumber = typeof req.body.trackingNumber === 'string' ? req.body.trackingNumber.trim() : '';
+
+  const rr = await returnRequestRepository.findById(req.params.id).populate('user', 'email name');
   if (!rr) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
-  if (rr.status !== 'approved') {
-    res.status(400);
-    throw new Error('Book the courier only after the request is approved.');
+  if (!['approved', 'courier_booked'].includes(rr.status)) {
+    throw new AppError(
+      rr.status === 'pending'
+        ? 'Approve the request before booking the courier.'
+        : `Courier details can no longer be changed (this request is "${rr.status}").`,
+      400
+    );
   }
+  if (!provider) {
+    throw new AppError('Courier name is required — it is our only claim handle if the pickup goes missing.', 400);
+  }
+  if (!trackingNumber) {
+    throw new AppError('Tracking / AWB number is required.', 400);
+  }
+
+  const isCorrection = rr.status === 'courier_booked';
+  const previous = isCorrection ? rr.courier : null;
+  const unchanged = isCorrection
+    && previous?.provider === provider
+    && previous?.trackingNumber === trackingNumber;
+
   rr.courier = {
-    provider: provider || rr.courier?.provider,
-    trackingNumber: trackingNumber || rr.courier?.trackingNumber,
-    bookedAt: new Date(),
+    provider,
+    trackingNumber,
+    // Preserve the ORIGINAL booking time on a correction — that timestamp is when the
+    // goods actually left the customer, which is what a courier claim turns on.
+    bookedAt: previous?.bookedAt || new Date(),
     bookedBy: req.user._id,
+    correctedAt: isCorrection && !unchanged ? new Date() : previous?.correctedAt,
   };
-  transition(rr, 'courier_booked', `Pickup arranged${trackingNumber ? ` (AWB ${trackingNumber})` : ''}`, req.user._id);
+
+  if (unchanged) {
+    // Nothing changed — don't append a noise timeline entry or re-mail the customer.
+    return res.json({ success: true, request: rr });
+  }
+
+  transition(
+    rr,
+    'courier_booked',
+    isCorrection
+      ? `Courier details corrected to ${provider} (AWB ${trackingNumber})`
+      : `Pickup arranged with ${provider} (AWB ${trackingNumber})`,
+    req.user._id
+  );
   await returnRequestRepository.save(rr);
   await orderRepository.setReturnRequestStatus(rr.order, 'approved');
+  // Tell the customer who is collecting and under which AWB — the single most-asked
+  // question after an approval, and previously unanswerable from our own records.
+  // A correction re-sends, so the customer is never left holding a stale AWB.
+  enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'courier_booked' });
   res.json({ success: true, request: rr });
 });
 
@@ -454,12 +537,12 @@ export const bookCourier = asyncHandler(async (req, res) => {
 export const markReceived = asyncHandler(async (req, res) => {
   const rr = await returnRequestRepository.findById(req.params.id).populate('user', 'email name');
   if (!rr) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
-  if (!['courier_booked', 'approved'].includes(rr.status)) {
-    res.status(400);
-    throw new Error('The item can only be marked received after the courier is booked.');
+  // `approved` is deliberately NOT accepted: allowing it let the courier step be
+  // skipped entirely, which is how a mandatory AWB gets bypassed in practice.
+  if (rr.status !== 'courier_booked') {
+    throw new AppError('The item can only be marked received after the courier is booked.', 400);
   }
   transition(rr, 'received', 'Item received at warehouse — pending inspection', req.user._id);
   await returnRequestRepository.save(rr);
@@ -475,12 +558,10 @@ export const recordInspection = asyncHandler(async (req, res) => {
   const { passed, notes } = req.body;
   const rr = await returnRequestRepository.findById(req.params.id).populate('user', 'email name');
   if (!rr) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
   if (rr.status !== 'received') {
-    res.status(400);
-    throw new Error('Inspection can only be recorded after the item is received.');
+    throw new AppError('Inspection can only be recorded after the item is received.', 400);
   }
   rr.inspection = { passed: !!passed, notes: notes || '', at: new Date(), by: req.user._id };
 
@@ -510,9 +591,10 @@ export const recordInspection = asyncHandler(async (req, res) => {
 export const refundPreview = asyncHandler(async (req, res) => {
   const rr = await returnRequestRepository.findById(req.params.id).populate('items.product', 'name');
   if (!rr) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
+  const { order, refundable, headroom } = await resolveRefundBasis(rr);
+
   // Suggested restocking = sum of the price-threshold limb over returned lines.
   const suggestedRestocking = money(
     rr.items.reduce((sum, it) => sum + suggestedRestockingRupees(it.unitPrice, it.quantity), 0)
@@ -520,10 +602,21 @@ export const refundPreview = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     preview: {
-      productValue: rr.refund.productValue,
+      // What the customer actually paid for these lines — the number the refund is
+      // computed from and the one shown on the button.
+      productValue: refundable.netRupees,
+      // Context for the operator: the list value we used to (wrongly) refund, and the
+      // slice of the order-level coupon/karma discount attributable to these lines.
+      listValue: refundable.grossRupees,
+      discountShare: refundable.discountShareRupees,
+      couponCode: order.couponCode || null,
+      // Gateway headroom. Razorpay rejects anything above this outright.
+      orderTotal: headroom.capturedRupees,
+      alreadyRefunded: headroom.alreadyRefundedRupees,
+      maxRefundable: headroom.remainingRupees,
       suggestedRestocking, // operator may accept, change, or zero this
       shippingDeductionDefault: rr.shippingBorneBy === 'customer' ? null : 0,
-      note: 'Original delivery charge is never refunded. Restocking (10%) suggested for items over ₹1,00,000; add manually for oversized items. Enter the actual return-shipping cost to deduct when the customer bears it.',
+      note: 'Refunds are based on what the customer actually paid, after any coupon or karma discount. The original delivery charge is never refunded. Restocking (10%) suggested for items over ₹1,00,000; add manually for oversized items. Enter the actual return-shipping cost to deduct when the customer bears it.',
     },
   });
 });
@@ -534,44 +627,53 @@ export const refundPreview = asyncHandler(async (req, res) => {
 export const initiateReturnRefund = asyncHandler(async (req, res) => {
   const existing = await returnRequestRepository.findById(req.params.id);
   if (!existing) {
-    res.status(404);
-    throw new Error('Return request not found');
+    throw new AppError('Return request not found', 404);
   }
   // Friendly pre-checks for a fast, readable 4xx. These are NOT the real guard —
   // the atomic claimForRefund() below is what actually serializes concurrent
   // requests; these just avoid doing work / returning an opaque 409 in the common case.
   if (existing.status !== 'received' || existing.inspection?.passed !== true) {
-    res.status(400);
-    throw new Error('Refund can only be initiated after the item is received and passes inspection.');
+    throw new AppError('Refund can only be initiated after the item is received and passes inspection.', 400);
   }
   if (['processing', 'completed'].includes(existing.refund?.status)) {
-    res.status(409);
-    throw new Error(`A refund for this return is already ${existing.refund.status}.`);
+    throw new AppError(`A refund for this return is already ${existing.refund.status}.`, 409);
   }
+
+  // Recompute the base from the ORDER — never from existing.refund.productValue, which
+  // is a create-time hint and, for returns raised before 2026-08-03, a GROSS figure.
+  const { order, payment, refundable, headroom } = await resolveRefundBasis(existing);
 
   const shippingDeduction = money(Math.max(0, Number(req.body.shippingDeduction) || 0));
   const restockingDeduction = money(Math.max(0, Number(req.body.restockingDeduction) || 0));
-  const productValue = existing.refund.productValue;
+  const productValue = refundable.netRupees;
   const finalAmount = money(productValue - shippingDeduction - restockingDeduction);
 
   // finalAmount can only be ≤ productValue (both deductions are clamped ≥ 0), so the
   // only real bound to assert is that something is left to refund after deductions.
   if (finalAmount <= 0) {
-    res.status(400);
-    throw new Error('The refund amount after deductions must be greater than ₹0.');
+    throw new AppError('The refund amount after deductions must be greater than ₹0.', 400);
+  }
+
+  // Gateway headroom guard. Razorpay rejects a refund above the captured amount with
+  // an opaque error AFTER we have already claimed the return into `processing`; this
+  // catches it first, before any state moves, and says which number is wrong. It is
+  // also the backstop against a second return on the same order over-drawing it.
+  if (finalAmount > headroom.remainingRupees) {
+    throw new AppError(
+      `Refund of ₹${finalAmount} exceeds what is left on this order (₹${headroom.remainingRupees} of ₹${headroom.capturedRupees} captured` +
+      `${headroom.alreadyRefundedRupees > 0 ? `, ₹${headroom.alreadyRefundedRupees} already refunded` : ''}). ` +
+      'Reduce the amount or refund the balance manually in the Razorpay dashboard.',
+      422
+    );
   }
 
   // Resolve the captured Razorpay payment on the order BEFORE claiming, so an order
   // that can't be refunded online never leaves a return stranded in `processing`.
-  const order = await orderRepository.findById(existing.order);
-  if (!order || order.paymentStatus !== 'paid') {
-    res.status(422);
-    throw new Error('This order has no captured online payment to refund. Refund manually.');
+  if (order.paymentStatus !== 'paid') {
+    throw new AppError('This order has no captured online payment to refund. Refund manually.', 422);
   }
-  const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
   if (!payment || !payment.gatewayPaymentId) {
-    res.status(422);
-    throw new Error('No Razorpay payment id on file — refund manually in the dashboard.');
+    throw new AppError('No Razorpay payment id on file — refund manually in the dashboard.', 422);
   }
   const amountPaise = Math.round(finalAmount * 100);
 
@@ -580,11 +682,13 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
   // winner here; the loser matches zero docs, gets null, and 409s — never firing a
   // second Razorpay refund. `rr` is the freshly-claimed document we mutate below.
   const rr = await returnRequestRepository.claimForRefund(req.params.id, {
+    productValue,
+    listValue: refundable.grossRupees,
+    discountShare: refundable.discountShareRupees,
     shippingDeduction, restockingDeduction, finalAmount, initiatedBy: req.user._id,
   });
   if (!rr) {
-    res.status(409);
-    throw new Error('This refund is already being processed.');
+    throw new AppError('This refund is already being processed.', 409);
   }
 
   try {
@@ -615,10 +719,24 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
       processedBy: req.user._id,
       processedAt: completed ? new Date() : undefined,
       transactionId: result.refundId,
+      // `remainingRefundable` keys off this prefix to tell a return-sourced summary
+      // apart from a cancellation refund — do not reword without updating it.
       notes: `Return ${rr._id}`,
     };
     await order.save();
     await orderRepository.setReturnRequestStatus(rr.order, 'refund_processed');
+
+    // Payment axis: a partial return refund never touched the Payment row, so the
+    // finance view read ₹0 refunded on an order that had money sent back. ACCUMULATE
+    // (never assign) — an order can have several partial refunds and each must add.
+    // Only the full-value case marks the row `refunded`; a partial leaves it `completed`.
+    //
+    // Behind a once-only claim: the $inc is not idempotent, and for an instant refund
+    // the refund.processed webhook can arrive before the save above lands, at which
+    // point both paths believe they are the one to record it.
+    if (completed && await returnRequestRepository.claimPaymentRecord(rr._id)) {
+      await paymentRepository.recordRefund(payment._id, finalAmount, 'return_refund');
+    }
 
     // Net-LTV reversal only when the money has actually left (instant/optimum refunds
     // come back `processed`). For a normal-speed refund it stays `processing` here and
@@ -648,7 +766,9 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
         Sentry.captureException(err);
       });
     }
-    res.status(502);
-    throw new Error(`Refund failed at the gateway: ${err.message}`);
+    // 502, and OPERATIONAL: a gateway rejection is the gateway's answer, not a fault in
+    // this service. Thrown as a bare Error it became a 500 that paged on-call and showed
+    // the operator "Something went wrong" while the real reason sat in the logs.
+    throw new AppError(`Refund failed at the gateway: ${err.message}`, 502);
   }
 });

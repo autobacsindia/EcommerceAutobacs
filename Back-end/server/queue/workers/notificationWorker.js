@@ -17,7 +17,7 @@
  *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
  *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
  *   send-return-submitted            { returnId }        — acknowledge a new return request to the customer (idempotent)
- *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/received/rejected/refunded)
+ *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/courier_booked/received/rejected/refunded)
  *   send-admin-return-alert          { returnId }        — notify support inbox of a new return request
  *   send-admin-return-refunded-alert { returnId }        — log to support inbox that a return refund was initiated
  */

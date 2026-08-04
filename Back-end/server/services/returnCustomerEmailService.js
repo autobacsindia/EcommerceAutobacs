@@ -55,9 +55,9 @@ export const emailReturnSubmitted = async (returnId) => {
 };
 
 /**
- * Send a lifecycle status email (approved / received / rejected / refunded).
+ * Send a lifecycle status email (approved / courier_booked / received / rejected / refunded).
  * @param {string} returnId
- * @param {'approved'|'received'|'rejected'|'refunded'} event
+ * @param {'approved'|'courier_booked'|'received'|'rejected'|'refunded'} event
  * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'no-recipient'}>}
  */
 export const emailReturnStatus = async (returnId, event) => {

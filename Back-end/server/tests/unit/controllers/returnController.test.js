@@ -13,6 +13,8 @@ const mockReturnRepo = {
   create: jest.fn(),
   save: jest.fn(),
   claimForRefund: jest.fn(),
+  // Once-only guard for the cumulative Payment.refundAmount $inc.
+  claimPaymentRecord: jest.fn(),
   countDocuments: jest.fn(),
   find: jest.fn(),
 };
@@ -23,7 +25,7 @@ const mockOrderRepo = {
   markReturnedOnReturnApproval: jest.fn(),
   revertReturnToDelivered: jest.fn(),
 };
-const mockPaymentRepo = { findById: jest.fn() };
+const mockPaymentRepo = { findById: jest.fn(), recordRefund: jest.fn() };
 const mockRazorpay = { refundPayment: jest.fn() };
 const mockEnqueue = jest.fn();
 const mockGetResource = jest.fn();
@@ -49,6 +51,8 @@ const {
   reviewReturn,
   recordInspection,
   cancelMyReturn,
+  bookCourier,
+  markReceived,
 } = await import('../../../controllers/returnController.js');
 
 const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
@@ -73,12 +77,21 @@ function makeOrder(overrides = {}) {
   };
 }
 
-// Run an asyncHandler-wrapped controller and capture the error it forwards to next.
+/**
+ * Run an asyncHandler-wrapped controller and capture the error it forwards to next.
+ *
+ * `status` is the HTTP status the CLIENT actually receives. On the error path that is
+ * `err.statusCode` — errorMiddleware derives the status from the error alone and never
+ * reads `res.statusCode`, so asserting on `res.status` here would pass for a handler
+ * that returns 500 to the browser. That is exactly the bug this file missed: every
+ * `res.status(400); throw new Error(...)` in the controller shipped as a 500.
+ */
 async function run(handler, req) {
   const res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
   const next = jest.fn();
   await handler(req, res, next);
-  return { res, next, error: next.mock.calls[0]?.[0] };
+  const error = next.mock.calls[0]?.[0];
+  return { res, next, error, status: error?.statusCode ?? res.status.mock.calls[0]?.[0] };
 }
 
 describe('createReturnRequest — policy guards', () => {
@@ -102,8 +115,8 @@ describe('createReturnRequest — policy guards', () => {
 
   it('rejects a return outside the 4-day window', async () => {
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ deliveredAt: daysAgo(9), fulfillmentMetrics: { deliveredAt: daysAgo(9) } }));
-    const { res, error } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/window closed/i);
   });
 
@@ -113,24 +126,24 @@ describe('createReturnRequest — policy guards', () => {
   it('rejects a return raised 4 days 23 hours after delivery', async () => {
     const at = new Date(Date.now() - (4 * 24 + 23) * 60 * 60 * 1000);
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ deliveredAt: at, fulfillmentMetrics: { deliveredAt: at } }));
-    const { res, error } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/window closed/i);
   });
 
   it('accepts a return still inside the window (3 days 23 hours)', async () => {
     const at = new Date(Date.now() - (3 * 24 + 23) * 60 * 60 * 1000);
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ deliveredAt: at, fulfillmentMetrics: { deliveredAt: at } }));
-    const { res, next } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
+    const { status, next } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(201);
+    expect(status).toBe(201);
   });
 
   it('rejects an ineligible reason (change of mind)', async () => {
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder());
     const body = { ...baseBody, items: [{ productId: 'prod-1', quantity: 1, reason: 'changed_mind' }] };
-    const { res, error } = await run(createReturnRequest, { body, user: { _id: 'u1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(createReturnRequest, { body, user: { _id: 'u1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/wrong item, transit damage, or a manufacturing defect/i);
   });
 
@@ -138,32 +151,32 @@ describe('createReturnRequest — policy guards', () => {
     const order = makeOrder();
     order.items[0].product.returnPolicy = { returnable: false };
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(order);
-    const { res, error } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/not eligible for return/i);
   });
 
   it('rejects when the mandatory unboxing video is missing', async () => {
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder());
     const body = { ...baseBody, video: undefined };
-    const { res, error } = await run(createReturnRequest, { body, user: { _id: 'u1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(createReturnRequest, { body, user: { _id: 'u1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/unboxing video is required/i);
   });
 
   it('rejects when the problem description is missing', async () => {
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder());
     const body = { ...baseBody, problemDescription: '   ' };
-    const { res, error } = await run(createReturnRequest, { body, user: { _id: 'u1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(createReturnRequest, { body, user: { _id: 'u1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/description of the problem is required/i);
   });
 
   it('creates a return, snapshots product value, and emails customer + support', async () => {
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder());
-    const { res, next } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
+    const { status, next } = await run(createReturnRequest, { body: baseBody, user: { _id: 'u1' } });
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(201);
+    expect(status).toBe(201);
     const created = mockReturnRepo.create.mock.calls[0][0];
     expect(created.refund.productValue).toBe(1000); // 2 × ₹500
     expect(mockEnqueue).toHaveBeenCalledWith('send-return-submitted', { returnId: 'ret-1' });
@@ -172,16 +185,41 @@ describe('createReturnRequest — policy guards', () => {
 });
 
 describe('initiateReturnRefund — deductions + gate', () => {
+  // Sibling-return lookup used by the headroom check: repo.find(...).select(...).lean().
+  const mockSiblings = (docs = []) => {
+    mockReturnRepo.find.mockReturnValue({ select: () => ({ lean: async () => docs }) });
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
-    mockOrderRepo.findById.mockResolvedValue({ _id: 'order-1', paymentStatus: 'paid', payment: 'payment-1', totalAmount: 1500, save: jest.fn() });
-    mockPaymentRepo.findById.mockResolvedValue({ gatewayPaymentId: 'pay_123' });
+    // The refund base is now derived from the ORDER, so it must carry real lines.
+    // 2 × ₹500 = ₹1000 goods, no discount, ₹500 shipping → ₹1500 captured.
+    mockOrderRepo.findById.mockResolvedValue(makeRefundOrder());
+    mockSiblings([]);
+    mockPaymentRepo.findById.mockResolvedValue({ _id: 'payment-1', gatewayPaymentId: 'pay_123' });
+    mockPaymentRepo.recordRefund.mockResolvedValue({});
+    mockReturnRepo.claimPaymentRecord.mockResolvedValue({ _id: 'ret-1' }); // uncontended
     mockRazorpay.refundPayment.mockResolvedValue({ refundId: 'rfnd_1', status: 'processed', amount: 90000 });
     mockReturnRepo.save.mockResolvedValue(true);
     // Default: pre-check passes, and the atomic claim succeeds returning the claimed doc.
     mockReturnRepo.findById.mockResolvedValue(makeReturn());
     mockReturnRepo.claimForRefund.mockImplementation(async (_id, amounts) => makeReturn({ refund: { productValue: 1000, status: 'processing', ...amounts } }));
   });
+
+  function makeRefundOrder(overrides = {}) {
+    return {
+      _id: 'order-1',
+      paymentStatus: 'paid',
+      payment: 'payment-1',
+      subtotal: 1000,
+      discount: 0,
+      shippingCost: 500,
+      totalAmount: 1500,
+      items: [{ product: 'prod-1', quantity: 2, price: 500, variantId: null }],
+      save: jest.fn(),
+      ...overrides,
+    };
+  }
 
   function makeReturn(overrides = {}) {
     return {
@@ -199,8 +237,8 @@ describe('initiateReturnRefund — deductions + gate', () => {
 
   it('blocks a refund before inspection passes (never claims)', async () => {
     mockReturnRepo.findById.mockResolvedValue(makeReturn({ inspection: { passed: null } }));
-    const { res, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/received and passes inspection/i);
     expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
   });
@@ -213,6 +251,8 @@ describe('initiateReturnRefund — deductions + gate', () => {
     // Instant/'processed' refund → net-LTV reversal fires immediately.
     expect(mockReverseLtv).toHaveBeenCalledWith('ret-1');
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    // The settled refund must land on the Payment row, cumulatively.
+    expect(mockPaymentRepo.recordRefund).toHaveBeenCalledWith('payment-1', 1000, 'return_refund');
   });
 
   it('does NOT reverse LTV immediately for a normal-speed (processing) refund', async () => {
@@ -230,18 +270,122 @@ describe('initiateReturnRefund — deductions + gate', () => {
   });
 
   it('rejects deductions that wipe out the refund (never claims)', async () => {
-    const { res, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { shippingDeduction: 1000 }, user: { _id: 'a1' } });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { shippingDeduction: 1000 }, user: { _id: 'a1' } });
+    expect(status).toBe(400);
     expect(error.message).toMatch(/greater than ₹0/);
     expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
   });
 
   it('409s when the atomic claim is lost to a concurrent refund', async () => {
     mockReturnRepo.claimForRefund.mockResolvedValue(null);
-    const { res, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
-    expect(res.status).toHaveBeenCalledWith(409);
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(409);
     expect(error.message).toMatch(/already being processed/i);
     expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+
+  // ── Discount proration (the 2026-08-03 over-refund bug) ──────────────────────
+  //
+  // Order lines carry LIST prices; coupon/karma live at order level. Refunding
+  // Σ(price × qty) sends back more than the customer paid — silently when the gap
+  // is small, and as a hard Razorpay rejection ("refund amount ... greater than
+  // amount captured") when it is large. Both shipped to production.
+
+  it('refunds what the customer PAID, not the list value, when a coupon was applied', async () => {
+    // ₹1000 of goods, ₹400 coupon → ₹600 actually paid for these lines (+₹100 shipping).
+    mockOrderRepo.findById.mockResolvedValue(makeRefundOrder({
+      subtotal: 1000, discount: 400, couponDiscount: 400, shippingCost: 100, totalAmount: 700,
+    }));
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({
+      productValue: 600,   // what was paid — the refundable base
+      listValue: 1000,     // struck through in the admin UI
+      discountShare: 400,
+      finalAmount: 600,
+    }));
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 60000, expect.any(Object));
+  });
+
+  it('prorates the discount across lines when only part of the order is returned', async () => {
+    // Two lines: ₹1000 (returned) + ₹3000 = ₹4000 goods, ₹400 discount (10%).
+    // The returned line owes 25% of the goods → 25% of the ₹3600 net = ₹900.
+    mockOrderRepo.findById.mockResolvedValue(makeRefundOrder({
+      subtotal: 4000, discount: 400, shippingCost: 0, totalAmount: 3600,
+      items: [
+        { product: 'prod-1', quantity: 2, price: 500, variantId: null },
+        { product: 'prod-2', quantity: 1, price: 3000, variantId: null },
+      ],
+    }));
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({
+      productValue: 900, listValue: 1000, discountShare: 100, finalAmount: 900,
+    }));
+  });
+
+  it('refuses a refund larger than what is left on the order, before any state moves', async () => {
+    // A prior return already took ₹1200 of the ₹1500 captured; only ₹300 remains.
+    mockSiblings([
+      { _id: 'ret-0', refund: { status: 'completed', finalAmount: 1200 } },
+      { _id: 'ret-1', refund: { status: 'pending', finalAmount: 1000 } }, // self — excluded
+    ]);
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(status).toBe(422);
+    expect(error.message).toMatch(/exceeds what is left/i);
+    expect(error.message).toMatch(/₹300 of ₹1500/);
+    // Nothing may move: no claim, and above all no gateway call.
+    expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
+    expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stale GROSS productValue snapshot on a pre-fix return', async () => {
+    // Returns raised before the fix stored the list value in refund.productValue.
+    // The controller must recompute from the order and never trust that snapshot.
+    mockReturnRepo.findById.mockResolvedValue(makeReturn({
+      refund: { productValue: 99999, status: 'pending' },
+    }));
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 1000 }));
+  });
+
+  it('skips the Payment write when the webhook already claimed the record', async () => {
+    // recordRefund is an atomic $inc and NOT idempotent — an instant refund whose
+    // refund.processed webhook lands first must not be counted twice on the payment.
+    mockReturnRepo.claimPaymentRecord.mockResolvedValue(null); // webhook won the claim
+    const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockPaymentRepo.recordRefund).not.toHaveBeenCalled();
+  });
+
+  it('does not claim the payment record for a normal-speed (processing) refund', async () => {
+    mockRazorpay.refundPayment.mockResolvedValue({ refundId: 'rfnd_2', status: 'processing', amount: 100000 });
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(mockReturnRepo.claimPaymentRecord).not.toHaveBeenCalled();
+    expect(mockPaymentRepo.recordRefund).not.toHaveBeenCalled();
+  });
+
+  it('counts money the Payment row already knows about when computing headroom', async () => {
+    // ₹1500 captured, payment says ₹1400 already refunded → only ₹100 left, so a ₹1000
+    // refund must be refused even though no sibling ReturnRequest records it.
+    mockPaymentRepo.findById.mockResolvedValue({ _id: 'payment-1', gatewayPaymentId: 'pay_123', refundAmount: 1400 });
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(status).toBe(422);
+    expect(error.message).toMatch(/exceeds what is left/i);
+    expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a gateway rejection as an operational 502, not a 500 page-out', async () => {
+    mockRazorpay.refundPayment.mockRejectedValue(new Error('The refund amount provided is greater than amount captured'));
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(502);
+    // isOperational is what keeps this out of the P1 pager and lets an admin read it.
+    expect(error.isOperational).toBe(true);
+    expect(error.message).toMatch(/greater than amount captured/);
   });
 });
 
@@ -315,7 +459,7 @@ describe('return approval → order fulfillment status', () => {
     mockGetResource.mockImplementation(async (publicId, type) => ({ bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg' }));
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ status: 'returned' }));
 
-    const { res, next } = await run(createReturnRequest, {
+    const { status, next } = await run(createReturnRequest, {
       body: {
         orderId: 'order-1',
         items: [{ productId: 'prod-1', quantity: 1, reason: 'transit_damage' }],
@@ -326,6 +470,141 @@ describe('return approval → order fulfillment status', () => {
       user: { _id: 'u1' },
     });
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(201);
+    expect(status).toBe(201);
+  });
+});
+
+/**
+ * The courier step. Both fields are mandatory, the AWB is emailed to the customer, and
+ * it is our only handle for a claim against the courier if a high-value pickup goes
+ * missing — which is exactly why a typo must remain correctable.
+ */
+describe('bookCourier — mandatory, un-skippable, and correctable', () => {
+  const makeReturn = (overrides = {}) => ({
+    _id: 'ret-1',
+    order: 'order-1',
+    status: 'approved',
+    timeline: [],
+    user: { email: 'c@x.com' },
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReturnRepo.save.mockResolvedValue(true);
+    mockOrderRepo.setReturnRequestStatus.mockResolvedValue(true);
+    mockReturnRepo.findById.mockReturnValue({ populate: async () => makeReturn() });
+  });
+
+  /** repo.findById(...).populate(...) resolves to the return. */
+  const loaded = (rr) => mockReturnRepo.findById.mockReturnValue({ populate: async () => rr });
+
+  const book = (body) => run(bookCourier, { params: { id: 'ret-1' }, body, user: { _id: 'a1' } });
+
+  it('rejects a booking with no courier name', async () => {
+    const { status, error } = await book({ trackingNumber: 'AWB1' });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/courier name is required/i);
+    expect(mockReturnRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a booking with no AWB', async () => {
+    const { status, error } = await book({ provider: 'Delhivery' });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/tracking \/ awb number is required/i);
+  });
+
+  it('treats whitespace-only values as missing', async () => {
+    const { status } = await book({ provider: '   ', trackingNumber: '  ' });
+    expect(status).toBe(400);
+  });
+
+  it('books from `approved` and emails the customer the courier + AWB', async () => {
+    const rr = makeReturn();
+    loaded(rr);
+
+    const { next } = await book({ provider: ' Delhivery ', trackingNumber: ' AWB123 ' });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(rr.courier.provider).toBe('Delhivery');       // trimmed
+    expect(rr.courier.trackingNumber).toBe('AWB123');
+    expect(rr.status).toBe('courier_booked');
+    expect(mockEnqueue).toHaveBeenCalledWith('send-return-status-email', { returnId: 'ret-1', event: 'courier_booked' });
+  });
+
+  it('allows a correction while still in `courier_booked`', async () => {
+    const bookedAt = new Date('2026-08-01T10:00:00Z');
+    const rr = makeReturn({
+      status: 'courier_booked',
+      courier: { provider: 'Delhivery', trackingNumber: 'TYPO-1', bookedAt },
+    });
+    loaded(rr);
+
+    const { next } = await book({ provider: 'Bluedart', trackingNumber: 'AWB-CORRECT' });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(rr.courier.trackingNumber).toBe('AWB-CORRECT');
+    // The original handover time is what a courier claim turns on — never overwritten.
+    expect(rr.courier.bookedAt).toBe(bookedAt);
+    expect(rr.courier.correctedAt).toBeInstanceOf(Date);
+    expect(rr.timeline.at(-1).note).toMatch(/corrected/i);
+    // The customer must not be left holding the wrong AWB.
+    expect(mockEnqueue).toHaveBeenCalledWith('send-return-status-email', { returnId: 'ret-1', event: 'courier_booked' });
+  });
+
+  it('is a no-op when a correction changes nothing (no re-mail, no timeline noise)', async () => {
+    const rr = makeReturn({
+      status: 'courier_booked',
+      timeline: [{ status: 'courier_booked', note: 'original' }],
+      courier: { provider: 'Delhivery', trackingNumber: 'AWB123', bookedAt: new Date() },
+    });
+    loaded(rr);
+
+    await book({ provider: 'Delhivery', trackingNumber: 'AWB123' });
+
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(rr.timeline).toHaveLength(1);
+    expect(mockReturnRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('refuses to book before approval, with a message that says what to do', async () => {
+    loaded(makeReturn({ status: 'pending' }));
+    const { status, error } = await book({ provider: 'Delhivery', trackingNumber: 'AWB1' });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/approve the request before/i);
+  });
+
+  it('freezes courier details once the item is received', async () => {
+    loaded(makeReturn({ status: 'received' }));
+    const { status, error } = await book({ provider: 'Bluedart', trackingNumber: 'AWB2' });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/no longer be changed/i);
+  });
+});
+
+describe('markReceived — the courier step cannot be skipped', () => {
+  const makeReturn = (overrides = {}) => ({
+    _id: 'ret-1', order: 'order-1', status: 'courier_booked', timeline: [], user: { email: 'c@x.com' }, ...overrides,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReturnRepo.save.mockResolvedValue(true);
+    mockOrderRepo.setReturnRequestStatus.mockResolvedValue(true);
+  });
+
+  it('accepts a return that went through the courier step', async () => {
+    const rr = makeReturn();
+    mockReturnRepo.findById.mockReturnValue({ populate: async () => rr });
+    const { next } = await run(markReceived, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(rr.status).toBe('received');
+  });
+
+  it('rejects an `approved` return — that shortcut is how a mandatory AWB gets bypassed', async () => {
+    mockReturnRepo.findById.mockReturnValue({ populate: async () => makeReturn({ status: 'approved' }) });
+    const { status, error } = await run(markReceived, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/after the courier is booked/i);
   });
 });

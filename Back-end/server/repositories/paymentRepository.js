@@ -1,5 +1,6 @@
 import BaseRepository from './baseRepository.js';
 import Payment from '../models/Payment.js';
+import { toPaise, fromPaise } from '../utils/money.js';
 
 class PaymentRepository extends BaseRepository {
   constructor() {
@@ -34,6 +35,63 @@ class PaymentRepository extends BaseRepository {
   async save(payment, session = null) {
     if (session) return payment.save({ session });
     return payment.save();
+  }
+
+  /**
+   * MONEY-CRITICAL: add a settled refund to a payment row.
+   *
+   * `refundAmount` is CUMULATIVE — an order can be refunded several times (one per
+   * returned line), so this is an atomic `$inc`, never a read-modify-write or an
+   * assignment. Both refund webhooks used to assign `refundEntity.amount / 100`,
+   * which meant a second partial refund overwrote the first and the row under-reported
+   * what had actually been sent back.
+   *
+   * `status` flips to `refunded` only once the cumulative total covers the capture;
+   * a partial refund leaves it `completed` so the order still reads as paid.
+   *
+   * ROUNDING: `refundAmount` is a rupee FLOAT and `$inc` accumulates binary error, so
+   * the "is it fully refunded?" test MUST be done in integer paise. Comparing the
+   * rupee floats directly loses roughly one split in nine — e.g.
+   * `16000.88 + 12682.50 === 28683.379999999997`, which is `< 28683.38`, so a payment
+   * that HAS been refunded in full silently never reaches `refunded`. The flip write
+   * also normalises the drift out of the stored value so it cannot compound.
+   *
+   * NOT idempotent by design — `$inc` applies every call. Callers must gate it behind
+   * a once-only claim (orderRepository.claimRefundPaymentRecord /
+   * returnRequestRepository.claimRefundPaymentRecord) so a controller racing its own
+   * webhook cannot double-count the same refund.
+   *
+   * @param {string|ObjectId} paymentId
+   * @param {number} amountRupees - the amount settled by THIS refund
+   * @param {string} reason
+   * @returns {Promise<Object|null>} the updated payment
+   */
+  async recordRefund(paymentId, amountRupees, reason) {
+    const amount = fromPaise(toPaise(amountRupees));
+    if (amount <= 0) return null;
+
+    const updated = await Payment.findByIdAndUpdate(
+      paymentId,
+      {
+        $inc: { refundAmount: amount },
+        $set: { refundReason: reason, refundedAt: new Date() },
+      },
+      { new: true }
+    );
+    if (!updated) return null;
+
+    // Second write, deliberately: the terminal status depends on the POST-increment
+    // total, which only the atomic $inc above can tell us. Conditional so a racing
+    // refund that already flipped it is not undone.
+    const refundedPaise = toPaise(updated.refundAmount);
+    if (updated.status !== 'refunded' && refundedPaise >= toPaise(updated.amount)) {
+      return Payment.findOneAndUpdate(
+        { _id: paymentId, status: { $ne: 'refunded' } },
+        { $set: { status: 'refunded', refundAmount: fromPaise(refundedPaise) } },
+        { new: true }
+      );
+    }
+    return updated;
   }
 }
 

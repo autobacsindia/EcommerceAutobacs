@@ -3,6 +3,7 @@ import productQuestionRepository from "../repositories/productQuestionRepository
 import Product from "../models/Product.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
+import AppError from "../utils/AppError.js";
 import { 
   validateProductQuestion, 
   validateProductQuestionAnswer, 
@@ -34,10 +35,12 @@ const invalidateQuestionCaches = async (productId) => {
 router.post("/", questionSubmitRateLimit, validateProductQuestion, asyncHandler(async (req, res) => {
   const { productId, question, userName, email } = req.body;
 
+  // AppError, not `res.status(404); throw new Error(...)` — errorHandler reads the
+  // status off the error and ignores res, so the bare form returned 500 (and paged
+  // on-call) for a customer asking about a deleted product.
   const product = await Product.findById(productId);
   if (!product) {
-    res.status(404);
-    throw new Error("Product not found");
+    throw new AppError("Product not found", 404);
   }
 
   const productQuestion = await productQuestionRepository.create({
@@ -107,8 +110,7 @@ router.put("/:id/answer", protect, admin, questionAnswerRateLimit, validateIdPar
   const question = await productQuestionRepository.findById(req.params.id);
 
   if (!question) {
-    res.status(404);
-    throw new Error("Question not found");
+    throw new AppError("Question not found", 404);
   }
 
   question.answer = cleanHTML(answer);
@@ -134,8 +136,7 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
   const question = await productQuestionRepository.findById(req.params.id);
 
   if (!question) {
-    res.status(404);
-    throw new Error("Question not found");
+    throw new AppError("Question not found", 404);
   }
 
   await productQuestionRepository.deleteOne({ _id: question._id });

@@ -33,7 +33,7 @@ const itemLines = (rr) =>
 /**
  * Build the email for a given lifecycle event.
  * @param {Object} params
- * @param {'submitted'|'approved'|'received'|'rejected'|'refunded'} params.event
+ * @param {'submitted'|'approved'|'courier_booked'|'received'|'rejected'|'refunded'} params.event
  * @param {Object} params.rr - ReturnRequest (items.product populated)
  * @param {Object} params.order - Order ({ orderNumber })
  * @param {Object} params.company - companyInfo
@@ -69,6 +69,23 @@ export const returnEmail = ({ event, rr, order, company }) => {
         `Please keep the item in its original packaging with all accessories.`,
       ];
       break;
+    case 'courier_booked': {
+      // We book the pickup, so the customer has no way to learn the courier or AWB
+      // unless we tell them — this is the most-asked question after an approval.
+      const courierName = rr.courier?.provider || 'our courier partner';
+      const awb = rr.courier?.trackingNumber || '';
+      subject = `Return pickup arranged — Order #${ref}`;
+      heading = 'Your return pickup is arranged';
+      intro = `We’ve booked the return pickup for order #${ref} with <strong>${esc(courierName)}</strong>.`
+        + (awb ? `<br><br><strong>Tracking / AWB:</strong> ${esc(awb)}` : '')
+        + `<br><br>Please keep the item in its original packaging with all accessories, and hand it to the courier when they arrive.`;
+      textLines = [
+        `We've booked the return pickup for order #${ref} with ${courierName}.`,
+        awb ? `Tracking / AWB: ${awb}` : null,
+        `Please keep the item in its original packaging with all accessories.`,
+      ].filter(Boolean);
+      break;
+    }
     case 'received':
       subject = `We’ve received your returned item — Order #${ref}`;
       heading = 'Your returned item is with us';

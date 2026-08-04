@@ -161,6 +161,13 @@ class OrderRepository extends BaseRepository {
           'refundDetails.status': 'processing',
           'refundDetails.processedBy': userId,
           'refundDetails.failureReason': null,
+          // Re-arm the once-only Payment.refundAmount claim for this fresh attempt.
+          'refundDetails.paymentRecorded': false,
+          // Drop any note left by a PRIOR return refund that mirrored itself onto this
+          // subdoc. refundMathService.remainingRefundable treats a "Return <id>" note as
+          // "already counted via the ReturnRequest", so a stale one surviving into a
+          // genuine cancellation refund would hide that refund from the running total.
+          'refundDetails.notes': null,
           // Clear any id/timestamp from a prior attempt so a late webhook for the OLD
           // refund can't be mis-attributed to this new one (the mismatch guard in
           // applyRefundWebhook rejects a webhook whose id ≠ the freshly stored one).
@@ -205,6 +212,20 @@ class OrderRepository extends BaseRepository {
    * Flag an in-flight refund as failed (gateway threw). Conditional on `processing` for the
    * same anti-clobber reason as recordRefundResult; an admin can retry from the button.
    */
+  /**
+   * Atomically claim the cumulative Payment.refundAmount write for this order, once.
+   * Twin of returnRequestRepository.claimPaymentRecord — see there for why the $inc
+   * needs a claim at all (controller racing its own refund.processed webhook).
+   */
+  async claimRefundPaymentRecord(orderId, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, 'refundDetails.paymentRecorded': { $ne: true } },
+      { $set: { 'refundDetails.paymentRecorded': true } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
   async markRefundFailed(orderId, reason, session = null) {
     const res = await Order.updateOne(
       { _id: orderId, 'refundDetails.status': 'processing' },
