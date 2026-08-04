@@ -6,7 +6,7 @@ import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { getStockStatus } from '@/lib/stock';
-import { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './productRail';
+import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
 
 interface Product {
   _id: string;
@@ -155,7 +155,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
           </span>
         </div>
         
-        <div className={RAIL_CONTAINER}>
+        <ProductRail label="Frequently bought together">
           {products.map((product) => {
             const getImageUrl = () => {
               if (!product.images || product.images.length === 0) {
@@ -285,8 +285,8 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
               </article>
             );
           })}
-        </div>
-        
+        </ProductRail>
+
         <div className="mt-8 text-center">
           <Link 
             href="/products"

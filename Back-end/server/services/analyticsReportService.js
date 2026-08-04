@@ -15,11 +15,11 @@ import CouponRedemption from '../models/CouponRedemption.js';
 import cacheService from './cacheService.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
-
-// Statuses that count as a realised sale (money made). Mirrors dashboardAnalyticsService
-// so revenue figures stay consistent across the operational dashboard and these historical
-// reports, and so the many cancelled/failed historical WooCommerce orders (ADR-005) are excluded.
-const SALE_STATUSES = ['confirmed', 'processing', 'shipped', 'delivered'];
+// Statuses that count as a realised sale (money made) — shared with the admin stat
+// tiles so revenue figures stay consistent across the operational dashboard, these
+// historical reports and the admin header, and so the many cancelled/failed
+// historical WooCommerce orders (ADR-005) are excluded everywhere.
+import { SALE_STATUSES } from '../utils/orderStatusGroups.js';
 
 const CACHE_TTL_SECONDS = 300; // 5 min — analytics tolerate staleness; protects the DB.
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
-import { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './productRail';
+import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
 
 interface Product {
   _id: string;
@@ -106,7 +106,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
           Similar Products
         </h2>
         
-        <div className={RAIL_CONTAINER}>
+        <ProductRail label="Similar products">
           {products.map((product) => (
             <article
               key={product._id}
@@ -174,7 +174,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
               </Link>
             </article>
           ))}
-        </div>
+        </ProductRail>
       </div>
     </section>
   );
