@@ -615,7 +615,18 @@ export default function OrderDetailPage() {
           <CancelOrderModal orderId={order._id} orderNumber={order._id.slice(-8).toUpperCase()} totalAmount={order.totalAmount} hasPayment={!!order.payment} onClose={() => setShowCancelDialog(false)} onSuccess={() => fetchOrderDetail()} />
         )}
         {showReturnDialog && order && (
-          <ReturnRequestModal orderId={order._id} orderNumber={order._id.slice(-8).toUpperCase()} items={order.items} deliveredAt={order.deliveredAt || order.fulfillmentMetrics?.deliveredAt || ''} onClose={() => setShowReturnDialog(false)} onSuccess={() => fetchOrderDetail()} />
+          <ReturnRequestModal
+            orderId={order._id}
+            orderNumber={order._id.slice(-8).toUpperCase()}
+            items={order.items}
+            deliveredAt={order.deliveredAt || order.fulfillmentMetrics?.deliveredAt || ''}
+            // Debit-card EMI is all-or-nothing at the bank; the form says so up front
+            // rather than letting the customer find out after we've collected the goods.
+            fullRefundOnly={(order.payment as OrderPaymentSummary)?.fullRefundOnly ?? false}
+            paidByLabel={(order.payment as OrderPaymentSummary)?.emiPlanLabel ?? null}
+            onClose={() => setShowReturnDialog(false)}
+            onSuccess={() => fetchOrderDetail()}
+          />
         )}
         {showReviewDialog && selectedItemForReview && order && (
           <WriteReviewModal productId={selectedItemForReview.product?._id || ''} productName={selectedItemForReview.product?.name || selectedItemForReview.name || ''} productImage={selectedItemForReview.product?.images?.[0]?.url || selectedItemForReview.image} orderId={order._id} onClose={() => setShowReviewDialog(false)} onSuccess={() => {}} />

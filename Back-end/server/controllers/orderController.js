@@ -16,7 +16,7 @@ import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
-import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
+import { describeEmiPlan, supportsPartialRefund } from '../utils/paymentMethodDetails.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
@@ -49,6 +49,11 @@ const publicPaymentSummary = (payment) => {
     // Pre-rendered "Credit Card EMI · HDFC · 6 months @ 14%" so the order page and the
     // admin view cannot drift in how they describe the same plan.
     emiPlanLabel: describeEmiPlan(payment) || undefined,
+    // Debit-card EMI can only be refunded in full. Surfaced so the RETURN FORM can say
+    // so before the customer submits, rather than the customer finding out after the
+    // goods have already been collected. The server re-checks on submit — this flag is
+    // for the message, never the enforcement.
+    fullRefundOnly: !supportsPartialRefund(payment),
     status: payment.status,
     amount: payment.amount,
     currency: payment.currency,
