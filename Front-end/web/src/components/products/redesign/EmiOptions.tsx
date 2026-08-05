@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Razorpay Affordability Widget — the "EMI from ₹X/month · View plans" strip
@@ -77,6 +77,24 @@ function loadWidgetScript(): Promise<boolean> {
   return widgetScriptPromise;
 }
 
+/**
+ * The widget mounts itself into an element with THIS EXACT ID. It is hardcoded in
+ * Razorpay's bundle (`T = "razorpay-affordability-widget"`, read via
+ * `document.getElementById(T)`) and is not configurable.
+ *
+ * ⚠️ DO NOT make this dynamic. The component originally rendered a per-instance
+ * `useId()` container and passed a `containerId` option — an option the current
+ * widget bundle does not read at all (the string `containerId` does not appear in
+ * it). The widget therefore loaded, built its iframe, failed to find its container,
+ * and rendered nothing. The EMI strip was silently dead on every PDP in production,
+ * with no console error, because the widget swallows the miss.
+ *
+ * Being a fixed id, it is a singleton: only one EmiOptions may be mounted per page.
+ * That holds today (one BuyBox per PDP) — if a second EMI surface is ever added,
+ * they must share one instance rather than render two containers.
+ */
+const WIDGET_CONTAINER_ID = 'razorpay-affordability-widget';
+
 interface RazorpayAffordabilitySuiteInstance {
   render: () => void;
   destroy?: () => void;
@@ -84,7 +102,6 @@ interface RazorpayAffordabilitySuiteInstance {
 type RazorpayAffordabilitySuiteCtor = new (opts: {
   key: string;
   amount: number;
-  containerId: string;
 }) => RazorpayAffordabilitySuiteInstance;
 
 interface EmiOptionsProps {
@@ -96,11 +113,6 @@ interface EmiOptionsProps {
 export default function EmiOptions({ price, className }: EmiOptionsProps) {
   const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
   const containerRef = useRef<HTMLDivElement>(null);
-  // useId() gives a stable id that matches across SSR and hydration (a random
-  // per-render id would differ server↔client → hydration mismatch). ':' is
-  // legal in an id attribute but not in a CSS selector, so sanitise it for the
-  // widget's containerId lookup.
-  const containerId = `rzp-affordability-${useId().replace(/:/g, '')}`;
 
   // null = still waiting. Drives the fallback copy: the widget silently renders
   // nothing when Affordability is not enabled on the Razorpay account, when no
@@ -153,7 +165,7 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
         return;
       }
       try {
-        instance = new Ctor({ key: keyId, amount: amountPaise, containerId });
+        instance = new Ctor({ key: keyId, amount: amountPaise });
         instance.render();
       } catch {
         // Widget failure must never break the PDP — fall back to plain copy.
@@ -172,7 +184,7 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       }
       if (container) container.innerHTML = '';
     };
-  }, [keyId, amountPaise, containerId]);
+  }, [keyId, amountPaise]);
 
   if (!keyId) return null;
 
@@ -183,7 +195,7 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
 
   return (
     <div className={className}>
-      <div id={containerId} ref={containerRef} />
+      <div id={WIDGET_CONTAINER_ID} ref={containerRef} />
 
       {/* Widget silent (Affordability not enabled on the account, no lender for this
           amount, or the CDN blocked). State only what is true regardless — Razorpay
