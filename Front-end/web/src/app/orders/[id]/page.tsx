@@ -19,7 +19,8 @@ import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
-import { productUrl } from '@/lib/types';
+import { productUrl, type OrderPaymentSummary } from '@/lib/types';
+import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
 import OrderDetailSkeleton from '@/components/skeletons/OrderDetailSkeleton';
 import { formatDateIST, formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 
@@ -474,12 +475,17 @@ export default function OrderDetailPage() {
                       )}
                     </div>
                   )}
-                  {(order.payment as any)?.transactionId && (
+                  {((order.payment as any)?.gatewayPaymentId || (order.payment as any)?.transactionId) && (
                     <div>
                       <p className="text-xs text-ink-muted mb-0.5">Transaction ID</p>
-                      <p className="font-mono text-xs text-ink/70">{(order.payment as any)?.transactionId}</p>
+                      {/* gatewayPaymentId is what the capture actually writes; transactionId
+                          only exists on legacy/offline rows. */}
+                      <p className="font-mono text-xs text-ink/70">
+                        {(order.payment as any)?.gatewayPaymentId || (order.payment as any)?.transactionId}
+                      </p>
                     </div>
                   )}
+                  <EmiPaymentNotice payment={order.payment as OrderPaymentSummary} tone="dark" />
                 </>
               ) : (
                 <p className="text-ink-muted">Payment information not available</p>

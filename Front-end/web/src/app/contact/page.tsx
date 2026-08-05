@@ -4,6 +4,8 @@ import { MapPin, Phone, Mail, Clock, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from '@/lib/constants';
+import ContactForm from '@/components/support/ContactForm';
 
 const SUPPORT_EMAIL = 'support@autobacsindia.com';
 const SUPPORT_PHONE_DISPLAY = '+91 98952 57905';
@@ -93,15 +95,17 @@ function ContactPageInner() {
               </div>
             </div>
 
-            {/* Direct support (replaces the old message form) */}
+            {/* Message form (creates a tracked support ticket) + direct channels */}
             <div>
               <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-6">Talk to Support</h2>
-              <div className="bg-obsidian border border-hairline rounded-sm p-6 sm:p-8 space-y-5">
-                <p className="text-ink/70 font-display text-sm">
-                  Reach our customer support team directly. Email us or give us a call and we&apos;ll
-                  help you with orders, products, or anything else — we typically respond within one business day.
-                </p>
 
+              <ContactForm defaultSubject={emailSubject} orderId={orderId} />
+
+              <p className="text-ink-muted font-display text-xs uppercase tracking-widest text-center my-6">
+                or reach us directly
+              </p>
+
+              <div className="bg-obsidian border border-hairline rounded-sm p-6 sm:p-8 space-y-5">
                 <a
                   href={mailtoHref}
                   className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
@@ -161,7 +165,7 @@ function ContactPageInner() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[
               { q: 'How long does shipping take?', a: 'Standard shipping typically takes 3-5 business days within India. Express shipping options are available at checkout.' },
-              { q: 'What is your return policy?', a: 'We offer a 30-day return policy for unused items in original packaging. Visit our Returns page for more details.' },
+              { q: RETURN_POLICY_QUESTION, a: RETURN_POLICY_SUMMARY },
               { q: 'Do you ship internationally?', a: 'Currently, we only ship within India. International shipping is planned for the future.' },
               { q: 'How can I track my order?', a: "Once your order ships, you'll receive a tracking number via email. You can also track your order in your account dashboard." },
             ].map((item, i) => (

@@ -439,15 +439,36 @@ class AnalyticsReportService {
           { $project: { _id: 0, method: '$_id', count: 1, amount: { $round: ['$amount', 2] } } },
           { $sort: { count: -1 } },
         ]),
-        // Payment method / gateway mix + success rate.
+        // Payment method / gateway mix.
+        //
+        // READ THIS BEFORE ADDING A "SUCCESS RATE" BACK: a Payment row only ever
+        // exists because a capture succeeded — razorpayService.processPaymentSuccess is
+        // the sole creator and always writes status 'completed'. Abandoned and declined
+        // attempts never produce a row at all. So this collection cannot answer "what
+        // fraction of attempts succeeded"; the honest denominator lives at the gateway,
+        // not here.
+        //
+        // The old `successRatePct` divided 'completed' by row count, which meant a
+        // FULLY REFUNDED payment (paymentRepository.recordRefund flips status to
+        // 'refunded' once cumulative refunds cover the capture) was scored as a
+        // failure. One refunded EMI sale rendered as "emi · 0% success", and a single
+        // refund among four card sales as "75%" — both describing refund activity while
+        // labelled as gateway reliability.
+        //
+        // What we report instead: captures, how much of that came back as refunds, and
+        // the net. All of it is answerable from these rows.
         this.agg(Payment, [
           { $match: inWindow },
           {
             $group: {
               _id: { method: '$paymentMethod', gateway: '$paymentGateway' },
-              count: { $sum: 1 },
-              completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+              captured: { $sum: 1 },
+              // Rows that reached a full refund. Partial refunds stay 'completed', so
+              // this undercounts orders touched by a refund on purpose — refundedAmount
+              // below is the money-accurate figure.
+              refunded: { $sum: { $cond: [{ $eq: ['$status', 'refunded'] }, 1, 0] } },
               amount: { $sum: '$amount' },
+              refundedAmount: { $sum: { $ifNull: ['$refundAmount', 0] } },
             },
           },
           {
@@ -455,15 +476,14 @@ class AnalyticsReportService {
               _id: 0,
               method: '$_id.method',
               gateway: '$_id.gateway',
-              count: 1,
-              completed: 1,
+              captured: 1,
+              refunded: 1,
               amount: { $round: ['$amount', 2] },
-              successRatePct: {
-                $cond: [{ $gt: ['$count', 0] }, { $round: [{ $multiply: [{ $divide: ['$completed', '$count'] }, 100] }, 1] }, 0],
-              },
+              refundedAmount: { $round: ['$refundedAmount', 2] },
+              netAmount: { $round: [{ $subtract: ['$amount', '$refundedAmount'] }, 2] },
             },
           },
-          { $sort: { count: -1 } },
+          { $sort: { captured: -1 } },
         ]),
         // Fulfilment SLA: average hours to ship / deliver for orders delivered in the window.
         this.agg(Order, [

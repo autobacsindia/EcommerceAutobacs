@@ -66,6 +66,7 @@ import scheduledTasksRoutes from './scheduledTasks.js';
 
 import contactRoutes from './contact.js';
 import consultationRoutes from './consultation.js';
+import supportRoutes from './support.js';
 import careersRoutes from './careers.js';
 
 import rateLimitDashboardRoutes from './rateLimitDashboard.js';
@@ -170,6 +171,10 @@ apiRouter.use('/admin', adminStatsRoutes);
 // ============================================================================
 apiRouter.use('/contact', contactFormRateLimit, contactRoutes);
 apiRouter.use('/consultation', consultationRateLimit, consultationRoutes);
+// Support tickets. Per-route limiters live inside the router because the
+// customer and agent halves need different budgets. NOTE: /support/inbound (the
+// Postmark webhook) is mounted in app.js AHEAD of CSRF and never reaches here.
+apiRouter.use('/support', supportRoutes);
 // Careers: public open-roles read + admin CRUD (guarded in-route). Applications
 // (Phase 3) attach their own stricter limiter on the submit sub-route.
 apiRouter.use('/careers', publicBrowsingRateLimit, careersRoutes);

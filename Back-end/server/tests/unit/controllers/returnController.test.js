@@ -276,6 +276,62 @@ describe('initiateReturnRefund — deductions + gate', () => {
     expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
   });
 
+  // ── Debit-card EMI: full refund only ────────────────────────────────────────
+  //
+  // The issuer holds a loan against the whole capture and is never told which line
+  // came back, so it can unwind the loan or nothing — Razorpay rejects a partial
+  // refund on DC EMI outright. Our return flow is partial by construction, so without
+  // this guard the operator learns about it only AFTER claimForRefund has moved the
+  // return into `processing`, via a 502 from the gateway.
+  const dcEmiPayment = {
+    _id: 'payment-1',
+    gatewayPaymentId: 'pay_123',
+    methodDetails: { emi: { kind: 'debit_card', issuer: 'ICICI' } },
+  };
+
+  it('blocks a PARTIAL refund on debit-card EMI before anything is claimed', async () => {
+    mockPaymentRepo.findById.mockResolvedValue(dcEmiPayment);
+    // ₹1000 goods against a ₹1500 capture → partial.
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(422);
+    expect(error.message).toMatch(/Debit Card EMI/i);
+    expect(error.message).toMatch(/refund in full/i);
+    expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
+    expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+
+  it('allows a debit-card EMI refund that covers the whole capture', async () => {
+    mockPaymentRepo.findById.mockResolvedValue(dcEmiPayment);
+    // Goods worth the full ₹1500 capture → a full refund, which the issuer accepts.
+    mockOrderRepo.findById.mockResolvedValue(
+      makeRefundOrder({ subtotal: 1500, shippingCost: 0, items: [{ product: 'prod-1', quantity: 2, price: 750, variantId: null }] })
+    );
+    mockReturnRepo.findById.mockResolvedValue(makeReturn({ items: [{ product: 'prod-1', quantity: 2, unitPrice: 750 }] }));
+    const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 150000, expect.any(Object));
+  });
+
+  it('leaves partial refunds on credit-card EMI alone', async () => {
+    mockPaymentRepo.findById.mockResolvedValue({
+      ...dcEmiPayment,
+      methodDetails: { emi: { kind: 'credit_card', issuer: 'HDFC', months: 6 } },
+    });
+    const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 100000, expect.any(Object));
+  });
+
+  it('does not block when the EMI kind is unknown — missing metadata must not stop a valid refund', async () => {
+    mockPaymentRepo.findById.mockResolvedValue({
+      ...dcEmiPayment,
+      methodDetails: { emi: { kind: 'unknown' } },
+    });
+    const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockRazorpay.refundPayment).toHaveBeenCalled();
+  });
+
   it('409s when the atomic claim is lost to a concurrent refund', async () => {
     mockReturnRepo.claimForRefund.mockResolvedValue(null);
     const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });

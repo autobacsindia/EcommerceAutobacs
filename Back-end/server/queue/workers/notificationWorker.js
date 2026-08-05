@@ -20,6 +20,12 @@
  *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/courier_booked/received/rejected/refunded)
  *   send-admin-return-alert          { returnId }        — notify support inbox of a new return request
  *   send-admin-return-refunded-alert { returnId }        — log to support inbox that a return refund was initiated
+ *   process-inbound-email            { inboundId }       — parse a captured support email into a ticket (idempotent)
+ *   send-support-acknowledgement     { ticketId }        — confirm a new ticket to the customer (loop-guarded)
+ *   send-support-reply               { ticketId, body, authorId, authorName } — an agent's reply to the customer
+ *   send-support-resolution          { ticketId }        — tell the customer their ticket is resolved
+ *   create-support-ticket            { sourceModel, sourceId } — open a linked ticket for a
+ *                                                          ProductQuestion / Review / ReturnRequest (idempotent)
  */
 
 import { Worker } from 'bullmq';
@@ -41,6 +47,17 @@ import {
   emailAdminReturnRefundedAlert,
 } from '../../services/adminNotificationService.js';
 import { emailReturnSubmitted, emailReturnStatus } from '../../services/returnCustomerEmailService.js';
+import inboundEmailService from '../../services/inboundEmailService.js';
+import supportEmailService from '../../services/supportEmailService.js';
+import supportTicketRepository from '../../repositories/supportTicketRepository.js';
+import productQuestionRepository from '../../repositories/productQuestionRepository.js';
+import reviewRepository from '../../repositories/reviewRepository.js';
+import returnRequestRepository from '../../repositories/returnRequestRepository.js';
+import {
+  ticketFromProductQuestion,
+  ticketFromReview,
+  ticketFromReturn,
+} from '../../services/supportChannelAdapters.js';
 import * as Sentry from '@sentry/node';
 
 const handlers = {
@@ -135,6 +152,76 @@ const handlers = {
   'send-admin-return-refunded-alert': async (job) => {
     const { returnId } = job.data;
     await emailAdminReturnRefundedAlert(returnId);
+  },
+
+  /**
+   * Parse a captured inbound email into a ticket.
+   *
+   * The acknowledgement is chained here rather than sent inside the service so
+   * that a Postmark outage retries only the send, never the parse — reprocessing
+   * is idempotent but pointless work.
+   */
+  'process-inbound-email': async (job) => {
+    const { inboundId } = job.data;
+    const result = await inboundEmailService.processInbound(inboundId);
+
+    if (result.shouldAcknowledge && result.ticket) {
+      const ticket = await supportTicketRepository.findByReference(result.ticket);
+      if (ticket) await supportEmailService.sendAcknowledgement(ticket);
+    }
+    return result;
+  },
+
+  'send-support-acknowledgement': async (job) => {
+    const { ticketId } = job.data;
+    const ticket = await supportTicketRepository.findById(ticketId);
+    if (!ticket) return { skipped: 'ticket not found' };
+    return supportEmailService.sendAcknowledgement(ticket);
+  },
+
+  'send-support-reply': async (job) => {
+    const { ticketId, body, authorId, authorName } = job.data;
+    const ticket = await supportTicketRepository.findById(ticketId);
+    if (!ticket) return { skipped: 'ticket not found' };
+    return supportEmailService.sendAgentReply(ticket, body, {
+      user: authorId,
+      name: authorName,
+    });
+  },
+
+  'send-support-resolution': async (job) => {
+    const { ticketId } = job.data;
+    const ticket = await supportTicketRepository.findById(ticketId);
+    if (!ticket) return { skipped: 'ticket not found' };
+    return supportEmailService.sendResolutionNotice(ticket);
+  },
+
+  /**
+   * Open a linked support ticket for a record from another channel.
+   *
+   * Done asynchronously so ticket creation can never fail the customer's
+   * original request — a question, review or return must still be accepted even
+   * if the support side is briefly unavailable. Idempotent on
+   * (sourceModel, sourceId), so a retry never doubles up.
+   */
+  'create-support-ticket': async (job) => {
+    const { sourceModel, sourceId } = job.data;
+
+    const loaders = {
+      ProductQuestion: [productQuestionRepository, ticketFromProductQuestion],
+      Review: [reviewRepository, ticketFromReview],
+      ReturnRequest: [returnRequestRepository, ticketFromReturn],
+    };
+
+    const entry = loaders[sourceModel];
+    if (!entry) throw new Error(`Unknown support ticket source: ${sourceModel}`);
+
+    const [repository, adapter] = entry;
+    const record = await repository.findById(sourceId);
+    if (!record) return { skipped: `${sourceModel} ${sourceId} not found` };
+
+    const ticket = await adapter(record);
+    return { ticket: ticket?.reference || null };
   },
 };
 

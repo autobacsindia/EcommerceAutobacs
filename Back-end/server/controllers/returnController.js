@@ -38,6 +38,8 @@ import paymentRepository from '../repositories/paymentRepository.js';
 import razorpayService from '../services/razorpayService.js';
 import { reverseReturnLtvOnce } from '../services/returnRefundLtvService.js';
 import { refundableForLines, remainingRefundable } from '../services/refundMathService.js';
+import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
+import { toPaise } from '../utils/money.js';
 import { enqueueNotification } from '../queue/queues.js';
 import {
   RETURN_WINDOW_DAYS,
@@ -142,6 +144,39 @@ const resolveRefundBasis = async (rr) => {
   const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
   const headroom = remainingRefundable(order, siblings, rr._id, payment);
   return { order, payment, refundable, headroom };
+};
+
+/**
+ * Debit-card EMI is FULL-REFUND-ONLY at the issuer.
+ *
+ * The bank is never told which line of a multi-item order came back — it only holds a
+ * loan against the whole capture — so it can unwind the loan or nothing. Razorpay
+ * rejects a partial refund on a DC EMI payment outright.
+ *
+ * Our return flow is partial by construction (per-line proration, minus shipping and
+ * restocking deductions), so on a DC EMI order almost every refund is one Razorpay
+ * refuses. Without this check the operator only finds out AFTER claimForRefund has
+ * moved the return into `processing`, and gets a 502 for what is really a policy
+ * conflict we can see in advance.
+ *
+ * Returns null when the refund may proceed, or an operator-facing reason string.
+ *
+ * @param {Object} payment - our Payment document (needs methodDetails)
+ * @param {number} finalAmount - rupees this refund will send
+ * @param {number} capturedRupees - what the gateway captured on the order
+ * @returns {string|null}
+ */
+const partialRefundBlockReason = (payment, finalAmount, capturedRupees) => {
+  if (supportsPartialRefund(payment)) return null;
+  // A refund that happens to cover the whole capture IS a full refund and is allowed.
+  if (toPaise(finalAmount) >= toPaise(capturedRupees)) return null;
+
+  return (
+    `This order was paid by Debit Card EMI, which the bank can only refund in full — ` +
+    `a partial refund of ₹${finalAmount} against the ₹${capturedRupees} captured will be ` +
+    `rejected by Razorpay. Either refund the full ₹${capturedRupees}, or settle this ` +
+    `return outside the gateway and record it manually.`
+  );
 };
 
 /** Signed, viewable copies of a return's private evidence (admin only). */
@@ -300,6 +335,14 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   const returnId = returnRequest._id.toString();
   enqueueNotification('send-return-submitted', { returnId });
   enqueueNotification('send-admin-return-alert', { returnId });
+
+  // Open a linked support ticket for the CONVERSATION only. This ReturnRequest
+  // remains the system of record for refund maths, evidence and the policy
+  // window — the ticket never drives any of that.
+  enqueueNotification('create-support-ticket', {
+    sourceModel: 'ReturnRequest',
+    sourceId: returnId,
+  });
 
   res.status(201).json({ success: true, request: returnRequest });
 });
@@ -593,7 +636,7 @@ export const refundPreview = asyncHandler(async (req, res) => {
   if (!rr) {
     throw new AppError('Return request not found', 404);
   }
-  const { order, refundable, headroom } = await resolveRefundBasis(rr);
+  const { order, payment, refundable, headroom } = await resolveRefundBasis(rr);
 
   // Suggested restocking = sum of the price-threshold limb over returned lines.
   const suggestedRestocking = money(
@@ -602,6 +645,10 @@ export const refundPreview = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     preview: {
+      // Payment-instrument constraints the operator has to know BEFORE choosing an
+      // amount — chiefly debit-card EMI, which the bank can only refund in full.
+      paidBy: describeEmiPlan(payment) || null,
+      fullRefundOnly: !supportsPartialRefund(payment),
       // What the customer actually paid for these lines — the number the refund is
       // computed from and the one shown on the button.
       productValue: refundable.netRupees,
@@ -675,6 +722,15 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
   if (!payment || !payment.gatewayPaymentId) {
     throw new AppError('No Razorpay payment id on file — refund manually in the dashboard.', 422);
   }
+
+  // Instrument constraint (debit-card EMI = full refund only). Checked HERE, after the
+  // amount is final but before claimForRefund, so a refund the gateway would reject
+  // never leaves the return stranded in `processing`.
+  const blockReason = partialRefundBlockReason(payment, finalAmount, headroom.capturedRupees);
+  if (blockReason) {
+    throw new AppError(blockReason, 422);
+  }
+
   const amountPaise = Math.round(finalAmount * 100);
 
   // Atomically claim the refund into `processing` (the serialization point) BEFORE

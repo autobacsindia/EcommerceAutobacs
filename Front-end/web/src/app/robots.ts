@@ -22,6 +22,8 @@ export default function robots(): MetadataRoute.Robots {
         '/profile',
         '/order',
         '/orders',
+        // The customer's own ticket list — private, and never in the sitemap.
+        '/support',
         '/wishlist',
         '/auth/',
         '/login',

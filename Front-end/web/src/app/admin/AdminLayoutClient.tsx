@@ -51,6 +51,12 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   //   ],
   // },
   {
+    title: 'Support',
+    items: [
+      { href: '/admin/support', label: 'Inbox', icon: '💬' },
+    ],
+  },
+  {
     title: 'Sales',
     items: [
       { href: '/admin/leads', label: 'Leads', icon: '💼' },

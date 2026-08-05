@@ -137,7 +137,11 @@ describe('Razorpay payment.captured — concurrent delivery', () => {
     const { order } = await seedOrder();
     const paymentId = `pay_${Date.now()}_paylater`;
     const payload = capturedPayload(order, paymentId);
-    payload.payment.entity.method = 'cardless_emi'; // not in the internal enum
+    // `paylater` is a real Razorpay method with no slot in our enum. It is used here
+    // in place of the former `cardless_emi` fixture, which now maps to `emi` on
+    // purpose (see utils/paymentMethodDetails.js) and so no longer exercises the
+    // unknown-method path this test exists to protect.
+    payload.payment.entity.method = 'paylater';
 
     await expect(razorpayService.handlePaymentCaptured(payload)).resolves.not.toThrow();
 
@@ -146,6 +150,7 @@ describe('Razorpay payment.captured — concurrent delivery', () => {
     expect(payment.paymentMethod).toBe('other');
     expect(payment.status).toBe('completed');
     // Raw gateway method is preserved for reconciliation.
-    expect(payment.paymentDetails.razorpay.method).toBe('cardless_emi');
+    expect(payment.paymentDetails.razorpay.method).toBe('paylater');
+    expect(payment.methodDetails.rawMethod).toBe('paylater');
   });
 });

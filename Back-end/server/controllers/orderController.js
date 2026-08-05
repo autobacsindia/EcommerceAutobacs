@@ -16,10 +16,50 @@ import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
+import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
+
+/**
+ * Project a populated Payment document down to what a client may see.
+ *
+ * `findWithPopulated` pulls the whole Payment row, and the response used to include
+ * it verbatim — which meant every order detail response carried
+ * `paymentDetails.razorpay`: the entire gateway entity, including our per-transaction
+ * `fee`/`tax` (i.e. the MDR we pay — commercially sensitive), the stored card id,
+ * acquirer data and internal notes. None of it has ever been read by the frontend
+ * (`Order.payment` is typed as a plain id there), so this is a straight removal.
+ *
+ * What is deliberately KEPT: the gateway payment id (`pay_...`) — it appears on the
+ * customer's own card statement and is the reference they need when raising a bank
+ * dispute — and the method summary, so the order page can say how it was paid.
+ *
+ * @param {Object|string|null} payment - populated Payment doc, raw id, or null
+ * @returns {Object|string|null} safe summary, or the input unchanged if not populated
+ */
+const publicPaymentSummary = (payment) => {
+  if (!payment || typeof payment !== 'object') return payment ?? null;
+  return {
+    _id: payment._id,
+    paymentMethod: payment.paymentMethod,
+    paymentGateway: payment.paymentGateway,
+    methodDetails: payment.methodDetails,
+    // Pre-rendered "Credit Card EMI · HDFC · 6 months @ 14%" so the order page and the
+    // admin view cannot drift in how they describe the same plan.
+    emiPlanLabel: describeEmiPlan(payment) || undefined,
+    status: payment.status,
+    amount: payment.amount,
+    currency: payment.currency,
+    refundAmount: payment.refundAmount,
+    refundedAt: payment.refundedAt,
+    gatewayPaymentId: payment.gatewayPaymentId,
+    // Legacy/offline rows carry a hand-set transactionId instead of a gateway id.
+    transactionId: payment.transactionId,
+    createdAt: payment.createdAt,
+  };
+};
 
 // @desc    Get all orders for logged-in user with pagination
 // @route   GET /orders
@@ -119,6 +159,9 @@ export const getOrderById = async (req, res) => {
     ...order,
     returnRequest: hasRealReturnRequest ? order.returnRequest : undefined,
     refundDetails: hasRealRefund ? order.refundDetails : undefined,
+    // Strip the raw gateway entity (MDR, card id, acquirer data) before it leaves the
+    // server; keep the method summary + EMI plan the order page renders.
+    payment: publicPaymentSummary(order.payment),
     items: order.items.map(item => {
       const metaContentId = contentIdForLineItem(item.product, item.variantId);
       // Strip internal-only fields we populated solely to derive metaContentId —

@@ -63,4 +63,36 @@ describe('returnEmail — refunded', () => {
     expect(text).toContain('Shipping deduction: ₹100.00');
     expect(text).toContain('Restocking (10%): ₹50.00');
   });
+
+  // On EMI the loan is between the customer and their bank: we are settled in full and
+  // never touch the interest. A "full refund" therefore still leaves them out of pocket
+  // by the interest already billed plus any bank cancellation charge — neither of which
+  // we or Razorpay can reverse. Saying so in the refund email is what keeps that from
+  // becoming a chargeback.
+  const emiPayment = {
+    methodDetails: { emi: { kind: 'credit_card', issuer: 'HDFC', months: 6, ratePercent: 14 } },
+  };
+
+  it('warns EMI customers that only the principal comes back', () => {
+    const rr = makeReturn({ refund: { finalAmount: 85000 } });
+    const { text, html } = returnEmail({ event: 'refunded', rr, order, company, payment: emiPayment });
+    expect(text).toContain('Credit Card EMI · HDFC · 6 months @ 14%');
+    expect(text).toContain('principal only');
+    expect(text).toContain('not refundable');
+    expect(html).toContain('principal only');
+  });
+
+  it('stays silent about EMI for a non-EMI payment', () => {
+    const rr = makeReturn({ refund: { finalAmount: 600 } });
+    const { text, html } = returnEmail({
+      event: 'refunded', rr, order, company, payment: { methodDetails: { rawMethod: 'upi' } },
+    });
+    expect(text).not.toContain('principal only');
+    expect(html).not.toContain('principal only');
+  });
+
+  it('sends fine with no payment at all — the caveat is best-effort, never a throw', () => {
+    const rr = makeReturn({ refund: { finalAmount: 600 } });
+    expect(() => returnEmail({ event: 'refunded', rr, order, company })).not.toThrow();
+  });
 });

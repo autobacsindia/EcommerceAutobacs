@@ -369,7 +369,7 @@ function LoyaltySection({ data, period, formatMoney }: { data: LoyaltyData; peri
 function ReturnsSection({ data, formatMoney }: { data: ReturnsPaymentsData; formatMoney: (n: number) => string }) {
   const paymentDonut = (data.payments ?? []).map((p) => ({
     name: `${p.method}${p.gateway ? ` · ${p.gateway}` : ''}`,
-    value: p.count,
+    value: p.captured,
   }));
   return (
     <div className="space-y-6">
@@ -394,16 +394,25 @@ function ReturnsSection({ data, formatMoney }: { data: ReturnsPaymentsData; form
           />
         </SectionCard>
       </div>
-      <SectionCard title="Payment gateways" subtitle="Volume and success rate by method & gateway">
+      <SectionCard
+        title="Payment gateways"
+        subtitle="Captured payments and refunds by method & gateway. Declined and abandoned attempts are not recorded here — see the Razorpay dashboard for gateway success rates."
+      >
         <SimpleTable
           rows={data.payments ?? []}
           emptyMessage="No payments in this period"
           columns={[
             { key: 'method', label: 'Method' },
             { key: 'gateway', label: 'Gateway' },
-            { key: 'count', label: 'Attempts', align: 'right' },
-            { key: 'successRatePct', label: 'Success %', align: 'right', render: (r) => `${r.successRatePct}%` },
+            { key: 'captured', label: 'Captured', align: 'right' },
             { key: 'amount', label: 'Amount', align: 'right', render: (r) => formatMoney(r.amount) },
+            {
+              key: 'refundedAmount',
+              label: 'Refunded',
+              align: 'right',
+              render: (r) => (r.refundedAmount > 0 ? formatMoney(r.refundedAmount) : '—'),
+            },
+            { key: 'netAmount', label: 'Net', align: 'right', render: (r) => formatMoney(r.netAmount) },
           ]}
         />
       </SectionCard>

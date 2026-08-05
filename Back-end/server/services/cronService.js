@@ -5,6 +5,8 @@ import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
 import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
 import { reconcileStuckPayments } from './paymentReconciliationService.js';
+import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
+import { getNotificationsQueue } from '../queue/queues.js';
 
 class CronService {
   constructor() {
@@ -51,9 +53,69 @@ class CronService {
     this.scheduleSaleExpiry();
     this.scheduleLeadSweeps();
     this.schedulePaymentReconciliation();
+    this.scheduleSupportHealth();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
+    }
+  }
+
+  /**
+   * Support pipeline health sweep.
+   *
+   * Three jobs in one pass, all idempotent:
+   *   • inbound liveness  — alert if the support pipe has gone silent
+   *   • SLA breach sweep  — the net under the BullMQ delayed timers, which live
+   *                         in Redis and vanish on a flush
+   *   • stuck-inbound requeue — retry emails captured while Redis was down
+   *
+   * Every 15 minutes by default. Frequent enough that a broken inbound webhook
+   * is caught within a quarter hour; cheap enough that it costs nothing when
+   * everything is fine (three indexed queries).
+   */
+  scheduleSupportHealth() {
+    const schedule = process.env.SUPPORT_HEALTH_CRON || '*/15 * * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid SUPPORT_HEALTH_CRON "${schedule}" — support health sweep NOT scheduled`);
+      return;
+    }
+
+    try {
+      const task = cron.schedule(schedule, () =>
+        this.withDistributedLock('cron:lock:supportHealth', 5 * 60, async () => {
+          // Each guarded separately so one failure never suppresses the others —
+          // a Postmark outage must not also stop the SLA sweep from running.
+          await checkInboundLiveness().catch(err =>
+            console.error('[CronService] Inbound liveness check failed:', err.message)
+          );
+          await sweepSlaBreaches().catch(err =>
+            console.error('[CronService] SLA breach sweep failed:', err.message)
+          );
+          await requeueStuckInbound((name, data) =>
+            getNotificationsQueue().add(name, data, {
+              attempts: 5,
+              backoff: { type: 'exponential', delay: 5000 },
+              removeOnComplete: true,
+            })
+          ).catch(err =>
+            console.error('[CronService] Stuck-inbound requeue failed:', err.message)
+          );
+        }),
+        { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+      );
+
+      this.scheduledTasks.push({
+        name: 'supportHealth',
+        task,
+        schedule,
+        description: 'Support: inbound liveness, SLA breach sweep, stuck-email requeue',
+      });
+
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`[CronService] Support health sweep scheduled: "${schedule}"`);
+      }
+    } catch (err) {
+      console.error('[CronService] Failed to schedule support health sweep:', err.message);
     }
   }
 

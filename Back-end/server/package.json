@@ -31,6 +31,7 @@
     "backfill-crm-leads": "node --import=dotenv/config scripts/backfill-crm-leads.js",
     "backfill-lead-scores": "node --import=dotenv/config scripts/backfill-lead-scores.js",
     "backfill-payment-status": "node --import=dotenv/config scripts/backfill-payment-status.js",
+    "backfill-payment-method-details": "node --import=dotenv/config scripts/backfill-payment-method-details.js",
     "backfill-normalize-emails": "node --import=dotenv/config scripts/backfill-normalize-emails.js",
     "backfill-career-categories": "node --import=dotenv/config scripts/backfill-career-categories.js",
     "backfill-return-policy-flags": "node --import=dotenv/config scripts/backfill-return-policy-flags.js",

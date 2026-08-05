@@ -25,6 +25,69 @@ import { companyInfo } from '../config/company.js';
 import counterRepository from '../repositories/counterRepository.js';
 import { formatInvoiceNumber, invoiceFileName } from '../utils/invoiceFormat.js';
 import { formatLongDateIST } from '../utils/datetime.js';
+import paymentRepository from '../repositories/paymentRepository.js';
+import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
+
+/** Payment enum → invoice-facing label. */
+const PAYMENT_METHOD_LABELS = {
+  credit_card: 'Credit Card',
+  debit_card: 'Debit Card',
+  upi: 'UPI',
+  net_banking: 'Net Banking',
+  wallet: 'Wallet',
+  cod: 'Cash on Delivery',
+};
+
+/**
+ * Resolve what to print on the "Payment Method" line.
+ *
+ * This used to be the hardcoded string "Credit Card/Debit Card/NetBanking/UPI" on every
+ * invoice — an accurate-by-vagueness placeholder that told the customer nothing and, on
+ * an EMI order, actively obscured the arrangement they are being billed interest on.
+ *
+ * Falls back to that original string when there is no payment row to read (legacy and
+ * offline orders), so no existing invoice regresses.
+ *
+ * @param {Object} order - Order document; `payment` may be an id or a populated doc
+ * @returns {Promise<{label: string, emiNote?: string}>}
+ */
+const resolvePaymentLine = async (order) => {
+  const GENERIC = 'Credit Card/Debit Card/NetBanking/UPI';
+  if (!order?.payment) return { label: GENERIC };
+
+  let payment = order.payment;
+  if (typeof payment !== 'object' || !payment.paymentMethod) {
+    // Best-effort: an unreadable payment row must never fail an invoice render.
+    try {
+      payment = await paymentRepository.findById(payment._id || payment);
+    } catch {
+      return { label: GENERIC };
+    }
+  }
+  if (!payment?.paymentMethod) return { label: GENERIC };
+
+  const emiLabel = describeEmiPlan(payment);
+  if (emiLabel) {
+    return {
+      label: emiLabel,
+      emiNote:
+        'Interest and any cancellation charges on this EMI plan are levied by your bank ' +
+        'and do not form part of this invoice.',
+    };
+  }
+
+  const label = PAYMENT_METHOD_LABELS[payment.paymentMethod]
+    || payment.methodDetails?.rawMethod
+    || GENERIC;
+
+  // Card network/last4 when we have them — turns "Credit Card" into something the
+  // customer can match against their statement.
+  const { cardNetwork, cardLast4 } = payment.methodDetails || {};
+  if (cardLast4 && (payment.paymentMethod === 'credit_card' || payment.paymentMethod === 'debit_card')) {
+    return { label: `${label} · ${cardNetwork ? `${cardNetwork} ` : ''}••••${cardLast4}` };
+  }
+  return { label };
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -137,6 +200,8 @@ const loadLogo = async () => {
  */
 export const generateInvoicePdf = async (order, user = null) => {
   const logo = await loadLogo();
+  // Resolved here, outside the synchronous pdfkit render below (which cannot await).
+  const paymentLine = await resolvePaymentLine(order);
 
   return new Promise((resolve, reject) => {
     try {
@@ -237,7 +302,10 @@ export const generateInvoicePdf = async (order, user = null) => {
       metaRow('Invoice Date:', fmtDate(new Date()));
       metaRow('Order Number:', orderNumber(order));
       metaRow('Order Date:', fmtDate(created));
-      metaRow('Payment Method:', 'Credit Card/Debit Card/NetBanking/UPI');
+      metaRow('Payment Method:', paymentLine.label);
+      // EMI only: the interest sits outside this invoice entirely (it is billed by the
+      // customer's bank), so say so on the document rather than leaving them to infer it.
+      if (paymentLine.emiNote) metaRow('', paymentLine.emiNote);
 
       y = Math.max(billBottom, my) + 24;
 

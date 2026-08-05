@@ -6,6 +6,8 @@
  * in, mirroring utils/emailTemplates.js. Amounts are already in rupees.
  */
 
+import { describeEmiPlan } from './paymentMethodDetails.js';
+
 const inr = (n) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -37,9 +39,11 @@ const itemLines = (rr) =>
  * @param {Object} params.rr - ReturnRequest (items.product populated)
  * @param {Object} params.order - Order ({ orderNumber })
  * @param {Object} params.company - companyInfo
+ * @param {Object} [params.payment] - Payment doc, used to add the EMI refund caveat.
+ *                                    Optional: absent means no EMI notice, never a throw.
  * @returns {{ subject: string, text: string, html: string }}
  */
-export const returnEmail = ({ event, rr, order, company }) => {
+export const returnEmail = ({ event, rr, order, company, payment = null }) => {
   const ref = order?.orderNumber || String(rr.order);
   const items = itemLines(rr);
   const itemsHtml = items.map((l) => `<li style="margin:2px 0;">${esc(l)}</li>`).join('');
@@ -48,6 +52,8 @@ export const returnEmail = ({ event, rr, order, company }) => {
     : '';
 
   let subject, heading, intro, textLines;
+  // Rendered as its own highlighted block after the intro (refund event only).
+  let emiNotice = null;
 
   switch (event) {
     case 'submitted':
@@ -114,6 +120,17 @@ export const returnEmail = ({ event, rr, order, company }) => {
       const parts = [];
       if (rr.refund?.shippingDeduction) parts.push(`Shipping deduction: ${inr(rr.refund.shippingDeduction)}`);
       if (rr.refund?.restockingDeduction) parts.push(`Restocking (10%): ${inr(rr.refund.restockingDeduction)}`);
+      // EMI orders: the refund covers PRINCIPAL only. Interest the bank has already
+      // billed, and any cancellation charge it levies, are the bank's and cannot be
+      // reversed by us or by Razorpay. Saying so here — plainly, in the same email that
+      // announces the refund — is what stops "you refunded me less than I paid" becoming
+      // a chargeback. See utils/paymentMethodDetails.js for how the plan is detected.
+      emiNotice = describeEmiPlan(payment);
+      if (emiNotice) {
+        parts.push(
+          `Paid via ${emiNotice} — your bank refunds the principal only. Interest already billed and any cancellation charge set by your bank are not refundable.`
+        );
+      }
       textLines = [
         `We've initiated a refund of ${inr(amt)} for order #${ref} to your original payment method.`,
         ...parts,
@@ -137,7 +154,14 @@ export const returnEmail = ({ event, rr, order, company }) => {
     `— ${company.name}`,
   ].filter((l) => l !== null).join('\n');
 
-  const html = shell(company, heading, `${p(intro)}${itemsBlock}`);
+  const emiBlock = emiNotice
+    ? `<div style="margin:0 0 14px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;">
+         <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#92400e;">Paid via ${esc(emiNotice)}</p>
+         <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">Your bank refunds the <strong>principal only</strong>. Interest already billed on this EMI plan, and any cancellation charge your bank applies, are set by the bank and cannot be refunded by us or by Razorpay.</p>
+       </div>`
+    : '';
+
+  const html = shell(company, heading, `${p(intro)}${emiBlock}${itemsBlock}`);
   return { subject, text, html };
 };
 

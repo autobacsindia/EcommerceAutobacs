@@ -13,7 +13,15 @@ import leadSyncService from './leadSyncService.js';
 import { reverseReturnLtvOnce } from './returnRefundLtvService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import metaCapiService from './metaCapiService.js';
+import { resolvePaymentMethod, buildMethodDetails } from '../utils/paymentMethodDetails.js';
 import * as Sentry from '@sentry/node';
+
+/**
+ * Ceiling on the optional EMI-plan lookup performed during a capture. Kept well inside
+ * the webhook's latency budget — losing the plan detail is cosmetic, earning a webhook
+ * retry is not.
+ */
+const EMI_ENRICHMENT_TIMEOUT_MS = 2000;
 
 class RazorpayService {
   constructor() {
@@ -213,6 +221,12 @@ class RazorpayService {
    * @returns {Promise<Object>} Processing result
    */
   async processPaymentSuccess(orderId, paymentData, userId) {
+    // EMI tenure/rate needs a separate expanded fetch. Do it here, OUTSIDE and BEFORE
+    // the transaction — a slow or failing metadata call must not hold a Mongo
+    // transaction open, and must not be able to abort the capture. Non-EMI payments
+    // return immediately without touching the network.
+    paymentData = await this._enrichEmiPlan(paymentData);
+
     // ── Atomic transaction: create payment → link to order → confirm status ───
     // If any step fails the transaction aborts, rolling back all writes.
     // The old manual "mark payment as failed" compensation code is no longer
@@ -259,7 +273,10 @@ class RazorpayService {
             user: userId,
             amount: order.totalAmount,
             currency: 'INR',
-            paymentMethod: this.getPaymentMethodFromRazorpay(paymentData.method),
+            // Pass the WHOLE entity, not `.method` — that is what lets a debit card be
+            // told apart from a credit card (both arrive as method: 'card').
+            paymentMethod: resolvePaymentMethod(paymentData),
+            methodDetails: buildMethodDetails(paymentData),
             paymentGateway: 'razorpay',
             gatewayOrderId: paymentData.order_id,
             gatewayPaymentId: paymentData.id,
@@ -485,25 +502,62 @@ class RazorpayService {
   }
 
   /**
-   * Map Razorpay payment method to internal payment method
-   * @param {string} razorpayMethod - Razorpay payment method
+   * Map a Razorpay payment to our internal payment method.
+   *
+   * Delegates to utils/paymentMethodDetails.js — accepts the whole payment entity so a
+   * debit card (`method: 'card'` + `card.type: 'debit'`) is distinguishable from a credit
+   * card. A bare method string is still accepted for older callers, and degrades to the
+   * previous card→credit_card behaviour.
+   *
+   * @param {Object|string} payment - Razorpay payment entity, or a bare method string
    * @returns {string} Internal payment method
    */
-  getPaymentMethodFromRazorpay(razorpayMethod) {
-    const methodMap = {
-      'card': 'credit_card',
-      'debitcard': 'debit_card',
-      'netbanking': 'net_banking',
-      'wallet': 'wallet',
-      'upi': 'upi',
-      'emi': 'emi'
-    };
+  getPaymentMethodFromRazorpay(payment) {
+    return resolvePaymentMethod(payment);
+  }
 
-    // Unknown/new gateway methods (cardless_emi, paylater, bank_transfer, …) map to the
-    // `other` enum value rather than the raw string — passing an out-of-enum value would
-    // throw Mongoose validation inside the payment transaction and strand captured money
-    // in an unrecorded state. The raw method is still preserved in paymentDetails.razorpay.
-    return methodMap[razorpayMethod] || 'other';
+  /**
+   * Best-effort enrichment of an EMI payment with its plan (issuer, tenure, rate).
+   *
+   * The webhook payload carries `card.issuer`/`card.type` but not the tenure — that
+   * needs a fetch with `expand[]=emi`. Support cannot answer "why am I being charged
+   * interest?" without it, so we go and get it.
+   *
+   * Deliberately called BEFORE the payment transaction opens and deliberately
+   * swallowing every error: this is reporting metadata, and a gateway hiccup here must
+   * never abort a capture and strand the customer's money in an unrecorded state.
+   *
+   * HARD-BOUNDED. This runs inside the webhook handler, which has its own latency
+   * budget at Razorpay's end — a slow fetch here would delay our 200 and earn a webhook
+   * retry, turning a cosmetic metadata call into duplicate deliveries. The SDK has no
+   * usable default timeout, so the call is raced against one and simply abandoned if it
+   * loses; the payment records without tenure/rate, which is exactly the pre-existing
+   * behaviour.
+   *
+   * @param {Object} paymentData - Razorpay payment entity
+   * @returns {Promise<Object>} the entity, plan-enriched where possible
+   */
+  async _enrichEmiPlan(paymentData) {
+    const isEmi = paymentData?.method === 'emi' || paymentData?.method === 'cardless_emi';
+    if (!isEmi || paymentData.emi_plan || paymentData.emi) return paymentData;
+
+    try {
+      const Razorpay = await import('razorpay');
+      const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+      const expanded = await Promise.race([
+        instance.payments.fetch(paymentData.id, { 'expand[]': 'emi' }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('EMI plan fetch timed out')), EMI_ENRICHMENT_TIMEOUT_MS)
+        ),
+      ]);
+      // Merge rather than replace: the caller's entity is the signature-verified one.
+      if (expanded?.emi || expanded?.emi_plan) {
+        return { ...paymentData, emi: expanded.emi, emi_plan: expanded.emi_plan };
+      }
+    } catch (error) {
+      console.warn(`[Razorpay] EMI plan enrichment skipped for ${paymentData.id}: ${error.message}`);
+    }
+    return paymentData;
   }
 
   /**

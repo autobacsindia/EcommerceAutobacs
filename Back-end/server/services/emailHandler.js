@@ -118,9 +118,17 @@ class EmailHandler {
    * @param {string} options.fromEmail - Override sender address (optional; must be a
    *        verified sender/confirmed-domain address in Postmark). Defaults to POSTMARK_FROM_EMAIL.
    * @param {string} options.fromName - Override sender display name (optional).
+   * @param {string} options.replyTo - Reply-To address (optional). Support mail uses
+   *        this to carry a signed per-ticket token, so a customer's reply is
+   *        threaded back to the right conversation even when their client drops
+   *        the References header.
+   * @param {Object<string,string>} options.headers - Extra RFC 5322 headers
+   *        (optional), e.g. In-Reply-To / References for threading and
+   *        `Auto-Submitted: auto-generated` so other autoresponders do not reply
+   *        to our automated mail. Empty values are dropped.
    * @returns {Promise<Object>} - Result with success status and details
    */
-  async sendEmail({ to, subject, text, html, messageStream, attachments, fromEmail, fromName }) {
+  async sendEmail({ to, subject, text, html, messageStream, attachments, fromEmail, fromName, replyTo, headers }) {
     // Check if service is enabled
     if (!this.isEnabled) {
       return {
@@ -174,6 +182,22 @@ class EmailHandler {
       ...(Array.isArray(attachments) && attachments.length > 0 && { Attachments: attachments }),
       MessageStream: messageStream || this.defaultStream
     };
+
+    // Reply-To, validated like any other address so a malformed token can never
+    // produce mail the customer cannot reply to.
+    if (replyTo && this.isValidEmail(replyTo)) {
+      msg.ReplyTo = replyTo;
+    }
+
+    // Postmark takes custom headers as [{ Name, Value }]. Empty/nullish values are
+    // dropped rather than sent blank, since an empty In-Reply-To breaks threading
+    // in some clients more comprehensively than omitting it.
+    if (headers && typeof headers === 'object') {
+      const extra = Object.entries(headers)
+        .filter(([name, value]) => name && value != null && String(value).trim() !== '')
+        .map(([name, value]) => ({ Name: name, Value: String(value) }));
+      if (extra.length > 0) msg.Headers = extra;
+    }
 
     // Attempt to send with retry logic
     let lastError = null;
@@ -451,10 +475,10 @@ class EmailHandler {
    * @param {Array<Object>} [params.attachments] - Postmark attachments (e.g. shipping slip PDF)
    * @returns {Promise<Object>} - Result with success status
    */
-  async sendOrderStatusUpdate({ to, order, status, user = null, attachments }) {
+  async sendOrderStatusUpdate({ to, order, status, user = null, attachments, payment = null }) {
     const { orderStatusEmail } = await import('../utils/emailTemplates.js');
     const { companyInfo } = await import('../config/company.js');
-    const { subject, text, html } = orderStatusEmail({ order, user, status, company: companyInfo });
+    const { subject, text, html } = orderStatusEmail({ order, user, status, company: companyInfo, payment });
 
     return this.sendEmail({ to, subject, text, html, attachments });
   }
