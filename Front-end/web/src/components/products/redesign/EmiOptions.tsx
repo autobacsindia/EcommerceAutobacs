@@ -195,7 +195,38 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
 
   return (
     <div className={className}>
-      <div id={WIDGET_CONTAINER_ID} ref={containerRef} />
+      {/*
+        LEGIBILITY: the widget renders inside a CROSS-ORIGIN iframe
+        (cdn.razorpay.com/…/frame.html), so its text colours cannot be restyled from
+        here — no CSS of ours reaches inside it, by design.
+
+        Razorpay does read `getComputedStyle(document.body).background-color` (ours is
+        #080808) and tints its own surface with it, but its type stays the near-black
+        it uses for light storefronts. On this obsidian theme that rendered as dark
+        grey on near-black: present, but unreadable.
+
+        So we give it a light surface of its own to sit on. This is the only reliable
+        lever — it holds whatever Razorpay changes inside the frame, and it reads as a
+        deliberate payment chip rather than a hole in the page. The container id must
+        stay exactly WIDGET_CONTAINER_ID, so the styling goes on this wrapper.
+      */}
+      {/*
+        ⚠️ The hidden state must NEVER zero the WIDTH. Razorpay sizes its iframe from
+        `container.clientWidth` at mount time (`var r = e.clientWidth; … t.width = r+"px"`),
+        so a `w-0`/`display:none`/absolutely-positioned container yields a 0px-wide
+        iframe that stays invisible even after being revealed. Collapse the HEIGHT and
+        fade the opacity only — and keep the padding/border box identical across both
+        states so the measured width does not shift when the card appears.
+      */}
+      <div
+        className={
+          widgetPainted
+            ? 'overflow-hidden rounded-sm border border-hairline bg-[#f4f2ee] px-3 py-1 opacity-100 transition-opacity duration-300'
+            : 'pointer-events-none h-0 overflow-hidden rounded-sm border border-transparent px-3 opacity-0'
+        }
+      >
+        <div id={WIDGET_CONTAINER_ID} ref={containerRef} />
+      </div>
 
       {/* Widget silent (Affordability not enabled on the account, no lender for this
           amount, or the CDN blocked). State only what is true regardless — Razorpay
