@@ -268,6 +268,58 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     throw new AppError('Select at least one item to return.', 400);
   }
 
+  // ── Debit-card EMI: all-or-nothing ──────────────────────────────────────────
+  //
+  // The issuer holds ONE loan against the whole capture and is never told what was in
+  // the order, so it can cancel the loan or nothing — a partial refund is rejected
+  // outright (see utils/paymentMethodDetails.js).
+  //
+  // This is checked HERE, at request time, and not only at refund time. The refund-time
+  // guard is a backstop that fires at the END of the flow — after the return is
+  // approved, after WE have paid for the courier pickup, and after the goods are back
+  // in the warehouse. Discovering the constraint at that point costs real money and
+  // strands the customer. Discovering it here costs nothing.
+  //
+  // Single-item orders can never trip this: returning the only line IS a full return.
+  const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+  if (payment && !supportsPartialRefund(payment)) {
+    const paidBy = describeEmiPlan(payment) || 'Debit Card EMI';
+
+    // A full return is only possible if every line is actually returnable. If any is
+    // not (electrical/custom/imported/installed), no valid request exists at all — say
+    // so plainly instead of rejecting them item by item.
+    const blocked = order.items.find((oi) => oi.product?.returnPolicy?.returnable === false);
+    if (blocked) {
+      throw new AppError(
+        `This order was paid using ${paidBy}, which your bank can only refund in full — but ` +
+        `"${blocked.product?.name || 'one of the items'}" is not eligible for return, so the whole order ` +
+        `cannot be sent back. Please contact support and we will settle this for you.`,
+        422
+      );
+    }
+
+    // Sum per product on both sides — an order may legitimately carry the same product
+    // on more than one line, and the line lookup above matches on product id alone.
+    const tally = (rows, key, qty) => rows.reduce((m, r) => {
+      const id = String(key(r));
+      return m.set(id, (m.get(id) || 0) + qty(r));
+    }, new Map());
+
+    const wanted = tally(order.items, (oi) => oi.product?._id || oi.product, (oi) => oi.quantity);
+    const chosen = tally(returnItems, (ri) => ri.product, (ri) => ri.quantity);
+    const isFullReturn = wanted.size === chosen.size
+      && [...wanted].every(([id, qty]) => chosen.get(id) === qty);
+
+    if (!isFullReturn) {
+      throw new AppError(
+        `This order was paid using ${paidBy}. Your bank can only cancel the whole EMI plan — it cannot ` +
+        `refund part of it. To get a refund, every item in this order needs to be returned. You can ` +
+        `re-order anything you would like to keep straight away.`,
+        422
+      );
+    }
+  }
+
   // 3) Mandatory documentation — all three, or reject.
   const desc = typeof problemDescription === 'string' ? problemDescription.trim() : '';
   if (!desc) {

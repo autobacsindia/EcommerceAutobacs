@@ -123,6 +123,22 @@ describe('EmiOptions — widget mount contract', () => {
     expect(screen.queryByText(/pay-later options are shown at checkout/i)).not.toBeInTheDocument();
   });
 
+  // Razorpay sizes its iframe from container.clientWidth at mount. Anything that
+  // zeroes the width before the widget paints (w-0, display:none, position:absolute)
+  // produces a 0px-wide iframe that never becomes visible, no matter what we do
+  // afterwards. Only the height may collapse while we wait.
+  it('never zeroes the container width while the widget is still loading', () => {
+    const { container } = render(<EmiOptions price={130000} />);
+    const wrapper = container.querySelector(`#${WIDGET_ID}`)!.parentElement!;
+    // Compare exact class TOKENS — a regex like /\bhidden\b/ also matches inside
+    // `overflow-hidden`, which is legitimate and must stay.
+    const tokens = wrapper.className.split(/\s+/);
+    expect(tokens).not.toContain('w-0');
+    expect(tokens).not.toContain('hidden');
+    expect(tokens).not.toContain('absolute');
+    expect(tokens).not.toContain('fixed');
+  });
+
   it('renders nothing below the EMI floor — no lender, so no promise', () => {
     const { container } = render(<EmiOptions price={500} />);
     expect(container).toBeEmptyDOMElement();

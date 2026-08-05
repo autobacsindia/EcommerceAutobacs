@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, CheckCircle, ChevronRight, ChevronLeft, AlertCircle, Video, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, RETURN_REASONS, RETURN_WINDOW_DAYS } from '@/lib/constants';
@@ -29,6 +29,14 @@ interface ReturnRequestModalProps {
   orderNumber: string;
   items: OrderItem[];
   deliveredAt: string;
+  /**
+   * Debit-card EMI: the bank holds one loan against the whole order and cannot unwind
+   * part of it, so a refund is all-or-nothing. When true, every item must come back.
+   * Display + guard-rail only — createReturnRequest re-checks on the server.
+   */
+  fullRefundOnly?: boolean;
+  /** e.g. "Debit Card EMI · HDFC" — names the constraint in the notice. */
+  paidByLabel?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -38,7 +46,7 @@ const VIDEO_MAX = 60 * MB;
 const PROOF_MAX = 15 * MB;
 const PHOTO_MAX = 10 * MB;
 
-export default function ReturnRequestModal({ orderId, orderNumber, items, deliveredAt, onClose, onSuccess }: ReturnRequestModalProps) {
+export default function ReturnRequestModal({ orderId, orderNumber, items, deliveredAt, fullRefundOnly = false, paidByLabel, onClose, onSuccess }: ReturnRequestModalProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedItems, setSelectedItems] = useState<Map<string, SelectedItem>>(new Map());
   const [returnReason, setReturnReason] = useState('');
@@ -51,6 +59,29 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, delive
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // A refund on this order is all-or-nothing, and only a MULTI-item order can get that
+  // wrong — returning the only line of a single-item order is already a full return, so
+  // those customers must never see the notice.
+  const mustReturnEverything = fullRefundOnly && items.length > 1;
+
+  const selectAllItems = () =>
+    setSelectedItems(
+      new Map(items.map((i) => [i._id, { productId: i.product?._id || i._id, quantity: i.quantity }]))
+    );
+
+  const allItemsSelected =
+    selectedItems.size === items.length &&
+    items.every((i) => selectedItems.get(i._id)?.quantity === i.quantity);
+
+  // Start with everything selected so the default action is the one that works. The
+  // customer can still change it — validateStep explains why it has to go back.
+  useEffect(() => {
+    if (mustReturnEverything) selectAllItems();
+    // Items are fixed for the lifetime of the modal; run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mustReturnEverything]);
+
 
   // One signed params set is reused for every file in this submission.
   const sigRef = useRef<ReturnUploadSig | null>(null);
@@ -123,7 +154,12 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, delive
 
   const validateStep = (step: number): string | null => {
     switch (step) {
-      case 1: if (selectedItems.size === 0) return 'Select at least one item to return.'; break;
+      case 1:
+        if (selectedItems.size === 0) return 'Select at least one item to return.';
+        if (mustReturnEverything && !allItemsSelected) {
+          return 'This order was paid by EMI on a debit card, so it can only be refunded in full. Every item has to be returned.';
+        }
+        break;
       case 2:
         if (!returnReason) return 'Select a reason for the return.';
         if (!description.trim()) return 'Describe the problem.';
@@ -229,8 +265,41 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, delive
           <div className="space-y-4">
             <div>
               <h4 className="font-bold text-lg mb-1">Select items</h4>
-              <p className="text-sm text-ink-muted mb-4">Choose which item(s) you want to return.</p>
+              <p className="text-sm text-ink-muted mb-4">
+                {mustReturnEverything
+                  ? 'All items in this order need to be returned together — see below.'
+                  : 'Choose which item(s) you want to return.'}
+              </p>
             </div>
+
+            {/* Debit-card EMI: said here, at the first step, so nothing is shipped and no
+                pickup is paid for before the customer knows the order is all-or-nothing. */}
+            {mustReturnEverything && (
+              <div className="rounded-lg border border-gold/30 bg-gold/5 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 shrink-0 text-gold" />
+                  <div className="space-y-2 text-sm">
+                    <p className="font-semibold text-ink/90">
+                      This order was paid using {paidByLabel || 'Debit Card EMI'}.
+                    </p>
+                    <p className="text-ink-muted leading-relaxed">
+                      Your bank can only cancel the whole EMI plan — it can&apos;t refund part of it. To get a
+                      refund, all items in this order need to come back. You can re-order anything you&apos;d
+                      like to keep straight away.
+                    </p>
+                    {!allItemsSelected && (
+                      <button
+                        type="button"
+                        onClick={selectAllItems}
+                        className="rounded-lg bg-gold px-4 py-2 font-medium text-obsidian transition hover:opacity-90"
+                      >
+                        Return all items
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             {items.map((item) => {
               const isSelected = selectedItems.has(item._id);
               const sel = selectedItems.get(item._id);

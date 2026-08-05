@@ -184,6 +184,96 @@ describe('createReturnRequest — policy guards', () => {
   });
 });
 
+// ── Debit-card EMI caught at REQUEST time, not refund time ───────────────────
+//
+// The refund-time guard fires only after the return is approved, the courier is paid
+// for and the goods are back. Catching it here costs nothing instead.
+describe('createReturnRequest — debit-card EMI is all-or-nothing', () => {
+  const dcEmi = { _id: 'payment-1', gatewayPaymentId: 'pay_1', methodDetails: { emi: { kind: 'debit_card', issuer: 'HDFC' } } };
+
+  const twoLineOrder = () => makeOrder({
+    payment: 'payment-1',
+    items: [
+      { product: { _id: 'prod-1', name: 'Seat Cover', returnPolicy: { returnable: true } }, quantity: 1, price: 20000, variantId: null },
+      { product: { _id: 'prod-2', name: 'Suspension Kit', returnPolicy: { returnable: true } }, quantity: 1, price: 60000, variantId: null },
+    ],
+  });
+
+  const body = (items) => ({
+    orderId: 'order-1', items, problemDescription: 'Arrived damaged',
+    video: validAsset('v1'), proofOfPurchase: validAsset('p1', 'jpg'),
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockGetResource.mockImplementation(async (publicId, type) => ({ bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg' }));
+    mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-1', ...doc }));
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(twoLineOrder());
+    mockPaymentRepo.findById.mockResolvedValue(dcEmi);
+  });
+
+  it('rejects a PARTIAL return before anything is shipped or collected', async () => {
+    const req = { body: body([{ productId: 'prod-1', quantity: 1, reason: 'transit_damage' }]), user: { _id: 'u1' } };
+    const { status, error } = await run(createReturnRequest, req);
+    expect(status).toBe(422);
+    expect(error.message).toMatch(/whole EMI plan/i);
+    expect(error.message).toMatch(/every item in this order/i);
+    expect(mockReturnRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('accepts the return when every line is included', async () => {
+    const req = { body: body([
+      { productId: 'prod-1', quantity: 1, reason: 'transit_damage' },
+      { productId: 'prod-2', quantity: 1, reason: 'transit_damage' },
+    ]), user: { _id: 'u1' } };
+    const { next } = await run(createReturnRequest, req);
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.create).toHaveBeenCalled();
+  });
+
+  it('rejects a full-line-count return that short-ships the QUANTITY', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({
+      payment: 'payment-1',
+      items: [{ product: { _id: 'prod-1', name: 'Seat Cover', returnPolicy: { returnable: true } }, quantity: 3, price: 20000, variantId: null }],
+    }));
+    const req = { body: body([{ productId: 'prod-1', quantity: 1, reason: 'transit_damage' }]), user: { _id: 'u1' } };
+    const { status } = await run(createReturnRequest, req);
+    expect(status).toBe(422);
+  });
+
+  it('explains the dead end when a line is non-returnable, so a full return is impossible', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({
+      payment: 'payment-1',
+      items: [
+        { product: { _id: 'prod-1', name: 'Seat Cover', returnPolicy: { returnable: true } }, quantity: 1, price: 20000, variantId: null },
+        { product: { _id: 'prod-2', name: 'Custom Wrap', returnPolicy: { returnable: false } }, quantity: 1, price: 60000, variantId: null },
+      ],
+    }));
+    const req = { body: body([{ productId: 'prod-1', quantity: 1, reason: 'transit_damage' }]), user: { _id: 'u1' } };
+    const { status, error } = await run(createReturnRequest, req);
+    expect(status).toBe(422);
+    expect(error.message).toMatch(/contact support/i);
+    expect(error.message).toMatch(/Custom Wrap/);
+  });
+
+  it('leaves a SINGLE-item order alone — returning the only line is already a full return', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ payment: 'payment-1' }));
+    const req = { body: body([{ productId: 'prod-1', quantity: 2, reason: 'transit_damage' }]), user: { _id: 'u1' } };
+    const { next } = await run(createReturnRequest, req);
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.create).toHaveBeenCalled();
+  });
+
+  it('leaves CREDIT-card EMI partial returns alone', async () => {
+    mockPaymentRepo.findById.mockResolvedValue({ ...dcEmi, methodDetails: { emi: { kind: 'credit_card', issuer: 'Kotak' } } });
+    const req = { body: body([{ productId: 'prod-1', quantity: 1, reason: 'transit_damage' }]), user: { _id: 'u1' } };
+    const { next } = await run(createReturnRequest, req);
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.create).toHaveBeenCalled();
+  });
+});
+
 describe('initiateReturnRefund — deductions + gate', () => {
   // Sibling-return lookup used by the headroom check: repo.find(...).select(...).lean().
   const mockSiblings = (docs = []) => {

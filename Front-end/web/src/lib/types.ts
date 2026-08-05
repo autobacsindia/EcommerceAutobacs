@@ -307,6 +307,12 @@ export interface OrderPaymentSummary {
   };
   /** Pre-rendered by the backend, e.g. "Credit Card EMI · HDFC · 6 months @ 14%". */
   emiPlanLabel?: string;
+  /**
+   * True for debit-card EMI: the issuer holds one loan against the whole capture and
+   * cannot unwind part of it, so the order is all-or-nothing. Drives the notice on the
+   * return form. Display only — the server enforces it on submit.
+   */
+  fullRefundOnly?: boolean;
   status: string;
   amount: number;
   currency?: string;

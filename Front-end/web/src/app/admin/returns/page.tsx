@@ -164,7 +164,18 @@ function DetailModal({ request, loading, onClose, onActioned }: {
     try {
       const res = await apiClient.get<{ preview: ReturnRefundPreview }>(API_ENDPOINTS.RETURN_REFUND_PREVIEW(id));
       setPreview(res.preview);
-      setRefund((r) => ({ ...r, restockingDeduction: res.preview.suggestedRestocking ? String(res.preview.suggestedRestocking) : '' }));
+      // On a full-refund-only order (debit-card EMI) ANY deduction turns this into a
+      // partial refund, which the issuer rejects — so the suggested restocking must not
+      // be pre-filled. Left in, it would pre-block the screen with a figure the operator
+      // never typed, on exactly the high-value orders where the 10% suggestion applies.
+      setRefund((r) => ({
+        ...r,
+        shippingDeduction: res.preview.fullRefundOnly ? '' : r.shippingDeduction,
+        restockingDeduction:
+          !res.preview.fullRefundOnly && res.preview.suggestedRestocking
+            ? String(res.preview.suggestedRestocking)
+            : '',
+      }));
     } catch { /* preview is best-effort */ }
   }, []);
 
@@ -382,12 +393,24 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       )}
                     </div>
 
+                    {/* Debit-card EMI: the issuer can only unwind the whole loan, so any
+                        deduction makes this a partial refund it will reject. Say so once,
+                        next to the disabled inputs, instead of leaving the operator to
+                        discover it by typing a number and hitting a wall. */}
+                    {preview?.fullRefundOnly && (
+                      <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <strong>Full refund only.</strong> This order was paid via {preview.paidBy || 'Debit Card EMI'},
+                        and the bank can only cancel the whole EMI plan. Deductions are unavailable — refund the exact
+                        captured amount, or settle this return outside the gateway and record it manually.
+                      </div>
+                    )}
+
                     <div className="flex gap-3 items-end flex-wrap">
-                      <label className="text-sm">Shipping deduction (₹)
-                        <input type="number" min="0" value={refund.shippingDeduction} onChange={(e) => setRefund({ ...refund, shippingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
+                      <label className={`text-sm ${preview?.fullRefundOnly ? 'opacity-50' : ''}`}>Shipping deduction (₹)
+                        <input type="number" min="0" disabled={preview?.fullRefundOnly} value={refund.shippingDeduction} onChange={(e) => setRefund({ ...refund, shippingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40 disabled:cursor-not-allowed disabled:bg-gray-100" />
                       </label>
-                      <label className="text-sm">Restocking deduction (₹)
-                        <input type="number" min="0" value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40" />
+                      <label className={`text-sm ${preview?.fullRefundOnly ? 'opacity-50' : ''}`}>Restocking deduction (₹)
+                        <input type="number" min="0" disabled={preview?.fullRefundOnly} value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40 disabled:cursor-not-allowed disabled:bg-gray-100" />
                       </label>
                       <button
                         disabled={busy || payout <= 0 || overHeadroom || blockedPartialEmi}
