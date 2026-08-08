@@ -67,6 +67,18 @@ const nextConfig: NextConfig = {
           { key: 'X-XSS-Protection', value: '1; mode=block' },
         ],
       },
+      {
+        // PostHog's static bundles (array.js, surveys.js, recorder.js) are
+        // content-addressed and effectively immutable, but the /ingest/static/*
+        // rewrite re-fetched them from us-assets.i.posthog.com on every miss —
+        // measured 16.4 MB of Fast Origin Transfer in 12h for surveys.js alone,
+        // and Fast Origin Transfer is a PAID meter while edge cache hits are not.
+        // s-maxage lets the Vercel edge serve repeats without touching PostHog.
+        source: '/ingest/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=3600, s-maxage=604800, stale-while-revalidate=86400' },
+        ],
+      },
     ];
   },
 

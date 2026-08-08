@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatible)
+import { isGonePath } from '@/lib/legacyPaths';
 
 /**
  * Next.js Middleware — single edge entrypoint for the whole app.
@@ -204,6 +205,21 @@ export async function middleware(req: NextRequest) {
     const apiHeaders = new Headers(req.headers);
     apiHeaders.delete('origin');
     return NextResponse.next({ request: { headers: apiHeaders } });
+  }
+
+  // ── Dead WordPress paths (see lib/legacyPaths.ts) ───────────────────────────
+  // Checked AFTER the API short-circuit so live API traffic never pays for these
+  // regexes. Returns a bare text body — no React render, no Function invocation.
+  if (isGonePath(pathname)) {
+    return new NextResponse('Gone', {
+      status: 410,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        // Let the edge absorb repeat crawls instead of re-running middleware.
+        'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+        'X-Robots-Tag': 'noindex',
+      },
+    });
   }
 
   // Per-request nonce + CSP, attached to whichever response proceeds.
