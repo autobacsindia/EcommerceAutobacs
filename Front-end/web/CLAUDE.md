@@ -12,6 +12,15 @@ Next.js 15 App Router, React 19, TypeScript, Tailwind v4. Currently Railway (Doc
 
 CI order: lint → test → build (build gated on the first two).
 
+## Vercel build skipping (`vercel.json`)
+
+`vercel.json` is validated against Vercel's strict schema — **unknown keys fail the build**, so no `"//comment"` pseudo-comment keys. Document config here instead.
+
+`ignoreCommand` semantics: exit 0 = skip build, non-zero = build.
+- **Production always builds** (`exit 1`) — a skipped prod deploy costs far more than a wasted build.
+- **Previews** skip only when the last commit touched nothing inside the Root Directory (`Front-end/web`).
+- Caveat: the diff is `HEAD^..HEAD`, so a multi-commit push whose *last* commit is backend-only will skip. Acceptable for previews, never for prod.
+
 ## Structure (`src/`)
 
 - `app/` — routes (App Router). Pages, layouts, `api/` route handlers.
