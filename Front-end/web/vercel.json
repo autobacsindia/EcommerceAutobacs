@@ -3,7 +3,6 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "regions": ["bom1"],
-  "//ignoreCommand": "Exit 0 = skip build, non-zero = build. Production ALWAYS builds (exit 1) — a skipped prod deploy is far more costly than a wasted build. Previews skip only when the last commit touched nothing inside the Root Directory (Front-end/web). Caveat: this compares HEAD^..HEAD, so a multi-commit push whose LAST commit is backend-only will skip; that is acceptable for previews, never for prod.",
   "ignoreCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then exit 1; else git diff --quiet HEAD^ HEAD -- .; fi",
   "git": {
     "deploymentEnabled": {
