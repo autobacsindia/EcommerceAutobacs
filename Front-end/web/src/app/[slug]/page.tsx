@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ArticleDetailClient from '@/components/blog/ArticleDetailClient';
@@ -21,7 +22,10 @@ function serializeJsonLd(data: unknown): string {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-async function fetchBlogArticle(slug: string) {
+// Wrapped in React cache() per the frontend conventions: generateMetadata and
+// the page body both resolve the same slug, and this guarantees one upstream
+// call per request regardless of Next's fetch-memoization behaviour.
+const fetchBlogArticle = cache(async function fetchBlogArticle(slug: string) {
   try {
     const res = await fetch(`${API_BASE}/api/v1/media/articles/${slug}`, {
       headers: internalApiHeaders(),
@@ -34,7 +38,7 @@ async function fetchBlogArticle(slug: string) {
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({
   params,
@@ -43,7 +47,30 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const data = await fetchBlogArticle(slug);
-  if (!data) return { title: 'Not Found | Autobacs India' };
+
+  // notFound() here rather than a "Not Found" title, so the not-found decision
+  // is made as early as possible.
+  //
+  // ⚠️ This does NOT currently produce a 404 status. This route is the root
+  // catch-all, so every unmatched single-segment URL a crawler invents lands on
+  // it, and today those go out as **200 + not-found HTML** (a soft 404 — Google
+  // indexes it, and it never appears in 404 metrics, which is exactly why
+  // Observability reports zero 404s for this route).
+  //
+  // Cause, isolated by rebuilding with the file removed (2026-08-08): the root
+  // `src/app/loading.tsx` wraps the tree in a Suspense boundary, so Next commits
+  // the status and starts streaming before either this function or the page body
+  // can throw. Measured, same build, only that file differing:
+  //     with root loading.tsx      /zzz-nope → 200
+  //     without root loading.tsx   /zzz-nope → 404
+  // `/products/[slug]` and `/categories/[slug]` have their own segment-level
+  // loading.tsx and soft-404 for the same reason.
+  //
+  // Removing the root loading.tsx is a global loading-UX tradeoff, so it is
+  // deliberately NOT done here. Until that call is made, the cost mitigation is
+  // the edge-level 410 blocklist in lib/legacyPaths.ts, which stops the
+  // high-volume crawler paths before they ever reach a Function.
+  if (!data) notFound();
 
   const article = data.data;
   const articleUrl = `${SITE_URL}/${article.slug}`;
