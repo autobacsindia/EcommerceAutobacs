@@ -23,6 +23,35 @@ class UserRepository extends BaseRepository {
     return user.save();
   }
 
+  /**
+   * The two fields campaign eligibility turns on: which mailbox this account is, and
+   * whether that mailbox has been proven. Projected because it runs on every checkout
+   * quote, and kept as its own method so the eligibility gate can never accidentally
+   * be handed a document missing `isVerified` (which would read as "unverified" and
+   * silently deny a legitimate invitee).
+   */
+  async getCampaignIdentity(userId, session = null) {
+    let q = User.findById(userId).select('email isVerified').lean();
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  /**
+   * What a campaign landing page needs to decide which door to show someone who has
+   * typed their email: register, set a password, confirm the address, or just log in.
+   *
+   * Returns null when no account exists. Callers must only expose this for an address
+   * already known to be on a campaign allowlist — otherwise it is an account-existence
+   * oracle for arbitrary emails.
+   */
+  async getCampaignAccountState(email, session = null) {
+    let q = User.findOne({ email: String(email || '').toLowerCase().trim() })
+      .select('name email isVerified mustResetPassword isGuest')
+      .lean();
+    if (session) q = q.session(session);
+    return q;
+  }
+
   // ── Karma points ────────────────────────────────────────────────────────────
 
   async getKarma(userId, session = null) {

@@ -54,6 +54,22 @@ const CouponSchema = new mongoose.Schema({
     products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }]
   },
 
+  /**
+   * Set when this coupon is MANAGED BY A CAMPAIGN (models/Campaign.js).
+   *
+   * Two effects, both in pricingService._evaluateCoupon:
+   *   1. an extra eligibility gate — the campaign decides whether this buyer qualifies
+   *      (allowlist / verified email / date window / redemption cap);
+   *   2. the discount percentage comes from the campaign's TIER LADDER for the current
+   *      cart value, not from this document's static `value`.
+   *
+   * The campaign owns the decisions; the coupon remains the money path, so
+   * Order.discount, the invoice, and refundMathService keep reading one set of figures.
+   * Do NOT hand-edit a campaign-managed coupon in the coupon admin — change the
+   * campaign instead, or the two will disagree about what a buyer is owed.
+   */
+  campaign: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign", default: null },
+
   // ── Usage limits ────────────────────────────────────────────────────────────
   usageLimit: { type: Number, min: 0, default: null },        // global cap, null = unlimited
   usageLimitPerUser: { type: Number, min: 0, default: null }, // per-user cap, null = unlimited

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
@@ -16,6 +16,8 @@ import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { useCampaign } from '@/hooks/queries/useCampaign';
+import CampaignMeter from '@/components/campaign/CampaignMeter';
 
 export default function CartPage() {
   return (
@@ -47,6 +49,30 @@ function CartPageContent() {
     [cart?.items]
   );
   const { quote } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
+
+  // ── Campaign reward ────────────────────────────────────────────────────────
+  // An invited customer never types the code — the card tells them the reward is
+  // theirs, so making them hunt for a coupon field would be a needless drop-off.
+  // Applied once, only when no other coupon is set (never overwrite a code the
+  // customer chose themselves), and the server re-validates it at checkout anyway.
+  const cartSubtotal = quote?.subtotal ?? cart?.total ?? 0;
+  const { data: campaignStatus } = useCampaign(Math.round(cartSubtotal));
+  const autoAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (autoAppliedRef.current) return;
+    if (!campaignStatus?.eligible || !campaignStatus.couponCode) return;
+    if (cart?.couponCode) return;
+    if (!cart?.items?.length) return;
+
+    autoAppliedRef.current = true;
+    applyCoupon(campaignStatus.couponCode).catch(() => {
+      // Silent: the reward is a bonus, not something the customer asked for. A failure
+      // here must never surface as an error they did not cause — the meter simply
+      // won't appear, and the code is still printed on the card as a fallback.
+      autoAppliedRef.current = false;
+    });
+  }, [campaignStatus?.eligible, campaignStatus?.couponCode, cart?.couponCode, cart?.items?.length, applyCoupon]);
 
   const handleApplyCoupon = async () => {
     const code = couponInput.trim().toUpperCase();
@@ -333,6 +359,11 @@ function CartPageContent() {
           <div className="lg:col-span-4 mt-8 lg:mt-0">
             <div className="bg-obsidian border border-hairline rounded-lg p-6 sticky top-20">
               <h2 className="text-lg font-display font-light text-ink tracking-[-0.01em] mb-4">Order Summary</h2>
+
+              {/* Renders only for an eligible invited customer with a non-empty cart. */}
+              <div className="mb-4">
+                <CampaignMeter cartValue={cartSubtotal} appliedDiscount={quote?.couponDiscount} />
+              </div>
 
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-ink/70 font-display text-sm">

@@ -48,6 +48,20 @@ export const profileKeys = {
   karmaHistory: () => [...profileKeys.all, 'karma', 'history'] as const,
 };
 
+export const campaignKeys = {
+  all: ['campaigns'] as const,
+  lists: () => [...campaignKeys.all, 'list'] as const,
+  /** Full campaign document for the admin editor. */
+  detail: (slug: string) => [...campaignKeys.all, 'detail', slug] as const,
+  /** Funnel + spend against the cap. */
+  report: (slug: string) => [...campaignKeys.all, 'report', slug] as const,
+  /**
+   * Per-user eligibility. Keyed on cart value because the tier — and so the banner
+   * copy and the savings meter — changes as the cart grows.
+   */
+  me: (slug: string, cartValue: number) => [...campaignKeys.all, 'me', slug, cartValue] as const,
+};
+
 export const adminKeys = {
   all: ['admin'] as const,
   /** Prefix for every list of a resource — use to invalidate all pages/filters at once. */

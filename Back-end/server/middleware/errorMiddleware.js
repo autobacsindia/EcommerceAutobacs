@@ -3,6 +3,7 @@
 import AppError from '../utils/AppError.js';
 import crypto from 'crypto';
 import { sendP1Alert } from '../utils/alerting.js';
+import { CAMPAIGN_REASON } from '../config/campaign.js';
 
 /**
  * Safe error messages whitelist (prevent accidental data leakage)
@@ -49,6 +50,12 @@ const SAFE_ERROR_MESSAGES = new Set([
   'Your cart does not meet this coupon’s minimum value',
   'Your cart exceeds this coupon’s maximum value',
   'Order total must be greater than zero',
+
+  // Campaign rejection reasons, spread from config/campaign.js rather than retyped so
+  // reworded copy can never silently fall off the whitelist. A reason that is not here
+  // reaches the buyer as "Something went wrong" at checkout instead of telling them
+  // which email to log in with — one support call per thank-you card.
+  ...Object.values(CAMPAIGN_REASON),
   
   // Payment errors
   'Payment failed',
