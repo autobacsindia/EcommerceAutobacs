@@ -43,10 +43,22 @@ export function useCampaign(cartValue = 0, slug: string = ACTIVE_CAMPAIGN_SLUG) 
       );
       return res.campaign;
     },
-    // A campaign that is off, or a slug that does not exist, 404s. That is an expected
+    /**
+     * Off entirely when no campaign is configured.
+     *
+     * The site-wide banner mounts in the root layout, so without this gate every page
+     * view all year round fires an uncacheable per-user request that 404s once the
+     * festive period is over. Clearing `ACTIVE_CAMPAIGN_SLUG` removes the request
+     * completely rather than merely hiding its result.
+     */
+    enabled: !!slug,
+    // A campaign that is off, or a slug that does not exist, 404s. That is the expected
     // steady state for most of the year, so it must not retry or spam the console.
     retry: false,
-    staleTime: 30_000,
+    // Long enough that navigating the site does not re-ask on every page, short enough
+    // that flipping the campaign off in admin reaches shoppers quickly.
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   });
 }
 

@@ -49,8 +49,9 @@ const seedProduct = (price) => Product.create({
   price, stock: 'in', brand: 'B', isActive: true,
 });
 
-const seedUser = ({ email, isVerified = true } = {}) => User.create({
-  name: 'U', email: email || `u${++seq}${Date.now()}@x.com`, passwordHash: 'x', isVerified,
+const seedUser = ({ email, isVerified = true, mustResetPassword = false } = {}) => User.create({
+  name: 'U', email: email || `u${++seq}${Date.now()}@x.com`, passwordHash: 'x',
+  isVerified, mustResetPassword,
 });
 
 /**
@@ -229,6 +230,172 @@ describe('eligibility gate', () => {
 
     const quote = await quoteFor(anyone._id, product);
     expect(quote.couponDiscount).toBe(10000);
+  });
+});
+
+describe('eligibility is independent of cart value (regression)', () => {
+  // The banner and the landing page both ask about a cart worth nothing. Returning
+  // "not eligible" for a zero cart made the site-wide ribbon and the landing page's
+  // success panel invisible to every customer, while a ?cartValue=50000 probe passed —
+  // which is exactly why this is pinned at zero.
+  it('reports an invited customer as eligible with an EMPTY cart', async () => {
+    const campaign = await seedCampaign();
+    const user = await seedUser({ email: 'empty@x.com' });
+    await invite(campaign, 'empty@x.com');
+
+    const status = await campaignService.statusForUser(campaign.slug, user._id, 0);
+
+    expect(status.eligible).toBe(true);
+    expect(status.reason).toBeNull();
+    expect(status.couponCode).toBe(CODE);   // the cart can auto-apply it
+    expect(status.tier).toBeNull();         // but no tier is earned yet
+  });
+
+  it('still reports an uninvited customer as ineligible with an empty cart', async () => {
+    const campaign = await seedCampaign();
+    const stranger = await seedUser({ email: 'stranger2@x.com' });
+
+    const status = await campaignService.statusForUser(campaign.slug, stranger._id, 0);
+    expect(status.eligible).toBe(false);
+    expect(status.reason).toBe(CAMPAIGN_REASON.NOT_INVITED);
+    expect(status.couponCode).toBeNull();
+  });
+
+  it('claims the invite on eligibility alone, before anything is added', async () => {
+    const campaign = await seedCampaign();
+    const user = await seedUser({ email: 'earlyclaim@x.com' });
+    await invite(campaign, 'earlyclaim@x.com');
+
+    await campaignService.statusForUser(campaign.slug, user._id, 0);
+
+    const member = await CampaignMember.findOne({ campaign: campaign._id, email: 'earlyclaim@x.com' });
+    expect(member.status).toBe(CAMPAIGN_MEMBER_STATUS.CLAIMED);
+  });
+
+  it('still refuses to PRICE a zero-value cart', async () => {
+    // Eligible, but there is no discount to apply — a distinct outcome.
+    const product = await seedProduct(50000);
+    const campaign = await seedCampaign();
+    const user = await seedUser({ email: 'pricezero@x.com' });
+    await invite(campaign, 'pricezero@x.com');
+
+    const evaluated = await campaignService.evaluate(campaign, user._id, 0);
+    expect(evaluated.reason).toBeUndefined();
+    expect(evaluated.tier).toBeNull();
+
+    // And a real cart still prices normally.
+    expect((await quoteFor(user._id, product)).couponDiscount).toBe(10000);
+  });
+});
+
+describe('checkEmail disclosure limits', () => {
+  it('does not reveal account state or a name for an "everyone" campaign', async () => {
+    // With no allowlist there is nothing this public route can legitimately say about a
+    // specific address. Probing the account would make it an existence-and-name oracle
+    // for any email.
+    const campaign = await seedCampaign({ audience: CAMPAIGN_AUDIENCE.EVERYONE, maxRedemptions: 50 });
+    await seedUser({ email: 'realperson@x.com', isVerified: true, mustResetPassword: true });
+
+    const res = await campaignService.checkEmail(campaign.slug, 'realperson@x.com');
+
+    expect(res.name).toBeNull();
+    expect(res.action).toBe('login');          // generic, not 'set_password'
+  });
+
+  it('still routes an invited customer on a list campaign', async () => {
+    const campaign = await seedCampaign();
+    await seedUser({ email: 'listed@x.com', isVerified: true, mustResetPassword: true });
+    await invite(campaign, 'listed@x.com', 'Listed Person');
+
+    const res = await campaignService.checkEmail(campaign.slug, 'listed@x.com');
+    expect(res).toMatchObject({ onList: true, action: 'set_password', name: 'Listed Person' });
+  });
+});
+
+describe('assertPublishable validates the managed coupon', () => {
+  // pricingService only applies the eligibility gate when coupon.campaign is set. An
+  // unlinked coupon is priced as an ORDINARY coupon at its own static value — so a
+  // mislinked code either silently gives nothing or hands its percentage to every
+  // shopper with no allowlist and no per-customer limit.
+  it('refuses to go live when the coupon does not exist', async () => {
+    const campaign = await seedCampaign({ status: CAMPAIGN_STATUS.DRAFT });
+    await Coupon.deleteMany({ code: CODE });
+
+    await expect(campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE))
+      .rejects.toThrow(/does not exist/i);
+  });
+
+  it('refuses to go live when the coupon is not linked back to the campaign', async () => {
+    const campaign = await seedCampaign({ status: CAMPAIGN_STATUS.DRAFT });
+    await Coupon.updateOne({ code: CODE }, { $set: { campaign: null, value: 20 } });
+
+    await expect(campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE))
+      .rejects.toThrow(/not linked to this campaign/i);
+  });
+
+  it('refuses a publicly visible coupon, or one without a per-user limit of 1', async () => {
+    const campaign = await seedCampaign({ status: CAMPAIGN_STATUS.DRAFT });
+
+    await Coupon.updateOne({ code: CODE }, { $set: { visibility: 'public' } });
+    await expect(campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE))
+      .rejects.toThrow(/must be hidden/i);
+
+    await Coupon.updateOne({ code: CODE }, { $set: { visibility: 'hidden', usageLimitPerUser: null } });
+    await expect(campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE))
+      .rejects.toThrow(/per-user limit of 1/i);
+  });
+
+  it('goes live when the coupon is correctly wired', async () => {
+    const campaign = await seedCampaign({ status: CAMPAIGN_STATUS.DRAFT });
+    const updated = await campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE);
+    expect(updated.status).toBe(CAMPAIGN_STATUS.LIVE);
+  });
+});
+
+describe('deliberate bracket ladders', () => {
+  it('are rejected by default but allowed with an explicit opt-out', async () => {
+    // The previous error told the operator to switch to "window", which also failed
+    // this check — leaving no way to express intended brackets at all.
+    const bracket = {
+      slug: 'brackets', name: 'Brackets', couponCode: 'BRACKETS',
+      endsAt: new Date(Date.now() + 864e5), resolution: 'window',
+      tiers: [
+        { id: 'a', minCartValue: 0, maxCartValue: 100000, percent: 20 },
+        { id: 'b', minCartValue: 100000, maxCartValue: null, percent: 10 },
+      ],
+    };
+
+    await expect(campaignService.create(bracket)).rejects.toThrow(/allowNonMonotonicTiers/i);
+
+    const created = await campaignService.create({ ...bracket, allowNonMonotonicTiers: true });
+    expect(created.allowNonMonotonicTiers).toBe(true);
+    expect(created.tiers).toHaveLength(2);
+  });
+});
+
+describe('redemption recording is robust', () => {
+  it('records the redemption even when the invite was never claimed', async () => {
+    // `member.user` is only set by the eligibility endpoint. A buyer can reach checkout
+    // without that ever firing, and the redemption would then match no member row —
+    // leaving the funnel showing them as never having claimed, and ₹0 given away.
+    const product = await seedProduct(50000);
+    const campaign = await seedCampaign({ maxRedemptions: 10 });
+    const user = await seedUser({ email: 'neverclaimed@x.com' });
+    await invite(campaign, 'neverclaimed@x.com');
+
+    const before = await CampaignMember.findOne({ campaign: campaign._id, email: 'neverclaimed@x.com' });
+    expect(before.user).toBeNull();          // deliberately unclaimed
+
+    const order = await orderService.createOrder(
+      user._id, [{ product: product._id, quantity: 1 }], ADDRESS,
+      { couponCode: CODE, shippingCost: 0 },
+    );
+
+    const after = await CampaignMember.findOne({ campaign: campaign._id, email: 'neverclaimed@x.com' });
+    expect(after.status).toBe(CAMPAIGN_MEMBER_STATUS.REDEEMED);
+    expect(after.discountRupees).toBe(10000);
+    expect(String(after.redeemedOrder)).toBe(String(order._id));
+    expect(String(after.user)).toBe(String(user._id));   // backfilled
   });
 });
 

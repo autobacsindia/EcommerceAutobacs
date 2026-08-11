@@ -195,6 +195,10 @@ class PricingService {
       campaign = await campaignRepository.findById(coupon.campaign, session);
       const evaluated = await campaignService.evaluate(campaign, userId, eligiblePaise, session, now);
       if (evaluated.reason) throw new CouponRejected(evaluated.reason);
+      // Eligible, but this cart has not reached any tier yet — a distinct case from
+      // being ineligible, and the only place it is a hard rejection is here, where we
+      // are being asked to price an actual discount.
+      if (!evaluated.tier) throw new CouponRejected(CAMPAIGN_REASON.NO_TIER);
       campaignTier = evaluated.tier;
     }
 

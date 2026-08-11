@@ -61,6 +61,16 @@ const CampaignSchema = new mongoose.Schema({
   // Guards the uncapped upper tier: 10% of a ₹8 lakh cart is ₹80,000 otherwise.
   maxDiscountPerOrder: { type: Number, min: 0, default: null },
 
+  /**
+   * Opt out of the "discount must never fall as the cart grows" guard.
+   *
+   * Off by default, and should stay off: a ladder that can drop means a customer
+   * watches their saving shrink after adding an item. Exists only so a genuinely
+   * intended bracket scheme can be saved — an explicit, recorded decision rather
+   * than something an operator stumbles into.
+   */
+  allowNonMonotonicTiers: { type: Boolean, default: false },
+
   // The managed Coupon this campaign prices. Hidden-visibility and not hand-editable
   // in the coupon admin — the campaign is the authority for its value.
   couponCode: { type: String, uppercase: true, trim: true, default: null },

@@ -80,8 +80,13 @@ class OrderService {
     );
     if (!reserved) throw new AppError('This offer has been fully claimed', 400);
 
+    // Email is passed so the member row can be found even when this buyer never hit
+    // the eligibility endpoint (which is what normally links the account to the invite).
+    const identity = await userRepository.getCampaignIdentity(userId, session);
     await campaignMemberRepository.markRedeemed(
-      appliedCampaign.id, userId, { orderId: order._id, discountRupees }, session
+      appliedCampaign.id, userId,
+      { orderId: order._id, discountRupees, email: identity?.email },
+      session
     );
   }
 

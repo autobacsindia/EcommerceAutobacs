@@ -24,15 +24,28 @@ export default function CampaignMeter({
 }: {
   /** Cart subtotal in rupees. */
   cartValue: number;
-  /** The discount the server's quote actually granted, in rupees, when known. */
-  appliedDiscount?: number;
+  /**
+   * The discount the server's quote granted **for this campaign**, in rupees.
+   * Callers must pass this ONLY when the quote's applied coupon is the campaign's own
+   * (see the cart page) — otherwise an unrelated coupon's discount would be displayed
+   * under the festive label.
+   */
+  appliedDiscount?: number | null;
 }) {
   const { data: campaign } = useCampaign(Math.round(cartValue));
 
   if (!campaign?.eligible || cartValue <= 0) return null;
 
-  // Prefer the server's figure; fall back to the tier the eligibility check reported.
-  const saving = appliedDiscount ?? (campaign.tier ? campaign.tier.discountPaise / 100 : 0);
+  // Prefer the server's figure, but only when it is a real number the server actually
+  // returned for this campaign. `?? ` alone treated a genuine 0 as authoritative and
+  // rendered "Festive 20 — You save ₹0" while the tier said otherwise.
+  const tierSaving = campaign.tier ? campaign.tier.discountPaise / 100 : 0;
+  const saving = typeof appliedDiscount === 'number' && appliedDiscount > 0
+    ? appliedDiscount
+    : tierSaving;
+
+  // Nothing to celebrate yet — the cart has not reached any tier.
+  if (saving <= 0) return null;
   const next = nextTier(campaign, cartValue);
   const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 

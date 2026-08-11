@@ -8,6 +8,7 @@ import { ArrowLeft, Calculator, Upload, AlertTriangle, Plus, Trash2 } from 'luci
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
+import { istStartOfDayISO, istEndOfDayISO, toISTDateInput } from '@/lib/istDate';
 
 /**
  * Admin — campaign editor.
@@ -64,7 +65,8 @@ interface Report {
 }
 
 const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
-const toDateInput = (d: string | null) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+// IST-aware, so a 15 Aug start does not read back as 14 Aug. See lib/istDate.ts.
+const toDateInput = (d: string | null) => toISTDateInput(d);
 
 const label = 'block text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1.5';
 const field = 'w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none';
@@ -223,13 +225,14 @@ export default function AdminCampaignEditor() {
           <div>
             <label className={label}>Starts</label>
             <input type="date" className={field} value={toDateInput(value('startsAt') ?? null)}
-              onChange={(e) => set({ startsAt: e.target.value ? new Date(e.target.value).toISOString() : null })} />
+              onChange={(e) => set({ startsAt: e.target.value ? istStartOfDayISO(e.target.value) : null })} />
+            <p className="mt-1 text-xs text-zinc-600">Opens at 00:00 IST on this date.</p>
           </div>
           <div>
             <label className={label}>Ends</label>
             <input type="date" className={field} value={toDateInput(value('endsAt') ?? null)}
-              onChange={(e) => set({ endsAt: e.target.value ? new Date(e.target.value).toISOString() : null })} />
-            <p className="mt-1 text-xs text-zinc-600">Required before the campaign can run.</p>
+              onChange={(e) => set({ endsAt: e.target.value ? istEndOfDayISO(e.target.value) : null })} />
+            <p className="mt-1 text-xs text-zinc-600">Closes at 23:59 IST on this date. Required before the campaign can run.</p>
           </div>
           <div>
             <label className={label}>Who qualifies</label>
