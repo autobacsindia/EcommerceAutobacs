@@ -4,6 +4,8 @@ import cartRepository from '../repositories/cartRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import couponRedemptionRepository from '../repositories/couponRedemptionRepository.js';
 import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
+import campaignRepository from '../repositories/campaignRepository.js';
+import campaignMemberRepository from '../repositories/campaignMemberRepository.js';
 import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import pricingService from './pricingService.js';
@@ -56,6 +58,31 @@ class OrderService {
       code: coupon.code,
       discountAmount: couponDiscount
     }, session);
+  }
+
+  /**
+   * Atomically consume a campaign redemption inside the caller's transaction.
+   *
+   * Two writes, in this order for a reason:
+   *   1. the GUARDED global counter — the campaign's budget stop. A guarded $inc is the
+   *      only thing that holds when two carts race for the last remaining slot; reading
+   *      redeemedCount and comparing it would let both through. Failing here aborts the
+   *      whole transaction, so no order exists for a redemption we could not reserve.
+   *   2. the member's redemption record — reporting for the admin dashboard.
+   *
+   * "Once per customer" is NOT enforced here: that is the managed coupon's per-user
+   * counter in _applyCoupon, which already runs in this same transaction against a
+   * unique index. Duplicating the rule in two places would let the two disagree.
+   */
+  async _applyCampaign(appliedCampaign, userId, order, discountRupees, session) {
+    const reserved = await campaignRepository.incrementRedemptionGuarded(
+      appliedCampaign.id, discountRupees, session
+    );
+    if (!reserved) throw new AppError('This offer has been fully claimed', 400);
+
+    await campaignMemberRepository.markRedeemed(
+      appliedCampaign.id, userId, { orderId: order._id, discountRupees }, session
+    );
   }
 
   /**
@@ -135,6 +162,9 @@ class OrderService {
 
         if (appliedCode) {
           await this._applyCoupon(appliedCode, userId, order, quote.couponDiscount, session);
+        }
+        if (quote.appliedCampaign) {
+          await this._applyCampaign(quote.appliedCampaign, userId, order, quote.couponDiscount, session);
         }
         if (quote.karmaPointsUsed > 0) {
           await this._redeemKarma(userId, quote.karmaPointsUsed, order, session);

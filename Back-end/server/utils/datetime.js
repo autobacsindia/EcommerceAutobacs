@@ -37,6 +37,35 @@ export const toDate = (value) => {
 };
 
 /**
+ * IST day boundaries for a plain `YYYY-MM-DD` string.
+ *
+ * The inverse of the formatting problem above, and just as costly. `new Date('2026-09-05')`
+ * is parsed by spec as UTC midnight — 05:30 IST — so treating it as a campaign's end
+ * instant would close the offer at half five in the morning and silently lose the whole
+ * of the last day's trading. Likewise a bare start date would open the offer at 05:30
+ * rather than midnight.
+ *
+ * IST is UTC+05:30 year-round with no daylight saving, so the offset can be stated
+ * literally and the result is exact.
+ *
+ * Use these wherever an operator types a DATE but the system needs an INSTANT —
+ * campaign windows, sale windows, report ranges.
+ */
+const IST_OFFSET = '+05:30';
+
+/** 00:00:00.000 IST on the given YYYY-MM-DD. Returns null for anything unparseable. */
+export const istStartOfDay = (ymd) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ''))) return toDate(ymd);
+  return toDate(`${ymd}T00:00:00.000${IST_OFFSET}`);
+};
+
+/** 23:59:59.999 IST on the given YYYY-MM-DD — the last instant of that IST day. */
+export const istEndOfDay = (ymd) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ''))) return toDate(ymd);
+  return toDate(`${ymd}T23:59:59.999${IST_OFFSET}`);
+};
+
+/**
  * `Intl.DateTimeFormat` construction is comparatively expensive and these run in
  * per-order loops (invoice tables, digest emails), so formatters are memoised by
  * their option signature.

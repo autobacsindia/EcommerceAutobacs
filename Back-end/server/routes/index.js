@@ -52,6 +52,7 @@ import paymentMethodRoutes from './paymentMethods.js';
 import checkoutRoutes from './checkout.js';
 import couponRoutes from './coupons.js';
 import loyaltyRoutes from './loyalty.js';
+import campaignRoutes from './campaigns.js';
 
 import dashboardRoutes from './dashboard.js';
 import analyticsRoutes from './analytics.js';
@@ -133,6 +134,11 @@ apiRouter.use('/checkout', checkoutRateLimit, optionalAuth, checkoutRoutes);
 apiRouter.use('/coupons', publicBrowsingRateLimit, optionalAuth, couponRoutes);
 // Loyalty/karma: storefront balance + admin config (guarded in-route).
 apiRouter.use('/loyalty', authenticatedUserRateLimit, loyaltyRoutes);
+// Promotional campaigns: /:slug/me + /:slug/check-email are public (the printed QR
+// lands here); admin CRUD is guarded in-route. optionalAuth so eligibility can be
+// personalised for a signed-in customer while a logged-out visitor still gets told
+// which email to sign in with.
+apiRouter.use('/campaigns', publicBrowsingRateLimit, optionalAuth, campaignRoutes);
 
 // ============================================================================
 // ADMIN DOMAIN

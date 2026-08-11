@@ -14,6 +14,7 @@ import { QueryProvider } from "@/providers/QueryProvider";
 import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
+import CampaignBanner from "@/components/campaign/CampaignBanner";
 import { getNavCategories } from "@/lib/navCategories";
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
@@ -272,6 +273,10 @@ export default async function RootLayout({
                   <CurrencyProvider>
                       <GlobalLoadingBar />
                       <ConditionalHeader navCategories={navCategories} />
+                      {/* Renders only for a signed-in, eligible campaign customer;
+                          returns null the rest of the time (and all year when no
+                          campaign is running). */}
+                      <CampaignBanner />
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <SessionExpiredPrompt />

@@ -117,6 +117,18 @@ export const API_ENDPOINTS = {
   COUPONS: '/coupons',                                   // admin list + create
   COUPON_DETAIL: (id: string) => `/coupons/${id}`,       // admin get/update/delete
 
+  // Promotional campaigns (festival cards, sitewide sales)
+  CAMPAIGNS: '/campaigns',                                              // admin list + create
+  MAGIC_LINK_REQUEST: '/auth/magic-link/request',                       // emails a set-password link
+  CAMPAIGN_ME: (slug: string) => `/campaigns/${slug}/me`,               // public eligibility
+  CAMPAIGN_CHECK_EMAIL: (slug: string) => `/campaigns/${slug}/check-email`,
+  CAMPAIGN_ADMIN: (slug: string) => `/campaigns/${slug}/admin`,
+  CAMPAIGN_REPORT: (slug: string) => `/campaigns/${slug}/report`,
+  CAMPAIGN_DETAIL: (id: string) => `/campaigns/${id}`,                  // admin update
+  CAMPAIGN_STATUS: (id: string) => `/campaigns/${id}/status`,           // the kill switch
+  CAMPAIGN_MEMBERS: (id: string) => `/campaigns/${id}/members`,
+  CAMPAIGN_SIMULATE: (id: string) => `/campaigns/${id}/simulate`,
+
   // Loyalty / Karma points
   LOYALTY_ME: '/loyalty/me',
   LOYALTY_HISTORY: '/loyalty/history',
@@ -368,3 +380,13 @@ export const IMAGE_UPLOAD = {
   ACCEPTED_FORMATS: ['image/jpeg', 'image/png', 'image/webp'],
   ACCEPTED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp'],
 } as const;
+/**
+ * The campaign the storefront currently surfaces — the landing page at /festive, the
+ * site-wide banner, and the cart savings meter all read this one slug.
+ *
+ * Changing occasions is a one-line edit here; the campaign itself (tiers, dates, who
+ * qualifies, on/off) is configured in the admin screen, not in code. When no campaign
+ * with this slug is live the eligibility endpoint 404s and every surface hides itself,
+ * which is the correct steady state for most of the year.
+ */
+export const ACTIVE_CAMPAIGN_SLUG = 'festive-2026';

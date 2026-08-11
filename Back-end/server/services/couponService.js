@@ -10,6 +10,8 @@ import mongoose from 'mongoose';
 import couponRepository from '../repositories/couponRepository.js';
 import couponRedemptionRepository from '../repositories/couponRedemptionRepository.js';
 import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
+import campaignRepository from '../repositories/campaignRepository.js';
+import campaignMemberRepository from '../repositories/campaignMemberRepository.js';
 import AppError from '../utils/AppError.js';
 
 const EDITABLE_FIELDS = [
@@ -99,11 +101,22 @@ class CouponService {
     const redemption = await couponRedemptionRepository.findByOrder(orderId);
     if (!redemption) return;
 
+    // A campaign-managed coupon also holds a slot against the campaign's budget cap.
+    // Released in the same transaction as the coupon counters, otherwise a cancelled
+    // order would permanently consume a redemption the customer never received — the
+    // cap would drift down and the campaign would close early.
+    const coupon = await couponRepository.findById(redemption.coupon);
+    const campaignId = coupon?.campaign || null;
+
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
         await couponRepository.decrementUsage(redemption.coupon, session);
         await couponUserUsageRepository.decrement(redemption.coupon, redemption.user, session);
+        if (campaignId) {
+          await campaignRepository.decrementRedemption(campaignId, redemption.discountAmount, session);
+          await campaignMemberRepository.clearRedemption(campaignId, redemption.user, session);
+        }
         await couponRedemptionRepository.deleteByIdSession(redemption._id, session);
       });
     } finally {

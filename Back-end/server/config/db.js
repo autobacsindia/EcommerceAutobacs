@@ -298,6 +298,28 @@ async function ensureCriticalIndexes() {
     );
     console.log('✓ CouponUserUsage per-user unique index confirmed');
 
+    // MONEY-ADJACENT: CampaignMember (campaign, email) unique — one invite per email
+    // per campaign. Guarantees a re-imported allowlist upserts instead of creating a
+    // second invite row for the same person (which would show as two people in the
+    // funnel and let one card be tracked twice). Also the index that every eligibility
+    // check reads, so it is a correctness AND a latency requirement. autoIndex is off
+    // in production, so this is what actually creates it there.
+    await db.collection('campaignmembers').createIndex(
+      { campaign: 1, email: 1 },
+      { unique: true, background: true }
+    );
+    // Resolving "is this logged-in user invited?" without a second email round-trip.
+    await db.collection('campaignmembers').createIndex(
+      { campaign: 1, user: 1 },
+      { background: true }
+    );
+    // The pricing-path lookup: campaign that owns a managed coupon code.
+    await db.collection('campaigns').createIndex(
+      { couponCode: 1 },
+      { background: true }
+    );
+    console.log('✓ Campaign indexes confirmed');
+
     // Sales-CRM lead worklist sort — serves the default admin leads view (a pool/rep
     // queue ranked by { leadScore, createdAt }). Non-unique perf index; declared on the
     // Lead schema too, but autoIndex is off in prod so this safety net is what actually

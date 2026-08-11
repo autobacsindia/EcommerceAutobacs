@@ -20,12 +20,15 @@
 import productRepository from '../repositories/productRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
+import campaignRepository from '../repositories/campaignRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
+import campaignService from './campaignService.js';
 import AppError from '../utils/AppError.js';
 import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
+import { CAMPAIGN_REASON } from '../config/campaign.js';
 
 // Buyer-facing rejection reasons (all whitelisted in errorMiddleware so they survive).
 const REASON = {
@@ -176,6 +179,25 @@ class PricingService {
     if (coupon.minCartValue && eligiblePaise < toPaise(coupon.minCartValue)) throw new CouponRejected(REASON.MIN);
     if (coupon.maxCartValue != null && eligiblePaise > toPaise(coupon.maxCartValue)) throw new CouponRejected(REASON.MAX);
 
+    // ── Campaign gate (only for campaign-managed coupons) ──────────────────────
+    // A campaign coupon carries an extra eligibility test (allowlist / verified email
+    // / campaign window / redemption cap) AND takes its percentage from the campaign's
+    // tier ladder for this cart value rather than the coupon's static `value`. Ordinary
+    // coupons skip this entirely — `coupon.campaign` is null and nothing below changes.
+    //
+    // Runs BEFORE the generic per-user/first-order gates on purpose: a campaign coupon
+    // sets usageLimitPerUser, so the generic gate below would otherwise answer a
+    // logged-out visitor with "Please log in to use this coupon" — useless copy for
+    // someone who has just scanned a QR code and needs telling WHICH email to use.
+    let campaign = null;
+    let campaignTier = null;
+    if (coupon.campaign) {
+      campaign = await campaignRepository.findById(coupon.campaign, session);
+      const evaluated = await campaignService.evaluate(campaign, userId, eligiblePaise, session, now);
+      if (evaluated.reason) throw new CouponRejected(evaluated.reason);
+      campaignTier = evaluated.tier;
+    }
+
     // First-order-only and per-user limits require an identified user.
     if (coupon.firstOrderOnly || coupon.usageLimitPerUser != null) {
       if (!userId) throw new CouponRejected(REASON.LOGIN);
@@ -186,13 +208,21 @@ class PricingService {
     }
     if (coupon.usageLimitPerUser != null) {
       const usage = await couponUserUsageRepository.findByCouponUser(coupon._id, userId, session);
-      if (usage && usage.count >= coupon.usageLimitPerUser) throw new CouponRejected(REASON.PER_USER);
+      if (usage && usage.count >= coupon.usageLimitPerUser) {
+        // Campaign wording for a campaign coupon — "offer", not "coupon", since the
+        // buyer never typed a code; it was applied for them.
+        throw new CouponRejected(coupon.campaign ? CAMPAIGN_REASON.ALREADY_USED : REASON.PER_USER);
+      }
     }
 
     // ── Compute the discount in paise ──────────────────────────────────────────
     let goodsDiscountPaise = 0;
     let freeShipping = false;
-    if (coupon.type === 'percentage') {
+    if (campaignTier) {
+      // Already capped by the tier's own limit and the campaign ceiling, and clamped
+      // to the eligible subtotal, inside resolveTier().
+      goodsDiscountPaise = campaignTier.discountPaise;
+    } else if (coupon.type === 'percentage') {
       goodsDiscountPaise = Math.floor((eligiblePaise * coupon.value) / 100);
       if (coupon.maxDiscountAmount) goodsDiscountPaise = Math.min(goodsDiscountPaise, toPaise(coupon.maxDiscountAmount));
     } else if (coupon.type === 'fixed') {
@@ -201,7 +231,7 @@ class PricingService {
       freeShipping = true;
     }
 
-    return { coupon, goodsDiscountPaise, freeShipping };
+    return { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier };
   }
 
   /**
@@ -225,13 +255,31 @@ class PricingService {
     let shippingWaivePaise = 0;
     let appliedCoupon = null;
     let couponError = null;
+    let appliedCampaign = null;
+    let allowKarma = true;
     if (couponCode && String(couponCode).trim()) {
       try {
-        const { coupon, goodsDiscountPaise, freeShipping } =
+        const { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier } =
           await this._evaluateCoupon(couponCode, orderItems, userId, session);
         goodsCouponPaise = goodsDiscountPaise;
         shippingWaivePaise = freeShipping ? shippingPaise : 0;
         appliedCoupon = { code: coupon.code, type: coupon.type, value: coupon.value };
+        if (campaign && campaignTier) {
+          // Surfaced so the cart can show the tier the buyer has reached ("Festive 20")
+          // and how much more would unlock the next one.
+          appliedCampaign = {
+            id: String(campaign._id),
+            slug: campaign.slug,
+            name: campaign.name,
+            tierId: campaignTier.tierId,
+            tierLabel: campaignTier.label,
+            percent: campaignTier.percent,
+          };
+          // A campaign percentage is not compounded with loyalty points unless the
+          // campaign explicitly opts in — 20% off plus karma is a margin decision,
+          // not a default.
+          if (!campaign.allowKarmaStacking) allowKarma = false;
+        }
       } catch (err) {
         if (err instanceof CouponRejected) couponError = err.reason;
         else throw err;
@@ -248,7 +296,7 @@ class PricingService {
     let karmaDiscountPaise = 0;
     let maxRedeemablePoints = 0;
 
-    if (cfg.enabled && pointValuePaise > 0) {
+    if (cfg.enabled && pointValuePaise > 0 && allowKarma) {
       const capByPercentPaise = Math.floor((amountAfterCouponPaise * cfg.redeemMaxPercent) / 100);
       const maxPointsByCap = Math.floor(capByPercentPaise / pointValuePaise);
       let balance = 0;
@@ -292,6 +340,7 @@ class PricingService {
       tax: fromPaise(taxPaise),
       totalAmount: fromPaise(totalPaise),
       appliedCoupon,
+      appliedCampaign,
       couponError,
       karmaPointsUsed,
       karmaPointValue: cfg.pointValueInRupees,
