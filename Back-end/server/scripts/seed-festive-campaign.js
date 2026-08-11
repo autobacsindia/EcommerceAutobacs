@@ -200,5 +200,13 @@ const res = await CampaignMember.bulkWrite(ops, { ordered: false });
 console.log(`✓ Allowlist: ${res.upsertedCount || 0} added, ${res.modifiedCount || 0} updated, ` +
             `${await CampaignMember.countDocuments({ campaign: campaign._id })} total`);
 
-console.log(`\nDone. Campaign is "${campaign.status}" — it applies to nobody until you switch it on.`);
+// State the real consequence of the status it ended up in. Saying "applies to nobody"
+// unconditionally would tell an operator a LIVE campaign was inert.
+const consequence = {
+  [CAMPAIGN_STATUS.DRAFT]: 'it applies to nobody until you switch it on',
+  [CAMPAIGN_STATUS.OFF]: 'it applies to nobody',
+  [CAMPAIGN_STATUS.TESTING]: `it applies ONLY to the tester emails (${config.testerEmails.length} listed)`,
+  [CAMPAIGN_STATUS.LIVE]: 'IT IS LIVE — eligible customers can redeem right now',
+}[campaign.status];
+console.log(`\nDone. Campaign is "${campaign.status}" — ${consequence}.`);
 await mongoose.disconnect();

@@ -52,7 +52,7 @@ function useCountdown(endsAt: string | null | undefined) {
 }
 
 export default function FestivePage() {
-  const { data: campaign, isLoading } = useCampaign(0);
+  const { data: campaign } = useCampaign(0);
   const [email, setEmail] = useState('');
   const [result, setResult] = useState<CheckResult | null>(null);
   const [linkSent, setLinkSent] = useState(false);
@@ -95,9 +95,12 @@ export default function FestivePage() {
             Thank you for driving with us.
           </h1>
           <p className="mt-4 text-lg text-zinc-400">
+            {/* The percentage comes from the live tier ladder rather than being hardcoded,
+                so an admin changing it never leaves this page advertising a stale number.
+                Until it loads, the sentence still reads correctly without it. */}
             {topTier
               ? <>Your reward is waiting — <span className="text-gold">up to {topTier.percent}% off</span>, and it grows with your cart.</>
-              : <>Your reward is waiting.</>}
+              : <>Your reward is waiting, and it grows with your cart.</>}
           </p>
 
           {countdown && (
@@ -127,7 +130,13 @@ export default function FestivePage() {
         )}
 
         {/* ── Not yet identified ───────────────────────────────────────────── */}
-        {!isLoading && !campaign?.eligible && (
+        {/* Rendered while the eligibility check is still in flight, not just after it
+            resolves. This page is reached by scanning a QR on a phone: gating the only
+            action behind the fetch left the visitor looking at a headline and empty
+            space on a slow connection. An already-eligible visitor sees this for the
+            moment before the success panel replaces it, which is much the lesser evil
+            than a landing page with nothing to do on it. */}
+        {!campaign?.eligible && (
           <div className="mt-12 rounded-xl border border-zinc-800 bg-zinc-900/50 p-8">
             <Steps />
 
