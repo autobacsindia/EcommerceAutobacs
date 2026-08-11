@@ -14,6 +14,11 @@ export interface CheckoutQuote {
   tax: number;
   totalAmount: number;
   appliedCoupon: { code: string; type: string; value: number } | null;
+  /** Present only when the applied coupon is a campaign's managed coupon. */
+  appliedCampaign: {
+    id: string; slug: string; name: string;
+    tierId: string | null; tierLabel: string | null; percent: number;
+  } | null;
   couponError: string | null;
   karmaPointsUsed: number;
   karmaPointValue: number;

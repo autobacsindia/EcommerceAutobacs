@@ -72,6 +72,32 @@ describe('CampaignMeter', () => {
     renderMeter({ cartValue: 600000, appliedDiscount: 50000 });
     expect(await screen.findByText(/unlocked the best tier/i)).toBeInTheDocument();
   });
+
+  // The mocked status carries a fixed tier of ₹10,000 (discountPaise 1000000), so these
+  // assert the component falls back to the TIER figure rather than the passed-in value.
+  it('ignores a zero appliedDiscount and falls back to the tier', async () => {
+    // A real 0 was previously treated as authoritative, rendering "Festive 20 — ₹0"
+    // while the tier said the customer had earned something.
+    renderMeter({ cartValue: 30000, appliedDiscount: 0 });
+    expect(await screen.findByText('₹10,000')).toBeInTheDocument();
+  });
+
+  it('ignores a null appliedDiscount (an unrelated coupon is applied)', async () => {
+    // The cart passes null when the quote's coupon is NOT this campaign's, so another
+    // coupon's discount can never be displayed under the festive label.
+    renderMeter({ cartValue: 30000, appliedDiscount: null });
+    expect(await screen.findByText('₹10,000')).toBeInTheDocument();
+  });
+
+  it('renders nothing when eligible but no tier is earned yet', async () => {
+    // Eligibility no longer depends on cart value, so an eligible customer with a
+    // trivial cart reaches here with tier null — there is nothing to celebrate.
+    const { container } = renderMeter(
+      { cartValue: 100 },
+      { ...STATUS, tier: null },
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 });
 
 describe('nextTier', () => {

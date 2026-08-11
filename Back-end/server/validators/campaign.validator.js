@@ -50,6 +50,7 @@ const campaignRules = (partial = false) => {
     body('resolution').optional().isIn(TIER_RESOLUTIONS).withMessage('Invalid tier resolution'),
     body('requireVerifiedEmail').optional().isBoolean(),
     body('allowKarmaStacking').optional().isBoolean(),
+    body('allowNonMonotonicTiers').optional().isBoolean(),
     body('startsAt').optional({ nullable: true }).isISO8601().withMessage('startsAt must be a date'),
     body('endsAt').optional({ nullable: true }).isISO8601().withMessage('endsAt must be a date'),
     body('maxDiscountPerOrder').optional({ nullable: true }).isFloat({ min: 0 }),

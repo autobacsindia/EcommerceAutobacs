@@ -18,6 +18,7 @@
 import campaignRepository from '../repositories/campaignRepository.js';
 import campaignMemberRepository from '../repositories/campaignMemberRepository.js';
 import userRepository from '../repositories/userRepository.js';
+import couponRepository from '../repositories/couponRepository.js';
 import AppError from '../utils/AppError.js';
 import { resolveTier, validateTiers, assertMonotonic } from '../utils/campaignTiers.js';
 import {
@@ -28,7 +29,7 @@ import {
 const EDITABLE_FIELDS = [
   'name', 'description', 'status', 'audience', 'testerEmails', 'requireVerifiedEmail',
   'startsAt', 'endsAt', 'tiers', 'resolution', 'maxDiscountPerOrder', 'couponCode',
-  'allowKarmaStacking', 'maxRedemptions', 'landingPath',
+  'allowKarmaStacking', 'maxRedemptions', 'landingPath', 'allowNonMonotonicTiers',
 ];
 
 function pick(body) {
@@ -99,10 +100,12 @@ class CampaignService {
     }
 
     // ── Tier ──────────────────────────────────────────────────────────────────
-    const tier = resolveTier(campaign, eligiblePaise);
-    if (!tier) return { reason: CAMPAIGN_REASON.NO_TIER };
-
-    return { tier };
+    // Eligibility is a property of the PERSON; the tier is a property of their CART.
+    // Keeping them separate matters: an empty cart earns no tier yet, but the customer
+    // is still eligible and must be told so. Conflating the two returned "not eligible"
+    // for a zero-value cart, which silently killed the site-wide ribbon and the landing
+    // page's success panel — both of which ask about a cart worth nothing.
+    return { eligible: true, tier: resolveTier(campaign, eligiblePaise) };
   }
 
   /**
@@ -132,7 +135,11 @@ class CampaignService {
     // every landing-page and cart render, so the funnel populates itself without the
     // frontend having to remember to report anything. Idempotent, and never demotes a
     // member who has already redeemed.
-    if (result.tier && campaign.audience === CAMPAIGN_AUDIENCE.LIST && userId) {
+    // Keyed on eligibility, not on having reached a tier — otherwise an eligible
+    // customer who has not yet added anything is never bound to their invite, and the
+    // funnel under-reports everyone who browsed before shopping.
+    const isEligible = !result.reason;
+    if (isEligible && campaign.audience === CAMPAIGN_AUDIENCE.LIST && userId) {
       const user = await userRepository.getCampaignIdentity(userId);
       if (user?.email) {
         await campaignMemberRepository.claimForUser(campaign._id, user.email, userId)
@@ -145,8 +152,8 @@ class CampaignService {
       slug: campaign.slug,
       name: campaign.name,
       endsAt: campaign.endsAt,
-      couponCode: result.tier ? campaign.couponCode : null,
-      eligible: !!result.tier,
+      couponCode: isEligible ? campaign.couponCode : null,
+      eligible: isEligible,
       reason: result.reason || null,
       tier: result.tier || null,
       // The ladder is safe to publish: it is what the card advertises, and it lets
@@ -192,11 +199,18 @@ class CampaignService {
     const clean = String(email || '').toLowerCase().trim();
     const live = campaign.status === CAMPAIGN_STATUS.LIVE || campaign.status === CAMPAIGN_STATUS.TESTING;
 
-    const member = campaign.audience === CAMPAIGN_AUDIENCE.LIST
-      ? await campaignMemberRepository.findByCampaignEmail(campaign._id, clean)
-      : null;
+    // An 'everyone' campaign has no allowlist to check, so there is nothing this
+    // endpoint can legitimately tell the caller about a specific address. Probing the
+    // account here would turn a public, unauthenticated route into an oracle for
+    // "does this email have an account, is it verified, and what is the holder's
+    // name?" for ANY address — which is exactly what getCampaignAccountState's own
+    // contract forbids. The allowlist membership is what earns that disclosure.
+    if (campaign.audience !== CAMPAIGN_AUDIENCE.LIST) {
+      return { onList: true, action: 'login', campaignLive: live, name: null };
+    }
 
-    if (campaign.audience === CAMPAIGN_AUDIENCE.LIST && !member) {
+    const member = await campaignMemberRepository.findByCampaignEmail(campaign._id, clean);
+    if (!member) {
       return { onList: false, action: 'not_invited', campaignLive: live };
     }
 
@@ -230,19 +244,29 @@ class CampaignService {
       const errors = validateTiers(merged);
       if (errors.length) throw new AppError(`Invalid tier ladder: ${errors.join(' ')}`, 400);
 
-      // A ladder whose discount can FALL as the cart grows is rejected outright.
-      // The cart shows the saving live, so a cliff reads as the site cheating the
-      // customer and rewards a smaller basket. Checked here, not merely in tests,
-      // because tiers are admin-editable long after launch.
-      const mono = assertMonotonic(merged);
-      if (!mono.ok) {
-        throw new AppError(
-          `This tier ladder would REDUCE a customer's discount as their cart grows ` +
-          `(at ₹${(mono.at / 100).toFixed(2)} the saving drops from ` +
-          `₹${(mono.from / 100).toFixed(2)} to ₹${(mono.to / 100).toFixed(2)}). ` +
-          `Adjust the tiers, or set resolution to "window" if brackets are intended.`,
-          400
-        );
+      // A ladder whose discount can FALL as the cart grows is rejected outright. The
+      // cart shows the saving live, so a cliff reads as the site cheating the customer
+      // and rewards a smaller basket. Checked here, not merely in tests, because tiers
+      // are admin-editable long after launch.
+      //
+      // The escape hatch is `allowNonMonotonicTiers`, NOT switching to 'window'.
+      // Bracket ladders are the very thing that produces cliffs, so telling an operator
+      // to set resolution:'window' — as this error previously did — sent them to an
+      // option that also fails this check, leaving no way forward. Deliberate brackets
+      // are legitimate; they just have to be stated explicitly rather than arrived at
+      // by accident.
+      if (!merged.allowNonMonotonicTiers) {
+        const mono = assertMonotonic(merged);
+        if (!mono.ok) {
+          throw new AppError(
+            `This tier ladder would REDUCE a customer's discount as their cart grows ` +
+            `(at ₹${(mono.at / 100).toFixed(2)} the saving drops from ` +
+            `₹${(mono.from / 100).toFixed(2)} to ₹${(mono.to / 100).toFixed(2)}). ` +
+            `A customer adding one cheap item would watch their saving fall. Adjust the ` +
+            `tiers, or set allowNonMonotonicTiers if these brackets are intended.`,
+            400
+          );
+        }
       }
     }
 
@@ -257,9 +281,50 @@ class CampaignService {
    * draft is allowed to be incomplete — these are the checks that must hold before
    * anyone can actually be charged a discounted amount.
    */
-  assertPublishable(campaign) {
+  async assertPublishable(campaign) {
     if (!campaign.couponCode) {
       throw new AppError('A campaign needs its managed coupon code before it can run', 400);
+    }
+
+    /**
+     * Verify the managed coupon actually exists and is wired back to this campaign.
+     *
+     * This is the load-bearing check, not a formality. pricingService only applies the
+     * eligibility gate when `coupon.campaign` is set; a coupon with that field null is
+     * priced as an ORDINARY coupon at its own static `value`. So a code that looks like
+     * the campaign's but isn't linked either silently gives nothing (value 0, the offer
+     * appears broken) or — far worse — hands its percentage to every shopper on the
+     * site with no allowlist, no verified-email requirement and no per-customer limit.
+     * `visibility` matters for the same reason: a public campaign coupon would appear
+     * in the cart's suggestion chips for everyone.
+     */
+    const coupon = await couponRepository.findByCode(String(campaign.couponCode).toUpperCase().trim());
+    if (!coupon) {
+      throw new AppError(
+        `Coupon ${campaign.couponCode} does not exist. Create it before running this campaign.`, 400
+      );
+    }
+    if (!coupon.campaign || String(coupon.campaign) !== String(campaign._id)) {
+      throw new AppError(
+        `Coupon ${campaign.couponCode} is not linked to this campaign, so the eligibility ` +
+        `gate would be bypassed and its own value applied to every customer. Re-link it before going live.`,
+        400
+      );
+    }
+    if (!coupon.isActive) {
+      throw new AppError(`Coupon ${campaign.couponCode} is inactive, so no discount would apply.`, 400);
+    }
+    if (coupon.visibility !== 'hidden') {
+      throw new AppError(
+        `Coupon ${campaign.couponCode} must be hidden, or it will be advertised to every shopper.`, 400
+      );
+    }
+    if (coupon.usageLimitPerUser !== 1) {
+      throw new AppError(
+        `Coupon ${campaign.couponCode} must have a per-user limit of 1 — it is the only thing ` +
+        `enforcing one reward per customer.`,
+        400
+      );
     }
     if (!campaign.tiers?.length) {
       throw new AppError('A campaign needs at least one discount tier before it can run', 400);
@@ -298,7 +363,7 @@ class CampaignService {
       updatedBy: actorId,
     };
     if (payload.status && payload.status !== CAMPAIGN_STATUS.DRAFT) {
-      this.assertPublishable(payload);
+      await this.assertPublishable(payload);
     }
 
     try {
@@ -316,7 +381,7 @@ class CampaignService {
     const data = pick(body);
     const merged = this.assertValidConfig(data, existing.toObject ? existing.toObject() : existing);
     if (merged.status && merged.status !== CAMPAIGN_STATUS.DRAFT && merged.status !== CAMPAIGN_STATUS.OFF) {
-      this.assertPublishable(merged);
+      await this.assertPublishable(merged);
     }
 
     return campaignRepository.update(id, { ...data, updatedBy: actorId });
@@ -329,7 +394,7 @@ class CampaignService {
 
     if (status === CAMPAIGN_STATUS.LIVE || status === CAMPAIGN_STATUS.TESTING) {
       const merged = campaign.toObject ? campaign.toObject() : campaign;
-      this.assertPublishable({ ...merged, status });
+      await this.assertPublishable({ ...merged, status });
     }
     return campaignRepository.update(id, { status, updatedBy: actorId });
   }

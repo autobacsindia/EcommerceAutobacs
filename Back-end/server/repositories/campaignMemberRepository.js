@@ -59,12 +59,22 @@ class CampaignMemberRepository extends BaseRepository {
    * "once per customer" guard is the coupon's per-user counter, so this is a
    * denormalised write for the admin dashboard and must never gate a checkout.
    */
-  async markRedeemed(campaignId, userId, { orderId, discountRupees }, session = null) {
+  async markRedeemed(campaignId, userId, { orderId, discountRupees, email }, session = null) {
+    // Matches on the account OR the invited email. `user` is only populated once the
+    // customer has passed through the eligibility endpoint, which is not guaranteed —
+    // a buyer can reach checkout without that call ever firing, and the redemption
+    // would then match no member row at all, leaving the funnel showing them as never
+    // having claimed and ₹0 given away. Email is the stable key, since the allowlist
+    // is keyed on it.
+    const or = [{ user: userId }];
+    if (email) or.push({ email: String(email).toLowerCase().trim() });
+
     return CampaignMember.findOneAndUpdate(
-      { campaign: campaignId, user: userId },
+      { campaign: campaignId, $or: or },
       {
         $set: {
           status: CAMPAIGN_MEMBER_STATUS.REDEEMED,
+          user: userId,               // backfill the link if it was never established
           redeemedOrder: orderId,
           redeemedAt: new Date(),
           discountRupees: Math.max(0, Number(discountRupees) || 0),

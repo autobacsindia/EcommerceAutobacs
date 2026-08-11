@@ -87,6 +87,24 @@ const config = {
   landingPath: '/festive',
 };
 
+/**
+ * Fields that must only be written when the operator actually asked for them.
+ *
+ * `$set`-ing the whole config on re-run is destructive: re-running to correct the
+ * allowlist would also flip a LIVE campaign back to draft and null out its dates,
+ * redemption cap and tester list — silently switching off a running offer, which is
+ * the opposite of the "re-running is safe" promise in this file's header. Each of
+ * these is therefore omitted from the update unless its flag was passed, and applied
+ * via $setOnInsert so a brand-new campaign still gets a value.
+ */
+const FLAG_GATED = {
+  status: process.argv.some(a => a.startsWith('--status=')),
+  startsAt: !!STARTS,
+  endsAt: !!ENDS,
+  maxRedemptions: process.argv.some(a => a.startsWith('--max-redemptions=')),
+  testerEmails: process.argv.some(a => a.startsWith('--testers=')),
+};
+
 // ── Validate the ladder before touching the database ──────────────────────────
 const errors = validateTiers(config);
 if (errors.length) { console.error('Invalid tier ladder:\n  ' + errors.join('\n  ')); process.exit(1); }
@@ -165,8 +183,27 @@ if (!APPLY) {
 }
 
 // ── Write ─────────────────────────────────────────────────────────────────────
+// Split the config: always-safe fields go in $set, flag-gated ones only land on insert
+// unless their flag was passed. Protects a live campaign from an allowlist re-import.
+const setFields = {};
+const insertOnly = {};
+for (const [k, v] of Object.entries(config)) {
+  if (k in FLAG_GATED && !FLAG_GATED[k]) insertOnly[k] = v;
+  else setFields[k] = v;
+}
+
+const existing = await Campaign.findOne({ slug: config.slug }).select('status').lean();
+if (existing) {
+  const skipped = Object.keys(insertOnly);
+  if (skipped.length) {
+    console.log(`  (existing campaign is "${existing.status}" — leaving ${skipped.join(', ')} untouched)`);
+  }
+}
+
 const campaign = await Campaign.findOneAndUpdate(
-  { slug: config.slug }, { $set: config }, { upsert: true, new: true, setDefaultsOnInsert: true },
+  { slug: config.slug },
+  { $set: setFields, $setOnInsert: insertOnly },
+  { upsert: true, new: true, setDefaultsOnInsert: true },
 );
 console.log(`✓ Campaign ${campaign._id}`);
 
@@ -200,5 +237,13 @@ const res = await CampaignMember.bulkWrite(ops, { ordered: false });
 console.log(`✓ Allowlist: ${res.upsertedCount || 0} added, ${res.modifiedCount || 0} updated, ` +
             `${await CampaignMember.countDocuments({ campaign: campaign._id })} total`);
 
-console.log(`\nDone. Campaign is "${campaign.status}" — it applies to nobody until you switch it on.`);
+// State the real consequence of the status it ended up in. Saying "applies to nobody"
+// unconditionally would tell an operator a LIVE campaign was inert.
+const consequence = {
+  [CAMPAIGN_STATUS.DRAFT]: 'it applies to nobody until you switch it on',
+  [CAMPAIGN_STATUS.OFF]: 'it applies to nobody',
+  [CAMPAIGN_STATUS.TESTING]: `it applies ONLY to the tester emails (${config.testerEmails.length} listed)`,
+  [CAMPAIGN_STATUS.LIVE]: 'IT IS LIVE — eligible customers can redeem right now',
+}[campaign.status];
+console.log(`\nDone. Campaign is "${campaign.status}" — ${consequence}.`);
 await mongoose.disconnect();

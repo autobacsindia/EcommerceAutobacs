@@ -362,7 +362,13 @@ function CartPageContent() {
 
               {/* Renders only for an eligible invited customer with a non-empty cart. */}
               <div className="mb-4">
-                <CampaignMeter cartValue={cartSubtotal} appliedDiscount={quote?.couponDiscount} />
+                {/* The server's discount is only passed when the quote's applied coupon is
+                    the CAMPAIGN's own — otherwise an unrelated coupon's discount would be
+                    displayed under the festive label. */}
+                <CampaignMeter
+                  cartValue={cartSubtotal}
+                  appliedDiscount={quote?.appliedCampaign ? quote.couponDiscount : null}
+                />
               </div>
 
               <div className="space-y-3 mb-6">
