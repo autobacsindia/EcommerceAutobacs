@@ -18,7 +18,13 @@ jest.unstable_mockModule('../../../services/invoiceService.js', () => ({
 jest.unstable_mockModule('../../../repositories/userRepository.js', () => ({ default: {} }));
 jest.unstable_mockModule('../../../services/orderService.js', () => ({ default: {} }));
 jest.unstable_mockModule('../../../services/orderStatusService.js', () => ({ default: {} }));
-jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({ default: {} }));
+// orderController imports the named carrier constants alongside the default, so the mock
+// has to provide them too or the module fails to link.
+jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({
+  default: {},
+  OTHER_CARRIER_CODE: 'OTHER',
+  MAX_CUSTOM_CARRIER_NAME: 60,
+}));
 jest.unstable_mockModule('../../../queue/queues.js', () => ({ getNotificationsQueue: jest.fn() }));
 
 const { downloadInvoice } = await import('../../../controllers/orderController.js');

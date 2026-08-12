@@ -180,6 +180,352 @@ describe('PUT /products/:id — deletePublicIds deferred delete', () => {
     // And it must have been called AFTER save (product still exists in DB)
     const inDb = await Product.findById(product._id);
     expect(inDb).not.toBeNull();
+
+    // REGRESSION: the DB gallery must lose the image too. This previously only
+    // deleted the Cloudinary asset and left the URL on the product, so the
+    // storefront rendered a dead image that came back on every form reload.
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old2']);
+    // The removed image was primary — the survivor must be promoted, or the
+    // product ends up with no thumbnail anywhere.
+    expect(inDb.images.filter((i) => i.isPrimary)).toHaveLength(1);
+    expect(inDb.images[0].isPrimary).toBe(true);
+  });
+
+  test('removing an image while ALSO uploading a new one still drops it from the DB', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        // Append mode used to rebuild the gallery from the DB copy, which still
+        // contained the removed image — so the removal was silently discarded.
+        deletePublicIds: JSON.stringify(['autobacs/old1']),
+        uploadedImages:  JSON.stringify([
+          { url: 'https://res.cloudinary.com/test-cloud/image/upload/new1.jpg', public_id: 'autobacs/new1' },
+        ]),
+      });
+
+    expect(res.status).toBe(200);
+
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old2', 'autobacs/new1']);
+    expect(mockDeleteMany).toHaveBeenCalledWith(expect.arrayContaining(['autobacs/old1']));
+    // The image that survived must NOT be swept up in the cleanup.
+    expect(mockDeleteMany.mock.calls.flat(2)).not.toContain('autobacs/old2');
+  });
+
+  test('a public_id still present in the saved gallery is never deleted from Cloudinary', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    // A forged / stale payload asks us to delete an id belonging to another
+    // product. Cleanup is derived from what actually persisted, so it can't
+    // reach anything this product never referenced.
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        deletePublicIds: JSON.stringify(['autobacs/someone-elses-asset']),
+      });
+
+    expect(res.status).toBe(200);
+
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old1', 'autobacs/old2']);
+    expect(mockDeleteMany.mock.calls.flat(2)).not.toContain('autobacs/someone-elses-asset');
+  });
+
+  test('a migrated image with no public_id can be removed by its URL', async () => {
+    // WooCommerce-migrated rows carry no public_id, so they key off their URL.
+    // Matching removals strictly on public_id left them un-removable: the tile
+    // vanished from the form and came straight back on the next load.
+    const product = await seedProduct({
+      images: [
+        { url: 'https://autobacsindia.com/wp-content/legacy.jpg', alt: 'legacy', isPrimary: true },
+        { url: 'https://cdn/old2.jpg', public_id: 'autobacs/old2', alt: 'old2', isPrimary: false },
+      ],
+    });
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        deletePublicIds: JSON.stringify(['https://autobacsindia.com/wp-content/legacy.jpg']),
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.url)).toEqual(['https://cdn/old2.jpg']);
+    // Nothing to clean up on Cloudinary — the legacy image was never ours.
+    expect(mockDeleteMany.mock.calls.flat(2)).not.toContain('autobacs/old2');
+  });
+
+  test('a migrated image with no public_id can be sequenced by its URL', async () => {
+    const product = await seedProduct({
+      images: [
+        { url: 'https://autobacsindia.com/wp-content/legacy.jpg', alt: 'legacy', isPrimary: true },
+        { url: 'https://cdn/old2.jpg', public_id: 'autobacs/old2', alt: 'old2', isPrimary: false },
+      ],
+    });
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:         product.name,
+        description:  product.description,
+        price:        product.price,
+        stock:        product.stock,
+        imageOrder:   JSON.stringify(['autobacs/old2', 'https://autobacsindia.com/wp-content/legacy.jpg']),
+        primaryImage: 'autobacs/old2',
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.url))
+      .toEqual(['https://cdn/old2.jpg', 'https://autobacsindia.com/wp-content/legacy.jpg']);
+    expect(inDb.images.filter((i) => i.isPrimary).map((i) => i.public_id)).toEqual(['autobacs/old2']);
+  });
+
+  test('removing every image empties the gallery and cleans up all assets', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        deletePublicIds: JSON.stringify(['autobacs/old1', 'autobacs/old2']),
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images).toHaveLength(0);
+    expect(mockDeleteMany).toHaveBeenCalledWith(
+      expect.arrayContaining(['autobacs/old1', 'autobacs/old2'])
+    );
+  });
+
+  test('a malformed deletePublicIds payload is ignored, not fatal', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        deletePublicIds: '{"not":"an array"}',
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images).toHaveLength(2);
+  });
+});
+
+// ── Tests: PUT /products/:id — gallery sequence + primary ────────────────────
+
+describe('PUT /products/:id — imageOrder / primaryImage', () => {
+  test('imageOrder rewrites the stored gallery sequence', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        imageOrder:  JSON.stringify(['autobacs/old2', 'autobacs/old1']),
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old2', 'autobacs/old1']);
+  });
+
+  test('newly uploaded images can be sequenced ahead of existing ones', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        uploadedImages: JSON.stringify([
+          { url: 'https://res.cloudinary.com/test-cloud/image/upload/new1.jpg', public_id: 'autobacs/new1' },
+        ]),
+        imageOrder: JSON.stringify(['autobacs/new1', 'autobacs/old1', 'autobacs/old2']),
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.public_id))
+      .toEqual(['autobacs/new1', 'autobacs/old1', 'autobacs/old2']);
+  });
+
+  test('primaryImage marks exactly one image, regardless of position', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:         product.name,
+        description:  product.description,
+        price:        product.price,
+        stock:        product.stock,
+        primaryImage: 'autobacs/old2',
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    // Order untouched, but the star moved to the second tile.
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old1', 'autobacs/old2']);
+    expect(inDb.images.filter((i) => i.isPrimary).map((i) => i.public_id)).toEqual(['autobacs/old2']);
+  });
+
+  test('an order omitting an image appends it rather than dropping it', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:        product.name,
+        description: product.description,
+        price:       product.price,
+        stock:       product.stock,
+        // Stale order from a tab that never saw old2. Sequencing must not
+        // double as deletion — that channel is deletePublicIds alone.
+        imageOrder:  JSON.stringify(['autobacs/old1']),
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old1', 'autobacs/old2']);
+    expect(mockDeleteMany.mock.calls.flat(2)).not.toContain('autobacs/old2');
+  });
+
+  test('an unknown key in imageOrder or primaryImage is ignored', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:         product.name,
+        description:  product.description,
+        price:        product.price,
+        stock:        product.stock,
+        imageOrder:   JSON.stringify(['autobacs/ghost', 'autobacs/old2']),
+        primaryImage: 'autobacs/ghost',
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old2', 'autobacs/old1']);
+    // Primary fell back to the first surviving image, never left unset.
+    expect(inDb.images.filter((i) => i.isPrimary).map((i) => i.public_id)).toEqual(['autobacs/old2']);
+  });
+
+  test('a partial update that never mentions images leaves the gallery intact', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({ name: 'Renamed Product', price: 1499 });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    expect(inDb.name).toBe('Renamed Product');
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/old1', 'autobacs/old2']);
+    expect(inDb.images.filter((i) => i.isPrimary)).toHaveLength(1);
+    expect(mockDeleteMany).not.toHaveBeenCalled();
+  });
+
+  test('replaceImages with NO new images leaves the gallery and assets alone', async () => {
+    const product = await seedProduct();
+    const adminToken = await getAdminToken();
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`),
+      adminToken,
+    )
+      .send({
+        name:          product.name,
+        description:   product.description,
+        price:         product.price,
+        stock:         product.stock,
+        replaceImages: 'true',
+      });
+
+    expect(res.status).toBe(200);
+    const inDb = await Product.findById(product._id);
+    // Wiping here would strand the product with no images AND delete both
+    // assets — the gallery must survive a replace that replaces nothing.
+    expect(inDb.images).toHaveLength(2);
+    expect(mockDeleteMany).not.toHaveBeenCalled();
   });
 
   test('non-string values in deletePublicIds are filtered out', async () => {
@@ -306,6 +652,58 @@ describe('PUT /products/:id — DB failure rolls back new uploads', () => {
 });
 
 // ── Tests: POST /products — create rollback ───────────────────────────────────
+
+describe('POST /products — gallery sequence + primary', () => {
+  test('upload order is preserved and primaryImage picks the thumbnail', async () => {
+    const adminToken = await getAdminToken();
+    const Category = (await import('../models/Category.js')).default;
+    const category = await Category.create({ name: 'Test Cat', slug: `test-cat-${Date.now()}` });
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(request(app).post('/api/v1/products'), adminToken).send({
+      name:        'Gallery Product',
+      description: 'A product with an arranged gallery',
+      price:       499,
+      stock:       'in',
+      categories:  JSON.stringify([String(category._id)]),
+      uploadedImages: JSON.stringify([
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/a.jpg', public_id: 'autobacs/a' },
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/b.jpg', public_id: 'autobacs/b' },
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/c.jpg', public_id: 'autobacs/c' },
+      ]),
+      primaryImage: 'autobacs/b',
+    });
+
+    expect(res.status).toBe(201);
+    const inDb = await Product.findById(res.body.product._id);
+    expect(inDb.images.map((i) => i.public_id)).toEqual(['autobacs/a', 'autobacs/b', 'autobacs/c']);
+    // The starred image is primary even though it is not first.
+    expect(inDb.images.filter((i) => i.isPrimary).map((i) => i.public_id)).toEqual(['autobacs/b']);
+  });
+
+  test('with no primaryImage the first image is primary', async () => {
+    const adminToken = await getAdminToken();
+    const Category = (await import('../models/Category.js')).default;
+    const category = await Category.create({ name: 'Test Cat', slug: `test-cat-${Date.now()}` });
+    mockUploadMany.mockResolvedValue([]);
+
+    const res = await asAdmin(request(app).post('/api/v1/products'), adminToken).send({
+      name:        'Default Primary Product',
+      description: 'A product with no explicit primary',
+      price:       499,
+      stock:       'in',
+      categories:  JSON.stringify([String(category._id)]),
+      uploadedImages: JSON.stringify([
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/a.jpg', public_id: 'autobacs/a' },
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/b.jpg', public_id: 'autobacs/b' },
+      ]),
+    });
+
+    expect(res.status).toBe(201);
+    const inDb = await Product.findById(res.body.product._id);
+    expect(inDb.images.filter((i) => i.isPrimary).map((i) => i.public_id)).toEqual(['autobacs/a']);
+  });
+});
 
 describe('POST /products — atomic rollback on DB failure', () => {
   test('if DB save fails after upload, uploaded public_ids are deleted', async () => {

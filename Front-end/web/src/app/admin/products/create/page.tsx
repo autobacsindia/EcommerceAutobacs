@@ -10,7 +10,7 @@ import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { uploadImagesToCloudinary } from '@/lib/cloudinaryUpload';
 import { ArrowLeft } from 'lucide-react';
-import ImageUploader from '@/components/ui/ImageUploader';
+import ImageUploader, { GalleryItem } from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
@@ -71,6 +71,10 @@ export default function CreateProductPage() {
   
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  // Gallery tiles in the admin's chosen order + which one they starred. Files
+  // upload in this order, so `images[i]` and `gallery`'s new items line up.
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [primaryKey, setPrimaryKey] = useState<string | null>(null);
   const [features, setFeatures] = useState<string[]>(['']);
   const [whyChoose, setWhyChoose] = useState<string[]>(['']);
   const [packageContents, setPackageContents] = useState<string[]>(['']);
@@ -223,9 +227,18 @@ export default function CreateProductPage() {
       // ── Image files ────────────────────────────────────────────────────
       // Upload images straight to Cloudinary (bypasses the ~4.5 MB proxy limit),
       // then send only the resulting refs as JSON — so the product request is tiny.
+      //
+      // `images` is already in gallery order, and refs come back in the order
+      // the files went up, so ref[i] is gallery's i-th new tile. That mapping is
+      // what lets the starred tile be sent as a real public_id.
       if (images.length) {
         const refs = await uploadImagesToCloudinary(images, 'products');
         fd.append('uploadedImages', JSON.stringify(refs));
+
+        const newItems = gallery.filter((i) => i.kind === 'new');
+        const primaryIndex = newItems.findIndex((i) => i.key === primaryKey);
+        const primaryRef = refs[primaryIndex] ?? refs[0];
+        if (primaryRef) fd.append('primaryImage', primaryRef.public_id);
       }
 
       // Raw multipart submit (apiClient can't send FormData without JSON-serializing).
@@ -839,11 +852,17 @@ export default function CreateProductPage() {
             <ImageUploader
               label="Upload product images"
               onFilesChange={(files) => setImages(files)}
+              onGalleryChange={setGallery}
+              primaryKey={primaryKey}
+              onPrimaryChange={setPrimaryKey}
               disabled={submitting}
               // Images upload straight to Cloudinary, so only per-file 3 MB
               // applies — no combined-request cap.
               maxTotalSizeMB={Infinity}
             />
+            <p className="mt-2 text-xs text-gray-500">
+              Drag tiles or use ←/→ to set the order shown on the product page. ★ picks the main listing image.
+            </p>
           </div>
 
           <SeoPanel

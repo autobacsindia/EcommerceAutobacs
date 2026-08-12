@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { X, AlertCircle, ArrowRight, Mail, Paperclip } from 'lucide-react';
 import { ORDER_STATUS_COLORS } from '@/lib/constants';
 import apiClient from '@/lib/api';
-import type { ShippingInput } from '@/lib/orderStatusUpdate';
+import { OTHER_CARRIER_CODE, type ShippingInput } from '@/lib/orderStatusUpdate';
 
 interface Carrier {
   name: string;
   code: string;
   estimatedDeliveryDays?: number;
+  /** Free-text carrier: the admin types the courier's name. */
+  custom?: boolean;
 }
 
 /** Payload handed back to the caller on confirm. */
@@ -34,6 +36,11 @@ interface ConfirmStatusChangeModalProps {
 
 const label = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 const MAX_SLIP_BYTES = 5 * 1024 * 1024; // mirror backend MAX_PDF_SIZE
+const MAX_CARRIER_NAME = 60; // mirror backend MAX_CUSTOM_CARRIER_NAME
+
+// Always offered, even if the carriers endpoint fails, so a shipment is never
+// blocked on the lookup — the admin can type the courier's name instead.
+const OTHER_CARRIER: Carrier = { name: 'Other courier', code: OTHER_CARRIER_CODE, custom: true };
 
 function StatusChip({ status }: { status: string }) {
   return (
@@ -66,8 +73,16 @@ export default function ConfirmStatusChangeModal({
 
   const [trackingNumber, setTrackingNumber] = useState('');
   const [carrierCode, setCarrierCode] = useState('');
+  const [carrierName, setCarrierName] = useState('');
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [slipFile, setSlipFile] = useState<File | null>(null);
+
+  // The API already lists the "Other" carrier; append it defensively so the
+  // option survives an older backend or a failed carriers fetch.
+  const carrierOptions = carriers.some((c) => c.code === OTHER_CARRIER_CODE)
+    ? carriers
+    : [...carriers, OTHER_CARRIER];
+  const isOtherCarrier = carrierCode === OTHER_CARRIER_CODE;
 
   useEffect(() => {
     if (!isShipping) return;
@@ -116,7 +131,17 @@ export default function ConfirmStatusChangeModal({
         setError('Select a carrier to mark this order as shipped.');
         return;
       }
-      shipping = { trackingNumber: trackingNumber.trim(), carrierCode, slipFile };
+      const trimmedCarrierName = carrierName.trim();
+      if (isOtherCarrier && !trimmedCarrierName) {
+        setError('Enter the courier name for the "Other" carrier.');
+        return;
+      }
+      shipping = {
+        trackingNumber: trackingNumber.trim(),
+        carrierCode,
+        carrierName: isOtherCarrier ? trimmedCarrierName : undefined,
+        slipFile,
+      };
     }
 
     setIsSubmitting(true);
@@ -199,13 +224,36 @@ export default function ConfirmStatusChangeModal({
                   <option value="" disabled>
                     {carriers.length ? 'Select a carrier…' : 'Loading carriers…'}
                   </option>
-                  {carriers.map((c) => (
+                  {carrierOptions.map((c) => (
                     <option key={c.code} value={c.code}>
                       {c.name}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {/* Free-text courier name — only for the "Other" carrier. */}
+              {isOtherCarrier && (
+                <div>
+                  <label htmlFor="carrier-name" className="block text-sm font-medium text-gray-700 mb-2">
+                    Courier name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    id="carrier-name"
+                    type="text"
+                    value={carrierName}
+                    onChange={(e) => setCarrierName(e.target.value)}
+                    placeholder="e.g. Trackon Couriers"
+                    maxLength={MAX_CARRIER_NAME}
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="mt-2 text-xs text-gray-500">
+                    Shown to the customer with the tracking number. We have no tracking link for
+                    couriers outside the list, so the email won&apos;t include a &ldquo;track&rdquo; button.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label htmlFor="slip" className="block text-sm font-medium text-gray-700 mb-2">

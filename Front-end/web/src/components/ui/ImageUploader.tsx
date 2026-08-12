@@ -1,27 +1,24 @@
 'use client';
 /**
- * ImageUploader — Reusable multi-image upload component
+ * ImageUploader — Reusable multi-image gallery editor
  *
- * Props:
- *   value        {CloudinaryImage[]}   Current images (from DB)
- *   onChange     (images: File[]) => void  Called when user picks files
- *   onRemove     (index: number) => void   Called when user removes a preview
- *   maxFiles     number (default 10)
- *   label        string
- *   accept       string (default 'image/jpeg,image/png,image/webp')
- *   disabled     boolean
+ * Presents ONE ordered gallery containing both images already stored on the
+ * entity and files the admin just picked, because "sequence" only means
+ * anything to an admin if it describes the gallery they will actually ship —
+ * splitting saved and pending images into two lists makes the final order
+ * unknowable until after save.
  *
- * The component shows:
- *   - Existing images (secure_url) from `value` with a remove button
- *   - Local previews of newly-selected files (before upload)
- *   - Drop zone
+ * Ordering: drag a tile onto another to reposition it, or use the ←/→ buttons
+ * (keyboard-reachable and reliable on touch, where HTML5 drag is not).
+ * Primary: chosen explicitly with the ★ button, independent of position.
  *
- * Actual upload is handled by the parent form via FormData so the
+ * The parent owns persistence. It receives the full ordered gallery via
+ * `onGalleryChange` and uploads `kind: 'new'` files itself, so the Cloudinary
  * API secret never touches the frontend.
  */
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import Image from 'next/image';
-import { X, Upload, ImageIcon } from 'lucide-react';
+import { X, Upload, Star, ArrowLeft, ArrowRight } from 'lucide-react';
 import { IMAGE_ACCEPT, IMAGE_MAX_FILE_MB, IMAGE_MAX_TOTAL_MB, IMAGE_MAX_FILES, validateImageFile } from '@/lib/imageUpload';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,17 +31,50 @@ export interface CloudinaryImage {
 }
 
 export interface LocalPreview {
+  uid:     string;
   file:    File;
   preview: string; // object URL
 }
 
+/**
+ * One tile in the gallery, saved or pending.
+ *
+ * `key` is the stable identity the backend also orders by: an existing image's
+ * `public_id` (or its URL, for legacy rows that never got one), or a local uid
+ * for a file not yet uploaded. The parent translates local uids to their
+ * Cloudinary public_ids once the upload completes.
+ */
+export interface GalleryItem {
+  key:  string;
+  kind: 'existing' | 'new';
+  url:  string;
+  alt?: string;
+  file?: File;
+}
+
+/** Stable key for an already-stored image — mirrors `imageKey()` on the server. */
+export const existingImageKey = (img: CloudinaryImage): string => img.public_id || img.url;
+
 interface ImageUploaderProps {
   /** Existing images already saved in DB */
   value?:      CloudinaryImage[];
-  /** Called when existing image is removed (passes public_id) */
-  onRemoveExisting?: (publicId: string, index: number) => void;
-  /** Called each time new local files are added */
+  /**
+   * Called when an existing image is removed, with its stable key and its index
+   * in `value`. The key is the image's public_id, or its URL for migrated rows
+   * that never got one — the server matches removals on the same key, so those
+   * legacy images can be removed too.
+   */
+  onRemoveExisting?: (key: string, index: number) => void;
+  /** Called each time new local files are added, in gallery order */
   onFilesChange?: (files: File[]) => void;
+  /** Called with the full ordered gallery whenever it changes */
+  onGalleryChange?: (items: GalleryItem[]) => void;
+  /** Key of the image marked primary. Uncontrolled when omitted. */
+  primaryKey?: string | null;
+  /** Called when the admin picks a different primary image */
+  onPrimaryChange?: (key: string) => void;
+  /** Set false to hide reorder + primary controls (e.g. replace mode) */
+  reorderable?: boolean;
   maxFiles?:   number;
   /** Per-file size ceiling (MB). Default matches backend multer limit. */
   maxFileSizeMB?: number;
@@ -60,12 +90,19 @@ interface ImageUploaderProps {
   className?:  string;
 }
 
+let uidCounter = 0;
+const nextUid = () => `local-${Date.now()}-${uidCounter++}`;
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ImageUploader({
   value = [],
   onRemoveExisting,
   onFilesChange,
+  onGalleryChange,
+  primaryKey,
+  onPrimaryChange,
+  reorderable = true,
   maxFiles = IMAGE_MAX_FILES,
   maxFileSizeMB = IMAGE_MAX_FILE_MB,
   maxTotalSizeMB = IMAGE_MAX_TOTAL_MB,
@@ -78,6 +115,10 @@ export default function ImageUploader({
   const [localPreviews, setLocalPreviews] = useState<LocalPreview[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Explicit ordering of tile keys. Keys absent here fall to the end. */
+  const [order, setOrder] = useState<string[]>([]);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   const totalCount = value.length + localPreviews.length;
   const remaining  = maxFiles - totalCount;
@@ -86,6 +127,64 @@ export default function ImageUploader({
   // upload straight to Cloudinary and never traverse the proxy request body.
   const enforceTotal = Number.isFinite(maxTotalSizeMB) && maxTotalSizeMB > 0;
   const MAX_TOTAL_BYTES = maxTotalSizeMB * 1024 * 1024;
+
+  // ── The gallery ────────────────────────────────────────────────────────────
+  // Derived, never stored: `order` is only a hint applied over the live pool of
+  // images. Keys that disappear (a removed image) resolve to nothing, and keys
+  // that appear (a newly picked file) land at the end — so the list self-heals
+  // instead of needing an effect to reconcile it with `value`.
+  const items = useMemo<GalleryItem[]>(() => {
+    const pool: GalleryItem[] = [
+      ...value.map((img) => ({
+        key:  existingImageKey(img),
+        kind: 'existing' as const,
+        url:  img.url,
+        alt:  img.alt,
+      })),
+      ...localPreviews.map((p) => ({
+        key:  p.uid,
+        kind: 'new' as const,
+        url:  p.preview,
+        file: p.file,
+      })),
+    ];
+
+    const byKey = new Map(pool.map((i) => [i.key, i]));
+    const picked: GalleryItem[] = [];
+    const seen = new Set<string>();
+    for (const key of order) {
+      const item = byKey.get(key);
+      if (item && !seen.has(key)) {
+        picked.push(item);
+        seen.add(key);
+      }
+    }
+    return [...picked, ...pool.filter((i) => !seen.has(i.key))];
+  }, [value, localPreviews, order]);
+
+  const effectivePrimary = useMemo(() => {
+    if (primaryKey && items.some((i) => i.key === primaryKey)) return primaryKey;
+    return items[0]?.key ?? null;
+  }, [primaryKey, items]);
+
+  // Publish the arrangement upward. New files are reported in gallery order so
+  // the parent's upload refs line up with the order it sends to the server.
+  //
+  // Keyed on a content signature rather than the `items` identity: the parent
+  // typically passes an inline `value` array and stores what we publish in its
+  // own state, so an identity-keyed effect would re-publish on every parent
+  // render and spin (publish → parent setState → render → publish).
+  const signature = items.map((i) => `${i.kind}:${i.key}`).join('|');
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  useEffect(() => {
+    const current = itemsRef.current;
+    onGalleryChange?.(current);
+    onFilesChange?.(current.filter((i) => i.kind === 'new').map((i) => i.file!));
+    // Callbacks are usually inline arrows in the parent — depending on them
+    // would defeat the signature guard above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 
   // ── Add files ──────────────────────────────────────────────────────────────
   // Reject client-side against the *real* constraints (per-file + combined +
@@ -141,32 +240,64 @@ export default function ImageUploader({
     if (!accepted.length) return;
 
     const previews: LocalPreview[] = accepted.map((file) => ({
+      uid:     nextUid(),
       file,
       preview: URL.createObjectURL(file),
     }));
 
-    setLocalPreviews((prev) => {
-      const next = [...prev, ...previews];
-      onFilesChange?.(next.map((p) => p.file));
-      return next;
-    });
-  }, [remaining, maxFiles, enforceTotal, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews, onFilesChange]);
+    setLocalPreviews((prev) => [...prev, ...previews]);
+  }, [remaining, maxFiles, enforceTotal, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews]);
 
-  // ── Remove local preview ───────────────────────────────────────────────────
-  const removeLocal = (idx: number) => {
+  // ── Remove ─────────────────────────────────────────────────────────────────
+  const removeLocal = (uid: string) => {
     // Removing a file frees slot/size budget, so any prior rejection message no
     // longer applies — clear it to avoid a stale error next to a valid selection.
     setError(null);
     setLocalPreviews((prev) => {
-      const next = [...prev];
-      URL.revokeObjectURL(next[idx].preview);
-      next.splice(idx, 1);
-      onFilesChange?.(next.map((p) => p.file));
-      return next;
+      const target = prev.find((p) => p.uid === uid);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((p) => p.uid !== uid);
     });
   };
 
-  // ── Drag & drop ────────────────────────────────────────────────────────────
+  const removeItem = (item: GalleryItem) => {
+    if (item.kind === 'new') {
+      removeLocal(item.key);
+      return;
+    }
+    const idx = value.findIndex((img) => existingImageKey(img) === item.key);
+    // Report the key, not the raw public_id — a migrated image has none, and
+    // an empty string would stage a removal the server could never match.
+    if (idx !== -1) onRemoveExisting?.(existingImageKey(value[idx]), idx);
+  };
+
+  // ── Reordering ─────────────────────────────────────────────────────────────
+  /** Rewrite `order` from the current gallery with `key` moved to `toIndex`. */
+  const moveTo = useCallback((key: string, toIndex: number) => {
+    const keys = items.map((i) => i.key);
+    const from = keys.indexOf(key);
+    if (from === -1) return;
+    const clamped = Math.max(0, Math.min(keys.length - 1, toIndex));
+    if (clamped === from) return;
+    keys.splice(from, 1);
+    keys.splice(clamped, 0, key);
+    setOrder(keys);
+  }, [items]);
+
+  const moveBy = (key: string, delta: number) => {
+    const from = items.findIndex((i) => i.key === key);
+    if (from !== -1) moveTo(key, from + delta);
+  };
+
+  const onTileDrop = (targetKey: string) => {
+    if (!dragKey || dragKey === targetKey) return;
+    const targetIndex = items.findIndex((i) => i.key === targetKey);
+    if (targetIndex !== -1) moveTo(dragKey, targetIndex);
+    setDragKey(null);
+    setDragOverKey(null);
+  };
+
+  // ── Drag & drop (files onto the drop zone) ─────────────────────────────────
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     if (!disabled) setDragging(true);
@@ -177,6 +308,8 @@ export default function ImageUploader({
     setDragging(false);
     if (!disabled) addFiles(e.dataTransfer.files);
   };
+
+  const showControls = reorderable && !disabled;
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -225,65 +358,127 @@ export default function ImageUploader({
         <p role="alert" className="text-xs text-red-600">{error}</p>
       )}
 
-      {/* ── Image grid ────────────────────────────────────────────────────── */}
-      {(value.length > 0 || localPreviews.length > 0) && (
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
-          {/* Existing Cloudinary images */}
-          {value.map((img, idx) => (
-            <div key={img.public_id || idx} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-50">
-              <Image
-                src={img.url}
-                alt={img.alt || `Image ${idx + 1}`}
-                fill
-                className="object-cover"
-                sizes="120px"
-              />
-              {img.isPrimary && (
-                <span className="absolute top-1 left-1 text-[10px] bg-red-600 text-white px-1 rounded">
-                  Primary
-                </span>
-              )}
-              {onRemoveExisting && !disabled && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveExisting(img.public_id, idx);
-                  }}
-                  className="absolute top-1 right-1 p-0.5 rounded-full bg-white/60 text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label="Remove image"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          ))}
+      {/* ── Gallery ───────────────────────────────────────────────────────── */}
+      {items.length > 0 && (
+        <>
+          {showControls && (
+            <p className="text-xs text-gray-500">
+              Drag a tile or use ←/→ to set the display order. ★ marks the main image shown in listings.
+            </p>
+          )}
 
-          {/* Local previews (not yet uploaded) */}
-          {localPreviews.map((p, idx) => (
-            <div key={p.preview} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-50 ring-2 ring-yellow-400/50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={p.preview}
-                alt={`Preview ${idx + 1}`}
-                className="w-full h-full object-cover"
-              />
-              <span className="absolute bottom-1 left-1 text-[10px] bg-yellow-500 text-gray-900 px-1 rounded font-medium">
-                New
-              </span>
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => removeLocal(idx)}
-                  className="absolute top-1 right-1 p-0.5 rounded-full bg-white/60 text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label="Remove preview"
+          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 list-none p-0 m-0">
+            {items.map((item, idx) => {
+              const isPrimary = item.key === effectivePrimary;
+              return (
+                <li
+                  key={item.key}
+                  draggable={showControls}
+                  onDragStart={() => showControls && setDragKey(item.key)}
+                  onDragEnd={() => { setDragKey(null); setDragOverKey(null); }}
+                  onDragOver={(e) => {
+                    if (!showControls || !dragKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragOverKey(item.key);
+                  }}
+                  onDrop={(e) => {
+                    if (!showControls) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onTileDrop(item.key);
+                  }}
+                  data-testid={`gallery-item-${idx}`}
+                  className={`
+                    relative group aspect-square rounded-lg overflow-hidden bg-gray-50
+                    ${item.kind === 'new' ? 'ring-2 ring-yellow-400/50' : ''}
+                    ${isPrimary ? 'ring-2 ring-red-500' : ''}
+                    ${dragKey === item.key ? 'opacity-40' : ''}
+                    ${dragOverKey === item.key && dragKey !== item.key ? 'ring-2 ring-blue-500' : ''}
+                    ${showControls ? 'cursor-move' : ''}
+                  `}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+                  {item.kind === 'existing' ? (
+                    <Image
+                      src={item.url}
+                      alt={item.alt || `Image ${idx + 1}`}
+                      fill
+                      className="object-cover pointer-events-none"
+                      sizes="120px"
+                    />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={item.url}
+                      alt={`Preview ${idx + 1}`}
+                      className="w-full h-full object-cover pointer-events-none"
+                    />
+                  )}
+
+                  {/* Position badge — the number that actually ships */}
+                  <span className="absolute top-1 left-1 flex h-4 min-w-4 items-center justify-center rounded bg-black/60 px-1 text-[10px] font-medium text-white">
+                    {idx + 1}
+                  </span>
+
+                  {isPrimary && (
+                    <span className="absolute bottom-1 left-1 rounded bg-red-600 px-1 text-[10px] text-white">
+                      Primary
+                    </span>
+                  )}
+                  {item.kind === 'new' && !isPrimary && (
+                    <span className="absolute bottom-1 left-1 rounded bg-yellow-500 px-1 text-[10px] font-medium text-gray-900">
+                      New
+                    </span>
+                  )}
+
+                  {!disabled && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeItem(item); }}
+                      className="absolute top-1 right-1 rounded-full bg-white/70 p-0.5 text-gray-900 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                      aria-label={`Remove image ${idx + 1}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+
+                  {showControls && (
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-0.5 bg-black/50 p-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onPrimaryChange?.(item.key); }}
+                        disabled={isPrimary}
+                        className="rounded p-0.5 text-white hover:bg-white/20 disabled:opacity-40"
+                        aria-label={`Set image ${idx + 1} as primary`}
+                        aria-pressed={isPrimary}
+                      >
+                        <Star className={`h-3 w-3 ${isPrimary ? 'fill-current' : ''}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); moveBy(item.key, -1); }}
+                        disabled={idx === 0}
+                        className="rounded p-0.5 text-white hover:bg-white/20 disabled:opacity-40"
+                        aria-label={`Move image ${idx + 1} earlier`}
+                      >
+                        <ArrowLeft className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); moveBy(item.key, 1); }}
+                        disabled={idx === items.length - 1}
+                        className="rounded p-0.5 text-white hover:bg-white/20 disabled:opacity-40"
+                        aria-label={`Move image ${idx + 1} later`}
+                      >
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );

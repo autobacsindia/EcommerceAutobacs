@@ -28,6 +28,7 @@ import { cleanHTML } from '../utils/htmlSanitizer.js';
 import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
 import { aggregateFromVariants } from '../utils/wcVariants.js';
 import { normalizeSeo } from '../utils/seo.js';
+import { imageKey, orderGallery } from '../utils/productGallery.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -45,6 +46,19 @@ const productFolder = (productId) => `${BASE_FOLDER}/${productId}`;
 
 /** Hard cap on images accepted per create/update request (matches the uploader). */
 const MAX_NEW_IMAGES = 8;
+
+/** Read the optional `imageOrder` / `primaryImage` sequencing fields off the body. */
+const takeSequencing = (fields) => {
+  const order = Array.isArray(fields.imageOrder)
+    ? fields.imageOrder.filter((k) => typeof k === 'string' && k)
+    : null;
+  const primary = typeof fields.primaryImage === 'string' && fields.primaryImage
+    ? fields.primaryImage
+    : null;
+  delete fields.imageOrder;
+  delete fields.primaryImage;
+  return { order, primary };
+};
 
 /**
  * Validate image refs the browser uploaded DIRECTLY to Cloudinary (bypassing the
@@ -85,7 +99,7 @@ const parseProductFields = (body) => {
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
    'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages',
-   'returnPolicy'].forEach((key) => {
+   'imageOrder', 'returnPolicy'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
@@ -234,6 +248,7 @@ export const createProductWithImages = async (req, res) => {
   // Images the browser already uploaded straight to Cloudinary (direct upload).
   const preUploaded = normalizePreUploaded(fields.uploadedImages);
   delete fields.uploadedImages;
+  const { order: imageOrder, primary: primaryImage } = takeSequencing(fields);
   assertValidProduct(fields, { partial: false });
   const files  = req.files || (req.file ? [req.file] : []);
 
@@ -255,12 +270,18 @@ export const createProductWithImages = async (req, res) => {
     ...uploadedImages.map((img) => ({ url: img.secure_url, public_id: img.public_id })),
   ];
 
-  const images = allRefs.map((img, idx) => ({
-    url:       img.url,
-    public_id: img.public_id,
-    alt:       fields.name || '',
-    isPrimary: idx === 0,
-  }));
+  // Sequence + thumbnail follow the admin's arrangement in the form; with no
+  // explicit intent the upload order stands and the first image is primary.
+  const images = orderGallery(
+    allRefs.map((img) => ({
+      url:       img.url,
+      public_id: img.public_id,
+      alt:       fields.name || '',
+      isPrimary: false,
+    })),
+    imageOrder,
+    primaryImage,
+  );
 
   const product = new Product({ ...fields, images });
 
@@ -310,19 +331,30 @@ export const updateProductWithImages = async (req, res, next) => {
   // Images the browser already uploaded straight to Cloudinary (direct upload).
   const preUploaded = normalizePreUploaded(fields.uploadedImages);
   delete fields.uploadedImages;
+  const { order: imageOrder, primary: primaryImage } = takeSequencing(fields);
   assertValidProduct(fields, { partial: true });
   const files  = req.files || (req.file ? [req.file] : []);
   const replaceImages = fields.replaceImages === 'true' || fields.replaceImages === true;
   delete fields.replaceImages;
 
-  // public_ids the client staged for deletion (deferred from UI remove actions)
-  // These are deleted AFTER DB save — never before — to keep Cloudinary + DB in sync
+  // Image keys the client staged for removal (deferred from UI remove actions).
+  // Usually public_ids; a migrated image without one is keyed by URL. These drop
+  // out of the saved gallery, and Step 4 then cleans up whatever that orphaned —
+  // never the other way round, so DB and Cloudinary cannot disagree.
   let clientPendingDeletes = [];
   if (fields.deletePublicIds) {
-    try {
-      clientPendingDeletes = JSON.parse(fields.deletePublicIds);
-    } catch {
-      clientPendingDeletes = [];
+    if (Array.isArray(fields.deletePublicIds)) {
+      // Already an array — a JSON request body, rather than multipart.
+      clientPendingDeletes = fields.deletePublicIds;
+    } else {
+      try {
+        const parsed = JSON.parse(fields.deletePublicIds);
+        // A non-array payload (e.g. `"5"`, `{}`) must degrade to "nothing
+        // staged" rather than blowing up the update on a later .filter().
+        if (Array.isArray(parsed)) clientPendingDeletes = parsed;
+      } catch {
+        clientPendingDeletes = [];
+      }
     }
     delete fields.deletePublicIds;
   }
@@ -358,32 +390,52 @@ export const updateProductWithImages = async (req, res, next) => {
     ...newUploads.map((img) => ({ url: img.secure_url, public_id: img.public_id })),
   ];
 
-  // ── Step 2: Apply new images to the fields object ─────────────────────
-  if (newRefs.length > 0) {
-    if (replaceImages) {
-      // Replace: build entirely new image list
-      fields.images = newRefs.map((img, idx) => ({
-        url:       img.url,
-        public_id: img.public_id,
-        alt:       fields.name || product.name,
-        isPrimary: idx === 0,
-      }));
-    } else {
-      // Append: merge existing + new
-      const appended = newRefs.map((img) => ({
-        url:       img.url,
-        public_id: img.public_id,
-        alt:       fields.name || product.name,
-        isPrimary: false,
-      }));
-      fields.images = [...(product.images || []), ...appended];
-      // Guarantee exactly one primary — a product that had no images (or none
-      // flagged primary) would otherwise end up with an all-false gallery.
-      if (!fields.images.some((img) => img.isPrimary) && fields.images.length) {
-        fields.images[0].isPrimary = true;
-      }
-    }
-  }
+  // ── Step 2: Compose the final gallery ─────────────────────────────────
+  //
+  // The gallery is ALWAYS recomposed from the request's intent, never left
+  // untouched. It used to be rewritten only when new images arrived, so an
+  // admin who merely removed an image saved a product whose DB gallery still
+  // listed it — while Step 4 went ahead and deleted the asset from Cloudinary.
+  // The result was a dead URL persisted against the product: a broken image on
+  // the storefront that reappeared in the form on every reload.
+  //
+  //   kept     = current gallery minus anything explicitly staged for deletion
+  //              (or nothing at all, when replacing outright)
+  //   appended = images uploaded in this request
+  //   order    = the admin's drag/arrow arrangement; primary = their choice
+  //
+  // With no images/order/deletes in the payload this recomposes the existing
+  // gallery unchanged, so partial updates that never touch images are a no-op.
+  const deleteSet = new Set(
+    clientPendingDeletes.filter((id) => typeof id === 'string' && id)
+  );
+
+  // `replaceImages` only wipes the gallery when something replaces it — a
+  // replace request carrying no new image must not strand the product with
+  // zero images (and Step 4 would then delete every asset it still needs).
+  //
+  // Removal matches on the image KEY, not strictly on public_id: migrated
+  // WooCommerce rows carry no public_id and are identified by URL, and those
+  // were previously impossible to remove at all.
+  const kept = (replaceImages && newRefs.length > 0)
+    ? []
+    : (product.images || [])
+        .map((img) => ({
+          url:       img.url,
+          public_id: img.public_id,
+          alt:       img.alt,
+          isPrimary: img.isPrimary,
+        }))
+        .filter((img) => !deleteSet.has(imageKey(img)));
+
+  const appended = newRefs.map((img) => ({
+    url:       img.url,
+    public_id: img.public_id,
+    alt:       fields.name || product.name,
+    isPrimary: false,
+  }));
+
+  fields.images = orderGallery([...kept, ...appended], imageOrder, primaryImage);
 
   if (Array.isArray(fields.categories)) {
     fields.categories = [...new Set(fields.categories)];
@@ -420,25 +472,25 @@ export const updateProductWithImages = async (req, res, next) => {
 
   // ── Step 4: Delete images from Cloudinary (AFTER DB confirmed) ──────
   //
-  // Two sources of IDs to clean up:
-  //   A) replaceImages=true WITH new images → delete all OLD product images
-  //      (gallery was actually replaced). CRITICAL: only when newRefs replaced
-  //      the gallery — a replace request with no new image leaves fields.images
-  //      untouched, so deleting the old assets would strand the DB URLs.
-  //   B) clientPendingDeletes → images the admin individually removed in the UI
+  // Cleanup is DERIVED from what actually persisted, not from what the client
+  // asked us to delete: an asset is removed only when it was on the product
+  // before and is absent from the saved gallery now. That makes "Cloudinary
+  // deleted, DB still points at it" structurally impossible — the exact broken
+  // image this used to produce — and it also means a forged or stale
+  // `deletePublicIds` can never reach an asset the product still references
+  // (or one belonging to a different product entirely).
   //
   // Failures here are logged with [CLEANUP_REQUIRED] by deleteFromCloudinary but
   // do NOT throw — the DB is already consistent at this point, so we never
   // unwind a successful save over a Cloudinary cleanup failure.
-  const toDelete = new Set();
-  if (replaceImages && newRefs.length > 0 && oldPublicIds.length > 0) {
-    oldPublicIds.forEach((id) => toDelete.add(id));
-  }
-  clientPendingDeletes.forEach((id) => typeof id === 'string' && id && toDelete.add(id));
+  const survivingIds = new Set(
+    (updatedProduct.images || []).map((img) => img.public_id).filter(Boolean)
+  );
+  const toDelete = oldPublicIds.filter((id) => !survivingIds.has(id));
 
-  if (toDelete.size > 0) {
-    console.log(`[ProductController] Cleaning up ${toDelete.size} Cloudinary asset(s) post-save`);
-    await deleteManyFromCloudinary([...toDelete]);
+  if (toDelete.length > 0) {
+    console.log(`[ProductController] Cleaning up ${toDelete.length} orphaned Cloudinary asset(s) post-save`);
+    await deleteManyFromCloudinary(toDelete);
   }
 
   invalidateCache('products');

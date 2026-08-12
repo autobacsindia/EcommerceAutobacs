@@ -16,9 +16,14 @@ import { API_ENDPOINTS } from '@/lib/constants';
 // must prefix it explicitly to hit the same Next.js → backend proxy path.
 const API_PREFIX = '/api/v1';
 
+/** Carrier code for a courier we don't list — the admin types its name. */
+export const OTHER_CARRIER_CODE = 'OTHER';
+
 export interface ShippingInput {
   trackingNumber: string;
   carrierCode: string;
+  /** Courier name, sent (and required by the API) only when code is OTHER. */
+  carrierName?: string;
   /** Optional courier slip PDF; when present the request is sent multipart. */
   slipFile?: File | null;
 }
@@ -42,6 +47,7 @@ export async function updateOrderStatus(orderId: string, input: StatusUpdateInpu
     if (note) fd.append('notes', note);
     fd.append('trackingNumber', shipping.trackingNumber);
     fd.append('carrierCode', shipping.carrierCode);
+    if (shipping.carrierName) fd.append('carrierName', shipping.carrierName);
     fd.append('slip', shipping.slipFile);
 
     const csrfToken =
@@ -82,6 +88,7 @@ export async function updateOrderStatus(orderId: string, input: StatusUpdateInpu
   if (shipping) {
     body.trackingNumber = shipping.trackingNumber;
     body.carrierCode = shipping.carrierCode;
+    if (shipping.carrierName) body.carrierName = shipping.carrierName;
   }
   await apiClient.put(API_ENDPOINTS.ORDER_UPDATE_STATUS(orderId), body);
 }

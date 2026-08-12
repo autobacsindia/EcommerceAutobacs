@@ -12,7 +12,7 @@ import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
 import { uploadImagesToCloudinary } from '@/lib/cloudinaryUpload';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import ImageUploader, { CloudinaryImage } from '@/components/ui/ImageUploader';
+import ImageUploader, { CloudinaryImage, GalleryItem, existingImageKey } from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoScorePanel from '@/components/ui/SeoScorePanel';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
@@ -68,6 +68,9 @@ interface Product {
   };
 }
 
+/** Stable empty gallery — an inline `[]` would be a fresh prop every render. */
+const NO_IMAGES: CloudinaryImage[] = [];
+
 export default function EditProductPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -120,6 +123,11 @@ export default function EditProductPage() {
   
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<CloudinaryImage[]>([]);
+  // The full gallery (saved + pending) in the admin's chosen display order, and
+  // the key of the image they marked primary. Submitted as `imageOrder` /
+  // `primaryImage` so the server persists the arrangement it is shown here.
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [primaryKey, setPrimaryKey] = useState<string | null>(null);
   // Track pending deletions — applied atomically on submit (avoids race conditions)
   const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
   // Replace mode: when true, existing gallery is wiped and replaced by new uploads
@@ -235,6 +243,10 @@ export default function EditProductPage() {
         isPrimary: img?.isPrimary || false,
       }));
       setExistingImages(imgs);
+      // Seed the primary marker from the stored gallery so the ★ starts on the
+      // image the storefront is actually using (falling back to the first).
+      const storedPrimary = imgs.find((i) => i.isPrimary) || imgs[0];
+      setPrimaryKey(storedPrimary ? existingImageKey(storedPrimary) : null);
       setFeatures(productData.features || []);
       setWhyChoose(productData.whyChoose || []);
       setPackageContents(productData.packageContents || []);
@@ -350,23 +362,23 @@ export default function EditProductPage() {
   /**
    * Called by ImageUploader when admin removes an existing image.
    *
-   * Design: deferred deletion — we DON'T call the API immediately.
-   * Instead we queue the public_id into pendingDeletes and remove from UI.
-   * The actual Cloudinary DELETE fires inside handleSubmit after the PUT
-   * succeeds, which means:
+   * Design: deferred removal — we DON'T call the API immediately. The key is
+   * queued into pendingDeletes and the tile disappears from the form; the PUT
+   * then drops it from the stored gallery, and only afterwards does the server
+   * clean up the Cloudinary asset that removal orphaned. So:
    *   ✅ No race condition between delete and submit
-   *   ✅ Atomic — if submit fails, images are never deleted
-   *   ✅ Single mutation path (one source of truth)
+   *   ✅ Atomic — if submit fails, nothing is deleted
+   *   ✅ The asset can never outlive its DB row, or vice versa
    *
-   * If the image has no public_id (legacy migrated images), it is simply
-   * dropped from the form — it will be absent from the next PUT payload.
+   * `key` is the image's public_id, or its URL for a migrated image that never
+   * had one — the server matches removals on the same key either way.
    */
-  const handleRemoveExisting = (publicId: string, index: number) => {
+  const handleRemoveExisting = (key: string, index: number) => {
     // Remove from UI immediately
     setExistingImages((prev) => prev.filter((_, i) => i !== index));
-    // Queue for deletion after submit succeeds
-    if (publicId) {
-      setPendingDeletes((prev) => [...prev, publicId]);
+    // Queue for removal at submit time
+    if (key) {
+      setPendingDeletes((prev) => [...prev, key]);
     }
   };
 
@@ -501,10 +513,42 @@ export default function EditProductPage() {
       // ── New images ─────────────────────────────────────────────────────────
       // Upload straight to Cloudinary (bypasses the ~4.5 MB proxy limit), then
       // send only the refs as JSON so the update request stays tiny.
-      if (newImageFiles.length) {
+      //
+      // Uploading BEFORE the PUT is what makes sequencing work across saved and
+      // pending images alike: once every tile has a real public_id we can send
+      // one flat order covering the whole gallery, instead of new images being
+      // stuck at the end until a second save.
+      const newItems = gallery.filter((i) => i.kind === 'new');
+      const keyToPublicId = new Map<string, string>();
+      if (newItems.length) {
         // Group new assets under autobacs/products/<id> for the edited product.
-        const refs = await uploadImagesToCloudinary(newImageFiles, 'products', productId);
+        // Refs come back in the order the files were passed, which is gallery
+        // order — so ref[i] belongs to newItems[i].
+        const refs = await uploadImagesToCloudinary(
+          newItems.map((i) => i.file!),
+          'products',
+          productId,
+        );
+        refs.forEach((ref, i) => {
+          if (newItems[i]) keyToPublicId.set(newItems[i].key, ref.public_id);
+        });
         fd.append('uploadedImages', JSON.stringify(refs));
+      }
+
+      // ── Sequence + primary ────────────────────────────────────────────────
+      // Local tile keys are swapped for the Cloudinary public_ids the server
+      // knows about; anything still unresolved (an upload that returned no id)
+      // is dropped rather than sent as a key the server would ignore anyway.
+      if (gallery.length) {
+        const resolveKey = (item: GalleryItem) =>
+          item.kind === 'new' ? keyToPublicId.get(item.key) : item.key;
+
+        const imageOrder = gallery.map(resolveKey).filter(Boolean) as string[];
+        fd.append('imageOrder', JSON.stringify(imageOrder));
+
+        const primaryItem = gallery.find((i) => i.key === primaryKey) ?? gallery[0];
+        const resolvedPrimary = primaryItem ? resolveKey(primaryItem) : undefined;
+        if (resolvedPrimary) fd.append('primaryImage', resolvedPrimary);
       }
 
       // ── Send ──────────────────────────────────────────────────────────────
@@ -1292,9 +1336,12 @@ export default function EditProductPage() {
             </div>
 
             <ImageUploader
-              value={replaceMode ? [] : existingImages}
+              value={replaceMode ? NO_IMAGES : existingImages}
               onRemoveExisting={handleRemoveExisting}
               onFilesChange={(files) => setNewImageFiles(files)}
+              onGalleryChange={setGallery}
+              primaryKey={primaryKey}
+              onPrimaryChange={setPrimaryKey}
               maxFiles={8}
               label=""
               // Images upload straight to Cloudinary, so only per-file 3 MB
@@ -1304,7 +1351,7 @@ export default function EditProductPage() {
             <p className="mt-2 text-xs text-gray-500">
               {replaceMode
                 ? 'Replace mode: upload new images above — existing gallery will be cleared on save.'
-                : 'Existing images can be removed individually. New images are appended on save.'}
+                : 'Removed images are deleted on save. Drag tiles or use ←/→ to set the order that appears on the product page.'}
             </p>
           </div>
 
