@@ -7,6 +7,11 @@ import Order from '../models/Order.js';
 import crypto from 'crypto';
 
 /**
+ * Code of the free-text "Other" carrier — the admin supplies the courier name.
+ */
+const OTHER_CARRIER_CODE = 'OTHER';
+
+/**
  * Supported carriers with their configurations
  */
 const CARRIERS = {
@@ -72,8 +77,25 @@ const CARRIERS = {
     trackingUrl: 'https://ecomexpress.in/tracking/?awb_field=',
     trackingNumberFormat: /^[0-9]{12,14}$/,
     estimatedDeliveryDays: 3
+  },
+  // Escape hatch for regional/one-off couriers we don't model. The admin types
+  // the courier's name; we have no tracking-URL pattern for it, so the order
+  // carries the number only and the shipped email omits the "track" link.
+  // Listed last on purpose — getSupportedCarriers preserves this order.
+  OTHER: {
+    name: 'Other courier',
+    code: OTHER_CARRIER_CODE,
+    custom: true,
+    trackingUrl: null,
+    // Permissive: third-party AWBs vary wildly (letters, digits, dashes).
+    trackingNumberFormat: /^[A-Za-z0-9][A-Za-z0-9-/]{3,39}$/,
+    // No SLA to promise for an unknown courier — no ETA is derived.
+    estimatedDeliveryDays: null
   }
 };
+
+/** Max length accepted for an admin-typed courier name. */
+const MAX_CUSTOM_CARRIER_NAME = 60;
 
 /**
  * Tracking event status codes
@@ -204,7 +226,7 @@ class OrderTrackingService {
    * @returns {Promise<Object>} - Updated order
    */
   async addTrackingInfo(orderId, trackingData) {
-    const { trackingNumber, carrierCode, notes } = trackingData;
+    const { trackingNumber, carrierCode, carrierName, notes } = trackingData;
 
     try {
       const order = await Order.findById(orderId);
@@ -212,10 +234,10 @@ class OrderTrackingService {
         throw new Error('Order not found');
       }
 
-      // Validate carrier
-      const carrier = CARRIERS[carrierCode];
+      // Validate carrier (and the admin-typed name for the `OTHER` carrier)
+      const { carrier, error } = this.resolveCarrier(carrierCode, carrierName);
       if (!carrier) {
-        throw new Error(`Invalid carrier code: ${carrierCode}`);
+        throw new Error(error);
       }
 
       // Validate tracking number format if provided
@@ -225,17 +247,16 @@ class OrderTrackingService {
 
       // Update order with tracking info
       order.trackingNumber = trackingNumber;
-      order.carrier = {
-        name: carrier.name,
-        code: carrierCode,
-        trackingUrl: carrier.trackingUrl + trackingNumber
-      };
+      order.carrier = this.buildCarrierSubdoc(carrier, trackingNumber);
 
-      // Calculate estimated delivery
+      // Calculate estimated delivery. An unknown courier has no SLA to promise,
+      // so leave the ETA unset rather than inventing one.
       const estimatedDays = carrier.estimatedDeliveryDays;
-      const estimatedDate = new Date();
-      estimatedDate.setDate(estimatedDate.getDate() + estimatedDays);
-      order.estimatedDelivery = estimatedDate;
+      if (estimatedDays) {
+        const estimatedDate = new Date();
+        estimatedDate.setDate(estimatedDate.getDate() + estimatedDays);
+        order.estimatedDelivery = estimatedDate;
+      }
 
       // Add initial tracking event
       if (!order.trackingEvents) {
@@ -448,7 +469,9 @@ class OrderTrackingService {
     return Object.values(CARRIERS).map(carrier => ({
       name: carrier.name,
       code: carrier.code,
-      estimatedDeliveryDays: carrier.estimatedDeliveryDays
+      estimatedDeliveryDays: carrier.estimatedDeliveryDays,
+      // Tells the admin UI to show a "courier name" input for this option.
+      ...(carrier.custom ? { custom: true } : {})
     }));
   }
 
@@ -459,6 +482,57 @@ class OrderTrackingService {
    */
   getCarrier(carrierCode) {
     return CARRIERS[carrierCode] || null;
+  }
+
+  /**
+   * Resolve the carrier a write path should persist, folding in the admin-typed
+   * name for the free-text `OTHER` carrier. Single source of truth for every
+   * path that stamps `order.carrier`.
+   *
+   * @param {string} carrierCode - Carrier code
+   * @param {string} [carrierName] - Courier name, required when code is OTHER
+   * @returns {{carrier: Object|null, error: string|null}}
+   */
+  resolveCarrier(carrierCode, carrierName) {
+    const carrier = this.getCarrier(carrierCode);
+    if (!carrier) {
+      return { carrier: null, error: `Unknown carrier code: ${carrierCode}` };
+    }
+
+    if (!carrier.custom) {
+      return { carrier, error: null };
+    }
+
+    const name = typeof carrierName === 'string' ? carrierName.trim() : '';
+    if (!name) {
+      return { carrier: null, error: 'Courier name is required when the carrier is "Other"' };
+    }
+    if (name.length > MAX_CUSTOM_CARRIER_NAME) {
+      return {
+        carrier: null,
+        error: `Courier name must be ${MAX_CUSTOM_CARRIER_NAME} characters or fewer`
+      };
+    }
+
+    // Same shape as a built-in carrier, with the admin's name in place of ours.
+    return { carrier: { ...carrier, name }, error: null };
+  }
+
+  /**
+   * Build the `order.carrier` subdocument for a resolved carrier. Custom
+   * couriers have no URL pattern, so `trackingUrl` is left unset rather than
+   * emitted as a bare tracking number that would render as a broken link.
+   *
+   * @param {Object} carrier - Carrier from resolveCarrier()
+   * @param {string} trackingNumber - Tracking number
+   * @returns {{name: string, code: string, trackingUrl?: string}}
+   */
+  buildCarrierSubdoc(carrier, trackingNumber) {
+    return {
+      name: carrier.name,
+      code: carrier.code,
+      ...(carrier.trackingUrl ? { trackingUrl: carrier.trackingUrl + trackingNumber } : {})
+    };
   }
 
   /**
@@ -610,6 +684,8 @@ export default orderTrackingService;
 export {
   OrderTrackingService,
   CARRIERS,
+  OTHER_CARRIER_CODE,
+  MAX_CUSTOM_CARRIER_NAME,
   TRACKING_STATUS,
   STATUS_DESCRIPTIONS
 };

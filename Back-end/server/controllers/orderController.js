@@ -5,7 +5,7 @@ import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
 import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
-import orderTrackingService from '../services/orderTrackingService.js';
+import orderTrackingService, { OTHER_CARRIER_CODE } from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { remainingRefundable } from '../services/refundMathService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
@@ -938,7 +938,7 @@ export const deleteOrder = async (req, res) => {
 // @route   PUT /orders/:id/status
 // @access  Private/Admin
 export const updateOrderStatus = async (req, res) => {
-  const { status, reason, notes, trackingNumber, carrierCode, estimatedDelivery, metadata } = req.body;
+  const { status, reason, notes, trackingNumber, carrierCode, carrierName, estimatedDelivery, metadata } = req.body;
 
   if (!status) {
     return res.status(400).json({ success: false, message: 'Status is required' });
@@ -950,9 +950,11 @@ export const updateOrderStatus = async (req, res) => {
   // Cloudinary here and its URL threaded through to the order + shipped email.
   let shipping;
   if (status === 'shipped') {
-    const carrier = orderTrackingService.getCarrier(carrierCode);
+    // `OTHER` is the free-text carrier: the admin types the courier's name and we
+    // persist that instead of a built-in one (no tracking-URL pattern exists for it).
+    const { carrier, error: carrierError } = orderTrackingService.resolveCarrier(carrierCode, carrierName);
     if (!carrier) {
-      return res.status(400).json({ success: false, message: `Unknown carrier code: ${carrierCode}` });
+      return res.status(400).json({ success: false, message: carrierError });
     }
 
     const trimmedTracking = String(trackingNumber).trim();
@@ -988,11 +990,7 @@ export const updateOrderStatus = async (req, res) => {
 
     shipping = {
       trackingNumber: trimmedTracking,
-      carrier: {
-        name: carrier.name,
-        code: carrier.code,
-        trackingUrl: carrier.trackingUrl + trimmedTracking,
-      },
+      carrier: orderTrackingService.buildCarrierSubdoc(carrier, trimmedTracking),
       estimatedDelivery: eta || undefined,
       shippingSlip,
     };
@@ -1206,10 +1204,19 @@ export const getFulfillmentMetrics = async (req, res) => {
 // @route   POST /orders/:id/tracking
 // @access  Private/Admin
 export const addTracking = async (req, res) => {
-  const { trackingNumber, carrierCode, notes } = req.body;
+  const { trackingNumber, carrierCode, carrierName, notes } = req.body;
 
   if (!carrierCode) {
     return res.status(400).json({ success: false, message: 'Carrier code is required' });
+  }
+
+  // A number can only be auto-generated in a carrier's own format; we don't know
+  // an unlisted courier's, so the admin must supply the real AWB for `OTHER`.
+  if (carrierCode === OTHER_CARRIER_CODE && !String(trackingNumber || '').trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tracking number is required when the carrier is "Other"'
+    });
   }
 
   const finalTrackingNumber = trackingNumber ||
@@ -1218,6 +1225,7 @@ export const addTracking = async (req, res) => {
   const result = await orderTrackingService.addTrackingInfo(req.params.id, {
     trackingNumber: finalTrackingNumber,
     carrierCode,
+    carrierName,
     notes
   });
 
@@ -1359,6 +1367,20 @@ const ORDERS_DEFAULT_PAYMENT_STATUSES = ['pending', 'paid', 'refunded'];
 // Whitelisted sort fields — anything else falls back to createdAt to avoid injecting
 // an arbitrary (and unindexed) sort key.
 const ADMIN_ORDER_SORT_FIELDS = new Set(['createdAt', 'totalAmount', 'status']);
+
+/**
+ * Normalize a search term for the ORDER-ID lane only.
+ *
+ * Orders have no separate order number — the admin table renders the last 8 hex chars
+ * of `_id` prefixed with a `#`. So the value an admin copies off the screen (or out of
+ * an email) arrives as "#7f3a91b2", which fails a bare hex test and silently skipped the
+ * id lane entirely, returning an empty page for an order the admin was looking straight
+ * at. Strip the display prefix and any internal spacing here.
+ *
+ * Only the id lane uses this; the customer/recipient lanes keep matching the raw term,
+ * so a name or email containing a '#' is unaffected.
+ */
+const orderIdTerm = (term) => String(term).replace(/^#+/, '').replace(/\s+/g, '');
 // The store operates in a single timezone (India). Admin date-range filters send a
 // date-only string ("YYYY-MM-DD"); we anchor it to this offset so "14 Jul" means the
 // IST calendar day regardless of the server's own timezone. Shared with the admin
@@ -1397,6 +1419,13 @@ export const getAllOrdersAdmin = async (req, res) => {
 
   const query = {};
 
+  // Search terms are parsed up front because they also relax the payment-axis default
+  // below — an explicit search must not be silently narrowed by it. The two params' full
+  // contract is documented at the search block further down, where they're applied.
+  const unifiedTerm = String(req.query.search || '').trim();
+  const orderNumberTerm = String(req.query.orderNumber || '').trim();
+  const hasSearchTerm = Boolean(unifiedTerm || orderNumberTerm);
+
   // Status — the panel sends a comma-joined multi-select; keep only real statuses.
   // If a status filter WAS supplied but nothing survives the whitelist (e.g. a stale
   // 'pending'), that's an intentional "none of these exist" filter, so return an empty
@@ -1416,6 +1445,12 @@ export const getAllOrdersAdmin = async (req, res) => {
   // has ALSO not narrowed by fulfillment status, we impose the clean default so the
   // Orders queue isn't cluttered with never-paid orders (which live in Leads). Same
   // "intentional none" semantics as the status filter above.
+  //
+  // A SEARCH also lifts the default. The default exists to keep the *browse* queue clean,
+  // but a search means "find me this order" — and the orders an admin most often goes
+  // looking for by name or id are exactly the failed/cancelled/expired ones a customer is
+  // calling about. Leaving the default on made those searches return an empty page for an
+  // order that plainly exists. The payment badge on each row keeps the state visible.
   if (req.query.paymentStatus) {
     const payStatuses = String(req.query.paymentStatus)
       .split(',')
@@ -1423,7 +1458,7 @@ export const getAllOrdersAdmin = async (req, res) => {
       .filter(s => ADMIN_PAYMENT_STATUSES.includes(s));
     if (payStatuses.length === 0) return res.json(emptyOrdersPage(page, limit));
     query.paymentStatus = payStatuses.length === 1 ? payStatuses[0] : { $in: payStatuses };
-  } else if (!req.query.status) {
+  } else if (!req.query.status && !hasSearchTerm) {
     query.paymentStatus = { $in: ORDERS_DEFAULT_PAYMENT_STATUSES };
   }
 
@@ -1472,18 +1507,18 @@ export const getAllOrdersAdmin = async (req, res) => {
   //    returned an empty page.
   //  • `orderNumber` — the LEGACY strict order-id lookup, kept for API compatibility
   //    (a numeric fragment must not spuriously match phone numbers here).
-  const unifiedTerm = String(req.query.search || '').trim();
-  const orderNumberTerm = String(req.query.orderNumber || '').trim();
-
+  // Both are parsed at the top of this handler because they also lift the payment-axis
+  // default above.
   if (unifiedTerm) {
     const or = [];
 
     // Order-id lane. 24-char hex = full ObjectId; a shorter hex run = trailing
     // fragment of the stringified _id. Non-hex simply skips this lane.
-    if (mongoose.Types.ObjectId.isValid(unifiedTerm) && unifiedTerm.length === 24) {
-      or.push({ _id: new mongoose.Types.ObjectId(unifiedTerm) });
-    } else if (/^[a-fA-F0-9]+$/.test(unifiedTerm)) {
-      or.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${unifiedTerm}$`, options: 'i' } } });
+    const idTerm = orderIdTerm(unifiedTerm);
+    if (mongoose.Types.ObjectId.isValid(idTerm) && idTerm.length === 24) {
+      or.push({ _id: new mongoose.Types.ObjectId(idTerm) });
+    } else if (/^[a-fA-F0-9]+$/.test(idTerm)) {
+      or.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${idTerm}$`, options: 'i' } } });
     }
 
     // Buyer lane — resolve matching users to ids.
@@ -1507,10 +1542,11 @@ export const getAllOrdersAdmin = async (req, res) => {
       query.$or = or;
     }
   } else if (orderNumberTerm) {
-    if (mongoose.Types.ObjectId.isValid(orderNumberTerm) && orderNumberTerm.length === 24) {
-      query._id = new mongoose.Types.ObjectId(orderNumberTerm);
-    } else if (/^[a-fA-F0-9]+$/.test(orderNumberTerm)) {
-      query.$expr = { $regexMatch: { input: { $toString: '$_id' }, regex: `${orderNumberTerm}$`, options: 'i' } };
+    const idTerm = orderIdTerm(orderNumberTerm);
+    if (mongoose.Types.ObjectId.isValid(idTerm) && idTerm.length === 24) {
+      query._id = new mongoose.Types.ObjectId(idTerm);
+    } else if (/^[a-fA-F0-9]+$/.test(idTerm)) {
+      query.$expr = { $regexMatch: { input: { $toString: '$_id' }, regex: `${idTerm}$`, options: 'i' } };
     } else {
       return res.json(emptyOrdersPage(page, limit));
     }

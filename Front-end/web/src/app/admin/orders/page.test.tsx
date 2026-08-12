@@ -19,6 +19,8 @@ jest.mock('@/lib/api');
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: jest.fn(),
+    // Filter changes use replace(), not push() — see updateURL in the page.
+    replace: jest.fn(),
   }),
   useSearchParams: () => ({
     get: jest.fn(),

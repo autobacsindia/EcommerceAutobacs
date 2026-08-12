@@ -9,6 +9,7 @@ import warehouseService, {
   InventoryItem,
   LowStockItem,
 } from '@/services/warehouseService';
+import { revalidateWarehouses } from '@/lib/revalidateWarehouses';
 
 type Tab = 'overview' | 'inventory' | 'lowstock';
 
@@ -185,7 +186,7 @@ export default function WarehouseDetailPage() {
     try {
       const res = await warehouseService.toggleHomepage(id, !warehouse.showOnHomepage);
       setWarehouse(res.warehouse);
-      await fetch('/api/revalidate/warehouses', { method: 'POST' });
+      await revalidateWarehouses();
     } catch (err: any) {
       setError(err.message || 'Failed to update homepage visibility');
     } finally {

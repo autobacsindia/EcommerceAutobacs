@@ -5,6 +5,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
 import { invalidateCache } from "../middleware/cacheMiddleware.js";
+import { categoryTags } from "../utils/nextTags.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 import { cacheMiddleware } from "../middleware/cacheControl.js";
@@ -269,7 +270,7 @@ router.post(
       invalidateCache('categories', 'products');
       // Refresh the storefront's Next.js Data Cache (home + nav) so a new
       // category shows up without waiting out the ISR window.
-      revalidateFrontendTags(['home:categories', 'nav:categories']);
+      revalidateFrontendTags(categoryTags(category));
       // Drop the in-memory hierarchy cache so new categories aggregate immediately.
       categoryMappingService.refresh();
 
@@ -406,7 +407,7 @@ router.put(
       // Parent/name/active changes alter the hierarchy AND the rolled-up facet
       // counts, so bust the product/facet caches too.
       invalidateCache('categories', 'products');
-      revalidateFrontendTags(['home:categories', 'nav:categories', ...(updated?.slug ? [`category:${updated.slug}`] : [])]);
+      revalidateFrontendTags(categoryTags(updated));
       // Parent/slug/name changes alter the hierarchy; refresh the lookup cache.
       categoryMappingService.refresh();
 
@@ -460,7 +461,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 
   // Soft-delete removes a facet and changes ancestor counts → bust products too.
   invalidateCache('categories', 'products');
-  revalidateFrontendTags(['home:categories', 'nav:categories', `category:${category.slug}`]);
+  revalidateFrontendTags(categoryTags(category));
   // Soft-deleted category must drop out of hierarchy aggregation.
   categoryMappingService.refresh();
 
@@ -484,7 +485,7 @@ router.patch("/:id/feature", protect, admin, validateIdParam, asyncHandler(async
 
   // Featured only affects presentation/ordering, not the hierarchy — no mapping refresh.
   invalidateCache('categories');
-  revalidateFrontendTags(['home:categories', 'nav:categories']);
+  revalidateFrontendTags(categoryTags(category));
 
   res.json({
     success: true,

@@ -18,9 +18,12 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/categories` },
 };
 
+// Tagged 'category:list' — an allowlisted prefix the backend revalidator can
+// actually emit. The bare 'categories' used before matched no allowed prefix, so
+// this page served up to 600s stale after a category edit.
 async function getCategories(): Promise<Category[]> {
   const res = await fetch(`${getServerApiBase()}/categories`, {
-    next: { revalidate: 600, tags: ['categories'] },
+    next: { revalidate: 600, tags: ['category:list'] },
   });
   if (!res.ok) throw new Error(`categories fetch failed: ${res.status}`);
   const data = (await res.json()) as { data?: Category[]; categories?: Category[] };

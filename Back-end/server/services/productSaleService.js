@@ -21,6 +21,7 @@
 
 import productRepository from '../repositories/productRepository.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { productBulkTags } from '../utils/nextTags.js';
 import { revalidateFrontendTags } from './frontendRevalidator.js';
 
 /**
@@ -31,6 +32,7 @@ import { revalidateFrontendTags } from './frontendRevalidator.js';
 export async function expireEndedSales(now = new Date()) {
   let reverted = 0;
   let failed = 0;
+  const revertedProducts = [];
 
   const expired = await productRepository.findExpiredSales(now);
   if (expired.length === 0) return { reverted, failed };
@@ -45,6 +47,7 @@ export async function expireEndedSales(now = new Date()) {
         : p.price;
     try {
       await productRepository.revertExpiredSale(p._id, revertPrice);
+      revertedProducts.push({ slug: p.slug });
       reverted += 1;
     } catch (err) {
       failed += 1;
@@ -54,9 +57,13 @@ export async function expireEndedSales(now = new Date()) {
 
   if (reverted > 0) {
     invalidateCache('products');
-    // A sweep can revert many products at once; refresh the home featured grid
-    // coarsely rather than enumerating every affected slug.
-    revalidateFrontendTags(['home:products']);
+    // A revert raises the charged price, so every affected PDP must refresh —
+    // not just the collection pages. The sweep handles up to 500 products, and
+    // the revalidator batches them 20 per request (it used to TRUNCATE at 20,
+    // leaving ~96% of reverted PDPs advertising the expired lower price while
+    // checkout charged the reverted one). Past its ceiling the remainder still
+    // self-heals at the PDP's own 60s window.
+    revalidateFrontendTags(productBulkTags(revertedProducts));
     console.log(`[ProductSale] Reverted ${reverted} expired sale(s)` + (failed ? `, ${failed} failed` : ''));
   }
 

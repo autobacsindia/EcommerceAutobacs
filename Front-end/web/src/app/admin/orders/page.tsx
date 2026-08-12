@@ -307,7 +307,11 @@ function AdminOrdersPageInner() {
     if (newFilters.minAmount) params.set('minAmount', newFilters.minAmount);
     if (newFilters.maxAmount) params.set('maxAmount', newFilters.maxAmount);
     
-    router.push(`/admin/orders?${params.toString()}`, { scroll: false });
+    // replace, not push: filters commit on a debounce while the admin types, so pushing
+    // would stack a history entry per typing pause and make Back walk backwards through
+    // half-typed search terms instead of leaving the page. The URL stays a shareable
+    // snapshot of the current view either way.
+    router.replace(`/admin/orders?${params.toString()}`, { scroll: false });
   };
 
   // Sorting re-orders the whole result set, so jump back to page 1 — staying on

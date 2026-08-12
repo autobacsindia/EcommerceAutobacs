@@ -13,6 +13,8 @@ import careerCategoryRepository from '../repositories/careerCategoryRepository.j
 import { slugify } from '../utils/slug.js';
 import { normalizeSeo } from '../utils/seo.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
+import { careersTags } from '../utils/nextTags.js';
 
 const CACHE_TAG = 'careers';
 
@@ -135,6 +137,7 @@ export const createPosting = async (req, res) => {
   try {
     const posting = await jobPostingRepository.create(doc);
     invalidateCache(CACHE_TAG);
+    revalidateFrontendTags(careersTags());
     res.status(201).json({ success: true, posting });
   } catch (err) {
     if (err?.code === 11000) {
@@ -185,6 +188,7 @@ export const updatePosting = async (req, res) => {
   try {
     await posting.save();
     invalidateCache(CACHE_TAG);
+    revalidateFrontendTags(careersTags());
     res.json({ success: true, posting });
   } catch (err) {
     if (err?.code === 11000) {
@@ -201,5 +205,6 @@ export const deletePosting = async (req, res) => {
   const posting = await jobPostingRepository.findByIdAndDelete(req.params.id);
   if (!posting) return res.status(404).json({ success: false, message: 'Role not found' });
   invalidateCache(CACHE_TAG);
+  revalidateFrontendTags(careersTags());
   res.json({ success: true, message: 'Role deleted' });
 };

@@ -8,23 +8,66 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
 import { cleanArticleHTML } from "../utils/htmlSanitizer.js";
+import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
+import { articleTags } from "../utils/nextTags.js";
+import cacheService from "../services/cacheService.js";
+import { CACHE_VERSION } from "../services/cache/config.js";
+import { invalidateCache } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
 
-// ─── Simple in-memory cache ───────────────────────────────────────────────────
-const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// ─── Response cache (shared Redis, via the house CacheService) ────────────────
+//
+// This was a module-local `new Map()`. That made it a SECOND, rival cache next
+// to the established Redis one, and — because prod runs multiple Railway
+// replicas — a per-process one: an admin publishing an article invalidated the
+// Map on whichever replica served the write, while every other replica kept
+// serving the stale article for the rest of the 5-minute TTL. Which replica you
+// hit is luck, so the bug looked intermittent.
+//
+// Keys are namespaced under `<CACHE_VERSION>:media:` so the shared
+// invalidateCache() helper reaches them by BOTH mechanisms: the tag index
+// (deterministic) and its SCAN-glob substring fallback.
+const CACHE_TTL_SECONDS = 5 * 60;
+const mediaKey = (suffix) => `${CACHE_VERSION}:media:${suffix}`;
 
-function cacheGet(key) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(key); return null; }
-  return entry.data;
-}
-function cacheSet(key, data) { cache.set(key, { data, ts: Date.now() }); }
-function cacheInvalidate(prefix) {
-  for (const key of cache.keys()) { if (key.startsWith(prefix)) cache.delete(key); }
-}
+/**
+ * Read-through cache for a public media response.
+ * @param {string|null} suffix  key suffix, or null to bypass the cache entirely
+ * @param {string[]} tags       invalidation tags (see MEDIA_TAGS)
+ * @param {() => Promise<any>} fn  builds the payload on a miss
+ */
+const cached = (suffix, tags, fn) =>
+  suffix === null ? fn() : cacheService.wrap(mediaKey(suffix), fn, { ttl: CACHE_TTL_SECONDS, tags });
+
+// Tag names double as the invalidateCache() glob substrings, so a write path
+// clears both the tagged keys and any untagged/legacy ones in a single call.
+const MEDIA_TAGS = {
+  articles: 'media:articles',
+  article: 'media:article',
+  trending: 'media:trending',
+  press: 'media:press',
+};
+
+const ARTICLE_TYPES = ["news", "blog"];
+/** Max page size a caller may request — bounds both the Mongo .limit() and the key space. */
+const MAX_ARTICLE_LIMIT = 50;
+const MAX_TRENDING_LIMIT = 20;
+/** Absolute page ceiling, so `?page=1e9` can't ask Mongo to skip a billion docs. */
+const MAX_PAGE = 1000;
+/**
+ * Only the first few pages are cached. Deep pages are rare, near-zero-hit-rate
+ * traffic and would otherwise multiply the key space for no benefit — they still
+ * serve correctly, straight from Mongo.
+ */
+const MAX_CACHED_PAGE = 5;
+
+/** Parse a query integer, falling back and clamping. Never NaN. */
+const clampInt = (raw, fallback, min, max) => {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
+};
 
 // ─── WP link resolution ───────────────────────────────────────────────────────
 
@@ -92,11 +135,18 @@ function resolveEmbedType(url) {
 
 // GET /media/articles?type=news|blog&category=&tag=&search=&sort=views|date&page=&limit=
 router.get("/articles", asyncHandler(async (req, res) => {
-  const { type, category, tag, search, featured, sort, page = 1, limit = 12 } = req.query;
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { type, category, tag, search, featured, sort } = req.query;
+  // Clamped, not trusted: `limit` reaches a Mongo .limit() and both reach the
+  // cache key, so an unbounded value is both an expensive query and a way to
+  // mint cache entries. The frontend asks for 6 (home shelf) and 12 (/blog).
+  const page = clampInt(req.query.page, 1, 1, MAX_PAGE);
+  const limit = clampInt(req.query.limit, 12, 1, MAX_ARTICLE_LIMIT);
+  const skip = (page - 1) * limit;
+
+  const normalizedType = ARTICLE_TYPES.includes(type) ? type : null;
 
   const query = { status: "published" };
-  if (type && ["news", "blog"].includes(type)) query.type = type;
+  if (normalizedType) query.type = normalizedType;
   if (category) query.category = { $regex: category, $options: "i" };
   if (tag) query.tags = { $in: [tag] };
   if (featured === "true") query.featured = true;
@@ -116,34 +166,44 @@ router.get("/articles", asyncHandler(async (req, res) => {
   // sort=views → trending; default = newest first
   const sortOrder = sort === "views" ? { views: -1 } : { publishedAt: -1, createdAt: -1 };
 
-  // Cache only first-page, no-search requests
-  const cacheKey = search ? null : `articles:${type||'all'}:${category||''}:${tag||''}:${featured||''}:${sort||''}:${page}:${limit}`;
-  if (cacheKey) {
-    const cached = cacheGet(cacheKey);
-    if (cached) return res.json(cached);
-  }
+  // Cache ONLY the requests whose key is drawn from a bounded value space.
+  //
+  // `search`, `category` and `tag` are free-form user input. This cache is now
+  // shared Redis rather than a per-process Map, so letting them into the key
+  // means `GET /media/articles?category=$RANDOM` in a loop mints unbounded
+  // entries AND grows the `ctag:media:articles` tag set (which only empties on
+  // an admin write) — real Upstash memory and per-command cost. Those requests
+  // still serve correctly, they just go straight to Mongo.
+  //
+  // What remains is finite: type (3) x featured (2) x sort (2) x page (<=5) x
+  // limit (clamped) — a few hundred keys at worst.
+  const isCacheable = !search && !category && !tag && page <= MAX_CACHED_PAGE;
+  const cacheKey = isCacheable
+    ? `articles:${normalizedType || 'all'}:${featured === 'true' ? 'f' : ''}:${sort === 'views' ? 'views' : 'date'}:${page}:${limit}`
+    : null;
 
-  const [articles, total] = await Promise.all([
-    articleRepository.find(query)
-      .select("title slug type coverImage excerpt category tags author featured views publishedAt createdAt")
-      .sort(sortOrder)
-      .skip(skip)
-      .limit(parseInt(limit)),
-    articleRepository.countDocuments(query),
-  ]);
+  const payload = await cached(cacheKey, [MEDIA_TAGS.articles], async () => {
+    const [articles, total] = await Promise.all([
+      articleRepository.find(query)
+        .select("title slug type coverImage excerpt category tags author featured views publishedAt createdAt")
+        .sort(sortOrder)
+        .skip(skip)
+        .limit(limit),
+      articleRepository.countDocuments(query),
+    ]);
 
-  const payload = {
-    success: true,
-    data: articles,
-    pagination: {
-      page: parseInt(page),
-      limit: parseInt(limit),
-      total,
-      pages: Math.ceil(total / parseInt(limit)),
-    },
-  };
+    return {
+      success: true,
+      data: articles,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  });
 
-  if (cacheKey) cacheSet(cacheKey, payload);
   res.json(payload);
 }));
 
@@ -166,12 +226,12 @@ router.get("/articles/sitemap", asyncHandler(async (req, res) => {
 // GET /media/articles/:slug  — single article by slug
 router.get("/articles/:slug", asyncHandler(async (req, res) => {
   const cacheKey = `article:${req.params.slug}`;
-  const cached = cacheGet(cacheKey);
+  const hit = await cacheService.get(mediaKey(cacheKey));
 
   // Cache hit: still increment views in background
-  if (cached) {
+  if (hit) {
     articleRepository.updateOne({ slug: req.params.slug }, { $inc: { views: 1 } }).catch(() => {});
-    return res.json(cached);
+    return res.json(hit);
   }
 
   const article = await articleRepository.findOne({ slug: req.params.slug, status: "published" });
@@ -204,7 +264,9 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
   articleObj.content = cleanArticleHTML(articleObj.content);
 
   const payload = { success: true, data: articleObj, related };
-  cacheSet(cacheKey, payload);
+  // Not awaited: the response must not wait on Redis, and a cache-write failure
+  // is a miss next time, never a failed request.
+  cacheService.set(mediaKey(cacheKey), payload, CACHE_TTL_SECONDS, [MEDIA_TAGS.article]);
   res.json(payload);
 }));
 
@@ -285,21 +347,23 @@ router.get("/articles-categories", asyncHandler(async (req, res) => {
 
 // GET /media/trending?type=news|blog&limit=5
 router.get("/trending", asyncHandler(async (req, res) => {
-  const { type, limit = 5 } = req.query;
-  const cacheKey = `trending:${type||'all'}:${limit}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
+  const { type } = req.query;
+  // Same reasoning as /articles: `limit` feeds both a Mongo .limit() and the
+  // shared-Redis cache key, so it is clamped rather than trusted.
+  const limit = clampInt(req.query.limit, 5, 1, MAX_TRENDING_LIMIT);
+  const normalizedType = ARTICLE_TYPES.includes(type) ? type : null;
 
   const query = { status: "published" };
-  if (type && ["news", "blog"].includes(type)) query.type = type;
+  if (normalizedType) query.type = normalizedType;
 
-  const articles = await articleRepository.find(query)
-    .select("title slug type coverImage category views publishedAt")
-    .sort({ views: -1 })
-    .limit(parseInt(limit));
+  const payload = await cached(`trending:${normalizedType || 'all'}:${limit}`, [MEDIA_TAGS.trending], async () => {
+    const articles = await articleRepository.find(query)
+      .select("title slug type coverImage category views publishedAt")
+      .sort({ views: -1 })
+      .limit(limit);
+    return { success: true, data: articles };
+  });
 
-  const payload = { success: true, data: articles };
-  cacheSet(cacheKey, payload);
   res.json(payload);
 }));
 
@@ -378,17 +442,14 @@ router.get("/videos", asyncHandler(async (req, res) => {
 
 // GET /media/press  — published external press/media coverage cards
 router.get("/press", asyncHandler(async (req, res) => {
-  const cacheKey = "press:published";
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
+  const payload = await cached("press:published", [MEDIA_TAGS.press], async () => {
+    const items = await PressCoverage.find({ status: "published" })
+      .select("publication date headline excerpt url image tilt tape featured order")
+      .sort({ featured: -1, order: 1, createdAt: -1 })
+      .lean();
+    return { success: true, data: items };
+  });
 
-  const items = await PressCoverage.find({ status: "published" })
-    .select("publication date headline excerpt url image tilt tape featured order")
-    .sort({ featured: -1, order: 1, createdAt: -1 })
-    .lean();
-
-  const payload = { success: true, data: items };
-  cacheSet(cacheKey, payload);
   res.json(payload);
 }));
 
@@ -426,7 +487,7 @@ router.post("/admin/press", protect, admin, asyncHandler(async (req, res) => {
   PRESS_FIELDS.forEach((f) => { if (req.body[f] !== undefined) payload[f] = req.body[f]; });
 
   const item = await PressCoverage.create(payload);
-  cacheInvalidate("press:");
+  invalidateCache(MEDIA_TAGS.press);
   res.status(201).json({ success: true, data: item });
 }));
 
@@ -437,7 +498,7 @@ router.put("/admin/press/:id", protect, admin, asyncHandler(async (req, res) => 
 
   PRESS_FIELDS.forEach((f) => { if (req.body[f] !== undefined) item[f] = req.body[f]; });
   await item.save();
-  cacheInvalidate("press:");
+  invalidateCache(MEDIA_TAGS.press);
   res.json({ success: true, data: item });
 }));
 
@@ -445,7 +506,7 @@ router.put("/admin/press/:id", protect, admin, asyncHandler(async (req, res) => 
 router.delete("/admin/press/:id", protect, admin, asyncHandler(async (req, res) => {
   const item = await PressCoverage.findByIdAndDelete(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Press item not found" });
-  cacheInvalidate("press:");
+  invalidateCache(MEDIA_TAGS.press);
   res.json({ success: true, message: "Press item deleted" });
 }));
 
@@ -509,8 +570,19 @@ router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => 
     seo: normalizeSeo(seo),
   });
 
-  cacheInvalidate("articles:");
-  cacheInvalidate("trending:");
+  // MEDIA_TAGS.article (the per-slug detail entries) must be cleared on EVERY
+  // article write, not just for the article being written. A detail response
+  // embeds `related[]` — up to 4 sibling articles — so publishing, renaming or
+  // deleting article B leaves B in A's cached `related[]` for the full TTL, and
+  // a deleted B renders a related link that 404s. Targeted per-slug deletes
+  // cannot fix that: the stale copy lives under OTHER articles' keys.
+  // Article writes are rare (it is a blog), so clearing the tag wholesale is the
+  // cheap, correct choice.
+  invalidateCache(MEDIA_TAGS.articles, MEDIA_TAGS.article, MEDIA_TAGS.trending);
+  // Refresh the storefront's Next.js Data Cache: a published blog article shows
+  // on the home journal shelf and at /<slug>. Without this the article stayed
+  // invisible for the shelf's 300s / the page's 60s window.
+  revalidateFrontendTags(articleTags(article));
   res.status(201).json({ success: true, data: article });
 }));
 
@@ -519,6 +591,16 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
   const article = await articleRepository.findById(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
 
+  // Captured before any mutation, for the FRONTEND revalidation below: if the
+  // slug or type moves, the old public URL's Next.js Data Cache entry must be
+  // purged too. (The backend response cache needs no equivalent — the write
+  // clears the whole MEDIA_TAGS.article tag.) A type change blog→news is the
+  // live case: the article stops being served at /<slug>, and that page must
+  // stop rendering it. The slug itself does not currently move — see the dead
+  // regeneration block below.
+  const previousSlug = article.slug;
+  const previousType = article.type;
+
   const fields = ["title", "type", "coverImage", "excerpt", "content", "category", "tags", "author", "status", "featured"];
   fields.forEach((f) => { if (req.body[f] !== undefined) article[f] = req.body[f]; });
 
@@ -526,7 +608,15 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
   // when sent; an admin who clears all fields resets to computed defaults.
   if (req.body.seo !== undefined) article.seo = normalizeSeo(req.body.seo);
 
-  // Regenerate slug if title changed
+  // DEAD BLOCK — deliberately left inert. The `fields.forEach` above has already
+  // assigned req.body.title onto the document, so `req.body.title !== article.title`
+  // is never true and the slug is never regenerated. The upshot is that an
+  // article's URL is STABLE across title edits, which is the behaviour we want:
+  // "fixing" this would move the public /<slug> of every renamed post, breaking
+  // inbound links and churning the sitemap. Changing it is an SEO decision, not a
+  // cleanup — capture the title before the loop only if that is the intent.
+  // The invalidation below still handles a slug change so it stays correct if
+  // this ever becomes live.
   if (req.body.title && req.body.title !== article.title) {
     let baseSlug = generateSlug(req.body.title);
     let slug = baseSlug;
@@ -538,9 +628,19 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
   }
 
   await article.save();
-  cacheInvalidate("articles:");
-  cacheInvalidate("trending:");
-  cache.delete(`article:${article.slug}`);
+  // MEDIA_TAGS.article (the per-slug detail entries) must be cleared on EVERY
+  // article write, not just for the article being written. A detail response
+  // embeds `related[]` — up to 4 sibling articles — so publishing, renaming or
+  // deleting article B leaves B in A's cached `related[]` for the full TTL, and
+  // a deleted B renders a related link that 404s. Targeted per-slug deletes
+  // cannot fix that: the stale copy lives under OTHER articles' keys.
+  // Article writes are rare (it is a blog), so clearing the tag wholesale is the
+  // cheap, correct choice.
+  invalidateCache(MEDIA_TAGS.articles, MEDIA_TAGS.article, MEDIA_TAGS.trending);
+  revalidateFrontendTags([
+    ...articleTags(article),
+    ...articleTags({ slug: previousSlug, type: previousType }),
+  ]);
   res.json({ success: true, data: article });
 }));
 
@@ -548,9 +648,16 @@ router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) 
 router.delete("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) => {
   const article = await articleRepository.findByIdAndDelete(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
-  cacheInvalidate("articles:");
-  cacheInvalidate("trending:");
-  cache.delete(`article:${article.slug}`);
+  // MEDIA_TAGS.article (the per-slug detail entries) must be cleared on EVERY
+  // article write, not just for the article being written. A detail response
+  // embeds `related[]` — up to 4 sibling articles — so publishing, renaming or
+  // deleting article B leaves B in A's cached `related[]` for the full TTL, and
+  // a deleted B renders a related link that 404s. Targeted per-slug deletes
+  // cannot fix that: the stale copy lives under OTHER articles' keys.
+  // Article writes are rare (it is a blog), so clearing the tag wholesale is the
+  // cheap, correct choice.
+  invalidateCache(MEDIA_TAGS.articles, MEDIA_TAGS.article, MEDIA_TAGS.trending);
+  revalidateFrontendTags(articleTags(article));
   res.json({ success: true, message: "Article deleted" });
 }));
 

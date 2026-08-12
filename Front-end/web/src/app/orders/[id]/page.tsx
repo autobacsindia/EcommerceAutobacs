@@ -333,8 +333,11 @@ export default function OrderDetailPage() {
                 Already Shipped — Can’t Cancel
               </button>
             )}
-            {order.trackingNumber && (
-              <Link href={order.carrier?.trackingUrl || `/orders/${order._id}/tracking`} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+            {/* Only linkable when the courier has a tracking URL — an "Other"
+                courier has none, and the old /orders/[id]/tracking fallback is
+                not a route (404). The number + carrier still show below. */}
+            {order.trackingNumber && order.carrier?.trackingUrl && (
+              <Link href={order.carrier.trackingUrl} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <Truck className="h-4 w-4" />
                 Track Package
               </Link>

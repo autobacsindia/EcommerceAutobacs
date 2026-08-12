@@ -1,6 +1,7 @@
 import { body, param, query } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
+import { OTHER_CARRIER_CODE, MAX_CUSTOM_CARRIER_NAME } from '../../services/orderTrackingService.js';
 
 export const validateOrder = [
   body('items')
@@ -81,6 +82,15 @@ export const validateOrderStatusUpdate = [
     .trim()
     .notEmpty()
     .withMessage('Carrier is required to mark an order as shipped'),
+  // Free-text courier name, only for the `OTHER` carrier. The service re-checks
+  // it (this is the friendly, field-level message).
+  body('carrierName')
+    .if(body('carrierCode').equals(OTHER_CARRIER_CODE))
+    .trim()
+    .notEmpty()
+    .withMessage('Courier name is required when the carrier is "Other"')
+    .isLength({ max: MAX_CUSTOM_CARRIER_NAME })
+    .withMessage(`Courier name must be ${MAX_CUSTOM_CARRIER_NAME} characters or fewer`),
   validateRequest
 ];
 
@@ -129,6 +139,13 @@ export const validateTrackingInfo = [
   body('carrierCode')
     .notEmpty()
     .withMessage('Carrier code is required'),
+  body('carrierName')
+    .if(body('carrierCode').equals(OTHER_CARRIER_CODE))
+    .trim()
+    .notEmpty()
+    .withMessage('Courier name is required when the carrier is "Other"')
+    .isLength({ max: MAX_CUSTOM_CARRIER_NAME })
+    .withMessage(`Courier name must be ${MAX_CUSTOM_CARRIER_NAME} characters or fewer`),
   body('trackingNumber')
     .optional()
     .trim(),

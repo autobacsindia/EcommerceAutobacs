@@ -367,8 +367,11 @@ class ProductRepository {
    * The pre-find hook already scopes to deletedAt: null.
    */
   async findExpiredSales(now = new Date(), limit = 500) {
+    // `slug` is projected so the sweep can hand per-PDP revalidation tags to the
+    // frontend revalidator — an expired sale moves the price UP, and a stale PDP
+    // would keep advertising the lower sale price.
     return Product.find({ saleEndsAt: { $ne: null, $lte: now } })
-      .select('_id price originalPrice')
+      .select('_id price originalPrice slug')
       .limit(limit)
       .lean();
   }

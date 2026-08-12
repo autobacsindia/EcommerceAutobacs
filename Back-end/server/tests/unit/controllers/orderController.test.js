@@ -35,6 +35,8 @@ const mockOrderTrackingService = {
   addTrackingEvent: jest.fn(),
   trackByNumber: jest.fn(),
   getCarrier: jest.fn(),
+  resolveCarrier: jest.fn(),
+  buildCarrierSubdoc: jest.fn(),
   getSupportedCarriers: jest.fn(),
   simulateTracking: jest.fn(),
   getTrackingStatistics: jest.fn(),
@@ -45,7 +47,10 @@ jest.unstable_mockModule('../../../models/Order.js', () => ({ default: mockOrder
 jest.unstable_mockModule('../../../models/Cart.js', () => ({ default: mockCart }));
 jest.unstable_mockModule('../../../models/Product.js', () => ({ default: mockProduct }));
 jest.unstable_mockModule('../../../services/orderStatusService.js', () => ({ default: mockOrderStatusService }));
-jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({ default: mockOrderTrackingService }));
+jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({
+  default: mockOrderTrackingService,
+  OTHER_CARRIER_CODE: 'OTHER',
+}));
 // Loyalty disabled here so the pricing engine skips the karma balance lookup — this
 // controller test mocks only the Order/Cart/Product models and uses a non-ObjectId user id.
 // The return is set in beforeEach because jest.config resetMocks:true wipes factory impls.
@@ -61,6 +66,7 @@ const {
   createOrder,
   cancelOrder,
   updateOrderStatus,
+  addTracking,
   getOrderById,
   submitReturnRequest,
   updateReturnStatus
@@ -324,11 +330,19 @@ describe('OrderController Unit Tests', () => {
       // No slip file → JSON path, no Cloudinary upload.
       req.body = { status: 'shipped', trackingNumber: '12345', carrierCode: 'DELHIVERY' };
 
-      mockOrderTrackingService.getCarrier.mockReturnValue({
+      mockOrderTrackingService.resolveCarrier.mockReturnValue({
+        carrier: {
+          name: 'Delhivery',
+          code: 'DELHIVERY',
+          trackingUrl: 'https://d.example/',
+          estimatedDeliveryDays: 2,
+        },
+        error: null,
+      });
+      mockOrderTrackingService.buildCarrierSubdoc.mockReturnValue({
         name: 'Delhivery',
         code: 'DELHIVERY',
-        trackingUrl: 'https://d.example/',
-        estimatedDeliveryDays: 2,
+        trackingUrl: 'https://d.example/12345',
       });
 
       const resultOrder = { _id: 'order-id', status: 'shipped', trackingNumber: '12345' };
@@ -364,12 +378,106 @@ describe('OrderController Unit Tests', () => {
       req.user.role = 'admin';
       req.params.id = 'order-id';
       req.body = { status: 'shipped', trackingNumber: '12345', carrierCode: 'NOPE' };
-      mockOrderTrackingService.getCarrier.mockReturnValue(null);
+      mockOrderTrackingService.resolveCarrier.mockReturnValue({
+        carrier: null,
+        error: 'Unknown carrier code: NOPE',
+      });
 
       await updateOrderStatus(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(mockOrderStatusService.updateOrderStatus).not.toHaveBeenCalled();
+    });
+
+    it('ships with the "Other" carrier using the admin-typed courier name', async () => {
+      req.user.role = 'admin';
+      req.params.id = 'order-id';
+      req.body = {
+        status: 'shipped',
+        trackingNumber: 'TRK-99',
+        carrierCode: 'OTHER',
+        carrierName: 'Trackon Couriers',
+      };
+
+      // No trackingUrl pattern for an unlisted courier → no link is persisted.
+      mockOrderTrackingService.resolveCarrier.mockReturnValue({
+        carrier: { name: 'Trackon Couriers', code: 'OTHER', trackingUrl: null, custom: true },
+        error: null,
+      });
+      mockOrderTrackingService.buildCarrierSubdoc.mockReturnValue({
+        name: 'Trackon Couriers',
+        code: 'OTHER',
+      });
+      mockOrderStatusService.updateOrderStatus.mockResolvedValue({
+        success: true,
+        order: { _id: 'order-id', status: 'shipped' },
+        message: 'Status updated',
+      });
+
+      await updateOrderStatus(req, res);
+
+      expect(mockOrderTrackingService.resolveCarrier).toHaveBeenCalledWith('OTHER', 'Trackon Couriers');
+      const shipping = mockOrderStatusService.updateOrderStatus.mock.calls[0][2].shipping;
+      expect(shipping.carrier).toEqual({ name: 'Trackon Couriers', code: 'OTHER' });
+      expect(shipping.carrier.trackingUrl).toBeUndefined();
+      // No SLA for an unknown courier → no invented ETA in the customer email.
+      expect(shipping.estimatedDelivery).toBeUndefined();
+    });
+
+    it('rejects the "Other" carrier without a courier name', async () => {
+      req.user.role = 'admin';
+      req.params.id = 'order-id';
+      req.body = { status: 'shipped', trackingNumber: 'TRK-99', carrierCode: 'OTHER' };
+      mockOrderTrackingService.resolveCarrier.mockReturnValue({
+        carrier: null,
+        error: 'Courier name is required when the carrier is "Other"',
+      });
+
+      await updateOrderStatus(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        message: 'Courier name is required when the carrier is "Other"',
+      }));
+      expect(mockOrderStatusService.updateOrderStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addTracking', () => {
+    it('requires a tracking number for the "Other" carrier (none can be generated)', async () => {
+      req.user.role = 'admin';
+      req.params.id = 'order-id';
+      req.body = { carrierCode: 'OTHER', carrierName: 'Trackon Couriers' };
+
+      await addTracking(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(mockOrderTrackingService.generateTrackingNumber).not.toHaveBeenCalled();
+      expect(mockOrderTrackingService.addTrackingInfo).not.toHaveBeenCalled();
+    });
+
+    it('threads the courier name through to the tracking service', async () => {
+      req.user.role = 'admin';
+      req.params.id = 'order-id';
+      req.body = { carrierCode: 'OTHER', carrierName: 'Trackon Couriers', trackingNumber: 'TRK-99' };
+      mockOrderTrackingService.addTrackingInfo.mockResolvedValue({
+        success: true,
+        order: { _id: 'order-id' },
+        trackingUrl: undefined,
+      });
+
+      await addTracking(req, res);
+
+      expect(mockOrderTrackingService.addTrackingInfo).toHaveBeenCalledWith(
+        'order-id',
+        expect.objectContaining({
+          trackingNumber: 'TRK-99',
+          carrierCode: 'OTHER',
+          carrierName: 'Trackon Couriers',
+        })
+      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
 

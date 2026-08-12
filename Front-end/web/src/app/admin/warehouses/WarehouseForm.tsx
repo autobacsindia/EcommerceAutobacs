@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import warehouseService, { WarehouseFormData } from '@/services/warehouseService';
+import { revalidateWarehouses } from '@/lib/revalidateWarehouses';
 
 interface Props {
   initialData?: Partial<WarehouseFormData>;
@@ -64,6 +65,9 @@ export default function WarehouseForm({ initialData, warehouseId, mode, onSucces
       } else {
         await warehouseService.updateWarehouse(warehouseId!, form);
       }
+      // The homepage Delivery Network section caches warehouses for an hour;
+      // refresh it now so a new or renamed branch shows up immediately.
+      await revalidateWarehouses();
       onSuccess();
     } catch (err: any) {
       setError(err.message || 'Failed to save warehouse');

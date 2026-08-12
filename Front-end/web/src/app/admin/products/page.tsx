@@ -169,6 +169,12 @@ function AdminProductsPageInner() {
           };
         }
       );
+      // setQueryData above only patches the page/filter combo currently on
+      // screen. Every OTHER cached combo still holds the deleted row and would
+      // serve it from cache for the 60s staleTime if the admin changes page or
+      // filter. Invalidate the whole resource prefix so they refetch — the
+      // optimistic patch keeps this view flicker-free in the meantime.
+      queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
       // Deleting a product may remove it from the homepage's featured shelf.
       revalidateHome('home:products');
       alert('Product deleted successfully');

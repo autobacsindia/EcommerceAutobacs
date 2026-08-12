@@ -29,7 +29,9 @@ const fetchBlogArticle = cache(async function fetchBlogArticle(slug: string) {
   try {
     const res = await fetch(`${API_BASE}/api/v1/media/articles/${slug}`, {
       headers: internalApiHeaders(),
-      next: { revalidate: 60 },
+      // Tagged so an admin publish/edit/delete refreshes this page immediately
+      // via the backend revalidator, instead of waiting out the 60s window.
+      next: { revalidate: 60, tags: [`blog:${slug}`] },
     });
     if (!res.ok) return null;
     const data = await res.json();

@@ -46,6 +46,36 @@ const HIGH_VALUE_THRESHOLD = '10000';
 const DEBOUNCED_FIELDS = new Set<keyof OrderFilters>(['search', 'customer', 'minAmount', 'maxAmount']);
 const DEBOUNCE_MS = 350;
 
+// Value-equality for a filter set. The `filters` prop arrives as a FRESH object on every
+// parent commit, so reference identity says nothing about whether anything changed — we
+// have to compare by value to tell a genuine external change from the parent echoing our
+// own commit straight back at us.
+const sameList = (a: string[] = [], b: string[] = []) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
+const sameFilters = (a: OrderFilters, b: OrderFilters) =>
+  a.search === b.search &&
+  a.customer === b.customer &&
+  a.startDate === b.startDate &&
+  a.endDate === b.endDate &&
+  a.minAmount === b.minAmount &&
+  a.maxAmount === b.maxAmount &&
+  sameList(a.statuses, b.statuses) &&
+  sameList(a.paymentStatuses, b.paymentStatuses);
+
+// How many distinct filters a set has active — drives the header badge and whether the
+// panel starts open (a filter arriving from the URL must not be invisible).
+const countActive = (f: OrderFilters) => {
+  let count = 0;
+  if (f.search) count++;
+  if (f.statuses.length > 0) count++;
+  if ((f.paymentStatuses?.length ?? 0) > 0) count++;
+  if (f.startDate || f.endDate) count++;
+  if (f.minAmount || f.maxAmount) count++;
+  if (f.customer) count++;
+  return count;
+};
+
 // Local calendar day (YYYY-MM-DD) — NOT toISOString(), which is UTC and would roll
 // the date back a day for an admin in a positive-offset timezone (e.g. IST) after
 // ~18:30 local. The backend anchors these date-only strings to the store timezone.
@@ -74,13 +104,24 @@ export default function OrderFiltersPanel({
   onApply,
   autoApply = true,
 }: OrderFiltersPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Start open when anything is already filtered (e.g. a shared /admin/orders?search=…
+  // link), otherwise the table looks arbitrarily narrowed with no visible reason and no
+  // visible search term.
+  const [isExpanded, setIsExpanded] = useState(() => countActive(filters) > 0);
   const [localFilters, setLocalFilters] = useState<OrderFilters>(filters);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last filter set we handed to the parent. The parent stores it and echoes it back
+  // as a new object, and that echo must NOT reset the inputs: the round trip includes a
+  // Next router transition, so anything typed between the debounce firing and the parent
+  // re-rendering would be wiped and the box would visibly rebound to the older text.
+  const lastCommittedRef = useRef<OrderFilters>(filters);
 
-  // Sync local filters with prop changes (URL init, external clear, etc.).
+  // Adopt the prop only on a genuine EXTERNAL change (URL init, a clear triggered
+  // elsewhere) — i.e. when it differs by value from our own last commit.
   useEffect(() => {
+    if (sameFilters(filters, lastCommittedRef.current)) return;
+    lastCommittedRef.current = filters;
     setLocalFilters(filters);
   }, [filters]);
 
@@ -93,10 +134,16 @@ export default function OrderFiltersPanel({
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
   };
 
+  // Hand a filter set up, recording it so the parent's echo is recognised and ignored.
+  const commit = (next: OrderFilters) => {
+    lastCommittedRef.current = next;
+    onFiltersChange(next);
+  };
+
   // Apply now — discrete controls and the final flush of typed input.
   const commitImmediate = (next: OrderFilters) => {
     cancelPending();
-    if (autoApply) onFiltersChange(next);
+    if (autoApply) commit(next);
   };
 
   // Apply after the user pauses typing — free-text inputs only.
@@ -105,7 +152,7 @@ export default function OrderFiltersPanel({
     cancelPending();
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
-      onFiltersChange(next);
+      commit(next);
     }, DEBOUNCE_MS);
   };
 
@@ -172,18 +219,7 @@ export default function OrderFiltersPanel({
     commitImmediate(emptyFilters);
   };
 
-  const getActiveFilterCount = () => {
-    let count = 0;
-    if (localFilters.search) count++;
-    if (localFilters.statuses.length > 0) count++;
-    if ((localFilters.paymentStatuses?.length ?? 0) > 0) count++;
-    if (localFilters.startDate || localFilters.endDate) count++;
-    if (localFilters.minAmount || localFilters.maxAmount) count++;
-    if (localFilters.customer) count++;
-    return count;
-  };
-
-  const activeCount = getActiveFilterCount();
+  const activeCount = countActive(localFilters);
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
@@ -216,7 +252,7 @@ export default function OrderFiltersPanel({
             <button
               onClick={() => {
                 cancelPending();
-                onFiltersChange(localFilters);
+                commit(localFilters);
                 onApply?.();
               }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
