@@ -28,12 +28,13 @@ export const generateMetadata = (): Promise<Metadata> =>
   });
 
 // Open roles are now admin-managed (JobPosting) and fetched server-side. ISR: a
-// short revalidate keeps the page fresh after an admin publishes/edits a role
-// without going fully dynamic; the `careers` cache tag also bounds staleness.
+// short revalidate bounds staleness, and the 'careers:list' tag lets a publish/
+// edit/withdraw refresh this page on demand (the bare 'careers' used before
+// matched no allowlisted prefix, so no write could ever purge it).
 async function getOpenPostings(): Promise<CareerPosting[]> {
   try {
     const res = await fetch(`${getServerApiBase()}/careers/postings`, {
-      next: { revalidate: 300, tags: ['careers'] },
+      next: { revalidate: 300, tags: ['careers:list'] },
     });
     if (!res.ok) return [];
     const data = await res.json();

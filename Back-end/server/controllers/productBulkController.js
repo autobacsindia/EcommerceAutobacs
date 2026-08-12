@@ -16,6 +16,7 @@ import { parse } from 'csv-parse/sync';
 import Product from '../models/Product.js';
 import categoryMappingService from '../services/categoryMappingService.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
+import { productBulkTags } from '../utils/nextTags.js';
 import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
 import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
 
@@ -59,6 +60,9 @@ export const importProductsCSV = async (req, res) => {
 
   const results = { total: rows.length, created: 0, failed: 0, errors: [] };
   const takenSlugs = new Set();
+  // Slugs of the rows that actually saved, so the revalidator can refresh each
+  // new PDP and not just the collection pages.
+  const createdProducts = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -104,6 +108,7 @@ export const importProductsCSV = async (req, res) => {
         isActive: true,
       });
       await product.save();
+      createdProducts.push({ slug: product.slug });
       results.created++;
     } catch (err) {
       results.failed++;
@@ -113,7 +118,12 @@ export const importProductsCSV = async (req, res) => {
 
   if (results.created > 0) {
     invalidateCache('products');
-    revalidateFrontendTags(['home:products']);
+    // Per-product tags too, not just the collection tags: a CSV import creates
+    // PDPs, and emitting only 'home:products' left each new/edited detail page
+    // stale for its full `revalidate` window. productBulkTags puts the coarse
+    // tags first so they survive the revalidator's MAX_TOTAL_TAGS ceiling; the
+    // per-slug tags after them go out in batches of 20.
+    revalidateFrontendTags(productBulkTags(createdProducts));
   }
 
   res.status(results.failed === 0 ? 201 : 207).json({

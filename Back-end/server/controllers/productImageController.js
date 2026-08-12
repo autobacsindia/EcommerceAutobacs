@@ -23,10 +23,7 @@ import {
 } from '../utils/cloudinaryHelpers.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
-
-// Next.js Data Cache tags to refresh after a product write: the home featured
-// grid always, plus this product's PDP when we know its slug.
-const productNextTags = (p) => ['home:products', ...(p?.slug ? [`product:${p.slug}`] : [])];
+import { productTags as productNextTags } from '../utils/nextTags.js';
 import { cleanHTML } from '../utils/htmlSanitizer.js';
 import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
 import { aggregateFromVariants } from '../utils/wcVariants.js';

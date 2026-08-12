@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Plus, Edit, Trash2, Eye, AlertTriangle } from 'lucide-react';
 import warehouseService, { WarehouseListItem, WarehouseFilters } from '@/services/warehouseService';
+import { revalidateWarehouses } from '@/lib/revalidateWarehouses';
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   active: { label: 'Active', className: 'bg-green-100 text-green-800' },
@@ -44,6 +45,8 @@ export default function WarehousesPage() {
     if (!confirm(`Delete warehouse "${name}"? This cannot be undone.`)) return;
     try {
       await warehouseService.deleteWarehouse(id);
+      // A removed branch must disappear from the homepage map too.
+      await revalidateWarehouses();
       setWarehouses(prev => prev.filter(w => w._id !== id));
     } catch (err: any) {
       alert(err.message || 'Failed to delete warehouse');

@@ -17,7 +17,8 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Body: { tags: string[] } — each tag must start with an allowlisted prefix.
  */
 
-const ALLOWED_PREFIXES = ['home:', 'product:', 'category:', 'nav:', 'seo:', 'blog:'];
+import { ALLOWED_PREFIXES, isAllowedTag } from '@/lib/revalidateTags';
+
 const MAX_TAGS = 20;
 
 function authorize(req: NextRequest): boolean {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   const requested = Array.isArray(body.tags) ? body.tags : [];
   const tags = requested
     .filter((t): t is string => typeof t === 'string')
-    .filter((t) => ALLOWED_PREFIXES.some((p) => t.startsWith(p)))
+    .filter(isAllowedTag)
     .slice(0, MAX_TAGS);
 
   if (!tags.length) {

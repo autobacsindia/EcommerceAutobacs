@@ -55,3 +55,51 @@ it('retries on 5xx up to 3 attempts', async () => {
   await revalidateFrontendTags(['home:products']);
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
+
+describe('batching beyond the 20-tag request cap', () => {
+  const sentTags = () =>
+    fetchMock.mock.calls.flatMap(([, opts]) => JSON.parse(opts.body).tags);
+
+  it('sends every tag across multiple requests instead of truncating at 20', async () => {
+    // Regression: the expired-sale sweep reverts up to 500 products and builds a
+    // product:<slug> tag for each. Truncating at 20 left ~96% of those PDPs
+    // advertising the expired lower price while checkout charged the reverted one.
+    const tags = ['home:products', 'product:list', ...Array.from({ length: 98 }, (_, i) => `product:p-${i}`)];
+    await revalidateFrontendTags(tags);
+
+    expect(fetchMock).toHaveBeenCalledTimes(5); // 100 tags / 20 per request
+    expect(sentTags()).toEqual(tags);
+    // No request may exceed the frontend route's own cap, or it silently truncates there.
+    for (const [, opts] of fetchMock.mock.calls) {
+      expect(JSON.parse(opts.body).tags.length).toBeLessThanOrEqual(20);
+    }
+  });
+
+  it('keeps coarse collection tags in the FIRST request', async () => {
+    const tags = ['home:products', 'product:list', ...Array.from({ length: 400 }, (_, i) => `product:p-${i}`)];
+    await revalidateFrontendTags(tags);
+
+    const first = JSON.parse(fetchMock.mock.calls[0][1].body).tags;
+    expect(first[0]).toBe('home:products');
+    expect(first[1]).toBe('product:list');
+  });
+
+  it('caps total fan-out so a huge bulk write cannot flood the frontend', async () => {
+    const tags = Array.from({ length: 5000 }, (_, i) => `product:p-${i}`);
+    await revalidateFrontendTags(tags);
+
+    // 200-tag ceiling / 20 per request.
+    expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(sentTags()).toHaveLength(200);
+  });
+
+  it('still sends one request when under the cap', async () => {
+    await revalidateFrontendTags(['home:products', 'product:x']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('de-duplicates before batching', async () => {
+    await revalidateFrontendTags(['home:products', 'home:products', 'product:x']);
+    expect(sentTags()).toEqual(['home:products', 'product:x']);
+  });
+});

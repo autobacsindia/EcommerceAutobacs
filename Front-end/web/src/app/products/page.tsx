@@ -34,8 +34,15 @@ function flattenParams(sp: Record<string, string | string[] | undefined>): Recor
 // Server-side first-page fetch. `next.revalidate` puts the backend response in
 // Next's Data Cache for 300s keyed by URL, so repeated visits to the same
 // filter/sort/page combo are served without re-hitting the backend (which
-// itself sets `s-maxage=600`). Tagged 'products' so a future revalidateTag on a
-// product write can purge it.
+// itself sets `s-maxage=600`). Tagged 'product:list' so any product write purges
+// it on demand via the backend revalidator.
+//
+// The tag MUST keep an allowlisted prefix ('product:'). It was previously the
+// bare 'products', which no producer could ever emit — both the backend
+// (services/frontendRevalidator.js) and the /api/revalidate route filter tags to
+// the `home: product: category: nav: seo: blog:` prefixes, and 'products' matches
+// none of them. The catalog listing therefore served up to 300s stale after every
+// admin edit. Do not drop the colon.
 //
 // Unlike /categories, a fetch failure here is swallowed (returns undefined):
 // the route is dynamic (reads searchParams) so nothing gets cached, and the
@@ -45,7 +52,7 @@ function flattenParams(sp: Record<string, string | string[] | undefined>): Recor
 async function getProductsPage(params: Record<string, string>): Promise<ProductsData | undefined> {
   try {
     const res = await fetch(`${getServerApiBase()}/products?${buildProductsQuery(params)}`, {
-      next: { revalidate: 300, tags: ['products'] },
+      next: { revalidate: 300, tags: ['product:list'] },
     });
     if (!res.ok) return undefined;
     return normalizeProductsResponse(await res.json());

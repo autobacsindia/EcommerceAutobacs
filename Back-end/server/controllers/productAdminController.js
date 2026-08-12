@@ -1,6 +1,8 @@
 import Product from '../models/Product.js';
 import { cleanupWordPressProducts } from '../utils/wordpressProductCleanup.js';
 import { attachContentIds } from '../utils/metaCatalogId.js';
+import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
+import { productTags } from '../utils/nextTags.js';
 
 // @route   GET /products/:id
 // @desc    Get product by ID
@@ -50,6 +52,12 @@ export async function updateStock(req, res, next) {
   }
 
   res.json({ success: true, message: 'Stock updated successfully', product });
+
+  // Availability is the highest-stakes field on the PDP: an `out` item must stop
+  // being addable immediately. Redis is purged by the route-level hook, but that
+  // alone left the Next.js Data Cache serving the old availability for the PDP's
+  // full 60s window (and the catalog listing's 300s) — this closes that gap.
+  revalidateFrontendTags(productTags(product));
 
   // ES sync is handled by the post('findOneAndUpdate') hook on ProductSchema.
   next();
