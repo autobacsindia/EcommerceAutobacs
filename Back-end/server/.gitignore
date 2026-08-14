@@ -101,3 +101,6 @@ reports-header-nav/
 
 # Pre-delete backups from scripts/purge-test-account-data.js — contain customer PII
 purge-backups/
+
+# Point-in-time migration manifest (scripts/db-migration-manifest.js) — local artifact
+db-migration-manifest.json
