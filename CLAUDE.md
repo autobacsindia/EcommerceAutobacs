@@ -201,6 +201,24 @@ Rules: `noindex` (SeoPanel/PageSeo) drops a page from both `<head>` robots and `
 - `ci.yml` — backend jest + 60% line-coverage floor. Triggers on `Back-end/server/**`.
 - Deploy: **platform auto-deploy** on `main` push (Railway + Vercel git integrations). No GitHub Actions deploy workflow. Gating = branch protection requiring the two CI checks above. Note: both CI jobs currently run a **curated test subset**, not the full suites — so **run the full suite locally** before declaring anything done; green CI is not proof the whole suite passes.
 
+### Merging to `main` (⚠️ this IS the production deploy)
+
+There is no separate "deploy" step. **A push to `main` deploys to the live store within minutes** — real customers, real Razorpay. Treat the merge itself as the deploy.
+
+- **Always go through a pull request.** Branch protection requires it (`Changes must be made through a pull request`) — but **repo admins can bypass it, and a plain `git push origin main` from an admin account silently succeeds**, printing only `remote: Bypassed rule violations for refs/heads/main`. That push skips the PR review *and* both CI checks. The gate is not a technical guarantee for admins; it is a convention you have to keep. Use `gh pr create` + merge, not a direct push.
+- **Order of operations when a change needs a data migration:** deploy the code first, confirm the new behaviour is live in prod, *then* run the migration. Running it first just lets the old code undo it.
+- **Prefer a rename-swap over a bulk delete** on any large collection. `deleteMany` over millions of docs costs one oplog entry plus every index update per document; `renameCollection`/`drop` are O(1) metadata. Keep the old collection until you have verified, then drop it.
+- **Migration scripts:** dry-run by default, `--apply` to execute, and always print a rollback path. Follow `scripts/purge-test-account-data.js` / `scripts/compact-rate-limit-events.js`.
+- **Any script that imports models and then calls `mongoose.connect()` MUST pass `{ autoIndex: false }`.** It defaults to `true`, so merely connecting builds every declared index against whatever cluster the script points at — which in this repo is production, because the local `.env` points at prod Mongo.
+- **Check index drift after schema changes:** `npm run audit-index-drift` (in `Back-end/server`). `autoIndex` is off in prod by design, so schema index changes are **never** applied by a deploy — they need a migration. See the [index drift](#index-drift-schemas-vs-the-live-cluster) note below.
+
+### Index drift (schemas vs. the live cluster)
+
+Because prod runs with `autoIndex: false`, the live index set can silently diverge from the schemas — and it did, for months, which cost real data. Two rules:
+
+- **A declared index is not a built index.** MongoDB rejects some specs outright, and Mongoose reports nothing. Notably **`$ne` is not supported inside a `partialFilterExpression`** — use `$type`. Also, declaring the same index name twice with different options (a field-level `index: true`/`unique: true` plus a `schema.index()` call) makes creation fail; that is how `AuditLog`'s 90-day TTL never got created.
+- **A TTL index over a subdocument array deletes the parent document**, expiring on the *minimum* date in the array. Production carried two such indexes on `carts.recentChanges` (300s) that erased shoppers' carts five minutes after a stock adjustment. Any TTL on a business collection needs a `partialFilterExpression` scoping it to exactly the rows that may be deleted. `tests/indexDrift.test.js` fails CI on both mistakes.
+
 ## House rules
 
 - Docs are curated (2026-07): `docs/` keeps only the cutover runbooks + `ENVIRONMENTS.md` + the consolidated audit (`docs/audit/09-CONSOLIDATED-2026-07.md`); the old `*_FIX.md`/`*_SUMMARY.md` sprawl and per-phase audit files were removed (recover from git history if needed). Code is the source of truth — verify any doc against it.
@@ -221,6 +239,11 @@ Rules: `noindex` (SeoPanel/PageSeo) drops a page from both `<head>` robots and `
 - **Never build quantity/reservation logic** against the coarse `in/low/out` enum, or revive `WarehouseInventory`, without a deliberate schema ADR.
 - **Never render a historical order from live product/price docs** — orders snapshot their money at creation.
 - **Never hand-roll `generateMetadata`** — wire into the config-driven SEO system.
+- **Never push straight to `main`** — that IS the production deploy, and an admin push silently *bypasses* the PR + CI gate. Use a PR.
+- **Never use `$ne` in a `partialFilterExpression`** — MongoDB rejects it, so the index is never built and nobody is told. Use `$type`.
+- **Never put a TTL index on a subdocument array** — it deletes the whole parent document. Scope every TTL on a business collection with a `partialFilterExpression`.
+- **Never `mongoose.connect()` in a script that imports models without `{ autoIndex: false }`** — it defaults to true and will build indexes against prod.
+- **Never log per-request telemetry to MongoDB** — one insert per request made `rate_limit_events` 95% of the database and forced an Atlas tier upgrade. Redis holds the counters.
 - **Never trust green CI as full coverage** — CI runs a curated subset; run the full suite locally.
 - **Never smuggle an optimization** (cache layer, index, ES swap) into a feature diff — separate pass, tests standing guard.
 - **Never introduce a second way to do something already established** (a rival cache, a Mongo-regex search beside ES, a bespoke queue) — use the existing primitive; replace it only as a measured upgrade.
