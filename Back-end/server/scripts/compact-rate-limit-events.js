@@ -27,7 +27,7 @@
  *   2. Rename  rate_limit_events -> rate_limit_events_old        [instant]
  *   3. Create a fresh rate_limit_events with only the 2 indexes the dashboard
  *      queries actually use (down from 13).
- *   4. Copy back the block/retry_*/threshold_change rows (~13.6k), preserving _id.
+ *   4. Copy back the block, retry and threshold_change rows (~13.6k), keeping _id.
  *   5. Verify, then STOP. `_old` is left in place as the rollback path.
  *
  * ROLLBACK (before --drop-old): rename `rate_limit_events_old` back over the new
