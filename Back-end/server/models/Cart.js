@@ -100,20 +100,56 @@ CartSchema.pre('save', function(next) {
 
 // CRITICAL: Unique partial indexes for cart retrieval (guest + authenticated)
 // Ensures ONE cart per user or session (data integrity)
-// Partial: Only index documents where field exists AND is not null (more precise than sparse)
 // Unique: Prevents duplicate carts for same user/session
+//
+// The filter is `$type`, NOT `$exists: true, $ne: null`. MongoDB rejects `$ne`
+// in a partialFilterExpression ("Expression not supported in partial index"), so
+// the previous declaration could never be built — which is exactly why
+// production still had the older `sparse` version of these indexes and drifted
+// from this file for months. `sparse` is not equivalent: it skips only MISSING
+// fields, so a document with `sessionId: null` IS indexed, and under a unique
+// index only one such document could ever exist.
+// `$type` is supported and expresses the real intent — index only documents
+// where the field holds a real value. Verified against MongoDB, not assumed.
 CartSchema.index(
   { sessionId: 1 },
   {
     unique: true,
-    partialFilterExpression: { sessionId: { $exists: true, $ne: null } }
+    partialFilterExpression: { sessionId: { $type: 'string' } }
   }
 );
 CartSchema.index(
   { user: 1 },
   {
     unique: true,
-    partialFilterExpression: { user: { $exists: true, $ne: null } }
+    partialFilterExpression: { user: { $type: 'objectId' } }
+  }
+);
+
+// Abandoned GUEST carts expire after 30 days of inactivity.
+//
+// Read the partial filter carefully before touching this — a TTL index is how
+// this collection previously lost live carts. Two orphan TTL indexes existed in
+// production on `recentChanges.createdAt` (300s) that were never in this schema.
+// A TTL index over an array of dates expires on the *minimum* value and deletes
+// the WHOLE document, so any cart that recorded a stock-adjustment note was
+// destroyed five minutes later, wiping the shopper's basket. They are removed by
+// scripts/fix-cart-indexes-v2.js.
+//
+// This index is safe where those were not, for three specific reasons:
+//   1. partialFilterExpression restricts it to GUEST carts. A logged-in user's
+//      cart has no sessionId and is therefore never indexed, so it never expires.
+//   2. It keys on `updatedAt` — a real top-level Date maintained by `timestamps`,
+//      not a subdocument array. Any write refreshes it, so an active cart never
+//      reaches the threshold.
+//   3. 30 days is far outside a shopping session, unlike the 300s above.
+// The "never expires a logged-in user's cart" property is asserted in tests/cart.test.js.
+CartSchema.index(
+  { updatedAt: 1 },
+  {
+    expireAfterSeconds: 30 * 24 * 60 * 60,
+    partialFilterExpression: { sessionId: { $type: 'string' } },
+    name: 'guest_cart_ttl'
   }
 );
 

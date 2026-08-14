@@ -12,6 +12,36 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/**
+ * Is this createIndex error the harmless "it's already exactly what we asked for"
+ * case, or is it drift?
+ *
+ * This distinction used to be missing, and it hid a production bug for months.
+ * The old check treated codes 85 and 86 as "already exists" and logged a tidy
+ * "⊘ Already exists", so the script reported SUCCESS while the live index was
+ * wrong. Those codes mean the opposite of success:
+ *
+ *   85 IndexOptionsConflict  — same name/key, DIFFERENT options (e.g. prod's
+ *                              carts.sessionId_1 was `sparse` where the schema
+ *                              said partial; the script "passed" every run).
+ *   86 IndexKeySpecsConflict — same name, different key spec.
+ *
+ * Both are now surfaced as errors so someone has to look. For a full picture
+ * (including EXTRA indexes that exist in the database but in no schema — which
+ * this create-only script is structurally blind to) use:
+ *     node scripts/audit-index-drift.js
+ *
+ * @param {Error & { code?: number }} err
+ * @returns {boolean} true only when the existing index already matches
+ */
+function isIndexAlreadyIdentical(err) {
+  // 68 = IndexAlreadyExists: identical spec, nothing to do.
+  if (err.code === 68) return true;
+  // Older servers report this by message with no distinct code.
+  if (err.code == null && err.message?.includes('already exists')) return true;
+  return false;
+}
+
 async function ensureProductionIndexes() {
   console.log('=== Starting Production Index Migration ===\n');
   
@@ -124,7 +154,7 @@ async function ensureProductionIndexes() {
         results.created.push(`Products.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`Products.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -165,7 +195,7 @@ async function ensureProductionIndexes() {
         results.created.push(`Users.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`Users.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -180,12 +210,17 @@ async function ensureProductionIndexes() {
     const cartsCol = db.collection('carts');
     
     const cartIndexes = [
+      // These must stay identical to models/Cart.js. `$type` is deliberate:
+      // MongoDB REJECTS `$ne` inside a partialFilterExpression, so the previous
+      // `{ $exists: true, $ne: null }` form could never be built. `$exists: true`
+      // alone is not equivalent either — it matches a field explicitly set to
+      // null, and a unique index then allows only ONE such document.
       {
         name: 'sessionId',
         spec: { sessionId: 1 },
         options: {
           unique: true,
-          partialFilterExpression: { sessionId: { $exists: true } },
+          partialFilterExpression: { sessionId: { $type: 'string' } },
           background: true
         },
         description: 'Guest cart lookup (unique per session, partial index)'
@@ -195,10 +230,21 @@ async function ensureProductionIndexes() {
         spec: { user: 1 },
         options: {
           unique: true,
-          partialFilterExpression: { user: { $exists: true } },
+          partialFilterExpression: { user: { $type: 'objectId' } },
           background: true
         },
         description: 'Authenticated user cart lookup (unique per user, partial index)'
+      },
+      {
+        name: 'guest_cart_ttl',
+        spec: { updatedAt: 1 },
+        options: {
+          expireAfterSeconds: 30 * 24 * 60 * 60,
+          partialFilterExpression: { sessionId: { $type: 'string' } },
+          background: true,
+          name: 'guest_cart_ttl'
+        },
+        description: 'Abandoned GUEST carts expire after 30 days (never user carts)'
       }
     ];
     
@@ -208,7 +254,7 @@ async function ensureProductionIndexes() {
         results.created.push(`Carts.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`Carts.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -245,7 +291,10 @@ async function ensureProductionIndexes() {
         name: 'sessionId',
         spec: { sessionId: 1 },
         options: {
-          partialFilterExpression: { sessionId: { $exists: true } },
+          // Must match models/Order.js. Left at `$exists: true` this script and
+          // the schema would disagree permanently, each "correcting" the other —
+          // the exact drift loop this change set exists to end.
+          partialFilterExpression: { sessionId: { $type: 'string' } },
           background: true
         },
         description: 'Guest order lookup (order confirmation, tracking, partial index)'
@@ -276,7 +325,7 @@ async function ensureProductionIndexes() {
         results.created.push(`Orders.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`Orders.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -338,7 +387,7 @@ async function ensureProductionIndexes() {
         results.created.push(`Reviews.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`Reviews.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -379,7 +428,7 @@ async function ensureProductionIndexes() {
         results.created.push(`Articles.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`Articles.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -415,7 +464,7 @@ async function ensureProductionIndexes() {
         results.created.push(`CouponUserUsage.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`CouponUserUsage.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {
@@ -454,7 +503,7 @@ async function ensureProductionIndexes() {
         results.created.push(`WebhookEvent.${idx.name} - ${idx.description}`);
         console.log(`  ✓ Created: ${idx.name}`);
       } catch (err) {
-        if (err.code === 85 || err.code === 86 || err.message.includes('already exists') || err.message.includes('same name')) {
+        if (isIndexAlreadyIdentical(err)) {
           results.existing.push(`WebhookEvent.${idx.name}`);
           console.log(`  ⊘ Already exists: ${idx.name}`);
         } else {

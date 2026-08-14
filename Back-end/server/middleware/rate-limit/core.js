@@ -4,6 +4,7 @@ import { redisClient, checkRedisHealth, markRedisDown } from './redisClient.js';
 import { handleRedisUnavailable } from './emergencyLimiter.js';
 import { isValidIP } from './ipValidator.js';
 import { isTrustedInternalClient, getInternalRateMultiplier } from './trustedClient.js';
+import { normalizeEndpoint } from '../../config/rateLimitTelemetry.js';
 
 // Atomic fixed-window counter in a SINGLE Redis round-trip.
 //   KEYS[1] = counter key, ARGV[1] = window seconds → returns {count, ttl}.
@@ -47,6 +48,9 @@ export const rateLimit = (options = {}) => {
 
     const endpoint = req.originalUrl || req.url;
     const adjustedMax = adaptiveThrottlingService.getAdjustedLimit(endpoint, max);
+    // Telemetry records the path only. `endpoint` keeps its full-URL form above so
+    // adaptive-throttling lookups are untouched by this change.
+    const endpointPath = normalizeEndpoint(endpoint);
 
     // Our own frontend calling server-side (SSR/ISR) arrives from a handful of
     // Vercel egress IPs and would otherwise share one per-IP bucket across the
@@ -77,9 +81,12 @@ export const rateLimit = (options = {}) => {
       if (count > effectiveMax) {
         const retryAfter = ttl > 0 ? ttl : 1;
         rateLimitEventEmitter.emitBlock({
-          endpoint,
+          endpoint: endpointPath,
           method: req.method,
-          ipAddress: req.ip || req.connection.remoteAddress,
+          // Same IP the limiter keys on (clientIP prefers cf-connecting-ip).
+          // Recording req.ip here logged the Vercel/proxy egress address, which
+          // made block events useless for tracing an abusive client.
+          ipAddress: clientIP,
           userId: req.user?.id || req.user?._id,
           userEmail: req.user?.email,
           limitType: 'window',
@@ -87,7 +94,6 @@ export const rateLimit = (options = {}) => {
           attemptCount: count,
           retryAfter,
           userAgent: req.get('user-agent'),
-          deviceInfo: req.get('user-agent'),
           adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
         });
 
@@ -103,16 +109,15 @@ export const rateLimit = (options = {}) => {
       }
 
       rateLimitEventEmitter.emitHit({
-        endpoint,
+        endpoint: endpointPath,
         method: req.method,
-        ipAddress: req.ip || req.connection.remoteAddress,
+        ipAddress: clientIP,
         userId: req.user?.id || req.user?._id,
         userEmail: req.user?.email,
         limitType: 'window',
         currentLimit: effectiveMax,
         attemptCount: count,
         userAgent: req.get('user-agent'),
-        deviceInfo: req.get('user-agent'),
         adaptiveProfileActive: adaptiveThrottlingService.isProfileActive()
       });
 

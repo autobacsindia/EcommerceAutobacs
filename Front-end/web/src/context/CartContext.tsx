@@ -84,7 +84,14 @@ export type OptimisticProduct = {
 };
 
 interface Cart {
-  _id: string;
+  /**
+   * null until the cart is actually persisted. GET /cart no longer creates a
+   * document just because someone looked — it returns an empty cart shape and
+   * the row is written on first add — so a shopper who has added nothing has no
+   * cart id yet. Nothing reads this field; it is typed honestly rather than
+   * asserting an id that may not exist.
+   */
+  _id: string | null;
   items: CartItem[];
   total: number;
   /** Coupon code the shopper applied. The discount itself is always priced server-side. */

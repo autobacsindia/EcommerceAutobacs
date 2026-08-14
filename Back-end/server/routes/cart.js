@@ -84,6 +84,30 @@ function repriceLine(item) {
 
 const router = express.Router();
 
+/**
+ * The response shape for a visitor who has no cart document yet.
+ *
+ * Deliberately NOT persisted. Reading a cart used to INSERT one, so every
+ * anonymous page view that touched /cart created a row: 81,492 cart documents
+ * existed against 478 that ever held an item, growing ~2,000/day forever with no
+ * TTL. A cart is now created on first *add* — the point where there is something
+ * to remember. `_id` is null because the cart does not exist yet; no consumer
+ * reads it (verified across the frontend).
+ */
+function emptyCartResponse({ user = null, sessionId = null }) {
+  return {
+    _id: null,
+    user,
+    sessionId,
+    isGuest: !user,
+    items: [],
+    totalItems: 0,
+    totalPrice: 0,
+    couponCode: null,
+    recentChanges: []
+  };
+}
+
 // @route   GET /cart
 // @desc    Get user's cart (supports both authenticated and guest users)
 // @access  Public (optional auth)
@@ -98,10 +122,6 @@ router.get("/", asyncHandler(async (req, res) => {
       // Authenticated user - find by user ID
       cart = await Cart.findOne({ user: req.user.id })
         .populate('items.product', 'name price images stock isActive productType variants wpId');
-      
-      if (!cart) {
-        cart = await Cart.create({ user: req.user.id, items: [], isGuest: false });
-      }
     } else {
       // Guest user - find by session ID
       if (!sessionId) {
@@ -110,13 +130,21 @@ router.get("/", asyncHandler(async (req, res) => {
           message: 'Session ID required for guest cart operations'
         });
       }
-      
+
       cart = await Cart.findOne({ sessionId })
         .populate('items.product', 'name price images stock isActive productType variants wpId');
-      
-      if (!cart) {
-        cart = await Cart.create({ sessionId, items: [], isGuest: true });
-      }
+    }
+
+    // No cart yet — hand back an empty one without writing to the database.
+    if (!cart) {
+      return res.json({
+        success: true,
+        cart: serializeCart(emptyCartResponse({
+          user: isAuthenticated ? req.user.id : null,
+          sessionId: isAuthenticated ? null : sessionId
+        })),
+        recentChanges: []
+      });
     }
 
     console.log('[Cart] Retrieved cart for', isAuthenticated ? `user ${req.user.id}` : `session ${sessionId}`, 'with', cart.items.length, 'items');
@@ -264,7 +292,39 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     });
   }
 
-  await cart.save();
+  try {
+    await cart.save();
+  } catch (err) {
+    // E11000 on the unique sessionId/user partial index means a CONCURRENT first
+    // add created the cart between our findOne and save. This is reachable now
+    // that reading no longer pre-creates the row: two taps on "Add to cart" from
+    // a fresh session race, and without this the loser 500s and silently drops
+    // the item. Re-read the winner's cart and replay this line onto it.
+    if (err?.code !== 11000 || !cart.isNew) throw err;
+
+    const winner = await Cart.findOne(
+      isAuthenticated ? { user: req.user.id } : { sessionId }
+    );
+    if (!winner) throw err; // not the race we thought; surface it
+
+    const idx = winner.items.findIndex(
+      item => sameLine(item, productId, resolved.variantId)
+    );
+    if (idx > -1) {
+      winner.items[idx].quantity += Number(quantity);
+    } else {
+      winner.items.push({
+        product: productId,
+        variantId: resolved.variantId,
+        variantLabel: resolved.variantLabel,
+        quantity: Number(quantity),
+        price: resolved.price
+      });
+    }
+    await winner.save();
+    cart = winner;
+  }
+
   await cart.populate('items.product', 'name price images stock isActive productType variants wpId');
 
   res.json({
