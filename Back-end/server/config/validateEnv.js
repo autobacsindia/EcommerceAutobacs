@@ -10,6 +10,8 @@
  * - Insecure configurations in production
  */
 
+import { PERSIST_MODES } from './rateLimitTelemetry.js';
+
 const requiredEnvVars = [
   'JWT_SECRET',
   'MONGO_URI',
@@ -59,6 +61,30 @@ export function validateEnvironment() {
     const allowed = ['lax', 'strict', 'none'];
     if (!allowed.includes(process.env.COOKIE_SAMESITE.toLowerCase())) {
       errors.push(`COOKIE_SAMESITE must be one of ${allowed.join(', ')} (got "${process.env.COOKIE_SAMESITE}")`);
+    }
+  }
+
+  // Validate RATE_LIMIT_EVENT_PERSIST enum if set (config/rateLimitTelemetry.js).
+  // Optional — defaults to 'blocks-only'. Validated here so a typo is a loud deploy
+  // failure rather than a silent fallback that quietly re-enables (or disables)
+  // ~200k telemetry writes/day without anyone noticing.
+  if (process.env.RATE_LIMIT_EVENT_PERSIST) {
+    if (!PERSIST_MODES.includes(process.env.RATE_LIMIT_EVENT_PERSIST.trim())) {
+      errors.push(
+        `RATE_LIMIT_EVENT_PERSIST must be one of ${PERSIST_MODES.join(', ')} ` +
+        `(got "${process.env.RATE_LIMIT_EVENT_PERSIST}")`
+      );
+    }
+  }
+
+  // Sample rate is only meaningful in 'sampled' mode, but validate whenever set.
+  if (process.env.RATE_LIMIT_EVENT_HIT_SAMPLE_RATE) {
+    const rate = Number.parseFloat(process.env.RATE_LIMIT_EVENT_HIT_SAMPLE_RATE);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+      errors.push(
+        'RATE_LIMIT_EVENT_HIT_SAMPLE_RATE must be a number between 0 and 1 ' +
+        `(got "${process.env.RATE_LIMIT_EVENT_HIT_SAMPLE_RATE}")`
+      );
     }
   }
 

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import rateLimitEventRepository from '../repositories/rateLimitEventRepository.js';
+import { shouldPersistEvent } from '../config/rateLimitTelemetry.js';
 
 class RateLimitEventEmitter extends EventEmitter {
   constructor() {
@@ -15,11 +16,16 @@ class RateLimitEventEmitter extends EventEmitter {
     // Listen for rate limit events and persist to database
     this.on('rate_limit_event', async (eventData) => {
       try {
-        // Store in memory for real-time access
+        // Store in memory for real-time access. This happens for EVERY event
+        // regardless of the persistence mode — the realtime dashboard reads the
+        // ring buffer, not MongoDB, so throttling durable writes costs it nothing.
         this.storeInMemory(eventData);
-        
-        // Persist to MongoDB (async, non-blocking)
-        await this.persistToDatabase(eventData);
+
+        // Persist to MongoDB only when policy allows. `hit` events are excluded
+        // by default; see config/rateLimitTelemetry.js for why.
+        if (shouldPersistEvent(eventData.eventType)) {
+          await this.persistToDatabase(eventData);
+        }
       } catch (error) {
         console.error('Error handling rate limit event:', error);
       }

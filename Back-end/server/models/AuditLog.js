@@ -82,10 +82,13 @@ const AuditLogSchema = new mongoose.Schema({
   },
   
   // Timestamps
+  // No `index: true` here. It created `timestamp_1` WITHOUT a TTL, which collided
+  // by name with the 90-day TTL index declared below — so the TTL index was never
+  // built and audit-log retention silently never ran. The TTL declaration owns
+  // `timestamp_1`; `timestamp_-1` below covers descending range queries.
   timestamp: {
     type: Date,
     default: Date.now,
-    index: true,
   },
 }, {
   timestamps: true, // Adds createdAt and updatedAt

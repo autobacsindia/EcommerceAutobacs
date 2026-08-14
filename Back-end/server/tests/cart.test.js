@@ -115,6 +115,149 @@ describe('Cart API', () => {
       expect(res.body.cart.items[0].quantity).toBe(2);
       expect(res.body.cart.items[0].product._id.toString()).toBe(productId.toString());
     });
+
+    // Reading a cart used to INSERT one, so every anonymous visitor who loaded a
+    // page touching /cart created a row: 81,492 cart documents in production
+    // against 478 that ever held an item, ~2,000/day and no TTL.
+    it('does NOT create a cart document when a guest merely reads', async () => {
+      const sessionId = 'read-only-guest-session';
+
+      const res = await request(app)
+        .get('/api/v1/cart')
+        .set('x-session-id', sessionId)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.cart.items).toHaveLength(0);
+      expect(await Cart.countDocuments({ sessionId })).toBe(0);
+    });
+
+    it('does NOT create a cart document when an authenticated user merely reads', async () => {
+      await request(app)
+        .get('/api/v1/cart')
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+
+      expect(await Cart.countDocuments({ user: userId })).toBe(0);
+    });
+
+    it('creates the cart on first add, not on read', async () => {
+      const sessionId = 'creates-on-add-session';
+
+      await request(app).get('/api/v1/cart').set('x-session-id', sessionId).expect(200);
+      expect(await Cart.countDocuments({ sessionId })).toBe(0);
+
+      // A Bearer header satisfies the CSRF exemption; an invalid token leaves
+      // req.user unset so the guest branch runs. Same pattern as the merge tests.
+      await request(app)
+        .post('/api/v1/cart/add')
+        .set('Authorization', 'Bearer invalid.token.value')
+        .set('x-session-id', sessionId)
+        .send({ productId: productId.toString(), quantity: 1 })
+        .expect(200);
+
+      expect(await Cart.countDocuments({ sessionId })).toBe(1);
+    });
+
+    // Removing create-on-read opened a race: two concurrent FIRST adds on a fresh
+    // session both construct a new Cart, and the loser hits E11000 on the unique
+    // partial index. Without the retry in routes/cart.js that surfaced as a 500
+    // and the shopper's item vanished.
+    it('survives two concurrent first adds without losing an item', async () => {
+      const sessionId = 'concurrent-first-add';
+
+      const add = () => request(app)
+        .post('/api/v1/cart/add')
+        .set('Authorization', 'Bearer invalid.token.value')
+        .set('x-session-id', sessionId)
+        .send({ productId: productId.toString(), quantity: 1 });
+
+      const [a, b] = await Promise.all([add(), add()]);
+
+      expect(a.status).toBe(200);
+      expect(b.status).toBe(200);
+
+      // Exactly one cart, and neither add was dropped.
+      expect(await Cart.countDocuments({ sessionId })).toBe(1);
+      const cart = await Cart.findOne({ sessionId });
+      expect(cart.items).toHaveLength(1);
+      expect(cart.items[0].quantity).toBe(2);
+    });
+  });
+
+  /**
+   * Regression tests for the production data-loss bug.
+   *
+   * Production carried two TTL indexes that were never in models/Cart.js:
+   * `recentChanges.createdAt_1` and `recentChanges_1`, both expireAfterSeconds:300.
+   * A TTL index over an array of dates expires on the MINIMUM value and deletes
+   * the WHOLE document — so a cart that recorded a REMOVED_OUT_OF_STOCK note
+   * (routes/cart.js pushes one and saves) was deleted five minutes later, taking
+   * the shopper's whole basket with it.
+   *
+   * These assert the schema's intent: a cart is never expired by anything keyed
+   * on recentChanges, and the replacement guest TTL can never touch a user cart.
+   */
+  describe('cart TTL indexes', () => {
+    const indexesOf = () => Cart.schema.indexes();
+
+    it('declares NO TTL index on recentChanges', () => {
+      const offenders = indexesOf().filter(([key, opts]) => {
+        const keyed = Object.keys(key).some((k) => k.startsWith('recentChanges'));
+        return keyed && opts?.expireAfterSeconds != null;
+      });
+      expect(offenders).toEqual([]);
+    });
+
+    it('a cart holding a recentChanges entry survives (no document-level expiry)', async () => {
+      const cart = await Cart.create({
+        sessionId: 'cart-with-changes',
+        items: [{ product: productId, quantity: 1, price: product.price }],
+        recentChanges: [{
+          type: 'REMOVED_OUT_OF_STOCK',
+          productId,
+          productName: 'Test Product',
+          previousQuantity: 1,
+          newQuantity: 0,
+          message: 'removed',
+          // Older than the 300s the orphan index used, so the old index would
+          // have reaped this document.
+          createdAt: new Date(Date.now() - 10 * 60 * 1000)
+        }]
+      });
+
+      const found = await Cart.findById(cart._id);
+      expect(found).not.toBeNull();
+      expect(found.items).toHaveLength(1);
+    });
+
+    it('the guest TTL index is restricted to guest carts only', () => {
+      const ttl = indexesOf().find(([, opts]) => opts?.name === 'guest_cart_ttl');
+      expect(ttl).toBeDefined();
+
+      const [key, opts] = ttl;
+      expect(key).toEqual({ updatedAt: 1 });
+      expect(opts.expireAfterSeconds).toBe(30 * 24 * 60 * 60);
+      // The clause that makes a logged-in user's cart immune: no sessionId,
+      // so the document is not in the index and can never expire.
+      expect(opts.partialFilterExpression).toEqual({
+        sessionId: { $type: 'string' }
+      });
+    });
+
+    it('an authenticated user cart is outside the guest TTL partial filter', async () => {
+      const cart = await Cart.create({
+        user: userId,
+        items: [{ product: productId, quantity: 1, price: product.price }]
+      });
+
+      // The exact filter the TTL index uses; a user cart must not match it.
+      const matched = await Cart.countDocuments({
+        _id: cart._id,
+        sessionId: { $type: 'string' }
+      });
+      expect(matched).toBe(0);
+    });
   });
 
   describe('POST /cart/add', () => {

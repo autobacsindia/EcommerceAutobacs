@@ -29,7 +29,9 @@ const ArticleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-ArticleSchema.index({ slug: 1 });
+// NOTE: no `index({ slug: 1 })` here — the field already declares `unique: true`,
+// which creates `slug_1`. Declaring it again non-unique asked for the SAME index
+// name with different options, which MongoDB rejects, so index creation aborted.
 ArticleSchema.index({ type: 1, status: 1 });
 ArticleSchema.index({ type: 1, status: 1, publishedAt: -1 });
 ArticleSchema.index({ type: 1, status: 1, views: -1 });   // trending

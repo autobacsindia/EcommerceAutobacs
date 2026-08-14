@@ -5,15 +5,14 @@ const rateLimitEventSchema = new mongoose.Schema({
   eventType: {
     type: String,
     required: true,
-    enum: ['hit', 'block', 'retry_success', 'retry_failure', 'threshold_change'],
-    index: true
+    enum: ['hit', 'block', 'retry_success', 'retry_failure', 'threshold_change']
   },
-  
-  // Request context
+
+  // Request context. Path only — normalizeEndpoint() strips the query string
+  // before this is written (a full URL made this field near-unique per request).
   endpoint: {
     type: String,
-    required: true,
-    index: true
+    required: true
   },
   method: {
     type: String,
@@ -24,18 +23,18 @@ const rateLimitEventSchema = new mongoose.Schema({
   // User/IP identification
   ipAddress: {
     type: String,
-    required: true,
-    index: true
+    required: true
   },
+  // NOTE: `sparse: true` was removed from userId / userEmail / adaptiveProfileId.
+  // In Mongoose `sparse` is an INDEX option, so declaring it silently built a
+  // sparse index on each of those fields — three more indexes maintained on every
+  // insert, for lookups no query performs.
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    sparse: true,
-    index: true
+    ref: 'User'
   },
   userEmail: {
-    type: String,
-    sparse: true
+    type: String
   },
   
   // Rate limit details
@@ -96,19 +95,17 @@ const rateLimitEventSchema = new mongoose.Schema({
     }
   },
   
-  // Request metadata
+  // Request metadata. `deviceInfo` was removed — it was assigned the same
+  // req.get('user-agent') value as `userAgent`, duplicating a long string on
+  // every one of ~200k daily rows.
   userAgent: {
     type: String
   },
-  deviceInfo: {
-    type: String
-  },
-  
+
   // Adaptive throttling context
   adaptiveProfileId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AdaptiveThrottlingProfile',
-    sparse: true
+    ref: 'AdaptiveThrottlingProfile'
   },
   adaptiveProfileActive: {
     type: Boolean,
@@ -127,12 +124,22 @@ const rateLimitEventSchema = new mongoose.Schema({
   collection: 'rate_limit_events'
 });
 
-// Compound indexes for efficient queries
+// Index set is deliberately minimal. The previous set had 13 indexes (334 MB —
+// 95% of the database's entire index footprint), each maintained on every one of
+// ~200k daily inserts.
+//
+// These two cover the aggregations (getEventCountsByType, getTopRateLimitedEndpoints,
+// getUserImpactMetrics, getRetrySuccessRate, getRealtimeMetrics), which all filter
+// on `timestamp` or `eventType` + `timestamp`.
+//
+// `getHistoricalEvents` also filters by ipAddress / userId / endpoint, and those
+// are now unindexed. That is intentional, not an oversight: with `hit` events no
+// longer persisted this collection holds ~13k rows rather than 3M, so a scan is
+// trivial, the `timestamp` sort is still indexed, and `endpoint` uses a regex
+// which could never use an index anyway. If RATE_LIMIT_EVENT_PERSIST is set to
+// `all` for a long incident, revisit — an index here is a measured decision, not
+// a default. Check drift with scripts/audit-index-drift.js.
 rateLimitEventSchema.index({ eventType: 1, timestamp: -1 });
-rateLimitEventSchema.index({ endpoint: 1, timestamp: -1 });
-rateLimitEventSchema.index({ eventType: 1, endpoint: 1, timestamp: -1 });
-rateLimitEventSchema.index({ ipAddress: 1, timestamp: -1 });
-rateLimitEventSchema.index({ userId: 1, timestamp: -1 });
 
 // Static methods for analytics
 

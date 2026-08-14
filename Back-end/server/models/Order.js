@@ -391,11 +391,14 @@ OrderSchema.index({ 'refundDetails.status': 1 }); // Refund status queries
 OrderSchema.index({ 'refundDetails.transactionId': 1 }, { sparse: true });
 
 // CRITICAL: Guest order lookup (order confirmation page, guest order tracking)
-// Partial: Only index documents where sessionId exists AND is not null (guest orders only)
+// Partial: Only index documents where sessionId holds a real value (guest orders).
+// `$type` rather than `$exists: true, $ne: null` — MongoDB rejects `$ne` in a
+// partialFilterExpression, so the previous form silently failed to build and this
+// index did not exist. Guest order lookups were doing a collection scan.
 OrderSchema.index(
   { sessionId: 1 },
   {
-    partialFilterExpression: { sessionId: { $exists: true, $ne: null } }
+    partialFilterExpression: { sessionId: { $type: 'string' } }
   }
 );
 
