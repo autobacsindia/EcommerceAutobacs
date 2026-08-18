@@ -24,6 +24,7 @@ const ALLOWED_FOLDERS = {
   categories: "autobacs/categories",
   articles:   "autobacs/articles",
   media:      "autobacs/media",
+  promos:     "autobacs/promo-banners",
 };
 
 /** A 24-char hex Mongo ObjectId — the only per-entity subfolder we accept. */

@@ -59,6 +59,15 @@ export const categoryTags = (category) => [
 export const careersTags = () => ['careers:list'];
 
 /**
+ * Tags for a promo-banner write.
+ *
+ * One tag, because there is one banner: it is fetched server-side in the root
+ * layout and on the home page, and both fetches carry this single tag. Any write
+ * — create, edit, toggle, delete — refreshes every storefront page that holds it.
+ */
+export const promoBannerTags = () => ['promo:banner'];
+
+/**
  * Tags for a media article write. Only blog-type articles have a cached public
  * page (the catch-all /[slug] route) and feed the home journal shelf; press,
  * gallery and video items render client-side and need no Data Cache refresh.
@@ -69,4 +78,4 @@ export const articleTags = (article) => {
   return ['home:journal', ...(article?.slug ? [`blog:${article.slug}`] : [])];
 };
 
-export default { productTags, productBulkTags, categoryTags, careersTags, articleTags };
+export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags };

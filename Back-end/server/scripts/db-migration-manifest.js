@@ -29,6 +29,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
+// Also load the gitignored audit/migration env if present. Without this,
+// TARGET_MONGODB_URI defined in .env.audit.local is invisible and the compare
+// silently falls back to MONGODB_URI — i.e. it compares the OLD cluster against
+// itself and reports meaningless drift. Existing process env always wins.
+dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.env.audit.local') });
 
 const ARGS = new Set(process.argv.slice(2));
 const SAVE = ARGS.has('--save');

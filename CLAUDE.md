@@ -201,6 +201,14 @@ Rules: `noindex` (SeoPanel/PageSeo) drops a page from both `<head>` robots and `
 - `ci.yml` — backend jest + 60% line-coverage floor. Triggers on `Back-end/server/**`.
 - Deploy: **platform auto-deploy** on `main` push (Railway + Vercel git integrations). No GitHub Actions deploy workflow. Gating = branch protection requiring the two CI checks above. Note: both CI jobs currently run a **curated test subset**, not the full suites — so **run the full suite locally** before declaring anything done; green CI is not proof the whole suite passes.
 
+### Git actions require explicit approval — every time
+
+**Never `git commit`, `git push`, `git merge`, or merge a PR unless the user has asked for that specific action in that message.** Not "they approved a similar commit earlier", not "the change is finished so committing is implied", not "the tests are green". Finishing the work and recording the work are two separate decisions, and only the second one is the user's to trigger.
+
+When work is complete: say so, summarise what changed, and **stop**. Let the user decide when it goes into history. If a commit seems obviously warranted, offer it — don't perform it.
+
+This applies with more force to `push` and `merge`, which are outward-facing and, on `main`, deploy to production.
+
 ### Merging to `main` (⚠️ this IS the production deploy)
 
 There is no separate "deploy" step. **A push to `main` deploys to the live store within minutes** — real customers, real Razorpay. Treat the merge itself as the deploy.
@@ -239,6 +247,7 @@ Because prod runs with `autoIndex: false`, the live index set can silently diver
 - **Never build quantity/reservation logic** against the coarse `in/low/out` enum, or revive `WarehouseInventory`, without a deliberate schema ADR.
 - **Never render a historical order from live product/price docs** — orders snapshot their money at creation.
 - **Never hand-roll `generateMetadata`** — wire into the config-driven SEO system.
+- **Never commit, push, merge, or merge a PR without being asked for that action in that message** — completing work is not permission to record it.
 - **Never push straight to `main`** — that IS the production deploy, and an admin push silently *bypasses* the PR + CI gate. Use a PR.
 - **Never use `$ne` in a `partialFilterExpression`** — MongoDB rejects it, so the index is never built and nobody is told. Use `$type`.
 - **Never put a TTL index on a subdocument array** — it deletes the whole parent document. Scope every TTL on a business collection with a `partialFilterExpression`.

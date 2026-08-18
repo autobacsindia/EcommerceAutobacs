@@ -263,6 +263,7 @@ class SearchService {
     // Elasticsearch indexes ONLY active products (see indexAllProducts), so an admin
     // list that must surface inactive/draft items skips ES and goes straight to Mongo
     // against the full collection. Public search keeps using ES when available.
+    let esZeroHit = false; // ES was consulted, did not throw, and returned no hits
     if (!includeInactive && await elasticsearchService.isConnected()) {
       try {
         const esParams = { ...params };
@@ -279,7 +280,11 @@ class SearchService {
         if (esResult?.products?.length > 0) {
           return esResult;
         }
-        console.warn('[SearchService] Elasticsearch returned 0 results; falling back to MongoDB');
+        // Zero hits is NOT yet a problem worth reporting: whether it means "we
+        // genuinely don't stock this" or "the index is missing/wiped" can only be
+        // decided once Mongo has answered the same question. Carry the fact down
+        // and let the divergence check below do the logging.
+        esZeroHit = true;
       } catch (error) {
         console.error('Elasticsearch search failed, falling back to MongoDB:', error);
       }
@@ -319,6 +324,20 @@ class SearchService {
         .maxTimeMS(3000);
 
       const total = await Product.countDocuments(query).maxTimeMS(3000);
+
+      // ES/Mongo divergence — the actionable half of the empty-index guard above.
+      // ES returning nothing is unremarkable on its own (most such searches are for
+      // things we don't stock, and logging those buries the real signal in noise).
+      // It matters only when Mongo then finds matches ES did not, which is exactly
+      // what a missing, wiped, or drifted index looks like from the outside. Both
+      // counts and the query are included so the line is alertable on its own.
+      if (esZeroHit && total > 0) {
+        console.warn(
+          `[SearchService] ES/Mongo divergence: query=${JSON.stringify(search || '(filters only)')} ` +
+          `es=0 mongo=${total} — Elasticsearch index may be stale or incomplete; ` +
+          `verify with reindex-products`
+        );
+      }
 
       return {
         products,

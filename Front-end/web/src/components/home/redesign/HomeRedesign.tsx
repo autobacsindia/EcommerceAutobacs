@@ -14,6 +14,8 @@ import Transformation from './Transformation';
 import Testimonials from './Testimonials';
 import Journal from './Journal';
 import RedesignFooter from './RedesignFooter';
+import PromoBanner from '@/components/layout/PromoBanner';
+import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
 import type { HomeData } from './homeData';
 
 /**
@@ -25,7 +27,19 @@ import type { HomeData } from './homeData';
  *   1. scroll-reveal — fade/slide `.reveal` elements in as they enter view.
  *   2. nav background — darken the fixed nav after the first scroll.
  */
-export default function HomeRedesign({ data }: { data: HomeData }) {
+export default function HomeRedesign({
+  data,
+  promoBanner = null,
+}: {
+  data: HomeData;
+  /**
+   * Resolved server-side in app/page.tsx. The home page mounts the promo strip
+   * itself rather than taking it from the root layout, because this page ships
+   * its own `position: fixed` nav — a strip rendered above `children` in the
+   * layout would end up underneath that bar. See ConditionalPromoBanner.
+   */
+  promoBanner?: PromoBannerData | null;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,6 +81,9 @@ export default function HomeRedesign({ data }: { data: HomeData }) {
     <div className="hr" ref={rootRef}>
       <RedesignNav />
       <Hero />
+      {/* Below the hero, not above it: the hero is this page's LCP element and
+          must stay the first thing a visitor sees. */}
+      <PromoBanner banner={promoBanner} />
       <Manifesto />
       <Categories categories={data.categories} />
       <Showreel hotspots={data.carHotspots} />

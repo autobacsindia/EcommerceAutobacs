@@ -15,7 +15,9 @@ import { Toaster } from "react-hot-toast";
 import GlobalLoadingBar from "@/components/layout/GlobalLoadingBar";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import CampaignBanner from "@/components/campaign/CampaignBanner";
+import ConditionalPromoBanner from "@/components/layout/ConditionalPromoBanner";
 import { getNavCategories } from "@/lib/navCategories";
+import { getActivePromoBanner } from "@/lib/promoBanner";
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
@@ -187,6 +189,11 @@ export default async function RootLayout({
   // stays in sync with admin-managed categories and renders in the SSR HTML.
   const navCategories = await getNavCategories();
 
+  // Site-wide promo strip (Onam/Diwali/sale). Resolved on the server so it lands
+  // in the initial HTML with its space already reserved; returns null whenever no
+  // campaign is scheduled, which is the normal state for most of the year.
+  const promoBanner = await getActivePromoBanner();
+
   return (
     <html lang="en">
       <head>
@@ -273,6 +280,11 @@ export default async function RootLayout({
                   <CurrencyProvider>
                       <GlobalLoadingBar />
                       <ConditionalHeader navCategories={navCategories} />
+                      {/* Admin-managed occasion strip. Sits directly under the nav
+                          on every storefront route except `/`, which mounts it
+                          itself below the hero (its nav is fixed and ships inside
+                          HomeRedesign). Null when nothing is scheduled. */}
+                      <ConditionalPromoBanner banner={promoBanner} />
                       {/* Renders only for a signed-in, eligible campaign customer;
                           returns null the rest of the time (and all year when no
                           campaign is running). */}

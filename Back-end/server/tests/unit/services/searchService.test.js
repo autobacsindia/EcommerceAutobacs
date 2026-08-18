@@ -96,6 +96,72 @@ describe('SearchService Unit Tests', () => {
       expect(Product.find).toHaveBeenCalled();
     });
 
+    it('stays silent when ES and Mongo agree there are no results', async () => {
+      // The common case by far: the shopper searched for something we don't stock.
+      // ES answering zero here is correct, not a fault, and must not be logged —
+      // otherwise a real index outage is buried in ambient noise.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [], pagination: { total: 0, page: 1, pages: 0 }
+      });
+      Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(0) });
+
+      await SearchService.searchProducts({ search: 'nonexistent-part' });
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('warns with both counts when ES returns zero but Mongo finds matches (index drift)', async () => {
+      // The actionable signal: ES is empty/stale while Mongo still has the data.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [], pagination: { total: 0, page: 1, pages: 0 }
+      });
+      Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(29) });
+
+      await SearchService.searchProducts({ search: 'brake' });
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const msg = warn.mock.calls[0][0];
+      expect(msg).toContain('ES/Mongo divergence');
+      expect(msg).toContain('brake');   // the query, so the line is reproducible
+      expect(msg).toContain('es=0');
+      expect(msg).toContain('mongo=29'); // both sides, so the line is alertable
+      warn.mockRestore();
+    });
+
+    it('does not warn about divergence when ES was never consulted', async () => {
+      // ES down or admin path: Mongo is the only source, so there is nothing to
+      // diverge from and the drift warning would be a false positive.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(false);
+      Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(29) });
+
+      await SearchService.searchProducts({ search: 'brake' });
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('does not warn about divergence when the ES call threw', async () => {
+      // A thrown ES error is already logged on its own path; re-reporting it as
+      // index drift would misattribute an outage to a stale index.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockRejectedValue(new Error('ES Error'));
+      Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(29) });
+
+      await SearchService.searchProducts({ search: 'brake' });
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+      console.error.mockRestore();
+    });
+
     it('should fall back to MongoDB when Elasticsearch is unavailable', async () => {
       elasticsearchService.isConnected.mockResolvedValue(false);
       
