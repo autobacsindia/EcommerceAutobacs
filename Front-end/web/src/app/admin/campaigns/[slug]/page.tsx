@@ -9,6 +9,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
 import { istStartOfDayISO, istEndOfDayISO, toISTDateInput } from '@/lib/istDate';
+import MemberRosterPanel from '@/components/admin/campaigns/MemberRosterPanel';
 
 /**
  * Admin — campaign editor.
@@ -271,6 +272,7 @@ export default function AdminCampaignEditor() {
         </div>
       </div>
 
+      <MemberRosterPanel campaignId={campaign._id} />
       <MemberImportPanel campaignId={campaign._id} slug={slug} />
 
       {/* ── Save ────────────────────────────────────────────────────────────── */}
@@ -365,7 +367,12 @@ function MemberImportPanel({ campaignId, slug }: { campaignId: string; slug: str
         API_ENDPOINTS.CAMPAIGN_MEMBERS(campaignId), { members },
       );
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: campaignKeys.report(slug) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: campaignKeys.report(slug) });
+      // Otherwise the roster keeps serving its cached pages and the newly
+      // imported people appear nowhere until a hard reload.
+      queryClient.invalidateQueries({ queryKey: campaignKeys.membersFor(campaignId) });
+    },
   });
 
   return (

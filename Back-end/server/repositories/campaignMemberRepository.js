@@ -133,6 +133,55 @@ class CampaignMemberRepository extends BaseRepository {
     };
   }
 
+  /**
+   * One page of the allowlist, for the admin roster.
+   *
+   * KEYSET pagination on `email`, not skip/offset: the roster is read while imports
+   * and claims are landing, and an offset would duplicate or skip rows the moment a
+   * document is inserted mid-scroll. `{campaign: 1, email: 1}` is unique, so email is
+   * a total order with no tie-break needed and the cursor can never stall on a
+   * duplicate — and the same index serves the sort, so this stays an index scan.
+   *
+   * `q` is a plain Mongo match, deliberately NOT Elasticsearch: this searches an
+   * allowlist of a few hundred addresses that only an admin ever reads, it is already
+   * bounded by the `campaign` equality, and there is no campaign index in ES. The
+   * email side is anchored (`^`) so it uses the index; the name side cannot be, which
+   * is the reason for the hard limit cap above it.
+   */
+  async listPage(campaignId, { cursor = null, limit = 50, status = null, q = null } = {}) {
+    const filter = { campaign: campaignId };
+    if (status) filter.status = status;
+    if (cursor) filter.email = { $gt: String(cursor).toLowerCase().trim() };
+
+    if (q) {
+      // Escape the user's text — an admin pasting "a+b@x.com" or "(pvt)" must not
+      // compile into a regex that throws or scans pathologically.
+      const safe = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (safe) {
+        filter.$or = [
+          { email: { $regex: `^${safe}`, $options: 'i' } },
+          { name: { $regex: safe, $options: 'i' } },
+        ];
+      }
+    }
+
+    // Ask for one more than requested: its presence is what tells the caller there is
+    // another page, without a second count query that could disagree under writes.
+    const capped = Math.min(Math.max(1, Number(limit) || 50), 100);
+    const rows = await CampaignMember.find(filter)
+      .sort({ email: 1 })
+      .limit(capped + 1)
+      .select('email name status claimedAt redeemedAt redeemedOrder discountRupees reviewNote')
+      .lean();
+
+    const hasMore = rows.length > capped;
+    const page = hasMore ? rows.slice(0, capped) : rows;
+    return {
+      members: page,
+      nextCursor: hasMore ? page[page.length - 1].email : null,
+    };
+  }
+
   /** Funnel counts for the admin dashboard. */
   async statusCounts(campaignId) {
     const rows = await CampaignMember.aggregate([

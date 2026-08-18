@@ -8,9 +8,9 @@
  * the seed script and any future caller too, not just for HTTP.
  */
 
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import mongoose from 'mongoose';
-import { CAMPAIGN_STATUSES, CAMPAIGN_AUDIENCES } from '../config/campaign.js';
+import { CAMPAIGN_STATUSES, CAMPAIGN_AUDIENCES, CAMPAIGN_MEMBER_STATUSES } from '../config/campaign.js';
 import { TIER_RESOLUTIONS } from '../utils/campaignTiers.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
@@ -93,6 +93,15 @@ export const validateCampaignMembers = [
   body('members.*.email').trim().isEmail().withMessage('Every member needs a valid email'),
   body('members.*.name').optional({ nullable: true }).trim().isLength({ max: 120 }),
   body('members.*.reviewNote').optional({ nullable: true }).trim().isLength({ max: 200 }),
+];
+
+export const validateCampaignMemberQuery = [
+  query('cursor').optional().trim().isLength({ max: 254 }),
+  // Cap enforced again in the repository — a caller that skips validation (a script,
+  // a future internal call) must not be able to ask for an unbounded page.
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1–100'),
+  query('status').optional().isIn(CAMPAIGN_MEMBER_STATUSES).withMessage('Unknown member status'),
+  query('q').optional().trim().isLength({ max: 120 }),
 ];
 
 export const validateCampaignSimulate = [
