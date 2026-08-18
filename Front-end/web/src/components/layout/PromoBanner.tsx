@@ -10,47 +10,63 @@ import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
  * getActivePromoBanner, called from the root layout), so the strip is in the
  * initial HTML instead of popping in after hydration and pushing the page down.
  *
- * SIZING MODEL: a FIXED height per breakpoint, filling the width, with three
- * separately-designed images. The earlier model — one image scaled to its own
- * aspect ratio — failed at both ends: stretched across a desktop window it was
- * blurry unless the source was enormous, and squeezed onto a phone an ~18:1
- * strip collapsed to a ~23px sliver nobody could read. One picture cannot serve
- * a 375px phone and a 2560px monitor; three can.
+ * SIZING MODEL: full width, height derived from the artwork's OWN aspect ratio,
+ * nothing cropped. The strip grows and shrinks with the window; the whole image
+ * is always on screen.
  *
- * Because the height is fixed and the width varies, the sides (or, on very wide
- * monitors, the top and bottom) are trimmed. That is deliberate and is why the
- * designer spec defines a centre safe area — see the admin screen, which states
- * the required size next to each upload slot.
+ * This replaced a fixed-height + `object-cover` model, which had to slice the
+ * sides off any artwork whose ratio didn't match the window's — the wider the
+ * monitor, the more of the message disappeared. Height is now the dependent
+ * variable, which is the only way a full-bleed strip can be both uncropped and
+ * responsive.
+ *
+ * The ratio comes from the pixel dimensions Cloudinary reported at upload and
+ * stored on the banner, so the box is reserved at the exact right height before
+ * a byte of image arrives — no layout shift, despite the height being fluid.
+ * `object-contain` backs it up: if the dimensions are missing (a legacy row) or
+ * a clamp below changes the box shape, the artwork letterboxes on the strip's
+ * own background rather than losing content. Letterboxing is recoverable;
+ * cropping the offer out of the offer banner is not.
  *
  * Purely promotional: it links, it never transacts. Nothing here reads or shows
  * a price, a total, or stock.
  */
 
 /**
- * Rendered height per breakpoint, in CSS pixels. Exported because the home page
- * has to subtract them: its nav is `position: fixed` with no spacer, so the
- * strip needs an explicit offset to sit below it rather than underneath it.
+ * Artwork guidance per slot. Single source of truth for the admin screen's
+ * instructions and its wrong-size warnings.
  *
- * MUST stay in step with the artwork sizes quoted in the admin upload screen —
- * the files are designed to these heights at 2× density.
- */
-export const PROMO_HEIGHTS = { mobile: 72, tablet: 88, desktop: 104 } as const;
-
-/** Tailwind classes for the heights above. Breakpoints: <640 / 640-1023 / ≥1024. */
-const HEIGHT_CLASSES = 'h-[72px] sm:h-[88px] lg:h-[104px]';
-
-/** Artwork narrower than this cannot fill a large 2× display without softening. */
-export const RECOMMENDED_MIN_WIDTH = 2560;
-
-/**
- * Required artwork size per slot, at 2× density. Single source of truth for the
- * admin's guidance and its wrong-size warnings.
+ * `ratio` is the width÷height the file should be designed to, and it is the
+ * number that actually matters now: it alone decides how tall the strip renders.
+ * The three chosen ratios all land at roughly 100px tall on a typical device of
+ * their class (3840/15 at a 1512px laptop ≈ 101px; 2048/8 at an 800px tablet
+ * ≈ 100px; 1280/4 at a 390px phone ≈ 98px), so the strip looks like the same
+ * strip everywhere while every file stays whole.
+ *
+ * `width` is the export width, set so the file still has ~2× device pixels to
+ * spend on the largest screen in its band. Cloudinary's `c_limit` never upscales,
+ * so a smaller export cannot be rescued at render time.
  */
 export const PROMO_SLOT_SPECS = {
-  desktop: { label: 'Desktop', width: 3840, height: 208, minViewport: '1024px and up' },
-  tablet: { label: 'Tablet', width: 2048, height: 176, minViewport: '640 – 1023px' },
-  mobile: { label: 'Mobile', width: 1280, height: 144, minViewport: 'under 640px' },
+  desktop: { label: 'Desktop', width: 3840, height: 256, ratio: 15, minViewport: '1024px and up' },
+  tablet: { label: 'Tablet', width: 2048, height: 256, ratio: 8, minViewport: '640 – 1023px' },
+  mobile: { label: 'Mobile', width: 1280, height: 320, ratio: 4, minViewport: 'under 640px' },
 } as const;
+
+export type PromoSlot = keyof typeof PROMO_SLOT_SPECS;
+
+/**
+ * Height clamps, in CSS pixels.
+ *
+ * MIN — a 15:1 desktop file shown on a 375px phone (because no mobile artwork
+ * was uploaded) computes to 25px: unreadable, and below the 44px minimum for a
+ * comfortable tap target. The clamp letterboxes it instead.
+ *
+ * MAX — stops a mis-proportioned upload (someone exports a square poster) from
+ * taking over the viewport, and keeps the strip a strip on very wide monitors.
+ */
+export const PROMO_MIN_HEIGHT = 64;
+export const PROMO_MAX_HEIGHT = 200;
 
 /**
  * srcset widths — a full-bleed strip, so these track DEVICE pixels, not CSS px.
@@ -64,23 +80,60 @@ const WIDTHS = [640, 828, 1080, 1440, 1920, 2560, 3840] as const;
 const srcSetFor = (url: string) =>
   WIDTHS.map((w) => `${cloudinaryLoader({ src: url, width: w })} ${w}w`).join(', ');
 
+/**
+ * The CSS `aspect-ratio` value for a slot: the artwork's true shape when we know
+ * it, otherwise the shape the slot was specced for.
+ *
+ * Exported so the admin preview reserves its box the same way the storefront
+ * does — an admin who sees a different shape to a shopper has no way to trust
+ * the preview.
+ */
+export function promoAspectRatio(
+  slot: PromoSlot,
+  width?: number | null,
+  height?: number | null,
+): string {
+  if (width && height && width > 0 && height > 0) return `${width} / ${height}`;
+  return `${PROMO_SLOT_SPECS[slot].ratio} / 1`;
+}
+
 export default function PromoBanner({ banner }: { banner: PromoBannerData | null }) {
   if (!banner) return null;
 
-  const { imageUrl, tabletImageUrl, mobileImageUrl, alt, linkPath } = banner;
+  const {
+    imageUrl, imageWidth, imageHeight,
+    tabletImageUrl, tabletImageWidth, tabletImageHeight,
+    mobileImageUrl, mobileImageWidth, mobileImageHeight,
+    alt, linkPath,
+  } = banner;
+
+  /*
+    Per-breakpoint ratios ride in as custom properties because their values are
+    per-banner data — Tailwind can only emit classes it can see at build time,
+    and three media queries cannot be expressed in one inline `style`. The
+    classes below are static; only the numbers they read are dynamic.
+  */
+  const ratioVars = {
+    '--promo-ar': promoAspectRatio('mobile', mobileImageWidth, mobileImageHeight),
+    '--promo-ar-sm': promoAspectRatio('tablet', tabletImageWidth, tabletImageHeight),
+    '--promo-ar-lg': promoAspectRatio('desktop', imageWidth, imageHeight),
+  } as React.CSSProperties;
 
   return (
     <Link
       href={linkPath}
       aria-label={alt}
-      className={`group block w-full overflow-hidden bg-obsidian ${HEIGHT_CLASSES}`}
+      style={ratioVars}
+      className="group block w-full overflow-hidden bg-obsidian
+                 aspect-[var(--promo-ar)] sm:aspect-[var(--promo-ar-sm)] lg:aspect-[var(--promo-ar-lg)]
+                 min-h-[64px] max-h-[200px]"
     >
       {/*
         <picture> with media queries, not next/image: this is ART DIRECTION —
-        three separately composed images, not three sizes of one. next/image
-        cannot express that, and the usual workaround (stacked <Image>s toggled
-        with `hidden`) leaves them all in the DOM, so a phone downloads the
-        3840px desktop file it will never show.
+        up to three separately composed images, not three sizes of one.
+        next/image cannot express that, and the usual workaround (stacked
+        <Image>s toggled with `hidden`) leaves them all in the DOM, so a phone
+        downloads the 3840px desktop file it will never show.
 
         Source order is most-specific-first: the browser takes the FIRST matching
         <source>, so desktop must precede tablet. The bare <img> is the mobile
@@ -106,7 +159,7 @@ export default function PromoBanner({ banner }: { banner: PromoBannerData | null
            */
           loading="eager"
           decoding="async"
-          className="block h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.01]"
+          className="block h-full w-full object-contain object-center transition-transform duration-500 group-hover:scale-[1.01]"
         />
       </picture>
     </Link>

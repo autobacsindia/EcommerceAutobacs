@@ -20,8 +20,14 @@ const CDN = 'https://res.cloudinary.com/demo/image/upload/v1/autobacs/promo-bann
 const BANNER: PromoBannerData = {
   id: 'b1',
   imageUrl: `${CDN}/onam-desktop.jpg`,
+  imageWidth: 3840,
+  imageHeight: 256,
   tabletImageUrl: `${CDN}/onam-tablet.jpg`,
+  tabletImageWidth: 2048,
+  tabletImageHeight: 256,
   mobileImageUrl: `${CDN}/onam-mobile.jpg`,
+  mobileImageWidth: 1280,
+  mobileImageHeight: 320,
   alt: 'Onam offer is live',
   linkPath: '/offers',
 };
@@ -60,15 +66,55 @@ describe('PromoBanner', () => {
   });
 
   describe('art direction across breakpoints', () => {
-    it('reserves a fixed height at every breakpoint', () => {
+    it('sizes each breakpoint from that slot\'s own artwork ratio', () => {
+      render(<PromoBanner banner={BANNER} />);
+      // Height follows the file's shape instead of a fixed value, which is what
+      // stops the sides being cropped off a strip whose ratio does not happen to
+      // match the window's.
+      const style = screen.getByRole('link').getAttribute('style') ?? '';
+      expect(style).toContain('--promo-ar: 1280 / 320');      // mobile
+      expect(style).toContain('--promo-ar-sm: 2048 / 256');   // tablet
+      expect(style).toContain('--promo-ar-lg: 3840 / 256');   // desktop
+    });
+
+    it('reserves the box before the image loads', () => {
       render(<PromoBanner banner={BANNER} />);
       // A full-width strip at the top of the document is the worst place to take
-      // a CLS hit, so the height is committed in CSS rather than derived from an
-      // image that has not loaded yet.
+      // a CLS hit. Fluid height is only safe because the ratio is known upfront
+      // from the stored dimensions — the browser reserves the exact box.
       const cls = screen.getByRole('link').className;
-      expect(cls).toMatch(/h-\[72px\]/);
-      expect(cls).toMatch(/sm:h-\[88px\]/);
-      expect(cls).toMatch(/lg:h-\[104px\]/);
+      expect(cls).toMatch(/aspect-\[var\(--promo-ar\)\]/);
+      expect(cls).toMatch(/sm:aspect-\[var\(--promo-ar-sm\)\]/);
+      expect(cls).toMatch(/lg:aspect-\[var\(--promo-ar-lg\)\]/);
+    });
+
+    it('falls back to the slot spec ratio when dimensions are unknown', () => {
+      // Legacy rows predate dimension capture. Without a fallback the box would
+      // collapse to zero height and the banner would silently vanish.
+      render(
+        <PromoBanner
+          banner={{
+            ...BANNER,
+            imageWidth: null, imageHeight: null,
+            tabletImageWidth: null, tabletImageHeight: null,
+            mobileImageWidth: null, mobileImageHeight: null,
+          }}
+        />,
+      );
+      const style = screen.getByRole('link').getAttribute('style') ?? '';
+      expect(style).toContain('--promo-ar: 4 / 1');
+      expect(style).toContain('--promo-ar-sm: 8 / 1');
+      expect(style).toContain('--promo-ar-lg: 15 / 1');
+    });
+
+    it('clamps the height at both ends', () => {
+      render(<PromoBanner banner={BANNER} />);
+      // Min: a 15:1 desktop file on a 375px phone computes to ~25px — below a
+      // usable tap target. Max: a mistakenly square upload would otherwise take
+      // over the viewport.
+      const cls = screen.getByRole('link').className;
+      expect(cls).toMatch(/min-h-\[64px\]/);
+      expect(cls).toMatch(/max-h-\[200px\]/);
     });
 
     it('serves desktop artwork at 1024px and up', () => {
@@ -105,10 +151,12 @@ describe('PromoBanner', () => {
       expect(container.querySelectorAll('img')).toHaveLength(1);
     });
 
-    it('crops to fill the fixed height rather than letterboxing', () => {
+    it('letterboxes rather than cropping when the box and the file disagree', () => {
       render(<PromoBanner banner={BANNER} />);
-      // object-cover is why the designer spec defines a centre safe area.
-      expect(screen.getByAltText('Onam offer is live').className).toMatch(/object-cover/);
+      // object-cover would slice the wording off the sides of the offer banner
+      // whenever a clamp or a missing dimension changed the box shape. Bars on a
+      // matching background are recoverable; a cropped offer is not.
+      expect(screen.getByAltText('Onam offer is live').className).toMatch(/object-contain/);
     });
 
     it('uses the desktop image for every slot when only one was uploaded', () => {
@@ -117,7 +165,11 @@ describe('PromoBanner', () => {
       const single: PromoBannerData = {
         ...BANNER,
         tabletImageUrl: BANNER.imageUrl,
+        tabletImageWidth: BANNER.imageWidth,
+        tabletImageHeight: BANNER.imageHeight,
         mobileImageUrl: BANNER.imageUrl,
+        mobileImageWidth: BANNER.imageWidth,
+        mobileImageHeight: BANNER.imageHeight,
       };
       const { container } = render(<PromoBanner banner={single} />);
       const srcsets = [...container.querySelectorAll('source')].map((s) => s.getAttribute('srcset'));

@@ -81,21 +81,28 @@ export default function HomeRedesign({
     <div className="hr" ref={rootRef}>
       <RedesignNav />
       {/*
-        Promo strip directly under the nav, matching every other page.
+        Promo strip directly under the nav, matching every other page — but here
+        it shares a stacking wrapper with the hero rather than sitting above it
+        in flow. The hero is a full-bleed 100vh stage that the fixed nav already
+        overlays; stacking nav + strip on top of it in flow pushed the car down
+        by ~180px and left a dead band between the strip and the artwork.
 
-        Two details this page forces:
-        1. The nav is `position: fixed` with NO spacer (the hero deliberately runs
-           full-bleed underneath it), so without the spacer below the strip would
-           render at y=0 and sit hidden behind the nav.
-        2. The hero keeps `height: 100vh` rather than becoming
-           `calc(100vh - strip)`. On desktop it is sticky-pinned inside
-           .hero-pin, and a shorter hero would leave a gap under it once pinned.
-           The strip simply scrolls away above it, which is the behaviour we want:
-           seen on arrival, then out of the way.
+        So on desktop `.hr-promo-slot` is an overlay pinned inside the hero's own
+        scroll track (see home-redesign.css): flush under the nav, scrolls away on
+        the first scroll, and the hero keeps an untouched `height: 100vh` — which
+        it must, because it is sticky-pinned inside .hero-pin and a shorter hero
+        would leave a gap under it once pinned. On mobile the hero is a stacked,
+        content-height section, so the strip stays in flow there and takes over
+        the hero's nav clearance instead of adding to it.
       */}
-      {promoBanner && <div className="h-16 md:h-[76px] shrink-0" aria-hidden />}
-      <PromoBanner banner={promoBanner} />
-      <Hero />
+      <div className="hr-hero-stack">
+        {promoBanner && (
+          <div className="hr-promo-slot">
+            <PromoBanner banner={promoBanner} />
+          </div>
+        )}
+        <Hero />
+      </div>
       <Manifesto />
       <Categories categories={data.categories} />
       <Showreel hotspots={data.carHotspots} />

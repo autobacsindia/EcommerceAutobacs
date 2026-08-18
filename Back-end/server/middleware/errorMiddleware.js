@@ -259,6 +259,28 @@ export const errorHandler = (err, req, res, next) => {
 
     const errMsg = typeof err.message === 'string' ? err.message : String(err.message ?? '');
 
+    // Safely extract validation errors (Mongoose ValidatorError objects may
+    // contain schema/document references that cause JSON.stringify to throw).
+    //
+    // Computed BEFORE the log call, not just for the response: `message` is
+    // whitelisted down to the bare string "Validation Error", so without this in
+    // the log line a 400 is undiagnosable from Railway — you get a stack and no
+    // field name. That cost a real debugging session on a product save that was
+    // failing on `seo.canonical`.
+    let safeErrors;
+    if (err.errors && typeof err.errors === 'object') {
+      try {
+        safeErrors = Object.fromEntries(
+          Object.entries(err.errors).map(([k, v]) => [
+            k,
+            typeof v === 'object' && v !== null ? (v.message || String(v)) : String(v)
+          ])
+        );
+      } catch (_) {
+        safeErrors = undefined;
+      }
+    }
+
     try {
       console.error(JSON.stringify({
         level: 'error',
@@ -278,7 +300,8 @@ export const errorHandler = (err, req, res, next) => {
         userId: req.user?._id || req.user?.id || 'anonymous',
         body: safeBodyForLog,
         params: req.params,
-        query: req.query
+        query: req.query,
+        ...(safeErrors ? { validationErrors: safeErrors } : {})
       }));
     } catch (_) {
       console.error('[errorHandler] Failed to log error:', err.name, errMsg);
@@ -337,22 +360,6 @@ export const errorHandler = (err, req, res, next) => {
           url: req.originalUrl
         }));
       } catch (_) { /* ignore */ }
-    }
-
-    // Safely extract validation errors (Mongoose ValidatorError objects may
-    // contain schema/document references that cause JSON.stringify to throw)
-    let safeErrors;
-    if (err.errors && typeof err.errors === 'object') {
-      try {
-        safeErrors = Object.fromEntries(
-          Object.entries(err.errors).map(([k, v]) => [
-            k,
-            typeof v === 'object' && v !== null ? (v.message || String(v)) : String(v)
-          ])
-        );
-      } catch (_) {
-        safeErrors = undefined;
-      }
     }
 
     if (res.headersSent) return;

@@ -171,6 +171,28 @@
 .hr .nav-mobile .veh-inline { width: 100%; border-bottom: 1px solid var(--line); padding: 8px 0; }
 .hr .veh-inline .veh-panel { position: static; width: 100%; border: none; padding: 10px 4px 4px; backdrop-filter: none; box-shadow: none; background: none; }
 
+/* ── PROMO STRIP × HERO ──
+   The admin promo strip must NOT push the hero down. The hero is a full-bleed
+   stage the fixed nav already overlays, so stacking nav (76px) + strip (104px)
+   above it in flow shoved the car ~180px down the first screen and left a dead
+   band between the two. Desktop therefore overlays the strip inside the hero's
+   scroll track: flush under the nav, gone on the first scroll, and .hero keeps
+   an untouched 100vh (it is sticky-pinned inside .hero-pin — see below — and a
+   shorter hero would expose the next section under it while pinned).
+   The overlay lands on the masked, effectively transparent top of the hero
+   canvas, not on the car itself. */
+.hr .hr-hero-stack { position: relative; }
+@media (min-width: 769px) {
+  .hr .hr-promo-slot { position: absolute; left: 0; right: 0; top: 76px; z-index: 12; }
+}
+/* Mobile keeps the strip in flow — the hero is a stacked, content-height
+   section there, so an overlay would land on the headline. Its 96px of nav
+   clearance moves onto the strip instead of being paid twice. */
+@media (max-width: 768px) {
+  .hr .hr-promo-slot { padding-top: 64px; }
+  .hr .hr-promo-slot + .hero-pin .hero { padding-top: 28px; }
+}
+
 /* ── HERO ── */
 .hr .hero { position: relative; width: 100%; height: 100vh; min-height: 600px; overflow: hidden; background: var(--bg); }
 .hr .hero .bg-glow { position: absolute; inset: 0; background: radial-gradient(ellipse 80% 70% at 52% 46%, #1d2020 0%, #0d0e0e 100%); pointer-events: none; }

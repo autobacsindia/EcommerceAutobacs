@@ -13,14 +13,26 @@ import { serverFetch } from '@/lib/server-api';
  * only the fallback for when that call cannot be delivered.
  */
 
+/**
+ * Pixel dimensions accompany every url because the strip sizes itself from the
+ * artwork's own aspect ratio rather than cropping to a fixed height. They are
+ * nullable: a row created before the upload flow captured them, or a url typed
+ * in by hand, has none, and the component falls back to the slot's spec ratio.
+ */
 export interface PromoBanner {
   id: string;
   /** Desktop artwork (≥1024px) — also the server-side fallback for the two below. */
   imageUrl: string;
+  imageWidth: number | null;
+  imageHeight: number | null;
   /** Tablet artwork (640–1023px). Already defaulted to `imageUrl` by the API. */
   tabletImageUrl: string;
+  tabletImageWidth: number | null;
+  tabletImageHeight: number | null;
   /** Mobile artwork (<640px). Already defaulted to `imageUrl` by the API. */
   mobileImageUrl: string;
+  mobileImageWidth: number | null;
+  mobileImageHeight: number | null;
   alt: string;
   linkPath: string;
 }

@@ -10,6 +10,11 @@
 export interface ApiResponseBody {
   message?: string;
   error?: string;
+  /**
+   * Per-field validation detail from the backend error middleware, keyed by
+   * schema path (e.g. `{ 'seo.canonical': 'Path `canonical` … is longer …' }`).
+   */
+  errors?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -57,10 +62,38 @@ export async function parseApiResponse(res: Response): Promise<ApiResponseBody> 
   }
 }
 
+/** Cap the appended field detail so one bad payload can't produce a wall of text. */
+const MAX_FIELD_ERRORS = 5;
+
+/**
+ * Flatten the backend's per-field validation map into readable lines.
+ *
+ * This detail is the whole reason a failed admin save is actionable. The backend
+ * deliberately whitelists `message` down to the bare string "Validation Error"
+ * (it refuses to echo raw model errors as the top-level message), so `errors` is
+ * the ONLY place naming the offending field — and dropping it left admins with an
+ * `alert("Validation Error")` and no way to know what to fix.
+ */
+function fieldErrorDetail(data: ApiResponseBody): string {
+  const entries = Object.entries(data.errors ?? {}).filter(
+    ([, msg]) => typeof msg === 'string' && msg.trim(),
+  );
+  if (!entries.length) return '';
+
+  const shown = entries
+    .slice(0, MAX_FIELD_ERRORS)
+    .map(([field, msg]) => `• ${field}: ${msg}`);
+  const hidden = entries.length - shown.length;
+  if (hidden > 0) shown.push(`• …and ${hidden} more field${hidden === 1 ? '' : 's'}.`);
+
+  return `\n\n${shown.join('\n')}`;
+}
+
 /**
  * Build a user-facing error message from a non-OK response. Special-cases the
  * 413 body-limit case since it's the common upload failure and its raw text is
- * opaque to admins.
+ * opaque to admins, and appends per-field validation detail when the backend
+ * sent any.
  */
 export function errorMessage(
   res: Response,
@@ -70,5 +103,6 @@ export function errorMessage(
   if (res.status === 413) {
     return 'Upload too large. The file(s) exceed the ~4 MB request limit — compress the images (or split the CSV) and try again.';
   }
-  return data.message || data.error || `${fallback} (HTTP ${res.status}).`;
+  const base = data.message || data.error || `${fallback} (HTTP ${res.status}).`;
+  return `${base}${fieldErrorDetail(data)}`;
 }

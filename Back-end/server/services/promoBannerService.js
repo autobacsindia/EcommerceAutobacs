@@ -28,15 +28,36 @@ const CACHE_TTL_SECONDS = 60;
  * the component, so the storefront always receives three usable URLs and the
  * rendering layer never has to decide what "missing" means. It also keeps the
  * fallback rule in one place instead of repeated per breakpoint in JSX.
+ *
+ * Pixel dimensions travel WITH the url they belong to, and a fallback carries the
+ * desktop dimensions with the desktop url. The storefront turns them into a CSS
+ * aspect-ratio so the strip reserves its exact height before the image loads and
+ * renders the artwork whole — no cropping. A url paired with another slot's
+ * dimensions would reserve the wrong box and letterbox a perfectly good file.
  */
-const publicShape = (doc) => ({
-  id: String(doc._id),
-  imageUrl: doc.imageUrl,
-  tabletImageUrl: doc.tabletImageUrl || doc.imageUrl,
-  mobileImageUrl: doc.mobileImageUrl || doc.imageUrl,
-  alt: doc.alt,
-  linkPath: doc.linkPath || '/offers',
-});
+const slotShape = (url, width, height, fallback) =>
+  (url ? { url, width: width || null, height: height || null } : fallback);
+
+const publicShape = (doc) => {
+  const desktop = slotShape(doc.imageUrl, doc.imageWidth, doc.imageHeight, null);
+  const tablet = slotShape(doc.tabletImageUrl, doc.tabletImageWidth, doc.tabletImageHeight, desktop);
+  const mobile = slotShape(doc.mobileImageUrl, doc.mobileImageWidth, doc.mobileImageHeight, desktop);
+
+  return {
+    id: String(doc._id),
+    imageUrl: desktop.url,
+    imageWidth: desktop.width,
+    imageHeight: desktop.height,
+    tabletImageUrl: tablet.url,
+    tabletImageWidth: tablet.width,
+    tabletImageHeight: tablet.height,
+    mobileImageUrl: mobile.url,
+    mobileImageWidth: mobile.width,
+    mobileImageHeight: mobile.height,
+    alt: doc.alt,
+    linkPath: doc.linkPath || '/offers',
+  };
+};
 
 /**
  * The banner to render right now, or null when nothing is scheduled.

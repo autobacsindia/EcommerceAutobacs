@@ -13,8 +13,14 @@ const CDN = 'https://res.cloudinary.com/demo/image/upload/v1/autobacs/promo-bann
 const BANNER = {
   id: 'b1',
   imageUrl: `${CDN}/onam-desktop.jpg`,
+  imageWidth: 3840,
+  imageHeight: 256,
   tabletImageUrl: `${CDN}/onam-tablet.jpg`,
+  tabletImageWidth: 2048,
+  tabletImageHeight: 256,
   mobileImageUrl: `${CDN}/onam-mobile.jpg`,
+  mobileImageWidth: 1280,
+  mobileImageHeight: 320,
   alt: 'Onam offer is live',
   linkPath: '/offers',
 };

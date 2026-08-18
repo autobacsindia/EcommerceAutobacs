@@ -224,12 +224,55 @@ describe('Promo banner API', () => {
     expect(banner.tabletImageUrl).toBe(IMG);
   });
 
+  it('publishes each slot\'s pixel dimensions', async () => {
+    await seed({
+      imageWidth: 3840, imageHeight: 256,
+      mobileImageUrl: `${CLOUDINARY}/onam-mobile.jpg`,
+      mobileImageWidth: 1280, mobileImageHeight: 320,
+    });
+    const { banner } = (await getActive()).body;
+    // The storefront turns these into a CSS aspect-ratio: the strip renders the
+    // artwork whole at whatever height its shape implies, instead of cropping the
+    // sides to fit a fixed height, and still reserves its box before the image
+    // loads. Without dimensions there is no way to have both.
+    expect(banner.imageWidth).toBe(3840);
+    expect(banner.imageHeight).toBe(256);
+    expect(banner.mobileImageWidth).toBe(1280);
+    expect(banner.mobileImageHeight).toBe(320);
+  });
+
+  it('carries the desktop dimensions with the desktop url when a slot falls back', async () => {
+    await seed({ imageWidth: 3840, imageHeight: 256 });
+    const { banner } = (await getActive()).body;
+    // The pairing is the point: a fallback url served with the empty slot's own
+    // (null) dimensions would be reserved at the spec ratio rather than the
+    // file's, and letterbox a perfectly good image on phones and tablets.
+    expect(banner.mobileImageUrl).toBe(IMG);
+    expect(banner.mobileImageWidth).toBe(3840);
+    expect(banner.mobileImageHeight).toBe(256);
+    expect(banner.tabletImageWidth).toBe(3840);
+    expect(banner.tabletImageHeight).toBe(256);
+  });
+
+  it('reports null dimensions rather than guessing when they were never captured', async () => {
+    await seed();
+    const { banner } = (await getActive()).body;
+    // Legacy rows and hand-typed urls have none. The component falls back to the
+    // slot's spec ratio; inventing numbers here would hide that from it.
+    expect(banner.imageWidth).toBeNull();
+    expect(banner.imageHeight).toBeNull();
+  });
+
   it('never leaks admin bookkeeping onto the public response', async () => {
     await seed();
     const { banner } = (await getActive()).body;
     // The public payload is a SHARED cache entry — it must not accumulate fields.
     expect(Object.keys(banner).sort()).toEqual([
-      'alt', 'id', 'imageUrl', 'linkPath', 'mobileImageUrl', 'tabletImageUrl',
+      'alt', 'id',
+      'imageHeight', 'imageUrl', 'imageWidth',
+      'linkPath',
+      'mobileImageHeight', 'mobileImageUrl', 'mobileImageWidth',
+      'tabletImageHeight', 'tabletImageUrl', 'tabletImageWidth',
     ]);
   });
 

@@ -46,10 +46,16 @@ interface SeoPanelProps {
 }
 
 // Ideal SERP lengths (soft guidance) vs. hard caps (enforced by maxLength).
+// The caps MIRROR the backend schema (Back-end/server/models/shared/seoSchema.js)
+// — keep them in lockstep. The URL caps used to be missing here entirely, so a
+// pasted over-long canonical was only rejected at the Mongoose validator, which
+// surfaced as an unactionable "Validation Error" the admin couldn't get past.
 const TITLE_IDEAL = 60;
 const TITLE_MAX = 70;
 const DESC_IDEAL = 155;
 const DESC_MAX = 200;
+const CANONICAL_MAX = 500;
+const OG_IMAGE_MAX = 1000;
 
 function Counter({ length, ideal, max }: { length: number; ideal: number; max: number }) {
   const color =
@@ -170,6 +176,7 @@ export default function SeoPanel({ value, onChange, defaults, defaultOpen = fals
                 <input
                   type="url"
                   value={value.canonical}
+                  maxLength={CANONICAL_MAX}
                   onChange={(e) => set('canonical', e.target.value)}
                   placeholder="Leave blank — defaults to this page's own URL"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -187,6 +194,7 @@ export default function SeoPanel({ value, onChange, defaults, defaultOpen = fals
                 <input
                   type="url"
                   value={value.ogImage}
+                  maxLength={OG_IMAGE_MAX}
                   onChange={(e) => set('ogImage', e.target.value)}
                   placeholder="Defaults to the primary image"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"

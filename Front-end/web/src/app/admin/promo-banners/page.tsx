@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
-import { PROMO_SLOT_SPECS, PROMO_HEIGHTS } from '@/components/layout/PromoBanner';
+import { PROMO_SLOT_SPECS, promoAspectRatio, PROMO_MAX_HEIGHT } from '@/components/layout/PromoBanner';
 
 /**
  * Admin — site-wide promo banner.
@@ -14,14 +14,21 @@ import { PROMO_SLOT_SPECS, PROMO_HEIGHTS } from '@/components/layout/PromoBanner
  * the resolution rule is the backend's — this screen only reports the `state` the
  * backend computed, it never re-derives "which one is showing".
  *
- * Three artwork slots, because one image cannot serve a 375px phone and a 2560px
- * monitor: stretched wide it blurs, squeezed narrow it becomes an unreadable
- * sliver. Only the desktop file is required; the others fall back to it.
+ * ONE artwork file is all this needs. The strip renders it whole — full width,
+ * height following the file's own shape — so nothing is ever cropped.
+ *
+ * The two extra slots exist for a single reason: a wide strip gets proportionally
+ * shorter as the screen narrows, so a 15:1 desktop file is a ~25px sliver on a
+ * phone. Uploading a squatter file for the small breakpoints fixes that. They are
+ * optional, hidden until asked for, and fall back to the desktop file.
  */
 
 /** Which artwork slot a file belongs to. Order = the order shown in the form. */
 const SLOTS = ['desktop', 'tablet', 'mobile'] as const;
 type Slot = (typeof SLOTS)[number];
+
+/** Everything except the required desktop file — shown behind a disclosure. */
+const OPTIONAL_SLOTS: Slot[] = ['tablet', 'mobile'];
 
 /** API field names per slot. Desktop keeps the original flat `image*` names. */
 const SLOT_FIELDS: Record<Slot, { url: string; publicId: string; width: string; height: string }> = {
@@ -191,8 +198,20 @@ export default function AdminPromoBannersPage() {
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((p) => ({ ...p, [k]: v }));
 
-  const openCreate = () => { setEditingId(null); setDraft(EMPTY); setShowForm(true); setMsg(null); setError(null); };
-  const openEdit = (b: Banner) => { setEditingId(b._id); setDraft(toDraft(b)); setShowForm(true); setMsg(null); setError(null); };
+  /**
+   * Whether the optional-artwork disclosure is open.
+   *
+   * Controlled rather than left to the browser: it has to spring open when the
+   * banner being edited already uses those slots, or an operator would open a
+   * banner, see one upload box, and reasonably conclude the other files were
+   * lost. Kept in state (not derived inline) so re-renders from unrelated typing
+   * can't force it back open after the operator closes it.
+   */
+  const [showOptionalArt, setShowOptionalArt] = useState(false);
+  const usesOptionalArt = (d: Draft) => OPTIONAL_SLOTS.some((slot) => Boolean(d.images[slot].url));
+
+  const openCreate = () => { setEditingId(null); setDraft(EMPTY); setShowOptionalArt(false); setShowForm(true); setMsg(null); setError(null); };
+  const openEdit = (b: Banner) => { const d = toDraft(b); setEditingId(b._id); setDraft(d); setShowOptionalArt(usesOptionalArt(d)); setShowForm(true); setMsg(null); setError(null); };
   const closeForm = () => { setShowForm(false); setEditingId(null); setDraft(EMPTY); };
 
   const handleUpload = async (file: File, slot: Slot) => {
@@ -281,7 +300,8 @@ export default function AdminPromoBannersPage() {
         <p className="mb-2 text-xs font-medium text-blue-700">
           Give your designer: <strong>{spec.width} × {spec.height} px</strong>
           <span className="font-normal text-gray-500">
-            {' '}— renders {PROMO_HEIGHTS[slot]}px tall, full width
+            {' '}({spec.ratio}:1). Nothing is cropped — the strip is as tall as this
+            shape makes it, about 100px on a typical {spec.label.toLowerCase()} screen.
           </span>
         </p>
 
@@ -295,15 +315,18 @@ export default function AdminPromoBannersPage() {
 
         {img.url && (
           <div className="mt-3">
-            {/* Previewed at the height it will actually render, so what you see
-                here is what a visitor sees — not a scaled-down thumbnail that
-                flatters an under-sized file. */}
+            {/* Reserved and filled exactly as the storefront does it — same
+                aspect-ratio helper, same object-contain — so the preview cannot
+                flatter a file that will letterbox or look soft in production. */}
             <div
               className="w-full overflow-hidden rounded border border-gray-200 bg-gray-900"
-              style={{ height: PROMO_HEIGHTS[slot] }}
+              style={{
+                aspectRatio: promoAspectRatio(slot, img.width, img.height),
+                maxHeight: PROMO_MAX_HEIGHT,
+              }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary Cloudinary upload */}
-              <img src={img.url} alt={`${spec.label} preview`} className="h-full w-full object-cover object-center" />
+              <img src={img.url} alt={`${spec.label} preview`} className="h-full w-full object-contain object-center" />
             </div>
             <div className="mt-1 flex items-center justify-between">
               <span className="text-xs text-gray-500">
@@ -369,12 +392,35 @@ export default function AdminPromoBannersPage() {
             <div>
               <h3 className="text-sm font-semibold text-gray-800">Artwork</h3>
               <p className="text-xs text-gray-500">
-                The strip always fills the screen width at a fixed height, so the edges are
-                trimmed on sizes it wasn&apos;t designed for. Keep wording in the middle of each
-                image. Only the desktop file is required.
+                One image is enough. It fills the screen width and is never cropped — the
+                strip is simply as tall as the image&apos;s shape makes it, so a wide design
+                looks the same on every monitor and gets shorter as the screen narrows.
               </p>
             </div>
-            {SLOTS.map(renderSlot)}
+
+            {renderSlot('desktop')}
+
+            {/* Collapsed by default: three upload boxes read as three things you
+                must produce. They are one thing you must produce plus an escape
+                hatch for phones, and the copy should say so before it asks for
+                files. */}
+            <details
+              className="rounded-lg border border-gray-200 bg-gray-50 p-4"
+              open={showOptionalArt}
+              onToggle={(e) => setShowOptionalArt(e.currentTarget.open)}
+            >
+              <summary className="cursor-pointer text-sm font-medium text-gray-800">
+                Add separate artwork for smaller screens (optional)
+              </summary>
+              <p className="mt-2 mb-3 text-xs text-gray-500">
+                Only worth doing if the wide design ends up too short to read on a phone: a{' '}
+                {PROMO_SLOT_SPECS.desktop.ratio}:1 strip is about{' '}
+                {Math.round(390 / PROMO_SLOT_SPECS.desktop.ratio)}px tall on one. A squatter
+                design for these sizes keeps the wording legible. Leave them empty and the
+                desktop image is used everywhere.
+              </p>
+              <div className="space-y-3">{OPTIONAL_SLOTS.map(renderSlot)}</div>
+            </details>
           </div>
 
           <div>
