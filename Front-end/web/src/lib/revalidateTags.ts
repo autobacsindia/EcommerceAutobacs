@@ -19,6 +19,7 @@ export const ALLOWED_PREFIXES = [
   'seo:',
   'blog:',
   'careers:',
+  'promo:',
 ] as const;
 
 export function isAllowedTag(tag: string): boolean {

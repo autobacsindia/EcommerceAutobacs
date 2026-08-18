@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { Gift, X } from 'lucide-react';
 import { useCampaign } from '@/hooks/queries/useCampaign';
+import { useRewardRibbonClaimsSlot } from '@/hooks/useRewardRibbon';
 
 /**
  * Site-wide reward ribbon for an eligible campaign customer.
@@ -17,14 +17,19 @@ import { useCampaign } from '@/hooks/queries/useCampaign';
  *
  * Hidden on admin screens, on the cart (the savings meter already says it better, and
  * two competing reward callouts is noise), and once dismissed for the session.
+ *
+ * Where it renders, it also OUTRANKS the promotional image strip (PromoBanner) —
+ * that precedence lives in useRewardRibbonClaimsSlot() so both components read one
+ * rule rather than each guessing at the other's visibility.
  */
 export default function CampaignBanner() {
-  const pathname = usePathname();
   const [dismissed, setDismissed] = useState(false);
   const { data: campaign } = useCampaign(0);
+  const claimsSlot = useRewardRibbonClaimsSlot();
 
-  const suppressed = pathname?.startsWith('/admin') || pathname === '/cart' || pathname === '/festive';
-  if (suppressed || dismissed || !campaign?.eligible) return null;
+  // `campaign` is redundant with claimsSlot at runtime (it only claims the slot
+  // when the campaign is eligible) but keeps the type narrowed for the tier maths.
+  if (!claimsSlot || dismissed || !campaign) return null;
 
   const topPercent = campaign.tiers?.length
     ? Math.max(...campaign.tiers.map((t) => t.percent))

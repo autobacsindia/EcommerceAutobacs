@@ -29,7 +29,7 @@ Mumbai → Singapore, which took query latency 565 ms → 185 ms.
 | MongoDB version | **8.0** | Source is 8.0.29. |
 | Storage | **10 GB** | Actual usage is 32 MB. 10 GB is the M10 default. |
 | Cloud Backup | **ON** | $0.14/GB-month. Trivial at this size. |
-| Continuous Backup | off | Snapshot RPO is fine; PIT is not worth it here. |
+| Continuous Backup | **ON** | Point-in-time restore, ~1 min RPO instead of 6 hours. |
 | Compute auto-scale | **ON, min M10 / max M20** | Absorbs a campaign spike instead of throttling. |
 | Storage auto-scale | ON | Harmless. |
 | **Termination Protection** | **ON** | It is currently OFF on prod. Turn it on. |
@@ -106,7 +106,11 @@ Database users and the IP access list are per-cluster and are **not** copied by
 - [ ] **Temporary migration user** with `readWriteAnyDatabase` (needed by
       `mongorestore` to write indexes). **Delete it after Phase 3.**
 - [ ] **IP access list.** Security → Network Access. Add:
-      - your current laptop IP (for the restore) — get it with `curl -4 ifconfig.me`
+      - your current laptop IP (for the restore) — get it with `curl -4 ifconfig.me`.
+        ⚠️ This is a **dynamic residential IP and it changes** — it moved from
+        `49.37.232.42` to `49.37.235.214` within a single day. If a dump or restore
+        suddenly times out with a server-selection error, re-check it here first;
+        that is the usual cause, not a broken cluster.
       - whatever the backend needs. Railway egress IPs rotate, so this is usually
         `0.0.0.0/0` in practice. If so, that is exactly why the database user must
         be least-privilege.

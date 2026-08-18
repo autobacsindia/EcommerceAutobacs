@@ -24,7 +24,7 @@ import Sentry from '../config/sentry.js';
 // Keep in sync with the identical list in the frontend's app/api/revalidate/route.ts —
 // a tag that clears one list but not the other is silently dropped. Tag names are
 // built centrally in utils/nextTags.js; never inline a bare tag at a call site.
-const ALLOWED_PREFIXES = ['home:', 'product:', 'category:', 'nav:', 'seo:', 'blog:', 'careers:'];
+const ALLOWED_PREFIXES = ['home:', 'product:', 'category:', 'nav:', 'seo:', 'blog:', 'careers:', 'promo:'];
 /** Per-request cap. Mirrors the frontend route's own MAX_TAGS — sending more is silently truncated there. */
 const MAX_TAGS = 20;
 /**

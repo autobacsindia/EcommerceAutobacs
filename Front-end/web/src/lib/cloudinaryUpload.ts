@@ -17,6 +17,16 @@ import { validateImageFile } from './imageUpload';
 export interface UploadedImage {
   url: string;
   public_id: string;
+  /**
+   * Intrinsic pixel dimensions, as reported by Cloudinary.
+   *
+   * Optional because most callers only persist the URL. Anything that must
+   * reserve layout space before the image loads (the promo banner scales to its
+   * own aspect ratio) needs these — measuring client-side would mean measuring
+   * after the shift has already happened.
+   */
+  width?: number;
+  height?: number;
 }
 
 interface SignatureResponse {
@@ -76,7 +86,12 @@ async function uploadWithSignature(file: File, sig: SignatureResponse): Promise<
   }
 
   const data = await res.json();
-  return { url: data.secure_url, public_id: data.public_id };
+  return {
+    url: data.secure_url,
+    public_id: data.public_id,
+    width: data.width,
+    height: data.height,
+  };
 }
 
 /**

@@ -394,6 +394,20 @@ async function ensureCriticalIndexes() {
     );
     console.log('✓ CareerCategory indexes confirmed');
 
+    // PromoBanner — the site-wide occasion strip. Backs resolveActiveBanner()'s
+    // "which banner is live right now" query, which runs on a cache miss for
+    // every storefront page render. autoIndex is off in prod, so this safety net
+    // is what actually builds it there.
+    //
+    // NOT a TTL index, and endsAt must never be given one: expiry has to stop the
+    // banner RENDERING, not delete the record. A TTL here would destroy last
+    // year's Diwali artwork and its settings the moment the campaign ended.
+    await db.collection('promobanners').createIndex(
+      { isActive: 1, startsAt: 1, endsAt: 1, priority: -1, createdAt: -1 },
+      { background: true }
+    );
+    console.log('✓ PromoBanner indexes confirmed');
+
     // MONEY-ADJACENT: one ACTIVE (non-cancelled) return per (order, product). This
     // is the DB race-safe backstop returnController.createReturnRequest relies on —
     // its findOne pre-check can be beaten by two concurrent submissions, and only

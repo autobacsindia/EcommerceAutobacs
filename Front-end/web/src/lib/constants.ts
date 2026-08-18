@@ -135,6 +135,12 @@ export const API_ENDPOINTS = {
   LOYALTY_CONFIG: '/loyalty/config',                     // admin get/update
   LOYALTY_ADJUST: (userId: string) => `/loyalty/users/${userId}/adjust`,
 
+  // Promo banners (site-wide occasion strip)
+  PROMO_BANNER_ACTIVE: '/promo-banners/active',           // public: the live banner
+  PROMO_BANNERS_ADMIN: '/promo-banners/admin',            // admin list/create
+  PROMO_BANNER_ADMIN_BY_ID: (id: string) => `/promo-banners/admin/${id}`,
+  PROMO_BANNER_TOGGLE: (id: string) => `/promo-banners/admin/${id}/toggle`,
+
   // Contact
   CONTACT: '/contact',
 

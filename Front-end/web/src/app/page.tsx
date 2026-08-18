@@ -1,5 +1,6 @@
 import HomeRedesign from '@/components/home/redesign/HomeRedesign';
 import { getHomeData } from '@/components/home/redesign/homeData';
+import { getActivePromoBanner } from '@/lib/promoBanner';
 
 /**
  * Home page — redesigned (Hero.html).
@@ -21,6 +22,8 @@ import { getHomeData } from '@/components/home/redesign/homeData';
 export const revalidate = 300;
 
 export default async function Home() {
-  const data = await getHomeData();
-  return <HomeRedesign data={data} />;
+  // Independent reads — run them concurrently rather than making the promo strip
+  // wait on the (much heavier) home data fetch.
+  const [data, promoBanner] = await Promise.all([getHomeData(), getActivePromoBanner()]);
+  return <HomeRedesign data={data} promoBanner={promoBanner} />;
 }
