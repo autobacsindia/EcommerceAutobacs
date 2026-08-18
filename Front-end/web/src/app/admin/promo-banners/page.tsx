@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
+import { RECOMMENDED_MIN_WIDTH } from '@/components/layout/PromoBanner';
 
 /**
  * Admin — site-wide promo banner.
@@ -14,8 +15,12 @@ import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
  * backend decided (`liveId`), it never re-derives "which one is showing".
  */
 
+/** Why a banner is or isn't on screen — computed server-side, never re-derived here. */
+type BannerState = 'live' | 'off' | 'scheduled' | 'ended' | 'superseded';
+
 interface Banner {
   _id: string;
+  state: BannerState;
   title: string;
   imageUrl: string;
   imagePublicId: string | null;
@@ -58,6 +63,48 @@ const EMPTY: Draft = {
   priority: 0,
 };
 
+/**
+ * Badge copy per state.
+ *
+ * The first version of this screen said "ON — NOT SHOWING", which told an
+ * operator that something was wrong without telling them what, and left them
+ * staring at a ticked Active box. Each label below names the actual blocker so
+ * the next action is obvious.
+ */
+const STATE_BADGE: Record<BannerState, { text: string; className: string; explain: string }> = {
+  live: {
+    text: 'LIVE',
+    className: 'bg-green-100 text-green-700',
+    explain: 'Showing on the site right now.',
+  },
+  scheduled: {
+    text: 'SCHEDULED',
+    className: 'bg-blue-100 text-blue-700',
+    explain: 'Active, but its start date/time has not arrived yet.',
+  },
+  ended: {
+    text: 'ENDED',
+    className: 'bg-gray-200 text-gray-700',
+    explain: 'Active, but its end date has passed. Clear or extend the end date to run it again.',
+  },
+  superseded: {
+    text: 'WAITING',
+    className: 'bg-amber-100 text-amber-800',
+    explain: 'Active and in date, but another banner has a higher priority. Raise its priority or turn the other one off.',
+  },
+  off: {
+    text: 'OFF',
+    className: 'bg-gray-100 text-gray-500',
+    explain: 'Switched off.',
+  },
+};
+
+/**
+ * Past roughly this, the strip is too short to read once scaled to a phone
+ * (375 / 12 ≈ 31px). Advisory only — see the warning that uses it.
+ */
+const MAX_COMFORTABLE_RATIO = 12;
+
 const label = 'block text-sm font-medium text-gray-700 mb-1';
 const input = 'w-full border border-gray-300 rounded-lg px-3 py-2';
 const hint = 'mt-1 text-xs text-gray-500';
@@ -92,7 +139,6 @@ const toDraft = (b: Banner): Draft => ({
 
 export default function AdminPromoBannersPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
-  const [liveId, setLiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -105,15 +151,14 @@ export default function AdminPromoBannersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // The admin list and the live banner come from two endpoints on purpose:
-      // the second is the storefront's own resolution, so the "LIVE" tag below
-      // reflects what shoppers actually see rather than this page's guess at it.
-      const [list, active] = await Promise.all([
-        apiClient.get<{ success: boolean; banners: Banner[] }>(API_ENDPOINTS.PROMO_BANNERS_ADMIN),
-        apiClient.get<{ success: boolean; banner: { id: string } | null }>(API_ENDPOINTS.PROMO_BANNER_ACTIVE),
-      ]);
+      // One request. Each row's `state` is computed server-side against the same
+      // query the storefront uses — the earlier version also polled the PUBLIC
+      // /active endpoint, which carries CDN cache headers and so could hand the
+      // admin a stale verdict about a change they had just saved.
+      const list = await apiClient.get<{ success: boolean; banners: Banner[] }>(
+        API_ENDPOINTS.PROMO_BANNERS_ADMIN,
+      );
       setBanners(list.banners || []);
-      setLiveId(active.banner?.id ?? null);
       setError(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load banners');
@@ -125,6 +170,10 @@ export default function AdminPromoBannersPage() {
   useEffect(() => { void load(); }, [load]);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((p) => ({ ...p, [k]: v }));
+
+  /** Aspect ratio of the uploaded artwork, or null until one is uploaded. */
+  const ratio =
+    draft.imageWidth && draft.imageHeight ? draft.imageWidth / draft.imageHeight : null;
 
   const openCreate = () => { setEditingId(null); setDraft(EMPTY); setShowForm(true); setMsg(null); setError(null); };
   const openEdit = (b: Banner) => { setEditingId(b._id); setDraft(toDraft(b)); setShowForm(true); setMsg(null); setError(null); };
@@ -257,12 +306,37 @@ export default function AdminPromoBannersPage() {
               </div>
             )}
 
+            {/* Caught at upload time, not after it ships: an under-sized banner
+                looks fine in this small preview and only turns soft once it is
+                stretched across a real desktop window. */}
+            {draft.imageWidth != null && draft.imageWidth < RECOMMENDED_MIN_WIDTH && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <strong>This image will look blurry on large screens.</strong> It is{' '}
+                {draft.imageWidth}px wide; the banner stretches the full width of the window, so
+                it needs at least <strong>{RECOMMENDED_MIN_WIDTH}px</strong> (ideally 3840px) to
+                stay sharp. Re-export the artwork larger — enlarging this file will not help.
+              </p>
+            )}
+
+            {/* Warning, not a block: a rush campaign at 9pm should never be stopped
+                by a house style rule. It states the consequence and lets you decide. */}
+            {ratio != null && ratio > MAX_COMFORTABLE_RATIO && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <strong>Very wide strip ({ratio.toFixed(1)}:1).</strong> Scaled to a phone it will
+                be about <strong>{Math.round(375 / ratio)}px</strong> tall, which is usually too
+                short to read. An <strong>8:1</strong> ratio (e.g. 3200×400) stays legible on
+                mobile. You can still save this.
+              </p>
+            )}
+
             <p className={hint}>
-              A wide strip — around 1600×100 works well. It is shown whole and scales with the
-              screen, so nothing gets cut off; check the phone preview above and make sure the
-              text is still readable at that size.
+              Export at <strong>3200×400</strong> (an 8:1 strip) for the best balance, or
+              3840×320 if you want it shorter on desktop. It is shown whole and scales with the
+              screen, so nothing is ever cut off — check the phone preview above and make sure
+              the wording is still readable at that size.
               {draft.imageWidth && draft.imageHeight && (
-                <> Uploaded at {draft.imageWidth}×{draft.imageHeight}.</>
+                <> Uploaded at {draft.imageWidth}×{draft.imageHeight}
+                  {' '}({(draft.imageWidth / draft.imageHeight).toFixed(1)}:1).</>
               )}
             </p>
           </div>
@@ -338,17 +412,17 @@ export default function AdminPromoBannersPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{b.title}</span>
-                  {b._id === liveId && (
-                    <span className="shrink-0 rounded-full bg-green-100 text-green-700 text-[11px] font-semibold px-2 py-0.5">
-                      LIVE
-                    </span>
-                  )}
-                  {b.isActive && b._id !== liveId && (
-                    <span className="shrink-0 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold px-2 py-0.5">
-                      ON — NOT SHOWING
-                    </span>
-                  )}
+                  <span
+                    className={`shrink-0 rounded-full text-[11px] font-semibold px-2 py-0.5 ${STATE_BADGE[b.state].className}`}
+                  >
+                    {STATE_BADGE[b.state].text}
+                  </span>
                 </div>
+                {/* Say why, not just what — an unexplained "not showing" is the
+                    thing that sends someone to ask an engineer. */}
+                {b.state !== 'live' && (
+                  <div className="text-xs text-gray-600">{STATE_BADGE[b.state].explain}</div>
+                )}
                 <div className="text-xs text-gray-500 truncate">
                   → {b.linkPath}
                   {b.startsAt && ` · from ${new Date(b.startsAt).toLocaleString('en-IN')}`}

@@ -22,8 +22,20 @@ import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
  * a price, a total, or stock.
  */
 
-/** srcset widths — a full-bleed strip, so these track viewport widths. */
-const WIDTHS = [640, 828, 1080, 1440, 1920] as const;
+/**
+ * srcset widths — a full-bleed strip, so these track DEVICE pixels, not CSS px.
+ *
+ * The top entries matter: a 1920px-wide window on a 2× display needs a 3840px
+ * rendition, and a srcset that stops at 1920 leaves the browser upscaling — which
+ * is exactly what "the banner looks blurry" is. Cloudinary's `c_limit` never
+ * upscales past the source, so these are a ceiling, not a promise: asking for
+ * w_3840 from a 1200px upload still delivers 1200px. Sharpness ultimately comes
+ * from uploading artwork at least as wide as the largest entry here.
+ */
+const WIDTHS = [640, 828, 1080, 1440, 1920, 2560, 3840] as const;
+
+/** Artwork narrower than this cannot fill a large 2× display without softening. */
+export const RECOMMENDED_MIN_WIDTH = 2560;
 
 /**
  * Ratio used when a banner has no stored dimensions (seeded by hand, or saved
@@ -74,6 +86,7 @@ export default function PromoBanner({ banner }: { banner: PromoBannerData | null
       {/* eslint-disable-next-line @next/next/no-img-element -- sized by the aspect-ratio wrapper; still Cloudinary-optimised */}
       <img
         src={cloudinaryLoader({ src: imageUrl, width: 1920 })}
+        /* Widest entry the browser may pick; `c_limit` caps it at the source size. */
         srcSet={srcSetFor(imageUrl)}
         sizes="100vw"
         alt={alt}

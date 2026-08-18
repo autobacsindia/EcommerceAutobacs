@@ -11,7 +11,11 @@
  */
 
 import promoBannerRepository from '../repositories/promoBannerRepository.js';
-import { resolveActiveBanner, PROMO_BANNER_CACHE_TAG } from '../services/promoBannerService.js';
+import {
+  resolveActiveBanner,
+  describeBannerStates,
+  PROMO_BANNER_CACHE_TAG,
+} from '../services/promoBannerService.js';
 import { normalizePromoLinkPath } from '../utils/promoLinkPath.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
@@ -94,7 +98,17 @@ export const listBanners = async (req, res) => {
   // Fetch one extra to learn whether another page exists without a count query.
   const rows = await promoBannerRepository.findPage({ limit: limit + 1, before });
   const hasMore = rows.length > limit;
-  const banners = hasMore ? rows.slice(0, limit) : rows;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+
+  /**
+   * Resolve the winner through the repository directly rather than
+   * resolveActiveBanner(), deliberately: that one is Redis-cached for 60s, and an
+   * admin who just saved a change must not be shown a stale verdict about their
+   * own edit. Same query, same authority — just no cache in front of it.
+   */
+  const now = new Date();
+  const live = await promoBannerRepository.findActiveAt(now);
+  const banners = describeBannerStates(page, live ? String(live._id) : null, now);
 
   res.json({
     success: true,

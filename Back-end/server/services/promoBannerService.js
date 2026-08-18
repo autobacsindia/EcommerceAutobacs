@@ -58,4 +58,48 @@ export async function resolveActiveBanner() {
   return banner;
 }
 
-export default { resolveActiveBanner, PROMO_BANNER_CACHE_TAG };
+/**
+ * Why a given banner is or isn't on screen. Admin-facing only.
+ *
+ * Exists because "active but not showing" is a genuinely confusing thing to be
+ * told: the operator ticked Active, so the honest question is *what is stopping
+ * it*, and there are four different answers. Naming the reason turns a puzzle
+ * into an instruction.
+ */
+export const BANNER_STATE = {
+  LIVE: 'live',               // on screen right now
+  OFF: 'off',                 // Active unticked
+  SCHEDULED: 'scheduled',     // active, but its start date hasn't arrived
+  ENDED: 'ended',             // active, but its end date has passed
+  SUPERSEDED: 'superseded',   // active and in-window, but another banner outranks it
+};
+
+/**
+ * Classify every banner for the admin list.
+ *
+ * `liveId` is resolved by the SAME repository query the storefront uses, not
+ * re-derived here — so the admin can never disagree with what shoppers see about
+ * which banner won. This function only explains the losers.
+ *
+ * @param {Array} banners  admin rows (lean docs)
+ * @param {string|null} liveId  id of the winning banner, or null
+ * @param {Date} now
+ */
+export function describeBannerStates(banners = [], liveId = null, now = new Date()) {
+  return banners.map((b) => {
+    const id = String(b._id);
+    if (id === liveId) return { ...b, state: BANNER_STATE.LIVE };
+    if (!b.isActive) return { ...b, state: BANNER_STATE.OFF };
+    if (b.startsAt && new Date(b.startsAt) > now) return { ...b, state: BANNER_STATE.SCHEDULED };
+    if (b.endsAt && new Date(b.endsAt) <= now) return { ...b, state: BANNER_STATE.ENDED };
+    // Active, inside its window, and still not chosen — something else outranked it.
+    return { ...b, state: BANNER_STATE.SUPERSEDED };
+  });
+}
+
+export default {
+  resolveActiveBanner,
+  describeBannerStates,
+  BANNER_STATE,
+  PROMO_BANNER_CACHE_TAG,
+};

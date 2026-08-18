@@ -438,6 +438,68 @@ describe('Promo banner API', () => {
     expect(firstIds.filter((id) => secondIds.includes(id))).toHaveLength(0);
   });
 
+  describe('admin state reasons', () => {
+    // "Active but not showing" is the confusing case. Each of these asserts the
+    // admin is told WHICH of the four possible blockers applies, because that is
+    // the difference between a self-service fix and a support ticket.
+    const stateOf = async () => {
+      const res = await agent.get(`${BASE}/promo-banners/admin`);
+      return res.body.banners[0].state;
+    };
+
+    it('marks the winning banner live', async () => {
+      await seed();
+      expect(await stateOf()).toBe('live');
+    });
+
+    it('marks an unticked banner off', async () => {
+      await seed({ isActive: false });
+      expect(await stateOf()).toBe('off');
+    });
+
+    it('marks a not-yet-started banner scheduled, not merely "not showing"', async () => {
+      await seed({ startsAt: new Date(Date.now() + HOUR) });
+      expect(await stateOf()).toBe('scheduled');
+    });
+
+    it('marks an expired banner ended', async () => {
+      await seed({ startsAt: new Date(Date.now() - 2 * HOUR), endsAt: new Date(Date.now() - HOUR) });
+      expect(await stateOf()).toBe('ended');
+    });
+
+    it('marks an out-ranked banner superseded', async () => {
+      await seed({ title: 'Winner', priority: 10 });
+      await seed({ title: 'Loser', priority: 1 });
+      const res = await agent.get(`${BASE}/promo-banners/admin`);
+      const byTitle = Object.fromEntries(res.body.banners.map((b) => [b.title, b.state]));
+      expect(byTitle.Winner).toBe('live');
+      expect(byTitle.Loser).toBe('superseded');
+    });
+
+    it('agrees with the storefront about which banner won', async () => {
+      await seed({ title: 'Winner', imageUrl: `${CLOUDINARY}/win.jpg`, priority: 10 });
+      await seed({ title: 'Loser', imageUrl: `${CLOUDINARY}/lose.jpg`, priority: 1 });
+
+      const admin = await agent.get(`${BASE}/promo-banners/admin`);
+      const live = admin.body.banners.find((b) => b.state === 'live');
+      const shopper = await getActive();
+
+      // The admin verdict and the shopper's view must never disagree — that is
+      // the whole reason the winner is resolved by one query, not two rules.
+      expect(shopper.body.banner.id).toBe(live._id);
+    });
+
+    it('reflects a just-saved change immediately, not a cached verdict', async () => {
+      const banner = await seed();
+      await request(app).get(`${BASE}/promo-banners/active`); // warm the public cache
+
+      await patch(`/promo-banners/admin/${banner._id}/toggle`, { isActive: false });
+
+      // The admin list must not read through the CDN-cacheable public endpoint.
+      expect(await stateOf()).toBe('off');
+    });
+  });
+
   it('reports no further pages on the last one', async () => {
     await seed();
     const res = await agent.get(`${BASE}/promo-banners/admin?limit=10`);

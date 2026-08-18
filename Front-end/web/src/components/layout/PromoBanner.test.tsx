@@ -8,6 +8,13 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname(),
 }));
 
+// The reward-ribbon precedence rule. Mocked here so these tests stay about
+// placement; the rule itself is exercised in useRewardRibbon.test.tsx.
+const mockRibbonClaimsSlot = jest.fn<boolean, []>();
+jest.mock('@/hooks/useRewardRibbon', () => ({
+  useRewardRibbonClaimsSlot: () => mockRibbonClaimsSlot(),
+}));
+
 const BANNER: PromoBannerData = {
   id: 'b1',
   imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/autobacs/promo-banners/onam.jpg',
@@ -92,6 +99,8 @@ describe('PromoBanner', () => {
 });
 
 describe('ConditionalPromoBanner', () => {
+  beforeEach(() => mockRibbonClaimsSlot.mockReturnValue(false));
+
   const renderAt = (path: string, banner: PromoBannerData | null = BANNER) => {
     mockPathname.mockReturnValue(path);
     return render(<ConditionalPromoBanner banner={banner} />);
@@ -135,5 +144,22 @@ describe('ConditionalPromoBanner', () => {
   it('renders nothing on a storefront route when no banner is scheduled', () => {
     const { container } = renderAt('/products', null);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('stands down when the campaign reward ribbon owns the slot', () => {
+    // Two stacked bars push the page down and split attention across two offers.
+    // The ribbon wins: it is the only on-screen proof of a discount the customer
+    // was personally emailed about.
+    mockRibbonClaimsSlot.mockReturnValue(true);
+    mockPathname.mockReturnValue('/products');
+    const { container } = render(<ConditionalPromoBanner banner={BANNER} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('takes the slot back when no reward ribbon is showing', () => {
+    mockRibbonClaimsSlot.mockReturnValue(false);
+    mockPathname.mockReturnValue('/products');
+    const { container } = render(<ConditionalPromoBanner banner={BANNER} />);
+    expect(container).not.toBeEmptyDOMElement();
   });
 });

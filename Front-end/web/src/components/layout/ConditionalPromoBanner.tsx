@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import PromoBanner from './PromoBanner';
+import { useRewardRibbonClaimsSlot } from '@/hooks/useRewardRibbon';
 import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
 
 /**
@@ -27,6 +28,17 @@ import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
 export default function ConditionalPromoBanner({ banner }: { banner: PromoBannerData | null }) {
   const pathname = usePathname();
 
+  /**
+   * Stand down for the campaign reward ribbon.
+   *
+   * Both bars want the strip under the nav, and stacking them pushes the page
+   * down while asking the shopper to weigh two different offers at once. The
+   * ribbon wins because it is the only on-screen proof of a discount a customer
+   * was personally emailed about; this one is marketing that can wait. The rule
+   * itself lives in the hook so neither component can drift from the other.
+   */
+  const rewardRibbonShowing = useRewardRibbonClaimsSlot();
+
   // Normalise a trailing slash before matching: next.config.ts sets
   // `skipTrailingSlashRedirect`, so '/cart/' is served verbatim and an exact
   // === '/cart' test would miss it (the same trap ConditionalHeader documents).
@@ -40,7 +52,7 @@ export default function ConditionalPromoBanner({ banner }: { banner: PromoBanner
     path.startsWith('/checkout') ||
     path.startsWith('/admin');
 
-  if (hide) return null;
+  if (hide || rewardRibbonShowing) return null;
 
   return <PromoBanner banner={banner} />;
 }
