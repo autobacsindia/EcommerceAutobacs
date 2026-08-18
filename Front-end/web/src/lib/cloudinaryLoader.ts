@@ -39,8 +39,16 @@ const isTransformSegment = (segment: string): boolean =>
 type LoaderArgs = { src: string; width: number; quality?: number };
 
 export default function cloudinaryLoader({ src, width, quality }: LoaderArgs): string {
-  // Only rewrite Cloudinary delivery URLs; everything else is served verbatim.
-  if (!src.includes('res.cloudinary.com')) return src;
+  /*
+    Defensive, not decorative. This is a LEAF called during render by every image
+    on the site, so an exception here does not blank an image — it unwinds the
+    whole React tree and white-screens the page. A caller that passes an optional
+    field (a banner slot with no artwork uploaded, a product with a null image)
+    would otherwise crash the site on `src.includes`, which is exactly what a
+    missing tablet/mobile promo banner did. Pass the value straight back: React
+    omits a nullish `src`, so the browser simply renders no image.
+  */
+  if (typeof src !== 'string' || !src.includes('res.cloudinary.com')) return src;
 
   const uploadAt = src.indexOf(UPLOAD_MARKER);
   if (uploadAt === -1) return src;

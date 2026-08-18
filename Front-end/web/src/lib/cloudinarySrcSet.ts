@@ -69,7 +69,9 @@ export function cloudinarySrcSet(
   src: string,
   widths: readonly number[] = DEFAULT_WIDTHS,
 ): string | undefined {
-  if (!src.includes('res.cloudinary.com')) return undefined;
+  // Same leaf-safety rule as cloudinaryLoader: a nullish URL from an optional
+  // field must yield "no srcSet", never a TypeError that unwinds the page.
+  if (typeof src !== 'string' || !src.includes('res.cloudinary.com')) return undefined;
 
   const uploadAt = src.indexOf(UPLOAD_MARKER);
   if (uploadAt === -1) return undefined;

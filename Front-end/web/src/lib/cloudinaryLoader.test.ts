@@ -60,3 +60,24 @@ describe('cloudinaryLoader', () => {
     });
   });
 });
+
+describe('cloudinaryLoader — nullish src', () => {
+  /*
+    A loader is a LEAF called during render by every image on the site. Throwing
+    here does not break one image, it unwinds React and white-screens the page —
+    which is what a promo banner with no tablet artwork actually did in prod.
+  */
+  it('does not throw on a nullish src', () => {
+    expect(() =>
+      cloudinaryLoader({ src: undefined as unknown as string, width: 640 }),
+    ).not.toThrow();
+    expect(() =>
+      cloudinaryLoader({ src: null as unknown as string, width: 640 }),
+    ).not.toThrow();
+  });
+
+  it('returns the value untouched so React omits the attribute', () => {
+    expect(cloudinaryLoader({ src: undefined as unknown as string, width: 640 })).toBeUndefined();
+    expect(cloudinaryLoader({ src: null as unknown as string, width: 640 })).toBeNull();
+  });
+});
