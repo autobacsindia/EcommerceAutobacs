@@ -8,11 +8,13 @@ import { serverFetch } from './server-api';
 
 const mockFetch = serverFetch as jest.Mock;
 
+const CDN = 'https://res.cloudinary.com/demo/image/upload/v1/autobacs/promo-banners';
+
 const BANNER = {
   id: 'b1',
-  imageUrl: 'https://res.cloudinary.com/demo/image/upload/v1/autobacs/promo-banners/onam.jpg',
-  imageWidth: 1600,
-  imageHeight: 100,
+  imageUrl: `${CDN}/onam-desktop.jpg`,
+  tabletImageUrl: `${CDN}/onam-tablet.jpg`,
+  mobileImageUrl: `${CDN}/onam-mobile.jpg`,
   alt: 'Onam offer is live',
   linkPath: '/offers',
 };

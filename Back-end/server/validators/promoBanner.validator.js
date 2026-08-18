@@ -39,12 +39,22 @@ const bannerRules = (partial = false) => {
       .custom(isCloudinaryUrl).withMessage('Banner image must be a Cloudinary URL'),
     body('imagePublicId').optional({ nullable: true }).trim().isLength({ max: 300 }),
 
-    // Layout hints from the Cloudinary upload response. Bounded so a bad value
-    // cannot produce an absurd aspect-ratio box on the storefront.
-    body('imageWidth').optional({ nullable: true }).isInt({ min: 1, max: 20000 })
-      .withMessage('imageWidth must be a positive pixel count'),
-    body('imageHeight').optional({ nullable: true }).isInt({ min: 1, max: 20000 })
-      .withMessage('imageHeight must be a positive pixel count'),
+    // Optional per-breakpoint artwork. Absent ⇒ the desktop image is used.
+    body('tabletImageUrl').optional({ nullable: true, checkFalsy: true })
+      .trim().custom(isCloudinaryUrl).withMessage('Tablet image must be a Cloudinary URL'),
+    body('tabletImagePublicId').optional({ nullable: true }).trim().isLength({ max: 300 }),
+    body('mobileImageUrl').optional({ nullable: true, checkFalsy: true })
+      .trim().custom(isCloudinaryUrl).withMessage('Mobile image must be a Cloudinary URL'),
+    body('mobileImagePublicId').optional({ nullable: true }).trim().isLength({ max: 300 }),
+
+    // Recorded dimensions from the Cloudinary upload response, used to warn about
+    // under-sized artwork. Bounded so a nonsense value can't be stored.
+    ...['imageWidth', 'imageHeight',
+      'tabletImageWidth', 'tabletImageHeight',
+      'mobileImageWidth', 'mobileImageHeight',
+    ].map((field) =>
+      body(field).optional({ nullable: true }).isInt({ min: 1, max: 20000 })
+        .withMessage(`${field} must be a positive pixel count`)),
 
     // Required because the banner's whole message is inside the image; without
     // alt text a screen-reader user gets an unlabelled link and nothing else.

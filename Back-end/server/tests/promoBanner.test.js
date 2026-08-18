@@ -196,22 +196,32 @@ describe('Promo banner API', () => {
     expect((await getActive()).body.banner.imageUrl).toBe(`${CLOUDINARY}/high.jpg`);
   });
 
-  it('sends the intrinsic dimensions so the storefront can reserve the strip', async () => {
-    await seed({ imageWidth: 1600, imageHeight: 100 });
+  it('serves the per-breakpoint artwork when all three are uploaded', async () => {
+    await seed({
+      tabletImageUrl: `${CLOUDINARY}/onam-tablet.jpg`,
+      mobileImageUrl: `${CLOUDINARY}/onam-mobile.jpg`,
+    });
     const { banner } = (await getActive()).body;
-    // Without these the strip has no height until the image loads, and every
-    // page takes a full-width layout shift at the top of the document.
-    expect(banner.imageWidth).toBe(1600);
-    expect(banner.imageHeight).toBe(100);
+    expect(banner.imageUrl).toBe(IMG);
+    expect(banner.tabletImageUrl).toBe(`${CLOUDINARY}/onam-tablet.jpg`);
+    expect(banner.mobileImageUrl).toBe(`${CLOUDINARY}/onam-mobile.jpg`);
   });
 
-  it('nulls the dimensions when a banner has none, rather than inventing them', async () => {
+  it('falls back to the desktop image for slots that were left empty', async () => {
     await seed();
     const { banner } = (await getActive()).body;
-    // The frontend falls back to the house ratio; a fabricated size here would
-    // reserve the wrong box and shift anyway.
-    expect(banner.imageWidth).toBeNull();
-    expect(banner.imageHeight).toBeNull();
+    // Substituted server-side so the storefront always gets three usable URLs and
+    // the rendering layer never has to decide what "missing" means. A banner with
+    // one file must still render everywhere, not show a broken image on phones.
+    expect(banner.tabletImageUrl).toBe(IMG);
+    expect(banner.mobileImageUrl).toBe(IMG);
+  });
+
+  it('falls back for only the missing slot, not both', async () => {
+    await seed({ mobileImageUrl: `${CLOUDINARY}/onam-mobile.jpg` });
+    const { banner } = (await getActive()).body;
+    expect(banner.mobileImageUrl).toBe(`${CLOUDINARY}/onam-mobile.jpg`);
+    expect(banner.tabletImageUrl).toBe(IMG);
   });
 
   it('never leaks admin bookkeeping onto the public response', async () => {
@@ -219,7 +229,7 @@ describe('Promo banner API', () => {
     const { banner } = (await getActive()).body;
     // The public payload is a SHARED cache entry — it must not accumulate fields.
     expect(Object.keys(banner).sort()).toEqual([
-      'alt', 'id', 'imageHeight', 'imageUrl', 'imageWidth', 'linkPath',
+      'alt', 'id', 'imageUrl', 'linkPath', 'mobileImageUrl', 'tabletImageUrl',
     ]);
   });
 
@@ -308,12 +318,25 @@ describe('Promo banner API', () => {
     },
   );
 
-  it('stores the uploaded dimensions', async () => {
+  it('stores the uploaded dimensions for every slot', async () => {
     const res = await post('/promo-banners/admin', {
-      title: 'Sized', imageUrl: IMG, alt: 'x', imageWidth: 1600, imageHeight: 100,
+      title: 'Sized', imageUrl: IMG, alt: 'x',
+      imageWidth: 3840, imageHeight: 208,
+      mobileImageUrl: `${CLOUDINARY}/m.jpg`, mobileImageWidth: 1280, mobileImageHeight: 144,
     });
     expect(res.status).toBe(201);
-    expect(res.body.banner).toMatchObject({ imageWidth: 1600, imageHeight: 100 });
+    expect(res.body.banner).toMatchObject({
+      imageWidth: 3840, imageHeight: 208, mobileImageWidth: 1280, mobileImageHeight: 144,
+    });
+  });
+
+  it('rejects a non-Cloudinary URL in the mobile slot too', async () => {
+    // The desktop slot is not the only tampering surface.
+    const res = await post('/promo-banners/admin', {
+      title: 'Hotlinked mobile', imageUrl: IMG, alt: 'x',
+      mobileImageUrl: 'https://evil.com/banner.jpg',
+    });
+    expect(res.status).toBe(400);
   });
 
   it.each([
@@ -376,14 +399,41 @@ describe('Promo banner API', () => {
     expect(destroy).not.toHaveBeenCalled();
   });
 
-  it('deletes the artwork when a banner is deleted', async () => {
+  it('deletes ALL THREE artworks when a banner is deleted', async () => {
     const cloudinary = await import('../config/cloudinary.js');
     const destroy = jest.spyOn(cloudinary.default.uploader, 'destroy').mockResolvedValue({ result: 'ok' });
 
-    const banner = await seed();
+    const banner = await seed({
+      tabletImagePublicId: 'autobacs/promo-banners/onam-tablet',
+      mobileImagePublicId: 'autobacs/promo-banners/onam-mobile',
+    });
     await del(`/promo-banners/admin/${banner._id}`);
 
-    expect(destroy.mock.calls.map(([id]) => id)).toContain('autobacs/promo-banners/onam');
+    // Missing one here would strand a paid-for asset in Cloudinary forever.
+    expect(destroy.mock.calls.map(([id]) => id)).toEqual(expect.arrayContaining([
+      'autobacs/promo-banners/onam',
+      'autobacs/promo-banners/onam-tablet',
+      'autobacs/promo-banners/onam-mobile',
+    ]));
+  });
+
+  it('cleans up an orphaned MOBILE asset when that slot is replaced', async () => {
+    const cloudinary = await import('../config/cloudinary.js');
+    const destroy = jest.spyOn(cloudinary.default.uploader, 'destroy').mockResolvedValue({ result: 'ok' });
+
+    const banner = await seed({
+      mobileImageUrl: `${CLOUDINARY}/old-mobile.jpg`,
+      mobileImagePublicId: 'autobacs/promo-banners/old-mobile',
+    });
+    await put(`/promo-banners/admin/${banner._id}`, {
+      mobileImageUrl: `${CLOUDINARY}/new-mobile.jpg`,
+      mobileImagePublicId: 'autobacs/promo-banners/new-mobile',
+    });
+
+    const deleted = destroy.mock.calls.map(([id]) => id);
+    expect(deleted).toContain('autobacs/promo-banners/old-mobile');
+    // The desktop slot was untouched and must survive.
+    expect(deleted).not.toContain('autobacs/promo-banners/onam');
   });
 
   // ── Access control ────────────────────────────────────────────────────────

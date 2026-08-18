@@ -49,8 +49,22 @@ const pickWritableFields = (body, { partial = false } = {}) => {
   if (has('alt')) out.alt = String(body.alt).trim();
   if (has('imageUrl')) out.imageUrl = String(body.imageUrl).trim();
   if (has('imagePublicId')) out.imagePublicId = body.imagePublicId ? String(body.imagePublicId).trim() : null;
-  if (has('imageWidth')) out.imageWidth = Number(body.imageWidth) || null;
-  if (has('imageHeight')) out.imageHeight = Number(body.imageHeight) || null;
+
+  // Optional per-breakpoint artwork + the recorded upload dimensions. Listed
+  // rather than looped over the whole body so this stays an allowlist.
+  for (const field of [
+    'tabletImageUrl', 'tabletImagePublicId',
+    'mobileImageUrl', 'mobileImagePublicId',
+  ]) {
+    if (has(field)) out[field] = body[field] ? String(body[field]).trim() : null;
+  }
+  for (const field of [
+    'imageWidth', 'imageHeight',
+    'tabletImageWidth', 'tabletImageHeight',
+    'mobileImageWidth', 'mobileImageHeight',
+  ]) {
+    if (has(field)) out[field] = Number(body[field]) || null;
+  }
   // Re-normalised here and not only in the validator, so a non-HTTP caller
   // (seed script, future admin tool) cannot store an unsafe href either.
   if (has('linkPath')) out.linkPath = normalizePromoLinkPath(body.linkPath);
@@ -161,7 +175,8 @@ export const updateBanner = async (req, res) => {
    * left Mongo pointing at images that no longer existed. Compare stored-before
    * against stored-after and act on the difference.
    */
-  const orphans = [[existing.imagePublicId, banner.imagePublicId]]
+  const orphans = ['imagePublicId', 'tabletImagePublicId', 'mobileImagePublicId']
+    .map((field) => [existing[field], banner[field]])
     .filter(([before, after]) => before && before !== after)
     .map(([before]) => before);
   if (orphans.length) await deleteManyFromCloudinary(orphans);
@@ -194,7 +209,9 @@ export const deleteBanner = async (req, res) => {
 
   // Only after the document is gone — an asset deleted ahead of a failed delete
   // would leave a live banner pointing at a 404 image.
-  await deleteManyFromCloudinary([banner.imagePublicId].filter(Boolean));
+  await deleteManyFromCloudinary(
+    [banner.imagePublicId, banner.tabletImagePublicId, banner.mobileImagePublicId].filter(Boolean),
+  );
 
   purgeBannerCaches();
   res.json({ success: true, message: 'Banner deleted' });

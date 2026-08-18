@@ -80,10 +80,22 @@ export default function HomeRedesign({
   return (
     <div className="hr" ref={rootRef}>
       <RedesignNav />
-      <Hero />
-      {/* Below the hero, not above it: the hero is this page's LCP element and
-          must stay the first thing a visitor sees. */}
+      {/*
+        Promo strip directly under the nav, matching every other page.
+
+        Two details this page forces:
+        1. The nav is `position: fixed` with NO spacer (the hero deliberately runs
+           full-bleed underneath it), so without the spacer below the strip would
+           render at y=0 and sit hidden behind the nav.
+        2. The hero keeps `height: 100vh` rather than becoming
+           `calc(100vh - strip)`. On desktop it is sticky-pinned inside
+           .hero-pin, and a shorter hero would leave a gap under it once pinned.
+           The strip simply scrolls away above it, which is the behaviour we want:
+           seen on arrival, then out of the way.
+      */}
+      {promoBanner && <div className="h-16 md:h-[76px] shrink-0" aria-hidden />}
       <PromoBanner banner={promoBanner} />
+      <Hero />
       <Manifesto />
       <Categories categories={data.categories} />
       <Showreel hotspots={data.carHotspots} />

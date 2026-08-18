@@ -22,20 +22,45 @@ const PromoBannerSchema = new mongoose.Schema({
   // publicId is stored alongside every URL so replacing or deleting a banner can
   // delete the asset it orphans. Storing only the URL is what left dead images
   // in Cloudinary on the product gallery.
+  /**
+   * DESKTOP artwork (≥1024px viewports) and the fallback for every other size.
+   *
+   * Kept on the original flat `image*` field names rather than moved into a
+   * subdocument: banners already exist in test/prod on these fields, and a
+   * cosmetic rename would cost a migration and re-uploads for nothing.
+   */
   imageUrl: { type: String, required: true, trim: true },
   imagePublicId: { type: String, trim: true, default: null },
 
   /**
-   * Intrinsic pixel dimensions, captured from the Cloudinary upload response.
-   *
-   * The storefront renders the banner at its own aspect ratio and lets it scale
-   * down with the viewport, so it needs the ratio BEFORE the image arrives —
-   * otherwise the strip has no height until it loads and everything below jumps.
-   * Nullable because a row could predate this field or be seeded by hand; the
-   * frontend falls back to a default ratio when either is missing.
+   * Intrinsic pixel dimensions, captured from the Cloudinary upload response,
+   * so the admin can warn about under-sized artwork before it ships. The strip
+   * renders at a FIXED height per breakpoint, so these are diagnostics rather
+   * than layout inputs.
    */
   imageWidth: { type: Number, default: null, min: 1 },
   imageHeight: { type: Number, default: null, min: 1 },
+
+  /**
+   * TABLET artwork (640–1023px). Optional — falls back to desktop.
+   */
+  tabletImageUrl: { type: String, trim: true, default: null },
+  tabletImagePublicId: { type: String, trim: true, default: null },
+  tabletImageWidth: { type: Number, default: null, min: 1 },
+  tabletImageHeight: { type: Number, default: null, min: 1 },
+
+  /**
+   * MOBILE artwork (<640px). Optional — falls back to desktop.
+   *
+   * This is the slot that actually matters: a desktop strip is ~18:1, and
+   * squeezed onto a phone it becomes an unreadable sliver. A separate, much
+   * less wide crop with fewer words is the only way the campaign reads on the
+   * majority of the traffic.
+   */
+  mobileImageUrl: { type: String, trim: true, default: null },
+  mobileImagePublicId: { type: String, trim: true, default: null },
+  mobileImageWidth: { type: Number, default: null, min: 1 },
+  mobileImageHeight: { type: Number, default: null, min: 1 },
 
   /**
    * Required, not optional. The banner is a link whose entire message lives

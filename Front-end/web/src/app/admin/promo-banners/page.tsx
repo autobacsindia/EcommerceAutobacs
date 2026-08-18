@@ -4,28 +4,46 @@ import { useCallback, useEffect, useState } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
-import { RECOMMENDED_MIN_WIDTH } from '@/components/layout/PromoBanner';
+import { PROMO_SLOT_SPECS, PROMO_HEIGHTS } from '@/components/layout/PromoBanner';
 
 /**
  * Admin — site-wide promo banner.
  *
  * Marketing swaps the occasion artwork here: upload, point it somewhere, switch
  * it on. Several banners can be prepared ahead of time; exactly one renders, and
- * the resolution rule is the backend's — this screen only ever reports what the
- * backend decided (`liveId`), it never re-derives "which one is showing".
+ * the resolution rule is the backend's — this screen only reports the `state` the
+ * backend computed, it never re-derives "which one is showing".
+ *
+ * Three artwork slots, because one image cannot serve a 375px phone and a 2560px
+ * monitor: stretched wide it blurs, squeezed narrow it becomes an unreadable
+ * sliver. Only the desktop file is required; the others fall back to it.
  */
+
+/** Which artwork slot a file belongs to. Order = the order shown in the form. */
+const SLOTS = ['desktop', 'tablet', 'mobile'] as const;
+type Slot = (typeof SLOTS)[number];
+
+/** API field names per slot. Desktop keeps the original flat `image*` names. */
+const SLOT_FIELDS: Record<Slot, { url: string; publicId: string; width: string; height: string }> = {
+  desktop: { url: 'imageUrl', publicId: 'imagePublicId', width: 'imageWidth', height: 'imageHeight' },
+  tablet: { url: 'tabletImageUrl', publicId: 'tabletImagePublicId', width: 'tabletImageWidth', height: 'tabletImageHeight' },
+  mobile: { url: 'mobileImageUrl', publicId: 'mobileImagePublicId', width: 'mobileImageWidth', height: 'mobileImageHeight' },
+};
 
 /** Why a banner is or isn't on screen — computed server-side, never re-derived here. */
 type BannerState = 'live' | 'off' | 'scheduled' | 'ended' | 'superseded';
+
+interface SlotImage {
+  url: string;
+  publicId: string | null;
+  width: number | null;
+  height: number | null;
+}
 
 interface Banner {
   _id: string;
   state: BannerState;
   title: string;
-  imageUrl: string;
-  imagePublicId: string | null;
-  imageWidth: number | null;
-  imageHeight: number | null;
   alt: string;
   linkPath: string;
   isActive: boolean;
@@ -33,34 +51,31 @@ interface Banner {
   endsAt: string | null;
   priority: number;
   createdAt: string;
+  [field: string]: unknown;
 }
 
 type Draft = {
   title: string;
-  imageUrl: string;
-  imagePublicId: string | null;
-  imageWidth: number | null;
-  imageHeight: number | null;
   alt: string;
   linkPath: string;
   isActive: boolean;
   startsAt: string;
   endsAt: string;
   priority: number;
+  images: Record<Slot, SlotImage>;
 };
+
+const EMPTY_SLOT: SlotImage = { url: '', publicId: null, width: null, height: null };
 
 const EMPTY: Draft = {
   title: '',
-  imageUrl: '',
-  imagePublicId: null,
-  imageWidth: null,
-  imageHeight: null,
   alt: '',
   linkPath: '/offers',
   isActive: false,
   startsAt: '',
   endsAt: '',
   priority: 0,
+  images: { desktop: { ...EMPTY_SLOT }, tablet: { ...EMPTY_SLOT }, mobile: { ...EMPTY_SLOT } },
 };
 
 /**
@@ -72,38 +87,12 @@ const EMPTY: Draft = {
  * the next action is obvious.
  */
 const STATE_BADGE: Record<BannerState, { text: string; className: string; explain: string }> = {
-  live: {
-    text: 'LIVE',
-    className: 'bg-green-100 text-green-700',
-    explain: 'Showing on the site right now.',
-  },
-  scheduled: {
-    text: 'SCHEDULED',
-    className: 'bg-blue-100 text-blue-700',
-    explain: 'Active, but its start date/time has not arrived yet.',
-  },
-  ended: {
-    text: 'ENDED',
-    className: 'bg-gray-200 text-gray-700',
-    explain: 'Active, but its end date has passed. Clear or extend the end date to run it again.',
-  },
-  superseded: {
-    text: 'WAITING',
-    className: 'bg-amber-100 text-amber-800',
-    explain: 'Active and in date, but another banner has a higher priority. Raise its priority or turn the other one off.',
-  },
-  off: {
-    text: 'OFF',
-    className: 'bg-gray-100 text-gray-500',
-    explain: 'Switched off.',
-  },
+  live: { text: 'LIVE', className: 'bg-green-100 text-green-700', explain: 'Showing on the site right now.' },
+  scheduled: { text: 'SCHEDULED', className: 'bg-blue-100 text-blue-700', explain: 'Active, but its start date/time has not arrived yet.' },
+  ended: { text: 'ENDED', className: 'bg-gray-200 text-gray-700', explain: 'Active, but its end date has passed. Clear or extend the end date to run it again.' },
+  superseded: { text: 'WAITING', className: 'bg-amber-100 text-amber-800', explain: 'Active and in date, but another banner has a higher priority. Raise its priority or turn the other one off.' },
+  off: { text: 'OFF', className: 'bg-gray-100 text-gray-500', explain: 'Switched off.' },
 };
-
-/**
- * Past roughly this, the strip is too short to read once scaled to a phone
- * (375 / 12 ≈ 31px). Advisory only — see the warning that uses it.
- */
-const MAX_COMFORTABLE_RATIO = 12;
 
 const label = 'block text-sm font-medium text-gray-700 mb-1';
 const input = 'w-full border border-gray-300 rounded-lg px-3 py-2';
@@ -125,17 +114,48 @@ const fromInputValue = (value: string) => (value ? new Date(value).toISOString()
 
 const toDraft = (b: Banner): Draft => ({
   title: b.title,
-  imageUrl: b.imageUrl,
-  imagePublicId: b.imagePublicId,
-  imageWidth: b.imageWidth,
-  imageHeight: b.imageHeight,
   alt: b.alt,
   linkPath: b.linkPath,
   isActive: b.isActive,
   startsAt: toInputValue(b.startsAt),
   endsAt: toInputValue(b.endsAt),
   priority: b.priority,
+  images: SLOTS.reduce((acc, slot) => {
+    const f = SLOT_FIELDS[slot];
+    acc[slot] = {
+      url: (b[f.url] as string) || '',
+      publicId: (b[f.publicId] as string) ?? null,
+      width: (b[f.width] as number) ?? null,
+      height: (b[f.height] as number) ?? null,
+    };
+    return acc;
+  }, {} as Record<Slot, SlotImage>),
 });
+
+/** Flatten the slot map back onto the API's field names. */
+const toPayload = (draft: Draft) => {
+  const out: Record<string, unknown> = {
+    title: draft.title,
+    alt: draft.alt,
+    linkPath: draft.linkPath,
+    isActive: draft.isActive,
+    priority: Number(draft.priority) || 0,
+    startsAt: fromInputValue(draft.startsAt),
+    endsAt: fromInputValue(draft.endsAt),
+  };
+  for (const slot of SLOTS) {
+    const f = SLOT_FIELDS[slot];
+    const img = draft.images[slot];
+    out[f.url] = img.url || null;
+    out[f.publicId] = img.publicId;
+    out[f.width] = img.width;
+    out[f.height] = img.height;
+  }
+  return out;
+};
+
+/** How far off-spec an upload may be before we say something. */
+const SIZE_TOLERANCE = 0.9;
 
 export default function AdminPromoBannersPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -144,7 +164,7 @@ export default function AdminPromoBannersPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<Slot | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,7 +172,7 @@ export default function AdminPromoBannersPage() {
     setLoading(true);
     try {
       // One request. Each row's `state` is computed server-side against the same
-      // query the storefront uses — the earlier version also polled the PUBLIC
+      // query the storefront uses — an earlier version also polled the PUBLIC
       // /active endpoint, which carries CDN cache headers and so could hand the
       // admin a stale verdict about a change they had just saved.
       const list = await apiClient.get<{ success: boolean; banners: Banner[] }>(
@@ -171,36 +191,31 @@ export default function AdminPromoBannersPage() {
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((p) => ({ ...p, [k]: v }));
 
-  /** Aspect ratio of the uploaded artwork, or null until one is uploaded. */
-  const ratio =
-    draft.imageWidth && draft.imageHeight ? draft.imageWidth / draft.imageHeight : null;
-
   const openCreate = () => { setEditingId(null); setDraft(EMPTY); setShowForm(true); setMsg(null); setError(null); };
   const openEdit = (b: Banner) => { setEditingId(b._id); setDraft(toDraft(b)); setShowForm(true); setMsg(null); setError(null); };
   const closeForm = () => { setShowForm(false); setEditingId(null); setDraft(EMPTY); };
 
-  const handleUpload = async (file: File) => {
-    setUploading(true);
+  const handleUpload = async (file: File, slot: Slot) => {
+    setUploading(slot);
     setError(null);
     try {
-      // Uploads straight to Cloudinary using a signature minted by our backend —
-      // the bytes never pass through the API, so there is no ~4.5 MB proxy cap.
-      // width/height come back in the same response and are stored so the
-      // storefront can reserve the strip's space before the image loads.
+      // Straight to Cloudinary using a signature minted by our backend — the
+      // bytes never pass through the API, so there is no ~4.5 MB proxy cap.
+      // width/height come back in the same response and drive the size check.
       const { url, public_id, width, height } = await uploadImageToCloudinary(file, 'promos');
       setDraft((p) => ({
         ...p,
-        imageUrl: url,
-        imagePublicId: public_id,
-        imageWidth: width ?? null,
-        imageHeight: height ?? null,
+        images: { ...p.images, [slot]: { url, publicId: public_id, width: width ?? null, height: height ?? null } },
       }));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
-      setUploading(false);
+      setUploading(null);
     }
   };
+
+  const clearSlot = (slot: Slot) =>
+    setDraft((p) => ({ ...p, images: { ...p.images, [slot]: { ...EMPTY_SLOT } } }));
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,12 +223,7 @@ export default function AdminPromoBannersPage() {
     setMsg(null);
     setError(null);
     try {
-      const payload = {
-        ...draft,
-        startsAt: fromInputValue(draft.startsAt),
-        endsAt: fromInputValue(draft.endsAt),
-        priority: Number(draft.priority) || 0,
-      };
+      const payload = toPayload(draft);
       if (editingId) {
         await apiClient.put(API_ENDPOINTS.PROMO_BANNER_ADMIN_BY_ID(editingId), payload);
         setMsg('Banner updated. The storefront refreshes within a few seconds.');
@@ -252,6 +262,81 @@ export default function AdminPromoBannersPage() {
     }
   };
 
+  /** One upload slot: spec, file picker, preview at true rendered height, size check. */
+  const renderSlot = (slot: Slot) => {
+    const spec = PROMO_SLOT_SPECS[slot];
+    const img = draft.images[slot];
+    const required = slot === 'desktop';
+    const undersized = img.width != null && img.width < spec.width * SIZE_TOLERANCE;
+
+    return (
+      <div key={slot} className="rounded-lg border border-gray-200 p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <label className={label}>
+            {spec.label} {required ? '*' : <span className="font-normal text-gray-400">(optional)</span>}
+          </label>
+          <span className="text-xs text-gray-500">shows on {spec.minViewport}</span>
+        </div>
+
+        <p className="mb-2 text-xs font-medium text-blue-700">
+          Give your designer: <strong>{spec.width} × {spec.height} px</strong>
+          <span className="font-normal text-gray-500">
+            {' '}— renders {PROMO_HEIGHTS[slot]}px tall, full width
+          </span>
+        </p>
+
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={uploading !== null}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, slot); }}
+        />
+        {uploading === slot && <p className={hint}>Uploading…</p>}
+
+        {img.url && (
+          <div className="mt-3">
+            {/* Previewed at the height it will actually render, so what you see
+                here is what a visitor sees — not a scaled-down thumbnail that
+                flatters an under-sized file. */}
+            <div
+              className="w-full overflow-hidden rounded border border-gray-200 bg-gray-900"
+              style={{ height: PROMO_HEIGHTS[slot] }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary Cloudinary upload */}
+              <img src={img.url} alt={`${spec.label} preview`} className="h-full w-full object-cover object-center" />
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-xs text-gray-500">
+                {img.width && img.height
+                  ? `Uploaded ${img.width}×${img.height} (${(img.width / img.height).toFixed(1)}:1)`
+                  : 'Uploaded'}
+              </span>
+              {!required && (
+                <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => clearSlot(slot)}>
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Caught at upload time rather than in production: an under-sized file
+            looks fine in a small preview and only turns soft once stretched. */}
+        {undersized && (
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <strong>This will look blurry.</strong> It is {img.width}px wide; this slot needs{' '}
+            <strong>{spec.width}px</strong>. Re-export the artwork larger — enlarging the existing
+            file will not help. You can still save.
+          </p>
+        )}
+
+        {!img.url && !required && (
+          <p className={hint}>Leave empty to reuse the desktop image at this size.</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-start justify-between mb-2">
@@ -280,65 +365,16 @@ export default function AdminPromoBannersPage() {
             <p className={hint}>Only you see this — it never appears on the site.</p>
           </div>
 
-          <div>
-            <label className={label}>Banner image *</label>
-            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f); }} />
-            {uploading && <p className={hint}>Uploading…</p>}
-
-            {draft.imageUrl && (
-              <div className="mt-3 space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1">Desktop (full width)</p>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary Cloudinary upload */}
-                  <img src={draft.imageUrl} alt="Banner preview" className="w-full rounded border border-gray-200" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1">Phone (about 375px wide)</p>
-                  {/* The same image at phone width. It scales down whole — nothing is
-                      cropped — so this is exactly what a mobile visitor sees, and it is
-                      the check for whether the wording is still readable. */}
-                  <div className="w-[375px] max-w-full rounded border border-gray-200 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- admin-only preview */}
-                    <img src={draft.imageUrl} alt="Banner preview at phone width" className="w-full block" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Caught at upload time, not after it ships: an under-sized banner
-                looks fine in this small preview and only turns soft once it is
-                stretched across a real desktop window. */}
-            {draft.imageWidth != null && draft.imageWidth < RECOMMENDED_MIN_WIDTH && (
-              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <strong>This image will look blurry on large screens.</strong> It is{' '}
-                {draft.imageWidth}px wide; the banner stretches the full width of the window, so
-                it needs at least <strong>{RECOMMENDED_MIN_WIDTH}px</strong> (ideally 3840px) to
-                stay sharp. Re-export the artwork larger — enlarging this file will not help.
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">Artwork</h3>
+              <p className="text-xs text-gray-500">
+                The strip always fills the screen width at a fixed height, so the edges are
+                trimmed on sizes it wasn&apos;t designed for. Keep wording in the middle of each
+                image. Only the desktop file is required.
               </p>
-            )}
-
-            {/* Warning, not a block: a rush campaign at 9pm should never be stopped
-                by a house style rule. It states the consequence and lets you decide. */}
-            {ratio != null && ratio > MAX_COMFORTABLE_RATIO && (
-              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <strong>Very wide strip ({ratio.toFixed(1)}:1).</strong> Scaled to a phone it will
-                be about <strong>{Math.round(375 / ratio)}px</strong> tall, which is usually too
-                short to read. An <strong>8:1</strong> ratio (e.g. 3200×400) stays legible on
-                mobile. You can still save this.
-              </p>
-            )}
-
-            <p className={hint}>
-              Export at <strong>3200×400</strong> (an 8:1 strip) for the best balance, or
-              3840×320 if you want it shorter on desktop. It is shown whole and scales with the
-              screen, so nothing is ever cut off — check the phone preview above and make sure
-              the wording is still readable at that size.
-              {draft.imageWidth && draft.imageHeight && (
-                <> Uploaded at {draft.imageWidth}×{draft.imageHeight}
-                  {' '}({(draft.imageWidth / draft.imageHeight).toFixed(1)}:1).</>
-              )}
-            </p>
+            </div>
+            {SLOTS.map(renderSlot)}
           </div>
 
           <div>
@@ -386,7 +422,7 @@ export default function AdminPromoBannersPage() {
           </label>
 
           <div className="flex gap-3">
-            <button type="submit" disabled={saving || uploading || !draft.imageUrl}
+            <button type="submit" disabled={saving || uploading !== null || !draft.images.desktop.url}
               className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create banner'}
             </button>
@@ -408,13 +444,11 @@ export default function AdminPromoBannersPage() {
           {banners.map((b) => (
             <div key={b._id} className="flex items-center gap-4 p-4">
               {/* eslint-disable-next-line @next/next/no-img-element -- admin-only thumbnail */}
-              <img src={b.imageUrl} alt="" className="h-10 w-40 rounded object-cover border border-gray-200" />
+              <img src={b.imageUrl as string} alt="" className="h-10 w-40 rounded object-cover border border-gray-200" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{b.title}</span>
-                  <span
-                    className={`shrink-0 rounded-full text-[11px] font-semibold px-2 py-0.5 ${STATE_BADGE[b.state].className}`}
-                  >
+                  <span className={`shrink-0 rounded-full text-[11px] font-semibold px-2 py-0.5 ${STATE_BADGE[b.state].className}`}>
                     {STATE_BADGE[b.state].text}
                   </span>
                 </div>
@@ -428,6 +462,7 @@ export default function AdminPromoBannersPage() {
                   {b.startsAt && ` · from ${new Date(b.startsAt).toLocaleString('en-IN')}`}
                   {b.endsAt && ` · until ${new Date(b.endsAt).toLocaleString('en-IN')}`}
                   {b.priority !== 0 && ` · priority ${b.priority}`}
+                  {!b.mobileImageUrl && ' · ⚠ no mobile artwork'}
                 </div>
               </div>
               <button onClick={() => toggle(b)}

@@ -15,10 +15,12 @@ import { serverFetch } from '@/lib/server-api';
 
 export interface PromoBanner {
   id: string;
+  /** Desktop artwork (≥1024px) — also the server-side fallback for the two below. */
   imageUrl: string;
-  /** Intrinsic size, used to reserve the strip's space before the image loads. */
-  imageWidth: number | null;
-  imageHeight: number | null;
+  /** Tablet artwork (640–1023px). Already defaulted to `imageUrl` by the API. */
+  tabletImageUrl: string;
+  /** Mobile artwork (<640px). Already defaulted to `imageUrl` by the API. */
+  mobileImageUrl: string;
   alt: string;
   linkPath: string;
 }

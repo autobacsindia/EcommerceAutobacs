@@ -21,14 +21,19 @@ const CACHE_KEY = `${CACHE_VERSION}:${PROMO_BANNER_CACHE_TAG}`;
  */
 const CACHE_TTL_SECONDS = 60;
 
-/** Only these reach the storefront. Timestamps and admin bookkeeping stay put. */
+/**
+ * Only these reach the storefront. Timestamps and admin bookkeeping stay put.
+ *
+ * The tablet and mobile slots fall back to the desktop image HERE rather than in
+ * the component, so the storefront always receives three usable URLs and the
+ * rendering layer never has to decide what "missing" means. It also keeps the
+ * fallback rule in one place instead of repeated per breakpoint in JSX.
+ */
 const publicShape = (doc) => ({
   id: String(doc._id),
   imageUrl: doc.imageUrl,
-  // Drive the storefront's reserved-space box. Sent even though they are only
-  // layout hints: without them the strip has no height until the image loads.
-  imageWidth: doc.imageWidth || null,
-  imageHeight: doc.imageHeight || null,
+  tabletImageUrl: doc.tabletImageUrl || doc.imageUrl,
+  mobileImageUrl: doc.mobileImageUrl || doc.imageUrl,
   alt: doc.alt,
   linkPath: doc.linkPath || '/offers',
 });

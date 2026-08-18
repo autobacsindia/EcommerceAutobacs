@@ -10,98 +10,105 @@ import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
  * getActivePromoBanner, called from the root layout), so the strip is in the
  * initial HTML instead of popping in after hydration and pushing the page down.
  *
- * SCALING MODEL: one image, shown whole, scaled to the viewport. The strip keeps
- * the artwork's own aspect ratio at every width — nothing is cropped, so no part
- * of the campaign message can be cut off on a narrow screen. The trade is that a
- * very wide banner gets short on a phone (a 16:1 strip is ~23px tall at 375px),
- * which is legible for a bold headline and not much else. If a campaign needs
- * more presence on mobile than that allows, the answer is a second, taller crop
- * served through a <picture> source — a deliberate follow-up, not a default.
+ * SIZING MODEL: a FIXED height per breakpoint, filling the width, with three
+ * separately-designed images. The earlier model — one image scaled to its own
+ * aspect ratio — failed at both ends: stretched across a desktop window it was
+ * blurry unless the source was enormous, and squeezed onto a phone an ~18:1
+ * strip collapsed to a ~23px sliver nobody could read. One picture cannot serve
+ * a 375px phone and a 2560px monitor; three can.
+ *
+ * Because the height is fixed and the width varies, the sides (or, on very wide
+ * monitors, the top and bottom) are trimmed. That is deliberate and is why the
+ * designer spec defines a centre safe area — see the admin screen, which states
+ * the required size next to each upload slot.
  *
  * Purely promotional: it links, it never transacts. Nothing here reads or shows
  * a price, a total, or stock.
  */
 
 /**
- * srcset widths — a full-bleed strip, so these track DEVICE pixels, not CSS px.
+ * Rendered height per breakpoint, in CSS pixels. Exported because the home page
+ * has to subtract them: its nav is `position: fixed` with no spacer, so the
+ * strip needs an explicit offset to sit below it rather than underneath it.
  *
- * The top entries matter: a 1920px-wide window on a 2× display needs a 3840px
- * rendition, and a srcset that stops at 1920 leaves the browser upscaling — which
- * is exactly what "the banner looks blurry" is. Cloudinary's `c_limit` never
- * upscales past the source, so these are a ceiling, not a promise: asking for
- * w_3840 from a 1200px upload still delivers 1200px. Sharpness ultimately comes
- * from uploading artwork at least as wide as the largest entry here.
+ * MUST stay in step with the artwork sizes quoted in the admin upload screen —
+ * the files are designed to these heights at 2× density.
  */
-const WIDTHS = [640, 828, 1080, 1440, 1920, 2560, 3840] as const;
+export const PROMO_HEIGHTS = { mobile: 72, tablet: 88, desktop: 104 } as const;
+
+/** Tailwind classes for the heights above. Breakpoints: <640 / 640-1023 / ≥1024. */
+const HEIGHT_CLASSES = 'h-[72px] sm:h-[88px] lg:h-[104px]';
 
 /** Artwork narrower than this cannot fill a large 2× display without softening. */
 export const RECOMMENDED_MIN_WIDTH = 2560;
 
 /**
- * Ratio used when a banner has no stored dimensions (seeded by hand, or saved
- * before the fields existed). Matches the house artwork spec, so the reserved
- * box is close enough that any correction is imperceptible.
+ * Required artwork size per slot, at 2× density. Single source of truth for the
+ * admin's guidance and its wrong-size warnings.
  */
-const FALLBACK_ASPECT = '1600 / 100';
+export const PROMO_SLOT_SPECS = {
+  desktop: { label: 'Desktop', width: 3840, height: 208, minViewport: '1024px and up' },
+  tablet: { label: 'Tablet', width: 2048, height: 176, minViewport: '640 – 1023px' },
+  mobile: { label: 'Mobile', width: 1280, height: 144, minViewport: 'under 640px' },
+} as const;
 
 /**
- * Build a Cloudinary srcset through the project's next/image loader, so this
- * strip gets exactly the same f_auto/q_auto/c_limit delivery treatment as every
- * other image on the site (never the stored original).
+ * srcset widths — a full-bleed strip, so these track DEVICE pixels, not CSS px.
+ * A 1920px window on a 2× display needs a 3840px rendition; a srcset stopping at
+ * 1920 leaves the browser upscaling, which is what "blurry" looks like.
+ * Cloudinary's `c_limit` never upscales past the source, so these are a ceiling,
+ * not a promise — sharpness still requires artwork at least this wide.
  */
+const WIDTHS = [640, 828, 1080, 1440, 1920, 2560, 3840] as const;
+
 const srcSetFor = (url: string) =>
   WIDTHS.map((w) => `${cloudinaryLoader({ src: url, width: w })} ${w}w`).join(', ');
 
 export default function PromoBanner({ banner }: { banner: PromoBannerData | null }) {
   if (!banner) return null;
 
-  const { imageUrl, imageWidth, imageHeight, alt, linkPath } = banner;
-
-  /**
-   * Reserve the exact space the image will occupy, before it loads.
-   *
-   * `aspect-ratio` on the wrapper is what makes proportional scaling safe: the
-   * browser computes the height from the width at first layout, so the strip is
-   * full-size in the very first frame and the page below never jumps. Height
-   * alone (`h-auto` on the image) would leave the box at 0 until the bytes
-   * arrive — a full-width shift at the top of the document, on every page.
-   */
-  const aspectRatio =
-    imageWidth && imageHeight ? `${imageWidth} / ${imageHeight}` : FALLBACK_ASPECT;
+  const { imageUrl, tabletImageUrl, mobileImageUrl, alt, linkPath } = banner;
 
   return (
     <Link
       href={linkPath}
       aria-label={alt}
-      className="group block w-full overflow-hidden bg-obsidian"
-      style={{ aspectRatio }}
+      className={`group block w-full overflow-hidden bg-obsidian ${HEIGHT_CLASSES}`}
     >
       {/*
-        A plain <img>, not next/image: the wrapper above already owns sizing, and
-        `fill` would need a positioned parent for no gain here. Delivery is
-        unchanged — both the src and every srcSet entry go through
-        cloudinaryLoader, the same f_auto/q_auto/c_limit pipeline next/image
-        would have applied, so this is never the raw upload.
+        <picture> with media queries, not next/image: this is ART DIRECTION —
+        three separately composed images, not three sizes of one. next/image
+        cannot express that, and the usual workaround (stacked <Image>s toggled
+        with `hidden`) leaves them all in the DOM, so a phone downloads the
+        3840px desktop file it will never show.
+
+        Source order is most-specific-first: the browser takes the FIRST matching
+        <source>, so desktop must precede tablet. The bare <img> is the mobile
+        case and the no-JS/legacy fallback.
+
+        Every URL still goes through cloudinaryLoader, so this is the same
+        f_auto/q_auto/c_limit pipeline next/image would have applied.
       */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- sized by the aspect-ratio wrapper; still Cloudinary-optimised */}
-      <img
-        src={cloudinaryLoader({ src: imageUrl, width: 1920 })}
-        /* Widest entry the browser may pick; `c_limit` caps it at the source size. */
-        srcSet={srcSetFor(imageUrl)}
-        sizes="100vw"
-        alt={alt}
-        width={imageWidth ?? undefined}
-        height={imageHeight ?? undefined}
-        /**
-         * Above the fold on every page, so it must not be lazy — a lazily loaded
-         * top-of-page image is a guaranteed late paint. `fetchPriority` stays
-         * default rather than "high": on the home page the hero is the LCP
-         * element and this strip must not compete with it for bandwidth.
-         */
-        loading="eager"
-        decoding="async"
-        className="block h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.01]"
-      />
+      <picture>
+        <source media="(min-width: 1024px)" srcSet={srcSetFor(imageUrl)} sizes="100vw" />
+        <source media="(min-width: 640px)" srcSet={srcSetFor(tabletImageUrl)} sizes="100vw" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- art direction; Cloudinary-optimised above */}
+        <img
+          src={cloudinaryLoader({ src: mobileImageUrl, width: 1280 })}
+          srcSet={srcSetFor(mobileImageUrl)}
+          sizes="100vw"
+          alt={alt}
+          /**
+           * Above the fold on every page, so it must not be lazy — a lazily
+           * loaded top-of-page image is a guaranteed late paint. `fetchPriority`
+           * stays default rather than "high": on the home page the hero is the
+           * LCP element and this strip must not compete with it for bandwidth.
+           */
+          loading="eager"
+          decoding="async"
+          className="block h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.01]"
+        />
+      </picture>
     </Link>
   );
 }
