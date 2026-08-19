@@ -32,6 +32,66 @@ const BANNER: PromoBannerData = {
   linkPath: '/offers',
 };
 
+describe('PromoBanner — missing artwork slots', () => {
+  /*
+    The white-screen regression. Tablet and mobile artwork are optional (the
+    admin list only WARNS about a missing file), so a desktop-only banner is a
+    legitimate row. It used to reach cloudinaryLoader with `src: undefined`,
+    throw `Cannot read properties of undefined (reading 'includes')` mid-render,
+    and unwind the tree — taking down every page, because the strip mounts in
+    the root layout.
+  */
+  const desktopOnly: PromoBannerData = {
+    ...BANNER,
+    tabletImageUrl: null,
+    tabletImageWidth: null,
+    tabletImageHeight: null,
+    mobileImageUrl: null,
+    mobileImageWidth: null,
+    mobileImageHeight: null,
+  };
+
+  it('renders a desktop-only banner without throwing', () => {
+    expect(() => render(<PromoBanner banner={desktopOnly} />)).not.toThrow();
+    expect(screen.getByAltText('Onam offer is live')).toBeInTheDocument();
+  });
+
+  it('falls back to the desktop artwork for the missing tablet and mobile slots', () => {
+    const { container } = render(<PromoBanner banner={desktopOnly} />);
+
+    // Every <source> and the bare <img> must point at real artwork — never an
+    // "undefined" URL, which would 404 and show a broken image.
+    const sources = Array.from(container.querySelectorAll('source'));
+    expect(sources).toHaveLength(2);
+    sources.forEach((el) => {
+      expect(el.getAttribute('srcset')).toContain('onam-desktop.jpg');
+      expect(el.getAttribute('srcset')).not.toContain('undefined');
+    });
+
+    const img = screen.getByAltText('Onam offer is live');
+    expect(img.getAttribute('src')).toContain('onam-desktop.jpg');
+    expect(img.getAttribute('src')).not.toContain('undefined');
+  });
+
+  it('reserves the fallback file\'s own shape, not the empty slot\'s spec ratio', () => {
+    const { container } = render(<PromoBanner banner={desktopOnly} />);
+    const link = container.querySelector('a')!;
+    // All three breakpoints show the 3840x256 desktop file, so all three boxes
+    // must be that shape — otherwise a correctly-supplied banner letterboxes.
+    expect(link.getAttribute('style')).toContain('--promo-ar: 3840 / 256');
+    expect(link.getAttribute('style')).toContain('--promo-ar-sm: 3840 / 256');
+    expect(link.getAttribute('style')).toContain('--promo-ar-lg: 3840 / 256');
+  });
+
+  it('renders nothing when the row exists but no artwork has been uploaded', () => {
+    const { container } = render(
+      <PromoBanner banner={{ ...desktopOnly, imageUrl: null as unknown as string }} />,
+    );
+    // An empty clickable strip is worse than no strip.
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
 describe('PromoBanner', () => {
   it('renders nothing when no campaign is scheduled', () => {
     const { container } = render(<PromoBanner banner={null} />);

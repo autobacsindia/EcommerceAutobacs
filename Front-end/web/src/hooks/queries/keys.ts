@@ -60,6 +60,15 @@ export const campaignKeys = {
    * copy and the savings meter — changes as the cart grows.
    */
   me: (slug: string, cartValue: number) => [...campaignKeys.all, 'me', slug, cartValue] as const,
+  /**
+   * One page of a campaign's allowlist. Keyed on the filters AND the cursor, so
+   * scrolling caches pages independently and changing a filter starts a fresh list
+   * rather than appending to the previous one.
+   */
+  members: (campaignId: string, filters: { status?: string; q?: string; cursor?: string | null }) =>
+    [...campaignKeys.all, 'members', campaignId, filters.status ?? '', filters.q ?? '', filters.cursor ?? ''] as const,
+  /** Prefix for invalidating every page of a campaign's roster after an import. */
+  membersFor: (campaignId: string) => [...campaignKeys.all, 'members', campaignId] as const,
 };
 
 export const adminKeys = {

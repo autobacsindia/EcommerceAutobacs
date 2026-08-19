@@ -70,6 +70,22 @@ export const getCampaignReport = asyncHandler(async (req, res) => {
   res.json({ success: true, report });
 });
 
+// @desc    One page of the campaign's allowlist (keyset-paginated, searchable)
+// @route   GET /campaigns/:id/members
+// @access  Private/Admin
+export const listCampaignMembers = asyncHandler(async (req, res) => {
+  const result = await campaignService.listMembers(req.params.id, {
+    cursor: req.query.cursor || null,
+    limit: req.query.limit,
+    status: req.query.status || null,
+    q: req.query.q || null,
+  });
+  // Per-campaign operational data about named customers — never cache it anywhere
+  // shared, and never let an intermediary hold a copy.
+  res.set('Cache-Control', 'no-store, private');
+  res.json({ success: true, ...result });
+});
+
 // @desc    Create a campaign (always starts as a draft unless a status is supplied)
 // @route   POST /campaigns
 // @access  Private/Admin

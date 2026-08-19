@@ -59,3 +59,12 @@ describe('cloudinarySrcSet', () => {
     expect(set.split(', ').length).toBe(DEFAULT_WIDTHS.length);
   });
 });
+
+describe('cloudinarySrcSet — nullish src', () => {
+  // Same leaf-safety rule as the loader: no srcSet, never a thrown TypeError.
+  it('returns undefined instead of throwing', () => {
+    expect(() => cloudinarySrcSet(undefined as unknown as string)).not.toThrow();
+    expect(cloudinarySrcSet(undefined as unknown as string)).toBeUndefined();
+    expect(cloudinarySrcSet(null as unknown as string)).toBeUndefined();
+  });
+});

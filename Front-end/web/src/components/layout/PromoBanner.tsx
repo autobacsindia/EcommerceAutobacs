@@ -77,8 +77,8 @@ export const PROMO_MAX_HEIGHT = 200;
  */
 const WIDTHS = [640, 828, 1080, 1440, 1920, 2560, 3840] as const;
 
-const srcSetFor = (url: string) =>
-  WIDTHS.map((w) => `${cloudinaryLoader({ src: url, width: w })} ${w}w`).join(', ');
+const srcSetFor = (url: string | null | undefined) =>
+  (url ? WIDTHS.map((w) => `${cloudinaryLoader({ src: url, width: w })} ${w}w`).join(', ') : undefined);
 
 /**
  * The CSS `aspect-ratio` value for a slot: the artwork's true shape when we know
@@ -97,6 +97,21 @@ export function promoAspectRatio(
   return `${PROMO_SLOT_SPECS[slot].ratio} / 1`;
 }
 
+/**
+ * Resolve one breakpoint's artwork, falling back to the next-widest slot.
+ *
+ * Tablet and mobile artwork are OPTIONAL — the admin screen ships a banner with
+ * only a desktop file and merely warns about it, so every consumer has to cope
+ * with a missing slot. Falling back carries the slot's own pixel dimensions with
+ * it, so the reserved box matches the file actually being shown; taking the URL
+ * without the dimensions would reserve the wrong shape and letterbox a banner
+ * that had perfectly good artwork.
+ */
+type Slot = { url: string | null; width: number | null; height: number | null };
+
+const firstUsable = (...slots: Slot[]): Slot =>
+  slots.find((s) => !!s.url) ?? { url: null, width: null, height: null };
+
 export default function PromoBanner({ banner }: { banner: PromoBannerData | null }) {
   if (!banner) return null;
 
@@ -107,6 +122,20 @@ export default function PromoBanner({ banner }: { banner: PromoBannerData | null
     alt, linkPath,
   } = banner;
 
+  const desktop = firstUsable({ url: imageUrl, width: imageWidth, height: imageHeight });
+  const tablet = firstUsable(
+    { url: tabletImageUrl, width: tabletImageWidth, height: tabletImageHeight },
+    desktop,
+  );
+  const mobile = firstUsable(
+    { url: mobileImageUrl, width: mobileImageWidth, height: mobileImageHeight },
+    tablet,
+  );
+
+  // No artwork at all in any slot: render nothing rather than an empty clickable
+  // strip. A banner row can legitimately exist with its images not yet uploaded.
+  if (!mobile.url) return null;
+
   /*
     Per-breakpoint ratios ride in as custom properties because their values are
     per-banner data — Tailwind can only emit classes it can see at build time,
@@ -114,9 +143,9 @@ export default function PromoBanner({ banner }: { banner: PromoBannerData | null
     classes below are static; only the numbers they read are dynamic.
   */
   const ratioVars = {
-    '--promo-ar': promoAspectRatio('mobile', mobileImageWidth, mobileImageHeight),
-    '--promo-ar-sm': promoAspectRatio('tablet', tabletImageWidth, tabletImageHeight),
-    '--promo-ar-lg': promoAspectRatio('desktop', imageWidth, imageHeight),
+    '--promo-ar': promoAspectRatio('mobile', mobile.width, mobile.height),
+    '--promo-ar-sm': promoAspectRatio('tablet', tablet.width, tablet.height),
+    '--promo-ar-lg': promoAspectRatio('desktop', desktop.width, desktop.height),
   } as React.CSSProperties;
 
   return (
@@ -143,12 +172,12 @@ export default function PromoBanner({ banner }: { banner: PromoBannerData | null
         f_auto/q_auto/c_limit pipeline next/image would have applied.
       */}
       <picture>
-        <source media="(min-width: 1024px)" srcSet={srcSetFor(imageUrl)} sizes="100vw" />
-        <source media="(min-width: 640px)" srcSet={srcSetFor(tabletImageUrl)} sizes="100vw" />
+        <source media="(min-width: 1024px)" srcSet={srcSetFor(desktop.url)} sizes="100vw" />
+        <source media="(min-width: 640px)" srcSet={srcSetFor(tablet.url)} sizes="100vw" />
         {/* eslint-disable-next-line @next/next/no-img-element -- art direction; Cloudinary-optimised above */}
         <img
-          src={cloudinaryLoader({ src: mobileImageUrl, width: 1280 })}
-          srcSet={srcSetFor(mobileImageUrl)}
+          src={cloudinaryLoader({ src: mobile.url, width: 1280 })}
+          srcSet={srcSetFor(mobile.url)}
           sizes="100vw"
           alt={alt}
           /**

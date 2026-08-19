@@ -298,6 +298,161 @@ describe('admin operations', () => {
     expect(await CampaignMember.findOne({ campaign: campaign._id, email: 'one@x.com' })).toBeTruthy();
   });
 
+  describe('GET /campaigns/:id/members — the roster', () => {
+    const seedMembers = async (campaign, emails) =>
+      CampaignMember.insertMany(
+        emails.map((email) => ({ campaign: campaign._id, email, name: email.split('@')[0] })),
+      );
+
+    it('is closed to a signed-in shopper and to anonymous callers', async () => {
+      const campaign = await seedCampaign();
+      const shopper = await seedUser();
+
+      await request(app).get(`/api/v1/campaigns/${campaign._id}/members`).expect(401);
+      await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members`)
+        .set('Authorization', auth(shopper))
+        .expect(403);
+    });
+
+    it('returns the page plus whole-campaign counts, sorted by email', async () => {
+      const campaign = await seedCampaign();
+      await seedMembers(campaign, ['c@x.com', 'a@x.com', 'b@x.com']);
+
+      const res = await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+
+      expect(res.body.members.map((m) => m.email)).toEqual(['a@x.com', 'b@x.com', 'c@x.com']);
+      expect(res.body.counts).toMatchObject({ invited: 3, total: 3 });
+      expect(res.body.nextCursor).toBeNull();
+      // Named customers on a private allowlist — must never sit in a shared cache.
+      expect(res.headers['cache-control']).toMatch(/no-store/);
+    });
+
+    it('walks every member exactly once across cursor pages', async () => {
+      const campaign = await seedCampaign();
+      const emails = Array.from({ length: 25 }, (_, i) => `m${String(i).padStart(2, '0')}@x.com`);
+      await seedMembers(campaign, emails);
+
+      const seen = [];
+      let cursor = null;
+      for (let guard = 0; guard < 20; guard += 1) {
+        const url = `/api/v1/campaigns/${campaign._id}/members?limit=10`
+          + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+        const res = await request(app).get(url).set('Authorization', auth(adminUser)).expect(200);
+        seen.push(...res.body.members.map((m) => m.email));
+        cursor = res.body.nextCursor;
+        if (!cursor) break;
+      }
+
+      // The whole point of keyset over skip/offset: no duplicates, nothing missed.
+      expect(seen).toHaveLength(25);
+      expect(new Set(seen).size).toBe(25);
+      expect(seen).toEqual(emails);
+    });
+
+    it('sends counts only with the first page, never with a cursor page', async () => {
+      const campaign = await seedCampaign();
+      await seedMembers(campaign, ['a@x.com', 'b@x.com', 'c@x.com']);
+
+      const first = await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?limit=2`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+      expect(first.body.counts).not.toBeNull();
+
+      const next = await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?cursor=${first.body.nextCursor}`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+      expect(next.body.counts).toBeNull();
+    });
+
+    it('filters by status', async () => {
+      const campaign = await seedCampaign();
+      await seedMembers(campaign, ['a@x.com', 'b@x.com']);
+      await CampaignMember.updateOne({ email: 'b@x.com' }, { $set: { status: 'redeemed' } });
+
+      const res = await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?status=redeemed`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+
+      expect(res.body.members.map((m) => m.email)).toEqual(['b@x.com']);
+      // Counts still describe the campaign, not the filtered view — an operator
+      // must not read "1 invited" off a filtered page.
+      expect(res.body.counts.total).toBe(2);
+    });
+
+    it('searches by email prefix and by name', async () => {
+      const campaign = await seedCampaign();
+      await CampaignMember.insertMany([
+        { campaign: campaign._id, email: 'aafaz@x.com', name: 'Aafaz Zargar' },
+        { campaign: campaign._id, email: 'zed@x.com', name: 'Zed Smith' },
+      ]);
+      const hit = (q) => request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?q=${encodeURIComponent(q)}`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+
+      expect((await hit('aafaz')).body.members.map((m) => m.email)).toEqual(['aafaz@x.com']);
+      expect((await hit('Zargar')).body.members.map((m) => m.email)).toEqual(['aafaz@x.com']);
+      expect((await hit('nobody')).body.members).toEqual([]);
+    });
+
+    it('treats regex metacharacters in the search as literal text', async () => {
+      const campaign = await seedCampaign();
+      await CampaignMember.insertMany([
+        { campaign: campaign._id, email: 'a.b@x.com', name: 'Dotted' },
+        { campaign: campaign._id, email: 'axb@x.com', name: 'Plain' },
+      ]);
+
+      // An unescaped '.' would match BOTH; escaped, it matches only the literal dot.
+      const res = await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?q=${encodeURIComponent('a.b')}`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+      expect(res.body.members.map((m) => m.email)).toEqual(['a.b@x.com']);
+
+      // And an outright broken pattern must 200 with no results, not 500.
+      await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?q=${encodeURIComponent('([')}`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+    });
+
+    it('rejects an unbounded page size and an unknown status', async () => {
+      const campaign = await seedCampaign();
+      await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?limit=100000`)
+        .set('Authorization', auth(adminUser))
+        .expect(400);
+      await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members?status=banana`)
+        .set('Authorization', auth(adminUser))
+        .expect(400);
+    });
+
+    it('returns an empty page for a campaign with no members', async () => {
+      const campaign = await seedCampaign();
+      const res = await request(app)
+        .get(`/api/v1/campaigns/${campaign._id}/members`)
+        .set('Authorization', auth(adminUser))
+        .expect(200);
+      expect(res.body.members).toEqual([]);
+      expect(res.body.counts.total).toBe(0);
+    });
+
+    it('404s for a campaign that does not exist', async () => {
+      await request(app)
+        .get(`/api/v1/campaigns/${new mongoose.Types.ObjectId()}/members`)
+        .set('Authorization', auth(adminUser))
+        .expect(404);
+    });
+  });
+
   it('reports the funnel and remaining exposure', async () => {
     const campaign = await seedCampaign();
     await CampaignMember.create({ campaign: campaign._id, email: 'a@x.com' });

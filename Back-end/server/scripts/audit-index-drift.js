@@ -101,7 +101,13 @@ function behaviouralOptions(opts = {}) {
   if (opts.sparse) out.sparse = true;
   if (opts.expireAfterSeconds != null) out.expireAfterSeconds = opts.expireAfterSeconds;
   if (opts.partialFilterExpression) out.partialFilterExpression = opts.partialFilterExpression;
-  if (opts.weights) out.weights = opts.weights;
+  // Sort the weight keys. MongoDB returns them in its own order, so an identical
+  // text index compared naively reports as drifted forever purely on key order.
+  if (opts.weights) {
+    out.weights = Object.fromEntries(
+      Object.keys(opts.weights).sort().map((k) => [k, opts.weights[k]])
+    );
+  }
   if (opts.collation) out.collation = { locale: opts.collation.locale, strength: opts.collation.strength };
   return out;
 }

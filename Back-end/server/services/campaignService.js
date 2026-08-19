@@ -457,6 +457,24 @@ class CampaignService {
   }
 
   /**
+   * One page of the allowlist plus the funnel counts, for the admin roster.
+   *
+   * The counts ride along on the FIRST page only. They describe the whole campaign,
+   * not the page, so re-sending them with every scroll would be wasted work — and
+   * re-rendering a header total that drifts as pages load is worse than not showing it.
+   */
+  async listMembers(campaignId, { cursor, limit, status, q } = {}) {
+    const campaign = await campaignRepository.findById(campaignId);
+    if (!campaign) throw new AppError('Campaign not found', 404);
+
+    const page = await campaignMemberRepository.listPage(campaign._id, { cursor, limit, status, q });
+    return {
+      ...page,
+      counts: cursor ? null : await campaignMemberRepository.statusCounts(campaign._id),
+    };
+  }
+
+  /**
    * What a given cart value would earn — powers the admin "calculator" so a
    * misconfigured ladder is caught in seconds instead of in a customer's cart.
    */

@@ -6,12 +6,12 @@ import {
   getMyCampaignStatus, checkCampaignEmail,
   listCampaigns, getCampaignAdmin, getCampaignReport,
   createCampaign, updateCampaign, setCampaignStatus,
-  importCampaignMembers, simulateCampaign,
+  importCampaignMembers, listCampaignMembers, simulateCampaign,
 } from '../controllers/campaignController.js';
 import {
   validateCampaignSlug, validateCampaignId, validateCampaignCreate,
   validateCampaignUpdate, validateCampaignStatus, validateCampaignEmailCheck,
-  validateCampaignMembers, validateCampaignSimulate,
+  validateCampaignMembers, validateCampaignMemberQuery, validateCampaignSimulate,
 } from '../validators/campaign.validator.js';
 
 const router = express.Router();
@@ -42,6 +42,7 @@ router.get('/:slug/report', protect, admin, validateCampaignSlug, validateReques
 
 router.put('/:id', protect, admin, validateCampaignId, validateCampaignUpdate, validateRequest, updateCampaign);
 router.patch('/:id/status', protect, admin, validateCampaignId, validateCampaignStatus, validateRequest, setCampaignStatus);
+router.get('/:id/members', protect, admin, validateCampaignId, validateCampaignMemberQuery, validateRequest, listCampaignMembers);
 router.post('/:id/members', protect, admin, validateCampaignId, validateCampaignMembers, validateRequest, importCampaignMembers);
 router.post('/:id/simulate', protect, admin, validateCampaignId, validateCampaignSimulate, validateRequest, simulateCampaign);
 
