@@ -7,7 +7,7 @@ import Link from 'next/link';
 export default function AboutUsPage() {
   const features = [
     { icon: <CheckCircle className="h-8 w-8 text-gold" />, title: 'Guaranteed Fitted', description: 'Today our catalogue includes more than 1000 of different parts for motor cars of different brands.' },
-    { icon: <Truck className="h-8 w-8 text-gold" />, title: 'Hassle Free Shipping', description: "Top-notch aftermarket car spare parts supplied from only the industry's leading manufacturers." },
+    { icon: <Truck className="h-8 w-8 text-gold" />, title: 'Hassle Free Shipping', description: "Top-notch aftermarket car parts supplied from only the industry's leading manufacturers." },
     { icon: <ShoppingCart className="h-8 w-8 text-gold" />, title: 'Bulk Order Availability', description: 'We also provide bulk order for each and every products on our side.' },
     { icon: <Award className="h-8 w-8 text-gold" />, title: 'Wide Selection', description: 'We offer over 1000+ OEM-style quality auto parts to cover all your repair needs.' },
     { icon: <Headphones className="h-8 w-8 text-gold" />, title: 'Expert Advice', description: 'Our expert team will guide you to build your dream car without compromising the quality.' },
