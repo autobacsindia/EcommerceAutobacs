@@ -125,6 +125,48 @@ describe('MemberRosterPanel', () => {
     });
   });
 
+  it('never shows an operator the raw database word for a status', async () => {
+    get.mockResolvedValue({
+      members: [
+        member('a@x.com', { status: 'invited' }),
+        member('b@x.com', { status: 'claimed' }),
+        member('c@x.com', { status: 'redeemed' }),
+      ],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 1, redeemed: 1, total: 3 },
+    });
+
+    renderPanel();
+    await screen.findByText('a@x.com');
+
+    // Plain English in the table, matching the filter buttons exactly. "claimed" is
+    // schema vocabulary and must not surface — it is what prompted "what does the
+    // claimed status mean?" in the first place.
+    expect(screen.queryByText('claimed')).not.toBeInTheDocument();
+    expect(screen.queryByText('invited')).not.toBeInTheDocument();
+    expect(screen.queryByText('redeemed')).not.toBeInTheDocument();
+
+    // Two of each label: one filter button, one table chip.
+    expect(screen.getAllByText('Signed in')).toHaveLength(2);
+    expect(screen.getAllByText('Not signed in')).toHaveLength(2);
+    expect(screen.getAllByText('Used it')).toHaveLength(2);
+  });
+
+  it('prints the review note rather than hiding it behind a hover tooltip', async () => {
+    get.mockResolvedValue({
+      members: [member('a@x.com', { reviewNote: 'CHECK IDENTITY - email may belong to a dealer' })],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 0, redeemed: 0, total: 1 },
+    });
+
+    renderPanel();
+
+    // Visible text, not a title attribute: this is the one thing an operator must
+    // act on before a card goes in the post, and hover reaches neither phone nor
+    // keyboard.
+    expect(await screen.findByText(/CHECK IDENTITY/)).toBeVisible();
+  });
+
   it('says so plainly when a search matches nobody', async () => {
     get.mockResolvedValue({ members: [], nextCursor: null, counts: { invited: 5, claimed: 0, redeemed: 0, total: 5 } });
     renderPanel();
