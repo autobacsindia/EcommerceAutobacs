@@ -128,6 +128,12 @@ export const API_ENDPOINTS = {
   CAMPAIGN_STATUS: (id: string) => `/campaigns/${id}/status`,           // the kill switch
   CAMPAIGN_MEMBERS: (id: string) => `/campaigns/${id}/members`,
   CAMPAIGN_SIMULATE: (id: string) => `/campaigns/${id}/simulate`,
+  // Per-product discount tiers: authored from a search query, then materialized.
+  CAMPAIGN_PRODUCT_TIERS: (id: string) => `/campaigns/${id}/product-tiers`,
+  CAMPAIGN_PRODUCT_TIER_PREVIEW: (id: string) => `/campaigns/${id}/product-tiers/preview`,
+  CAMPAIGN_PRODUCT_TIER_DRIFT: (id: string) => `/campaigns/${id}/product-tiers/drift`,
+  CAMPAIGN_PRODUCT_TIER_ITEM: (id: string, tierCode: string) =>
+    `/campaigns/${id}/product-tiers/${tierCode}`,
 
   // Loyalty / Karma points
   LOYALTY_ME: '/loyalty/me',

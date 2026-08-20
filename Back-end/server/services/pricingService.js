@@ -21,6 +21,7 @@ import productRepository from '../repositories/productRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
 import campaignRepository from '../repositories/campaignRepository.js';
+import campaignProductTierRepository from '../repositories/campaignProductTierRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import campaignService from './campaignService.js';
@@ -29,6 +30,7 @@ import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { CAMPAIGN_REASON } from '../config/campaign.js';
+import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
 
 // Buyer-facing rejection reasons (all whitelisted in errorMiddleware so they survive).
 const REASON = {
@@ -103,6 +105,11 @@ class PricingService {
 
     const orderItems = [];
     let subtotalPaise = 0;
+    // What the buyer is ALREADY saving against MRP, before any coupon. Accumulated here
+    // rather than stored per line: `Order.items[].listPrice` already exists and means
+    // something else entirely (an offline sales-rep markdown), so reusing that name
+    // would silently corrupt rep-discount reporting.
+    let catalogSavingsPaise = 0;
 
     for (const item of items) {
       const product = await productRepository.findActiveById(item.product, session);
@@ -129,6 +136,24 @@ class PricingService {
 
       const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
       const unitPrice = effectivePrice(priceSource);   // honours an expired sale window (product or variant)
+
+      /*
+        Is this line ALREADY discounted right now?
+
+        Derived from `unitPrice`, which is effectivePrice() — NOT from a stored flag and
+        not from the raw `price` field. A sale window that has closed reverts the charged
+        price UP to originalPrice at the expiry instant, ahead of the cron sweep that
+        normalizes the stored fields; reading a flag would keep calling that line "on
+        sale" for as long as the sweep lagged, and cap its discount at 2% when it should
+        have earned its full tier rate.
+
+        Consumed by the product-tier ladder below. Deliberately not persisted onto the
+        order: it is an input to the discount, and the discount itself is what gets
+        snapshotted.
+      */
+      const listPrice = typeof priceSource.originalPrice === 'number' ? priceSource.originalPrice : null;
+      const onSale = listPrice != null && listPrice > unitPrice;
+
       orderItems.push({
         product: product._id,
         variantId,                       // null for simple products
@@ -138,12 +163,17 @@ class PricingService {
         name: product.name,
         image: product.images?.[0]?.url,
         categories: product.categories || [],
-        brandSlug: product.brandSlug || null
+        brandSlug: product.brandSlug || null,
+        onSale,
+        // Filled in by the product-tier ladder when one applies; 0 otherwise. This is
+        // the figure refundMathService reads to refund a returned line at ITS OWN rate.
+        discountPaise: 0
       });
       subtotalPaise += toPaise(unitPrice) * quantity;
+      if (onSale) catalogSavingsPaise += (toPaise(listPrice) - toPaise(unitPrice)) * quantity;
     }
 
-    return { orderItems, subtotalPaise };
+    return { orderItems, subtotalPaise, catalogSavingsPaise };
   }
 
   /** Does a priced line item fall within a coupon's appliesTo scope? */
@@ -156,6 +186,72 @@ class PricingService {
     if (item.brandSlug && brandSlugs.includes(item.brandSlug)) return true;
     if ((item.categories || []).some(c => categories.includes(String(c)))) return true;
     return false;
+  }
+
+  /**
+   * Price a cart against a campaign's PER-PRODUCT tier ladder.
+   *
+   * The structural difference from the cart-value ladder: that one picks ONE rate for
+   * the whole cart, this one picks a rate PER LINE, so a single cart can hold 3%, 5%,
+   * 8%, 4% and 2% lines at once. Every figure is integer paise and the per-line parts
+   * are returned alongside the total, because those parts are what gets persisted onto
+   * the order — refundMathService needs to refund a returned line at ITS OWN rate, and
+   * cannot re-derive it from a blended order-level total.
+   *
+   * Membership comes from materialized CampaignProductTier rows scoped to this campaign.
+   * A line with no row is not an error: it means "everything else" and takes the default
+   * tier. The sale ceiling is applied per line from the LIVE `onSale` computed in
+   * priceItems, never from a stored flag.
+   *
+   * @returns {{ totalPaise: number, lines: Array }}
+   */
+  async _priceProductTiers(campaign, eligibleItems, session = null) {
+    const assignments = await campaignProductTierRepository.findForProducts(
+      campaign._id,
+      eligibleItems.map(i => i.product),
+      session,
+    );
+
+    const resolved = eligibleItems.map((item) => {
+      const linePaise = toPaise(item.price) * item.quantity;
+      const assigned = assignments.get(String(item.product))?.tierCode || null;
+      const { percent, tierCode, label, onSaleCapped } =
+        resolveLinePercent(campaign.productTiers, assigned, item.onSale);
+      return {
+        product: String(item.product),
+        variantId: item.variantId ? String(item.variantId) : null,
+        name: item.name,
+        quantity: item.quantity,
+        linePaise,
+        tierCode,
+        tierLabel: label,
+        percent,
+        alreadyOnSale: Boolean(item.onSale),
+        onSaleCapped,
+        discountPaise: lineDiscountPaise(linePaise, percent),
+      };
+    });
+
+    /*
+      The order-wide ceiling has to land on the LINES, not just on the total.
+
+      Capping only the sum would leave the per-line figures adding up to more than the
+      order's actual discount, and refundMathService would then refund each returned line
+      at its uncapped rate — quietly refunding more than was ever charged once several
+      lines came back. apportionCap distributes it proportionally to what each line
+      earned, with the leftover paise handed out by largest remainder so the parts sum to
+      the cap EXACTLY.
+    */
+    const capPaise = campaign.maxDiscountPerOrder ? toPaise(campaign.maxDiscountPerOrder) : null;
+    if (capPaise != null) {
+      const capped = apportionCap(resolved.map(l => l.discountPaise), capPaise);
+      resolved.forEach((line, i) => { line.discountPaise = capped[i]; });
+    }
+
+    return {
+      totalPaise: resolved.reduce((sum, l) => sum + l.discountPaise, 0),
+      lines: resolved,
+    };
   }
 
   /**
@@ -191,15 +287,32 @@ class PricingService {
     // someone who has just scanned a QR code and needs telling WHICH email to use.
     let campaign = null;
     let campaignTier = null;
+    let productTierPricing = null;
     if (coupon.campaign) {
       campaign = await campaignRepository.findById(coupon.campaign, session);
       const evaluated = await campaignService.evaluate(campaign, userId, eligiblePaise, session, now);
       if (evaluated.reason) throw new CouponRejected(evaluated.reason);
-      // Eligible, but this cart has not reached any tier yet — a distinct case from
-      // being ineligible, and the only place it is a hard rejection is here, where we
-      // are being asked to price an actual discount.
-      if (!evaluated.tier) throw new CouponRejected(CAMPAIGN_REASON.NO_TIER);
-      campaignTier = evaluated.tier;
+
+      /*
+        Two ladders, and a campaign carries exactly one (campaignService.assertValidConfig
+        refuses both together — they price the same goods on different axes, so running
+        them at once would stack two discounts).
+
+        The presence of a product-tier ladder IS the switch. Nothing changes for any
+        existing campaign: `productTiers` is undefined on every one of them, so this
+        branch is unreachable until an operator configures a ladder and assigns products.
+        That is a better gate than an env flag, which would have to be remembered,
+        deployed, and eventually removed.
+      */
+      if (campaign.productTiers?.length) {
+        productTierPricing = await this._priceProductTiers(campaign, eligible, session);
+      } else {
+        // Eligible, but this cart has not reached any tier yet — a distinct case from
+        // being ineligible, and the only place it is a hard rejection is here, where we
+        // are being asked to price an actual discount.
+        if (!evaluated.tier) throw new CouponRejected(CAMPAIGN_REASON.NO_TIER);
+        campaignTier = evaluated.tier;
+      }
     }
 
     // First-order-only and per-user limits require an identified user.
@@ -222,7 +335,10 @@ class PricingService {
     // ── Compute the discount in paise ──────────────────────────────────────────
     let goodsDiscountPaise = 0;
     let freeShipping = false;
-    if (campaignTier) {
+    if (productTierPricing) {
+      // Already capped and apportioned per line inside _priceProductTiers.
+      goodsDiscountPaise = Math.min(productTierPricing.totalPaise, eligiblePaise);
+    } else if (campaignTier) {
       // Already capped by the tier's own limit and the campaign ceiling, and clamped
       // to the eligible subtotal, inside resolveTier().
       goodsDiscountPaise = campaignTier.discountPaise;
@@ -235,7 +351,7 @@ class PricingService {
       freeShipping = true;
     }
 
-    return { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier };
+    return { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier, productTierPricing };
   }
 
   /**
@@ -251,7 +367,7 @@ class PricingService {
    * @returns full breakdown incl. priced `orderItems` for persistence.
    */
   async computeQuote({ items, couponCode, redeemKarmaPoints = 0, userId = null, shippingCost = 0, session = null }) {
-    const { orderItems, subtotalPaise } = await this.priceItems(items, session);
+    const { orderItems, subtotalPaise, catalogSavingsPaise } = await this.priceItems(items, session);
     const shippingPaise = Math.max(0, toPaise(shippingCost));
 
     // ── Coupon (reported, not thrown) ──────────────────────────────────────────
@@ -261,9 +377,10 @@ class PricingService {
     let couponError = null;
     let appliedCampaign = null;
     let allowKarma = true;
+    let discountLines = null;
     if (couponCode && String(couponCode).trim()) {
       try {
-        const { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier } =
+        const { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier, productTierPricing } =
           await this._evaluateCoupon(couponCode, orderItems, userId, session);
         goodsCouponPaise = goodsDiscountPaise;
         shippingWaivePaise = freeShipping ? shippingPaise : 0;
@@ -283,6 +400,28 @@ class PricingService {
           // campaign explicitly opts in — 20% off plus karma is a margin decision,
           // not a default.
           if (!campaign.allowKarmaStacking) allowKarma = false;
+        }
+
+        if (productTierPricing) {
+          /*
+            Stamp each line's OWN discount onto the item that gets persisted.
+
+            This is the load-bearing half of the per-product scheme. refundMathService
+            prorates Order.discount by line gross value, which is exact while every line
+            shares one percentage and WRONG the moment they do not: return the 2% item
+            from a cart that also held an 8% item and the refund comes back at the cart's
+            blended rate. That is the same class of defect as the list-price over-refund
+            fixed on 2026-08-03, and the only way to avoid re-deriving it later is to
+            write down what each line was actually given, at the moment it was given.
+          */
+          const byKey = new Map(
+            productTierPricing.lines.map(l => [`${l.product}|${l.variantId || ''}`, l])
+          );
+          for (const item of orderItems) {
+            const line = byKey.get(`${String(item.product)}|${item.variantId ? String(item.variantId) : ''}`);
+            item.discountPaise = line?.discountPaise || 0;
+          }
+          discountLines = productTierPricing.lines;
         }
       } catch (err) {
         if (err instanceof CouponRejected) couponError = err.reason;
@@ -345,6 +484,31 @@ class PricingService {
       totalAmount: fromPaise(totalPaise),
       appliedCoupon,
       appliedCampaign,
+      /*
+        Per-line breakdown — present only for a product-tier campaign, null otherwise.
+        The cart renders it (which line earned what rate, which was capped because it was
+        already on offer) and the savings popup reads its totals. The BROWSER never
+        computes any of it: money is server-confirmed before the UI commits to it.
+      */
+      discountLines,
+      /*
+        What to celebrate, computed on the SERVER.
+
+        `catalog` is what the buyer already saves against MRP before any code is typed;
+        `coupon` and `karma` are what the code and their points added. The popup shows
+        `total`, because that is the honest number — quoting only the coupon would
+        under-sell a cart full of already-discounted goods, and quoting the catalogue
+        saving as if the coupon caused it would be a lie.
+
+        Sent as a resolved block rather than left to the browser to add up: the browser
+        renders money, it never derives it.
+      */
+      savings: {
+        catalog: fromPaise(catalogSavingsPaise),
+        coupon: fromPaise(goodsCouponPaise),
+        karma: fromPaise(karmaDiscountPaise),
+        total: fromPaise(catalogSavingsPaise + goodsCouponPaise + karmaDiscountPaise),
+      },
       couponError,
       karmaPointsUsed,
       karmaPointValue: cfg.pointValueInRupees,

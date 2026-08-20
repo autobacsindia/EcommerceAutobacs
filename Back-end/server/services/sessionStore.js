@@ -162,6 +162,27 @@ class SessionStore {
    * @param {Object} sessionData - Session metadata (IP, device info)
    * @param {number} ttl - Time to live in seconds (default: 30 days)
    */
+  /**
+   * Absolute session lifetime cap, in seconds. 0 = disabled (the default).
+   *
+   * Sliding expiration already works (refreshSessionTTL, called on every refresh —
+   * see utils/sessionManager.js), which means a session used at least once every TTL
+   * window renews forever. OWASP calls for an idle timeout AND an absolute timeout;
+   * this supplies the missing half: a hard ceiling measured from session CREATION
+   * that no amount of activity can extend.
+   *
+   * Read from the environment on every call, not captured at import, so it can be
+   * changed without a redeploy and so tests can toggle it.
+   *
+   * Off by default on purpose: switching it on logs out every session older than the
+   * ceiling, which is a deliberate operational decision, not a default anyone should
+   * inherit by upgrading.
+   */
+  absoluteMaxSeconds() {
+    const days = Number(process.env.SESSION_ABSOLUTE_MAX_DAYS || 0);
+    return Number.isFinite(days) && days > 0 ? Math.floor(days * 24 * 60 * 60) : 0;
+  }
+
   async storeSession(userId, sessionId, sessionData = {}, ttl = 30 * 24 * 60 * 60) {
     const startTime = Date.now();
     this.metrics.totalRequests++;
@@ -283,9 +304,46 @@ class SessionStore {
       const exists = await this.redis.exists(key);
       
       if (exists === 1) {
-        // Update last accessed time (extend TTL on access)
-        await this.redis.hset(key, 'lastAccessedAt', new Date().toISOString());
-        
+        // Absolute lifetime ceiling. Skipped entirely when disabled (the default),
+        // so the common path stays a single EXISTS with no extra round trip.
+        const maxAge = this.absoluteMaxSeconds();
+        if (maxAge > 0) {
+          const raw = await this.redis.get(key);
+          const createdAt = raw ? Date.parse(JSON.parse(raw)?.createdAt ?? '') : NaN;
+
+          // Fail CLOSED when the age cannot be established. Every write path stamps
+          // createdAt, so its absence means a malformed or orphaned key — and a
+          // session that cannot prove its age must not be granted unlimited life by
+          // a control whose entire purpose is to bound session age. The cost is one
+          // re-authentication; the alternative is an unbounded session.
+          if (!Number.isFinite(createdAt) || Date.now() - createdAt > maxAge * 1000) {
+            await this.redis.del(key).catch(() => {});
+            this.metrics.cacheMisses++;
+            this.recordSuccess();
+            this.trackLatency(Date.now() - startTime);
+            return false;
+          }
+        }
+
+        // NO touch-on-read here, deliberately.
+        //
+        // This used to be `hset(key, 'lastAccessedAt', ...)`, which was a type error:
+        // createSession() writes the session with `setex` as a JSON STRING, and HSET
+        // against a string key raises WRONGTYPE. So every authenticated validation
+        // threw, was swallowed by the catch below, and fell back to a MongoDB session
+        // lookup — the Redis session cache had been inert since 2026-04-04 while
+        // still costing a round trip. It also had a race: if the key expired between
+        // the `exists` check and the HSET, the HSET CREATED a hash with no TTL, which
+        // then lived forever and poisoned every later read of that key.
+        //
+        // Removing it restores the intended fast path with no behavioural change:
+        // sessions already expire at a fixed TTL from creation, because the extension
+        // this line was supposed to perform never once succeeded.
+        //
+        // Making the TTL actually slide (redis.expire(key, ttl)) is a separate and
+        // deliberate SECURITY decision — it would mean an active session never
+        // expires — and must not be smuggled in as a bug fix.
+
         // Record cache hit
         this.metrics.cacheHits++;
         this.recordSuccess();

@@ -145,8 +145,11 @@ class OrderService {
         order = await orderRepository.create(
           {
             user: userId,
-            items: quote.orderItems.map(({ product, variantId, variantLabel, quantity, price, name, image }) =>
-              ({ product, variantId, variantLabel, quantity, price, name, image })),
+            items: quote.orderItems.map(({ product, variantId, variantLabel, quantity, price, name, image, discountPaise }) =>
+              // `discountPaise` carries the line's OWN share of a per-product tier
+              // discount, so a returned line can be refunded at its own rate rather than
+              // the cart's blended average. 0 for every other pricing path.
+              ({ product, variantId, variantLabel, quantity, price, name, image, discountPaise: discountPaise || 0 })),
             shippingAddress,
             subtotal: quote.subtotal,
             shippingCost: quote.shippingCost,

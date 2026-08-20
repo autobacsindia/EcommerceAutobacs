@@ -233,18 +233,52 @@ async function main() {
 
   if (APPLY && driftCount > 0) {
     console.log('--- applying ---');
+
+    // Each index is applied INDEPENDENTLY.
+    //
+    // Previously a single failure threw straight out of the loop, which left the
+    // migration half-applied and printed no record of what had already succeeded —
+    // the worst possible state to resume from against production. At least one
+    // failure is expected and legitimate: MongoDB permits only ONE text index per
+    // collection, so creating the schema's `products` text index while the older
+    // four-field one is still live is rejected outright. That must not prevent the
+    // other 30+ indexes from being created.
+    const failures = [];
+
     for (const m of report.missing) {
       const opts = { ...m.options, background: true };
       if (m.name) opts.name = m.name; // preserve an explicitly-named index
-      await db.collection(m.collection).createIndex(m.key, opts);
-      console.log(`  ✓ created ${m.collection} ${JSON.stringify(m.key)}`);
+      try {
+        await db.collection(m.collection).createIndex(m.key, opts);
+        console.log(`  ✓ created ${m.collection} ${JSON.stringify(m.key)}`);
+      } catch (err) {
+        failures.push({ op: 'create', collection: m.collection, key: m.key, message: err.message });
+        console.error(`  ✗ FAILED create ${m.collection} ${JSON.stringify(m.key)} — ${err.message}`);
+      }
     }
     for (const m of report.mismatched) {
       const opts = { ...m.schema, background: true };
       if (m.desiredName) opts.name = m.desiredName;
-      await db.collection(m.collection).dropIndex(m.name);
-      await db.collection(m.collection).createIndex(m.key, opts);
-      console.log(`  ✓ rebuilt ${m.collection}.${m.name}`);
+      // Drop and create are paired: if the drop succeeds but the create fails, the
+      // collection is left with NO index where it previously had a usable one, so
+      // that case is reported loudly rather than counted as a routine failure.
+      try {
+        await db.collection(m.collection).dropIndex(m.name);
+      } catch (err) {
+        failures.push({ op: 'drop', collection: m.collection, key: m.key, message: err.message });
+        console.error(`  ✗ FAILED drop ${m.collection}.${m.name} — ${err.message}`);
+        continue; // nothing was removed, so the old index still serves queries
+      }
+      try {
+        await db.collection(m.collection).createIndex(m.key, opts);
+        console.log(`  ✓ rebuilt ${m.collection}.${m.name}`);
+      } catch (err) {
+        failures.push({ op: 'recreate', collection: m.collection, key: m.key, message: err.message });
+        console.error(
+          `  ✗✗ CRITICAL: dropped ${m.collection}.${m.name} but could NOT recreate it — ` +
+          `that collection is now missing the index entirely. Recreate by hand: ${err.message}`
+        );
+      }
     }
     if (ALLOW_DROP) {
       for (const e of report.extra) {
@@ -253,6 +287,16 @@ async function main() {
       }
     } else if (report.extra.length) {
       console.log(`  (${report.extra.length} EXTRA left in place — re-run with --allow-drop to remove)`);
+    }
+
+    if (failures.length) {
+      console.log(`\n--- ${failures.length} operation(s) FAILED ---`);
+      for (const f of failures) {
+        console.log(`  ${f.op} ${f.collection} ${JSON.stringify(f.key)}\n      ${f.message}`);
+      }
+      console.log('\nRe-run after resolving these; createIndex is idempotent, so the');
+      console.log('successful ones above will simply be no-ops.\n');
+      process.exitCode = 1;
     }
     console.log('');
   }

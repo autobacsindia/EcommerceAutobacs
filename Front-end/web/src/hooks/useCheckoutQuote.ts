@@ -19,6 +19,33 @@ export interface CheckoutQuote {
     id: string; slug: string; name: string;
     tierId: string | null; tierLabel: string | null; percent: number;
   } | null;
+  /**
+   * Per-line discount breakdown — present only when the applied coupon is priced by a
+   * campaign's PER-PRODUCT tier ladder, null otherwise. Server-computed: the browser
+   * displays these numbers and never derives them, because money is confirmed by the
+   * server before the UI commits to it.
+   */
+  discountLines: {
+    product: string;
+    variantId: string | null;
+    name: string;
+    quantity: number;
+    linePaise: number;
+    tierCode: string | null;
+    tierLabel: string | null;
+    percent: number;
+    /** The product was already sold below its MRP when the cart was priced. */
+    alreadyOnSale: boolean;
+    /** True only when being on offer actually REDUCED this line's rate. */
+    onSaleCapped: boolean;
+    discountPaise: number;
+  }[] | null;
+  /**
+   * What to celebrate, resolved server-side. `catalog` is what the buyer already saves
+   * against MRP before any code is typed; `coupon` and `karma` are what the code and
+   * their points added. The browser renders these; it never adds them up itself.
+   */
+  savings: { catalog: number; coupon: number; karma: number; total: number };
   couponError: string | null;
   karmaPointsUsed: number;
   karmaPointValue: number;

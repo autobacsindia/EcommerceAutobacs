@@ -16,6 +16,7 @@ jest.unstable_mockModule('../../../services/categoryMappingService.js', () => ({
     initialize: jest.fn(),
     findCategory: jest.fn(),
     getAllCategoryIdsIncludingChildren: jest.fn(),
+    getAllCategorySlugsIncludingChildren: jest.fn(),
     buildChildIndex: jest.fn(() => new Map()),
   }
 }));
@@ -35,7 +36,7 @@ jest.unstable_mockModule('../../../models/Vehicle.js', () => ({
 }));
 
 // Import the module under test using dynamic import to apply mocks
-const { default: SearchService } = await import('../../../services/searchService.js');
+const { default: SearchService, __resetEsAvailabilityTracker, getSearchPathMetrics, __resetSearchPathMetrics } = await import('../../../services/searchService.js');
 const { default: elasticsearchService } = await import('../../../services/elasticsearchService.js');
 const { default: categoryMappingService } = await import('../../../services/categoryMappingService.js');
 const { default: Product } = await import('../../../models/Product.js');
@@ -47,6 +48,17 @@ describe('SearchService Unit Tests', () => {
     
     // Default mocks setup
     elasticsearchService.isConnected.mockResolvedValue(false); // Default to MongoDB fallback
+
+    // Both subtree resolvers return arrays by contract. Defaulting them here (rather
+    // than letting the code guard against undefined) keeps a real contract break
+    // visible instead of silently resolving to an empty filter.
+    categoryMappingService.getAllCategoryIdsIncludingChildren.mockResolvedValue([]);
+    categoryMappingService.getAllCategorySlugsIncludingChildren.mockResolvedValue([]);
+
+    // The availability tracker is module state; reset it so one test's observed
+    // transition cannot leak into the next.
+    __resetEsAvailabilityTracker();
+    __resetSearchPathMetrics();
     
     // Mock Product.find chain. The service terminates the chain with
     // `.lean().maxTimeMS(ms)`, so maxTimeMS (not lean) resolves the documents.
@@ -62,6 +74,202 @@ describe('SearchService Unit Tests', () => {
     Product.find.mockReturnValue(mockFind);
     // countDocuments is also chained with `.maxTimeMS(ms)`.
     Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(0) });
+  });
+
+  describe('search path metrics (Phase-A instrumentation)', () => {
+    // The Mongo fallback is the only reason to rewrite skip/countDocuments, and that
+    // rewrite changes the pagination contract the frontend reads. These counters are
+    // what turn "probably rare now" into a number worth acting on.
+    it('counts an ES-served search and reports a 0% fallback rate', async () => {
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [{ _id: '1' }], pagination: { total: 1, page: 1, pages: 1 },
+      });
+
+      await SearchService.searchProducts({ search: 'brake' });
+
+      const m = getSearchPathMetrics();
+      expect(m.esServed).toBe(1);
+      expect(m.mongoFallbackRate).toBe('0.00%');
+    });
+
+    it('separates an ES outage from an admin listing', async () => {
+      // Both reach Mongo, but only one is a fault. Collapsing them would make an
+      // outage look like normal admin traffic.
+      elasticsearchService.isConnected.mockResolvedValue(false);
+      await SearchService.searchProducts({ search: 'a' });              // ES down
+      await SearchService.searchProducts({ search: 'b' }, { includeInactive: true }); // admin
+
+      const m = getSearchPathMetrics();
+      expect(m.fallbackEsDown).toBe(1);
+      expect(m.adminMongo).toBe(1);
+      // Admin traffic is expected, so it must NOT inflate the fallback rate.
+      expect(m.mongoFallbackRate).toBe('50.00%');
+    });
+
+    it('counts a zero-hit fallback distinctly from an ES error', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [], pagination: { total: 0, page: 1, pages: 0 },
+      });
+      await SearchService.searchProducts({ search: 'a' });
+
+      elasticsearchService.searchProducts.mockRejectedValue(new Error('boom'));
+      await SearchService.searchProducts({ search: 'b' });
+
+      const m = getSearchPathMetrics();
+      expect(m.fallbackEsZeroHit).toBe(1);
+      expect(m.fallbackEsError).toBe(1);
+      expect(m.mongoFallbackRate).toBe('100.00%');
+      console.error.mockRestore();
+    });
+
+    it('reports 0% before any search, without dividing by zero', () => {
+      expect(getSearchPathMetrics().mongoFallbackRate).toBe('0%');
+      expect(getSearchPathMetrics().total).toBe(0);
+    });
+  });
+
+  describe('Elasticsearch availability reporting', () => {
+    // The silent failure mode: isConnected() false means ES is skipped entirely and
+    // every public search runs the Mongo fallback with NOTHING in the log. The
+    // divergence warning cannot cover it — that only fires when ES was consulted.
+    it('reports the outage once when ES becomes unavailable', async () => {
+      const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(false);
+
+      await SearchService.searchProducts({ search: 'brake' });
+
+      expect(err).toHaveBeenCalledTimes(1);
+      expect(err.mock.calls[0][0]).toContain('Elasticsearch UNAVAILABLE');
+      err.mockRestore();
+    });
+
+    it('does not repeat the outage line on every subsequent search', async () => {
+      // A multi-hour outage must not write one line per page view.
+      const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+      elasticsearchService.isConnected.mockResolvedValue(false);
+
+      await SearchService.searchProducts({ search: 'a' });
+      await SearchService.searchProducts({ search: 'b' });
+      await SearchService.searchProducts({ search: 'c' });
+
+      expect(err).toHaveBeenCalledTimes(1);
+      err.mockRestore();
+    });
+
+    it('reports recovery when ES comes back', async () => {
+      const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      elasticsearchService.isConnected.mockResolvedValue(false);
+      await SearchService.searchProducts({ search: 'a' });
+
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [{ _id: '1' }], pagination: { total: 1, page: 1, pages: 1 },
+      });
+      await SearchService.searchProducts({ search: 'a' });
+
+      expect(log.mock.calls.some((c) => String(c[0]).includes('available again'))).toBe(true);
+      err.mockRestore();
+      log.mockRestore();
+    });
+
+    it('stays silent for admin (includeInactive) searches, which never consult ES', async () => {
+      // includeInactive deliberately bypasses ES, so it is not evidence of an outage.
+      const err = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      await SearchService.searchProducts({ search: 'a' }, { includeInactive: true });
+
+      expect(err).not.toHaveBeenCalled();
+      expect(elasticsearchService.isConnected).not.toHaveBeenCalled();
+      err.mockRestore();
+    });
+  });
+
+  describe('category subtree resolution (Mongo/ES parity)', () => {
+    // REGRESSION — Atlas "Query Targeting: Scanned Objects / Returned above 1000".
+    //
+    // The storefront URL carries a category SLUG. Elasticsearch was filtering that
+    // slug against the category DISPLAY NAME (`categories.name.keyword`), so
+    // "exterior" never matched "Exterior" and ES returned zero for every category
+    // page. Zero hits routed the request into the Mongo fallback, which cost a full
+    // collection scan plus an unbounded countDocuments — on prod, es=0 vs mongo=394
+    // for a single hub.
+    //
+    // Second defect stacked on the first: ES documents carry only the categories a
+    // product is DIRECTLY tagged with, so even a name-correct filter matched 68 of
+    // those 394. The hierarchy has to be flattened before it reaches ES.
+    const HUB = { _id: 'hub-id', name: 'Exterior', slug: 'exterior' };
+
+    beforeEach(() => {
+      categoryMappingService.findCategory.mockReturnValue(HUB);
+      categoryMappingService.getAllCategoryIdsIncludingChildren
+        .mockResolvedValue(['hub-id', 'child-id']);
+      categoryMappingService.getAllCategorySlugsIncludingChildren
+        .mockResolvedValue(['exterior', 'spoiler']);
+    });
+
+    it('hands ES the subtree SLUGS, not the raw identifier', async () => {
+      elasticsearchService.isConnected.mockResolvedValue(true);
+      elasticsearchService.searchProducts.mockResolvedValue({
+        products: [{ _id: '1' }], pagination: { total: 1, page: 1, pages: 1 },
+      });
+
+      await SearchService.searchProducts({ category: 'exterior' });
+
+      const esArg = elasticsearchService.searchProducts.mock.calls[0][0];
+      // The whole subtree, so a hub page returns the hub's products AND its
+      // children's — the difference between 68 and 394 results in production.
+      expect(esArg.categorySlugs).toEqual(['exterior', 'spoiler']);
+      // And crucially: ES was trusted, so no Mongo scan happened at all.
+      expect(Product.find).not.toHaveBeenCalled();
+    });
+
+    it('resolves ids and slugs from the SAME subtree walk', async () => {
+      const { ids, slugs } = await SearchService.resolveCategorySubtree('exterior');
+
+      expect(ids).toEqual(['hub-id', 'child-id']);
+      expect(slugs).toEqual(['exterior', 'spoiler']);
+      // Both projections seeded from the same resolved category — this is what
+      // stops the two engines answering the same URL differently.
+      expect(categoryMappingService.getAllCategoryIdsIncludingChildren)
+        .toHaveBeenCalledWith('hub-id');
+      expect(categoryMappingService.getAllCategorySlugsIncludingChildren)
+        .toHaveBeenCalledWith('hub-id');
+    });
+
+    it('deduplicates across a comma-separated list', async () => {
+      const { slugs } = await SearchService.resolveCategorySubtree('exterior,exterior');
+      expect(slugs).toEqual(['exterior', 'spoiler']);
+    });
+
+    it('contributes no slugs for an unresolvable category', async () => {
+      // An identifier the mapping cannot resolve has no subtree. Inventing one
+      // would let ES answer a filter Mongo would reject — the two engines must
+      // agree on "no such category" too.
+      categoryMappingService.findCategory.mockReturnValue(null);
+      categoryMappingService.getAllCategoryIdsIncludingChildren
+        .mockResolvedValue(['not-a-category']);
+
+      const { ids, slugs } = await SearchService.resolveCategorySubtree('not-a-category');
+
+      expect(slugs).toEqual([]);
+      expect(ids).toEqual(['not-a-category']); // unchanged Mongo behaviour: matches nothing
+      expect(categoryMappingService.getAllCategorySlugsIncludingChildren)
+        .not.toHaveBeenCalled();
+    });
+
+    it('still applies the subtree ids to the Mongo filter', async () => {
+      elasticsearchService.isConnected.mockResolvedValue(false);
+
+      await SearchService.searchProducts({ category: 'exterior' });
+
+      const queryArg = Product.find.mock.calls[0][0];
+      expect(queryArg.categories.$in).toHaveLength(2);
+    });
   });
 
   describe('searchProducts', () => {

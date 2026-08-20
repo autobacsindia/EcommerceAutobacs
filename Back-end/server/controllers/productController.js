@@ -16,6 +16,7 @@ import SearchService from "../services/searchService.js";
 import cacheService, { TTL, CACHE_VERSION } from "../services/cacheService.js";
 import { buildResponseKey, isCacheDisabled } from "../middleware/httpCache.js";
 import { CACHE_PROFILES, resolveTags } from "../config/cacheProfiles.js";
+import { buildFacetCacheKey } from '../utils/facetCacheKey.js';
 
 const PRODUCT_LIST_PROFILE = CACHE_PROFILES.PRODUCT_LIST;
 
@@ -105,7 +106,11 @@ export const getAdminProducts = async (req, res) => {
 
 // GET /products/facets — per-brand and per-category counts for the filter sidebar.
 export const getProductFacets = async (req, res) => {
-  const cacheKey = `${CACHE_VERSION}:products:facets:${JSON.stringify(req.query)}`;
+  // Canonical, pagination-independent key — see utils/facetCacheKey.js. The old
+  // `JSON.stringify(req.query)` folded `page`/`sort` into the key and depended on
+  // parameter order, so nearly every request minted a fresh entry and recomputed
+  // two MongoDB aggregations that an existing entry already answered.
+  const cacheKey = buildFacetCacheKey(req.query);
   try {
     const cached = await cacheService.get(cacheKey);
     if (cached) return res.json(cached);

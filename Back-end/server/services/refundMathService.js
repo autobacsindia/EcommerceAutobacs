@@ -56,6 +56,19 @@ export function orderGoodsNetPaise(order) {
   return Math.max(0, subtotalPaise - discountPaise);
 }
 
+/**
+ * Σ of the per-line coupon attribution written at order time, in paise.
+ *
+ * Non-zero only for an order priced by a campaign's PER-PRODUCT tier ladder. Used as the
+ * switch below, and `> 0` is the right test rather than "the field exists": every order
+ * created since the field was added carries `discountPaise: 0` on ordinary-coupon lines,
+ * and treating that as an attribution would refund those lines at GROSS — the exact
+ * over-refund this module exists to prevent.
+ */
+function perLineDiscountPaise(lines) {
+  return (lines || []).reduce((sum, l) => sum + Math.max(0, Math.floor(Number(l?.discountPaise) || 0)), 0);
+}
+
 /** Σ(price × qty) over order lines, in paise. */
 function grossLinesPaise(lines) {
   return (lines || []).reduce(
@@ -82,6 +95,11 @@ export function refundableForLines(order, returnedLines) {
   const orderGrossPaise = grossLinesPaise(orderLines);
   const goodsNetPaise = orderGoodsNetPaise(order);
 
+  // Per-line attribution when the order carries it; proration otherwise. Legacy orders,
+  // ordinary coupons and cart-value campaigns all take the proration path unchanged.
+  const usePerLine = perLineDiscountPaise(orderLines) > 0;
+  const orderKarmaPaise = toPaise(order?.karmaDiscount || 0);
+
   let grossPaise = 0;
   let netPaise = 0;
 
@@ -96,12 +114,40 @@ export function refundableForLines(order, returnedLines) {
     const lineGrossPaise = unitPaise * qty;
     grossPaise += lineGrossPaise;
 
-    // Proportional share of the goods-net pot. When the order carries no discount
-    // this collapses to the gross value exactly (ratio == 1), so a full-price order
-    // is unaffected by the proration path.
-    const linePaise = orderGrossPaise > 0
-      ? Math.floor((lineGrossPaise * goodsNetPaise) / orderGrossPaise)
-      : 0;
+    let linePaise;
+    if (usePerLine) {
+      /*
+        The order recorded what THIS line was actually discounted by, so use it.
+
+        Proration by gross value — the branch below — is exact only while every line
+        shares one percentage. Once a cart can hold 3%, 5%, 8% and 2% lines together it
+        answers with the cart AVERAGE: return the already-on-offer item discounted 2%
+        and it is refunded as though it had carried the cart's blended rate, refunding
+        money that was never taken off it. Same class of defect as the list-price
+        over-refund fixed on 2026-08-03, which is why the attribution is snapshotted.
+
+        Partial-quantity returns take a per-unit share of their OWN line, floored — the
+        same never-round-a-refund-up rule as everywhere else here.
+
+        Karma stays prorated: it is a whole-cart discount with no per-line meaning, so
+        the only defensible split is by value.
+      */
+      const lineDiscountPaise = Math.max(0, Math.floor(Number(orderLine?.discountPaise) || 0));
+      const couponSharePaise = orderQty > 0
+        ? Math.floor((lineDiscountPaise * qty) / orderQty)
+        : lineDiscountPaise;
+      const karmaSharePaise = orderGrossPaise > 0
+        ? Math.floor((lineGrossPaise * orderKarmaPaise) / orderGrossPaise)
+        : 0;
+      linePaise = Math.max(0, lineGrossPaise - couponSharePaise - karmaSharePaise);
+    } else {
+      // Proportional share of the goods-net pot. When the order carries no discount
+      // this collapses to the gross value exactly (ratio == 1), so a full-price order
+      // is unaffected by the proration path.
+      linePaise = orderGrossPaise > 0
+        ? Math.floor((lineGrossPaise * goodsNetPaise) / orderGrossPaise)
+        : 0;
+    }
     netPaise += linePaise;
   }
 

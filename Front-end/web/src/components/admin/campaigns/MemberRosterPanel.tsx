@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, Download } from 'lucide-react';
+import { Users, Search, Download, Flag } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
@@ -40,6 +40,11 @@ interface Member {
   redeemedAt: string | null;
   discountRupees: number;
   reviewNote: string | null;
+  /** Postal details, carried on the member so a card can be addressed. Optional. */
+  phone: string | null;
+  address: string | null;
+  pincode: string | null;
+  state: string | null;
 }
 
 interface MembersPage {
@@ -52,6 +57,22 @@ const STATUS_CHIP: Record<MemberStatus, string> = {
   invited: 'bg-zinc-500/15 text-zinc-300 ring-zinc-500/30',
   claimed: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
   redeemed: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+};
+
+/**
+ * ONE source of truth for how a status is worded, used by the table chips, the filter
+ * buttons and the CSV alike.
+ *
+ * The table used to print the raw database word ("claimed") while the filter button for
+ * the very same rows said "Signed in", with the meaning hidden in a hover tooltip. Two
+ * names for one thing, and the explanation unreachable on a phone — so the honest
+ * question "what does claimed mean?" was unanswerable from the screen. `claimed` is
+ * schema vocabulary; it should never have reached an operator.
+ */
+const STATUS_LABEL: Record<MemberStatus, string> = {
+  invited: 'Not signed in',
+  claimed: 'Signed in',
+  redeemed: 'Used it',
 };
 
 const STATUS_HELP: Record<MemberStatus, string> = {
@@ -145,9 +166,14 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
       }
       const esc = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const csv = [
-        ['Name', 'Email', 'Status', 'Claimed at', 'Redeemed at', 'Discount (₹)', 'Note'].join(','),
+        // Address columns come first after the name: this export is what a print run
+        // gets addressed from, so the posting details lead and the funnel follows.
+        ['Name', 'Email', 'Phone', 'Delivery Address', 'Pincode', 'State',
+         'Status', 'Signed in at', 'Used it at', 'Saved (₹)', 'Note'].join(','),
         ...all.map((m) => [
-          esc(m.name), esc(m.email), esc(m.status),
+          esc(m.name), esc(m.email), esc(m.phone),
+          esc(m.address), esc(m.pincode), esc(m.state),
+          esc(STATUS_LABEL[m.status]),
           esc(m.claimedAt ? formatIsoDateTimeIST(m.claimedAt) : ''),
           esc(m.redeemedAt ? formatIsoDateTimeIST(m.redeemedAt) : ''),
           esc(m.discountRupees || 0), esc(m.reviewNote),
@@ -192,7 +218,9 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-        {([['', 'All'], ['invited', 'Not signed in'], ['claimed', 'Signed in'], ['redeemed', 'Used it']] as const).map(
+        {([['', 'All'], ...(Object.keys(STATUS_LABEL) as MemberStatus[]).map((k) => [k, STATUS_LABEL[k]])] as [
+          '' | MemberStatus, string,
+        ][]).map(
           ([v, label]) => (
             <button
               key={v}
@@ -225,8 +253,9 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
               <tr>
                 <th className="pb-2 pr-4 font-medium">Name</th>
                 <th className="pb-2 pr-4 font-medium">Email</th>
+                <th className="pb-2 pr-4 font-medium">Address</th>
                 <th className="pb-2 pr-4 font-medium">Status</th>
-                <th className="pb-2 pr-4 font-medium">Signed in</th>
+                <th className="pb-2 pr-4 font-medium">Signed in on</th>
                 <th className="pb-2 font-medium text-right">Saved</th>
               </tr>
             </thead>
@@ -235,17 +264,49 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
                 <tr key={m._id} className="text-zinc-300">
                   <td className="py-2 pr-4">
                     {m.name || <span className="text-zinc-600">—</span>}
+                    {/*
+                      The note is printed, not hidden behind a hover tooltip. It was a
+                      bare ⚑ with a `title`, which meant the one thing an operator has
+                      to act on before posting a card was invisible on a phone, absent
+                      from the keyboard path, and unreadable without knowing to hover.
+                      42 of the 191 rows carry one; if you have to ask what the icon
+                      means, the icon is the wrong control.
+                    */}
                     {m.reviewNote && (
-                      <span className="ml-2 text-xs text-amber-400/80" title={m.reviewNote}>⚑</span>
+                      <span className="mt-0.5 flex items-start gap-1 text-xs text-amber-400/90">
+                        <Flag size={11} className="mt-0.5 shrink-0" />
+                        <span>{m.reviewNote}</span>
+                      </span>
                     )}
                   </td>
                   <td className="py-2 pr-4 font-mono text-xs text-zinc-400">{m.email}</td>
+                  <td className="py-2 pr-4 text-xs text-zinc-400">
+                    {m.address ? (
+                      <>
+                        {/* Clamped rather than truncated with a tooltip: a real Indian
+                            delivery address runs long and carries landmarks a courier
+                            uses, so it wraps and stays readable. The full text is in the
+                            CSV, which is what a print run is addressed from. */}
+                        <span className="line-clamp-2 max-w-[22rem]">{m.address}</span>
+                        {(m.pincode || m.state) && (
+                          <span className="mt-0.5 block text-zinc-500">
+                            {[m.pincode, m.state].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                        {m.phone && <span className="block font-mono text-zinc-500">{m.phone}</span>}
+                      </>
+                    ) : (
+                      // Said plainly, because "no address" is the one thing that stops a
+                      // card being posted and it must not look like an empty cell.
+                      <span className="text-amber-400/80">No address on file</span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4">
                     <span
                       title={STATUS_HELP[m.status]}
                       className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${STATUS_CHIP[m.status]}`}
                     >
-                      {m.status}
+                      {STATUS_LABEL[m.status]}
                     </span>
                   </td>
                   <td className="py-2 pr-4 text-xs text-zinc-500">

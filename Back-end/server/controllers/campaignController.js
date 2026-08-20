@@ -11,6 +11,7 @@
 
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import campaignService from '../services/campaignService.js';
+import campaignProductTierService from '../services/campaignProductTierService.js';
 import campaignRepository from '../repositories/campaignRepository.js';
 import AppError from '../utils/AppError.js';
 import { CAMPAIGN_STATUSES } from '../config/campaign.js';
@@ -147,4 +148,71 @@ export const simulateCampaign = asyncHandler(async (req, res) => {
     success: true,
     results: values.map(v => campaignService.simulate(campaign, v)),
   });
+});
+
+// ── Admin: product tiers ──────────────────────────────────────────────────────
+// The authoring surface for per-product discount rates. Every response here is
+// operator-only and reflects state an admin has just changed, so none of it may be
+// stored by a shared cache.
+
+// @desc    Dry-run a tier's search query: what WOULD be assigned, and what overlap
+//          would keep where it is. Writes nothing.
+// @route   GET /campaigns/:id/product-tiers/preview?tierCode=&query=
+// @access  Admin
+export const previewProductTier = asyncHandler(async (req, res) => {
+  const result = await campaignProductTierService.preview(req.params.id, {
+    tierCode: req.query.tierCode,
+    query: req.query.query,
+  });
+  noStore(res);
+  res.json({ success: true, ...result });
+});
+
+// @desc    Commit an assignment — the reviewed selection, or the whole query match.
+// @route   POST /campaigns/:id/product-tiers
+// @access  Admin
+export const commitProductTier = asyncHandler(async (req, res) => {
+  const result = await campaignProductTierService.commit(req.params.id, {
+    tierCode: req.body.tierCode,
+    query: req.body.query,
+    productIds: req.body.productIds,
+    // Explicit opt-in past the "this query matches most of the catalogue" refusal.
+    confirm: req.body.confirm === true,
+    assignedBy: req.user?._id || null,
+  });
+  noStore(res);
+  res.status(201).json({ success: true, ...result });
+});
+
+// @desc    One keyset page of a campaign's assignments (+ per-tier counts on page one).
+// @route   GET /campaigns/:id/product-tiers
+// @access  Admin
+export const listProductTiers = asyncHandler(async (req, res) => {
+  const result = await campaignProductTierService.list(req.params.id, {
+    cursor: req.query.cursor || null,
+    limit: req.query.limit,
+    tierCode: req.query.tierCode || null,
+  });
+  noStore(res);
+  res.json({ success: true, ...result });
+});
+
+// @desc    Products matching a tier's saved queries that carry no assignment — the
+//          report that stops a materialized scheme rotting as the catalogue grows.
+// @route   GET /campaigns/:id/product-tiers/drift
+// @access  Admin
+export const getProductTierDrift = asyncHandler(async (req, res) => {
+  const result = await campaignProductTierService.drift(req.params.id);
+  noStore(res);
+  res.json({ success: true, ...result });
+});
+
+// @desc    Remove one tier's membership, re-resolving products that also matched
+//          another tier rather than blanket-deleting them.
+// @route   DELETE /campaigns/:id/product-tiers/:tierCode
+// @access  Admin
+export const unassignProductTier = asyncHandler(async (req, res) => {
+  const result = await campaignProductTierService.unassign(req.params.id, req.params.tierCode);
+  noStore(res);
+  res.json({ success: true, ...result });
 });

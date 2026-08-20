@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
+import SavingsCelebration from '@/components/checkout/SavingsCelebration';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { ProductImage, productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
@@ -216,6 +217,9 @@ function CartPageContent() {
 
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
+      {/* Fires once when a coupon lands, on its own state. Renders nothing the rest of
+          the time, and never gates the checkout button behind being dismissed. */}
+      <SavingsCelebration quote={quote} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <Reveal className="mb-10">
@@ -297,6 +301,34 @@ function CartPageContent() {
                               <p className="text-[11px] uppercase tracking-[0.14em] text-gold mt-1">{item.variantLabel}</p>
                             )}
                             <p className="text-sm text-ink-muted font-display mt-1">{formatPrice(unitPrice)} each</p>
+                            {(() => {
+                              /*
+                                What THIS line earns from the applied coupon. Read straight
+                                off the server's per-line breakdown — the browser never
+                                works out a rate — and shown per line because a cart can
+                                now hold several different ones at once. Saying "3%" in a
+                                cart whose total implies 8% is the sort of gap that turns
+                                into a support ticket.
+                              */
+                              const dl = quote?.discountLines?.find(
+                                (l) => l.product === item.product._id
+                                  && (l.variantId ?? null) === (item.variantId ?? null),
+                              );
+                              if (!dl || dl.percent <= 0) return null;
+                              return (
+                                <p className="text-[11px] font-display mt-1 text-gold/80">
+                                  {dl.percent}% off with {quote?.appliedCoupon?.code}
+                                  {dl.onSaleCapped && (
+                                    // Already discounted, so the coupon adds a reduced
+                                    // rate rather than its full one. Said here, next to
+                                    // the item, not only in the popup they may dismiss.
+                                    <span className="text-amber-500/90">
+                                      {' '}— already on offer, so this is the added rate
+                                    </span>
+                                  )}
+                                </p>
+                              );
+                            })()}
                           </div>
                           <button
                             onClick={() => handleRemoveItem(item.product._id, item.variantId)}
@@ -380,6 +412,14 @@ function CartPageContent() {
                   <div className="flex justify-between text-gold font-display text-sm">
                     <span>Discount ({quote.appliedCoupon?.code})</span>
                     <span>−{formatPrice(quote.couponDiscount)}</span>
+                  </div>
+                )}
+                {quote && quote.savings?.total > 0 && (
+                  // The honest headline: what the catalogue already took off PLUS what
+                  // the code added. Server-resolved; nothing here is summed in the browser.
+                  <div className="flex justify-between text-emerald-500 font-display text-sm">
+                    <span>You save</span>
+                    <span>{formatPrice(quote.savings.total)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-ink/70 font-display text-sm">

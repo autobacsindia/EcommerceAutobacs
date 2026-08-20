@@ -33,6 +33,29 @@ const CampaignMemberSchema = new mongoose.Schema({
   redeemedAt: { type: Date, default: null },
   discountRupees: { type: Number, min: 0, default: 0 },
 
+  /**
+   * ── Postal details, for the thing that started all this: posting the cards ──────
+   *
+   * Carried on the member rather than looked up from the customer's account, because
+   * the two answer different questions. The account address is where that person wants
+   * DELIVERIES sent today and they may change it at any time; these are the details the
+   * operations list held when the campaign was built, which is what the printed run was
+   * addressed from. Keeping them here means a card that came back undelivered can still
+   * be traced to what was actually on the envelope.
+   *
+   * They also survive the person having no account at all — 175 of the 207 people on the
+   * 2026 list had only ever ordered over WhatsApp or the Order Manager.
+   *
+   * Kept as free text, not a structured address: the source is an operations spreadsheet
+   * where a single "Delivery Address" cell already holds the whole thing, frequently with
+   * landmarks and instructions ("opposite Domino's pizza", "next to Bharat TVS"). Parsing
+   * that into lines would lose information a courier actually uses.
+   */
+  phone: { type: String, trim: true, default: null },
+  address: { type: String, trim: true, default: null },
+  pincode: { type: String, trim: true, default: null },
+  state: { type: String, trim: true, default: null },
+
   // Free-text note from the import (e.g. "identity to check — email may be a dealer's").
   reviewNote: { type: String, trim: true, default: null },
 }, { timestamps: true });

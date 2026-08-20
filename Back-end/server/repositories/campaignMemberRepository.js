@@ -112,11 +112,22 @@ class CampaignMemberRepository extends BaseRepository {
     if (!Array.isArray(entries) || entries.length === 0) {
       return { inserted: 0, updated: 0 };
     }
-    const ops = entries.map(({ email, name, reviewNote }) => ({
+    const ops = entries.map(({ email, name, reviewNote, phone, address, pincode, state }) => ({
       updateOne: {
         filter: { campaign: campaignId, email: String(email).toLowerCase().trim() },
         update: {
-          $set: { name: name || null, reviewNote: reviewNote || null },
+          // Postal fields are only written when the incoming row HAS them. A re-import
+          // from a sheet that dropped the address column must correct names without
+          // silently blanking the addresses a previous import supplied — the cards still
+          // have to reach someone.
+          $set: {
+            name: name || null,
+            reviewNote: reviewNote || null,
+            ...(phone   ? { phone }   : {}),
+            ...(address ? { address } : {}),
+            ...(pincode ? { pincode } : {}),
+            ...(state   ? { state }   : {}),
+          },
           $setOnInsert: {
             campaign: campaignId,
             email: String(email).toLowerCase().trim(),
@@ -171,7 +182,7 @@ class CampaignMemberRepository extends BaseRepository {
     const rows = await CampaignMember.find(filter)
       .sort({ email: 1 })
       .limit(capped + 1)
-      .select('email name status claimedAt redeemedAt redeemedOrder discountRupees reviewNote')
+      .select('email name status claimedAt redeemedAt redeemedOrder discountRupees reviewNote phone address pincode state')
       .lean();
 
     const hasMore = rows.length > capped;

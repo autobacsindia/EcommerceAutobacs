@@ -15,7 +15,8 @@ const get = apiClient.get as jest.Mock;
 
 const member = (email: string, over = {}) => ({
   _id: email, email, name: email.split('@')[0], status: 'invited',
-  claimedAt: null, redeemedAt: null, discountRupees: 0, reviewNote: null, ...over,
+  claimedAt: null, redeemedAt: null, discountRupees: 0, reviewNote: null,
+  phone: null, address: null, pincode: null, state: null, ...over,
 });
 
 const renderPanel = () => {
@@ -125,6 +126,48 @@ describe('MemberRosterPanel', () => {
     });
   });
 
+  it('never shows an operator the raw database word for a status', async () => {
+    get.mockResolvedValue({
+      members: [
+        member('a@x.com', { status: 'invited' }),
+        member('b@x.com', { status: 'claimed' }),
+        member('c@x.com', { status: 'redeemed' }),
+      ],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 1, redeemed: 1, total: 3 },
+    });
+
+    renderPanel();
+    await screen.findByText('a@x.com');
+
+    // Plain English in the table, matching the filter buttons exactly. "claimed" is
+    // schema vocabulary and must not surface — it is what prompted "what does the
+    // claimed status mean?" in the first place.
+    expect(screen.queryByText('claimed')).not.toBeInTheDocument();
+    expect(screen.queryByText('invited')).not.toBeInTheDocument();
+    expect(screen.queryByText('redeemed')).not.toBeInTheDocument();
+
+    // Two of each label: one filter button, one table chip.
+    expect(screen.getAllByText('Signed in')).toHaveLength(2);
+    expect(screen.getAllByText('Not signed in')).toHaveLength(2);
+    expect(screen.getAllByText('Used it')).toHaveLength(2);
+  });
+
+  it('prints the review note rather than hiding it behind a hover tooltip', async () => {
+    get.mockResolvedValue({
+      members: [member('a@x.com', { reviewNote: 'CHECK IDENTITY - email may belong to a dealer' })],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 0, redeemed: 0, total: 1 },
+    });
+
+    renderPanel();
+
+    // Visible text, not a title attribute: this is the one thing an operator must
+    // act on before a card goes in the post, and hover reaches neither phone nor
+    // keyboard.
+    expect(await screen.findByText(/CHECK IDENTITY/)).toBeVisible();
+  });
+
   it('says so plainly when a search matches nobody', async () => {
     get.mockResolvedValue({ members: [], nextCursor: null, counts: { invited: 5, claimed: 0, redeemed: 0, total: 5 } });
     renderPanel();
@@ -136,5 +179,36 @@ describe('MemberRosterPanel', () => {
     get.mockRejectedValue(new Error('Campaign not found'));
     renderPanel();
     expect(await screen.findByText(/could not load the list/i)).toBeInTheDocument();
+  });
+});
+
+describe('postal details', () => {
+  it('shows the address, pincode, state and phone a card would be sent to', async () => {
+    get.mockResolvedValue({
+      members: [member('a@x.com', {
+        address: '364-A Vardhaman Nagar A, Ajmer Road, near 200Ft Bypass, JAIPUR',
+        pincode: '302021', state: 'Rajasthan', phone: '+91 9057055500',
+      })],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 0, redeemed: 0, total: 1 },
+    });
+
+    renderPanel();
+    expect(await screen.findByText(/364-A Vardhaman Nagar A/)).toBeInTheDocument();
+    expect(screen.getByText('302021 · Rajasthan')).toBeInTheDocument();
+    expect(screen.getByText('+91 9057055500')).toBeInTheDocument();
+  });
+
+  it('calls out a member with no address instead of showing an empty cell', async () => {
+    // "No address" is the one thing that stops a card being posted, so it must not
+    // look like a rendering gap.
+    get.mockResolvedValue({
+      members: [member('b@x.com')],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 0, redeemed: 0, total: 1 },
+    });
+
+    renderPanel();
+    expect(await screen.findByText('No address on file')).toBeInTheDocument();
   });
 });

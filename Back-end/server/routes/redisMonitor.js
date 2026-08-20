@@ -11,6 +11,7 @@ import sessionStore from '../services/sessionStore.js';
 import cacheService from '../services/cacheService.js';
 import { rateLimit } from '../middleware/rateLimitMiddleware.js';
 import auditLogRepository from '../repositories/auditLogRepository.js';
+import { getSearchPathMetrics } from '../services/searchService.js';
 
 const router = express.Router();
 
@@ -294,10 +295,16 @@ router.get('/metrics', protect, admin, async (req, res) => {
     // Get cache service metrics if available
     const cacheMetrics = cacheService.getStats ? cacheService.getStats() : {};
     
+    // Which search path production is actually taking. `search.mongoFallbackRate`
+    // is the figure that decides whether the skip/countDocuments rework is worth
+    // its frontend-contract change — the fallback is the only thing that runs them.
+    const searchMetrics = getSearchPathMetrics();
+
     // Combine all metrics
     const metrics = {
       sessionStore: sessionMetrics,
       cache: cacheMetrics,
+      search: searchMetrics,
       timestamp: new Date().toISOString(),
     };
     

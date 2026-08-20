@@ -10,6 +10,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
 import { istStartOfDayISO, istEndOfDayISO, toISTDateInput } from '@/lib/istDate';
 import MemberRosterPanel from '@/components/admin/campaigns/MemberRosterPanel';
+import ProductTierPanel from '@/components/admin/campaigns/ProductTierPanel';
 
 /**
  * Admin — campaign editor.
@@ -272,6 +273,7 @@ export default function AdminCampaignEditor() {
         </div>
       </div>
 
+      <ProductTierPanel campaignId={campaign._id} />
       <MemberRosterPanel campaignId={campaign._id} />
       <MemberImportPanel campaignId={campaign._id} slug={slug} />
 
