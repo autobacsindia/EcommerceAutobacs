@@ -35,6 +35,8 @@ export default function robots(): MetadataRoute.Robots {
         // Private campaign landing pages — reached only by the QR printed on a
         // thank-you card. Never indexed, never in the sitemap.
         '/festive',
+        // The in-store Onam offer — the printed counter QR is the only route in.
+        '/onam',
         '/integration-tests',
         '/_next/static/',
       ],

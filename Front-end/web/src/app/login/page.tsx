@@ -11,6 +11,8 @@ import Image from 'next/image';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
+import OfferStrip from '@/components/offer/OfferStrip';
+import { getOffer } from '@/lib/offers';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,6 +26,26 @@ export default function LoginPage() {
   // Where to send the user after a successful login. Sanitized to an internal path
   // to avoid open-redirect; defaults to home.
   const redirectTo = safeInternalPath(searchParams.get('redirect')) ?? '/';
+  /**
+   * The promotion this sign-in was reached from, e.g. the Onam counter QR sending the
+   * customer to /login?offer=onam&redirect=/onam. Resolved through getOffer so an
+   * unrecognised value becomes null here and is never echoed onward — the parameter
+   * arrives from a URL anyone can type.
+   */
+  const offerKey = getOffer(searchParams.get('offer'))?.key ?? null;
+
+  /**
+   * "Create your account" has to carry BOTH the offer and the destination. A customer
+   * who scanned a promotion QR and has no account yet taps this link, and dropping
+   * either param strands them on a generic sign-up form with no way back to the offer.
+   */
+  const registerHref = (() => {
+    const qs = new URLSearchParams();
+    if (offerKey) qs.set('offer', offerKey);
+    if (redirectTo !== '/') qs.set('redirect', redirectTo);
+    const query = qs.toString();
+    return query ? `/register?${query}` : '/register';
+  })();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -99,6 +121,8 @@ export default function LoginPage() {
       {/* Login Card */}
       <div className="w-full max-w-87.5 sm:max-w-100">
         <div className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8">
+          <OfferStrip offer={offerKey} />
+
           <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-6">Sign In</h1>
 
           {reasonBanner && (
@@ -232,7 +256,7 @@ export default function LoginPage() {
             </div>
           </div>
           <Link
-            href="/register"
+            href={registerHref}
             className="block w-full bg-obsidian hover:bg-obsidian-raised border border-hairline hover:border-gold text-ink font-display font-bold uppercase tracking-widest text-sm py-2.5 px-4 rounded-sm transition-all text-center"
           >
             Create your AutoBacs account

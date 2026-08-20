@@ -11,6 +11,8 @@ import BrandLogo from '@/components/layout/BrandLogo';
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
+import OfferStrip from '@/components/offer/OfferStrip';
+import { getOffer } from '@/lib/offers';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,6 +21,19 @@ export default function RegisterPage() {
   // open-redirect; defaults to home. Mirrors the login page's behaviour so the
   // checkout gate (?redirect=/checkout) round-trips through either screen.
   const redirectTo = safeInternalPath(searchParams.get('redirect')) ?? '/';
+  // The promotion this registration was reached from (see the login screen for the
+  // full note). Unrecognised values resolve to null and are never echoed onward.
+  const offerKey = getOffer(searchParams.get('offer'))?.key ?? null;
+
+  // Mirrors the login screen: the "Sign In" link keeps both the offer and the
+  // destination, so bouncing between the two screens never loses the promotion.
+  const loginHref = (() => {
+    const qs = new URLSearchParams();
+    if (offerKey) qs.set('offer', offerKey);
+    if (redirectTo !== '/') qs.set('redirect', redirectTo);
+    const query = qs.toString();
+    return query ? `/login?${query}` : '/login';
+  })();
   const { register, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
@@ -98,6 +113,8 @@ export default function RegisterPage() {
       {/* Register Card */}
       <div className="w-full max-w-87.5 sm:max-w-100">
         <div className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8">
+          <OfferStrip offer={offerKey} />
+
           <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-6">Create Account</h1>
 
           {registered && (
@@ -263,7 +280,7 @@ export default function RegisterPage() {
             </div>
             <div className="mt-4">
               <Link
-                href={redirectTo !== '/' ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}
+                href={loginHref}
                 className="block w-full bg-obsidian-raised hover:bg-obsidian-raised border border-hairline hover:border-gold text-ink font-display font-bold uppercase tracking-widest text-sm py-2.5 px-4 rounded-sm transition-all text-center"
               >
                 Sign In
