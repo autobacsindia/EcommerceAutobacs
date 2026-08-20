@@ -496,6 +496,7 @@ class ElasticsearchService {
       page = 1,
       limit = 12,
       category,
+      categorySlugs,
       brand,
       vehicleType, // Mapping "Vehicle Type" request to vehicle make
       minPrice,
@@ -701,7 +702,21 @@ class ElasticsearchService {
       }
 
       // Add filters
-      if (category) {
+      //
+      // `categorySlugs` is the subtree-expanded slug list from
+      // SearchService.resolveCategorySubtree() and is the CORRECT filter: indexed
+      // documents carry `categories.slug`, and the storefront URL carries a slug.
+      //
+      // The `category` branch below is the legacy path, kept only for callers that
+      // pass a display name directly. It filters on `categories.name.keyword`, which
+      // silently matches nothing whenever it is handed a slug ("exterior" vs
+      // "Exterior") and never expands the hierarchy — the two defects that pushed
+      // every category page onto the Mongo fallback. Prefer categorySlugs.
+      if (Array.isArray(categorySlugs) && categorySlugs.length > 0) {
+        searchBody.query.function_score.query.bool.filter.push({
+          terms: { 'categories.slug.keyword': categorySlugs }
+        });
+      } else if (category) {
         const categories = Array.isArray(category) ? category : category.split(',');
         searchBody.query.function_score.query.bool.filter.push({
           terms: { 'categories.name.keyword': categories }

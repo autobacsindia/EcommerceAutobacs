@@ -84,6 +84,32 @@ const OrderSchema = new mongoose.Schema({
         type: Number,
         default: null
       },
+      /**
+       * This line's OWN share of the order's coupon discount, in INTEGER PAISE.
+       *
+       * Written only when the coupon was priced by a campaign's PER-PRODUCT tier ladder,
+       * where each line can earn a different rate (3% / 5% / 8% / 4%, or 2% when the
+       * product was already on offer). 0 or absent means "no per-line attribution" — the
+       * case for every ordinary coupon, every cart-value campaign, and every historical
+       * order — and refundMathService then falls back to prorating `discount` by line
+       * gross value, which is exact when one rate covers the whole cart.
+       *
+       * WHY IT MUST BE SNAPSHOTTED: a blended cart cannot be un-blended afterwards.
+       * Refunding a returned line means knowing what THAT line was discounted by, and
+       * proration answers with the cart average — over-refunding the 2% item and
+       * under-refunding the 8% one. Orders are immutable financial records; this is part
+       * of the record.
+       *
+       * Paise, not rupees, deliberately: it is consumed by integer money maths and never
+       * displayed directly, so a float round-trip would only add a way to be wrong.
+       * Karma is NOT included — it is a whole-cart discount with no per-line meaning and
+       * stays prorated.
+       */
+      discountPaise: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
       name: String,
       image: String
     }

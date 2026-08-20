@@ -7,11 +7,15 @@ import {
   listCampaigns, getCampaignAdmin, getCampaignReport,
   createCampaign, updateCampaign, setCampaignStatus,
   importCampaignMembers, listCampaignMembers, simulateCampaign,
+  previewProductTier, commitProductTier, listProductTiers,
+  getProductTierDrift, unassignProductTier,
 } from '../controllers/campaignController.js';
 import {
   validateCampaignSlug, validateCampaignId, validateCampaignCreate,
   validateCampaignUpdate, validateCampaignStatus, validateCampaignEmailCheck,
   validateCampaignMembers, validateCampaignMemberQuery, validateCampaignSimulate,
+  validateProductTierPreview, validateProductTierCommit,
+  validateProductTierQuery, validateProductTierCode,
 } from '../validators/campaign.validator.js';
 
 const router = express.Router();
@@ -45,5 +49,14 @@ router.patch('/:id/status', protect, admin, validateCampaignId, validateCampaign
 router.get('/:id/members', protect, admin, validateCampaignId, validateCampaignMemberQuery, validateRequest, listCampaignMembers);
 router.post('/:id/members', protect, admin, validateCampaignId, validateCampaignMembers, validateRequest, importCampaignMembers);
 router.post('/:id/simulate', protect, admin, validateCampaignId, validateCampaignSimulate, validateRequest, simulateCampaign);
+
+// Product tiers. `/preview` and `/drift` are declared BEFORE the bare collection route
+// so neither can be swallowed by a `:tierCode` segment, and both are GETs that write
+// nothing — previewing a destructive-looking query must never be destructive.
+router.get('/:id/product-tiers/preview', protect, admin, validateCampaignId, validateProductTierPreview, validateRequest, previewProductTier);
+router.get('/:id/product-tiers/drift', protect, admin, validateCampaignId, validateRequest, getProductTierDrift);
+router.get('/:id/product-tiers', protect, admin, validateCampaignId, validateProductTierQuery, validateRequest, listProductTiers);
+router.post('/:id/product-tiers', protect, admin, validateCampaignId, validateProductTierCommit, validateRequest, commitProductTier);
+router.delete('/:id/product-tiers/:tierCode', protect, admin, validateCampaignId, validateProductTierCode, validateRequest, unassignProductTier);
 
 export default router;

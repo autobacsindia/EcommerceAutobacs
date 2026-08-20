@@ -93,6 +93,13 @@ export const validateCampaignMembers = [
   body('members.*.email').trim().isEmail().withMessage('Every member needs a valid email'),
   body('members.*.name').optional({ nullable: true }).trim().isLength({ max: 120 }),
   body('members.*.reviewNote').optional({ nullable: true }).trim().isLength({ max: 200 }),
+  // Postal details. Generous limits because a real Indian delivery address routinely
+  // carries landmarks and instructions, and truncating one silently is how a card goes
+  // to the wrong door.
+  body('members.*.phone').optional({ nullable: true }).trim().isLength({ max: 24 }),
+  body('members.*.address').optional({ nullable: true }).trim().isLength({ max: 500 }),
+  body('members.*.pincode').optional({ nullable: true }).trim().isLength({ max: 12 }),
+  body('members.*.state').optional({ nullable: true }).trim().isLength({ max: 60 }),
 ];
 
 export const validateCampaignMemberQuery = [
@@ -107,4 +114,56 @@ export const validateCampaignMemberQuery = [
 export const validateCampaignSimulate = [
   body('cartValues').optional().isArray({ max: 25 }).withMessage('At most 25 cart values'),
   body('cartValues.*').optional().isFloat({ min: 0 }).withMessage('Cart values must be ≥ 0'),
+];
+
+// ── Product tiers ─────────────────────────────────────────────────────────────
+// Shape only. Whether a tier code exists on the campaign, and whether a query sweeps up
+// an implausible share of the catalogue, are decided in campaignProductTierService —
+// they need the campaign document, and they must hold for every caller, not just HTTP.
+
+const TIER_CODE_MAX = 40;
+const TIER_QUERY_MAX = 120;
+
+export const validateProductTierPreview = [
+  query('tierCode')
+    .trim().notEmpty().withMessage('A tier code is required')
+    .isLength({ max: TIER_CODE_MAX }).withMessage('Tier code too long'),
+  query('query')
+    .trim().notEmpty().withMessage('A search query is required')
+    .isLength({ max: TIER_QUERY_MAX }).withMessage('Search query too long'),
+];
+
+export const validateProductTierCommit = [
+  body('tierCode')
+    .trim().notEmpty().withMessage('A tier code is required')
+    .isLength({ max: TIER_CODE_MAX }).withMessage('Tier code too long'),
+  body('query')
+    .optional({ nullable: true })
+    .trim().isLength({ max: TIER_QUERY_MAX }).withMessage('Search query too long'),
+  // Bounded so one request cannot be used to write an unbounded number of rows; the
+  // service applies the same ceiling to a query-derived set.
+  body('productIds')
+    .optional({ nullable: true })
+    .isArray({ max: 1000 }).withMessage('Too many products in one commit (max 1000)'),
+  body('productIds.*').optional().custom(isObjectId).withMessage('Invalid product id'),
+  body('confirm').optional().isBoolean().withMessage('confirm must be a boolean'),
+  // Exactly one source of truth for what to assign: a reviewed selection or a query.
+  body().custom((value) => {
+    const hasIds = Array.isArray(value?.productIds) && value.productIds.length > 0;
+    const hasQuery = typeof value?.query === 'string' && value.query.trim().length > 0;
+    if (!hasIds && !hasQuery) throw new Error('Provide either productIds or a query');
+    return true;
+  }),
+];
+
+export const validateProductTierQuery = [
+  query('cursor').optional({ nullable: true }).custom(isObjectId).withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
+  query('tierCode').optional({ nullable: true }).trim().isLength({ max: TIER_CODE_MAX }),
+];
+
+export const validateProductTierCode = [
+  param('tierCode')
+    .trim().notEmpty().withMessage('A tier code is required')
+    .isLength({ max: TIER_CODE_MAX }).withMessage('Tier code too long'),
 ];

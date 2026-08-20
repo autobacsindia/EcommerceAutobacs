@@ -21,6 +21,7 @@ import userRepository from '../repositories/userRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import AppError from '../utils/AppError.js';
 import { resolveTier, validateTiers, assertMonotonic } from '../utils/campaignTiers.js';
+import { validateProductTiers } from '../utils/productTiers.js';
 import {
   CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE, CAMPAIGN_REASON,
   CAMPAIGN_REQUIRES_CAP_FOR_EVERYONE,
@@ -28,7 +29,7 @@ import {
 
 const EDITABLE_FIELDS = [
   'name', 'description', 'status', 'audience', 'testerEmails', 'requireVerifiedEmail',
-  'startsAt', 'endsAt', 'tiers', 'resolution', 'maxDiscountPerOrder', 'couponCode',
+  'startsAt', 'endsAt', 'tiers', 'resolution', 'maxDiscountPerOrder', 'couponCode', 'productTiers',
   'allowKarmaStacking', 'maxRedemptions', 'landingPath', 'allowNonMonotonicTiers',
 ];
 
@@ -240,6 +241,27 @@ class CampaignService {
   assertValidConfig(data, existing = null) {
     const merged = { ...(existing || {}), ...data };
 
+    // The PER-PRODUCT ladder. Validated whenever it is touched, because the failure it
+    // guards against is silent: without exactly one default tier, every product that
+    // matched nothing gets no discount at all and nobody is told.
+    if (data.productTiers !== undefined) {
+      const errors = validateProductTiers(merged.productTiers);
+      if (errors.length) throw new AppError(`Invalid product-tier ladder: ${errors.join(' ')}`, 400);
+
+      // The two ladders price the SAME goods on different axes, so running both stacks
+      // two discounts on one cart. That is a margin decision, never something to arrive
+      // at by leaving a field populated from an earlier configuration.
+      const hasCartTiers = Array.isArray(merged.tiers) && merged.tiers.length > 0;
+      const hasProductTiers = Array.isArray(merged.productTiers) && merged.productTiers.length > 0;
+      if (hasCartTiers && hasProductTiers) {
+        throw new AppError(
+          'A campaign uses either cart-value tiers or product tiers, not both — together they ' +
+          'would apply two discounts to the same goods. Clear one before saving the other.',
+          400
+        );
+      }
+    }
+
     if (merged.tiers !== undefined || !existing) {
       const errors = validateTiers(merged);
       if (errors.length) throw new AppError(`Invalid tier ladder: ${errors.join(' ')}`, 400);
@@ -426,7 +448,17 @@ class CampaignService {
         continue;
       }
       seen.add(email);
-      clean.push({ email, name: raw?.name, reviewNote: raw?.reviewNote });
+      clean.push({
+        email,
+        name: raw?.name,
+        reviewNote: raw?.reviewNote,
+        // Postal details ride along so a card can actually be addressed. Optional —
+        // an allowlist that is only ever emailed does not need them.
+        phone: raw?.phone,
+        address: raw?.address,
+        pincode: raw?.pincode,
+        state: raw?.state,
+      });
     }
 
     const result = await campaignMemberRepository.bulkUpsert(campaignId, clean);

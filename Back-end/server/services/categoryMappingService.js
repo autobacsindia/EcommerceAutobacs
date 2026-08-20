@@ -264,6 +264,38 @@ class CategoryMappingService {
   }
 
   /**
+   * Get all category SLUGS including child categories (parent + all descendants).
+   *
+   * The slug twin of getAllCategoryIdsIncludingChildren, and it exists for one
+   * reason: Elasticsearch indexes categories by name/slug, never by ObjectId, so
+   * the ES filter cannot reuse the id list Mongo uses. Both resolvers walk the
+   * SAME subtree via getChildCategories(), which is what keeps the two engines
+   * agreeing on what "this category" means.
+   *
+   * Without this, a hub filter resolved to 394 products in Mongo and 0 in ES —
+   * the URL carries a slug, the ES filter compared it against the display NAME,
+   * and every category page silently fell back to a full Mongo scan.
+   *
+   * @param {string} categoryId - The ID of the parent category
+   * @returns {Promise<string[]>} Deduplicated lowercase slugs (parent first)
+   */
+  async getAllCategorySlugsIncludingChildren(categoryId) {
+    const rootId = String(categoryId);
+    const root = this.findCategory(rootId);
+    const childCategories = await this.getChildCategories(rootId);
+
+    const slugs = new Set();
+    // A category with no slug is skipped rather than emitting undefined into a
+    // terms filter, which would match nothing and silently narrow the result set.
+    if (root?.slug) slugs.add(String(root.slug).toLowerCase());
+    childCategories.forEach((child) => {
+      if (child?.slug) slugs.add(String(child.slug).toLowerCase());
+    });
+
+    return Array.from(slugs);
+  }
+
+  /**
    * Drop the in-memory cache so the next lookup re-loads from the database.
    * Call this after category create/update/delete so hierarchy changes take
    * effect without a process restart.

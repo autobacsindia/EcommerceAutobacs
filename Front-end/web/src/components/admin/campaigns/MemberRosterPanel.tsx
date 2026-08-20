@@ -40,6 +40,11 @@ interface Member {
   redeemedAt: string | null;
   discountRupees: number;
   reviewNote: string | null;
+  /** Postal details, carried on the member so a card can be addressed. Optional. */
+  phone: string | null;
+  address: string | null;
+  pincode: string | null;
+  state: string | null;
 }
 
 interface MembersPage {
@@ -161,9 +166,14 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
       }
       const esc = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const csv = [
-        ['Name', 'Email', 'Status', 'Signed in at', 'Used it at', 'Saved (₹)', 'Note'].join(','),
+        // Address columns come first after the name: this export is what a print run
+        // gets addressed from, so the posting details lead and the funnel follows.
+        ['Name', 'Email', 'Phone', 'Delivery Address', 'Pincode', 'State',
+         'Status', 'Signed in at', 'Used it at', 'Saved (₹)', 'Note'].join(','),
         ...all.map((m) => [
-          esc(m.name), esc(m.email), esc(STATUS_LABEL[m.status]),
+          esc(m.name), esc(m.email), esc(m.phone),
+          esc(m.address), esc(m.pincode), esc(m.state),
+          esc(STATUS_LABEL[m.status]),
           esc(m.claimedAt ? formatIsoDateTimeIST(m.claimedAt) : ''),
           esc(m.redeemedAt ? formatIsoDateTimeIST(m.redeemedAt) : ''),
           esc(m.discountRupees || 0), esc(m.reviewNote),
@@ -243,6 +253,7 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
               <tr>
                 <th className="pb-2 pr-4 font-medium">Name</th>
                 <th className="pb-2 pr-4 font-medium">Email</th>
+                <th className="pb-2 pr-4 font-medium">Address</th>
                 <th className="pb-2 pr-4 font-medium">Status</th>
                 <th className="pb-2 pr-4 font-medium">Signed in on</th>
                 <th className="pb-2 font-medium text-right">Saved</th>
@@ -269,6 +280,27 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
                     )}
                   </td>
                   <td className="py-2 pr-4 font-mono text-xs text-zinc-400">{m.email}</td>
+                  <td className="py-2 pr-4 text-xs text-zinc-400">
+                    {m.address ? (
+                      <>
+                        {/* Clamped rather than truncated with a tooltip: a real Indian
+                            delivery address runs long and carries landmarks a courier
+                            uses, so it wraps and stays readable. The full text is in the
+                            CSV, which is what a print run is addressed from. */}
+                        <span className="line-clamp-2 max-w-[22rem]">{m.address}</span>
+                        {(m.pincode || m.state) && (
+                          <span className="mt-0.5 block text-zinc-500">
+                            {[m.pincode, m.state].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                        {m.phone && <span className="block font-mono text-zinc-500">{m.phone}</span>}
+                      </>
+                    ) : (
+                      // Said plainly, because "no address" is the one thing that stops a
+                      // card being posted and it must not look like an empty cell.
+                      <span className="text-amber-400/80">No address on file</span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4">
                     <span
                       title={STATUS_HELP[m.status]}

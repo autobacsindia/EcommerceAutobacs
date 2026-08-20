@@ -69,6 +69,17 @@ export const campaignKeys = {
     [...campaignKeys.all, 'members', campaignId, filters.status ?? '', filters.q ?? '', filters.cursor ?? ''] as const,
   /** Prefix for invalidating every page of a campaign's roster after an import. */
   membersFor: (campaignId: string) => [...campaignKeys.all, 'members', campaignId] as const,
+  /**
+   * One page of a campaign's product-tier assignments. Keyed on the tier filter AND the
+   * cursor, same reason as `members`: changing the filter must start a fresh list rather
+   * than append to the previous one.
+   */
+  productTiers: (campaignId: string, filters: { tierCode?: string; cursor?: string | null }) =>
+    [...campaignKeys.all, 'productTiers', campaignId, filters.tierCode ?? '', filters.cursor ?? ''] as const,
+  /** Prefix for invalidating every page after a commit or an unassignment. */
+  productTiersFor: (campaignId: string) => [...campaignKeys.all, 'productTiers', campaignId] as const,
+  /** Products matching a tier's saved queries but carrying no assignment. */
+  productTierDrift: (campaignId: string) => [...campaignKeys.all, 'productTierDrift', campaignId] as const,
 };
 
 export const adminKeys = {

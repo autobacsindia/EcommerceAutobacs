@@ -95,6 +95,44 @@ export const CAMPAIGN_REASON = Object.freeze({
 export const CAMPAIGN_REQUIRE_VERIFIED_EMAIL_DEFAULT = true;
 
 /**
+ * ── Product-tier authoring guards ───────────────────────────────────────────────
+ *
+ * Tiers are authored from admin search queries, then MATERIALIZED (see
+ * utils/productTiers.js). These two constants exist because of a real near-miss: the
+ * tier spec contained `cbmcup`, a typo for `comeup`. `comeup` matches 6 products;
+ * `cbmcup` fuzzy-matches 928 — the entire catalogue. Committed unchecked it would have
+ * put every product in the 3% tier and, through lowest-wins, dragged the 5% and 8%
+ * tiers down with it, silently.
+ *
+ * So a query that sweeps up an implausible share of the catalogue is treated as a typo
+ * until an operator says otherwise. It is refused, not warned about — a warning on an
+ * admin screen is read once and clicked past.
+ */
+export const PRODUCT_TIER_BULK_RATIO = 0.4;
+
+/**
+ * The ratio alone is not enough. On a small or freshly seeded catalogue almost any query
+ * matches "most" of it — 3 products out of 5 is 60% and perfectly legitimate — so a
+ * ratio-only guard would block every assignment on a new store and teach operators to
+ * reflexively confirm past it, which is worse than having no guard.
+ *
+ * So the refusal needs BOTH: an implausible share AND enough absolute matches for that
+ * share to mean anything. `cbmcup` matched 928 products, far above this floor.
+ */
+export const PRODUCT_TIER_BULK_MIN_MATCHES = 25;
+
+/**
+ * Hard ceiling on how many products one query may assign in a single commit. Bounds the
+ * preview fetch as well, so a runaway query cannot page the whole catalogue into memory.
+ */
+export const PRODUCT_TIER_MAX_MATCHES = 1000;
+
+/** Buyer- and operator-facing wording for the guard above. */
+export const PRODUCT_TIER_BULK_REFUSAL =
+  'This query matches an implausibly large share of the catalogue — it is usually a typo. ' +
+  'Review the matched products and confirm explicitly if it is genuinely intended.';
+
+/**
  * An 'everyone' campaign has no natural ceiling on payout — it is bounded only by how
  * many customers exist. A redemption cap is therefore mandatory before such a campaign
  * may go live; enforced in campaignService.assertPublishable, not merely advised.

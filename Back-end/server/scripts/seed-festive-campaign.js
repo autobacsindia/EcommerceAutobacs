@@ -147,7 +147,28 @@ for (const r of rows) {
   if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) { rejected.push([r.email, 'invalid email']); continue; }
   if (seen.has(email)) { rejected.push([email, 'duplicate row']); continue; }
   seen.add(email);
-  members.push({ email, name: r.name || null, reviewNote: r.review_flag || null });
+  /*
+    Column names are matched loosely because the operations sheet is exported from
+    several places and the header drifts ("Delivery Address" / "address", "Pincode" /
+    "pincode"). The 2026 run lost every address to a stricter mapping that read only
+    three columns and silently discarded the rest — the list had them all along.
+  */
+  const pick = (...keys) => {
+    for (const k of keys) {
+      const hit = Object.keys(r).find(h => h.toLowerCase().trim() === k.toLowerCase());
+      if (hit && String(r[hit]).trim()) return String(r[hit]).trim();
+    }
+    return null;
+  };
+  members.push({
+    email,
+    name: pick('name', 'Customer Name'),
+    reviewNote: pick('review_flag', 'review note'),
+    phone: pick('phone', 'Phone'),
+    address: pick('address', 'Delivery Address'),
+    pincode: pick('pincode', 'Pincode'),
+    state: pick('state', 'State'),
+  });
 }
 
 console.log(`Campaign      : ${config.slug}  (status: ${config.status})`);
@@ -227,7 +248,17 @@ const ops = members.map(m => ({
   updateOne: {
     filter: { campaign: campaign._id, email: m.email },
     update: {
-      $set: { name: m.name, reviewNote: m.reviewNote },
+      // Same rule as campaignMemberRepository.bulkUpsert: only write a postal field the
+      // incoming row actually has, so a re-run from a sheet missing the address column
+      // corrects names without blanking addresses an earlier run supplied.
+      $set: {
+        name: m.name,
+        reviewNote: m.reviewNote,
+        ...(m.phone   ? { phone: m.phone }     : {}),
+        ...(m.address ? { address: m.address } : {}),
+        ...(m.pincode ? { pincode: m.pincode } : {}),
+        ...(m.state   ? { state: m.state }     : {}),
+      },
       $setOnInsert: { campaign: campaign._id, email: m.email, status: CAMPAIGN_MEMBER_STATUS.INVITED },
     },
     upsert: true,

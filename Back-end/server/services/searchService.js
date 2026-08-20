@@ -7,7 +7,142 @@ import categoryMappingService from "./categoryMappingService.js";
 import { expand as expandSynonyms, contentTokens } from "../config/searchSynonyms.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
 
+/**
+ * Last observed Elasticsearch availability, so an outage is reported on the
+ * TRANSITION rather than once per request.
+ *
+ * The silent case this closes: when isConnected() is false the service skips ES
+ * entirely and every public search runs the Mongo fallback — a full-collection
+ * regex scan plus an unbounded countDocuments — with nothing written to the log.
+ * The ES/Mongo divergence warning cannot cover this, by design: it only fires when
+ * ES was actually consulted and came back empty. So a total ES outage was the one
+ * failure mode that produced maximum database load and zero evidence.
+ *
+ * Logging the transition (not every request) keeps a multi-hour outage to two
+ * lines instead of one per page view, and still tells you exactly when it started
+ * and when it recovered. `null` = not yet observed.
+ */
+let lastEsAvailability = null;
+
+/**
+ * How often each search path is actually taken.
+ *
+ * Phase-A instrumentation for the pagination rework: the MongoDB fallback runs a
+ * full-collection regex scan plus an unbounded countDocuments, so it is the only
+ * reason to consider replacing them. After the category-slug fix that path should be
+ * rare — and rewriting `skip`/`countDocuments` is a frontend-contract change that
+ * should not be paid for on a hunch. Measure first, then decide.
+ *
+ * `esServed` is the healthy path. Everything under `fallback` reaches MongoDB, and
+ * the reason distinguishes an outage from an index gap from a genuine miss.
+ * `adminMongo` is expected and not a fault: admin listings must see inactive
+ * products, which Elasticsearch does not index.
+ */
+const searchPathMetrics = {
+  esServed: 0,
+  fallbackEsZeroHit: 0,   // ES answered, found nothing, Mongo consulted
+  fallbackEsDown: 0,      // ES unreachable — the expensive, silent case
+  fallbackEsError: 0,     // ES threw mid-query
+  adminMongo: 0,          // includeInactive: Mongo by design
+};
+
+/** Snapshot of the search-path counters (admin monitor / tests). */
+export function getSearchPathMetrics() {
+  const total = Object.values(searchPathMetrics).reduce((a, b) => a + b, 0);
+  const fallback = searchPathMetrics.fallbackEsZeroHit
+    + searchPathMetrics.fallbackEsDown
+    + searchPathMetrics.fallbackEsError;
+  return {
+    ...searchPathMetrics,
+    total,
+    // The number that decides whether the pagination rework is worth doing.
+    mongoFallbackRate: total > 0 ? `${((fallback / total) * 100).toFixed(2)}%` : '0%',
+  };
+}
+
+/** Test seam. */
+export function __resetSearchPathMetrics() {
+  for (const k of Object.keys(searchPathMetrics)) searchPathMetrics[k] = 0;
+}
+
+// Periodic summary, mirroring CacheService's metrics line so both land in the same
+// log stream and can be graphed together. Every 200 searches rather than on a timer,
+// so a quiet period never emits noise.
+const SEARCH_METRICS_LOG_EVERY = 200;
+let searchesSinceLog = 0;
+function recordSearchPath(bucket) {
+  searchPathMetrics[bucket] += 1;
+  if (++searchesSinceLog >= SEARCH_METRICS_LOG_EVERY) {
+    searchesSinceLog = 0;
+    const m = getSearchPathMetrics();
+    console.log(
+      `[SearchService] Path metrics: mongoFallbackRate=${m.mongoFallbackRate} ` +
+      `esServed=${m.esServed} zeroHit=${m.fallbackEsZeroHit} esDown=${m.fallbackEsDown} ` +
+      `esError=${m.fallbackEsError} admin=${m.adminMongo} total=${m.total}`
+    );
+  }
+}
+
+/** Test seam: forget the observed state so a transition can be asserted cleanly. */
+export function __resetEsAvailabilityTracker() {
+  lastEsAvailability = null;
+}
+
 class SearchService {
+  /**
+   * Resolve a category identifier (or comma-separated list) to its whole subtree,
+   * as BOTH ObjectIds and slugs.
+   *
+   * One walk, two projections, and that is the entire point. Mongo filters
+   * products by category ObjectId; Elasticsearch has no ObjectId in its documents
+   * and can only filter on `categories.slug.keyword`. Resolving them separately is
+   * how they drifted: the URL carries a slug, the ES filter compared that slug
+   * against the category DISPLAY NAME, and it matched nothing — "exterior" is
+   * never equal to "Exterior", and "vehicles-parts" is never equal to
+   * "Vehicles & Parts". ES returned 0, every category page fell through to the
+   * Mongo fallback, and each one cost a full collection scan plus an unbounded
+   * countDocuments. That is what drove the Atlas query-targeting alert.
+   *
+   * ES also has no notion of the hierarchy, so the descendants must be expanded
+   * here and passed down as a flat list: the hub "Exterior" alone matches 68
+   * directly-tagged products, while its 60-slug subtree matches 394 — the number
+   * Mongo returns.
+   *
+   * @param {string|string[]} category  slug, id, or name (or a list of them)
+   * @returns {Promise<{ids: string[], slugs: string[]}>} deduplicated, subtree-expanded
+   */
+  static async resolveCategorySubtree(category) {
+    const identifiers = Array.isArray(category) ? category : String(category).split(',');
+    const ids = new Set();
+    const slugs = new Set();
+
+    for (const raw of identifiers) {
+      const catIdentifier = String(raw || '').trim();
+      if (!catIdentifier) continue;
+
+      if (!categoryMappingService.initialized) await categoryMappingService.initialize();
+      const foundCategory = categoryMappingService.findCategory(catIdentifier);
+      // Unknown identifier: keep passing it through as an id so the Mongo filter
+      // behaves exactly as it did before (matching nothing) rather than silently
+      // widening to the entire catalogue.
+      const seedId = foundCategory ? foundCategory._id.toString() : catIdentifier;
+
+      for (const id of await categoryMappingService.getAllCategoryIdsIncludingChildren(seedId)) {
+        ids.add(id);
+      }
+      // Only resolvable categories contribute slugs. An unresolvable identifier has
+      // no subtree to expand, and inventing one would let ES answer a filter Mongo
+      // would reject.
+      if (foundCategory) {
+        for (const slug of await categoryMappingService.getAllCategorySlugsIncludingChildren(seedId)) {
+          slugs.add(slug);
+        }
+      }
+    }
+
+    return { ids: Array.from(ids), slugs: Array.from(slugs) };
+  }
+
   /**
    * Build the MongoDB filter object from search/filter params. Shared by searchProducts
    * and getFacets so the two never drift. `exclude` lets a facet omit its own dimension
@@ -46,20 +181,11 @@ class SearchService {
       query.productType = productType;
     }
 
-    // Categories (+ all descendants)
+    // Categories (+ all descendants). Resolved through the shared helper so the
+    // Mongo filter and the Elasticsearch filter cover the same subtree.
     if (category && !excludeCategory) {
-      const categories = Array.isArray(category) ? category : category.split(',');
-      if (categories.length > 0) {
-        const allCategoryIds = [];
-        for (const catIdentifier of categories) {
-          if (!categoryMappingService.initialized) await categoryMappingService.initialize();
-          const foundCategory = categoryMappingService.findCategory(catIdentifier);
-          const seedId = foundCategory ? foundCategory._id.toString() : catIdentifier;
-          const childCategoryIds = await categoryMappingService.getAllCategoryIdsIncludingChildren(seedId);
-          allCategoryIds.push(...childCategoryIds);
-        }
-        if (allCategoryIds.length > 0) query.categories = { $in: allCategoryIds.map(toObjectId) };
-      }
+      const { ids } = await SearchService.resolveCategorySubtree(category);
+      if (ids.length > 0) query.categories = { $in: ids.map(toObjectId) };
     }
 
     // Brands (case-insensitive, multiple)
@@ -264,11 +390,37 @@ class SearchService {
     // list that must surface inactive/draft items skips ES and goes straight to Mongo
     // against the full collection. Public search keeps using ES when available.
     let esZeroHit = false; // ES was consulted, did not throw, and returned no hits
-    if (!includeInactive && await elasticsearchService.isConnected()) {
+
+    // Availability is resolved into a variable (rather than inlined into the `if`)
+    // so the transition can be reported. See lastEsAvailability above.
+    const esAvailable = includeInactive ? null : await elasticsearchService.isConnected();
+    if (esAvailable !== null && esAvailable !== lastEsAvailability) {
+      if (esAvailable) {
+        console.log('[SearchService] Elasticsearch is available again; search is back on the index');
+      } else {
+        console.error(
+          '[SearchService] Elasticsearch UNAVAILABLE — every public search is now falling back ' +
+          'to a full MongoDB scan. Expect elevated Atlas query targeting until it returns.'
+        );
+      }
+      lastEsAvailability = esAvailable;
+    }
+
+    if (esAvailable) {
       try {
         const esParams = { ...params };
         if (!esParams.q && esParams.search) {
           esParams.q = esParams.search;
+        }
+        // Expand the category filter to its subtree SLUGS before handing it to ES.
+        // ES documents carry `categories.slug`, never the ObjectId, and they carry
+        // only the categories a product is directly tagged with — so the hierarchy
+        // has to be flattened here or a hub filter matches almost nothing.
+        // resolveCategorySubtree is the same walk the Mongo filter uses, which is
+        // what stops the two engines answering the same URL differently.
+        if (esParams.category) {
+          const { slugs } = await SearchService.resolveCategorySubtree(esParams.category);
+          esParams.categorySlugs = slugs;
         }
         const esResult = await elasticsearchService.searchProducts(esParams);
         // Empty-index guard: ES does NOT throw when the index is missing/wiped —
@@ -278,6 +430,7 @@ class SearchService {
         // the Mongo path (when Mongo is also empty the answer is identical, so
         // the only cost is a second query on genuinely-empty searches).
         if (esResult?.products?.length > 0) {
+          recordSearchPath('esServed');
           return esResult;
         }
         // Zero hits is NOT yet a problem worth reporting: whether it means "we
@@ -285,9 +438,15 @@ class SearchService {
         // decided once Mongo has answered the same question. Carry the fact down
         // and let the divergence check below do the logging.
         esZeroHit = true;
+        recordSearchPath('fallbackEsZeroHit');
       } catch (error) {
+        recordSearchPath('fallbackEsError');
         console.error('Elasticsearch search failed, falling back to MongoDB:', error);
       }
+    } else {
+      // Either an admin listing (Mongo by design) or Elasticsearch is unreachable
+      // (Mongo by accident, and expensively so). Counting them apart is the point.
+      recordSearchPath(includeInactive ? 'adminMongo' : 'fallbackEsDown');
     }
     
     // Fallback to MongoDB implementation. Filter-building lives in buildBaseQuery;

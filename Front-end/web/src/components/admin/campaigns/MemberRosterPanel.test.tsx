@@ -15,7 +15,8 @@ const get = apiClient.get as jest.Mock;
 
 const member = (email: string, over = {}) => ({
   _id: email, email, name: email.split('@')[0], status: 'invited',
-  claimedAt: null, redeemedAt: null, discountRupees: 0, reviewNote: null, ...over,
+  claimedAt: null, redeemedAt: null, discountRupees: 0, reviewNote: null,
+  phone: null, address: null, pincode: null, state: null, ...over,
 });
 
 const renderPanel = () => {
@@ -178,5 +179,36 @@ describe('MemberRosterPanel', () => {
     get.mockRejectedValue(new Error('Campaign not found'));
     renderPanel();
     expect(await screen.findByText(/could not load the list/i)).toBeInTheDocument();
+  });
+});
+
+describe('postal details', () => {
+  it('shows the address, pincode, state and phone a card would be sent to', async () => {
+    get.mockResolvedValue({
+      members: [member('a@x.com', {
+        address: '364-A Vardhaman Nagar A, Ajmer Road, near 200Ft Bypass, JAIPUR',
+        pincode: '302021', state: 'Rajasthan', phone: '+91 9057055500',
+      })],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 0, redeemed: 0, total: 1 },
+    });
+
+    renderPanel();
+    expect(await screen.findByText(/364-A Vardhaman Nagar A/)).toBeInTheDocument();
+    expect(screen.getByText('302021 · Rajasthan')).toBeInTheDocument();
+    expect(screen.getByText('+91 9057055500')).toBeInTheDocument();
+  });
+
+  it('calls out a member with no address instead of showing an empty cell', async () => {
+    // "No address" is the one thing that stops a card being posted, so it must not
+    // look like a rendering gap.
+    get.mockResolvedValue({
+      members: [member('b@x.com')],
+      nextCursor: null,
+      counts: { invited: 1, claimed: 0, redeemed: 0, total: 1 },
+    });
+
+    renderPanel();
+    expect(await screen.findByText('No address on file')).toBeInTheDocument();
   });
 });

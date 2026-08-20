@@ -29,6 +29,7 @@ import {
   PRIVATE_NO_STORE,
   resolveTags,
 } from '../config/cacheProfiles.js';
+import { canonicalizeQuery } from '../utils/facetCacheKey.js';
 
 const SKIP_PATHS = ['/auth', '/checkout', '/payment', '/user', '/profile'];
 
@@ -45,9 +46,15 @@ const isAuthenticated = (req) =>
  * price/currency variants don't collide.
  */
 export const buildResponseKey = (req, { regional = false } = {}) => {
+  // Canonicalised, not raw. The previous version hashed `req.originalUrl` (which
+  // already carries the query string) TOGETHER with `req.query`, and both follow the
+  // order the parameters arrived in — so `?a=1&b=2` and `?b=2&a=1` minted two entries
+  // for one identical response. Splitting the path from a sorted query string makes
+  // one logical request map to exactly one key.
+  const path = req.originalUrl.split('?')[0];
   const base = {
-    url: req.originalUrl,
-    query: req.query,
+    path,
+    query: canonicalizeQuery(req.query),
     locale: req.headers['accept-language']?.split(',')[0] || 'default',
     region: regional ? (cacheService.regionId || 'default') : undefined,
   };

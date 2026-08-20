@@ -71,6 +71,63 @@ describe('categoryMappingService hierarchy aggregation', () => {
     expect(ids.sort()).toEqual(['a', 'b']);
   });
 
+  // The slug twin of the id resolver. Elasticsearch documents carry
+  // `categories.slug` and no ObjectId, so this is the only way an ES filter can
+  // cover the same subtree the Mongo filter does. When it did not exist, ES
+  // compared the URL slug against the display NAME, matched nothing, and every
+  // category page fell through to a full Mongo scan.
+  describe('getAllCategorySlugsIncludingChildren', () => {
+    it('returns the root slug plus every descendant slug, deduplicated', async () => {
+      seedTree();
+      const slugs = await categoryMappingService.getAllCategorySlugsIncludingChildren('lighting');
+      expect(slugs.sort()).toEqual(['ambient', 'fog', 'led', 'lighting']);
+      expect(new Set(slugs).size).toBe(slugs.length);
+    });
+
+    it('walks the same subtree as the id resolver', async () => {
+      seedTree();
+      const ids = await categoryMappingService.getAllCategoryIdsIncludingChildren('lighting');
+      const slugs = await categoryMappingService.getAllCategorySlugsIncludingChildren('lighting');
+      // Parity is the entire contract: one product set, two filter languages.
+      expect(slugs).toHaveLength(ids.length);
+    });
+
+    it('resolves from a slug seed, not just an id', async () => {
+      seedTree();
+      // This is what the storefront actually sends — a slug in the URL.
+      const slugs = await categoryMappingService.getAllCategorySlugsIncludingChildren('lighting');
+      expect(slugs).toContain('lighting');
+      expect(slugs).toContain('led');
+    });
+
+    it('includes the root even when it has no children', async () => {
+      seedTree();
+      expect(await categoryMappingService.getAllCategorySlugsIncludingChildren('audio'))
+        .toEqual(['audio']);
+    });
+
+    it('skips categories with no slug rather than emitting undefined', async () => {
+      // An undefined entry in a terms filter matches nothing and would silently
+      // narrow the result set instead of failing loudly.
+      const cache = categoryMappingService.categoryCache;
+      seed(cache, { id: 'root', parent: null, slug: 'root', name: 'Root' });
+      const orphan = { _id: oid('noslug'), parent: oid('root'), slug: null, name: 'No Slug' };
+      cache.set('noslug', orphan);
+
+      const slugs = await categoryMappingService.getAllCategorySlugsIncludingChildren('root');
+      expect(slugs).toEqual(['root']);
+      expect(slugs).not.toContain(undefined);
+    });
+
+    it('terminates on a cyclic hierarchy', async () => {
+      const cache = categoryMappingService.categoryCache;
+      seed(cache, { id: 'a', parent: 'b', slug: 'a', name: 'A' });
+      seed(cache, { id: 'b', parent: 'a', slug: 'b', name: 'B' });
+      expect((await categoryMappingService.getAllCategorySlugsIncludingChildren('a')).sort())
+        .toEqual(['a', 'b']);
+    });
+  });
+
   it('refresh() clears the cache and forces re-initialization', () => {
     seedTree();
     categoryMappingService.refresh();
