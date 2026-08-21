@@ -32,6 +32,10 @@
  *   node --import=dotenv/config scripts/configure-festive-public-offer.js \
  *        --max-redemptions=500 --ends=2026-09-30 --apply
  *
+ *   # prove it on the real site, for named testers only, before anyone else can see it
+ *   node --import=dotenv/config scripts/configure-festive-public-offer.js \
+ *        --testing=you@autobacsindia.com --apply
+ *
  *   # go live, once the tier assignments look right in admin
  *   node --import=dotenv/config scripts/configure-festive-public-offer.js --live --apply
  */
@@ -58,6 +62,7 @@ const SLUG   = arg('slug', 'festive-2026');
 const ENDS   = arg('ends');
 const CAP    = arg('max-redemptions') ? parseInt(arg('max-redemptions'), 10) : null;
 const LIVE   = flag('live');
+const TESTERS = arg('testing');   // comma-separated emails
 const REVERT = flag('revert-to-list');
 
 /**
@@ -84,7 +89,22 @@ async function main() {
   // service layer. Merely connecting would build every declared index against whatever
   // cluster the env points at — which for a local .env in this repo is PRODUCTION.
   await mongoose.connect(uri, { autoIndex: false });
-  console.log(`Connected: ${mongoose.connection.host}/${mongoose.connection.name}`);
+
+  /*
+    Say WHICH cluster this is, loudly, before anything else.
+
+    This campaign is configured in two places — the test tier for rehearsing the customer
+    journey, production for the assignments that actually charge people — so the same
+    command gets run against two databases on the same afternoon. The host string alone
+    is easy to skim past at the top of a wall of output; the word PRODUCTION is not.
+  */
+  const host = mongoose.connection.host || '';
+  const isProd = /nrdity|cluster0/i.test(host);
+  const banner = isProd ? '⛔ PRODUCTION — real customers' : '🧪 TEST TIER — safe to experiment';
+  console.log(`\n${'═'.repeat(64)}`);
+  console.log(`  ${banner}`);
+  console.log(`  ${host}/${mongoose.connection.name}`);
+  console.log(`${'═'.repeat(64)}`);
   console.log(APPLY ? '\n*** APPLY MODE — this WILL write ***\n' : '\n--- DRY RUN — nothing will be written (pass --apply) ---\n');
 
   const campaign = await campaignRepository.findBySlug(SLUG);
@@ -173,6 +193,38 @@ async function main() {
       console.log('✓ Reverted to the allowlist audience and switched OFF.');
       console.log('  The cart-value tier ladder was NOT restored — set it in admin.');
     }
+    await mongoose.disconnect();
+    return;
+  }
+
+  if (TESTERS !== null) {
+    /*
+      TESTING mode: the offer runs on the real site, with real payment, but applies ONLY
+      to the listed addresses. Everyone else sees no discount at all.
+
+      This is the way to prove the money path before customers can reach it. A Vercel
+      preview deploy does NOT do the same job: the campaign is a document in the
+      production database and a preview frontend still talks to the production API, so
+      it sees the same campaign in the same state. Isolation comes from WHO qualifies,
+      not from which build is serving the page.
+    */
+    const emails = TESTERS.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+    if (!emails.length) die('--testing needs at least one email, e.g. --testing=you@autobacsindia.com');
+
+    console.log(`\nTESTING MODE: status ${before.status} → ${CAMPAIGN_STATUS.TESTING}`);
+    emails.forEach(e => console.log(`   only ${e} will get the discount`));
+    if (!APPLY) {
+      console.log('\n--- DRY RUN — nothing written. Re-run with --apply. ---');
+      await mongoose.disconnect();
+      return;
+    }
+    // testerEmails must be saved BEFORE the status flips: assertPublishable refuses
+    // testing mode with an empty tester list, and a half-applied change would leave the
+    // campaign in a state it rejects.
+    await campaignService.update(campaign._id, { testerEmails: emails });
+    await campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.TESTING);
+    console.log(`\n✓ Now in TESTING. Sign in as one of those addresses and the discount applies.`);
+    console.log(`  Nobody else is affected. Go live with --live --apply when satisfied.`);
     await mongoose.disconnect();
     return;
   }

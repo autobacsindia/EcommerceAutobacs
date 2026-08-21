@@ -361,7 +361,10 @@ export default function AdminCampaignEditor() {
           the rows are kept rather than deleted — they are the record of who the cards
           went to, so this is hidden, not destroyed. */}
       {isAllowlist && <MemberRosterPanel campaignId={campaign._id} />}
-      <MemberImportPanel campaignId={campaign._id} slug={slug} />
+      {/* Importing an allowlist into a campaign open to everyone is the same
+          contradiction as showing the roster: the rows would be written and then never
+          read by anything. */}
+      {isAllowlist && <MemberImportPanel campaignId={campaign._id} slug={slug} />}
 
       {/* ── Save ────────────────────────────────────────────────────────────── */}
       {saveError && (
