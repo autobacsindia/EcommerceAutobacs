@@ -21,7 +21,7 @@ describe('GET /media/admin/comments — type filter', () => {
   const testAdmin = {
     name: 'Media Admin',
     email: 'mediaadmin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin',
   };
 

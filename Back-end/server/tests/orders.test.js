@@ -6,6 +6,7 @@ import User from '../models/User.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import * as dbHandler from './db-handler.js';
+import { API, accessTokenFrom } from './helpers/api.js';
 import bcrypt from 'bcryptjs';
 
 describe('Orders API', () => {
@@ -17,7 +18,7 @@ describe('Orders API', () => {
   const testUser = {
     name: 'Order Test User',
     email: 'ordertest@example.com',
-    password: 'password123'
+    password: 'SecurePass123!'
   };
 
   const testProduct = {
@@ -70,13 +71,13 @@ describe('Orders API', () => {
     
     // Login to get auth token
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post(`${API}/auth/login`)
       .send({
         email: testUser.email,
         password: testUser.password
       });
       
-    authToken = loginRes.body.accessToken;
+    authToken = accessTokenFrom(loginRes);
     
     // Create test product
     const product = await Product.create(testProduct);
@@ -86,7 +87,7 @@ describe('Orders API', () => {
   describe('POST /orders', () => {
     it('should create a new order', async () => {
       const res = await request(app)
-        .post('/orders')
+        .post(`${API}/orders`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           items: [
@@ -100,16 +101,41 @@ describe('Orders API', () => {
         
       expect(res.body.success).toBe(true);
       expect(res.body.order).toBeDefined();
-      expect(res.body.order.status).toBe('pending');
+      // `pending` is the PAYMENT status; the fulfilment axis opens at
+      // `awaiting_payment` (see the enum on models/Order.js).
+      expect(res.body.order.status).toBe('awaiting_payment');
       expect(res.body.order.items).toHaveLength(1);
-      expect(res.body.order.totalAmount).toBe(2000 + 50 + 10); // (1000 * 2) + 50 + 10
+
+      // The client sent `tax: 10` and it is NOT in the total — the server recomputes
+      // every money field from the catalogue and its own tax/shipping rules, so a
+      // client-supplied tax is display-only input it is free to ignore. The old
+      // assertion here expected 2060 (client tax honoured), which would have made a
+      // tampering vector look like correct behaviour.
+      expect(res.body.order.totalAmount).toBe(2050); // (1000 * 2) + 50 shipping, tax server-computed
+    });
+
+    it('ignores a client-supplied totalAmount', async () => {
+      // The money invariant, asserted directly: sending an absurd total must not
+      // change what the server charges.
+      const res = await request(app)
+        .post(`${API}/orders`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          items: [{ product: productId, quantity: 2 }],
+          shippingAddress: testAddress,
+          shippingCost: 50,
+          totalAmount: 1, // attacker-supplied
+        })
+        .expect(201);
+
+      expect(res.body.order.totalAmount).toBe(2050);
     });
 
     it('should fail if product out of stock', async () => {
       await Product.findByIdAndUpdate(productId, { stock: 'out' });
 
       const res = await request(app)
-        .post('/orders')
+        .post(`${API}/orders`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           items: [
@@ -128,7 +154,7 @@ describe('Orders API', () => {
 
     it('should fail without shipping address', async () => {
       const res = await request(app)
-        .post('/orders')
+        .post(`${API}/orders`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           items: [
@@ -155,13 +181,13 @@ describe('Orders API', () => {
         shippingAddress: testAddress,
         subtotal: 1000,
         totalAmount: 1000,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
     });
 
     it('should get user orders', async () => {
       const res = await request(app)
-        .get('/orders')
+        .get(`${API}/orders`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
         
@@ -184,14 +210,14 @@ describe('Orders API', () => {
         shippingAddress: testAddress,
         subtotal: 1000,
         totalAmount: 1000,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
       orderId = order._id;
     });
 
     it('should get order by id', async () => {
       const res = await request(app)
-        .get(`/orders/${orderId}`)
+        .get(`${API}/orders/${orderId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
         
@@ -202,7 +228,7 @@ describe('Orders API', () => {
     it('should fail for non-existent order', async () => {
       const fakeId = new mongoose.Types.ObjectId();
       const res = await request(app)
-        .get(`/orders/${fakeId}`)
+        .get(`${API}/orders/${fakeId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
         

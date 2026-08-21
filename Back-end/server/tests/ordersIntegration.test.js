@@ -7,6 +7,7 @@ import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import Cart from '../models/Cart.js';
 import * as dbHandler from './db-handler.js';
+import { API, accessTokenFrom } from './helpers/api.js';
 import bcrypt from 'bcryptjs';
 
 // Increase timeout for this test file
@@ -22,14 +23,14 @@ describe('Orders Integration API', () => {
   const testUser = {
     name: 'Order Test User',
     email: 'orderuser@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer'
   };
 
   const adminUser = {
     name: 'Admin User',
     email: 'admin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin'
   };
 
@@ -78,12 +79,12 @@ describe('Orders Integration API', () => {
 
     // Login customer
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post(`${API}/auth/login`)
       .send({
         email: testUser.email,
         password: testUser.password
       });
-    userToken = loginRes.body.accessToken;
+    userToken = accessTokenFrom(loginRes);
 
     // Create admin
     const adminHashedPassword = await bcrypt.hash(adminUser.password, salt);
@@ -94,12 +95,12 @@ describe('Orders Integration API', () => {
 
     // Login admin
     const adminLoginRes = await request(app)
-      .post('/auth/login')
+      .post(`${API}/auth/login`)
       .send({
         email: adminUser.email,
         password: adminUser.password
       });
-    adminToken = adminLoginRes.body.accessToken;
+    adminToken = accessTokenFrom(adminLoginRes);
 
     // Create product
     product = await Product.create(testProduct);
@@ -128,7 +129,7 @@ describe('Orders Integration API', () => {
       };
 
       const res = await request(app)
-        .post('/orders')
+        .post(`${API}/orders`)
         .set('Authorization', `Bearer ${userToken}`)
         .send(orderData)
         .expect(201);
@@ -158,7 +159,7 @@ describe('Orders Integration API', () => {
       };
 
       const res = await request(app)
-        .post('/orders')
+        .post(`${API}/orders`)
         .set('Authorization', `Bearer ${userToken}`)
         .send(orderData)
         .expect(400);
@@ -188,7 +189,7 @@ describe('Orders Integration API', () => {
       };
 
       const res = await request(app)
-        .post('/orders')
+        .post(`${API}/orders`)
         .set('Authorization', `Bearer ${userToken}`)
         .send(orderData)
         .expect(400);
@@ -219,11 +220,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 500,
         totalAmount: 500,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       const res = await request(app)
-        .get('/orders')
+        .get(`${API}/orders`)
         .set('Authorization', `Bearer ${userToken}`)
         .expect(200);
 
@@ -252,11 +253,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 500,
         totalAmount: 500,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       const res = await request(app)
-        .put(`/orders/${order._id}/cancel`)
+        .put(`${API}/orders/${order._id}/cancel`)
         .set('Authorization', `Bearer ${userToken}`)
         .send({ reason: 'customer_request' })
         .expect(200);
@@ -286,11 +287,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 500,
         totalAmount: 500,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       const res = await request(app)
-        .get(`/orders/${order._id}`)
+        .get(`${API}/orders/${order._id}`)
         .set('Authorization', `Bearer ${userToken}`)
         .expect(200);
 
@@ -308,10 +309,10 @@ describe('Orders Integration API', () => {
       });
       // Login other user to get token
       const loginRes = await request(app)
-        .post('/auth/login')
+        .post(`${API}/auth/login`)
         .send({
           email: 'other@example.com',
-          password: 'password123' 
+          password: 'SecurePass123!' 
         });
       
       // Actually, easier to just create an order for the *other* user and try to access with *current* userToken
@@ -334,11 +335,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 100,
         totalAmount: 100,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       await request(app)
-        .get(`/orders/${otherOrder._id}`)
+        .get(`${API}/orders/${otherOrder._id}`)
         .set('Authorization', `Bearer ${userToken}`)
         .expect(403);
     });
@@ -363,11 +364,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 500,
         totalAmount: 500,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       const res = await request(app)
-        .get(`/orders/${order._id}`)
+        .get(`${API}/orders/${order._id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       
@@ -391,11 +392,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 500,
         totalAmount: 500,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       const res = await request(app)
-        .put(`/orders/${order._id}/status`)
+        .put(`${API}/orders/${order._id}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ 
           status: 'processing',
@@ -427,11 +428,11 @@ describe('Orders Integration API', () => {
         },
         subtotal: 500,
         totalAmount: 500,
-        status: 'pending'
+        status: 'awaiting_payment'
       });
 
       await request(app)
-        .put(`/orders/${order._id}/status`)
+        .put(`${API}/orders/${order._id}/status`)
         .set('Authorization', `Bearer ${userToken}`)
         .send({ status: 'processing' })
         .expect(403);
@@ -552,7 +553,7 @@ describe('Orders Integration API', () => {
       const salt = await bcrypt.genSalt(10);
       const jane = await User.create({
         name: 'Jane Buyer', email: 'jane.buyer@example.com',
-        passwordHash: await bcrypt.hash('password123', salt), role: 'customer',
+        passwordHash: await bcrypt.hash('SecurePass123!', salt), role: 'customer',
       });
       await seedOrder({ user: jane._id, totalAmount: 999, subtotal: 999 });
 
@@ -597,7 +598,7 @@ describe('Orders Integration API', () => {
       const salt = await bcrypt.genSalt(10);
       const zoe = await User.create({
         name: 'Zoe Shopper', email: 'zoe.shopper@example.com', phone: '9998887777',
-        passwordHash: await bcrypt.hash('password123', salt), role: 'customer',
+        passwordHash: await bcrypt.hash('SecurePass123!', salt), role: 'customer',
       });
       await seedOrder({ user: zoe._id, totalAmount: 888, subtotal: 888 });
 

@@ -1,5 +1,6 @@
 import { body } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
+import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../../config/commonPasswords.js';
 
 export const validateRegister = [
   body('name')
@@ -16,7 +17,9 @@ export const validateRegister = [
     .normalizeEmail(),
   body('password')
     .isLength({ min: 8, max: 72 })
-    .withMessage('Password must be between 8 and 72 characters'),
+    .withMessage('Password must be between 8 and 72 characters')
+    .custom((value) => !isCommonPassword(value))
+    .withMessage(COMMON_PASSWORD_MESSAGE),
   validateRequest
 ];
 
@@ -55,7 +58,9 @@ export const validateResetPassword = [
     .notEmpty()
     .withMessage('New password is required')
     .isLength({ min: 8, max: 72 })
-    .withMessage('Password must be between 8 and 72 characters'),
+    .withMessage('Password must be between 8 and 72 characters')
+    .custom((value) => !isCommonPassword(value))
+    .withMessage(COMMON_PASSWORD_MESSAGE),
   validateRequest
 ];
 

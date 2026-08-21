@@ -16,7 +16,7 @@ describe('Cart API', () => {
   const testUser = {
     name: 'Cart Test User',
     email: 'cartuser@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer'
   };
 

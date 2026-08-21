@@ -6,23 +6,16 @@ import User from '../models/User.js';
 import Product from '../models/Product.js';
 import bcrypt from 'bcryptjs';
 import * as dbHandler from './db-handler.js';
+import { API, accessTokenFrom, productFixture } from './helpers/api.js';
 
 // Mock data
 const testUser = {
   name: 'Test User',
   email: 'test@example.com',
-  password: 'password123'
+  password: 'SecurePass123!'
 };
 
-const testProduct = {
-  name: 'Test Product',
-  price: 99.99,
-  description: 'Test product description',
-  category: 'Test Category',
-  brand: 'Test Brand',
-  stock: 'in',
-  isActive: true
-};
+const testProduct = productFixture();
 
 let authToken;
 let userId;
@@ -63,7 +56,7 @@ beforeEach(async () => {
   
   // Login to get auth token
   const loginRes = await request(app)
-    .post('/auth/login')
+    .post(`${API}/auth/login`)
     .send({
       email: testUser.email,
       password: testUser.password
@@ -72,7 +65,7 @@ beforeEach(async () => {
   if (loginRes.status !== 200) {
     console.error('Login failed:', loginRes.status, loginRes.body);
   }
-  authToken = loginRes.body.accessToken;
+  authToken = accessTokenFrom(loginRes);
   
   // Create test product
   const product = await Product.create(testProduct);
@@ -93,7 +86,7 @@ describe('Wishlist API', () => {
   describe('POST /wishlist', () => {
     it('should create a new wishlist', async () => {
       const res = await request(app)
-        .post('/wishlist')
+        .post(`${API}/wishlist`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Test Wishlist',
@@ -112,7 +105,7 @@ describe('Wishlist API', () => {
     
     it('should not create wishlist without name', async () => {
       const res = await request(app)
-        .post('/wishlist')
+        .post(`${API}/wishlist`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           description: 'Test wishlist description'
@@ -126,7 +119,7 @@ describe('Wishlist API', () => {
   describe('GET /wishlist', () => {
     it('should get all user wishlists', async () => {
       const res = await request(app)
-        .get('/wishlist')
+        .get(`${API}/wishlist`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
         
@@ -139,7 +132,7 @@ describe('Wishlist API', () => {
   describe('PUT /wishlist/:id', () => {
     it('should update wishlist details', async () => {
       const res = await request(app)
-        .put(`/wishlist/${wishlistId}`)
+        .put(`${API}/wishlist/${wishlistId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Updated Wishlist',
@@ -155,7 +148,7 @@ describe('Wishlist API', () => {
   describe('POST /wishlist/:id/items', () => {
     it('should add item to wishlist', async () => {
       const res = await request(app)
-        .post(`/wishlist/${wishlistId}/items`)
+        .post(`${API}/wishlist/${wishlistId}/items`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           productId: productId,
@@ -170,7 +163,7 @@ describe('Wishlist API', () => {
     it('should not add duplicate item to wishlist', async () => {
       // First add item
       await request(app)
-        .post(`/wishlist/${wishlistId}/items`)
+        .post(`${API}/wishlist/${wishlistId}/items`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           productId: productId
@@ -178,7 +171,7 @@ describe('Wishlist API', () => {
         
       // Try to add again
       const res = await request(app)
-        .post(`/wishlist/${wishlistId}/items`)
+        .post(`${API}/wishlist/${wishlistId}/items`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           productId: productId
@@ -192,7 +185,7 @@ describe('Wishlist API', () => {
   describe('POST /wishlist/:id/share', () => {
     it('should make wishlist public', async () => {
       const res = await request(app)
-        .post(`/wishlist/${wishlistId}/share`)
+        .post(`${API}/wishlist/${wishlistId}/share`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           isPublic: true
@@ -208,7 +201,7 @@ describe('Wishlist API', () => {
   describe('GET /wishlist/:id/export', () => {
     it('should export wishlist as JSON', async () => {
       const res = await request(app)
-        .get(`/wishlist/${wishlistId}/export`)
+        .get(`${API}/wishlist/${wishlistId}/export`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
         
@@ -221,14 +214,14 @@ describe('Wishlist API', () => {
     it('should remove item from wishlist', async () => {
       // First add item
       await request(app)
-        .post(`/wishlist/${wishlistId}/items`)
+        .post(`${API}/wishlist/${wishlistId}/items`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           productId: productId
         });
 
       const res = await request(app)
-        .delete(`/wishlist/${wishlistId}/items/${productId}`)
+        .delete(`${API}/wishlist/${wishlistId}/items/${productId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
         
@@ -240,7 +233,7 @@ describe('Wishlist API', () => {
   describe('DELETE /wishlist/:id', () => {
     it('should delete wishlist', async () => {
       const res = await request(app)
-        .delete(`/wishlist/${wishlistId}`)
+        .delete(`${API}/wishlist/${wishlistId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
         

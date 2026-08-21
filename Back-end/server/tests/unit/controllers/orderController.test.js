@@ -60,6 +60,8 @@ jest.unstable_mockModule('../../../services/loyaltyConfigService.js', () => ({
   invalidateLoyaltyConfig: jest.fn(),
 }));
 
+const { userCartFilter } = await import('../../../repositories/cartRepository.js');
+
 // Import controller
 const { 
   getOrders,
@@ -157,10 +159,13 @@ describe('OrderController Unit Tests', () => {
       await getOrderById(req, res);
 
       expect(mockOrder.findById).toHaveBeenCalledWith('order-id');
-      expect(res.json).toHaveBeenCalledWith({
+      // The serialized order gained payment / refundDetails / returnRequest fields.
+      // Matching the whole object pinned an exact response shape, so every additive
+      // change broke the test without any behaviour regressing.
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
-        order: mockOrderDoc
-      });
+        order: expect.objectContaining(mockOrderDoc)
+      }));
     });
 
     it('should return 404 if order not found', async () => {
@@ -242,8 +247,12 @@ describe('OrderController Unit Tests', () => {
       expect(mockProduct.findByIdAndUpdate).not.toHaveBeenCalled();
 
       // Cart clear (called with a transaction session as the 3rd arg)
+      // The cart filter now restates `$type` so the partial `user_1` index is
+      // usable (a bare `{ user }` COLLSCANned the whole collection — see
+      // repositories/cartRepository.js). Assert through the helper so this stays
+      // correct if the filter shape changes again.
       expect(mockCart.findOneAndUpdate).toHaveBeenCalledWith(
-        { user: 'user-id' },
+        userCartFilter('user-id'),
         { items: [] },
         expect.objectContaining({ session: expect.anything() })
       );

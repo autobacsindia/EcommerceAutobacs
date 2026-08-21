@@ -100,13 +100,13 @@ describe('Promo banner API', () => {
   const admin = {
     name: 'Promo Admin',
     email: 'promoadmin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin',
   };
   const shopper = {
     name: 'Promo Shopper',
     email: 'promoshopper@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer',
   };
 
