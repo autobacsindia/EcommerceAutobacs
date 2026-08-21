@@ -19,6 +19,7 @@
 import AppError from '../utils/AppError.js';
 import ticketRepository from '../repositories/supportTicketRepository.js';
 import messageRepository from '../repositories/supportMessageRepository.js';
+import { messageIdFilter } from '../repositories/supportMessageRepository.js';
 import counterRepository from '../repositories/counterRepository.js';
 import { addBusinessHours } from '../utils/businessHours.js';
 import {
@@ -230,7 +231,7 @@ export const addMessage = async ({
     // already stored. Treat as success and hand back what we have — retries must
     // be no-ops, not duplicate replies in the customer's thread.
     if (err?.code === 11000 && messageId) {
-      const existing = await messageRepository.findOne({ messageId });
+      const existing = await messageRepository.findOne(messageIdFilter(messageId));
       if (existing) return { ticket, message: existing };
     }
     throw err;

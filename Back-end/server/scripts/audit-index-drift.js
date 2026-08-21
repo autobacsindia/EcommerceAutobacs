@@ -74,7 +74,7 @@ async function loadModels() {
  * `--apply --allow-drop` delete live text indexes. Collapse both forms to a
  * single `text:<fields>` signature instead.
  */
-function keySignature(key, weights) {
+export function keySignature(key, weights) {
   const isText = Object.values(key).includes('text') || key._fts === 'text';
   if (isText) {
     const fields = key._fts
@@ -89,7 +89,7 @@ function keySignature(key, weights) {
  * The option fields that actually change index behaviour. Cosmetic fields
  * (`background`, `v`, `ns`, `name`) are ignored so we don't report noise.
  */
-function behaviouralOptions(opts = {}) {
+export function behaviouralOptions(opts = {}) {
   const out = {};
   // NOTE: `name` is deliberately NOT compared here — the schema usually omits it
   // while MongoDB always reports one, so comparing would flag every index as
@@ -101,12 +101,29 @@ function behaviouralOptions(opts = {}) {
   if (opts.sparse) out.sparse = true;
   if (opts.expireAfterSeconds != null) out.expireAfterSeconds = opts.expireAfterSeconds;
   if (opts.partialFilterExpression) out.partialFilterExpression = opts.partialFilterExpression;
-  // Sort the weight keys. MongoDB returns them in its own order, so an identical
-  // text index compared naively reports as drifted forever purely on key order.
+  // Text-index weights need two normalisations, and BOTH are needed to stop a
+  // healthy text index reporting as drifted forever.
+  //
+  //  1. Key ORDER — MongoDB returns weights in its own order, so a naive compare
+  //     differs purely on ordering.
+  //  2. DEFAULT weights — MongoDB always REPORTS a weights map (every field at 1)
+  //     while a schema that never called `weights` carries none. Comparing those
+  //     gives `{}` vs `{ subject: 1, ... }`, which never matches. That made
+  //     `supporttickets`' text index permanently MISMATCHED, so every `--apply`
+  //     DROPPED AND RECREATED a live index — a pointless no-index window each run,
+  //     and exactly the drop/recreate path this script warns is CRITICAL if the
+  //     recreate fails. It also meant the audit could never reach "no drift", so
+  //     its exit code stopped being a usable CI/cron signal.
+  //
+  // An all-1s map IS the default, so it is equivalent to declaring nothing and is
+  // dropped. A genuine non-default weight (`{ name: 10 }`) is still compared, in
+  // either direction, because only then does the map change behaviour. The field
+  // LIST is already covered by keySignature's `text:<fields>` signature.
   if (opts.weights) {
-    out.weights = Object.fromEntries(
-      Object.keys(opts.weights).sort().map((k) => [k, opts.weights[k]])
-    );
+    const names = Object.keys(opts.weights).sort();
+    if (names.some((k) => opts.weights[k] !== 1)) {
+      out.weights = Object.fromEntries(names.map((k) => [k, opts.weights[k]]));
+    }
   }
   if (opts.collation) out.collation = { locale: opts.collation.locale, strength: opts.collation.strength };
   return out;
@@ -306,8 +323,17 @@ async function main() {
   process.exit(driftCount > 0 && !APPLY ? 1 : 0);
 }
 
-main().catch(async (err) => {
-  console.error('\n✗ Index drift audit failed:', err.message);
-  await mongoose.disconnect().catch(() => {});
-  process.exit(1);
-});
+// Only run when invoked as a script. Without this guard, merely IMPORTING this
+// module — which the unit tests do, to exercise keySignature/behaviouralOptions —
+// would connect to whatever cluster `.env` points at (production, here) and run a
+// full audit as a side effect.
+const invokedDirectly =
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (invokedDirectly) {
+  main().catch(async (err) => {
+    console.error('\n✗ Index drift audit failed:', err.message);
+    await mongoose.disconnect().catch(() => {});
+    process.exit(1);
+  });
+}

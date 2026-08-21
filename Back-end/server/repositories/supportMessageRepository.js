@@ -7,6 +7,26 @@ import SupportMessage from '../models/SupportMessage.js';
  * The threading lookups are the interesting part: given an inbound reply, find
  * which ticket it belongs to by matching the RFC 5322 identifiers it carries.
  */
+/**
+ * Lookup filters for the `messageId_1` unique PARTIAL index.
+ *
+ * The index is filtered on `{ messageId: { $type: 'string' } }` because
+ * `messageId` is `default: null` and `sparse` therefore could not exclude the
+ * in-app messages that carry no Message-ID (see models/SupportMessage.js).
+ *
+ * MongoDB's planner will not infer that a bare equality or `$in` predicate falls
+ * inside a `$type` partial filter, so the unqualified form discards the index
+ * and COLLSCANs. Restating `$type` makes the predicate a provable subset.
+ * Same defect class as repositories/cartRepository.js.
+ */
+export const messageIdFilter = (messageId) => ({
+  messageId: { $eq: messageId, $type: 'string' },
+});
+
+export const messageIdInFilter = (ids) => ({
+  messageId: { $in: ids, $type: 'string' },
+});
+
 class SupportMessageRepository extends BaseRepository {
   constructor() {
     super(SupportMessage);
@@ -47,7 +67,7 @@ class SupportMessageRepository extends BaseRepository {
     if (!ids.length) return null;
     return SupportMessage.findOne({
       $or: [
-        { messageId: { $in: ids } },
+        messageIdInFilter(ids),
         { references: { $in: ids } },
       ],
     })
@@ -58,7 +78,7 @@ class SupportMessageRepository extends BaseRepository {
   /** Idempotency probe: have we already stored this exact inbound message? */
   async existsByMessageId(messageId) {
     if (!messageId) return false;
-    const hit = await SupportMessage.exists({ messageId });
+    const hit = await SupportMessage.exists(messageIdFilter(messageId));
     return Boolean(hit);
   }
 
