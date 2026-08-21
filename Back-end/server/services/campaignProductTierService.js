@@ -15,7 +15,11 @@ import campaignRepository from '../repositories/campaignRepository.js';
 import campaignProductTierRepository from '../repositories/campaignProductTierRepository.js';
 import productRepository from '../repositories/productRepository.js';
 import AppError from '../utils/AppError.js';
-import { resolveAssignedTierCode, explicitTiers, validateProductTiers } from '../utils/productTiers.js';
+import {
+  resolveAssignedTierCode, explicitTiers, validateProductTiers,
+  resolveLinePercent, lineDiscountPaise,
+} from '../utils/productTiers.js';
+import { toPaise, fromPaise } from '../utils/money.js';
 import {
   PRODUCT_TIER_BULK_RATIO,
   PRODUCT_TIER_BULK_MIN_MATCHES,
@@ -170,6 +174,81 @@ class CampaignProductTierService {
       products: resolved,
       onSaleCount: resolved.filter(p => p.onSale).length,
       movedByOverlap: resolved.filter(p => p.resultingTier !== tierCode).length,
+    };
+  }
+
+  /**
+   * What would these products ACTUALLY earn right now? — the admin calculator.
+   *
+   * The cart-value calculator (campaignService.simulate) is meaningless for this kind of
+   * campaign: the rate follows the PRODUCT, not the cart total, so there is no single
+   * number to type in. Worse, run against a product-tier campaign it reads `tiers`,
+   * finds it empty, and reports ₹0 for every row — telling an operator the offer pays
+   * nothing. This is the honest replacement.
+   *
+   * It answers the question that actually goes wrong here: a tier can be perfectly
+   * configured while the products meant to be in it were never assigned, in which case
+   * they silently take the default rate. Nothing about the ladder reveals that; only
+   * resolving real products does.
+   *
+   * Deliberately calls resolveLinePercent — the SAME function pricingService prices a
+   * cart line with — rather than recomputing the rule. A calculator that reimplemented
+   * lowest-wins or the on-sale ceiling could drift from checkout and would then be
+   * confidently wrong, which is worse than having no calculator at all.
+   */
+  async simulateProducts(campaignId, { query, quantity = 1 }) {
+    const campaign = await this._campaign(campaignId);
+    if (!campaign.productTiers?.length) {
+      throw new AppError('This campaign is not priced by product tiers, so there is nothing to resolve', 400);
+    }
+
+    const qty = Math.max(1, parseInt(quantity, 10) || 1);
+    const { term, products, truncated } = await this._matchesFor(query);
+    const assignments = await campaignProductTierRepository.findForProducts(
+      campaign._id, products.map(p => p.id)
+    );
+
+    const rows = products.map(p => {
+      const assigned = assignments.get(p.id)?.tierCode || null;
+      // `p.onSale` is computed live from the effective price, never a stored flag —
+      // the same rule pricingService follows, for the same reason.
+      const { percent, tierCode, label, onSaleCapped } =
+        resolveLinePercent(campaign.productTiers, assigned, p.onSale);
+      const linePaise = toPaise(p.price) * qty;
+      return {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: p.price,
+        onSale: p.onSale,
+        tierCode,
+        tierLabel: label,
+        percent,
+        onSaleCapped,
+        // The distinction that matters when checking your work: a product showing the
+        // default rate because nobody assigned it looks identical, in the discount
+        // column, to one deliberately left as "everything else".
+        unassigned: !assigned,
+        lineRupees: fromPaise(linePaise),
+        savesRupees: fromPaise(lineDiscountPaise(linePaise, percent)),
+      };
+    });
+
+    return {
+      query: term,
+      quantity: qty,
+      truncated,
+      matched: rows.length,
+      unassignedCount: rows.filter(r => r.unassigned).length,
+      cappedCount: rows.filter(r => r.onSaleCapped).length,
+      /*
+        Per-line only. `maxDiscountPerOrder` is an ORDER-level ceiling applied across
+        every line together, so it cannot be shown against a single product — a real
+        cart of these items may well save less than the sum of this column. Surfaced so
+        the caller can say so rather than implying the figures add up.
+      */
+      orderCapRupees: campaign.maxDiscountPerOrder ?? null,
+      products: rows,
     };
   }
 

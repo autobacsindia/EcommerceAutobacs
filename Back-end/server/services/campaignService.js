@@ -17,6 +17,7 @@
 
 import campaignRepository from '../repositories/campaignRepository.js';
 import campaignMemberRepository from '../repositories/campaignMemberRepository.js';
+import campaignProductTierRepository from '../repositories/campaignProductTierRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import AppError from '../utils/AppError.js';
@@ -483,12 +484,42 @@ class CampaignService {
     }
   }
 
+  /**
+   * Refuse a product-ladder edit that would strand committed assignments.
+   *
+   * Tier membership is materialized as CampaignProductTier rows keyed by tier CODE. A
+   * code is therefore an identifier, not a label: remove or rename one that has rows
+   * and every product assigned to it still points at a tier that no longer exists.
+   * `resolveLinePercent` then finds nothing explicit and silently falls back to the
+   * default rate — so renaming 'thanos' would quietly drop those products from 8% to
+   * 4% with no error, no warning, and no way to tell from the ladder that it happened.
+   *
+   * Labels and percentages are free to change; only the code is load-bearing.
+   */
+  async assertLadderChangeSafe(campaignId, nextTiers) {
+    const counts = await campaignProductTierRepository.countsByTier(campaignId);
+    const nextCodes = new Set((nextTiers || []).map(t => String(t.code)));
+    const stranded = Object.entries(counts).filter(([code, n]) => n > 0 && !nextCodes.has(code));
+    if (!stranded.length) return;
+
+    const detail = stranded.map(([code, n]) => `"${code}" (${n} product${n === 1 ? '' : 's'})`).join(', ');
+    throw new AppError(
+      `Cannot remove or rename ${detail}: those products are assigned to it and would ` +
+      `silently drop to the default rate. Reassign them to another tier first, or keep ` +
+      `the code and change its label and percentage instead.`,
+      400
+    );
+  }
+
   async update(id, body, actorId = null) {
     const existing = await campaignRepository.findById(id);
     if (!existing) throw new AppError('Campaign not found', 404);
 
     const data = pick(body);
     const merged = this.assertValidConfig(data, existing.toObject ? existing.toObject() : existing);
+    if (data.productTiers !== undefined) {
+      await this.assertLadderChangeSafe(existing._id, merged.productTiers);
+    }
     if (merged.status && merged.status !== CAMPAIGN_STATUS.DRAFT && merged.status !== CAMPAIGN_STATUS.OFF) {
       await this.assertPublishable(merged);
     }

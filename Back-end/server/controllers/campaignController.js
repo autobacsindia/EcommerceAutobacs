@@ -168,6 +168,19 @@ export const previewProductTier = asyncHandler(async (req, res) => {
   res.json({ success: true, ...result });
 });
 
+// @desc    Resolve real products against the SAVED product ladder — the admin
+//          calculator for a product-tier campaign. Writes nothing.
+// @route   GET /campaigns/:id/product-tiers/simulate?query=&quantity=
+// @access  Admin
+export const simulateProductTiers = asyncHandler(async (req, res) => {
+  const result = await campaignProductTierService.simulateProducts(req.params.id, {
+    query: req.query.query,
+    quantity: req.query.quantity,
+  });
+  noStore(res);
+  res.json({ success: true, ...result });
+});
+
 // @desc    Commit an assignment — the reviewed selection, or the whole query match.
 // @route   POST /campaigns/:id/product-tiers
 // @access  Admin
