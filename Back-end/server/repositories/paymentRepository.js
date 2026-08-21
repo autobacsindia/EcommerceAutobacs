@@ -2,6 +2,28 @@ import BaseRepository from './baseRepository.js';
 import Payment from '../models/Payment.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 
+/**
+ * Lookup filter for the MONEY-CRITICAL `gatewayPaymentId_1` index.
+ *
+ * That index is `unique` + `partialFilterExpression: { gatewayPaymentId: { $type:
+ * "string" } }`. The partial filter is load-bearing and must NOT be removed: it
+ * keeps legacy/null gatewayPaymentId docs (migrated WooCommerce orders) from
+ * colliding on null under the unique constraint, and that uniqueness is the
+ * serialization point that makes webhook processing idempotent.
+ *
+ * But MongoDB's planner will not infer that `{ gatewayPaymentId: "pay_x" }` is
+ * inside `{ $type: "string" }`, so the bare form silently COLLSCANs. Restating
+ * `$type` makes the predicate a provable subset and brings the index back. Same
+ * defect that cost `carts` a 59,638-doc scan per read — see
+ * repositories/cartRepository.js and tests/paymentIndexUsage.test.js.
+ *
+ * Uniqueness was never affected, only lookup cost: this is a performance fix on
+ * the webhook path, not a correctness change.
+ */
+export const gatewayPaymentIdFilter = (gatewayPaymentId) => ({
+  gatewayPaymentId: { $eq: gatewayPaymentId, $type: 'string' },
+});
+
 class PaymentRepository extends BaseRepository {
   constructor() {
     super(Payment);
@@ -21,13 +43,13 @@ class PaymentRepository extends BaseRepository {
   }
 
   async findByOrderAndGatewayId(orderId, gatewayPaymentId, session = null) {
-    let q = Payment.findOne({ order: orderId, gatewayPaymentId });
+    let q = Payment.findOne({ order: orderId, ...gatewayPaymentIdFilter(gatewayPaymentId) });
     if (session) q = q.session(session);
     return q;
   }
 
   async findByGatewayPaymentId(gatewayPaymentId, session = null) {
-    let q = Payment.findOne({ gatewayPaymentId });
+    let q = Payment.findOne(gatewayPaymentIdFilter(gatewayPaymentId));
     if (session) q = q.session(session);
     return q;
   }
