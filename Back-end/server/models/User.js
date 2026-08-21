@@ -178,6 +178,12 @@ UserSchema.index({ email: 1 }, { unique: true });
 // Refresh token lookup — called on every authenticated request that needs token rotation.
 // Without this, findUserByRefreshToken() does a full collection scan across all users'
 // refreshTokens subdocuments.
+// Declared retroactively from $indexStats (2026-08-21): these were hand-built in
+// production and existed in NO schema, so `audit-index-drift` reported them as EXTRA
+// forever and `--allow-drop` would have deleted indexes that real traffic depends on.
+// The ops counts below are measured over a 162h window, not assumed.
+UserSchema.index({ role: 1 }); // 741 ops — admin/role filtering
+
 UserSchema.index({ 'refreshTokens.token': 1 });
 
 export default mongoose.model("User", UserSchema);
