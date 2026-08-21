@@ -39,8 +39,12 @@
 import mongoose from 'mongoose';
 import campaignService from '../services/campaignService.js';
 import campaignRepository from '../repositories/campaignRepository.js';
+import CampaignProductTier from '../models/CampaignProductTier.js';
 import { CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE } from '../config/campaign.js';
 import { istEndOfDay, formatDateTimeIST } from '../utils/datetime.js';
+
+/** The "everything else" rate, for warning copy. */
+const defaultOf = (c) => (c.productTiers || []).find(t => t.isDefault)?.percent ?? '?';
 
 const arg = (n, d = null) => {
   const hit = process.argv.find(a => a.startsWith(`--${n}=`));
@@ -103,6 +107,39 @@ async function main() {
   console.log(`   product tiers   ${before.productTiers}`);
   console.log(`   cap             ${before.maxRedemptions ?? 'none'}  (redeemed ${before.redeemedCount})`);
   console.log(`   ends            ${before.endsAt ? formatDateTimeIST(before.endsAt) : 'not set'}`);
+
+  /*
+    How many products are actually ASSIGNED to each tier.
+
+    The single most important number before going live, and the one the config alone
+    cannot tell you: an unassigned product is not an error, it silently takes the
+    default tier. So a campaign with a perfect ladder and zero assignments is fully
+    valid, passes every gate, and quietly charges the default rate on the entire
+    catalogue — including the products meant to earn the top rate.
+  */
+  if (campaign.productTiers?.length) {
+    const counts = await CampaignProductTier.aggregate([
+      { $match: { campaign: campaign._id } },
+      { $group: { _id: '$tierCode', n: { $sum: 1 } } },
+    ]);
+    const byCode = Object.fromEntries(counts.map(c => [c._id, c.n]));
+    const assigned = counts.reduce((sum, c) => sum + c.n, 0);
+
+    console.log('\nTIER ASSIGNMENTS:');
+    for (const t of campaign.productTiers) {
+      if (t.isDefault) {
+        console.log(`   ${String(t.percent).padStart(3)}%  ${t.label.padEnd(8)} everything not listed above`);
+      } else {
+        const n = byCode[t.code] || 0;
+        console.log(`   ${String(t.percent).padStart(3)}%  ${t.label.padEnd(8)} ${n} product(s)${n === 0 ? '   ⚠ NONE ASSIGNED' : ''}`);
+      }
+    }
+    if (assigned === 0) {
+      console.log('\n⚠  NO products are assigned to any tier. Going live now would charge the');
+      console.log(`   ${defaultOf(campaign)}% default on the ENTIRE catalogue — including the products`);
+      console.log('   meant to earn the top rate. Assign tiers in admin first.');
+    }
+  }
 
   /*
     Will `--live` actually succeed?

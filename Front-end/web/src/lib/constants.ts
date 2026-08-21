@@ -131,6 +131,7 @@ export const API_ENDPOINTS = {
   // Per-product discount tiers: authored from a search query, then materialized.
   CAMPAIGN_PRODUCT_TIERS: (id: string) => `/campaigns/${id}/product-tiers`,
   CAMPAIGN_PRODUCT_TIER_PREVIEW: (id: string) => `/campaigns/${id}/product-tiers/preview`,
+  CAMPAIGN_PRODUCT_TIER_SIMULATE: (id: string) => `/campaigns/${id}/product-tiers/simulate`,
   CAMPAIGN_PRODUCT_TIER_DRIFT: (id: string) => `/campaigns/${id}/product-tiers/drift`,
   CAMPAIGN_PRODUCT_TIER_ITEM: (id: string, tierCode: string) =>
     `/campaigns/${id}/product-tiers/${tierCode}`,

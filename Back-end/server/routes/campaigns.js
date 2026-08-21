@@ -7,14 +7,14 @@ import {
   listCampaigns, getCampaignAdmin, getCampaignReport,
   createCampaign, updateCampaign, setCampaignStatus,
   importCampaignMembers, listCampaignMembers, simulateCampaign,
-  previewProductTier, commitProductTier, listProductTiers,
+  previewProductTier, simulateProductTiers, commitProductTier, listProductTiers,
   getProductTierDrift, unassignProductTier,
 } from '../controllers/campaignController.js';
 import {
   validateCampaignSlug, validateCampaignId, validateCampaignCreate,
   validateCampaignUpdate, validateCampaignStatus, validateCampaignEmailCheck,
   validateCampaignMembers, validateCampaignMemberQuery, validateCampaignSimulate,
-  validateProductTierPreview, validateProductTierCommit,
+  validateProductTierPreview, validateProductTierSimulate, validateProductTierCommit,
   validateProductTierQuery, validateProductTierCode,
 } from '../validators/campaign.validator.js';
 
@@ -54,6 +54,7 @@ router.post('/:id/simulate', protect, admin, validateCampaignId, validateCampaig
 // so neither can be swallowed by a `:tierCode` segment, and both are GETs that write
 // nothing — previewing a destructive-looking query must never be destructive.
 router.get('/:id/product-tiers/preview', protect, admin, validateCampaignId, validateProductTierPreview, validateRequest, previewProductTier);
+router.get('/:id/product-tiers/simulate', protect, admin, validateCampaignId, validateProductTierSimulate, validateRequest, simulateProductTiers);
 router.get('/:id/product-tiers/drift', protect, admin, validateCampaignId, validateRequest, getProductTierDrift);
 router.get('/:id/product-tiers', protect, admin, validateCampaignId, validateProductTierQuery, validateRequest, listProductTiers);
 router.post('/:id/product-tiers', protect, admin, validateCampaignId, validateProductTierCommit, validateRequest, commitProductTier);
