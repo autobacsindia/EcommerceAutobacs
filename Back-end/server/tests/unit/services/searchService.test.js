@@ -7,6 +7,7 @@ jest.unstable_mockModule('../../../services/elasticsearchService.js', () => ({
   default: {
     isConnected: jest.fn(),
     searchProducts: jest.fn(),
+    getIndexedDocumentCount: jest.fn(),
   }
 }));
 
@@ -48,6 +49,11 @@ describe('SearchService Unit Tests', () => {
     
     // Default mocks setup
     elasticsearchService.isConnected.mockResolvedValue(false); // Default to MongoDB fallback
+
+    // A healthy, populated index is the normal production state. A zero-hit result
+    // is only routed to Mongo when the index looks EMPTY, so any test that wants the
+    // fallback has to simulate that outage explicitly.
+    elasticsearchService.getIndexedDocumentCount.mockResolvedValue(930);
 
     // Both subtree resolvers return arrays by contract. Defaulting them here (rather
     // than letting the code guard against undefined) keeps a real contract break
@@ -107,12 +113,94 @@ describe('SearchService Unit Tests', () => {
       expect(m.mongoFallbackRate).toBe('50.00%');
     });
 
+    // ── The Phase 2 contract ────────────────────────────────────────────────
+    // A zero-hit result used to cost TWO full collection scans (regex find +
+    // unbounded countDocuments) to reprove an empty answer. Atlas scored those
+    // shapes at inefficiency 930 — the worst remaining after the cart fix. The
+    // deciding question is now "is the index populated?", not "were there hits?".
+    describe('zero-hit handling', () => {
+      const emptyEs = () => {
+        elasticsearchService.isConnected.mockResolvedValue(true);
+        elasticsearchService.searchProducts.mockResolvedValue({
+          products: [], pagination: { total: 0, page: 1, pages: 0 },
+        });
+      };
+
+      it('TRUSTS zero hits from a populated index and never touches Mongo', async () => {
+        emptyEs();
+        elasticsearchService.getIndexedDocumentCount.mockResolvedValue(930);
+
+        const res = await SearchService.searchProducts({ search: 'nonexistent-widget' });
+
+        expect(res.products).toEqual([]);
+        // The whole point: no regex scan, no countDocuments.
+        expect(Product.find).not.toHaveBeenCalled();
+        expect(Product.countDocuments).not.toHaveBeenCalled();
+        const m = getSearchPathMetrics();
+        expect(m.esServedZero).toBe(1);
+        expect(m.fallbackEsZeroHit).toBe(0);
+        expect(m.mongoFallbackRate).toBe('0.00%');
+      });
+
+      it('FALLS BACK when the index reports zero documents (wiped index)', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        emptyEs();
+        elasticsearchService.getIndexedDocumentCount.mockResolvedValue(0);
+
+        await SearchService.searchProducts({ search: 'brake pads' });
+
+        expect(Product.find).toHaveBeenCalled();
+        expect(getSearchPathMetrics().fallbackEsZeroHit).toBe(1);
+        console.error.mockRestore();
+      });
+
+      // Fail towards the expensive-but-correct path. An unknown count must never be
+      // read as "populated", or an ES outage would surface as an empty catalogue.
+      it('FALLS BACK when the document count is unknown (null)', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        emptyEs();
+        elasticsearchService.getIndexedDocumentCount.mockResolvedValue(null);
+
+        await SearchService.searchProducts({ search: 'brake pads' });
+
+        expect(Product.find).toHaveBeenCalled();
+        expect(getSearchPathMetrics().fallbackEsZeroHit).toBe(1);
+        console.error.mockRestore();
+      });
+
+      it('does not consult the index count when ES returned hits', async () => {
+        elasticsearchService.isConnected.mockResolvedValue(true);
+        elasticsearchService.searchProducts.mockResolvedValue({
+          products: [{ _id: 'p1' }], pagination: { total: 1, page: 1, pages: 1 },
+        });
+
+        await SearchService.searchProducts({ search: 'bumper' });
+
+        expect(elasticsearchService.getIndexedDocumentCount).not.toHaveBeenCalled();
+        expect(getSearchPathMetrics().esServed).toBe(1);
+      });
+
+      // Admin listings bypass ES entirely (it indexes only active products), so the
+      // trust rule must not leak into that path.
+      it('leaves the admin includeInactive path on Mongo', async () => {
+        elasticsearchService.getIndexedDocumentCount.mockResolvedValue(930);
+
+        await SearchService.searchProducts({ search: 'x' }, { includeInactive: true });
+
+        expect(elasticsearchService.searchProducts).not.toHaveBeenCalled();
+        expect(getSearchPathMetrics().adminMongo).toBe(1);
+      });
+    });
+
     it('counts a zero-hit fallback distinctly from an ES error', async () => {
       jest.spyOn(console, 'error').mockImplementation(() => {});
       elasticsearchService.isConnected.mockResolvedValue(true);
       elasticsearchService.searchProducts.mockResolvedValue({
         products: [], pagination: { total: 0, page: 1, pages: 0 },
       });
+      // Zero hits ALONE no longer triggers the fallback — the index must also look
+      // empty, which is the wiped-index outage this path exists for.
+      elasticsearchService.getIndexedDocumentCount.mockResolvedValue(0);
       await SearchService.searchProducts({ search: 'a' });
 
       elasticsearchService.searchProducts.mockRejectedValue(new Error('boom'));
@@ -291,11 +379,15 @@ describe('SearchService Unit Tests', () => {
     it('should fall back to MongoDB when Elasticsearch returns zero hits (empty-index guard)', async () => {
       // ES does not throw on an empty/wiped index; it returns zero hits. The
       // service must treat that as a fallback trigger, not surface "no results".
+      // The deciding signal is the index document count, NOT the hit count —
+      // otherwise every "we don't stock that" search pays a full collection scan.
       elasticsearchService.isConnected.mockResolvedValue(true);
       elasticsearchService.searchProducts.mockResolvedValue({
         products: [],
         pagination: { total: 0, page: 1, pages: 0 }
       });
+      elasticsearchService.getIndexedDocumentCount.mockResolvedValue(0); // wiped index
+      jest.spyOn(console, 'error').mockImplementation(() => {});
 
       const params = { search: 'test' };
       await SearchService.searchProducts(params);
@@ -324,10 +416,14 @@ describe('SearchService Unit Tests', () => {
     it('warns with both counts when ES returns zero but Mongo finds matches (index drift)', async () => {
       // The actionable signal: ES is empty/stale while Mongo still has the data.
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      jest.spyOn(console, 'error').mockImplementation(() => {});
       elasticsearchService.isConnected.mockResolvedValue(true);
       elasticsearchService.searchProducts.mockResolvedValue({
         products: [], pagination: { total: 0, page: 1, pages: 0 }
       });
+      // Drift is only reachable through the outage path now: an index reporting
+      // zero documents while Mongo still holds the data is exactly that signal.
+      elasticsearchService.getIndexedDocumentCount.mockResolvedValue(0);
       Product.countDocuments.mockReturnValue({ maxTimeMS: jest.fn().mockResolvedValue(29) });
 
       await SearchService.searchProducts({ search: 'brake' });

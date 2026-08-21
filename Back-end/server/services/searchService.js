@@ -40,7 +40,8 @@ let lastEsAvailability = null;
  */
 const searchPathMetrics = {
   esServed: 0,
-  fallbackEsZeroHit: 0,   // ES answered, found nothing, Mongo consulted
+  esServedZero: 0,        // ES answered "nothing" from a POPULATED index — trusted, no Mongo
+  fallbackEsZeroHit: 0,   // ES found nothing AND the index looks empty/unknown — Mongo consulted
   fallbackEsDown: 0,      // ES unreachable — the expensive, silent case
   fallbackEsError: 0,     // ES threw mid-query
   adminMongo: 0,          // includeInactive: Mongo by design
@@ -433,10 +434,32 @@ class SearchService {
           recordSearchPath('esServed');
           return esResult;
         }
-        // Zero hits is NOT yet a problem worth reporting: whether it means "we
-        // genuinely don't stock this" or "the index is missing/wiped" can only be
-        // decided once Mongo has answered the same question. Carry the fact down
-        // and let the divergence check below do the logging.
+        // Zero hits from a POPULATED index means "we genuinely don't stock this",
+        // and that answer is already correct — re-asking MongoDB cost a full
+        // collection regex scan PLUS an unbounded countDocuments, i.e. two ~930-doc
+        // scans to reprove an empty result. Atlas scored those shapes at
+        // inefficiency 930, the worst remaining after the cart fix.
+        //
+        // The fallback still exists for the case it was actually written for: ES
+        // does not throw on a missing/wiped index, it returns zero hits. So the
+        // deciding question is not "did ES return nothing?" but "is the index
+        // populated?". A populated index is trusted; anything else falls through.
+        //
+        // `null` (unknown — disabled, no client, or the count failed) counts as NOT
+        // populated, so an ambiguous signal fails towards the expensive-but-correct
+        // scan rather than towards showing an empty catalogue.
+        const indexedDocs = await elasticsearchService.getIndexedDocumentCount();
+        if (indexedDocs > 0) {
+          recordSearchPath('esServedZero');
+          return esResult;
+        }
+
+        console.error(
+          '[SearchService] Elasticsearch returned 0 hits and the index reports ' +
+          (indexedDocs === null ? 'an UNKNOWN document count' : `${indexedDocs} documents`) +
+          ' — treating this as an index outage and falling back to MongoDB. ' +
+          'Verify with reindex-products.'
+        );
         esZeroHit = true;
         recordSearchPath('fallbackEsZeroHit');
       } catch (error) {

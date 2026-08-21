@@ -13,6 +13,22 @@ class ElasticsearchService {
       cacheTimeout: 30000 // 30 seconds cache
     };
     
+    // Cached "does the index actually hold documents?" signal.
+    //
+    // Elasticsearch does NOT throw when an index is missing or has been wiped — it
+    // returns zero hits, indistinguishable from "we genuinely don't stock this".
+    // That ambiguity is why search used to fall back to a full MongoDB scan on EVERY
+    // zero-hit query. Knowing the index is populated makes a zero-hit answer
+    // trustworthy, so the fallback can be reserved for real outages.
+    //
+    // Cached because it would otherwise add a round trip to every empty search; the
+    // window only has to be short enough to notice a wiped index quickly.
+    this.indexPopulation = {
+      count: null,
+      lastChecked: null,
+      cacheTimeout: 60000, // 1 minute
+    };
+
     // Circuit breaker state
     this.circuitBreaker = {
       failures: 0,
@@ -146,6 +162,48 @@ class ElasticsearchService {
   /**
    * Close the Elasticsearch client
    */
+  /**
+   * How many documents the search index currently holds, cached briefly.
+   *
+   * Used to tell a TRUSTWORTHY zero-hit result ("we don't stock that") apart from a
+   * SUSPECT one ("the index is empty or missing"). Only the second deserves a
+   * MongoDB fallback, which costs a full collection scan.
+   *
+   * Returns `null` when the answer is unknown (disabled, no client, or the count
+   * failed). Callers MUST treat null as "not proven populated" and fall back —
+   * failing towards the expensive-but-correct path, never towards showing an empty
+   * catalogue.
+   *
+   * @param {{force?: boolean}} [opts]
+   * @returns {Promise<number|null>}
+   */
+  async getIndexedDocumentCount({ force = false } = {}) {
+    if (!this.enabled || !this.client) return null;
+
+    const { lastChecked, cacheTimeout, count } = this.indexPopulation;
+    if (!force && lastChecked && Date.now() - lastChecked < cacheTimeout) {
+      return count;
+    }
+
+    try {
+      const res = await this.client.count({ index: this.indexName });
+      const n = typeof res?.count === 'number' ? res.count : res?.body?.count ?? null;
+      this.indexPopulation = { count: n, lastChecked: Date.now(), cacheTimeout };
+      return n;
+    } catch (error) {
+      // A missing index throws index_not_found_exception — that is precisely the
+      // outage case, so record it as "not populated" rather than swallowing it.
+      this.indexPopulation = { count: null, lastChecked: Date.now(), cacheTimeout };
+      console.error('[Elasticsearch] index count failed:', error?.message || error);
+      return null;
+    }
+  }
+
+  /** Test seam — drop the cached population reading. */
+  __resetIndexPopulation() {
+    this.indexPopulation = { count: null, lastChecked: null, cacheTimeout: this.indexPopulation.cacheTimeout };
+  }
+
   async shutdown() {
     if (this.client) {
       await this.client.close();
