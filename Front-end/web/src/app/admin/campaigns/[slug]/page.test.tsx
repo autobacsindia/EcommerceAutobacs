@@ -89,6 +89,14 @@ describe('a PUBLIC, product-tier campaign', () => {
     expect(screen.queryByTestId('roster')).not.toBeInTheDocument();
   });
 
+  it('does not offer to import an allowlist nothing would read', async () => {
+    renderPage(campaign);
+    await screen.findByText('Festive');
+    // Targets the panel HEADING, not the audience dropdown's "Invited customers only"
+    // option — that option must stay, or you could never switch back to an allowlist.
+    expect(screen.queryByRole('heading', { name: /invited customers/i })).not.toBeInTheDocument();
+  });
+
   it('does not describe best-for-customer resolution, which is the opposite rule', async () => {
     renderPage(campaign);
     await screen.findByText('Festive');
@@ -138,9 +146,10 @@ describe('an ALLOWLIST, cart-value campaign — the regression case', () => {
     expect(screen.getByText('191')).toBeInTheDocument();
   });
 
-  it('still shows the roster', async () => {
+  it('still shows the roster and the import panel', async () => {
     renderPage(campaign);
     expect(await screen.findByTestId('roster')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /invited customers/i })).toBeInTheDocument();
   });
 
   it('still shows the cart-value ladder and its resolution copy', async () => {
