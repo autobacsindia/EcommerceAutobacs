@@ -23,12 +23,25 @@ const mockVehicle = {
   findOne: jest.fn(),
 };
 
-const mockMongoose = {
-  Types: {
-    ObjectId: {
-      isValid: jest.fn(),
-    }
-  }
+// getProducts wraps SearchService in a cache-aside read; without mocking the cache
+// the real one runs and can short-circuit the call entirely, so searchProducts
+// records zero invocations and the failure looks like a broken controller.
+const mockCacheService = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn(),
+  wrap: jest.fn((key, fn) => fn()),
+  // getProducts uses getWithLock (single-flight against a cold cache), not wrap.
+  // Omitting it left the call returning undefined, so fetchList never ran and
+  // SearchService recorded zero invocations.
+  getWithLock: jest.fn((key, fn) => fn()),
+  generateKey: jest.fn(() => 'k'),
+};
+
+const mockProductService = {
+  getProductsByVehicle: jest.fn(),
+  getFeaturedProducts: jest.fn(),
+  getOfferProducts: jest.fn(),
+  getBrandsWithCounts: jest.fn(),
 };
 
 // Setup mocks
@@ -36,7 +49,12 @@ jest.unstable_mockModule('../../../models/Product.js', () => ({ default: mockPro
 jest.unstable_mockModule('../../../services/searchService.js', () => ({ default: mockSearchService }));
 jest.unstable_mockModule('../../../models/Brand.js', () => ({ default: mockBrand }));
 jest.unstable_mockModule('../../../models/Vehicle.js', () => ({ default: mockVehicle }));
-jest.unstable_mockModule('mongoose', () => ({ default: mockMongoose }));
+jest.unstable_mockModule('../../../services/productService.js', () => ({ default: mockProductService }));
+jest.unstable_mockModule('../../../services/cacheService.js', () => ({
+  default: mockCacheService,
+  CACHE_VERSION: 'v1',
+  TTL: { PRODUCT_LIST: 300, PRODUCT_FEATURED: 3600, PRODUCT_OFFERS: 1800, BRANDS: 7200 },
+}));
 
 // Import controller
 const { 
@@ -53,14 +71,30 @@ describe('ProductController Unit Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
+    // jest.config.js sets `resetMocks: true`, which strips the implementations the
+    // mock factories supplied. getWithLock then returns undefined instead of
+    // invoking fetchList, so SearchService is never called and the failure reads as
+    // "Number of calls: 0" with no error anywhere.
+    mockCacheService.get.mockResolvedValue(null);
+    mockCacheService.getWithLock.mockImplementation((key, fn) => fn());
+    mockCacheService.wrap.mockImplementation((key, fn) => fn());
+    mockCacheService.generateKey.mockReturnValue('k');
+
+    // `originalUrl` and `headers` are required by buildResponseKey (it splits the
+    // URL on '?' and reads accept-language); without them getProducts threw
+    // "Cannot read properties of undefined (reading 'split')" before ever calling
+    // SearchService, which surfaced only as "Number of calls: 0".
     req = {
       query: {},
-      params: {}
+      params: {},
+      originalUrl: '/api/v1/products',
+      headers: {},
     };
-    
+
     res = {
       json: jest.fn(),
       status: jest.fn().mockReturnThis(),
+      setHeader: jest.fn(),
     };
     
     // Default mock behavior for chaining
@@ -97,22 +131,16 @@ describe('ProductController Unit Tests', () => {
 
   describe('getFeaturedProducts', () => {
     it('should return featured products', async () => {
+      // Query-building moved into productService (which caches); the controller
+      // just parses `limit` and shapes the response. Asserting on Product.find
+      // here tested the pre-service architecture.
       const mockProducts = [{ name: 'Featured 1' }];
-      
-      const mockChain = {
-        populate: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        sort: jest.fn().mockResolvedValue(mockProducts)
-      };
-      
-      mockProduct.find.mockReturnValue(mockChain);
-      
+      mockProductService.getFeaturedProducts.mockResolvedValue(mockProducts);
+
       req.query = { limit: '10' };
       await getFeaturedProducts(req, res);
-      
-      expect(mockProduct.find).toHaveBeenCalledWith({ isActive: true, isFeatured: true });
-      expect(mockChain.populate).toHaveBeenCalledWith('categories', 'name slug');
-      expect(mockChain.limit).toHaveBeenCalledWith(10);
+
+      expect(mockProductService.getFeaturedProducts).toHaveBeenCalledWith(10);
       expect(res.json).toHaveBeenCalledWith({
         success: true,
         count: 1,
@@ -123,22 +151,13 @@ describe('ProductController Unit Tests', () => {
 
   describe('getOfferProducts', () => {
     it('should return offer products', async () => {
-      const mockProducts = [{ name: 'Offer 1' }];
-      
-      const mockChain = {
-        populate: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        sort: jest.fn().mockResolvedValue(mockProducts)
-      };
-      
-      mockProduct.find.mockReturnValue(mockChain);
-      
+      const mockProducts = [{ name: 'Sale 1', price: 100, originalPrice: 200 }];
+      mockProductService.getOfferProducts.mockResolvedValue(mockProducts);
+
+      req.query = { limit: '10' };
       await getOfferProducts(req, res);
-      
-      expect(mockProduct.find).toHaveBeenCalledWith(expect.objectContaining({
-        isActive: true,
-        $and: expect.any(Array)
-      }));
+
+      expect(mockProductService.getOfferProducts).toHaveBeenCalledWith(10);
       expect(res.json).toHaveBeenCalledWith({
         success: true,
         count: 1,
@@ -146,101 +165,61 @@ describe('ProductController Unit Tests', () => {
       });
     });
   });
-  
+
   describe('getProductsByVehicle', () => {
-    it('should handle invalid vehicle ID (slug lookup)', async () => {
+    // Vehicle resolution (ObjectId vs slug vs prefix vs make) lives in
+    // productRepository.findVehicleByIdOrSlug now; the controller only reacts to
+    // the service returning null. Asserting on Vehicle.findOne / ObjectId.isValid
+    // here tested an architecture that no longer exists.
+    it('404s when the service cannot resolve the vehicle', async () => {
       req.params.vehicleId = 'test-slug';
-      mockMongoose.Types.ObjectId.isValid.mockReturnValue(false);
-      
-      mockVehicle.findOne.mockResolvedValue(null);
-      
+      mockProductService.getProductsByVehicle.mockResolvedValue(null);
+
       await getProductsByVehicle(req, res);
-      
-      expect(mockMongoose.Types.ObjectId.isValid).toHaveBeenCalledWith('test-slug');
-      expect(mockVehicle.findOne).toHaveBeenCalledWith({ slug: 'test-slug', isActive: true });
+
+      expect(mockProductService.getProductsByVehicle).toHaveBeenCalledWith('test-slug', req.query);
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
-    it('should return products for valid vehicle', async () => {
+    it('returns the service payload for a resolved vehicle', async () => {
       req.params.vehicleId = 'valid-id';
-      const mockVehicleDoc = { _id: 'valid-id', make: 'Toyota', model: 'Corolla', slug: 'toyota-corolla' };
-      
-      mockMongoose.Types.ObjectId.isValid.mockReturnValue(true);
-      mockVehicle.findById.mockResolvedValue(mockVehicleDoc);
-      
-      const mockResults = {
+      mockProductService.getProductsByVehicle.mockResolvedValue({
+        vehicle: { _id: 'valid-id', make: 'Toyota', model: 'Corolla', slug: 'toyota-corolla' },
         products: [],
         pagination: {},
-        facets: {}
-      };
-      mockSearchService.searchProducts.mockResolvedValue(mockResults);
-      
+        facets: {},
+      });
+
       await getProductsByVehicle(req, res);
-      
-      expect(mockVehicle.findById).toHaveBeenCalledWith('valid-id');
-      expect(mockSearchService.searchProducts).toHaveBeenCalledWith(expect.objectContaining({
-        vehicle: 'valid-id'
-      }));
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        vehicle: expect.any(Object)
-      }));
+
+      expect(mockProductService.getProductsByVehicle).toHaveBeenCalledWith('valid-id', req.query);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
 
   describe('getBrands', () => {
+    // Brand aggregation + the zero-count filter live in
+    // productService.getBrandsWithCounts now, so the controller is a pass-through.
     it('should return brands with product counts', async () => {
-      const mockBrands = [
-        { _id: 'b1', name: 'Brand A', slug: 'brand-a' },
-        { _id: 'b2', name: 'Brand B', slug: 'brand-b' }
+      const brands = [
+        { id: '1', name: 'Brand A', slug: 'brand-a', productCount: 5, logo: null, description: null },
       ];
-      
-      mockBrand.find.mockReturnValue({
-        sort: jest.fn().mockResolvedValue(mockBrands)
-      });
-      
-      const mockCounts = [
-        { _id: 'Brand A', count: 10 },
-        { _id: 'Brand B', count: 5 }
-      ];
-      mockProduct.aggregate.mockResolvedValue(mockCounts);
-      
+      mockProductService.getBrandsWithCounts.mockResolvedValue(brands);
+
       await getBrands(req, res);
-      
-      expect(mockBrand.find).toHaveBeenCalled();
-      expect(mockProduct.aggregate).toHaveBeenCalled();
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        brands: expect.arrayContaining([
-          expect.objectContaining({
-            name: 'Brand A',
-            productCount: 10
-          }),
-          expect.objectContaining({
-            name: 'Brand B',
-            productCount: 5
-          })
-        ])
-      }));
+
+      expect(mockProductService.getBrandsWithCounts).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({ success: true, brands });
     });
 
-    it('should filter out brands with 0 products', async () => {
-       const mockBrands = [
-        { _id: 'b1', name: 'Brand A', slug: 'brand-a' }
-      ];
-      
-      mockBrand.find.mockReturnValue({
-        sort: jest.fn().mockResolvedValue(mockBrands)
-      });
-      
-      mockProduct.aggregate.mockResolvedValue([]); // No products
-      
+    it('passes through whatever the service returns, including an empty list', async () => {
+      // The 0-count filter is the service's job — this asserts the controller does
+      // not second-guess it.
+      mockProductService.getBrandsWithCounts.mockResolvedValue([]);
+
       await getBrands(req, res);
-      
-      expect(res.json).toHaveBeenCalledWith({
-        success: true,
-        brands: [] // Filtered out
-      });
+
+      expect(res.json).toHaveBeenCalledWith({ success: true, brands: [] });
     });
   });
 });

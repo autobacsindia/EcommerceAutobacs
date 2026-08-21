@@ -1,51 +1,78 @@
 /**
  * Product Service Tests - WITHOUT MongoDB!
- * 
+ *
  * This demonstrates how Clean Architecture makes testing 10x easier.
  * We mock the repository layer, so NO database needed!
+ *
+ * NOTE ON THE MOCKING STYLE
+ * -------------------------
+ * These used `jest.mock()`, which is a NO-OP under ESM (`--experimental-vm-modules`).
+ * The mock factories never ran, so the suite imported the REAL cacheService and
+ * failed with "cacheService.wrap.mockResolvedValue is not a function" — every test
+ * in the file. ESM needs `jest.unstable_mockModule()` plus a DYNAMIC import after
+ * the mock is registered, because static imports are hoisted above it.
  */
 
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import productService from '../services/productService.js';
-import productRepository from '../repositories/productRepository.js';
-import cacheService from '../services/cacheService.js';
 
-// Mock repositories and services
-jest.mock('../repositories/productRepository.js', () => ({
-  findFeatured: jest.fn(),
-  findOnOffer: jest.fn(),
-  findVehicleByIdOrSlug: jest.fn(),
-  findAllBrands: jest.fn(),
-  countProductsByBrand: jest.fn(),
-  findBySlug: jest.fn(),
-  getStock: jest.fn(),
-  updateStock: jest.fn(),
+jest.unstable_mockModule('../../repositories/productRepository.js', () => ({
+  default: {
+    findFeatured: jest.fn(),
+    findOnOffer: jest.fn(),
+    findVehicleByIdOrSlug: jest.fn(),
+    findAllBrands: jest.fn(),
+    countProductsByBrand: jest.fn(),
+    findBySlug: jest.fn(),
+    getStock: jest.fn(),
+    updateStock: jest.fn(),
+  },
 }));
 
-jest.mock('../services/cacheService.js', () => ({
-  get: jest.fn(),
-  set: jest.fn(),
-  wrap: jest.fn(),
-  generateKey: jest.fn((prefix, params) => {
-    const parts = [prefix];
-    const sortedKeys = Object.keys(params).sort();
-    for (const key of sortedKeys) {
-      const value = params[key];
-      if (value !== undefined && value !== null) {
-        parts.push(`${key}=${value}`);
+jest.unstable_mockModule('../../services/cacheService.js', () => ({
+  default: {
+    get: jest.fn(),
+    set: jest.fn(),
+    wrap: jest.fn(),
+    generateKey: jest.fn((prefix, params) => {
+      const parts = [prefix];
+      for (const key of Object.keys(params).sort()) {
+        const value = params[key];
+        if (value !== undefined && value !== null) parts.push(`${key}=${value}`);
       }
-    }
-    return parts.join(':');
-  }),
+      return parts.join(':');
+    }),
+  },
+  CACHE_VERSION: 'v1',
+  // Mirrors services/cache/config.js — the service reads TTL.PRODUCT_FEATURED
+  // etc., so a partial mock silently yields `ttl: undefined`.
+  TTL: { PRODUCT_FEATURED: 3600, PRODUCT_OFFERS: 1800, BRANDS: 7200 },
 }));
 
-jest.mock('../services/elasticsearchService.js', () => ({
-  enabled: false, // Force MongoDB fallback for testing
+jest.unstable_mockModule('../../services/elasticsearchService.js', () => ({
+  default: { enabled: false }, // Force the MongoDB path
 }));
+
+// Dynamic imports AFTER the mocks are registered — this is the part `jest.mock()`
+// cannot express in ESM.
+const { default: productService } = await import('../../services/productService.js');
+const { default: productRepository } = await import('../../repositories/productRepository.js');
+const { default: cacheService } = await import('../../services/cacheService.js');
 
 describe('ProductService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // jest.config.js sets `resetMocks: true`, which wipes the implementation the
+    // mock factory supplied. Without restoring it here generateKey returns
+    // undefined and every cache-key assertion compares against `undefined`.
+    cacheService.generateKey.mockImplementation((prefix, params) => {
+      const parts = [prefix];
+      for (const key of Object.keys(params).sort()) {
+        const value = params[key];
+        if (value !== undefined && value !== null) parts.push(`${key}=${value}`);
+      }
+      return parts.join(':');
+    });
   });
 
   describe('getFeaturedProducts', () => {
@@ -60,9 +87,9 @@ describe('ProductService', () => {
 
       expect(result).toEqual(mockProducts);
       expect(cacheService.wrap).toHaveBeenCalledWith(
-        'products:featured:limit=6',
+        'products:limit=6:type=featured', // generateKey sorts its params
         expect.any(Function),
-        { ttl: 3600, strategy: 'swr' }
+        { ttl: 3600, strategy: 'swr', tags: ['products', 'products:featured'] }
       );
     });
   });
@@ -80,7 +107,7 @@ describe('ProductService', () => {
       expect(cacheService.wrap).toHaveBeenCalledWith(
         'products:limit=24:type=offers',
         expect.any(Function),
-        { ttl: 1800, strategy: 'swr' }
+        { ttl: 1800, strategy: 'swr', tags: ['products', 'products:offers'] }
       );
     });
   });
@@ -135,7 +162,7 @@ describe('ProductService', () => {
       expect(cacheService.wrap).toHaveBeenCalledWith(
         'brands:withCounts=true',
         expect.any(Function),
-        { ttl: 7200, strategy: 'basic' }
+        { ttl: 7200, strategy: 'basic', tags: ['brands'] }
       );
     });
   });

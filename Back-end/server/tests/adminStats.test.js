@@ -21,7 +21,7 @@ import { currentFiscalYear } from '../utils/storeTime.js';
 const admin = {
   name: 'Stats Admin',
   email: 'statsadmin@example.com',
-  password: 'password123',
+  password: 'SecurePass123!',
 };
 
 const shippingAddress = {

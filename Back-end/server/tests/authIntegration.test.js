@@ -14,7 +14,7 @@ describe('Auth Integration API', () => {
   const testUser = {
     name: 'Auth Test User',
     email: 'authtest@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
   };
 
   beforeAll(async () => {
@@ -116,7 +116,7 @@ describe('Auth Integration API', () => {
     it('should fail with non-existent email', async () => {
       const res = await request(app)
         .post('/api/v1/auth/login')
-        .send({ email: 'nonexistent@example.com', password: 'password123' });
+        .send({ email: 'nonexistent@example.com', password: 'SecurePass123!' });
       expect(res.statusCode).toBe(401);
     });
 

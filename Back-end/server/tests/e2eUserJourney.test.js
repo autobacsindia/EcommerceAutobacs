@@ -7,6 +7,7 @@ import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import Cart from '../models/Cart.js';
 import * as dbHandler from './db-handler.js';
+import { API, accessTokenFrom } from './helpers/api.js';
 import bcrypt from 'bcryptjs';
 
 // Increase timeout for this comprehensive test
@@ -21,19 +22,22 @@ describe('E2E User Journey Integration Test', () => {
   const testUser = {
     name: 'Journey User',
     email: 'journey@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer'
   };
 
   const adminUser = {
     name: 'Admin User',
     email: 'admin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin'
   };
 
   const testProduct = {
     name: 'Journey Product',
+    // `slug` is required with no auto-generation — omitting it throws a
+    // ValidationError whose message never mentions the fixture.
+    slug: 'journey-product',
     description: 'A product for testing the user journey',
     price: 1000,
     categories: ['65e6d6d6d6d6d6d6d6d6d6d6'], // Dummy ObjectId
@@ -77,134 +81,155 @@ describe('E2E User Journey Integration Test', () => {
   // Let's try to make each step verify its part, and subsequent steps rely on previous steps' outcome.
   // To make it robust, we can put the whole journey in one test function? No, hard to debug.
   
-  // I will use `beforeAll` to set up the initial state (clean DB), and then run steps.
-  // I will NOT use `afterEach` to clear DB. I will clear DB in `afterAll`.
+  // The steps below are ONE test, not six.
+  //
+  // They were six `it()` blocks sharing state through module-level variables, which
+  // could never work: tests/setup.js registers a GLOBAL `afterEach` that empties every
+  // collection, so the product created in Step 1 was deleted before Step 2 ran and
+  // every later step failed on missing data. The original author's note here said "I
+  // will NOT use afterEach to clear DB" — but a suite cannot opt out of the global hook.
+  //
+  // A purchase journey is inherently sequential (the cart from Step 4 is what Step 5
+  // checks out), so the honest shape is a single test with labelled phases. Each step
+  // keeps its own assertions, so a failure still names the phase that broke.
 
-  it('Step 1: Admin setup - Create Product', async () => {
-    // 1. Create Admin
-    const salt = await bcrypt.genSalt(10);
-    const hashedAdminPassword = await bcrypt.hash(adminUser.password, salt);
-    const admin = await User.create({
-      ...adminUser,
-      passwordHash: hashedAdminPassword
-    });
-    
-    // Login Admin
-    const loginRes = await request(app)
-      .post('/auth/login')
-      .send({
-        email: adminUser.email,
-        password: adminUser.password
+  it('completes the full journey: setup → register → search → cart → order', async () => {
+    // ── Step 1: Admin setup — create product ──
+    {
+      // 1. Create Admin
+      const salt = await bcrypt.genSalt(10);
+      const hashedAdminPassword = await bcrypt.hash(adminUser.password, salt);
+      const admin = await User.create({
+        ...adminUser,
+        passwordHash: hashedAdminPassword
       });
-    adminToken = loginRes.body.accessToken;
+    
+      // Login Admin
+      const loginRes = await request(app)
+        .post(`${API}/auth/login`)
+        .send({
+          email: adminUser.email,
+          password: adminUser.password
+        });
+      adminToken = accessTokenFrom(loginRes);
 
-    // 2. Create Product
-    const product = await Product.create({
-        ...testProduct
-    });
-    productId = product._id;
-    
-    expect(productId).toBeDefined();
-  });
-
-  it('Step 2: User Registration and Login', async () => {
-    // Register
-    const registerRes = await request(app)
-      .post('/auth/register')
-      .send(testUser);
-    
-    expect(registerRes.statusCode).toBe(201);
-    expect(registerRes.body.success).toBe(true);
-    
-    // Login
-    const loginRes = await request(app)
-      .post('/auth/login')
-      .send({
-        email: testUser.email,
-        password: testUser.password
+      // 2. Create Product
+      const product = await Product.create({
+          ...testProduct
       });
-      
-    expect(loginRes.statusCode).toBe(200);
-    userToken = loginRes.body.accessToken;
-    userId = loginRes.body.user.id;
-    expect(userToken).toBeDefined();
-  });
+      productId = product._id;
+    
+      expect(productId).toBeDefined();
 
-  it('Step 3: User searches for product', async () => {
-    const res = await request(app)
-      .get(`/products?search=${testProduct.name}`)
-      // .set('Authorization', `Bearer ${userToken}`) // Public route
-      
-    expect(res.statusCode).toBe(200);
-    expect(res.body.success).toBe(true);
-    // Verify product is in results
-    // The structure is { success: true, count: N, products: [...] }
-    const found = res.body.products.some(p => p._id === productId.toString());
-    expect(found).toBe(true);
-  });
-
-  it('Step 4: Add to Cart', async () => {
-    // Verify product exists before adding
-    const productCheck = await Product.findById(productId);
-    if (!productCheck) console.error('Product missing in DB before cart add');
-
-    const res = await request(app)
-      .post('/cart/add')
-      .set('Authorization', `Bearer ${userToken}`)
-      .send({
-        productId: productId,
-        quantity: 2
-      });
-      
-    if (res.statusCode !== 200) {
-        console.log('Step 4 Failed Response:', JSON.stringify(res.body, null, 2));
-        console.log('Using Product ID:', productId);
-        console.log('User Token:', userToken ? 'Present' : 'Missing');
     }
+    // ── Step 2: User Registration and Login ──
+    {
+      // Register
+      const registerRes = await request(app)
+        .post(`${API}/auth/register`)
+        .send(testUser);
+    
+      expect(registerRes.statusCode).toBe(201);
+      expect(registerRes.body.success).toBe(true);
+    
+      // Login
+      const loginRes = await request(app)
+        .post(`${API}/auth/login`)
+        .send({
+          email: testUser.email,
+          password: testUser.password
+        });
+      
+      expect(loginRes.statusCode).toBe(200);
+      userToken = accessTokenFrom(loginRes);
+      userId = loginRes.body.user.id;
+      expect(userToken).toBeDefined();
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.cart.items).toHaveLength(1);
-    expect(res.body.cart.items[0].product._id.toString()).toBe(productId.toString());
-    expect(res.body.cart.items[0].quantity).toBe(2);
-  });
+    }
+    // ── Step 3: User searches for product ──
+    {
+      const res = await request(app)
+        .get(`${API}/products?search=${testProduct.name}`)
+        // .set('Authorization', `Bearer ${userToken}`) // Public route
+      
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      // Verify product is in results
+      // The structure is { success: true, count: N, products: [...] }
+      const found = res.body.products.some(p => p._id === productId.toString());
+      expect(found).toBe(true);
 
-  it('Step 5: Place Order (Checkout)', async () => {
-    const orderData = {
-      items: [
-        {
-          product: productId,
-          quantity: 2,
-          price: testProduct.price
-        }
-      ],
-      shippingAddress: {
-        fullName: 'Test User',
-        phone: '9876543210',
-        addressLine1: '123 Test St',
-        city: 'Test City',
-        state: 'Test State',
-        postalCode: '123456',
-        country: 'Test Country'
-      },
-      paymentMethod: 'cod', // Cash on Delivery for simplicity
-      totalAmount: testProduct.price * 2
-    };
+    }
+    // ── Step 4: Add to Cart ──
+    {
+      // Verify product exists before adding
+      const productCheck = await Product.findById(productId);
+      if (!productCheck) console.error('Product missing in DB before cart add');
 
-    const res = await request(app)
-      .post('/orders')
-      .set('Authorization', `Bearer ${userToken}`)
-      .send(orderData);
+      const res = await request(app)
+        .post(`${API}/cart/add`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          productId: productId,
+          quantity: 2
+        });
+      
+      if (res.statusCode !== 200) {
+          console.log('Step 4 Failed Response:', JSON.stringify(res.body, null, 2));
+          console.log('Using Product ID:', productId);
+          console.log('User Token:', userToken ? 'Present' : 'Missing');
+      }
 
-    expect(res.statusCode).toBe(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.order).toBeDefined();
-    expect(res.body.order.status).toBe('pending');
-  });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.cart.items).toHaveLength(1);
+      expect(res.body.cart.items[0].product._id.toString()).toBe(productId.toString());
+      expect(res.body.cart.items[0].quantity).toBe(2);
 
-  it('Step 6: Stock status is unchanged by ordering', async () => {
-    // Stock is a coarse status — placing an order does not deduct quantity.
-    const product = await Product.findById(productId);
-    expect(product.stock).toBe(testProduct.stock);
+    }
+    // ── Step 5: Place Order (Checkout) ──
+    {
+      const orderData = {
+        items: [
+          {
+            product: productId,
+            quantity: 2,
+            price: testProduct.price
+          }
+        ],
+        shippingAddress: {
+          fullName: 'Test User',
+          phone: '9876543210',
+          addressLine1: '123 Test St',
+          city: 'Test City',
+          state: 'Test State',
+          postalCode: '123456',
+          country: 'Test Country'
+        },
+        paymentMethod: 'cod', // Cash on Delivery for simplicity
+        totalAmount: testProduct.price * 2
+      };
+
+      const res = await request(app)
+        .post(`${API}/orders`)
+        .set('Authorization', `Bearer ${userToken}`)
+        .send(orderData);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.order).toBeDefined();
+      // The order state machine opens at `awaiting_payment`, not `pending` —
+      // `pending` is the PAYMENT status, a separate axis. Kept as-is rather than
+      // "fixed" to match the test: paymentReconciliationService and the abandoned-
+      // order sweep both key off `status: 'awaiting_payment'`.
+      expect(res.body.order.status).toBe('awaiting_payment');
+
+    }
+    // ── Step 6: Stock status is unchanged by ordering ──
+    {
+      // Stock is a coarse status — placing an order does not deduct quantity.
+      const product = await Product.findById(productId);
+      expect(product.stock).toBe(testProduct.stock);
+    }
   });
 });

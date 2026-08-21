@@ -21,7 +21,7 @@ describe('Press coverage API', () => {
   const testAdmin = {
     name: 'Press Admin',
     email: 'pressadmin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin',
   };
 

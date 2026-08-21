@@ -26,7 +26,7 @@ describe('Categories API', () => {
   const testAdmin = {
     name: 'Category Admin',
     email: 'catadmin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin'
   };
 

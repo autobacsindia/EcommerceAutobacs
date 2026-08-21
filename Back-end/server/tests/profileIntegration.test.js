@@ -17,14 +17,14 @@ describe('Profile Integration API', () => {
   const testUser = {
     name: 'Profile Test User',
     email: 'profileuser@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer',
   };
 
   const secondUser = {
     name: 'Second User',
     email: 'second@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer',
   };
 

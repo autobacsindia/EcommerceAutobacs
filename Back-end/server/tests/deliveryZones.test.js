@@ -4,6 +4,7 @@ import { app, cronService, adaptiveThrottlingService } from '../app.js';
 import User from '../models/User.js';
 import DeliveryZone from '../models/DeliveryZone.js';
 import * as dbHandler from './db-handler.js';
+import { API, accessTokenFrom } from './helpers/api.js';
 import bcrypt from 'bcryptjs';
 
 describe('Delivery Zones API', () => {
@@ -14,7 +15,7 @@ describe('Delivery Zones API', () => {
   const testAdmin = {
     name: 'Zone Admin',
     email: 'zoneadmin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin'
   };
 
@@ -68,12 +69,12 @@ describe('Delivery Zones API', () => {
 
     // Login admin
     const loginRes = await request(app)
-      .post('/auth/login')
+      .post(`${API}/auth/login`)
       .send({
         email: testAdmin.email,
         password: testAdmin.password
       });
-    adminToken = loginRes.body.accessToken;
+    adminToken = accessTokenFrom(loginRes);
 
     // Create delivery zone
     const zone = await DeliveryZone.create(testZone);
@@ -84,7 +85,7 @@ describe('Delivery Zones API', () => {
     describe('GET /api/delivery-zones/pincode/:pinCode', () => {
       it('should return zone for valid pincode', async () => {
         const res = await request(app)
-          .get('/api/delivery-zones/pincode/123456')
+          .get(`${API}/delivery-zones/pincode/123456`)
           .expect(200);
 
         expect(res.body.success).toBe(true);
@@ -93,7 +94,7 @@ describe('Delivery Zones API', () => {
 
       it('should return 404 for invalid pincode', async () => {
         const res = await request(app)
-          .get('/api/delivery-zones/pincode/999999')
+          .get(`${API}/delivery-zones/pincode/999999`)
           .expect(404);
 
         expect(res.body.success).toBe(false);
@@ -103,7 +104,7 @@ describe('Delivery Zones API', () => {
     describe('POST /api/delivery-zones/check-serviceability', () => {
       it('should confirm serviceability for valid pincode', async () => {
         const res = await request(app)
-          .post('/api/delivery-zones/check-serviceability')
+          .post(`${API}/delivery-zones/check-serviceability`)
           .send({ pinCode: '123456' })
           .expect(200);
 
@@ -113,7 +114,7 @@ describe('Delivery Zones API', () => {
 
       it('should deny serviceability for invalid pincode', async () => {
         const res = await request(app)
-          .post('/api/delivery-zones/check-serviceability')
+          .post(`${API}/delivery-zones/check-serviceability`)
           .send({ pinCode: '999999' })
           .expect(200); // Usually returns 200 with serviceable: false
 
@@ -125,7 +126,7 @@ describe('Delivery Zones API', () => {
     describe('POST /api/delivery-zones/estimate', () => {
       it('should return delivery estimate', async () => {
         const res = await request(app)
-          .post('/api/delivery-zones/estimate')
+          .post(`${API}/delivery-zones/estimate`)
           .send({ pinCode: '123456' })
           .expect(200);
 
@@ -140,7 +141,7 @@ describe('Delivery Zones API', () => {
     describe('POST /api/delivery-zones/shipping-cost', () => {
       it('should calculate shipping cost', async () => {
         const res = await request(app)
-          .post('/api/delivery-zones/shipping-cost')
+          .post(`${API}/delivery-zones/shipping-cost`)
           .send({ 
             pinCode: '123456',
             weightKg: 2
@@ -158,7 +159,7 @@ describe('Delivery Zones API', () => {
     describe('GET /api/delivery-zones', () => {
       it('should list all zones as admin', async () => {
         const res = await request(app)
-          .get('/api/delivery-zones')
+          .get(`${API}/delivery-zones`)
           .set('Authorization', `Bearer ${adminToken}`)
           .expect(200);
 
@@ -184,7 +185,7 @@ describe('Delivery Zones API', () => {
         };
 
         const res = await request(app)
-          .post('/api/delivery-zones')
+          .post(`${API}/delivery-zones`)
           .set('Authorization', `Bearer ${adminToken}`)
           .send(newZone)
           .expect(201);
@@ -197,7 +198,7 @@ describe('Delivery Zones API', () => {
     describe('PUT /api/delivery-zones/:id', () => {
       it('should update zone as admin', async () => {
         const res = await request(app)
-          .put(`/api/delivery-zones/${zoneId}`)
+          .put(`${API}/delivery-zones/${zoneId}`)
           .set('Authorization', `Bearer ${adminToken}`)
           .send({
             shippingCost: {
@@ -215,7 +216,7 @@ describe('Delivery Zones API', () => {
     describe('DELETE /api/delivery-zones/:id', () => {
       it('should delete zone as admin', async () => {
         const res = await request(app)
-          .delete(`/api/delivery-zones/${zoneId}`)
+          .delete(`${API}/delivery-zones/${zoneId}`)
           .set('Authorization', `Bearer ${adminToken}`)
           .expect(200);
 
@@ -223,7 +224,7 @@ describe('Delivery Zones API', () => {
 
         // Verify deletion
         const checkRes = await request(app)
-          .get(`/api/delivery-zones/${zoneId}`)
+          .get(`${API}/delivery-zones/${zoneId}`)
           .set('Authorization', `Bearer ${adminToken}`)
           .expect(404);
       });

@@ -5,6 +5,7 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import User from '../models/User.js';
 import * as dbHandler from './db-handler.js';
+import { API, accessTokenFrom } from './helpers/api.js';
 import bcrypt from 'bcryptjs';
 import categoryMappingService from '../services/categoryMappingService.js';
 
@@ -18,14 +19,14 @@ describe('Products API', () => {
   const testAdmin = {
     name: 'Admin User',
     email: 'admin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin'
   };
 
   const testUser = {
     name: 'Regular User',
     email: 'user@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'customer'
   };
 
@@ -65,12 +66,12 @@ describe('Products API', () => {
 
     // Login admin
     const adminLoginRes = await request(app)
-      .post('/auth/login')
+      .post(`${API}/auth/login`)
       .send({
         email: testAdmin.email,
         password: testAdmin.password
       });
-    adminToken = adminLoginRes.body.accessToken;
+    adminToken = accessTokenFrom(adminLoginRes);
 
     // Create regular user
     const user = await User.create({
@@ -83,12 +84,12 @@ describe('Products API', () => {
 
     // Login user
     const userLoginRes = await request(app)
-      .post('/auth/login')
+      .post(`${API}/auth/login`)
       .send({
         email: testUser.email,
         password: testUser.password
       });
-    userToken = userLoginRes.body.accessToken;
+    userToken = accessTokenFrom(userLoginRes);
 
     // Create test product
     const product = await Product.create(testProduct);
@@ -98,7 +99,7 @@ describe('Products API', () => {
   describe('GET /products', () => {
     it('should get all products', async () => {
       const res = await request(app)
-        .get('/products')
+        .get(`${API}/products`)
         .expect(200);
       
       expect(res.body.success).toBe(true);
@@ -108,7 +109,7 @@ describe('Products API', () => {
 
     it('should filter products by search query', async () => {
       const res = await request(app)
-        .get('/products')
+        .get(`${API}/products`)
         .query({ search: 'Test' })
         .expect(200);
       
@@ -120,10 +121,14 @@ describe('Products API', () => {
 
   describe('GET /products/:id', () => {
     it('should get product by id', async () => {
+      // /products/:id 301-redirects to the canonical /products/slug/:slug URL
+      // (deliberate — preserves backlinks, avoids duplicate indexing), so the
+      // request has to follow one hop to reach the product.
       const res = await request(app)
-        .get(`/products/${productId}`)
+        .get(`${API}/products/${productId}`)
+        .redirects(1)
         .expect(200);
-      
+
       expect(res.body.success).toBe(true);
       expect(res.body.product._id).toBe(productId.toString());
     });
@@ -131,7 +136,7 @@ describe('Products API', () => {
     it('should return 404 for non-existent product', async () => {
       const fakeId = new mongoose.Types.ObjectId();
       const res = await request(app)
-        .get(`/products/${fakeId}`)
+        .get(`${API}/products/${fakeId}`)
         .expect(404);
       
       expect(res.body.success).toBe(false);
@@ -140,18 +145,24 @@ describe('Products API', () => {
 
   describe('POST /products', () => {
     it('should create product as admin', async () => {
+      const category = await Category.create({ name: 'New Cat', slug: 'new-cat' });
+
       const newProduct = {
         name: 'New Product',
+        slug: 'new-product', // required, no auto-generation
         description: 'New Description',
         price: 200,
         stock: 'in',
         images: [{ url: 'http://example.com/new.jpg', alt: 'New Image' }],
         brand: 'New Brand',
-        category: 'Test Category'
+        // `categories` (plural, ObjectId refs) is what the API validates — the old
+        // `category: 'Test Category'` string was silently ignored, so creation failed
+        // with "At least one category is required".
+        categories: [category._id],
       };
 
       const res = await request(app)
-        .post('/products')
+        .post(`${API}/products`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send(newProduct)
         .expect(201);
@@ -170,7 +181,7 @@ describe('Products API', () => {
       };
 
       await request(app)
-        .post('/products')
+        .post(`${API}/products`)
         .set('Authorization', `Bearer ${userToken}`)
         .send(newProduct)
         .expect(403);
@@ -180,7 +191,7 @@ describe('Products API', () => {
   describe('PUT /products/:id', () => {
     it('should update product as admin', async () => {
       const res = await request(app)
-        .put(`/products/${productId}`)
+        .put(`${API}/products/${productId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ price: 150 })
         .expect(200);
@@ -200,7 +211,7 @@ describe('Products API', () => {
       };
 
       const res = await request(app)
-        .put(`/products/${productId}`)
+        .put(`${API}/products/${productId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send(updateData)
         .expect(200);
@@ -220,18 +231,23 @@ describe('Products API', () => {
   describe('DELETE /products/:id', () => {
     it('should delete product as admin', async () => {
       const res = await request(app)
-        .delete(`/products/${productId}`)
+        .delete(`${API}/products/${productId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       
       expect(res.body.success).toBe(true);
-      
-      // Verify deletion (soft delete)
-      const getRes = await request(app)
-        .get(`/products/${productId}`)
-        .expect(200);
-      
-      expect(getRes.body.product.isActive).toBe(false);
+
+      // Soft delete, not a hard one — but the `deletedAt: null` query hook now
+      // excludes the row, so it can no longer be fetched through the API (that is
+      // the point). Assert the invariant against the document instead: the row
+      // still exists, flagged inactive and stamped with a deletion time.
+      const deleted = await Product.findOne({ _id: productId }).setOptions({ includeDeleted: true });
+      expect(deleted).not.toBeNull();
+      expect(deleted.isActive).toBe(false);
+      expect(deleted.deletedAt).toBeInstanceOf(Date);
+
+      // And it is genuinely gone from the public API.
+      await request(app).get(`${API}/products/${productId}`).redirects(1).expect(404);
     });
   });
 
@@ -286,7 +302,7 @@ describe('Products API', () => {
 
     it('should filter by category', async () => {
       const res = await request(app)
-        .get('/products')
+        .get(`${API}/products`)
         .query({ category: 'Electronics' })
         .expect(200);
       
@@ -299,7 +315,7 @@ describe('Products API', () => {
 
     it('should filter by brand', async () => {
       const res = await request(app)
-        .get('/products')
+        .get(`${API}/products`)
         .query({ brand: 'Samsung' })
         .expect(200);
       
@@ -311,7 +327,7 @@ describe('Products API', () => {
 
     it('should filter by price range', async () => {
       const res = await request(app)
-        .get('/products')
+        .get(`${API}/products`)
         .query({ minPrice: 100, maxPrice: 180 })
         .expect(200);
       
@@ -324,7 +340,7 @@ describe('Products API', () => {
 
     it('should sort by price ascending', async () => {
       const res = await request(app)
-        .get('/products')
+        .get(`${API}/products`)
         .query({ sortBy: 'price', order: 'asc' })
         .expect(200);
       
@@ -342,7 +358,7 @@ describe('Products API', () => {
       };
 
       await request(app)
-        .post('/products')
+        .post(`${API}/products`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send(invalidProduct)
         .expect(400);

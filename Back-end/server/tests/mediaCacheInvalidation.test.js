@@ -38,7 +38,7 @@ describe('Media article cache invalidation', () => {
   const admin = {
     name: 'Media Admin',
     email: 'mediacacheadmin@example.com',
-    password: 'password123',
+    password: 'SecurePass123!',
     role: 'admin',
   };
 

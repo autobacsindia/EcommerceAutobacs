@@ -235,14 +235,35 @@ export const revokeRefreshToken = async (user, refreshToken) => {
 };
 
 /**
- * Revoke all refresh tokens for a user (logout from all devices)
+ * Revoke all refresh tokens for a user (logout from all devices).
+ *
+ * Bumping `sessionVersion` is NOT optional here, and leaving it out was a real
+ * hole: clearing `refreshTokens` only stops the user OBTAINING new access tokens.
+ * Every access token already issued stays cryptographically valid until it
+ * expires — up to 30 minutes for a customer, 15 for an admin — so "log out all
+ * devices" did not actually log anything out of an active session.
+ *
+ * `sessionVersion` is the mechanism that closes that window: it is embedded in
+ * every JWT (see generateTokens) and compared against the database on every
+ * authenticated request (authMiddleware `protect` / `optionalAuth`), so a bump
+ * invalidates all outstanding tokens instantly. It was already being bumped on
+ * password change, admin session revoke, and in routes/users.js — logout-all was
+ * simply missed.
+ *
  * @param {Object} user - User mongoose document
  */
 export const revokeAllRefreshTokens = async (user) => {
   // Clear MongoDB
   user.refreshTokens = [];
   await user.save();
-  
+
+  // Atomic $inc rather than save() so concurrent logout-all calls cannot read the
+  // same version and write it back twice — the same pattern the password-change
+  // path uses. The in-memory document is updated too, so a caller that saves
+  // `user` again cannot silently roll the bump back.
+  await User.updateOne({ _id: user._id }, { $inc: { sessionVersion: 1 } });
+  user.sessionVersion = (user.sessionVersion || 0) + 1;
+
   // ALSO clear all Redis sessions for immediate distributed logout (NEW!)
   await sessionStore.revokeAllSessions(user._id.toString());
 };
