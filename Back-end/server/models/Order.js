@@ -409,6 +409,12 @@ OrderSchema.index({ user: 1, status: 1 });      // User orders filtered by statu
 OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by status, sort by date)
 
 // SINGLE-FIELD indexes for specific lookups
+// Declared retroactively from $indexStats (2026-08-21): these were hand-built in
+// production and existed in NO schema, so `audit-index-drift` reported them as EXTRA
+// forever and `--allow-drop` would have deleted indexes that real traffic depends on.
+// The ops counts below are measured over a 162h window, not assumed.
+OrderSchema.index({ status: 1 }); // 1,023 ops — status-only filters (admin counts)
+
 OrderSchema.index({ trackingNumber: 1 }); // Tracking lookup
 OrderSchema.index({ 'returnRequest.status': 1 }); // Return request queries
 OrderSchema.index({ 'refundDetails.status': 1 }); // Refund status queries

@@ -267,6 +267,14 @@ ProductSchema.index({ isActive: 1, isFeatured: 1 });            // Homepage feat
 ProductSchema.index({ isActive: 1, categories: 1 });            // Category page listing (active-first prefix avoids scanning inactive products)
 
 // SINGLE-FIELD indexes for specific queries
+// Declared retroactively from $indexStats (2026-08-21): these were hand-built in
+// production and existed in NO schema, so `audit-index-drift` reported them as EXTRA
+// forever and `--allow-drop` would have deleted indexes that real traffic depends on.
+// The ops counts below are measured over a 162h window, not assumed.
+ProductSchema.index({ isActive: 1, stock: 1 });        // 3,495 ops — availability filtering
+ProductSchema.index({ categories: 1, isActive: 1 });   // 1,876 ops — category listing (categories-first)
+ProductSchema.index({ price: 1 });                     //     9 ops — price sort on the catalogue
+
 ProductSchema.index({ averageRating: -1 }); // Top rated products
 ProductSchema.index({ stock: 1 }); // Stock management
 ProductSchema.index({ compatibleVehicles: 1 }); // Vehicle-specific products
