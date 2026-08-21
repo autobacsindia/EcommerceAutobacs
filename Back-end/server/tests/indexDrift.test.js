@@ -99,6 +99,38 @@ describe('schema index hygiene', () => {
     expect(opts.partialFilterExpression).toEqual({ sessionId: { $type: 'string' } });
   });
 
+  // `sparse` skips only ABSENT fields, but `default: null` guarantees the field is
+  // PRESENT holding null — so under `unique` every "no value" row collides. This
+  // shipped on SupportMessage.messageId (index never built, so the Postmark
+  // webhook-replay guard did not exist) and on InboundEmail.messageId/fingerprint
+  // (built only because the collection was empty; the SECOND header-less email
+  // would have thrown E11000 and stopped ticket ingestion). Static check, because
+  // both failure modes are silent until real data arrives.
+  it('never pairs a sparse UNIQUE index with a `default: null` field', () => {
+    // Scoped to `unique` deliberately. Without it, `sparse` on a `default: null`
+    // field is merely INEFFECTIVE — every row is indexed anyway, costing a little
+    // space but breaking nothing (11 such indexes exist today, all harmless).
+    // Add `unique` and it becomes a defect: every null collides.
+    const offenders = [];
+
+    for (const [name, model] of Object.entries(mongoose.models)) {
+      for (const [key, opts] of model.schema.indexes()) {
+        if (!opts?.sparse || !opts?.unique) continue;
+        for (const field of Object.keys(key)) {
+          if (model.schema.path(field)?.options?.default === null) {
+            offenders.push(
+              `${name}.${field} — sparse+unique index on a \`default: null\` field. ` +
+              `sparse skips only ABSENT fields, so every null row is indexed and ` +
+              `collides. Use partialFilterExpression: { ${field}: { $type: ... } }.`
+            );
+          }
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps RateLimitEvent lean — telemetry must not out-index the catalogue', () => {
     // This collection reached 13 indexes / 334 MB, 95% of the database's entire
     // index footprint, serving aggregations that never ran. Every index here is

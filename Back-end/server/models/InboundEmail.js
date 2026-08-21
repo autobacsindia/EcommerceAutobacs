@@ -81,11 +81,32 @@ const InboundEmailSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-/** Replay safety by RFC header. */
-InboundEmailSchema.index({ messageId: 1 }, { unique: true, sparse: true });
+/**
+ * Replay safety by RFC header, and by content hash when no header is present.
+ *
+ * PARTIAL on `$type: 'string'`, NOT `sparse`. Both fields are declared
+ * `default: null`, so a payload lacking one stores an explicit null rather than
+ * omitting the field — and `sparse` skips only ABSENT fields. Under `unique`
+ * that means the SECOND inbound email with no Message-ID would have been
+ * rejected with E11000 and ingestion would have stopped dead.
+ *
+ * These indexes built cleanly only because `inboundemails` is still empty; the
+ * identical declaration on `supportmessages` (34 rows, 17 explicit nulls) failed
+ * outright, which is how the defect was found before support went live.
+ *
+ * Query through `inboundEmailRepository`'s filter helpers — a `$type` partial
+ * filter is not inferable from a bare equality predicate, so the plain form
+ * COLLSCANs.
+ */
+InboundEmailSchema.index(
+  { messageId: 1 },
+  { unique: true, partialFilterExpression: { messageId: { $type: 'string' } } }
+);
 
-/** Replay safety for payloads with no Message-ID. */
-InboundEmailSchema.index({ fingerprint: 1 }, { unique: true, sparse: true });
+InboundEmailSchema.index(
+  { fingerprint: 1 },
+  { unique: true, partialFilterExpression: { fingerprint: { $type: 'string' } } }
+);
 
 /** Ops view: what is stuck or failed, newest first. */
 InboundEmailSchema.index({ status: 1, createdAt: -1 });

@@ -140,13 +140,27 @@ SupportMessageSchema.index({ ticket: 1, createdAt: 1 });
 
 /**
  * Threading lookup + inbound idempotency. Unique so a webhook retry that
- * replays the same RFC Message-ID cannot duplicate a message; sparse because
- * messages created in-app (web form, admin reply drafted in the UI) have none
- * until they are sent.
+ * replays the same RFC Message-ID cannot duplicate a message.
+ *
+ * PARTIAL on `$type: 'string'`, NOT `sparse` — and the difference is the whole
+ * bug. `messageId` is declared `default: null`, so every in-app message (web
+ * form, admin reply drafted in the UI) carries the field PRESENT with a null
+ * value. `sparse` skips only ABSENT fields, so all of those nulls were indexed
+ * and collided under `unique`. The index therefore never built: production had
+ * 17 such rows and `createIndex` failed with E11000 on `{ messageId: null }`.
+ *
+ * That meant the idempotency guard described above DID NOT EXIST — a replayed
+ * Postmark webhook could append the same customer reply twice.
+ *
+ * `$type: 'string'` indexes only rows that hold a real Message-ID, which is the
+ * intent `sparse` was reaching for. Query through
+ * `supportMessageRepository.messageIdFilter()`: the planner will not infer that
+ * an equality predicate satisfies a `$type` partial filter, so a bare
+ * `{ messageId }` silently COLLSCANs (same defect as repositories/cartRepository.js).
  */
 SupportMessageSchema.index(
   { messageId: 1 },
-  { unique: true, sparse: true }
+  { unique: true, partialFilterExpression: { messageId: { $type: 'string' } } }
 );
 
 /**
