@@ -29,9 +29,29 @@ export interface CampaignStatus {
   couponCode: string | null;
   eligible: boolean;
   reason: string | null;
+  /**
+   * Stable machine key for the same refusal ('unverified', 'exhausted', 'already_used',
+   * …). Branch on this, never on `reason` — that one is finished prose meant to be
+   * displayed, and matching against it breaks the moment the wording is improved.
+   */
+  reasonCode: string | null;
   tier: { tierId: string; label: string | null; percent: number; discountPaise: number } | null;
   tiers: CampaignTier[];
   maxDiscountPerOrder: number | null;
+  /**
+   * Present only on campaigns priced by the PER-PRODUCT ladder, where `tiers` above is
+   * empty. A summary, not the ladder: the internal tier codes group the catalogue for
+   * operators and mean nothing to a shopper, so only the rates a buyer will actually be
+   * charged are published.
+   */
+  productLadder: {
+    /** The best rate any product earns. */
+    maxPercent: number;
+    /** What everything outside a named tier earns. */
+    defaultPercent: number;
+    /** The reduced rate on goods already discounted — never the sale AND the full rate. */
+    onSaleMaxPercent: number;
+  } | null;
 }
 
 export function useCampaign(cartValue = 0, slug: string = ACTIVE_CAMPAIGN_SLUG) {

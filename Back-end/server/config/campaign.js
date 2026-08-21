@@ -77,7 +77,19 @@ export const CAMPAIGN_REASON = Object.freeze({
   NOT_STARTED: 'This offer has not started yet',
   ENDED: 'This offer has ended',
   EXHAUSTED: 'This offer has been fully claimed',
+  /**
+   * Two wordings for one refusal, because the right instruction depends on the audience.
+   *
+   * LIST: the offer was posted to a specific address, and the customer may well hold
+   * several — "which email?" is the actual question they need answered, and telling
+   * them just to sign in strands anyone who picks the wrong one.
+   *
+   * OPEN: nothing was sent to anybody. A public card reaches people who may have no
+   * account at all, so promising them an email they never received reads as a mistake
+   * on our side and sends them hunting through an inbox for nothing.
+   */
   LOGIN: 'Please log in with the email your offer was sent to',
+  LOGIN_OPEN: 'Please sign in to use this offer',
   NOT_INVITED: 'This offer is reserved for invited customers',
   UNVERIFIED: 'Please confirm your email address to use this offer',
   ALREADY_USED: 'You have already used this offer',

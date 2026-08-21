@@ -15,6 +15,7 @@ import Cart from '../models/Cart.js';
 import Product from '../models/Product.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
+import { userCartFilter } from '../repositories/cartRepository.js';
 
 const router = express.Router();
 
@@ -66,7 +67,7 @@ router.post('/sync', protect, async (req, res) => {
 
     // ── 3. Get or Create Cart ─────────────────────────────────────────────
     
-    let cart = await Cart.findOne({ user: userId });
+    let cart = await Cart.findOne(userCartFilter(userId));
     
     if (!cart) {
       cart = new Cart({ user: userId, items: [] });
@@ -218,7 +219,7 @@ router.post('/sync/batch', protect, async (req, res) => {
     }
 
     // Fetch final cart state
-    const cart = await Cart.findOne({ user: req.user._id })
+    const cart = await Cart.findOne(userCartFilter(req.user._id))
       .populate('items.product', 'name price images stock');
 
     res.json({

@@ -416,17 +416,21 @@ OrderSchema.index({ 'refundDetails.status': 1 }); // Refund status queries
 // orders that have actually been refunded carry a transactionId.
 OrderSchema.index({ 'refundDetails.transactionId': 1 }, { sparse: true });
 
-// CRITICAL: Guest order lookup (order confirmation page, guest order tracking)
-// Partial: Only index documents where sessionId holds a real value (guest orders).
-// `$type` rather than `$exists: true, $ne: null` — MongoDB rejects `$ne` in a
-// partialFilterExpression, so the previous form silently failed to build and this
-// index did not exist. Guest order lookups were doing a collection scan.
-OrderSchema.index(
-  { sessionId: 1 },
-  {
-    partialFilterExpression: { sessionId: { $type: 'string' } }
-  }
-);
+// CRITICAL: Guest order lookup (order confirmation page, guest order tracking).
+//
+// PLAIN, deliberately — NOT `partialFilterExpression: { sessionId: { $type: 'string' } }`.
+// That form was tried and is a trap: MongoDB's planner does not infer that an
+// equality predicate satisfies a `$type` partial filter, so `findOne({ sessionId })`
+// is not provably inside the filter, the index is discarded, and the query
+// COLLSCANs — the exact scan this index exists to prevent. The identical mistake on
+// `carts` cost a 59,638-document scan per cart read and triggered an Atlas
+// query-targeting alert (see repositories/cartRepository.js).
+//
+// Unlike the cart indexes this one is NOT unique, so the partial filter bought no
+// correctness — only a marginal index-size saving — while breaking every read.
+// A plain index is always planner-usable and is what production actually has.
+// Do not "fix the drift" by making this partial again.
+OrderSchema.index({ sessionId: 1 });
 
 // Pre-save middleware to add initial status to history
 OrderSchema.pre('save', function(next) {
