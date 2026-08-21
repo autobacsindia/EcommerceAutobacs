@@ -6,6 +6,7 @@ import pricingService, { effectivePrice, resolveVariant } from "../services/pric
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 import { serializeCart } from "../utils/cartSerializer.js";
+import { sessionCartFilter, userCartFilter } from "../repositories/cartRepository.js";
 
 // Resolve the buyable unit for an add/update: a simple product prices from itself;
 // a variable product prices from its SELECTED variant (which carries its own price
@@ -120,7 +121,7 @@ router.get("/", asyncHandler(async (req, res) => {
     let cart;
     if (isAuthenticated) {
       // Authenticated user - find by user ID
-      cart = await Cart.findOne({ user: req.user.id })
+      cart = await Cart.findOne(userCartFilter(req.user.id))
         .populate('items.product', 'name price images stock isActive productType variants wpId');
     } else {
       // Guest user - find by session ID
@@ -131,7 +132,7 @@ router.get("/", asyncHandler(async (req, res) => {
         });
       }
 
-      cart = await Cart.findOne({ sessionId })
+      cart = await Cart.findOne(sessionCartFilter(sessionId))
         .populate('items.product', 'name price images stock isActive productType variants wpId');
     }
 
@@ -248,7 +249,7 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
   let cart;
   if (isAuthenticated) {
     // Authenticated user - find by user ID
-    cart = await Cart.findOne({ user: req.user.id })
+    cart = await Cart.findOne(userCartFilter(req.user.id))
       .populate('items.product', 'name price images stock isActive productType variants wpId');
     
     if (!cart) {
@@ -263,7 +264,7 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
       });
     }
     
-    cart = await Cart.findOne({ sessionId })
+    cart = await Cart.findOne(sessionCartFilter(sessionId))
       .populate('items.product', 'name price images stock isActive productType variants wpId');
     
     if (!cart) {
@@ -303,7 +304,7 @@ router.post("/add", validateCartItem, asyncHandler(async (req, res) => {
     if (err?.code !== 11000 || !cart.isNew) throw err;
 
     const winner = await Cart.findOne(
-      isAuthenticated ? { user: req.user.id } : { sessionId }
+      isAuthenticated ? userCartFilter(req.user.id) : sessionCartFilter(sessionId)
     );
     if (!winner) throw err; // not the race we thought; surface it
 
@@ -353,10 +354,10 @@ router.post("/merge", asyncHandler(async (req, res) => {
   const sessionId = req.headers['x-session-id'] || req.sessionID;
 
   const guestCart = sessionId
-    ? await Cart.findOne({ sessionId })
+    ? await Cart.findOne(sessionCartFilter(sessionId))
     : null;
 
-  let userCart = await Cart.findOne({ user: req.user.id });
+  let userCart = await Cart.findOne(userCartFilter(req.user.id));
   if (!userCart) {
     userCart = new Cart({ user: req.user.id, items: [], isGuest: false });
   }
@@ -419,7 +420,7 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
   // Find cart by user ID or session ID
   let cart;
   if (isAuthenticated) {
-    cart = await Cart.findOne({ user: req.user.id });
+    cart = await Cart.findOne(userCartFilter(req.user.id));
   } else {
     if (!sessionId) {
       return res.status(400).json({
@@ -427,7 +428,7 @@ router.put("/update/:productId", validateCartUpdate, asyncHandler(async (req, re
         message: 'Session ID required for guest cart operations'
       });
     }
-    cart = await Cart.findOne({ sessionId });
+    cart = await Cart.findOne(sessionCartFilter(sessionId));
   }
 
   if (!cart) {
@@ -490,7 +491,7 @@ router.delete("/remove/:productId", validateCartProductIdParam, asyncHandler(asy
   // Find cart by user ID or session ID
   let cart;
   if (isAuthenticated) {
-    cart = await Cart.findOne({ user: req.user.id });
+    cart = await Cart.findOne(userCartFilter(req.user.id));
   } else {
     if (!sessionId) {
       return res.status(400).json({
@@ -498,7 +499,7 @@ router.delete("/remove/:productId", validateCartProductIdParam, asyncHandler(asy
         message: 'Session ID required for guest cart operations'
       });
     }
-    cart = await Cart.findOne({ sessionId });
+    cart = await Cart.findOne(sessionCartFilter(sessionId));
   }
 
   if (!cart) {
@@ -538,7 +539,7 @@ router.delete("/clear", asyncHandler(async (req, res) => {
   // Find cart by user ID or session ID
   let cart;
   if (isAuthenticated) {
-    cart = await Cart.findOne({ user: req.user.id });
+    cart = await Cart.findOne(userCartFilter(req.user.id));
   } else {
     if (!sessionId) {
       return res.status(400).json({
@@ -546,7 +547,7 @@ router.delete("/clear", asyncHandler(async (req, res) => {
         message: 'Session ID required for guest cart operations'
       });
     }
-    cart = await Cart.findOne({ sessionId });
+    cart = await Cart.findOne(sessionCartFilter(sessionId));
   }
 
   if (!cart) {
@@ -571,10 +572,10 @@ router.delete("/clear", asyncHandler(async (req, res) => {
  * Resolve the caller's cart (authenticated user or guest session), or null.
  */
 async function findCallerCart(req) {
-  if (req.user && req.user.id) return Cart.findOne({ user: req.user.id });
+  if (req.user && req.user.id) return Cart.findOne(userCartFilter(req.user.id));
   const sessionId = req.headers['x-session-id'] || req.sessionID;
   if (!sessionId) return null;
-  return Cart.findOne({ sessionId });
+  return Cart.findOne(sessionCartFilter(sessionId));
 }
 
 // @route   PUT /cart/coupon
@@ -638,13 +639,13 @@ router.get("/validate", asyncHandler(async (req, res) => {
 
   let cart;
   if (isAuthenticated) {
-    cart = await Cart.findOne({ user: req.user.id })
+    cart = await Cart.findOne(userCartFilter(req.user.id))
       .populate('items.product', 'name price stock isActive productType variants wpId');
   } else {
     if (!sessionId) {
       return res.status(400).json({ success: false, message: 'Session ID required for guest cart operations' });
     }
-    cart = await Cart.findOne({ sessionId })
+    cart = await Cart.findOne(sessionCartFilter(sessionId))
       .populate('items.product', 'name price stock isActive productType variants wpId');
   }
 
@@ -706,7 +707,7 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
   // Find cart
   let cart;
   if (isAuthenticated) {
-    cart = await Cart.findOne({ user: req.user.id })
+    cart = await Cart.findOne(userCartFilter(req.user.id))
       .populate('items.product', 'name price images stock isActive productType variants wpId');
   } else {
     if (!sessionId) {
@@ -716,7 +717,7 @@ router.post("/validate-checkout", asyncHandler(async (req, res) => {
       });
     }
     
-    cart = await Cart.findOne({ sessionId })
+    cart = await Cart.findOne(sessionCartFilter(sessionId))
       .populate('items.product', 'name price images stock isActive productType variants wpId');
   }
 

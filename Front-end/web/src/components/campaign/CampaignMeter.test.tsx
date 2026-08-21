@@ -16,12 +16,16 @@ const STATUS: CampaignStatus = {
   couponCode: 'FESTIVE2026',
   eligible: true,
   reason: null,
+  reasonCode: null,
   tier: { tierId: 'festive20', label: 'Festive 20', percent: 20, discountPaise: 1000000 },
   tiers: [
     { id: 'festive20', label: 'Festive 20', minCartValue: 0, percent: 20, maxDiscount: 20000 },
     { id: 'grand10', label: 'Grand 10', minCartValue: 100000, percent: 10, maxDiscount: null },
   ],
   maxDiscountPerOrder: 50000,
+  // This campaign is priced by the CART-VALUE ladder above, so it carries no
+  // per-product ladder — the two are mutually exclusive by configuration.
+  productLadder: null,
 };
 
 function renderMeter(props: { cartValue: number; appliedDiscount?: number }, status = STATUS) {

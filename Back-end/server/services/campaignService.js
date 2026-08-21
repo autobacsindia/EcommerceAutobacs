@@ -21,7 +21,9 @@ import userRepository from '../repositories/userRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import AppError from '../utils/AppError.js';
 import { resolveTier, validateTiers, assertMonotonic } from '../utils/campaignTiers.js';
-import { validateProductTiers } from '../utils/productTiers.js';
+import {
+  validateProductTiers, defaultTier, explicitTiers, ON_SALE_MAX_PERCENT,
+} from '../utils/productTiers.js';
 import {
   CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE, CAMPAIGN_REASON,
   CAMPAIGN_REQUIRES_CAP_FOR_EVERYONE,
@@ -42,6 +44,20 @@ function pick(body) {
       .filter(Boolean);
   }
   return out;
+}
+
+/**
+ * The stable machine key for a refusal message.
+ *
+ * LOGIN and LOGIN_OPEN are the SAME refusal in two wordings, so both collapse to
+ * 'login'. A UI branching on this cares that the visitor must sign in, not which
+ * sentence we chose to say it with — splitting them would silently break any consumer
+ * the day a campaign's audience changed.
+ */
+function toReasonCode(reason) {
+  const key = Object.keys(CAMPAIGN_REASON).find(k => CAMPAIGN_REASON[k] === reason);
+  if (!key) return 'unknown';
+  return key === 'LOGIN_OPEN' ? 'login' : key.toLowerCase();
 }
 
 class CampaignService {
@@ -72,10 +88,15 @@ class CampaignService {
     // Every audience needs a known user: "once per customer" cannot be enforced
     // against an anonymous cart. Checkout already requires login, so this only
     // affects the pre-login quote, which correctly shows no campaign discount.
-    if (!userId) return { reason: CAMPAIGN_REASON.LOGIN };
+    // Which "please sign in" the visitor gets depends on how they were reached — an
+    // invitation names an address, a public card names nobody. See CAMPAIGN_REASON.
+    const loginReason = campaign.audience === CAMPAIGN_AUDIENCE.LIST
+      ? CAMPAIGN_REASON.LOGIN
+      : CAMPAIGN_REASON.LOGIN_OPEN;
+    if (!userId) return { reason: loginReason };
 
     const user = await userRepository.getCampaignIdentity(userId, session);
-    if (!user) return { reason: CAMPAIGN_REASON.LOGIN };
+    if (!user) return { reason: loginReason };
 
     const email = String(user.email || '').toLowerCase().trim();
 
@@ -156,6 +177,16 @@ class CampaignService {
       couponCode: isEligible ? campaign.couponCode : null,
       eligible: isEligible,
       reason: result.reason || null,
+      /*
+        A STABLE key for the same refusal, derived from CAMPAIGN_REASON's own keys.
+
+        `reason` is a finished sentence meant to be shown as-is, which makes it the
+        wrong thing for a UI to branch on: the landing page needs different actions per
+        refusal (confirm your email / sign in / browse instead), and matching on prose
+        would break silently the first time someone improves the wording. Derived rather
+        than stored so the two can never drift.
+      */
+      reasonCode: result.reason ? toReasonCode(result.reason) : null,
       tier: result.tier || null,
       // The ladder is safe to publish: it is what the card advertises, and it lets
       // the cart meter show "add ₹X more to save ₹Y more" without a second call.
@@ -164,6 +195,30 @@ class CampaignService {
         percent: t.percent, maxDiscount: t.maxDiscount,
       })),
       maxDiscountPerOrder: campaign.maxDiscountPerOrder,
+      /*
+        A customer-facing SUMMARY of the per-product ladder, for campaigns priced that
+        way (`tiers` above is empty for those, so a landing page would otherwise have
+        nothing to advertise).
+
+        Deliberately a summary and not the ladder itself. The tier codes and labels —
+        'bronkz', 'sora', 'thanos' — are operator vocabulary for grouping the catalogue;
+        they mean nothing to a shopper and publishing them would put internal scheme
+        names on a public page. What a buyer needs is the three numbers that describe
+        what they will actually be charged: the best rate available, the rate everything
+        else earns, and the reduced rate on goods that are already discounted.
+      */
+      productLadder: campaign.productTiers?.length
+        ? {
+            maxPercent: Math.max(
+              ...explicitTiers(campaign.productTiers).map(t => Number(t.percent) || 0),
+              Number(defaultTier(campaign.productTiers)?.percent) || 0,
+            ),
+            defaultPercent: Number(defaultTier(campaign.productTiers)?.percent) || 0,
+            // Quoted from the same constant pricingService caps with, so the page and
+            // the charge can never disagree about the on-sale rate.
+            onSaleMaxPercent: ON_SALE_MAX_PERCENT,
+          }
+        : null,
     };
   }
 
@@ -247,22 +302,38 @@ class CampaignService {
     if (data.productTiers !== undefined) {
       const errors = validateProductTiers(merged.productTiers);
       if (errors.length) throw new AppError(`Invalid product-tier ladder: ${errors.join(' ')}`, 400);
-
-      // The two ladders price the SAME goods on different axes, so running both stacks
-      // two discounts on one cart. That is a margin decision, never something to arrive
-      // at by leaving a field populated from an earlier configuration.
-      const hasCartTiers = Array.isArray(merged.tiers) && merged.tiers.length > 0;
-      const hasProductTiers = Array.isArray(merged.productTiers) && merged.productTiers.length > 0;
-      if (hasCartTiers && hasProductTiers) {
-        throw new AppError(
-          'A campaign uses either cart-value tiers or product tiers, not both — together they ' +
-          'would apply two discounts to the same goods. Clear one before saving the other.',
-          400
-        );
-      }
     }
 
-    if (merged.tiers !== undefined || !existing) {
+    /*
+      Exactly one ladder. The two price the SAME goods on different axes, so running
+      both stacks two discounts on one cart — a margin decision, never something to
+      arrive at by leaving a field populated from an earlier configuration.
+
+      Evaluated on the MERGED config and on every save, not only when `productTiers` is
+      the field being written: adding cart-value tiers to a campaign that already has a
+      product ladder never touches `data.productTiers`, so gating this check on that
+      field let exactly that combination through.
+    */
+    const hasCartTiers = Array.isArray(merged.tiers) && merged.tiers.length > 0;
+    const hasProductTiers = Array.isArray(merged.productTiers) && merged.productTiers.length > 0;
+    if (hasCartTiers && hasProductTiers) {
+      throw new AppError(
+        'A campaign uses either cart-value tiers or product tiers, not both — together they ' +
+        'would apply two discounts to the same goods. Clear one before saving the other.',
+        400
+      );
+    }
+
+    /*
+      The CART-VALUE ladder — skipped entirely when the product ladder is in use.
+
+      `tiers: []` is the correct and REQUIRED state for a product-tier campaign, but
+      validateTiers demands at least one rung. Running it regardless made such a campaign
+      impossible to configure: clearing the cart tiers to satisfy the either/or rule above
+      failed here, and keeping them failed there. The swap has to happen in one update,
+      so both rules have to agree about it.
+    */
+    if (!hasProductTiers && (merged.tiers !== undefined || !existing)) {
       const errors = validateTiers(merged);
       if (errors.length) throw new AppError(`Invalid tier ladder: ${errors.join(' ')}`, 400);
 
@@ -348,8 +419,24 @@ class CampaignService {
         400
       );
     }
-    if (!campaign.tiers?.length) {
-      throw new AppError('A campaign needs at least one discount tier before it can run', 400);
+    /*
+      A campaign needs A ladder — either one, never both.
+
+      assertValidConfig refuses cart-value `tiers` and `productTiers` together, because
+      they price the same goods on different axes and would stack two discounts. So
+      requiring `tiers` here made the per-product ladder unpublishable: clearing the
+      cart-value tiers to satisfy that rule tripped this check, and populating them to
+      satisfy this check tripped that rule. There was no configuration that passed both,
+      and every existing campaign test uses the cart-value ladder, so nothing caught it.
+    */
+    const hasCartTiers = Array.isArray(campaign.tiers) && campaign.tiers.length > 0;
+    const hasProductTiers = Array.isArray(campaign.productTiers) && campaign.productTiers.length > 0;
+    if (!hasCartTiers && !hasProductTiers) {
+      throw new AppError(
+        'A campaign needs a discount ladder before it can run — either cart-value tiers ' +
+        'or a product-tier ladder.',
+        400
+      );
     }
     if (!campaign.endsAt) {
       throw new AppError('A campaign needs an end date before it can run', 400);
