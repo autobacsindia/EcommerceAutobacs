@@ -257,15 +257,25 @@ export const revokeAllRefreshTokens = async (user) => {
   user.refreshTokens = [];
   await user.save();
 
+  // ALSO clear all Redis sessions for immediate distributed logout (NEW!)
+  await sessionStore.revokeAllSessions(user._id.toString());
+
+  // Bump LAST, deliberately.
+  //
+  // This is the third of three revocations and the only one that can fail on
+  // something other than the database being down (a caller may hand us a
+  // user-shaped object whose `_id` is not a real ObjectId — the refresh-token
+  // reuse path does exactly that). Running it before the other two meant a cast
+  // error aborted the function BEFORE Redis sessions were cleared, turning a
+  // security response into a no-op and surfacing as a confusing cast error
+  // instead of REFRESH_TOKEN_REUSE_DETECTED.
+  //
   // Atomic $inc rather than save() so concurrent logout-all calls cannot read the
   // same version and write it back twice — the same pattern the password-change
   // path uses. The in-memory document is updated too, so a caller that saves
   // `user` again cannot silently roll the bump back.
   await User.updateOne({ _id: user._id }, { $inc: { sessionVersion: 1 } });
   user.sessionVersion = (user.sessionVersion || 0) + 1;
-
-  // ALSO clear all Redis sessions for immediate distributed logout (NEW!)
-  await sessionStore.revokeAllSessions(user._id.toString());
 };
 
 /**

@@ -13,11 +13,17 @@
  */
 import { jest } from '@jest/globals';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import sessionStore from '../services/sessionStore.js';
 import { rotateRefreshToken, generateRefreshToken } from '../utils/sessionManager.js';
 
 const makeUser = () => ({
-  _id: 'user-abc-123',
+  // A REAL ObjectId, not a string. revokeAllRefreshTokens bumps `sessionVersion`
+  // via User.updateOne({ _id }), which casts — a string id throws
+  // "Cast to ObjectId failed" and masks the REFRESH_TOKEN_REUSE_DETECTED error
+  // this suite is asserting. The update matches zero rows here, which is a
+  // harmless no-op; the branch logic under test is unaffected.
+  _id: new mongoose.Types.ObjectId(),
   email: 'racer@example.com',
   refreshTokens: [],           // token intentionally absent → simulates "already rotated away"
   save: jest.fn().mockResolvedValue(undefined),

@@ -104,6 +104,27 @@ async function main() {
   console.log(`   cap             ${before.maxRedemptions ?? 'none'}  (redeemed ${before.redeemedCount})`);
   console.log(`   ends            ${before.endsAt ? formatDateTimeIST(before.endsAt) : 'not set'}`);
 
+  /*
+    Will `--live` actually succeed?
+
+    Asked here, on every run, because assertPublishable checks things this script never
+    touches — that the managed coupon exists, is linked back to THIS campaign, is hidden,
+    and carries a per-user limit of 1. Discovering one of those is wrong after spending
+    an afternoon assigning products to tiers is a miserable way to find out, so the same
+    gate is run read-only up front. It is the real function, not a copy of its rules:
+    a reimplementation here would drift from the one that actually decides.
+  */
+  try {
+    await campaignService.assertPublishable({
+      ...(campaign.toObject ? campaign.toObject() : campaign),
+      status: CAMPAIGN_STATUS.LIVE,
+    });
+    console.log('\n✓ Go-live preflight passes — --live would succeed.');
+  } catch (err) {
+    console.log(`\n⚠  Go-live preflight FAILS: ${err.message}`);
+    console.log('   Fix this before assigning tiers, or --live will refuse.');
+  }
+
   if (REVERT) {
     // The way back. Restoring the cart-value ladder is NOT this script's job — that
     // configuration is whatever it was before, and guessing at it would be worse than
@@ -165,6 +186,26 @@ async function main() {
   console.log(`   cap             ${before.maxRedemptions ?? 'none'} → ${cap}`);
   console.log(`   ends            ${before.endsAt ? formatDateTimeIST(before.endsAt) : 'not set'} → ${formatDateTimeIST(endsAt)}`);
   console.log(`   status          ${before.status}  (unchanged — use --live when ready)`);
+
+  /*
+    Print the cart-value ladder about to be cleared, in full.
+
+    `--revert-to-list` restores the audience and the off switch, but it cannot restore
+    this: the tiers are overwritten in place and nothing else holds a copy. Rather than
+    let an operator discover that during a rollback, the configuration they are
+    destroying is printed here, at the moment they can still copy it. It is three lines
+    of output against an unrecoverable loss.
+  */
+  if (before.cartTiers > 0) {
+    console.log('\n⚠  The cart-value ladder below will be CLEARED and is NOT recoverable');
+    console.log('   by --revert-to-list. Copy it if this campaign might ever need it back:');
+    for (const t of campaign.tiers) {
+      console.log(`     { id: '${t.id}', label: ${t.label ? `'${t.label}'` : 'null'}, ` +
+                  `minCartValue: ${t.minCartValue}, percent: ${t.percent}, ` +
+                  `maxDiscount: ${t.maxDiscount ?? 'null'} }`);
+    }
+    console.log(`     resolution: '${campaign.resolution}', maxDiscountPerOrder: ${campaign.maxDiscountPerOrder ?? 'null'}`);
+  }
 
   if (before.redeemedCount > cap) {
     console.log(`\n⚠  ${before.redeemedCount} redemptions have already been taken, which is ` +
