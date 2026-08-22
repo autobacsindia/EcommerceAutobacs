@@ -121,6 +121,8 @@ export const API_ENDPOINTS = {
   CAMPAIGNS: '/campaigns',                                              // admin list + create
   MAGIC_LINK_REQUEST: '/auth/magic-link/request',                       // emails a set-password link
   CAMPAIGN_ME: (slug: string) => `/campaigns/${slug}/me`,               // public eligibility
+  // Identity-free, so unlike CAMPAIGN_ME this one is safe to cache and share.
+  CAMPAIGN_PRODUCT_RATES: (slug: string) => `/campaigns/${slug}/product-rates`,
   CAMPAIGN_CHECK_EMAIL: (slug: string) => `/campaigns/${slug}/check-email`,
   CAMPAIGN_ADMIN: (slug: string) => `/campaigns/${slug}/admin`,
   CAMPAIGN_REPORT: (slug: string) => `/campaigns/${slug}/report`,

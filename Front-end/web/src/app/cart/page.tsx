@@ -1,5 +1,7 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
+
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'lucide-react';
@@ -67,10 +69,21 @@ function CartPageContent() {
     if (!cart?.items?.length) return;
 
     autoAppliedRef.current = true;
-    applyCoupon(campaignStatus.couponCode).catch(() => {
-      // Silent: the reward is a bonus, not something the customer asked for. A failure
-      // here must never surface as an error they did not cause — the meter simply
-      // won't appear, and the code is still printed on the card as a fallback.
+    applyCoupon(campaignStatus.couponCode).catch((err) => {
+      /*
+        Still not an error toast — the reward is a bonus the customer did not ask for,
+        and shouting at them about a failure they did not cause helps nobody.
+
+        But it is no longer swallowed either. This one call was the ONLY place the
+        campaign became visible, so a silent failure here was indistinguishable from the
+        campaign being switched off — which is exactly how a correctly configured live
+        campaign came to look broken. Reported to Sentry so it is a signal rather than a
+        mystery, and the ref is reset so a re-render can try again.
+      */
+      Sentry.captureException(err, {
+        tags: { feature: 'campaign', step: 'cart-auto-apply' },
+        extra: { code: campaignStatus.couponCode, slug: campaignStatus.slug },
+      });
       autoAppliedRef.current = false;
     });
   }, [campaignStatus?.eligible, campaignStatus?.couponCode, cart?.couponCode, cart?.items?.length, applyCoupon]);

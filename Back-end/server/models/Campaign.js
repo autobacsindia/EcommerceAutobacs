@@ -72,8 +72,17 @@ const CampaignSchema = new mongoose.Schema({
 
   // ── Audience ────────────────────────────────────────────────────────────────
   audience: { type: String, enum: CAMPAIGN_AUDIENCES, default: CAMPAIGN_AUDIENCE.LIST },
-  // Emails that may redeem while status is 'testing'. Lowercased on write.
-  testerEmails: [{ type: String, lowercase: true, trim: true }],
+  /*
+    `testerEmails` lived here, alongside a `testing` status that reached only those
+    addresses. Both are gone — the test ENVIRONMENT already provides that separation
+    with its own database and its own Razorpay keys, and carrying a second, campaign-
+    shaped notion of "testing" only produced a state an operator could switch on and
+    correctly see nothing happen.
+
+    Deliberately NOT declared as `strict: false` leftovers: the field is simply dropped
+    from the schema, so Mongoose stops reading and writing it. Any stray arrays left on
+    existing documents are inert and need no migration.
+  */
   // Redemption requires a confirmed email. See config/campaign.js — login does not
   // gate on isVerified, so this is what forces proof of mailbox control.
   requireVerifiedEmail: { type: Boolean, default: CAMPAIGN_REQUIRE_VERIFIED_EMAIL_DEFAULT },

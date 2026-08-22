@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Power, PlayCircle, FlaskConical, FileEdit, Users, IndianRupee } from 'lucide-react';
+import { Power, PlayCircle, FileEdit, Users, IndianRupee } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
@@ -15,7 +15,14 @@ import { campaignKeys } from '@/hooks/queries/keys';
  * to take in a hurry, and it must never be more than one click away.
  */
 
-type CampaignStatus = 'draft' | 'testing' | 'live' | 'off';
+/*
+  `testing` was a fourth state that ran the campaign on the real site for a list of named
+  tester emails. Removed — the test ENVIRONMENT already gives that separation, with its
+  own database and Razorpay keys, so 'live' means live for whichever environment you are
+  looking at. Keeping both produced a switch an operator could turn on and correctly see
+  nothing happen.
+*/
+type CampaignStatus = 'draft' | 'live' | 'off';
 
 interface CampaignRow {
   _id: string;
@@ -33,13 +40,12 @@ interface CampaignRow {
 
 const STATUS_STYLES: Record<CampaignStatus, string> = {
   live: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30',
-  testing: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
   draft: 'bg-zinc-500/15 text-zinc-400 ring-zinc-500/30',
   off: 'bg-red-500/15 text-red-400 ring-red-500/30',
 };
 
 const STATUS_ICON: Record<CampaignStatus, typeof Power> = {
-  live: PlayCircle, testing: FlaskConical, draft: FileEdit, off: Power,
+  live: PlayCircle, draft: FileEdit, off: Power,
 };
 
 const inr = (n: number) => `₹${(n || 0).toLocaleString('en-IN')}`;
@@ -115,7 +121,7 @@ export default function AdminCampaignsPage() {
 
                   {/* One-click stop. Deliberately not hidden behind the editor. */}
                   <div className="flex items-center gap-2">
-                    {(['live', 'testing', 'off'] as const).map((s) => (
+                    {(['live', 'off'] as const).map((s) => (
                       <button
                         key={s}
                         onClick={() => setStatus.mutate({ id: c._id, status: s })}
@@ -126,7 +132,7 @@ export default function AdminCampaignsPage() {
                             : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                         }`}
                       >
-                        {s === 'off' ? 'Turn off' : s === 'live' ? 'Go live' : 'Testing'}
+                        {s === 'off' ? 'Turn off' : 'Go live'}
                       </button>
                     ))}
                   </div>

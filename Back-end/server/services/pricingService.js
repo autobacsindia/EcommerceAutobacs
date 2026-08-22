@@ -29,6 +29,7 @@ import AppError from '../utils/AppError.js';
 import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
+import { effectivePrice } from '../utils/productPrice.js';
 import { CAMPAIGN_REASON } from '../config/campaign.js';
 import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
 
@@ -51,27 +52,15 @@ class CouponRejected extends Error {
   constructor(reason) { super(reason); this.reason = reason; }
 }
 
-/**
- * The price a buyer is actually charged for a product right now.
- *
- * Authoritative sale-expiry guard: if a product has a time-boxed sale
- * (saleEndsAt) that has already passed, the sale price (`price`) is ignored and
- * the effective price reverts UP to `originalPrice`. This holds even in the
- * seconds before the cron sweep normalizes the stored fields, so a sale can
- * never be charged past its end instant. Pre-expiry, or with no sale window,
- * the stored `price` is used unchanged.
- */
-export function effectivePrice(product, now = new Date()) {
-  if (
-    product?.saleEndsAt &&
-    now >= new Date(product.saleEndsAt) &&
-    typeof product.originalPrice === 'number' &&
-    product.originalPrice > product.price
-  ) {
-    return product.originalPrice;
-  }
-  return product.price;
-}
+/*
+  effectivePrice now lives in utils/productPrice.js and is re-exported here.
+
+  campaignService needs it to advertise a product's campaign rate on the product page,
+  and this module already imports campaignService — so keeping the definition here would
+  have made a cycle. Re-exported so every existing import of it from this module keeps
+  working untouched.
+*/
+export { effectivePrice };
 
 /**
  * Resolve a variable product's selected variant. The single implementation of

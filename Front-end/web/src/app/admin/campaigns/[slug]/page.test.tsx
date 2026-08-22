@@ -30,7 +30,7 @@ import apiClient from '@/lib/api';
 
 const BASE = {
   _id: 'c1', slug: 'c', name: 'Festive', status: 'off',
-  requireVerifiedEmail: true, allowKarmaStacking: false, testerEmails: [],
+  requireVerifiedEmail: true, allowKarmaStacking: false,
   startsAt: null, endsAt: null, resolution: 'best',
   maxDiscountPerOrder: 50000, maxRedemptions: 200,
   redeemedCount: 0, discountGivenRupees: 0, couponCode: 'X', landingPath: '/festive',

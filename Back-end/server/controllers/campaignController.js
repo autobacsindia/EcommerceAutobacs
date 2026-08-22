@@ -36,6 +36,26 @@ export const getMyCampaignStatus = asyncHandler(async (req, res) => {
   res.json({ success: true, campaign: status });
 });
 
+// @desc    What rate these products earn under the running campaign, for badges on the
+//          product page and listings.
+// @route   GET /campaigns/:slug/product-rates?ids=a,b,c
+// @access  Public
+//
+// Deliberately identity-free and therefore cacheable, unlike /me: a product's rate is a
+// property of the catalogue and the ladder, not of who is asking. The per-user question
+// — may THIS shopper still claim it — is answered by /me, which stays private and
+// no-store. Answering `rates: {}` rather than 404 when nothing is running lets the
+// client render nothing without branching on an error.
+export const getCampaignProductRates = asyncHandler(async (req, res) => {
+  const ids = String(req.query.ids || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const result = await campaignService.productRates(req.params.slug, ids);
+  res.json({ success: true, campaign: result });
+});
+
 // @desc    "Am I on the list, and what do I do next?" — the landing page's first step.
 // @route   POST /campaigns/:slug/check-email
 // @access  Public (strictly rate-limited; see campaignService.checkEmail on the trade-off)

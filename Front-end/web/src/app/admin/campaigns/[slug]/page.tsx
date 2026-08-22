@@ -42,7 +42,7 @@ import ProductTierPanel from '@/components/admin/campaigns/ProductTierPanel';
  * a public offer invites exactly the wrong conclusion about who can redeem.
  */
 
-type CampaignStatus = 'draft' | 'testing' | 'live' | 'off';
+type CampaignStatus = 'draft' | 'live' | 'off';
 
 /** A rung of the PER-PRODUCT ladder. `code` is an identifier, not a label. */
 interface ProductTier {
@@ -71,7 +71,6 @@ interface Campaign {
   audience: 'list' | 'everyone';
   requireVerifiedEmail: boolean;
   allowKarmaStacking: boolean;
-  testerEmails: string[];
   startsAt: string | null;
   endsAt: string | null;
   tiers: Tier[];
@@ -328,12 +327,6 @@ export default function AdminCampaignEditor() {
               <option value="list">Invited customers only</option>
               <option value="everyone">Everyone</option>
             </select>
-          </div>
-          <div>
-            <label className={label}>Tester emails (comma separated)</label>
-            <input className={field} value={(value('testerEmails') ?? []).join(', ')}
-              onChange={(e) => set({ testerEmails: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
-            <p className="mt-1 text-xs text-zinc-600">In Testing mode, only these addresses get the offer.</p>
           </div>
         </div>
 
