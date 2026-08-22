@@ -66,7 +66,7 @@ function CartPageContent() {
     })),
     [cart?.items]
   );
-  const { quote, error: quoteError } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
+  const { quote, loading: quoteLoading, error: quoteError } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
 
   // ── Campaign reward ────────────────────────────────────────────────────────
   // An invited customer never types the code — the card tells them the reward is
@@ -74,6 +74,13 @@ function CartPageContent() {
   // Applied once, only when no other coupon is set (never overwrite a code the
   // customer chose themselves), and the server re-validates it at checkout anyway.
   const cartSubtotal = quote?.subtotal ?? cart?.total ?? 0;
+
+  /*
+    True while the first real price is still coming, INCLUDING the moment after the
+    campaign coupon has been auto-applied but before the re-quote lands. Both windows
+    show a total that is about to change, and both are better spent saying so.
+  */
+  const awaitingPricing = quoteLoading || (!quote && (cart?.items?.length ?? 0) > 0);
   const { data: campaignStatus } = useCampaign(Math.round(cartSubtotal));
   const autoAppliedRef = useRef(false);
 
@@ -457,7 +464,7 @@ function CartPageContent() {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Subtotal</span>
-                  <span>{formatPrice(quote ? quote.subtotal : cart.total || 0)}</span>
+                  <span>{quote ? formatPrice(quote.subtotal) : '—'}</span>
                 </div>
                 {quote && quote.couponDiscount > 0 && (
                   <div className="flex justify-between text-gold font-display text-sm">
@@ -483,7 +490,18 @@ function CartPageContent() {
                 <div className="border-t border-hairline pt-3 flex justify-between">
                   <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
                   <span className="text-xl font-display font-bold text-gold">
-                    {formatPrice(quote ? quote.totalAmount : cart.total || 0)}
+                    {/*
+                      Never the client's own total while the server's is in flight.
+
+                      The fallback used to be `cart.total`, which is the UNDISCOUNTED sum —
+                      so the page opened on the full price and dropped a second or two
+                      later when the offer applied. A shopper reads that flicker as the
+                      price changing under them, which on a money path is worse than a
+                      brief "working it out".
+                    */}
+                    {quote
+                      ? formatPrice(quote.totalAmount)
+                      : awaitingPricing ? 'Working it out…' : '—'}
                   </span>
                 </div>
               </div>
