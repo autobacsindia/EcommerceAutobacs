@@ -46,8 +46,21 @@ export default function CampaignMeter({
 
   // Nothing to celebrate yet — the cart has not reached any tier.
   if (saving <= 0) return null;
-  const next = nextTier(campaign, cartValue);
   const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+
+  /*
+    A PER-PRODUCT campaign has no ladder to climb: the rate follows the product, so
+    there is no "add ₹X more" and no rung to be at the top of. Everything below that
+    describes progress is therefore suppressed for it — `nextTier` reads `tiers`, which
+    is empty under this shape, and the cart-ladder branch would otherwise congratulate
+    the shopper on having "unlocked the best tier available" when no tier exists and
+    nothing they add could change their rate.
+
+    What IS worth saying is how the rate was decided, so a smaller-than-expected saving
+    reads as the published rule rather than as a short-change.
+  */
+  const ladder = campaign.productLadder;
+  const next = ladder ? null : nextTier(campaign, cartValue);
 
   // Progress toward the next rung. With no next rung the customer is already at the
   // top of the ladder, so the bar reads full rather than stalling at some arbitrary point.
@@ -70,14 +83,26 @@ export default function CampaignMeter({
         </div>
       </div>
 
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      {/* A bar implies a journey with a far end. There isn't one under a per-product
+          ladder, so it would be decoration pretending to be information. */}
+      {!ladder && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
 
-      {next ? (
+      {ladder ? (
+        <p className="mt-2.5 text-xs text-zinc-400">
+          Up to <span className="font-semibold text-white">{ladder.maxPercent}%</span> off selected
+          products, <span className="font-semibold text-white">{ladder.defaultPercent}%</span> on
+          everything else, and{' '}
+          <span className="font-semibold text-white">{ladder.onSaleMaxPercent}%</span> on items
+          already discounted. Applied for you — no code to enter.
+        </p>
+      ) : next ? (
         <p className="mt-2.5 flex items-center gap-1.5 text-xs text-zinc-400">
           <TrendingUp size={12} className="text-gold" />
           Add <span className="font-semibold text-white">{inr(next.addRupees)}</span> more to save

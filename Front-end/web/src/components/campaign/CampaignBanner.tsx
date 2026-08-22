@@ -31,9 +31,21 @@ export default function CampaignBanner() {
   // when the campaign is eligible) but keeps the type narrowed for the tier maths.
   if (!claimsSlot || dismissed || !campaign) return null;
 
-  const topPercent = campaign.tiers?.length
-    ? Math.max(...campaign.tiers.map((t) => t.percent))
-    : null;
+  /*
+    Two campaign shapes, two honest sentences.
+
+    Under the CART-VALUE ladder a bigger basket really does earn a better rate, so
+    "add items and your saving grows" is a true promise. Under the PER-PRODUCT ladder
+    it is not — the rate follows the product, and a shopper who adds ₹20,000 of default
+    -tier goods expecting the headline rate has been misled by the banner rather than
+    by anything the server did. Money copy is held to the same standard as money maths.
+  */
+  const ladder = campaign.productLadder;
+  const topPercent = ladder
+    ? ladder.maxPercent
+    : campaign.tiers?.length
+      ? Math.max(...campaign.tiers.map((t) => t.percent))
+      : null;
 
   return (
     <div className="relative bg-gradient-to-r from-gold/20 via-gold/10 to-transparent border-b border-gold/25">
@@ -42,7 +54,10 @@ export default function CampaignBanner() {
         <p className="flex-1 text-ink/90">
           <span className="font-semibold text-gold">Your festive reward is active.</span>{' '}
           <span className="hidden sm:inline">
-            {topPercent ? `Up to ${topPercent}% off — ` : ''}add items and your saving grows.
+            {topPercent ? `Up to ${topPercent}% off — ` : ''}
+            {ladder
+              ? 'applied automatically at checkout.'
+              : 'add items and your saving grows.'}
           </span>
         </p>
         <Link href="/products" className="shrink-0 font-medium text-gold underline-offset-2 hover:underline">

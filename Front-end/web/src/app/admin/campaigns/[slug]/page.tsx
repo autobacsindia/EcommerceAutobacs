@@ -98,7 +98,10 @@ const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-
 const toDateInput = (d: string | null) => toISTDateInput(d);
 
 const label = 'block text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1.5';
-const field = 'w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none';
+// Width is NOT baked in: `field` + a `w-*` override is two competing width utilities,
+// and which one wins is decided by Tailwind's stylesheet order, not by the class list.
+const fieldBase = 'rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none';
+const field = `w-full ${fieldBase}`;
 const card = 'rounded-lg border border-zinc-800 bg-zinc-900/40 p-6';
 
 export default function AdminCampaignEditor() {
@@ -513,13 +516,19 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
         Uses the SAVED ladder and the SAVED assignments — save first to test a change.
       </p>
 
-      <div className="flex gap-3">
-        <input className={field} value={input} placeholder="Search products, e.g. profender"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && input.trim()) run.mutate(); }} />
-        <input type="number" min={1} max={999} value={qty} title="Quantity"
-          onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-          className={`${field} w-20 shrink-0`} />
+      <div className="flex items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <label className={label} htmlFor="tier-calc-query">Product search</label>
+          <input id="tier-calc-query" className={field} value={input} placeholder="e.g. profender"
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && input.trim()) run.mutate(); }} />
+        </div>
+        <div className="w-24 shrink-0">
+          <label className={label} htmlFor="tier-calc-qty">Qty</label>
+          <input id="tier-calc-qty" type="number" min={1} max={999} value={qty}
+            onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+            className={`${fieldBase} w-full`} />
+        </div>
         <button onClick={() => run.mutate()} disabled={!input.trim() || run.isPending}
           className="shrink-0 rounded bg-zinc-800 px-4 py-2 text-sm text-white hover:bg-zinc-700 disabled:opacity-40">
           {run.isPending ? '…' : 'Resolve'}

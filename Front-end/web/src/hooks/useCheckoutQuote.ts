@@ -17,7 +17,9 @@ export interface CheckoutQuote {
   /** Present only when the applied coupon is a campaign's managed coupon. */
   appliedCampaign: {
     id: string; slug: string; name: string;
-    tierId: string | null; tierLabel: string | null; percent: number;
+    /** All three are null under the PER-PRODUCT ladder — there is no single cart-wide
+     *  rung there; each line carries its own rate in `discountLines`. */
+    tierId: string | null; tierLabel: string | null; percent: number | null;
   } | null;
   /**
    * Per-line discount breakdown — present only when the applied coupon is priced by a

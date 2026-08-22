@@ -175,7 +175,7 @@ class CronService {
         ),
         { scheduled: true, timezone: tz }
       );
-      this.scheduledTasks.push({ name: 'leadSweepFrequent', task, schedule: frequent, description: 'CRM: abandoned checkouts + stale follow-ups' });
+      this.scheduledTasks.push({ name: 'leadSweepFrequent', task, schedule: frequent, description: 'CRM: abandoned checkouts + stale follow-ups; releases abandoned checkout holds' });
     } else {
       console.error(`[CronService] Invalid LEAD_SWEEP_CRON "${frequent}" — frequent lead sweep NOT scheduled`);
     }

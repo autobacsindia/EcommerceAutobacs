@@ -264,6 +264,26 @@ const OrderSchema = new mongoose.Schema({
   // Set once the +1-day post-delivery review-request email is sent, so the delayed
   // send-review-request job is idempotent (see services/reviewRequestService.js).
   reviewRequestedAt: Date,
+
+  /*
+    Set when an abandoned checkout's MONEY HOLDS were handed back — the coupon's global
+    and per-user counters, the campaign redemption slot, and any karma points debited.
+
+    All three are taken at order CREATION, before a rupee moves, because that is the only
+    way two racing tabs can be stopped from both claiming the last one. The consequence is
+    that a customer who never pays has still spent them: without this sweep they are told
+    "you have already used this offer" for ever, and a campaign's cap drains on orders
+    that were never orders. See sweepStaleCheckoutHolds in services/leadSweepService.js.
+
+    It is also a GATE, not just a record: once the holds are gone the order must never be
+    payable again, or the discount would be charged with nothing counting against the
+    campaign's cap. routes/razorpay.js refuses to mint a gateway order for one of these.
+
+    Distinct from the fulfilment and payment axes on purpose — releasing a hold says
+    nothing about where the parcel is or what the gateway thinks, so it must not disturb
+    either (CRM lead classification reads paymentStatus).
+  */
+  holdsReleasedAt: { type: Date, default: null },
   trackingNumber: String,
   carrier: {
     name: String,

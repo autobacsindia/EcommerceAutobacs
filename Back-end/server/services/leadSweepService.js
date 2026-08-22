@@ -20,7 +20,10 @@
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import leadRepository from '../repositories/leadRepository.js';
+import couponRedemptionRepository from '../repositories/couponRedemptionRepository.js';
 import leadSyncService from './leadSyncService.js';
+import couponService from './couponService.js';
+import karmaService from './karmaService.js';
 import { computeLeadScore } from '../utils/leadScore.js';
 import { OPEN_LEAD_STATUSES } from '../config/leadConstants.js';
 
@@ -38,6 +41,25 @@ function abandonedCutoff() {
 // out here; the "left at checkout" lead already formed at abandonedCutoff (60 min).
 function expireCutoff() {
   const ms = Number(process.env.LEAD_EXPIRE_AFTER_MS) || 24 * 60 * 60 * 1000; // 24 h
+  return new Date(Date.now() - ms);
+}
+/*
+  How long an unpaid checkout keeps its MONEY HOLDS — the coupon's per-user counter, the
+  campaign redemption slot, and any karma points debited.
+
+  Deliberately MUCH shorter than expireCutoff's 24 h, because the two decisions carry
+  opposite risks. Burying an order early hides a real order from the operational view, so
+  that one waits for the full reconciliation window. Releasing a hold early only ever
+  hands the customer back a reward they can use again — the forgiving direction — while
+  holding one too long tells someone who never paid that they have "already used" the
+  offer, and drains a campaign's cap on orders that were never orders.
+
+  Two hours is safe because paymentReconciliationService has by then asked Razorpay
+  DIRECTLY, roughly a dozen times, whether this order was captured, and been told no. It
+  is not an assumption about customer behaviour; it is the gateway's own answer.
+*/
+function holdReleaseCutoff() {
+  const ms = Number(process.env.CHECKOUT_HOLD_RELEASE_MS) || 2 * 60 * 60 * 1000; // 2 h
   return new Date(Date.now() - ms);
 }
 function dormancyCutoff() {
@@ -89,6 +111,104 @@ export async function sweepAbandonedOrders() {
     if (lead) synced += 1;
   }
   return { scanned: orders.length, synced, expired };
+}
+
+/**
+ * Hand back the money holds on checkouts that were abandoned before payment.
+ *
+ * orderService takes three things at order CREATION, before a rupee moves: the coupon's
+ * global and per-user counters, the campaign's redemption slot, and any karma points
+ * spent. That timing is not incidental — a guarded counter is the only thing that stops
+ * two racing tabs both claiming the last slot, and it has to exist before the payment is
+ * attempted to do that job.
+ *
+ * They come back when an order is cancelled or refunded (queue/workers/orderWorker.js).
+ * Nothing gave them back when the customer simply never paid — closed the tab, let the
+ * UPI request lapse, dismissed the Razorpay popup — which is roughly a quarter of all
+ * orders created. Those customers were then told "you have already used this offer" for
+ * ever, having paid nothing, and a capped campaign spent slots on orders that never
+ * existed.
+ *
+ * Driven from the redemption audit rows, not from Orders: a redemption exists only where
+ * a coupon was actually used, so this asks a small question rather than scanning every
+ * abandoned checkout. Idempotent by construction — releaseForOrder deletes that audit row
+ * last, inside the same transaction as the counters, so a second pass simply finds
+ * nothing to do.
+ *
+ * Deliberately does NOT touch `status` or `paymentStatus`. Releasing a hold says nothing
+ * about where the parcel is or what the gateway thinks, and CRM lead classification reads
+ * paymentStatus — moving it here would silently reclassify leads as a side effect of a
+ * money fix.
+ */
+export async function sweepStaleCheckoutHolds() {
+  const stale = await couponRedemptionRepository.findStaleBefore(holdReleaseCutoff(), SWEEP_BATCH);
+  let released = 0;
+  let skipped = 0;
+
+  for (const redemption of stale) {
+    const order = await orderRepository.findById(redemption.order);
+
+    /*
+      An orphaned redemption — its order was hard-deleted (the offline payment-link
+      rollback path does exactly that). Release it: the counters it holds can never be
+      settled by anything else, and leaving them is the same leak by another route.
+    */
+    if (!order) {
+      await releaseHolds(redemption.order);
+      released += 1;
+      continue;
+    }
+
+    // Still live: paid, already past checkout, or resolved as cancelled/refunded (whose
+    // own release path has run or will run). Only a genuinely stranded checkout qualifies.
+    if (order.status !== 'awaiting_payment' || order.paymentStatus === 'paid') {
+      skipped += 1;
+      continue;
+    }
+
+    /*
+      Stamp BEFORE releasing, not after.
+
+      The stamp is what stops the order being paid once its holds are gone; if the release
+      succeeded and the stamp then failed, the order would be payable at a discount that
+      counts against nothing. Stamping first can at worst leave an order unpayable with its
+      holds intact — recoverable, caught on the next pass, and the direction to fail in.
+    */
+    await orderRepository.update(order._id, {
+      $set: { holdsReleasedAt: new Date() },
+      $push: {
+        statusHistory: {
+          status: order.status,
+          timestamp: new Date(),
+          reason: 'payment_abandoned',
+          notes: 'Coupon, campaign and karma holds released — no payment within the window.',
+        },
+      },
+    });
+
+    await releaseHolds(order._id);
+    released += 1;
+  }
+
+  return { scanned: stale.length, released, skipped };
+}
+
+/**
+ * Give back everything an unpaid order was holding. Each half is guarded on its own: a
+ * karma failure must not leave the coupon held, nor the reverse, and neither must stop
+ * the sweep reaching the next order.
+ */
+async function releaseHolds(orderId) {
+  try {
+    await couponService.releaseForOrder(orderId);
+  } catch (err) {
+    console.error(`[LeadSweep] coupon release failed for order ${orderId}:`, err.message);
+  }
+  try {
+    await karmaService.reverseRedemption(orderId);
+  } catch (err) {
+    console.error(`[LeadSweep] karma reversal failed for order ${orderId}:`, err.message);
+  }
 }
 
 /** Registered (non-guest) users who never bought, aged past the window. */
@@ -178,8 +298,9 @@ export async function sweepRescoreLeads() {
 /** Frequent sweep (abandoned checkouts + stale follow-up flagging). */
 export async function runFrequentSweeps() {
   const abandoned = await sweepAbandonedOrders();
+  const holds = await sweepStaleCheckoutHolds();
   const stale = await sweepStaleLeads();
-  return { abandoned, stale };
+  return { abandoned, holds, stale };
 }
 
 /** Daily sweep (dormant users + score recency-decay refresh). */
