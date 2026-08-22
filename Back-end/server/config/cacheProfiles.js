@@ -66,6 +66,19 @@ export const CACHE_PROFILES = {
   PRODUCT_SIMILAR:       { ttl: 120,  tags: ['products'], http: 'product-listing' },
   PRODUCT_COMPLEMENTARY: { ttl: 120,  tags: ['products'], http: 'product-listing' },
   PRODUCT_BRANDS:        { ttl: 600,  tags: ['products', 'brands'], http: 'static-data' },
+  // strategy 'lock' = the CONTROLLER owns the Redis entry (getProductFacets builds
+  // its own canonical key via utils/facetCacheKey.js, TTL 300s, tag 'products').
+  // httpCache therefore stores nothing here — it exists purely to emit the
+  // Cache-Control header and enforce the Set-Cookie / non-2xx guard.
+  //
+  // Without it this route emitted NO Cache-Control at all, so csrfMiddleware's
+  // deferCsrfCookie() saw a non-public response and minted XSRF-TOKEN on it — and a
+  // Set-Cookie response is one Cloudflare will never cache. The filter sidebar, one
+  // of the busiest public GETs, reached the origin on every single request. Same
+  // failure as the 2026-08-03 site-wide csrf/cache bug, on the one route that was
+  // never wired up. `ttl` mirrors the controller's own 300s so the two cannot drift
+  // silently; s-maxage=300 in 'search-results' matches it.
+  PRODUCT_FACETS:        { ttl: 300,  strategy: 'lock', tags: ['products'], http: 'search-results' },
 
   // ── Categories ────────────────────────────────────────────────────────────
   CATEGORY_LIST: { ttl: 600, tags: ['categories'], http: 'static-data' },

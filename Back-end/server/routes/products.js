@@ -103,7 +103,7 @@ router.get("/admin/list", protect, admin, validateProductSearch, asyncHandler(ge
 // @route   GET /products/facets
 // @desc    Per-brand and per-category counts for the filter sidebar (accepts the same filters)
 // @access  Public
-router.get("/facets", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, validateProductSearch, asyncHandler(getProductFacets));
+router.get("/facets", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, httpCache('PRODUCT_FACETS'), validateProductSearch, asyncHandler(getProductFacets));
 
 // @route   GET /products/suggestions
 // @desc    Get search suggestions

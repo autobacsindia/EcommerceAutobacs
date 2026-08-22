@@ -39,7 +39,7 @@ const ADDRESS = {
 
 // Seed an order stuck in awaiting_payment with a gateway order id, aged so the
 // sweep's [10min, 24h] window includes it.
-async function seedStuckOrder({ ageMinutes = 20, totalAmount = 1000, razorpayOrderId = `order_${Date.now()}` } = {}) {
+async function seedStuckOrder({ ageMinutes = 20, totalAmount = 1000, razorpayOrderId = `order_${Date.now()}`, paymentStatus = 'pending' } = {}) {
   const user = await User.create({
     name: 'U', email: `u${Date.now()}${Math.random()}@x.com`, passwordHash: 'x',
   });
@@ -51,7 +51,7 @@ async function seedStuckOrder({ ageMinutes = 20, totalAmount = 1000, razorpayOrd
     shippingAddress: ADDRESS,
     paymentMethod: 'razorpay',
     status: 'awaiting_payment',
-    paymentStatus: 'pending',
+    paymentStatus,
     razorpayOrderId,
   });
   // timestamps:true stamps createdAt on insert and marks it IMMUTABLE, so a Mongoose
@@ -161,5 +161,61 @@ describe('reconcileStuckPayments', () => {
     const fresh = await Order.findById(order._id).lean();
     expect(fresh.paymentStatus).toBe('pending');
     expect(await Payment.countDocuments({ gatewayPaymentId: 'pay_mismatch' })).toBe(0);
+  });
+  // ── Webhook-liveness signal ────────────────────────────────────────────────
+  //
+  // `unresolved` is the ONLY input to the "webhooks may be DOWN" alert. The sweep
+  // deliberately scans failed/cancelled orders (a client-reported failure can sit
+  // on top of a real capture), but those must not feed the alert: a terminal
+  // paymentStatus means an outcome DID reach us. Conflating the two made the alert
+  // fire on ordinary abandoned checkouts — on production, 39 qualifying orders over
+  // 30 days with no actual outage.
+  describe('webhook-liveness signal', () => {
+    it('counts an order still awaiting an outcome as unresolved', async () => {
+      await seedStuckOrder({ paymentStatus: 'pending' });
+      jest.spyOn(razorpayService, 'fetchOrderPayments').mockResolvedValue([]);
+
+      expect(await reconcileStuckPayments()).toMatchObject({ scanned: 1, unresolved: 1 });
+    });
+
+    it('does NOT count a failed payment as unresolved (we heard the outcome)', async () => {
+      await seedStuckOrder({ paymentStatus: 'failed' });
+      jest.spyOn(razorpayService, 'fetchOrderPayments').mockResolvedValue([]);
+
+      // Still scanned — a client-reported failure can hide a real capture.
+      expect(await reconcileStuckPayments()).toMatchObject({ scanned: 1, unresolved: 0 });
+    });
+
+    it('does NOT count a cancelled payment as unresolved', async () => {
+      await seedStuckOrder({ paymentStatus: 'cancelled' });
+      jest.spyOn(razorpayService, 'fetchOrderPayments').mockResolvedValue([]);
+
+      expect(await reconcileStuckPayments()).toMatchObject({ scanned: 1, unresolved: 0 });
+    });
+
+    it('counts only the pending ones when both kinds are stuck together', async () => {
+      // The exact production shape on 2026-08-22: two terminal orders and nothing
+      // genuinely unresolved. The old signal said 2 and paged; the new one says 0.
+      await seedStuckOrder({ paymentStatus: 'failed', razorpayOrderId: 'order_f1' });
+      await seedStuckOrder({ paymentStatus: 'cancelled', razorpayOrderId: 'order_c1' });
+      jest.spyOn(razorpayService, 'fetchOrderPayments').mockResolvedValue([]);
+
+      expect(await reconcileStuckPayments()).toMatchObject({ scanned: 2, unresolved: 0 });
+    });
+
+    it('still flags the dangerous case: a paid-but-unconfirmed order stays unresolved', async () => {
+      // Customer paid, callback never landed, webhook never arrived. The sweep
+      // recovers it — and it was unresolved going in, which is what makes webhook
+      // silence meaningful.
+      const { order } = await seedStuckOrder({ paymentStatus: 'pending' });
+      jest.spyOn(razorpayService, 'fetchOrderPayments')
+        .mockResolvedValue([capturedPayment(order, { paymentId: 'pay_silent' })]);
+
+      expect(await reconcileStuckPayments()).toMatchObject({ scanned: 1, unresolved: 1, recovered: 1 });
+    });
+
+    it('reports unresolved: 0 when there is nothing to scan at all', async () => {
+      expect(await reconcileStuckPayments()).toMatchObject({ scanned: 0, unresolved: 0 });
+    });
   });
 });

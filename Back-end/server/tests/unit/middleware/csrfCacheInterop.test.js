@@ -180,3 +180,72 @@ describe('requests that must still receive the cookie', () => {
     expect(hasCsrfCookie(res)).toBe(false);
   });
 });
+
+/**
+ * /products/facets — the route the 2026-08-03 fix missed.
+ *
+ * It had no cache profile at all, so it emitted no Cache-Control, csrf saw a
+ * non-public response and minted XSRF-TOKEN, and Cloudflare will never cache a
+ * Set-Cookie response. The filter sidebar hit the origin on every request.
+ *
+ * Its profile is deliberately `strategy: 'lock'`: getProductFacets owns the Redis
+ * entry (canonical key from utils/facetCacheKey.js). These tests pin BOTH halves —
+ * the header must be public, and httpCache must NOT start a second store.
+ */
+describe('/products/facets', () => {
+  const facetsReq = (over = {}) => makeReq({
+    path: '/api/v1/products/facets',
+    originalUrl: '/api/v1/products/facets?brand=Brembo',
+    query: { brand: 'Brembo' },
+    ...over,
+  });
+
+  it('is publicly cacheable and mints no CSRF cookie', async () => {
+    const req = facetsReq();
+    const res = makeRes();
+    await runChain([csrfProtection, httpCache('PRODUCT_FACETS')], req, res, { success: true, facets: {} });
+
+    expect(hasCsrfCookie(res)).toBe(false);
+    expect(res.getHeader('Set-Cookie')).toBeUndefined();
+    expect(res.getHeader('Cache-Control')).toBe('public, max-age=120, s-maxage=300');
+  });
+
+  it('does NOT open a second Redis entry — the controller owns that', async () => {
+    const before = cacheService.cache.size;
+    const res = makeRes();
+    await runChain([csrfProtection, httpCache('PRODUCT_FACETS')], facetsReq(), res, { success: true, facets: {} });
+
+    expect(cacheService.cache.size).toBe(before);
+    // Lock profiles leave X-Cache to the controller rather than claiming a MISS
+    // for a lookup they never performed.
+    expect(res.getHeader('X-Cache')).toBeUndefined();
+  });
+
+  it('stays private for an authenticated shopper', async () => {
+    const req = facetsReq({ cookies: { accessToken: 'tok' } });
+    const res = makeRes();
+    await runChain([csrfProtection, httpCache('PRODUCT_FACETS')], req, res, { success: true, facets: {} });
+
+    expect(res.getHeader('Cache-Control')).toBe('private, no-store, no-cache, must-revalidate');
+  });
+
+  it('does not edge-cache a 400 from the validator that runs AFTER it', async () => {
+    // httpCache is deliberately mounted BEFORE validateProductSearch (matching the
+    // /products list route), so a rejected request still passes through it with the
+    // public header already applied optimistically. validateRequest answers with
+    // res.status(400).json(...), which trips the wrapper's guard and downgrades it.
+    const res = makeRes(400);
+    await runChain([csrfProtection, httpCache('PRODUCT_FACETS')], facetsReq({ query: { limit: '9999' } }), res, {
+      success: false, message: 'Limit must be between 1 and 500',
+    });
+
+    expect(res.getHeader('Cache-Control')).toBe('private, no-store, no-cache, must-revalidate');
+  });
+
+  it('downgrades to no-store if the handler errors, so an error is never edge-cached', async () => {
+    const res = makeRes(500);
+    await runChain([csrfProtection, httpCache('PRODUCT_FACETS')], facetsReq(), res, { success: false });
+
+    expect(res.getHeader('Cache-Control')).toBe('private, no-store, no-cache, must-revalidate');
+  });
+});
