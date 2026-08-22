@@ -130,7 +130,8 @@ describe('a PUBLIC, product-tier campaign', () => {
     renderPage(campaign);
     // The cart calculator resolves `tiers`; against this campaign it reports ₹0 for
     // every row, which reads as "the offer pays nothing".
-    expect(await screen.findByPlaceholderText(/search products/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/product search/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^qty$/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^calculate$/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /resolve/i })).toBeInTheDocument();
   });
