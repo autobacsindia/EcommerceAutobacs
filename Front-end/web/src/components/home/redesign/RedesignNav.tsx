@@ -11,6 +11,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { Search, Heart, Cart, Menu, Close, UserIcon } from './icons';
 import { brand, navLinks } from './homeContent';
 import { useAuth } from '@/context/AuthContext';
+import { loginHref } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 
 const VEHICLE_LABEL = 'Vehicle Makes';
@@ -155,7 +156,7 @@ export default function RedesignNav() {
               <KarmaBadge />
             </div>
           ) : (
-            <Link href="/login" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
+            <Link href={loginHref('/profile')} className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
               <UserIcon width={16} height={16} />
               Sign In
             </Link>

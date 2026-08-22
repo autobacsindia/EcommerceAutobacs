@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
-import { SESSION_EXPIRED_EVENT, emitAuthLogin } from '@/lib/api-client';
+import { SESSION_EXPIRED_EVENT, emitAuthLogin, emitAuthLogout } from '@/lib/api-client';
 import {
   readAuthCache,
   writeAuthCache,
@@ -351,6 +351,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
       // Clear cache so the next checkAuth doesn't restore the old session.
       clearCache();
+      // ...and the client DATA cache with it. Without this the next account (or the
+      // same browser as a guest) is served this user's cached per-user reads until
+      // they age out — see AuthQuerySync.
+      emitAuthLogout();
       resetAnalytics();
     }
   }, []);

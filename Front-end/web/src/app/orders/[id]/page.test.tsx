@@ -15,6 +15,8 @@ jest.mock('@/hooks/useRazorpay');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
   useParams: jest.fn(),
+  // useRequireAuth reads the pathname to build the /login?redirect= destination.
+  usePathname: () => '/orders/order123',
 }));
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => (

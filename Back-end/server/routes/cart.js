@@ -599,8 +599,22 @@ router.put("/coupon", asyncHandler(async (req, res) => {
   // Guests have no identity, so coupons gated on firstOrderOnly / usageLimitPerUser
   // are rejected here with REASON.LOGIN rather than appearing to apply and then
   // failing at order creation.
+  /*
+    `variantId` is REQUIRED for a variable product — priceItems resolves the SELECTED
+    variant and throws outright for a line without one, because the parent's price must
+    never be charged for a variant.
+
+    It was being dropped here. One variable item in the basket therefore made this throw
+    an AppError that is not a CouponRejected, so it escaped computeQuote entirely and
+    surfaced as a bare "Something went wrong" — which is what the cart's silent
+    auto-apply was hitting too. The line already carries the id; this stops discarding it.
+  */
   const quote = await pricingService.computeQuote({
-    items: cart.items.map((i) => ({ product: i.product, quantity: i.quantity })),
+    items: cart.items.map((i) => ({
+      product: i.product,
+      quantity: i.quantity,
+      variantId: i.variantId ?? null,
+    })),
     couponCode: code,
     userId: req.user?.id || null
   });

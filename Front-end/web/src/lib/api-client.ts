@@ -50,6 +50,20 @@ export function emitAuthLogin(): void {
   }
 }
 
+/** Broadcast a "signed out" signal. AuthQuerySync listens and CLEARS the client data
+ *  cache, so the next reader cannot be served the previous account's answers — and so a
+ *  per-user read (campaign eligibility, wishlist, orders) re-asks as a guest rather than
+ *  keeping whatever was cached while signed in. */
+export const AUTH_LOGOUT_EVENT = 'auth:logout';
+export function emitAuthLogout(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_LOGOUT_EVENT));
+  } catch {
+    /* CustomEvent unavailable — non-fatal */
+  }
+}
+
 /** True when the client believes it has (or had) an authenticated session. SSR-safe.
  *  Delegates the storage read to `authStorage` so the `auth_check` key and its
  *  shape live in exactly one place: a guest whose auth check merely wrote

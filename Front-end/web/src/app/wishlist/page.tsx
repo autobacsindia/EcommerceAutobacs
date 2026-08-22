@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import Link from 'next/link';
 import { ShoppingCart, Trash2, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -22,10 +23,11 @@ export default function WishlistPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  useRequireAuth();
+
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) { router.push('/login'); return; }
     if (isAuthenticated) fetchWishlistWrapper();
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated]);
 
   const fetchWishlistWrapper = async () => {
     try { setError(null); await fetchWishlist(); }

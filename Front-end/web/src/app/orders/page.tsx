@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
@@ -42,9 +43,7 @@ export default function OrdersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const ordersPerPage = 10;
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) router.push('/login');
-  }, [isAuthenticated, authLoading, router]);
+  useRequireAuth();
 
   useEffect(() => {
     if (isAuthenticated) fetchOrders();

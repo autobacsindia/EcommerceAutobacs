@@ -35,13 +35,34 @@
 .hr *::before,
 .hr *::after {
   box-sizing: border-box;
+}
+/*
+  ESCAPE HATCH — `.hr-unscoped`.
+
+  Everything under `.hr` is design-system CSS written against these resets. But this
+  page also hosts one component owned by the REST of the site (the campaign reward
+  ribbon), and that one is built from Tailwind utilities.
+
+  Tailwind v4 emits its utilities inside a cascade LAYER; this stylesheet is
+  unlayered, and unlayered CSS beats every layer regardless of specificity. So the
+  reset below silently defeated `px-4`, `py-2.5` and `mx-auto` on that component, and
+  `.hr a` defeated its gold link colour — the same ribbon rendered unpadded, flush
+  left and colourless on the home page and correctly everywhere else.
+
+  Restating the ribbon's styling here would have fixed the symptom and created two
+  sources of truth for one component, which is how they drift apart. Instead the
+  reset simply does not reach into a subtree marked `.hr-unscoped`.
+*/
+.hr *:not(.hr-unscoped, .hr-unscoped *),
+.hr *:not(.hr-unscoped, .hr-unscoped *)::before,
+.hr *:not(.hr-unscoped, .hr-unscoped *)::after {
   margin: 0;
   padding: 0;
 }
 .hr img {
   display: block;
 }
-.hr a {
+.hr a:not(.hr-unscoped a) {
   text-decoration: none;
   color: inherit;
 }
@@ -182,6 +203,11 @@
    The overlay lands on the masked, effectively transparent top of the hero
    canvas, not on the car itself. */
 .hr .hr-hero-stack { position: relative; }
+/* Opaque ground. On desktop the slot is an overlay ON the hero, and the reward
+   ribbon's own background is a gradient that fades to transparent — over the hero
+   that read as a see-through band rather than the quiet gold wash it is on every
+   other page, where it sits on the page background. */
+.hr .hr-promo-slot { background-color: var(--bg); }
 @media (min-width: 769px) {
   .hr .hr-promo-slot { position: absolute; left: 0; right: 0; top: 76px; z-index: 12; }
 }

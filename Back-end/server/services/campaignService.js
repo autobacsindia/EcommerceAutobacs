@@ -21,6 +21,7 @@ import campaignProductTierRepository from '../repositories/campaignProductTierRe
 import productRepository from '../repositories/productRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
+import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
 import AppError from '../utils/AppError.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { resolveTier, validateTiers, assertMonotonic } from '../utils/campaignTiers.js';
@@ -118,6 +119,35 @@ class CampaignService {
     if (campaign.audience === CAMPAIGN_AUDIENCE.LIST) {
       const member = await campaignMemberRepository.findByCampaignEmail(campaign._id, email, session);
       if (!member) return { reason: CAMPAIGN_REASON.NOT_INVITED };
+    }
+
+    // ── Already redeemed ──────────────────────────────────────────────────────
+    /*
+      Has this customer already spent it?
+
+      This lived ONLY in pricingService._evaluateCoupon, which runs when a discount is
+      actually being priced. Everything that merely DISPLAYS the offer asks this function
+      instead — and so was told "eligible" about someone who had already redeemed. An
+      allowlist campaign hid the flaw, because its member row flips to `redeemed`; a
+      PUBLIC campaign has no member row, so nothing caught it.
+
+      The result was an offer that kept advertising itself after it was gone: the
+      site-wide ribbon stayed up, the product page kept promising a rate, the cart kept
+      saying "your offer is active", and add-to-cart kept congratulating them on a saving
+      checkout would refuse. `already_used` was a reason the UI branched on and the engine
+      could never produce.
+
+      Two indexed lookups, and only once a shopper has cleared every other gate — the same
+      pair _evaluateCoupon already performs, moved early enough to be worth saying.
+    */
+    if (campaign.couponCode) {
+      const coupon = await couponRepository.findByCode(campaign.couponCode, session);
+      if (coupon?.usageLimitPerUser != null) {
+        const usage = await couponUserUsageRepository.findByCouponUser(coupon._id, userId, session);
+        if (usage && usage.count >= coupon.usageLimitPerUser) {
+          return { reason: CAMPAIGN_REASON.ALREADY_USED };
+        }
+      }
     }
 
     // ── Tier ──────────────────────────────────────────────────────────────────

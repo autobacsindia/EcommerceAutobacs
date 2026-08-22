@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import AuthQuerySync from './AuthQuerySync';
 
 /**
  * The single client-side data cache for the app (TanStack Query).
@@ -31,7 +32,14 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       })
   );
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      {/* Signing in or out changes the answer to every per-user query under an
+          unchanged key. AuthQuerySync is what tells the cache that happened. */}
+      <AuthQuerySync />
+      {children}
+    </QueryClientProvider>
+  );
 }
 
 export default QueryProvider;

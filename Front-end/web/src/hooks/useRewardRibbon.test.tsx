@@ -51,3 +51,29 @@ describe('useRewardRibbonClaimsSlot', () => {
     expect(at('/cart/', true)).toBe(false);
   });
 });
+
+/**
+ * The home page is the one route where the two bars are NOT sorted out between the root
+ * layout and ConditionalPromoBanner: its nav is `position: fixed` and it mounts its own
+ * strip inside the hero's scroll track, so the layout's ribbon rendered underneath that
+ * bar — invisible, while its flow height still pushed the page down — and the promo
+ * image showed alongside it because the precedence gate was never consulted.
+ *
+ * The rule itself must stay route-agnostic: home is a PLACEMENT problem, not an
+ * eligibility one. If '/' were suppressed here the ribbon would never show there at all.
+ */
+describe('useRewardRibbonClaimsSlot on the home page', () => {
+  const at = (path: string, eligible: boolean | undefined) => {
+    mockPathname.mockReturnValue(path);
+    mockCampaign.mockReturnValue({ data: eligible === undefined ? undefined : { eligible } });
+    return renderHook(() => useRewardRibbonClaimsSlot()).result.current;
+  };
+
+  it('still claims the slot on / — home is where it renders, not whether', () => {
+    expect(at('/', true)).toBe(true);
+  });
+
+  it('claims nothing on / for an ineligible visitor', () => {
+    expect(at('/', false)).toBe(false);
+  });
+});

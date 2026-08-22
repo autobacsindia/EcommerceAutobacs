@@ -52,6 +52,13 @@ export const validateCheckoutQuote = [
   body('items').isArray({ min: 1, max: 50 }).withMessage('items must be a non-empty array'),
   body('items.*.product').custom(isObjectId).withMessage('Invalid product id'),
   body('items.*.quantity').isInt({ min: 1, max: 999 }).withMessage('Invalid quantity'),
+  /*
+    Declared even though it is optional, so the contract is explicit: a VARIABLE product
+    is priced from its selected variant and priceItems rejects a line without one. A
+    caller that omits it here does not get a cheaper price — it gets no quote at all.
+  */
+  body('items.*.variantId').optional({ nullable: true }).custom(isObjectId)
+    .withMessage('Invalid variant id'),
   body('couponCode').optional({ nullable: true }).trim().isLength({ max: 40 }),
   body('redeemKarmaPoints').optional().isInt({ min: 0 }).withMessage('redeemKarmaPoints must be ≥ 0'),
   body('shippingCost').optional().isFloat({ min: 0 })

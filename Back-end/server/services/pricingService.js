@@ -113,14 +113,17 @@ class PricingService {
       let variantLabel = null;
       if (product.productType === 'variable') {
         const { variant, reason } = resolveVariant(product, item.variantId);
-        if (reason === 'unselected') throw new AppError(`Please select a variant for ${product.name}`, 400);
-        if (reason === 'missing') throw new AppError(`Selected variant is no longer available for ${product.name}`, 400);
-        if (reason) throw new AppError(`${product.name} (${variant.label}) is out of stock`, 400);
+        // `expose`: each of these names only the product the shopper is already looking
+        // at, and each tells them the one thing that fixes it. Without it they reach the
+        // buyer as "Something went wrong" — an actionable cart problem dressed as an outage.
+        if (reason === 'unselected') throw new AppError(`Please select a variant for ${product.name}`, 400, { expose: true });
+        if (reason === 'missing') throw new AppError(`Selected variant is no longer available for ${product.name}`, 400, { expose: true });
+        if (reason) throw new AppError(`${product.name} (${variant.label}) is out of stock`, 400, { expose: true });
         priceSource = variant;
         variantId = variant._id;
         variantLabel = variant.label;
       } else if (product.stock === STOCK_STATUS.OUT) {
-        throw new AppError(`${product.name} is out of stock`, 400);
+        throw new AppError(`${product.name} is out of stock`, 400, { expose: true });
       }
 
       const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);

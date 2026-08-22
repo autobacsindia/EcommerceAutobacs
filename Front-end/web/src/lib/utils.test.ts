@@ -9,6 +9,7 @@ import {
   isValidEmail,
   getInitials,
   isEmpty,
+  loginHref,
 } from './utils';
 
 describe('Utility Functions', () => {
@@ -128,6 +129,35 @@ describe('Utility Functions', () => {
       expect(isEmpty('a')).toBe(false);
       expect(isEmpty([1])).toBe(false);
       expect(isEmpty({ a: 1 })).toBe(false);
+    });
+  });
+
+  describe('loginHref', () => {
+    it('carries the destination so sign-in returns the customer to it', () => {
+      expect(loginHref('/profile')).toBe('/login?redirect=%2Fprofile');
+    });
+
+    it('encodes a path that already has a query string', () => {
+      expect(loginHref('/orders?status=delivered')).toBe('/login?redirect=%2Forders%3Fstatus%3Ddelivered');
+    });
+
+    it('drops a redirect that is only the home page', () => {
+      // '/' is the login page's default destination; spelling it out just adds noise.
+      expect(loginHref('/')).toBe('/login');
+    });
+
+    it('refuses to carry an off-site destination', () => {
+      // The redirect param is user-editable — an absolute or protocol-relative URL here
+      // would turn the login screen into an open redirect.
+      expect(loginHref('https://evil.com')).toBe('/login');
+      expect(loginHref('//evil.com')).toBe('/login');
+      expect(loginHref('evil.com')).toBe('/login');
+    });
+
+    it('falls back to a bare /login with nothing to return to', () => {
+      expect(loginHref(null)).toBe('/login');
+      expect(loginHref(undefined)).toBe('/login');
+      expect(loginHref('')).toBe('/login');
     });
   });
 });

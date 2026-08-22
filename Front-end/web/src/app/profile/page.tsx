@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import { User, Shield, MapPin, Edit, X, Plus, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
@@ -61,11 +62,9 @@ export default function ProfilePage() {
     country: 'India'
   });
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
+  // Signed-out visitors bounce to /login?redirect=/profile; `releaseGuard` opts the
+  // deliberate sign-out below out of that bounce so it can go home instead.
+  const { releaseGuard } = useRequireAuth();
 
   // Seed the edit form from the loaded profile — but never clobber in-progress
   // edits, so a background refetch while editing is harmless.
@@ -81,6 +80,21 @@ export default function ProfilePage() {
       router.push('/login?reason=auth_failed');
     }
   }, [profileError, router]);
+
+  /**
+   * Signing out is a deliberate exit, not a failed auth check — it lands on the home
+   * page, where the nav's profile icon (desktop) and "Sign In" row (mobile) already
+   * point back at /login for whoever wants in next.
+   *
+   * `releaseGuard()` must come first: `logout()` clears the user, which would otherwise
+   * fire this page's own auth guard and race us to /login. `replace` keeps /profile out
+   * of history, so Back can't return to a page that would immediately bounce again.
+   */
+  const handleLogout = async () => {
+    releaseGuard();
+    await logout();
+    router.replace('/');
+  };
 
   const handleEdit = () => setEditing(true);
 
@@ -363,7 +377,7 @@ export default function ProfilePage() {
                 Admin Dashboard
               </Link>
             )}
-            <button onClick={logout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+            <button onClick={handleLogout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
               Logout
             </button>
           </div>

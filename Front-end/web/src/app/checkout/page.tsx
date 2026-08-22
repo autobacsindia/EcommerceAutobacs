@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LogIn } from 'lucide-react';
@@ -21,7 +21,7 @@ import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import CheckoutSummary from '@/components/checkout/CheckoutSummary';
-import type { CheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { useCheckoutQuote, type CheckoutQuote } from '@/hooks/useCheckoutQuote';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -80,6 +80,34 @@ function CheckoutPageContent() {
   });
 
   const isGuest = !authLoading && !isAuthenticated;
+
+  /*
+    The REVIEW step's totals, from the server.
+
+    They used to be worked out in the browser — `cart.total / 1.18` for the subtotal and
+    the remainder for tax — which is the one thing this codebase does not allow money to
+    do. It also meant the step knew nothing about the coupon sitting on the cart, so a
+    shopper who had just been shown a ₹9,312 discount reached checkout and saw the full
+    price again. The number was not merely stale; it was invented.
+
+    Seeded from `cart.couponCode`, the same field CheckoutSummary reads on the final step,
+    so the two steps cannot disagree about what is being charged.
+  */
+  const reviewItems = useMemo(
+    () => (cart?.items || []).map((i: any) => ({
+      product: i.product._id,
+      quantity: i.quantity,
+      // Required for variable products — the server prices the SELECTED variant and
+      // rejects a line without one.
+      variantId: i.variantId ?? null,
+    })),
+    [cart?.items],
+  );
+  const { quote: reviewQuote, loading: reviewQuoteLoading } = useCheckoutQuote(
+    reviewItems,
+    cart?.couponCode || undefined,
+    0,
+  );
 
   // ── Analytics funnel (ADR-005) ──────────────────────────────────────────────
   const beganCheckoutRef = useRef(false);
@@ -588,20 +616,37 @@ function CheckoutPageContent() {
               <div className="space-y-3 mb-4 border-b border-hairline pb-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Subtotal</span>
-                  <span className="text-ink/70 font-display">₹{((cart?.total || 0) / 1.18).toFixed(2)}</span>
+                  <span className="text-ink/70 font-display">
+                    {reviewQuote ? `₹${reviewQuote.subtotal.toFixed(2)}` : '—'}
+                  </span>
                 </div>
+                {reviewQuote && reviewQuote.couponDiscount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gold font-display">Discount ({reviewQuote.appliedCoupon?.code})</span>
+                    <span className="text-gold font-display">−₹{reviewQuote.couponDiscount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Shipping</span>
                   <span className="text-ink-muted font-display text-xs">Calculated at delivery</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Tax (18% GST)</span>
-                  <span className="text-ink/70 font-display">₹{((cart?.total || 0) - (cart?.total || 0) / 1.18).toFixed(2)}</span>
+                  <span className="text-ink/70 font-display">
+                    {reviewQuote ? `₹${reviewQuote.tax.toFixed(2)}` : '—'}
+                  </span>
                 </div>
               </div>
               <div className="flex justify-between">
                 <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
-                <span className="text-xl font-display font-bold text-gold">₹{(cart?.total || 0).toFixed(2)}</span>
+                <span className="text-xl font-display font-bold text-gold">
+                  {/* Never a confident figure before the server has given one. Printing the
+                      undiscounted total while the quote is in flight is what made checkout
+                      contradict the cart the shopper had just left. */}
+                  {reviewQuote
+                    ? `₹${reviewQuote.totalAmount.toFixed(2)}`
+                    : reviewQuoteLoading ? 'Working it out…' : '—'}
+                </span>
               </div>
             </div>
 
