@@ -42,6 +42,7 @@
 
 import mongoose from 'mongoose';
 import campaignService from '../services/campaignService.js';
+import Coupon from '../models/Coupon.js';
 import campaignRepository from '../repositories/campaignRepository.js';
 import CampaignProductTier from '../models/CampaignProductTier.js';
 import { CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE } from '../config/campaign.js';
@@ -64,6 +65,9 @@ const CAP    = arg('max-redemptions') ? parseInt(arg('max-redemptions'), 10) : n
 const LIVE   = flag('live');
 const TESTERS = arg('testing');   // comma-separated emails
 const REVERT = flag('revert-to-list');
+const CREATE = flag('create');
+const USE_TEST = flag('test');
+const CODE   = arg('code', 'FESTIVE2026').toUpperCase();
 
 /**
  * The agreed ladder. Percentages are the offer; the codes are stable keys that the
@@ -82,8 +86,33 @@ const PRODUCT_TIERS = [
 ];
 
 async function main() {
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
-  if (!uri) die('MONGODB_URI is not set.');
+  /*
+    Which database. `--test` is an explicit opt-in to the test tier rather than something
+    inferred, because the two are configured in the same session and the difference
+    between them is "real customers" and "nobody".
+  */
+  let uri = USE_TEST
+    ? process.env.TEST_MONGODB_URI
+    : (process.env.MONGODB_URI || process.env.MONGO_URI);
+
+  if (!uri) {
+    die(USE_TEST
+      ? 'TEST_MONGODB_URI is not set in .env.'
+      : 'MONGODB_URI is not set.');
+  }
+
+  /*
+    A connection string with no database in its path makes Mongoose quietly use one
+    called `test` — so the script would appear to work, report success, and write the
+    campaign somewhere nothing reads. The test cluster's URI is the one that tends to
+    arrive in this shape. Append the database rather than failing: the intent is never
+    ambiguous, and a hard error here would just be a puzzle.
+  */
+  if (!/mongodb(\+srv)?:\/\/[^/]+\/[^?]+/.test(uri)) {
+    const [base, qs] = uri.split('?');
+    uri = `${base.replace(/\/$/, '')}/autobacs${qs ? `?${qs}` : ''}`;
+    console.log('ℹ  No database in the connection string — using /autobacs.');
+  }
 
   // MANDATORY: autoIndex defaults to true, and this script imports models through the
   // service layer. Merely connecting would build every declared index against whatever
@@ -107,8 +136,64 @@ async function main() {
   console.log(`${'═'.repeat(64)}`);
   console.log(APPLY ? '\n*** APPLY MODE — this WILL write ***\n' : '\n--- DRY RUN — nothing will be written (pass --apply) ---\n');
 
-  const campaign = await campaignRepository.findBySlug(SLUG);
-  if (!campaign) die(`No campaign with slug "${SLUG}".`);
+  let campaign = await campaignRepository.findBySlug(SLUG);
+
+  /*
+    Create it if it is missing — the path that matters on the TEST tier.
+
+    The test database is a snapshot, so a campaign created on production afterwards
+    simply is not there. Without this, rehearsing the offer on test would mean seeding a
+    campaign with one script and then converting it with this one, and the intermediate
+    state is an invitation-only cart-value offer that nobody wants. One command instead.
+
+    Created as DRAFT, which applies to nobody, so this can never switch anything on by
+    accident. The managed coupon is created alongside and linked back, because the
+    go-live check refuses a campaign whose coupon is missing or unlinked.
+  */
+  if (!campaign) {
+    if (!CREATE) {
+      die(`No campaign with slug "${SLUG}". Pass --create to make one ` +
+          `(intended for the test tier, where the snapshot predates it).`);
+    }
+    if (!ENDS) die('--create needs an end date, e.g. --ends=2026-08-31');
+    if (CAP == null) die('--create needs a cap, e.g. --max-redemptions=200');
+
+    console.log(`\nCREATE campaign "${SLUG}" + coupon ${CODE} (as draft)`);
+    if (!APPLY) {
+      console.log('\n--- DRY RUN — nothing written. Re-run with --apply. ---');
+      await mongoose.disconnect();
+      return;
+    }
+
+    campaign = await campaignService.create({
+      slug: SLUG,
+      name: 'Festive 2026 — Thank You Reward',
+      description: 'Public thank-you offer, distributed by QR on a printed card.',
+      status: CAMPAIGN_STATUS.DRAFT,
+      audience: CAMPAIGN_AUDIENCE.EVERYONE,
+      requireVerifiedEmail: true,
+      endsAt: istEndOfDay(ENDS),
+      maxRedemptions: CAP,
+      productTiers: PRODUCT_TIERS,
+      tiers: [],
+      couponCode: CODE,
+      landingPath: '/festive',
+    });
+
+    // Upserted, not created outright: a re-run after a half-finished attempt must not
+    // trip the unique index on `code` and leave the campaign with no coupon.
+    await Coupon.findOneAndUpdate(
+      { code: CODE },
+      {
+        $set: { campaign: campaign._id, visibility: 'hidden', usageLimitPerUser: 1, isActive: true },
+        $setOnInsert: { code: CODE, type: 'percentage', value: 0 },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    console.log(`✓ Created. Now assign products to tiers in admin, then re-run with --live --apply.`);
+    await mongoose.disconnect();
+    return;
+  }
 
   const before = {
     audience: campaign.audience,
