@@ -11,7 +11,7 @@
 
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { useTransactionalDb } from './helpers/replicaSet.js';
 
 import Product from '../models/Product.js';
 import User from '../models/User.js';
@@ -30,7 +30,6 @@ import { invalidateLoyaltyConfig } from '../services/loyaltyConfigService.js';
 
 jest.setTimeout(120000);
 
-let replset;
 
 const ADDRESS = {
   fullName: 'Test Buyer', phone: '9999999999', addressLine1: '1 Test St',
@@ -53,19 +52,9 @@ async function setConfig(cfg) {
 }
 
 beforeAll(async () => {
-  // Replace the standalone connection from setup.js with a replica-set one.
-  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
-  replset = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    binary: { version: '7.0.14' },
-  });
-  await mongoose.connect(replset.getUri(), { serverSelectionTimeoutMS: 30000 });
+  await useTransactionalDb();
 });
 
-afterAll(async () => {
-  await mongoose.disconnect();
-  if (replset) await replset.stop();
-});
 
 beforeEach(async () => {
   // setup.js's afterEach clears collections; re-seed a default config + clear cache.

@@ -7,13 +7,16 @@
  * whether such orders were in fact paid and drives the genuinely-captured ones
  * through the same idempotent success path the webhook uses.
  *
- * Like razorpayWebhookRace.test.js this spins up its own single-node replica set
- * because processPaymentSuccess writes inside session.withTransaction.
+ * processPaymentSuccess writes inside session.withTransaction, so this needs a
+ * transaction-capable database. tests/setup.js provides one (a single-node replica
+ * set) for every suite; useTransactionalDb() asserts that and warms it up. This
+ * file used to disconnect from it and build a SECOND replica set of its own — a
+ * leftover from when setup.js started a standalone.
  */
 
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { useTransactionalDb } from './helpers/replicaSet.js';
 
 // razorpayService's constructor throws without these; set BEFORE it is imported.
 process.env.RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_key';
@@ -26,7 +29,6 @@ import Payment from '../models/Payment.js';
 
 jest.setTimeout(180000);
 
-let replset;
 let razorpayService;
 let reconcileStuckPayments;
 
@@ -74,30 +76,10 @@ function capturedPayment(order, { paymentId = `pay_${Date.now()}`, amountPaise, 
 }
 
 beforeAll(async () => {
-  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
-  replset = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    binary: { version: '7.0.14' },
-  });
-  await mongoose.connect(replset.getUri(), { serverSelectionTimeoutMS: 30000 });
+  await useTransactionalDb({ warmUp: true });
   await Payment.syncIndexes(); // unique gatewayPaymentId index — idempotency serialization point
   razorpayService = (await import('../services/razorpayService.js')).default;
   reconcileStuckPayments = (await import('../services/paymentReconciliationService.js')).reconcileStuckPayments;
-
-  // Absorb the one-off replica-set warm-up cost (primary election + first-transaction
-  // latency) here so it doesn't blow the first real test's timeout — every test below
-  // exercises processPaymentSuccess, which writes inside session.withTransaction.
-  const warm = await mongoose.startSession();
-  try {
-    await warm.withTransaction(async () => { await Order.findOne({}).session(warm); });
-  } finally {
-    await warm.endSession();
-  }
-});
-
-afterAll(async () => {
-  await mongoose.disconnect();
-  if (replset) await replset.stop();
 });
 
 afterEach(async () => {

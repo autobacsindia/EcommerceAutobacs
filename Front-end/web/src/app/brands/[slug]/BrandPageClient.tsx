@@ -1,0 +1,210 @@
+'use client';
+
+import type { StockStatus } from '@/lib/stock';
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
+import ProductGrid from '@/components/products/ProductGrid';
+import Pagination from '@/components/layout/Pagination';
+import apiClient from '@/lib/api';
+
+interface ProductImage {
+  url: string;
+  alt?: string;
+  isPrimary?: boolean;
+  _id?: string;
+}
+
+interface Product {
+  _id: string;
+  name: string;
+  description: string;
+  shortDescription?: string;
+  price: number;
+  originalPrice?: number;
+  category: { _id: string; name: string; slug: string; } | string;
+  brand?: string;
+  images: ProductImage[] | string;
+  stock: StockStatus;
+  sku?: string;
+  specifications?: Array<{ key: string; value: string; _id?: string; }> | string;
+  features?: string[] | string;
+  isActive: boolean;
+  isFeatured: boolean;
+  averageRating: number;
+  totalReviews: number;
+  tags?: string[] | string;
+  createdAt: string;
+  updatedAt: string;
+  __v?: number;
+}
+
+interface Pagination {
+  total?: number;
+  pages?: number;
+  currentPage?: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+  count?: number;
+}
+
+interface ProductsData {
+  products: Product[];
+  pagination: Pagination;
+}
+
+async function getBrandProducts(brandName: string, page: number = 1, limit: number = 12): Promise<ProductsData> {
+  const data: any = await apiClient.get(`/products/brands/${encodeURIComponent(brandName)}?page=${page}&limit=${limit}`);
+  if (data?.products) {
+    const { total, pages, currentPage, hasNext, hasPrev, count } = data;
+    return { products: data.products, pagination: { total, pages, currentPage, hasNext, hasPrev, count } };
+  }
+  return { products: [], pagination: {} };
+}
+
+function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: any }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Seeded from the server fetch — see page.tsx. The brand is guaranteed to exist
+  // by the time this renders, so there is no brand-loading or brand-missing state
+  // left to model on the client.
+  const brand = initialBrand;
+
+  const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await getBrandProducts(initialBrand?.slug || slug, currentPage);
+        setData(result);
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch products');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, [slug, initialBrand?.slug, currentPage]);
+
+  const handlePageChange = (newPage: number) => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('page', newPage.toString());
+    router.push(`/brands/${slug}?${p.toString()}`);
+  };
+
+  return (
+    <div className="min-h-screen bg-obsidian-deep">
+      {/* Brand Header */}
+      <div className="bg-obsidian border-b border-hairline py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center gap-8">
+            <div className="bg-obsidian-raised border border-hairline rounded-lg p-4 w-32 h-32 flex items-center justify-center shrink-0">
+              {brand.logo ? (
+                <img
+                  src={brand.logo}
+                  alt={brand.name}
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <span className="text-3xl font-display font-bold text-gold">{brand.name?.charAt(0)}</span>
+              )}
+            </div>
+            <div className="text-center md:text-left">
+              <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Brand</p>
+              <h1 className="mt-3 text-[clamp(38px,5.5vw,72px)] font-light leading-[0.95] tracking-[-0.01em] text-ink mb-3">{brand.name}</h1>
+              {brand.description && (
+                <p className="mb-5 max-w-2xl font-display text-[14px] font-light leading-relaxed text-ink-muted">{brand.description}</p>
+              )}
+              <span className="inline-block bg-gold/10 border border-gold/30 text-gold font-display text-[11px] uppercase tracking-[0.2em] px-3.5 py-1.5">
+                {data.pagination?.total || 0} Products
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Results count */}
+        <div className="mb-6">
+          <p className="text-ink/70 font-display text-sm">
+            {loading ? 'Loading products...' : data.products.length > 0
+              ? `Showing ${data.products.length} product${data.products.length !== 1 ? 's' : ''}${data.pagination?.total ? ` of ${data.pagination.total}` : ''}`
+              : 'No products found'}
+          </p>
+        </div>
+
+        {/* Error */}
+        {error && !loading && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center mb-6">
+            <h3 className="text-lg font-display font-bold text-red-400 uppercase mb-2">Error Loading Products</h3>
+            <p className="text-ink/70 font-display mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center px-4 py-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading skeletons */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-obsidian border border-hairline rounded-lg overflow-hidden animate-pulse">
+                <div className="h-48 bg-obsidian-raised" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 bg-obsidian-raised rounded w-3/4" />
+                  <div className="h-4 bg-obsidian-raised rounded w-1/2" />
+                  <div className="h-6 bg-obsidian-raised rounded w-1/3" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !error && data.products.length > 0 ? (
+          <>
+            <ProductGrid products={data.products} />
+            {!loading && !error && (
+              <Pagination
+                pagination={data.pagination}
+                currentPage={currentPage}
+                basePath={`/brands/${slug}`}
+                searchParams={searchParams}
+              />
+            )}
+          </>
+        ) : !error ? (
+          <div className="text-center py-12">
+            <p className="text-ink-muted font-display text-lg mb-4">No products found for this brand</p>
+            <Link href="/products" className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors">
+              Browse all products
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary. It sits INSIDE the client
+// component on purpose: by the time this renders the server has already awaited
+// the brand lookup, so a missing brand has thrown notFound() and committed a 404
+// before anything streams. A `loading.tsx` in this segment (or any ancestor)
+// would move the boundary above that await and put the soft 404 straight back.
+export default function BrandPageClient({ slug, initialBrand }: { slug: string; initialBrand: any }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+      <BrandPageInner slug={slug} initialBrand={initialBrand} />
+    </Suspense>
+  );
+}

@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
@@ -37,11 +38,17 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const product = await getProductForMetadata(slug);
 
-  if (!product) {
-    return {
-      title: 'Product Not Found | Autobacs India',
-    }
-  }
+  // notFound() rather than a "Product Not Found" TITLE. Returning a title here
+  // rendered the page with HTTP 200 — a soft 404: Google keeps the dead product
+  // URL in its index (the ~550 stale WooCommerce slugs are exactly this shape),
+  // and any uptime/link check keyed on status reports a dead PDP as healthy.
+  //
+  // This only produces a real 404 while there is NO Suspense boundary above this
+  // segment. A `loading.tsx` at `/products/[slug]`, at `/products`, or at the app
+  // root makes Next flush the shell — and therefore commit HTTP 200 — before this
+  // ever throws. Those three files were removed for exactly this reason; adding
+  // any of them back silently restores the soft 404. See src/app/soft404.test.ts.
+  if (!product) notFound();
 
   // Build canonical URL — slug is the only identifier; no _id fallback
   const url = product.slug ? `${SITE_URL}/products/${product.slug}` : null;
@@ -126,6 +133,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const product = await getProductForMetadata(slug);
+
+  // Unknown slug => real 404 (see the note in generateMetadata). Previously this
+  // fell through to <ClientPage initialProduct={null}>, which refetched on the
+  // client and rendered its own "not found" state under a 200.
+  if (!product) notFound();
 
   // Build JSON-LD structured data for Google rich results
   const jsonLd = product?.slug ? {
