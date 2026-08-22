@@ -23,6 +23,20 @@ export function safeInternalPath(raw: string | null | undefined): string | null 
 }
 
 /**
+ * Build the sign-in URL that returns the customer to where they were.
+ *
+ * `target` goes through `safeInternalPath`, so an unsafe or absent value degrades to a
+ * bare `/login` rather than smuggling an off-site redirect into the query string. `/`
+ * is dropped too — it is already the login page's default destination, and carrying it
+ * only makes the URL noisier.
+ */
+export function loginHref(target?: string | null): string {
+  const safe = safeInternalPath(target);
+  if (!safe || safe === '/') return '/login';
+  return `/login?redirect=${encodeURIComponent(safe)}`;
+}
+
+/**
  * Format currency for display
  */
 export function formatCurrency(amount: number, currency: string = 'INR'): string {

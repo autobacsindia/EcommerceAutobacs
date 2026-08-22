@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -101,9 +102,7 @@ export default function OrderDetailPage() {
     onFailure: (error) => { if (error.message !== 'Payment cancelled') console.error('Retry payment failed:', error); }
   });
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) router.push('/login');
-  }, [isAuthenticated, authLoading, router]);
+  useRequireAuth();
 
   useEffect(() => {
     if (isAuthenticated && orderId) fetchOrderDetail();

@@ -29,7 +29,13 @@ import { isGonePath } from '@/lib/legacyPaths';
  * browsing users are not forced to re-authenticate every 30 minutes.
  */
 
-const PROTECTED_ROUTES = ['/account', '/orders', '/checkout'];
+// Routes that require a signed-in customer. Gating here means a signed-out visitor is
+// redirected at the edge instead of being served the protected shell and yanked away on
+// hydration. This is a UX + consistency boundary, NOT the security boundary — the API
+// (`/api/v1/profile`, `/api/v1/wishlist`, …) is what actually withholds the data, and it
+// fails closed on its own. Keep this list and the client-side `useRequireAuth` pages in
+// agreement; a route gated in one place and not the other is how the two drift.
+const PROTECTED_ROUTES = ['/account', '/orders', '/checkout', '/profile', '/wishlist'];
 const ADMIN_ROUTES = ['/admin'];
 
 // Verification options must match how the backend SIGNS tokens
@@ -265,7 +271,12 @@ export async function middleware(req: NextRequest) {
 
   const loginUrl = () => {
     const url = new URL('/login', req.url);
-    url.searchParams.set('redirect', pathname);
+    // Carry the query string, not just the pathname. Dropping it meant a customer sent
+    // here from `/orders?status=delivered` signed in and landed on a bare, unfiltered
+    // `/orders` — the view they were looking at is gone. `searchParams.set` encodes the
+    // whole thing into one value, and the login page re-validates it through
+    // `safeInternalPath`, so this stays a same-origin path and nothing more.
+    url.searchParams.set('redirect', `${pathname}${req.nextUrl.search}`);
     return url;
   };
 

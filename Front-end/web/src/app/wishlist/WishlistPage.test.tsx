@@ -5,9 +5,9 @@ import '@testing-library/jest-dom';
 
 // Mocks
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-  }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  // useRequireAuth reads the pathname to build the /login?redirect= destination.
+  usePathname: () => '/wishlist',
 }));
 
 jest.mock('next/link', () => {

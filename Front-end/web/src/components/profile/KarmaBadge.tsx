@@ -70,8 +70,11 @@ export default function KarmaBadge() {
   }, [open]);
 
   const balance = karma?.balance ?? null;
-  const pointValue = karma?.config.pointValueInRupees ?? 1;
-  const loyaltyEnabled = karma?.config.enabled ?? false;
+  // `?.` has to reach `config` too: a 200 whose body is missing `config` (a partial or
+  // reshaped response) would otherwise throw here and take the whole profile page down
+  // to the error boundary, over a badge that renders nothing when loyalty is off.
+  const pointValue = karma?.config?.pointValueInRupees ?? 1;
+  const loyaltyEnabled = karma?.config?.enabled ?? false;
 
   const toggle = () => setOpen((v) => !v);
 

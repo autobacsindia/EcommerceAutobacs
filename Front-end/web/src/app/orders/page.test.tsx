@@ -8,9 +8,9 @@ import orderService from '@/lib/services/orderService';
 jest.mock('@/context/AuthContext');
 jest.mock('@/lib/services/orderService');
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-  }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  // useRequireAuth reads the pathname to build the /login?redirect= destination.
+  usePathname: () => '/orders',
 }));
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => (
