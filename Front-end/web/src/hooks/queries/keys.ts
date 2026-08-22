@@ -80,6 +80,15 @@ export const campaignKeys = {
   productTiersFor: (campaignId: string) => [...campaignKeys.all, 'productTiers', campaignId] as const,
   /** Products matching a tier's saved queries but carrying no assignment. */
   productTierDrift: (campaignId: string) => [...campaignKeys.all, 'productTierDrift', campaignId] as const,
+  /**
+   * What rate given products earn under the running campaign.
+   *
+   * Deliberately NOT keyed on the user, unlike `me`: a product's rate is a property of
+   * the catalogue and the ladder, so every shopper shares one cache entry. Whether to
+   * SHOW it is the per-user question, and that is `me`'s job.
+   */
+  productRates: (slug: string, ids: string[]) =>
+    [...campaignKeys.all, 'productRates', slug, [...ids].sort().join(',')] as const,
 };
 
 export const adminKeys = {

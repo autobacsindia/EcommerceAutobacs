@@ -14,18 +14,21 @@
  */
 
 /**
- * Lifecycle. Deliberately richer than a boolean so a campaign can be live on the real
- * site while reaching only named testers — the only way to prove a money path end to
- * end on production before customers (or 200 printed cards) can touch it.
+ * Lifecycle.
  *
- *   draft   — being configured. Never applies, to anyone.
- *   testing — applies ONLY to campaign.testerEmails. Real site, real payment, no risk.
- *   live    — applies to the configured audience.
- *   off     — the kill switch. Instant, admin-flippable, no deploy.
+ *   draft — being configured. Never applies, to anyone.
+ *   live  — applies to the configured audience.
+ *   off   — the kill switch. Instant, admin-flippable, no deploy.
+ *
+ * There was a fourth, `testing`, which applied only to a list of named tester emails.
+ * It was removed: rehearsing on production is what the TEST ENVIRONMENT is for. Same
+ * code, separate database, separate Razorpay keys — so "live" already means live for
+ * whichever environment you are in, and a second, campaign-shaped notion of testing
+ * only created a state where an operator could flip a campaign on and correctly see
+ * nothing happen. Which is exactly what it did.
  */
 export const CAMPAIGN_STATUS = Object.freeze({
   DRAFT: 'draft',
-  TESTING: 'testing',
   LIVE: 'live',
   OFF: 'off',
 });
@@ -94,7 +97,6 @@ export const CAMPAIGN_REASON = Object.freeze({
   UNVERIFIED: 'Please confirm your email address to use this offer',
   ALREADY_USED: 'You have already used this offer',
   NO_TIER: 'Add more to your cart to unlock this offer',
-  TESTING: 'This offer is still being tested',
 });
 
 /**

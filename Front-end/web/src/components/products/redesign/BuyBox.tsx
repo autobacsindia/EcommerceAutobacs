@@ -9,6 +9,9 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
+import CampaignRateBadge from '@/components/campaign/CampaignRateBadge';
+import { useCampaignProductRates, lineSavings } from '@/hooks/queries/useCampaignProductRates';
+import { useCampaign } from '@/hooks/queries/useCampaign';
 import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
 import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
@@ -72,6 +75,10 @@ export default function BuyBox({
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
+  // For the add-to-cart congratulation. Both are cached reads the badge below already
+  // needs, so this costs nothing extra.
+  const { data: campaignStatus } = useCampaign(0);
+  const { data: campaignRates } = useCampaignProductRates([product._id]);
 
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -126,12 +133,36 @@ export default function BuyBox({
     variantLabel: selectedVariant?.label ?? null,
   });
 
+  /*
+    What this shopper is saving on the line they just added, and where it comes from.
+
+    The catalogue half — a price already below its "was" — is true for ANYONE, so it is
+    always counted. The campaign half is only counted when this shopper is actually
+    eligible: telling a signed-out visitor they saved 8% they cannot yet claim would be
+    a number the cart then contradicts.
+
+    Display only, and both inputs are the server's own — the price from the catalogue,
+    the rate from the campaign — floored the same way `lineDiscountPaise` floors it. The
+    cart still recomputes everything server-side.
+  */
+  const addedSavings = () => {
+    const percent = campaignStatus?.eligible
+      ? campaignRates?.rates?.[product._id]?.percent ?? 0
+      : 0;
+    return lineSavings({ price: activePrice, originalPrice: activeOriginal, quantity: qty, percent });
+  };
+
   const add = async () => {
     if (needsSelection) { toast.error('Please select a model first'); return; }
     setAdding(true);
     // Optimistic: badge + toast fire on tap; a server rejection rolls the count
     // back (in addToCart) and the catch surfaces an error toast.
-    toast.success(`Added ${qty} to cart`);
+    const saved = addedSavings();
+    toast.success(
+      saved.total > 0
+        ? `Added to cart — you saved ${formatPrice(saved.total)} 🎉`
+        : `Added ${qty} to cart`,
+    );
     try {
       await addToCart(product._id, qty, snapshot(), selectedVariant?._id ?? null);
     } catch (e) {
@@ -210,6 +241,18 @@ export default function BuyBox({
       <p className="mt-2 text-[12px] text-ink-muted">
         {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · shipping at checkout
       </p>
+
+      {/* The campaign, made visible where the buying decision is actually made. Hidden
+          until a variable product has a model picked, because the rate is charged on the
+          VARIANT's price and quoting it against a range would be a different number. */}
+      {!needsSelection && (
+        <CampaignRateBadge
+          productId={product._id}
+          price={activePrice}
+          originalPrice={activeOriginal}
+          className="mt-3"
+        />
+      )}
       {onSale && !isVariable && <SaleCountdown saleEndsAt={product.saleEndsAt} className="mt-3" />}
 
       {/* Variant (model) selector — variable products only */}

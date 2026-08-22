@@ -3,7 +3,7 @@ import { protect, admin } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { contactFormRateLimit } from '../middleware/rate-limit/index.js';
 import {
-  getMyCampaignStatus, checkCampaignEmail,
+  getMyCampaignStatus, checkCampaignEmail, getCampaignProductRates,
   listCampaigns, getCampaignAdmin, getCampaignReport,
   createCampaign, updateCampaign, setCampaignStatus,
   importCampaignMembers, listCampaignMembers, simulateCampaign,
@@ -15,7 +15,7 @@ import {
   validateCampaignUpdate, validateCampaignStatus, validateCampaignEmailCheck,
   validateCampaignMembers, validateCampaignMemberQuery, validateCampaignSimulate,
   validateProductTierPreview, validateProductTierSimulate, validateProductTierCommit,
-  validateProductTierQuery, validateProductTierCode,
+  validateProductTierQuery, validateProductTierCode, validateProductRates,
 } from '../validators/campaign.validator.js';
 
 const router = express.Router();
@@ -24,6 +24,14 @@ const router = express.Router();
 // optionalAuth is applied at mount so a logged-out visitor still gets a useful
 // answer ("log in with the email your offer was sent to") rather than a 401.
 router.get('/:slug/me', validateCampaignSlug, validateRequest, getMyCampaignStatus);
+
+// Per-product campaign rates for badges. Identity-free by construction — see the
+// controller — so unlike /:slug/me it carries no per-user data and needs no auth.
+router.get(
+  '/:slug/product-rates',
+  validateCampaignSlug, validateProductRates, validateRequest,
+  getCampaignProductRates,
+);
 
 // Reveals whether an address is on the allowlist, so it is an enumeration oracle by
 // design (the UX requires an unambiguous "you're in"). Held to the strictest public

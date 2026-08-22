@@ -18,12 +18,14 @@
 import campaignRepository from '../repositories/campaignRepository.js';
 import campaignMemberRepository from '../repositories/campaignMemberRepository.js';
 import campaignProductTierRepository from '../repositories/campaignProductTierRepository.js';
+import productRepository from '../repositories/productRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import AppError from '../utils/AppError.js';
+import { effectivePrice } from '../utils/productPrice.js';
 import { resolveTier, validateTiers, assertMonotonic } from '../utils/campaignTiers.js';
 import {
-  validateProductTiers, defaultTier, explicitTiers, ON_SALE_MAX_PERCENT,
+  validateProductTiers, defaultTier, explicitTiers, resolveLinePercent, ON_SALE_MAX_PERCENT,
 } from '../utils/productTiers.js';
 import {
   CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE, CAMPAIGN_REASON,
@@ -31,19 +33,22 @@ import {
 } from '../config/campaign.js';
 
 const EDITABLE_FIELDS = [
-  'name', 'description', 'status', 'audience', 'testerEmails', 'requireVerifiedEmail',
+  'name', 'description', 'status', 'audience', 'requireVerifiedEmail',
   'startsAt', 'endsAt', 'tiers', 'resolution', 'maxDiscountPerOrder', 'couponCode', 'productTiers',
   'allowKarmaStacking', 'maxRedemptions', 'landingPath', 'allowNonMonotonicTiers',
 ];
 
+/*
+  Ceiling on a PUBLIC, unauthenticated lookup. A product page asks about one product and
+  a listing about a screenful; anything larger is someone probing the catalogue through a
+  route that answers cheaply, so it is clamped rather than rejected — a caller asking for
+  too much gets the first 60 answers, not an error to work around.
+*/
+const MAX_RATE_LOOKUP = 60;
+
 function pick(body) {
   const out = {};
   for (const k of EDITABLE_FIELDS) if (body[k] !== undefined) out[k] = body[k];
-  if (Array.isArray(out.testerEmails)) {
-    out.testerEmails = out.testerEmails
-      .map(e => String(e || '').toLowerCase().trim())
-      .filter(Boolean);
-  }
   return out;
 }
 
@@ -110,13 +115,6 @@ class CampaignService {
     }
 
     // ── Audience ──────────────────────────────────────────────────────────────
-    // 'testing' means live on the real site for named testers only — the way to
-    // prove the money path on production before customers can reach it.
-    if (campaign.status === CAMPAIGN_STATUS.TESTING) {
-      const testers = (campaign.testerEmails || []).map(e => String(e).toLowerCase());
-      if (!testers.includes(email)) return { reason: CAMPAIGN_REASON.TESTING };
-    }
-
     if (campaign.audience === CAMPAIGN_AUDIENCE.LIST) {
       const member = await campaignMemberRepository.findByCampaignEmail(campaign._id, email, session);
       if (!member) return { reason: CAMPAIGN_REASON.NOT_INVITED };
@@ -141,6 +139,71 @@ class CampaignService {
     if (!campaign) return { campaign: null };
     const result = await this.evaluate(campaign, userId, eligiblePaise, session, now);
     return { campaign, ...result };
+  }
+
+  /**
+   * What rate each of these products earns under a per-product campaign, right now.
+   *
+   * Exists so a shopper learns the discount on the PRODUCT PAGE rather than discovering
+   * it at the cart. Before this, the entire scheme was invisible until a coupon
+   * auto-applied on /cart — so a single silent failure there, or simply never opening
+   * the cart, made a live campaign look like nothing was happening at all.
+   *
+   * Deliberately NOT per-user, and therefore safely cacheable: a product's rate is a
+   * property of the catalogue and the ladder, not of who is looking. WHETHER to show it
+   * is the per-user question, and the caller already holds that answer from
+   * statusForUser — which stays uncached and private. Splitting them this way keeps the
+   * expensive-to-cache thing small and the cacheable thing free of identity.
+   *
+   * Returns null when no per-product campaign is running, so a caller can render nothing
+   * without having to know why.
+   *
+   * @param {string[]} productIds
+   * @returns {Promise<null | { slug, endsAt, rates: Record<string, {percent:number, onSaleCapped:boolean}> }>}
+   */
+  async productRates(slug, productIds, now = new Date()) {
+    const campaign = await campaignRepository.findBySlug(slug);
+    if (!campaign) return null;
+
+    // Same window and kill-switch the pricing path enforces. A draft or switched-off
+    // campaign must not advertise a rate that checkout would refuse to honour.
+    if (campaign.status !== CAMPAIGN_STATUS.LIVE) return null;
+    if (campaign.startsAt && now < campaign.startsAt) return null;
+    if (campaign.endsAt && now > campaign.endsAt) return null;
+    if (!campaign.productTiers?.length) return null;
+
+    const ids = [...new Set((productIds || []).map(String).filter(Boolean))].slice(0, MAX_RATE_LOOKUP);
+    if (!ids.length) return { slug: campaign.slug, endsAt: campaign.endsAt, rates: {} };
+
+    const [assignments, products] = await Promise.all([
+      campaignProductTierRepository.findForProducts(campaign._id, ids),
+      productRepository.find(
+        { _id: { $in: ids }, isActive: true },
+        // Projected: a rate needs the sale window and nothing else. This route is public
+        // and uncached at the app layer, so it must not haul whole product documents.
+        { limit: ids.length, select: 'price originalPrice saleEndsAt', sort: {} },
+      ),
+    ]);
+
+    const rates = {};
+    for (const product of products) {
+      /*
+        `onSale` is derived exactly as priceItems derives it — from effectivePrice, not
+        from a stored flag — so the badge and the charge can never disagree. A sale whose
+        window has closed reverts the price UP at the expiry instant, ahead of the cron
+        that normalizes the stored fields; reading a flag here would advertise a capped
+        2% on a product that is about to earn its full tier rate.
+      */
+      const unitPrice = effectivePrice(product, now);
+      const listPrice = typeof product.originalPrice === 'number' ? product.originalPrice : null;
+      const onSale = listPrice != null && listPrice > unitPrice;
+
+      const assigned = assignments.get(String(product._id))?.tierCode || null;
+      const { percent, onSaleCapped } = resolveLinePercent(campaign.productTiers, assigned, onSale);
+      rates[String(product._id)] = { percent, onSaleCapped };
+    }
+
+    return { slug: campaign.slug, endsAt: campaign.endsAt, rates };
   }
 
   /**
@@ -254,7 +317,7 @@ class CampaignService {
     if (!campaign) throw new AppError('Campaign not found', 404);
 
     const clean = String(email || '').toLowerCase().trim();
-    const live = campaign.status === CAMPAIGN_STATUS.LIVE || campaign.status === CAMPAIGN_STATUS.TESTING;
+    const live = campaign.status === CAMPAIGN_STATUS.LIVE;
 
     // An 'everyone' campaign has no allowlist to check, so there is nothing this
     // endpoint can legitimately tell the caller about a specific address. Probing the
@@ -371,7 +434,7 @@ class CampaignService {
   }
 
   /**
-   * Gate on going LIVE (or into TESTING). Separate from assertValidConfig because a
+   * Gate on going LIVE. Separate from assertValidConfig because a
    * draft is allowed to be incomplete — these are the checks that must hold before
    * anyone can actually be charged a discounted amount.
    */
@@ -454,9 +517,6 @@ class CampaignService {
         400
       );
     }
-    if (campaign.status === CAMPAIGN_STATUS.TESTING && !campaign.testerEmails?.length) {
-      throw new AppError('Testing mode needs at least one tester email', 400);
-    }
     return true;
   }
 
@@ -532,7 +592,7 @@ class CampaignService {
     const campaign = await campaignRepository.findById(id);
     if (!campaign) throw new AppError('Campaign not found', 404);
 
-    if (status === CAMPAIGN_STATUS.LIVE || status === CAMPAIGN_STATUS.TESTING) {
+    if (status === CAMPAIGN_STATUS.LIVE) {
       const merged = campaign.toObject ? campaign.toObject() : campaign;
       await this.assertPublishable({ ...merged, status });
     }

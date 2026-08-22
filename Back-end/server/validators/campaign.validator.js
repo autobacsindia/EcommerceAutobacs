@@ -60,8 +60,6 @@ const campaignRules = (partial = false) => {
       .isLength({ max: 40 }),
     body('landingPath').optional({ nullable: true })
       .trim().matches(/^\/[a-z0-9/-]*$/i).withMessage('Landing path must start with /'),
-    body('testerEmails').optional().isArray({ max: 50 }).withMessage('At most 50 tester emails'),
-    body('testerEmails.*').optional().isEmail().withMessage('Invalid tester email'),
     ...tierRules,
   ];
 };
@@ -176,4 +174,19 @@ export const validateProductTierCode = [
   param('tierCode')
     .trim().notEmpty().withMessage('A tier code is required')
     .isLength({ max: TIER_CODE_MAX }).withMessage('Tier code too long'),
+];
+
+/*
+  A public, unauthenticated lookup, so the input is bounded before it reaches Mongo.
+
+  Length rather than a per-id ObjectId check: the ids arrive as one comma-joined string,
+  the service clamps the parsed list to its own ceiling, and an id that is not a real
+  ObjectId simply matches nothing. Rejecting the whole request over one malformed id
+  would make a product page fail because of a neighbouring card.
+*/
+export const validateProductRates = [
+  query('ids')
+    .optional()
+    .isString().withMessage('ids must be a comma-separated list')
+    .isLength({ max: 2000 }).withMessage('Too many product ids in one request'),
 ];

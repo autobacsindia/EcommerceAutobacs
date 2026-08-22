@@ -198,19 +198,30 @@ describe('eligibility gate', () => {
     }
   });
 
-  it('in testing mode applies only to listed testers', async () => {
-    const product = await seedProduct(50000);
-    const campaign = await seedCampaign({
-      status: CAMPAIGN_STATUS.TESTING,
-      testerEmails: ['tester@x.com'],
-    });
-    const tester = await seedUser({ email: 'tester@x.com' });
-    const customer = await seedUser({ email: 'realcustomer@x.com' });
-    await invite(campaign, 'tester@x.com');
-    await invite(campaign, 'realcustomer@x.com');
+  /*
+    Replaces "in testing mode applies only to listed testers".
 
-    expect((await quoteFor(tester._id, product)).couponDiscount).toBe(10000);
-    expect((await quoteFor(customer._id, product)).couponError).toBe(CAMPAIGN_REASON.TESTING);
+    A `testing` status once let a campaign run on the real site for a handful of named
+    addresses. It was removed: the TEST ENVIRONMENT already provides that separation —
+    same code, its own database, its own Razorpay keys — so `live` means live for
+    whichever environment you are in, and there is no longer a lifecycle state that an
+    operator can switch on and correctly see nothing happen.
+
+    What must hold instead is that only `live` ever pays out.
+  */
+  it('pays out on live, and on nothing else', async () => {
+    const product = await seedProduct(50000);
+    const customer = await seedUser({ email: 'realcustomer@x.com' });
+
+    const campaign = await seedCampaign({ status: CAMPAIGN_STATUS.DRAFT });
+    await invite(campaign, 'realcustomer@x.com');
+    expect((await quoteFor(customer._id, product)).couponError).toBe(CAMPAIGN_REASON.INACTIVE);
+
+    await campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE);
+    expect((await quoteFor(customer._id, product)).couponDiscount).toBe(10000);
+
+    await campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.OFF);
+    expect((await quoteFor(customer._id, product)).couponError).toBe(CAMPAIGN_REASON.INACTIVE);
   });
 
   it('applies to any verified customer when the audience is everyone', async () => {
