@@ -160,6 +160,21 @@ function getSafeMessage(err, isOperational, isPrivileged = false) {
     return err.message;
   }
 
+  /*
+    Explicitly exposed by whoever raised it (see AppError's `expose`).
+
+    The whitelist matches on EXACT strings, which cannot cover a message that names the
+    thing that went wrong — "Please select a variant for <product>" is written for the
+    buyer and contains nothing they are not already looking at, yet reached them as
+    "Something went wrong", making a fixable cart problem look like an outage.
+
+    Still gated on `isOperational`, so only messages we authored via AppError qualify;
+    an unexpected throw can carry internals and stays generic for everyone.
+  */
+  if (isOperational && err.expose === true && typeof err.message === 'string' && err.message) {
+    return err.message;
+  }
+
   // ADMINS SEE THE REAL REASON.
   //
   // The whitelist exists to stop internals leaking to the PUBLIC. Applying it to the
