@@ -15,6 +15,8 @@ import Testimonials from './Testimonials';
 import Journal from './Journal';
 import RedesignFooter from './RedesignFooter';
 import PromoBanner from '@/components/layout/PromoBanner';
+import CampaignBanner from '@/components/campaign/CampaignBanner';
+import { useRewardRibbonClaimsSlot } from '@/hooks/useRewardRibbon';
 import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
 import type { HomeData } from './homeData';
 
@@ -41,6 +43,8 @@ export default function HomeRedesign({
   promoBanner?: PromoBannerData | null;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  // Who owns the strip under the nav. One rule, shared with every other route.
+  const ribbonClaimsSlot = useRewardRibbonClaimsSlot();
 
   useEffect(() => {
     const root = rootRef.current;
@@ -96,11 +100,26 @@ export default function HomeRedesign({
         the hero's nav clearance instead of adding to it.
       */}
       <div className="hr-hero-stack">
-        {promoBanner && (
+        {/*
+          One strip in the slot, never two.
+
+          The reward ribbon outranks the promotional image — the rule lives in
+          useRewardRibbonClaimsSlot so every page reads the same one. Elsewhere the two
+          bars sort that out between the root layout and ConditionalPromoBanner, but this
+          page mounts its own strip (its nav is fixed, so the layout's copy would sit
+          underneath it), which meant the precedence never applied here and both showed.
+
+          Each renders its own wrapper rather than being nested in a shared one, so a
+          dismissed ribbon leaves no empty slot behind — on mobile that div is in flow and
+          would show as an unexplained gap under the nav.
+        */}
+        {ribbonClaimsSlot ? (
+          <CampaignBanner inHomeSlot className="hr-promo-slot" />
+        ) : promoBanner ? (
           <div className="hr-promo-slot">
             <PromoBanner banner={promoBanner} />
           </div>
-        )}
+        ) : null}
         <Hero />
       </div>
       <Manifesto />
