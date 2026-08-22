@@ -114,7 +114,7 @@ export default function HomeRedesign({
           would show as an unexplained gap under the nav.
         */}
         {ribbonClaimsSlot ? (
-          <CampaignBanner inHomeSlot className="hr-promo-slot" />
+          <CampaignBanner inHomeSlot className="hr-promo-slot hr-unscoped" />
         ) : promoBanner ? (
           <div className="hr-promo-slot">
             <PromoBanner banner={promoBanner} />

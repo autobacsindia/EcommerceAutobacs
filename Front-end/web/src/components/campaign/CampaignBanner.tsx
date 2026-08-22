@@ -70,8 +70,8 @@ export default function CampaignBanner({
       ? Math.max(...campaign.tiers.map((t) => t.percent))
       : null;
 
-  return (
-    <div className={`relative bg-gradient-to-r from-gold/20 via-gold/10 to-transparent border-b border-gold/25 ${className}`}>
+  const ribbon = (
+    <div className="relative bg-gradient-to-r from-gold/20 via-gold/10 to-transparent border-b border-gold/25">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 text-sm">
         <Gift size={15} className="shrink-0 text-gold" />
         <p className="flex-1 text-ink/90">
@@ -96,4 +96,16 @@ export default function CampaignBanner({
       </div>
     </div>
   );
+
+  /*
+    In the home slot the ribbon goes INSIDE a wrapper carrying the slot class, rather
+    than wearing that class itself. The slot owns placement — overlay positioning on
+    desktop, nav clearance on mobile, an opaque ground — and folding those onto the
+    ribbon's own element is what made it render differently there than everywhere else.
+
+    The wrapper lives here rather than in HomeRedesign so that a dismissed or
+    ineligible ribbon leaves no empty slot behind: on mobile that div is in flow and
+    would show as an unexplained gap under the nav.
+  */
+  return inHomeSlot ? <div className={className}>{ribbon}</div> : ribbon;
 }
