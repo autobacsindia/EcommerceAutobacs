@@ -12,7 +12,7 @@
 
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { useTransactionalDb } from './helpers/replicaSet.js';
 
 import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
@@ -25,7 +25,6 @@ import { CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE } from '../config/campaign.js';
 
 jest.setTimeout(120000);
 
-let replset;
 let seq = 0;
 
 const PRODUCT_TIERS = [
@@ -57,18 +56,9 @@ async function seedCampaign(overrides = {}) {
 }
 
 beforeAll(async () => {
-  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
-  replset = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    binary: { version: '7.0.14' },
-  });
-  await mongoose.connect(replset.getUri(), { serverSelectionTimeoutMS: 30000 });
+  await useTransactionalDb();
 });
 
-afterAll(async () => {
-  await mongoose.disconnect();
-  if (replset) await replset.stop();
-});
 
 afterEach(async () => {
   const { collections } = mongoose.connection;

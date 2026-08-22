@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import ClientPage from './ClientPage';
 import { getServerApiBase } from '@/lib/server-api';
@@ -26,11 +27,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const category = await getCategoryForMetadata(slug);
 
-  if (!category) {
-    return {
-      title: 'Category Not Found | Autobacs India',
-    }
-  }
+  // notFound() rather than a "Category Not Found" TITLE — returning a title
+  // rendered a soft 404 (HTTP 200), so every retired or mistyped category URL
+  // stayed indexable. Only works while no Suspense boundary sits above this
+  // segment: a `loading.tsx` here, at `/categories`, or at the app root makes
+  // Next commit 200 before this throws. See src/app/soft404.test.ts.
+  if (!category) notFound();
 
   const computedDescription = category.description
     ? category.description.substring(0, 160).replace(/\n/g, ' ')
@@ -76,5 +78,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const category = await getCategoryForMetadata(slug);
+  if (!category) notFound();
   return <ClientPage slug={slug} initialCategory={category} />;
 }

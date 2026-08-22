@@ -9,7 +9,6 @@
  * - Input validation and sanitization
  */
 
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';

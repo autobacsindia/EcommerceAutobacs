@@ -13,7 +13,7 @@
 
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { useTransactionalDb } from './helpers/replicaSet.js';
 
 import Product from '../models/Product.js';
 import User from '../models/User.js';
@@ -34,7 +34,6 @@ import {
 
 jest.setTimeout(120000);
 
-let replset;
 
 const ADDRESS = {
   fullName: 'Test Buyer', phone: '9999999999', addressLine1: '1 Test St',
@@ -93,12 +92,7 @@ const quoteFor = (userId, product) => pricingService.computeQuote({
 });
 
 beforeAll(async () => {
-  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
-  replset = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    binary: { version: '7.0.14' },
-  });
-  await mongoose.connect(replset.getUri(), { serverSelectionTimeoutMS: 30000 });
+  await useTransactionalDb();
   // The unique {coupon,user} index is what enforces one-redemption-per-customer, and
   // autoIndex does not run here. Without it the concurrency test would pass vacuously.
   await ensureCampaignIndexes();
@@ -113,10 +107,6 @@ async function ensureCampaignIndexes() {
     .createIndex({ campaign: 1, email: 1 }, { unique: true });
 }
 
-afterAll(async () => {
-  await mongoose.disconnect();
-  if (replset) await replset.stop();
-});
 
 beforeEach(async () => {
   await LoyaltyConfig.findOneAndUpdate(

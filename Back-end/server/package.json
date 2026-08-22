@@ -46,6 +46,7 @@
     "sync-prices": "node --import=dotenv/config scripts/sync-prices-from-woocommerce.js",
     "import-seo": "node --import=dotenv/config scripts/import-seo-from-woocommerce.js",
     "flush-cache": "node --import=dotenv/config scripts/flush-public-cache.js",
+    "inspect-cache": "node scripts/inspect-cache.js",
     "count-products": "node scripts/legacy/count-products.js",
     "add-sample-products": "node scripts/legacy/add-sample-products.js",
     "bulk-import-products": "node scripts/legacy/bulk-import-products.js",

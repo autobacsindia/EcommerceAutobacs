@@ -8,14 +8,16 @@
  * Payment row for a given gateway payment id, no matter how many times the event
  * lands.
  *
- * Like couponKarboIntegration.test.js this spins up its own single-node replica
- * set because processPaymentSuccess writes inside session.withTransaction and the
- * shared standalone mongod in setup.js cannot run transactions.
+ * processPaymentSuccess writes inside session.withTransaction, so this needs a
+ * transaction-capable database. It used to build its own single-node replica set
+ * because setup.js started a STANDALONE mongod, which cannot run transactions;
+ * setup.js now starts a replica set for every suite, so useTransactionalDb() just
+ * reuses it (and warms it up).
  */
 
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { useTransactionalDb } from './helpers/replicaSet.js';
 
 // razorpayService's constructor throws without these; set BEFORE it is imported.
 process.env.RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_key';
@@ -28,7 +30,6 @@ import Payment from '../models/Payment.js';
 
 jest.setTimeout(120000);
 
-let replset;
 let razorpayService;
 
 const ADDRESS = {
@@ -71,22 +72,13 @@ function capturedPayload(order, paymentId) {
 }
 
 beforeAll(async () => {
-  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
-  replset = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    binary: { version: '7.0.14' },
-  });
-  await mongoose.connect(replset.getUri(), { serverSelectionTimeoutMS: 30000 });
+  await useTransactionalDb({ warmUp: true });
   // The idempotency guarantee rests on the unique gatewayPaymentId index — build it
   // explicitly so the test doesn't race Mongoose's background autoIndex.
   await Payment.syncIndexes();
   razorpayService = (await import('../services/razorpayService.js')).default;
 });
 
-afterAll(async () => {
-  await mongoose.disconnect();
-  if (replset) await replset.stop();
-});
 
 afterEach(async () => {
   for (const key in mongoose.connection.collections) {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import { VEHICLE_IMAGE_MAP } from '@/services/vehicleService';
 import { getServerApiBase } from '@/lib/server-api';
 
@@ -14,7 +15,12 @@ interface VehicleMeta {
   image?: string | { url?: string };
 }
 
-async function fetchVehicle(slug: string): Promise<VehicleMeta | null> {
+/**
+ * cache()d so generateMetadata and the page body resolve the same slug with ONE
+ * upstream call. Exported because the route files need the null answer too: a
+ * slug with no Vehicle must 404, not render a listing titled after the slug.
+ */
+export const fetchVehicle = cache(async function fetchVehicle(slug: string): Promise<VehicleMeta | null> {
   try {
     const res = await fetch(`${getServerApiBase()}/vehicles/slug/${slug}`, {
       next: { revalidate: 3600 },
@@ -26,7 +32,7 @@ async function fetchVehicle(slug: string): Promise<VehicleMeta | null> {
     console.error('Vehicle metadata fetch error:', error);
     return null;
   }
-}
+});
 
 export async function buildVehicleMetadata(slug: string, page = 1): Promise<Metadata> {
   const vehicle = await fetchVehicle(slug);

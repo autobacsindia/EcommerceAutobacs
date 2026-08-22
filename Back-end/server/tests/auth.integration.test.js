@@ -17,7 +17,6 @@
  *     We do a GET /ping first to receive the cookie, then mirror it in the header.
  */
 
-import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import { app } from '../app.js';

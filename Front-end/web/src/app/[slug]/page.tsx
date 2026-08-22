@@ -53,25 +53,28 @@ export async function generateMetadata({
   // notFound() here rather than a "Not Found" title, so the not-found decision
   // is made as early as possible.
   //
-  // ⚠️ This does NOT currently produce a 404 status. This route is the root
-  // catch-all, so every unmatched single-segment URL a crawler invents lands on
-  // it, and today those go out as **200 + not-found HTML** (a soft 404 — Google
-  // indexes it, and it never appears in 404 metrics, which is exactly why
-  // Observability reports zero 404s for this route).
+  // This route is the root catch-all: every unmatched single-segment URL a
+  // crawler invents lands on it. For years those went out as 200 + not-found
+  // HTML (a soft 404 — Google indexes it, and it never shows up in 404 metrics,
+  // which is why Observability reported zero 404s for this route).
   //
   // Cause, isolated by rebuilding with the file removed (2026-08-08): the root
-  // `src/app/loading.tsx` wraps the tree in a Suspense boundary, so Next commits
-  // the status and starts streaming before either this function or the page body
-  // can throw. Measured, same build, only that file differing:
+  // `src/app/loading.tsx` wrapped the tree in a Suspense boundary, so Next
+  // committed the status and started streaming before either this function or
+  // the page body could throw. Measured, same build, only that file differing:
   //     with root loading.tsx      /zzz-nope → 200
   //     without root loading.tsx   /zzz-nope → 404
-  // `/products/[slug]` and `/categories/[slug]` have their own segment-level
-  // loading.tsx and soft-404 for the same reason.
   //
-  // Removing the root loading.tsx is a global loading-UX tradeoff, so it is
-  // deliberately NOT done here. Until that call is made, the cost mitigation is
-  // the edge-level 410 blocklist in lib/legacyPaths.ts, which stops the
-  // high-volume crawler paths before they ever reach a Function.
+  // That file is now GONE, along with `/products/loading.tsx`,
+  // `/products/[slug]/loading.tsx` and `/categories/[slug]/loading.tsx`, which
+  // soft-404'd their own segments for the same reason. ⚠️ Re-adding a
+  // `loading.tsx` at the app root, or above any route that can 404, silently
+  // restores the soft 404 — nothing else in the app will complain.
+  // src/app/soft404.test.ts fails if one reappears.
+  //
+  // The edge-level 410 blocklist in lib/legacyPaths.ts still runs first and is
+  // still worth keeping: it answers the high-volume dead WordPress paths without
+  // ever invoking a Function.
   if (!data) notFound();
 
   const article = data.data;
