@@ -127,3 +127,41 @@ describe('nextTier', () => {
     expect(nextTier(STATUS, 500000)).toBeNull();
   });
 });
+
+describe('CampaignMeter — per-product campaign', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  /*
+    `tiers` is empty — the two ladders are mutually exclusive — so every cart-value
+    affordance in this component has to stand down, or the meter starts making promises
+    the pricing engine will not keep.
+  */
+  const PRODUCT_STATUS: CampaignStatus = {
+    ...STATUS,
+    tier: null,
+    tiers: [],
+    productLadder: { maxPercent: 8, defaultPercent: 4, onSaleMaxPercent: 2 },
+  };
+
+  it('still shows the saving the server granted', async () => {
+    renderMeter({ cartValue: 30000, appliedDiscount: 1200 }, PRODUCT_STATUS);
+    expect(await screen.findByText('₹1,200')).toBeInTheDocument();
+  });
+
+  it('publishes the three rates so a small saving reads as the rule, not a short-change', async () => {
+    renderMeter({ cartValue: 30000, appliedDiscount: 1200 }, PRODUCT_STATUS);
+    expect(await screen.findByText('8%')).toBeInTheDocument();
+    expect(screen.getByText('4%')).toBeInTheDocument();
+    expect(screen.getByText('2%')).toBeInTheDocument();
+  });
+
+  it('never claims a bigger cart earns more, because it does not', async () => {
+    /* The rate follows the product here. "Add ₹X more to save ₹Y extra" would be an
+       untrue promise, and "you've unlocked the best tier available" names a ladder
+       that does not exist. Both belong to the cart-value shape only. */
+    renderMeter({ cartValue: 30000, appliedDiscount: 1200 }, PRODUCT_STATUS);
+    await screen.findByText('₹1,200');
+    expect(screen.queryByText(/more to save/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unlocked the best tier/i)).not.toBeInTheDocument();
+  });
+});

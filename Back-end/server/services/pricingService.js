@@ -385,16 +385,30 @@ class PricingService {
         goodsCouponPaise = goodsDiscountPaise;
         shippingWaivePaise = freeShipping ? shippingPaise : 0;
         appliedCoupon = { code: coupon.code, type: coupon.type, value: coupon.value };
-        if (campaign && campaignTier) {
-          // Surfaced so the cart can show the tier the buyer has reached ("Festive 20")
-          // and how much more would unlock the next one.
+        /*
+          Reported for EITHER ladder. This field is not merely display: orderService
+          keys `_applyCampaign` off it, and that is what consumes the campaign's
+          redemption slot and enforces `maxRedemptions`.
+
+          Gating it on `campaignTier` alone therefore left a per-product campaign with
+          no budget stop at all — redeemedCount stayed at 0 for ever, the cap never
+          bound, and karma stacked on top of the offer because `allowKarma` was never
+          cleared. For a PUBLIC campaign that cap is the only bound on the discount
+          liability, which is exactly why assertPublishable refuses to launch an
+          'everyone' campaign without one.
+
+          The tier fields describe a rung of the CART-VALUE ladder and have no meaning
+          under the per-product one, where each line carries its own rate — they are
+          null there, and the per-line detail lives in `discountLines`.
+        */
+        if (campaign && (campaignTier || productTierPricing)) {
           appliedCampaign = {
             id: String(campaign._id),
             slug: campaign.slug,
             name: campaign.name,
-            tierId: campaignTier.tierId,
-            tierLabel: campaignTier.label,
-            percent: campaignTier.percent,
+            tierId: campaignTier?.tierId ?? null,
+            tierLabel: campaignTier?.label ?? null,
+            percent: campaignTier?.percent ?? null,
           };
           // A campaign percentage is not compounded with loyalty points unless the
           // campaign explicitly opts in — 20% off plus karma is a margin decision,

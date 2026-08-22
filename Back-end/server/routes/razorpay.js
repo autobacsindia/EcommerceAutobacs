@@ -125,7 +125,24 @@ router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayO
         message: 'Order not found or does not belong to user/session'
       });
     }
-    
+
+    /*
+      This checkout was abandoned long enough that its money holds were handed back —
+      the coupon's per-user counter, the campaign's redemption slot, the karma points.
+      Paying it now would charge the discounted total with nothing counting against the
+      campaign's cap, and the customer's reward already belongs to them again.
+
+      So the order is closed, not the offer: they can put the same goods in the basket
+      and earn the same discount on a fresh order. Refusing here is what makes the
+      release safe — see sweepStaleCheckoutHolds in services/leadSweepService.js.
+    */
+    if (order.holdsReleasedAt) {
+      return res.status(409).json({
+        success: false,
+        message: 'This checkout expired. Please place the order again — your offer is still yours to use.'
+      });
+    }
+
     // SECURITY: amount is always taken from the DB order, never from the request body.
     // The browser is user-controlled territory — any client-supplied amount is ignored.
     const authorativeAmount = Math.round(order.totalAmount * 100); // convert ₹ → paise
