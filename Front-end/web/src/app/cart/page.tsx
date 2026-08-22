@@ -21,6 +21,7 @@ import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import CampaignMeter from '@/components/campaign/CampaignMeter';
+import CampaignCartNotice from '@/components/campaign/CampaignCartNotice';
 
 export default function CartPage() {
   return (
@@ -48,10 +49,24 @@ function CartPageContent() {
   // The server prices the cart; this mirrors it for display only. Order creation
   // re-computes from scratch, so nothing here can influence what the buyer is charged.
   const quoteItems = useMemo(
-    () => (cart?.items || []).map((i) => ({ product: i.product._id, quantity: i.quantity })),
+    () => (cart?.items || []).map((i) => ({
+      product: i.product._id,
+      quantity: i.quantity,
+      /*
+        `variantId` is REQUIRED for a variable product — the server prices the selected
+        variant, never the parent, so a variable line without one is rejected outright.
+
+        It was being dropped here. One variable item in the basket therefore 400'd the
+        whole quote, and because the failure is swallowed below, the summary silently
+        fell back to the client's own totals: TAX SHOWED AS ₹0, no discount line appeared,
+        and the campaign looked as though it had never applied. The cart holds the id
+        already — this only stopped throwing it away.
+      */
+      variantId: i.variantId ?? null,
+    })),
     [cart?.items]
   );
-  const { quote } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
+  const { quote, error: quoteError } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
 
   // ── Campaign reward ────────────────────────────────────────────────────────
   // An invited customer never types the code — the card tells them the reward is
@@ -416,6 +431,29 @@ function CartPageContent() {
                 />
               </div>
 
+              {/*
+                The offer, stated plainly, whether or not it has applied.
+
+                A shopper cannot tell an offer that is working from one that is broken by
+                looking at a total. Before this the cart said nothing at all: a signed-out
+                visitor saw no discount and no reason for its absence, and had no way to
+                know that signing in was worth anything.
+              */}
+              <CampaignCartNotice
+                applied={Boolean(quote?.appliedCampaign)}
+                discount={quote?.appliedCampaign ? quote.couponDiscount : 0}
+              />
+
+              {quoteError && (
+                /* The totals below are the browser's own fallback when the server's
+                   pricing call fails — no tax, no discount. Saying so is the difference
+                   between a wrong number and a known-unreliable one. */
+                <p className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  We could not price your bag just now, so tax and any offer are not shown
+                  here. Your final total is confirmed at checkout.
+                </p>
+              )}
+
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Subtotal</span>
@@ -437,7 +475,10 @@ function CartPageContent() {
                 )}
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Tax (18% GST)</span>
-                  <span>{formatPrice(quote ? quote.tax : 0)}</span>
+                  {/* Never print a confident ₹0. Tax is inclusive and always non-zero on a
+                      real basket, so a zero here means the quote did not load — which read
+                      as "no tax charged" rather than "not calculated yet". */}
+                  <span>{quote ? formatPrice(quote.tax) : '—'}</span>
                 </div>
                 <div className="border-t border-hairline pt-3 flex justify-between">
                   <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
