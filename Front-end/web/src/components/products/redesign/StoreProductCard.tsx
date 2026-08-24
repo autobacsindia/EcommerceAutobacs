@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart, ShoppingBag, HeadphonesIcon, SlidersHorizontal } from 'lucide-react';
+import { Heart, ShoppingBag, HeadphonesIcon, SlidersHorizontal, Gift } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import ProductImage from '@/components/products/ProductImage';
@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import type { ProductRate } from '@/hooks/queries/useCampaignProductRates';
 
 /**
  * Storefront product card (obsidian + gold). Self-contained client island —
@@ -22,12 +23,20 @@ export default function StoreProductCard({
   product,
   featured = false,
   fitmentBadge,
+  campaignRate,
   className,
 }: {
   product: Product;
   featured?: boolean;
   /** When set (vehicle pages), shows a green "Fits <vehicle>" compatibility pill. */
   fitmentBadge?: string;
+  /**
+   * This product's rate under the running festive campaign, batch-fetched by the
+   * caller (one request for the whole grid via `useCampaignProductRates`) rather than
+   * per-card — see `ProductGrid`. `null`/`undefined` renders no badge, same as "no
+   * campaign running" or "this user can no longer claim it".
+   */
+  campaignRate?: ProductRate | null;
   className?: string;
 }) {
   const router = useRouter();
@@ -63,6 +72,12 @@ export default function StoreProductCard({
   const outOfStock = product.stock === 'out';
   const backorder = product.stock === 'backorder';
   const wished = isInWishlist(product._id);
+  // Sold-out items still earn a rate, but advertising a discount nobody can check out
+  // with is a broken promise dressed as marketing. Card-specific: unlike the PDP badge
+  // (which a shopper reaches deliberately and which only gates on variant selection),
+  // a card is a discovery surface sitting right next to an explicit "Sold out" badge —
+  // showing both reads as a mixed message the PDP doesn't have to worry about.
+  const campaignPercent = !outOfStock && campaignRate && campaignRate.percent > 0 ? campaignRate.percent : 0;
 
   const toggleWish = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -143,6 +158,12 @@ export default function StoreProductCard({
           {featured && !onSale && !outOfStock && (
             <span className="bg-gold px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-obsidian">
               ★ Top pick
+            </span>
+          )}
+          {campaignPercent > 0 && (
+            <span className="flex items-center gap-1 border border-gold/50 bg-obsidian-deep/85 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-gold backdrop-blur">
+              <Gift size={10} className="shrink-0" aria-hidden />
+              +{campaignPercent}% festive
             </span>
           )}
         </div>

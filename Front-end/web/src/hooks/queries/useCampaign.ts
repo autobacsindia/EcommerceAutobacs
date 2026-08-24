@@ -83,6 +83,21 @@ export function useCampaign(cartValue = 0, slug: string = ACTIVE_CAMPAIGN_SLUG) 
 }
 
 /**
+ * Whether a campaign badge (product card, PDP) should render at all, for THIS user.
+ *
+ * Mirrors the terminal-refusal check `CampaignRateBadge` applies on the PDP: 'login' and
+ * 'unverified' are still fixable by the shopper, so the rate stays visible as the reason
+ * to bother; 'already_used' and 'exhausted' are terminal, and a badge advertising a
+ * discount the checkout will refuse is a broken promise. Reuses the SAME query as the
+ * site-wide `CampaignBanner` (`useCampaign(0)`), so calling this from a product grid
+ * costs nothing extra — react-query serves it from cache.
+ */
+export function useCampaignBadgeVisible(slug: string = ACTIVE_CAMPAIGN_SLUG) {
+  const { data: campaign } = useCampaign(0, slug);
+  return campaign?.reasonCode !== 'already_used' && campaign?.reasonCode !== 'exhausted';
+}
+
+/**
  * The next rung of the ladder, for the "add ₹X more to save ₹Y more" nudge.
  *
  * Only ever returns a tier that pays MORE than the current one. Under best-for-customer

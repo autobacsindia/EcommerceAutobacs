@@ -47,6 +47,15 @@ jest.mock('@/context/CurrencyContext', () => ({
   CurrencyProvider: ({ children }: { children: React.ReactNode }) => children
 }));
 
+// ProductGrid batches a campaign-rate lookup per page via react-query; this suite
+// exercises the offers fetch, not campaign eligibility, and renders no QueryClientProvider.
+jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
+  useCampaignProductRates: jest.fn(() => ({ data: null })),
+}));
+jest.mock('@/hooks/queries/useCampaign', () => ({
+  useCampaignBadgeVisible: jest.fn(() => true),
+}));
+
 describe('OffersPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();

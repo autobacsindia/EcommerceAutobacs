@@ -10,6 +10,8 @@ import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/ser
 import type { Product } from '@/lib/types';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
 import { cloudinarySrcSet, CARD_WIDTHS, swapImageToFallback } from '@/lib/cloudinarySrcSet';
+import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 
 /**
  * Single source of truth for the `/model/[slug]` vehicle listing — rendered by
@@ -115,6 +117,10 @@ export default function VehicleModelListing({
 
   const vehicleName = slug ? decodeURIComponent(slug) : '';
   const displayName = vehicleName ? formatVehicleName(vehicleName) : 'Vehicle';
+
+  // One batched request for the whole visible page rather than one per card.
+  const { data: campaignData } = useCampaignProductRates(products.map((p) => p._id || (p as { id?: string }).id).filter((id): id is string => !!id));
+  const campaignBadgeVisible = useCampaignBadgeVisible();
 
   useEffect(() => {
     if (!slug) {
@@ -461,14 +467,18 @@ export default function VehicleModelListing({
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
                   {products
                     .filter((p) => p && (p._id || (p as { id?: string }).id))
-                    .map((product) => (
-                      <StoreProductCard
-                        key={product._id || (product as { id?: string }).id}
-                        product={product}
-                        featured={product.isFeatured || (product as { featured?: boolean }).featured}
-                        fitmentBadge={displayName}
-                      />
-                    ))}
+                    .map((product) => {
+                      const pid = product._id || (product as { id?: string }).id;
+                      return (
+                        <StoreProductCard
+                          key={pid}
+                          product={product}
+                          featured={product.isFeatured || (product as { featured?: boolean }).featured}
+                          fitmentBadge={displayName}
+                          campaignRate={campaignBadgeVisible && pid ? campaignData?.rates?.[pid] : null}
+                        />
+                      );
+                    })}
                 </div>
 
                 {/* Pagination */}

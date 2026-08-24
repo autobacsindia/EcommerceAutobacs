@@ -10,6 +10,8 @@ import Pagination from '@/components/layout/Pagination';
 import { trackViewItemList } from '@/lib/analytics';
 import { useProducts } from '@/hooks/queries/useProducts';
 import { normalizeParams } from '@/hooks/queries/keys';
+import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import type { ProductsData } from '@/lib/productQuery';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
@@ -55,6 +57,10 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
   // keepPreviousData a filter/sort/page change keeps the old grid up (no
   // skeleton flash) while the next page fetches.
   const loading = isPending;
+
+  // One batched request for the whole visible page rather than one per card.
+  const { data: campaignData } = useCampaignProductRates(data.products.map((p) => p._id));
+  const campaignBadgeVisible = useCampaignBadgeVisible();
 
   // Fire the analytics list-view event once per distinct params — but only when
   // the data is FRESH for those params, not the keepPreviousData placeholder
@@ -172,7 +178,11 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
                   {data.products.map((p, i) => (
                     <Reveal key={p._id} delay={Math.min(i, 8) * 0.04}>
-                      <StoreProductCard product={p} featured={p.isFeatured} />
+                      <StoreProductCard
+                        product={p}
+                        featured={p.isFeatured}
+                        campaignRate={campaignBadgeVisible ? campaignData?.rates?.[p._id] : null}
+                      />
                     </Reveal>
                   ))}
                 </div>
