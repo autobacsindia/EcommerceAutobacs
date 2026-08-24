@@ -1,49 +1,18 @@
 'use client';
 
-import type { StockStatus } from '@/lib/stock';
-import { useEffect, useState } from 'react';
-import apiClient from '@/lib/api';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ProductGrid from '@/components/products/ProductGrid';
+import Pagination from '@/components/layout/Pagination';
+import { useOfferProducts } from '@/hooks/queries/useOfferProducts';
 
-interface ProductImage {
-  url: string;
-  alt?: string;
-  isPrimary?: boolean;
-  _id?: string;
-}
+function OffersPageInner() {
+  const searchParams = useSearchParams();
+  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
 
-interface Product {
-  _id: string;
-  name: string;
-  price: number;
-  originalPrice?: number;
-  images: ProductImage[] | string;
-  categories?: Array<{ _id: string; name: string; slug: string }>;
-  stock: StockStatus;
-  averageRating: number;
-  isFeatured?: boolean;
-  isOfferFeatured?: boolean;
-}
-
-export default function OffersPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchOffers = async () => {
-      try {
-        setLoading(true);
-        const response: any = await apiClient.get('/products/offers?limit=24');
-        setProducts(response.products || []);
-      } catch (err: any) {
-        setError('Failed to load offers');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOffers();
-  }, []);
+  const { data, isPending, isError } = useOfferProducts(currentPage);
+  const products = data?.products ?? [];
+  const pagination = data?.pagination ?? {};
 
   return (
     <div className="min-h-screen bg-obsidian-deep">
@@ -56,7 +25,7 @@ export default function OffersPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {loading && (
+        {isPending && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
@@ -71,22 +40,38 @@ export default function OffersPage() {
           </div>
         )}
 
-        {!loading && error && (
+        {!isPending && isError && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center">
-            <p className="text-red-400 font-display">{error}</p>
+            <p className="text-red-400 font-display">Failed to load offers</p>
           </div>
         )}
 
-        {!loading && !error && products.length > 0 && (
-          <ProductGrid products={products} />
+        {!isPending && !isError && products.length > 0 && (
+          <>
+            <ProductGrid products={products} />
+            <Pagination
+              pagination={pagination}
+              currentPage={currentPage}
+              basePath="/offers"
+              searchParams={new URLSearchParams(searchParams.toString())}
+            />
+          </>
         )}
 
-        {!loading && !error && products.length === 0 && (
+        {!isPending && !isError && products.length === 0 && (
           <div className="text-center py-12">
             <p className="text-ink-muted font-display">No offers available right now. Please check back later.</p>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export default function OffersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+      <OffersPageInner />
+    </Suspense>
   );
 }

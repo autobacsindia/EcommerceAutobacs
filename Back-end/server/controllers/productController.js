@@ -220,13 +220,23 @@ export const getFeaturedProducts = async (req, res, next) => {
 
 export const getOfferProducts = async (req, res, next) => {
   try {
-    const { limit = 24 } = req.query;
+    const { page = 1 } = req.query;
+    // Capped: this is the first pagination this route has had, and skip+limit on an
+    // uncapped client-supplied limit is an easy way to force a large, uncached scan.
+    const limit = Math.min(Number(req.query.limit) || 24, 100);
+    const currentPage = Math.max(1, Number(page) || 1);
 
-    const products = await productService.getOfferProducts(Number(limit));
+    const { products, total } = await productService.getOfferProducts({ page: currentPage, limit });
+    const pages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       count: products.length,
+      total,
+      pages,
+      currentPage,
+      hasNext: currentPage < pages,
+      hasPrev: currentPage > 1,
       products
     });
   } catch (error) {

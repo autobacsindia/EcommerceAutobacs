@@ -150,19 +150,59 @@ describe('ProductController Unit Tests', () => {
   });
 
   describe('getOfferProducts', () => {
-    it('should return offer products', async () => {
+    it('should return offer products with pagination metadata', async () => {
       const mockProducts = [{ name: 'Sale 1', price: 100, originalPrice: 200 }];
-      mockProductService.getOfferProducts.mockResolvedValue(mockProducts);
+      mockProductService.getOfferProducts.mockResolvedValue({ products: mockProducts, total: 1 });
 
       req.query = { limit: '10' };
       await getOfferProducts(req, res);
 
-      expect(mockProductService.getOfferProducts).toHaveBeenCalledWith(10);
+      expect(mockProductService.getOfferProducts).toHaveBeenCalledWith({ page: 1, limit: 10 });
       expect(res.json).toHaveBeenCalledWith({
         success: true,
         count: 1,
+        total: 1,
+        pages: 1,
+        currentPage: 1,
+        hasNext: false,
+        hasPrev: false,
         products: mockProducts
       });
+    });
+
+    it('passes the requested page through and computes hasNext/hasPrev off the total', async () => {
+      const mockProducts = [{ name: 'Sale Page 2' }];
+      // 25 total items at limit 10 → 3 pages; page 2 has both a next and a prev.
+      mockProductService.getOfferProducts.mockResolvedValue({ products: mockProducts, total: 25 });
+
+      req.query = { limit: '10', page: '2' };
+      await getOfferProducts(req, res);
+
+      expect(mockProductService.getOfferProducts).toHaveBeenCalledWith({ page: 2, limit: 10 });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        currentPage: 2,
+        pages: 3,
+        hasNext: true,
+        hasPrev: true,
+      }));
+    });
+
+    it('caps an oversized client-supplied limit rather than passing it straight to the query', async () => {
+      mockProductService.getOfferProducts.mockResolvedValue({ products: [], total: 0 });
+
+      req.query = { limit: '999999' };
+      await getOfferProducts(req, res);
+
+      expect(mockProductService.getOfferProducts).toHaveBeenCalledWith({ page: 1, limit: 100 });
+    });
+
+    it('floors a page below 1 to page 1 instead of computing a negative skip', async () => {
+      mockProductService.getOfferProducts.mockResolvedValue({ products: [], total: 0 });
+
+      req.query = { page: '0' };
+      await getOfferProducts(req, res);
+
+      expect(mockProductService.getOfferProducts).toHaveBeenCalledWith({ page: 1, limit: 24 });
     });
   });
 

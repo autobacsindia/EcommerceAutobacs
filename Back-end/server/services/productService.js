@@ -54,19 +54,24 @@ class ProductService {
   }
 
   /**
-   * Get products on offer with business logic
+   * Get products on offer with business logic, one page at a time.
+   *
+   * `page` is part of the cache key deliberately — without it every page would
+   * collide on the same Redis entry and shoppers past page 1 would see whatever
+   * page happened to populate the cache first.
    */
-  async getOfferProducts(limit = 24) {
+  async getOfferProducts({ page = 1, limit = 24 } = {}) {
     const cacheKey = cacheService.generateKey('products', {
       type: 'offers',
+      page,
       limit
     });
 
     return cacheService.wrap(
       cacheKey,
-      () => productRepository.findOnOffer(limit),
-      { 
-        ttl: TTL.PRODUCT_OFFERS, 
+      () => productRepository.findOnOffer({ page, limit }),
+      {
+        ttl: TTL.PRODUCT_OFFERS,
         strategy: 'swr',
         tags: ['products', 'products:offers']
       }

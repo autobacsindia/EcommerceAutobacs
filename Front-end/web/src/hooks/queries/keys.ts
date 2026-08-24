@@ -25,6 +25,10 @@ export const productKeys = {
     [...productKeys.lists(), normalizeParams(params)] as const,
   details: () => [...productKeys.all, 'detail'] as const,
   detail: (slug: string) => [...productKeys.details(), slug] as const,
+  /** `/products/offers` — a distinct namespace from `lists()` since it's a different
+   * backend route with its own cache tags, not a filter on the main listing. */
+  offers: () => [...productKeys.all, 'offers'] as const,
+  offersPage: (page: number) => [...productKeys.offers(), page] as const,
 };
 
 export const categoryKeys = {

@@ -96,18 +96,31 @@ describe('ProductService', () => {
 
   describe('getOfferProducts', () => {
     it('should use cache wrap with SWR strategy', async () => {
-      const offerProducts = [
-        { name: 'Sale Item', originalPrice: 5000, price: 3500 }
-      ];
-      cacheService.wrap.mockResolvedValue(offerProducts);
+      const offerResult = {
+        products: [{ name: 'Sale Item', originalPrice: 5000, price: 3500 }],
+        total: 1,
+      };
+      cacheService.wrap.mockResolvedValue(offerResult);
 
-      const result = await productService.getOfferProducts(24);
+      const result = await productService.getOfferProducts({ page: 1, limit: 24 });
 
-      expect(result).toEqual(offerProducts);
+      expect(result).toEqual(offerResult);
       expect(cacheService.wrap).toHaveBeenCalledWith(
-        'products:limit=24:type=offers',
+        'products:limit=24:page=1:type=offers',
         expect.any(Function),
         { ttl: 1800, strategy: 'swr', tags: ['products', 'products:offers'] }
+      );
+    });
+
+    it('keys page 2 separately from page 1 so pages never collide in the shared cache', async () => {
+      cacheService.wrap.mockResolvedValue({ products: [], total: 0 });
+
+      await productService.getOfferProducts({ page: 2, limit: 24 });
+
+      expect(cacheService.wrap).toHaveBeenCalledWith(
+        'products:limit=24:page=2:type=offers',
+        expect.any(Function),
+        expect.anything()
       );
     });
   });
