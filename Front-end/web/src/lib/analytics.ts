@@ -95,14 +95,58 @@ export const trackBeginCheckout = (input: { value: number; itemCount: number; cu
     value: input.value, item_count: input.itemCount, currency: input.currency ?? 'INR',
   });
 
+/**
+ * A completed purchase.
+ *
+ * `couponCode` / `campaignSlug` / `discount` carry the promotional attribution, and
+ * exist so a funnel can separate "bought while a campaign was running" from "bought
+ * USING the campaign" — without them a scan→purchase funnel counts every purchase by
+ * anyone who ever landed on the offer page, which flatters the campaign rather than
+ * measuring it.
+ *
+ * The keys are always emitted, `null` when nothing applied, so the event has one stable
+ * shape. A property that is sometimes absent and sometimes null is the kind of thing
+ * that makes a saved funnel quietly stop matching.
+ *
+ * Display/attribution only. These figures are echoed from the server-computed quote and
+ * are never what the customer is charged — the order total is recomputed server-side at
+ * creation. A wrong value here mis-reports a chart; it cannot mis-bill anyone.
+ */
 export const trackPurchase = (input: {
   orderId: string;
   value: number;
   itemCount?: number;
   currency?: string;
+  couponCode?: string | null;
+  campaignSlug?: string | null;
+  discount?: number | null;
 }) =>
   capture('purchase', {
     order_id: input.orderId, value: input.value, item_count: input.itemCount, currency: input.currency ?? 'INR',
+    coupon_code: input.couponCode ?? null,
+    campaign_slug: input.campaignSlug ?? null,
+    discount: input.discount ?? 0,
+  });
+
+/**
+ * A campaign offer page was viewed — the QR-scan signal.
+ *
+ * Keyed on the campaign SLUG rather than the URL. `/festive` is a permanent route whose
+ * printed QR cannot be reissued, so the next campaign will reuse it; a funnel filtered on
+ * the path would silently merge two campaigns' traffic, while one filtered on the slug
+ * stays correct for ever.
+ */
+export const trackCampaignOfferViewed = (input: {
+  slug: string;
+  /** Was the campaign still running when the card was scanned? */
+  offerLive: boolean;
+  /** Could THIS visitor actually redeem it (signed in, verified, not already used)? */
+  eligible?: boolean | null;
+}) =>
+  capture('campaign_offer_viewed', {
+    campaign_slug: input.slug,
+    offer_live: input.offerLive,
+    eligible: input.eligible ?? null,
   });
 
 /** Tie events to a user after login. */

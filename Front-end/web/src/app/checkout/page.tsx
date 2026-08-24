@@ -115,10 +115,32 @@ function CheckoutPageContent() {
   const lastCartTotalRef = useRef(0);
   const lastItemCountRef = useRef(0);
   const lastStepRef = useRef<CheckoutStep>('cart');
+  /*
+    Promotional attribution for the `purchase` event, held in a ref for the same reason
+    the totals above are: `purchase` fires AFTER the cart has been cleared and, on the
+    Razorpay path, while the router is already navigating away. Reading the live quote at
+    that moment yields nulls, and the event would report every campaign sale as organic.
+
+    Sourced from `pricing.quote` — the SERVER's breakdown — not from the coupon box, so
+    what is reported is what the server actually applied. A code the shopper typed but
+    which was rejected must never show up as an attributed sale.
+  */
+  const lastAttributionRef = useRef<{
+    couponCode: string | null; campaignSlug: string | null; discount: number;
+  }>({ couponCode: null, campaignSlug: null, discount: 0 });
   useEffect(() => {
     if (cart?.total) lastCartTotalRef.current = cart.total;
     if (cart?.items?.length) lastItemCountRef.current = cart.items.length;
   }, [cart?.total, cart?.items?.length]);
+  useEffect(() => {
+    const q = pricing.quote;
+    if (!q) return;
+    lastAttributionRef.current = {
+      couponCode: q.appliedCoupon?.code ?? null,
+      campaignSlug: q.appliedCampaign?.slug ?? null,
+      discount: q.couponDiscount ?? 0,
+    };
+  }, [pricing.quote]);
   // begin_checkout + view_cart — once, when the checkout loads with items.
   useEffect(() => {
     if (!beganCheckoutRef.current && cart && cart.items.length > 0) {
@@ -149,7 +171,12 @@ function CheckoutPageContent() {
   useEffect(() => {
     if (currentStep === 'confirmation' && orderId) {
       purchasedRef.current = true;
-      trackPurchase({ orderId, value: lastCartTotalRef.current, itemCount: lastItemCountRef.current });
+      trackPurchase({
+        orderId,
+        value: lastCartTotalRef.current,
+        itemCount: lastItemCountRef.current,
+        ...lastAttributionRef.current,
+      });
     }
   }, [currentStep, orderId]);
   // checkout_abandoned — left the flow (navigated away or closed tab) without buying.
@@ -181,7 +208,12 @@ function CheckoutPageContent() {
       // previously rode on that step, and flip purchasedRef so the pagehide/
       // unmount 'checkout_abandoned' guard doesn't misfire on the navigation.
       purchasedRef.current = true;
-      trackPurchase({ orderId, value: lastCartTotalRef.current, itemCount: lastItemCountRef.current });
+      trackPurchase({
+        orderId,
+        value: lastCartTotalRef.current,
+        itemCount: lastItemCountRef.current,
+        ...lastAttributionRef.current,
+      });
       await clearCart();
       router.push(`/order/${orderId}/success`);
     },

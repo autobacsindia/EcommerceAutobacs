@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Gift, CheckCircle2, ArrowRight, Clock, ShieldCheck, MailWarning } from 'lucide-react';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import { useAuth } from '@/context/AuthContext';
+import { trackCampaignOfferViewed } from '@/lib/analytics';
+import { ACTIVE_CAMPAIGN_SLUG } from '@/lib/constants';
 
 /**
  * /festive — where the printed QR code lands.
@@ -54,6 +56,31 @@ export default function FestivePage() {
   const { data: campaign, isLoading } = useCampaign(0);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const countdown = useCountdown(campaign?.endsAt);
+
+  /*
+    The scan signal.
+
+    A `$pageview` already records that someone reached this route, but it is keyed on the
+    PATH. The QR is printed and can never be reissued, so this route will be pointed at
+    the next campaign too, and a funnel built on the path would silently merge the two.
+    This event carries the SLUG, so each campaign's scans stay separable for ever.
+
+    Fired once the eligibility lookup settles rather than on mount, so `offerLive` and
+    `eligible` are real answers instead of "still loading". It fires even when the
+    campaign has ended — a scan of a dead card is exactly the thing worth knowing about,
+    and it is the one case the campaign response cannot name itself, hence the fallback
+    to the configured slug.
+  */
+  const reportedRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || reportedRef.current) return;
+    reportedRef.current = true;
+    trackCampaignOfferViewed({
+      slug: campaign?.slug ?? ACTIVE_CAMPAIGN_SLUG,
+      offerLive: !!campaign,
+      eligible: campaign ? campaign.eligible : null,
+    });
+  }, [isLoading, campaign?.slug, campaign?.eligible]);
 
   const ladder = campaign?.productLadder ?? null;
   // The cart-value ladder's best rung, for a campaign configured the older way. Keeps

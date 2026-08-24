@@ -12,9 +12,11 @@ import { render, screen } from '@testing-library/react';
 import FestivePage from './page';
 import { useAuth } from '@/context/AuthContext';
 import { useCampaign } from '@/hooks/queries/useCampaign';
+import { trackCampaignOfferViewed } from '@/lib/analytics';
 
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('@/hooks/queries/useCampaign', () => ({ useCampaign: jest.fn() }));
+jest.mock('@/lib/analytics', () => ({ trackCampaignOfferViewed: jest.fn() }));
 
 jest.mock('lucide-react', () => ({
   Gift: () => <span>gift</span>,
@@ -176,5 +178,63 @@ describe('when there is no campaign at all', () => {
     // outcome here, so loading must win over both branches.
     expect(screen.queryByText(/this offer has ended/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/you're in/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The scan signal.
+ *
+ * This is the only record that a printed card was used at all. A `$pageview` also fires,
+ * but it is keyed on the PATH — and this route is permanent while the campaign behind it
+ * is not, so the slug is what keeps one campaign's scans from being counted as the next
+ * one's. Every case below is about that event being emitted exactly once, with an honest
+ * answer rather than a loading state.
+ */
+describe('the scan signal', () => {
+  const tracked = () => (trackCampaignOfferViewed as jest.Mock).mock.calls;
+
+  it('reports the scan against the campaign slug, not the path', () => {
+    mockAuth({});
+    mockCampaign({ data: CAMPAIGN });
+    render(<FestivePage />);
+    expect(tracked()).toHaveLength(1);
+    expect(tracked()[0][0]).toEqual({ slug: 'festive-2026', offerLive: true, eligible: true });
+  });
+
+  it('stays silent until the eligibility lookup settles, so it never reports a loading state as a refusal', () => {
+    mockAuth({});
+    mockCampaign({ data: undefined, isLoading: true });
+    const { rerender } = render(<FestivePage />);
+    expect(tracked()).toHaveLength(0);
+
+    mockCampaign({ data: CAMPAIGN, isLoading: false });
+    rerender(<FestivePage />);
+    expect(tracked()).toHaveLength(1);
+    expect(tracked()[0][0].eligible).toBe(true);
+  });
+
+  it('still records a scan of a card whose offer has ended — the case worth knowing about', () => {
+    mockAuth({});
+    // The campaign 404s once it is switched off, so the response cannot name itself.
+    mockCampaign({ data: undefined, isLoading: false });
+    render(<FestivePage />);
+    expect(tracked()).toHaveLength(1);
+    expect(tracked()[0][0]).toEqual({ slug: 'festive-2026', offerLive: false, eligible: null });
+  });
+
+  it('carries the visitor\'s own eligibility, so scans can be split from usable scans', () => {
+    mockAuth({});
+    mockCampaign({ data: { ...CAMPAIGN, eligible: false, reasonCode: 'login' } });
+    render(<FestivePage />);
+    expect(tracked()[0][0].eligible).toBe(false);
+  });
+
+  it('fires once per landing, not once per render', () => {
+    mockAuth({});
+    mockCampaign({ data: CAMPAIGN });
+    const { rerender } = render(<FestivePage />);
+    rerender(<FestivePage />);
+    rerender(<FestivePage />);
+    expect(tracked()).toHaveLength(1);
   });
 });

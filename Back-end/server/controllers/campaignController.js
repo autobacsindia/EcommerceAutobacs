@@ -91,6 +91,20 @@ export const getCampaignReport = asyncHandler(async (req, res) => {
   res.json({ success: true, report });
 });
 
+// @desc    Who actually redeemed this campaign (keyset-paginated, newest first)
+// @route   GET /campaigns/:slug/redemptions
+// @access  Private/Admin
+export const listCampaignRedemptions = asyncHandler(async (req, res) => {
+  const result = await campaignService.listRedemptions(req.params.slug, {
+    cursor: req.query.cursor || null,
+    limit: req.query.limit,
+  });
+  // Named customers and what each was charged. Never cache it anywhere shared, and
+  // never let an intermediary keep a copy \u2014 same rule as the member roster.
+  res.set('Cache-Control', 'no-store, private');
+  res.json({ success: true, ...result });
+});
+
 // @desc    One page of the campaign's allowlist (keyset-paginated, searchable)
 // @route   GET /campaigns/:id/members
 // @access  Private/Admin

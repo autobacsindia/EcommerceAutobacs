@@ -22,6 +22,7 @@ import productRepository from '../repositories/productRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import couponRepository from '../repositories/couponRepository.js';
 import couponUserUsageRepository from '../repositories/couponUserUsageRepository.js';
+import couponRedemptionRepository from '../repositories/couponRedemptionRepository.js';
 import AppError from '../utils/AppError.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { resolveTier, validateTiers, assertMonotonic } from '../utils/campaignTiers.js';
@@ -676,7 +677,10 @@ class CampaignService {
   /** Funnel + spend for the admin dashboard. */
   async report(slug) {
     const campaign = await this.getBySlug(slug);
-    const counts = await campaignMemberRepository.statusCounts(campaign._id);
+    const [counts, money] = await Promise.all([
+      campaignMemberRepository.statusCounts(campaign._id),
+      this._moneyStats(campaign),
+    ]);
     return {
       slug: campaign.slug,
       name: campaign.name,
@@ -685,6 +689,13 @@ class CampaignService {
       startsAt: campaign.startsAt,
       endsAt: campaign.endsAt,
       members: counts,
+      /*
+        COMMITTED, not realised. These two are incremented inside the order-creation
+        transaction, before payment — they exist to enforce `maxRedemptions` atomically,
+        and a guarded $inc is the only thing that holds when two carts race for the last
+        slot. Reported unchanged because they are what the cap is measured against, but
+        they count abandoned checkouts too. `money` below is what was actually taken.
+      */
       redeemedCount: campaign.redeemedCount,
       maxRedemptions: campaign.maxRedemptions,
       discountGivenRupees: campaign.discountGivenRupees,
@@ -693,7 +704,42 @@ class CampaignService {
         ? null
         : Math.max(0, campaign.maxRedemptions - campaign.redeemedCount) *
           (campaign.maxDiscountPerOrder || 0),
+      money,
     };
+  }
+
+  /**
+   * Realised campaign performance, from the redemption rows joined to their orders.
+   *
+   * Null when the campaign prices nothing through a managed coupon — an honest "no
+   * answer" rather than a row of zeroes, which would read as "nobody bought" when the
+   * truth is that there is nothing to count.
+   */
+  async _moneyStats(campaign) {
+    if (!campaign.couponCode) return null;
+    const coupon = await couponRepository.findByCode(campaign.couponCode);
+    // A campaign can name a coupon that was never created, or one an admin deleted.
+    // Reporting zeroes here would be a lie; the caller is told the link is broken.
+    if (!coupon) return null;
+    return couponRedemptionRepository.statsByCoupon(coupon._id);
+  }
+
+  /**
+   * One page of "who actually redeemed this campaign", newest first.
+   *
+   * Deliberately NOT served from the member roster. `claimForUser` only runs for an
+   * allowlist audience and `markRedeemed` does not upsert, so a public campaign — which
+   * is what the printed QR card now points at — writes no member row at all. Its roster
+   * is permanently empty while its counters climb. The redemption rows are written on
+   * every use of the managed coupon regardless of audience, so this is the only view
+   * that is complete for both kinds of campaign.
+   */
+  async listRedemptions(slug, { cursor = null, limit = 50 } = {}) {
+    const campaign = await this.getBySlug(slug);
+    if (!campaign.couponCode) return { redemptions: [], nextCursor: null };
+    const coupon = await couponRepository.findByCode(campaign.couponCode);
+    if (!coupon) return { redemptions: [], nextCursor: null };
+    return couponRedemptionRepository.listByCouponPage(coupon._id, { cursor, limit });
   }
 
   /**
