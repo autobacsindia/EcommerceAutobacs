@@ -52,11 +52,17 @@ jest.mock('@/context/CurrencyContext', () => ({
 
 // ProductGrid batches a campaign-rate lookup per page via react-query; this suite
 // exercises the offers fetch and its pagination, not campaign eligibility.
+// Spread the real modules so only the network-backed hooks are stubbed — a bare
+// object mock silently drops every other export (`lineSavings`, `useCampaign`) and
+// the failure surfaces as "not a function" deep inside an unrelated component.
 jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
+  ...jest.requireActual('@/hooks/queries/useCampaignProductRates'),
   useCampaignProductRates: jest.fn(() => ({ data: null })),
 }));
 jest.mock('@/hooks/queries/useCampaign', () => ({
+  ...jest.requireActual('@/hooks/queries/useCampaign'),
   useCampaignBadgeVisible: jest.fn(() => true),
+  useCampaign: jest.fn(() => ({ data: null })),
 }));
 
 function renderWithClient(ui: React.ReactElement) {

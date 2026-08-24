@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import StoreProductCard from './StoreProductCard';
 import type { Product } from '@/lib/types';
@@ -19,7 +19,7 @@ jest.mock('@/components/products/ProductImage', () => {
 });
 
 jest.mock('@/context/CartContext', () => ({
-  useCart: () => ({ addToCart: jest.fn() }),
+  useCart: () => ({ addToCart: (...a: unknown[]) => addToCartMock(...a) }),
 }));
 
 jest.mock('@/context/WishlistContext', () => ({
@@ -41,6 +41,21 @@ jest.mock('@/context/CurrencyContext', () => ({
 jest.mock('react-hot-toast', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
+
+// The card owns WHICH savings it reports; the shared hook owns how that becomes a
+// sentence (and the eligibility gate) — covered in useAddedToCartToast.test.tsx.
+const notifyAddedMock = jest.fn();
+jest.mock('@/hooks/useAddedToCartToast', () => ({
+  useAddedToCartToast: () => notifyAddedMock,
+}));
+
+const addToCartMock = jest.fn();
+
+beforeEach(() => {
+  notifyAddedMock.mockReset();
+  addToCartMock.mockReset();
+  addToCartMock.mockResolvedValue(undefined);
+});
 
 function makeProduct(overrides: Partial<Product> = {}): Product {
   return {
@@ -95,5 +110,67 @@ describe('StoreProductCard campaign badge', () => {
     );
     expect(screen.getByText('-25%')).toBeInTheDocument();
     expect(screen.getByText('+2% festive')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The card used to fire a flat `toast.success('Added to cart')` while already holding
+ * the campaign rate it renders as a badge — so the same product added from a listing
+ * congratulated the shopper on nothing, while the PDP told them what they saved.
+ */
+describe('StoreProductCard add-to-cart confirmation', () => {
+  const clickAdd = () => fireEvent.click(screen.getByLabelText('Add to cart'));
+
+  it('reports the campaign rate it is displaying', () => {
+    render(
+      <StoreProductCard
+        product={makeProduct({ price: 1000 })}
+        campaignRate={{ percent: 8, onSaleCapped: false }}
+      />,
+    );
+    clickAdd();
+    expect(notifyAddedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 1000, campaignPercent: 8 }),
+    );
+  });
+
+  it('reports the catalogue "was" price so a plain markdown still counts', () => {
+    render(<StoreProductCard product={makeProduct({ price: 750, originalPrice: 1000 })} />);
+    clickAdd();
+    expect(notifyAddedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 750, originalPrice: 1000, campaignPercent: 0 }),
+    );
+  });
+
+  it('claims no campaign saving when no rate was supplied', () => {
+    render(<StoreProductCard product={makeProduct()} campaignRate={null} />);
+    clickAdd();
+    expect(notifyAddedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ campaignPercent: 0 }),
+    );
+  });
+
+  it('does not add — or congratulate — a sold-out product', () => {
+    render(
+      <StoreProductCard
+        product={makeProduct({ stock: 'out' })}
+        campaignRate={{ percent: 8, onSaleCapped: false }}
+      />,
+    );
+    clickAdd();
+    expect(notifyAddedMock).not.toHaveBeenCalled();
+    expect(addToCartMock).not.toHaveBeenCalled();
+  });
+
+  it('sends a variable product to the PDP instead of quick-adding it', () => {
+    render(
+      <StoreProductCard
+        product={makeProduct({ productType: 'variable' })}
+        campaignRate={{ percent: 8, onSaleCapped: false }}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('Select a model'));
+    expect(notifyAddedMock).not.toHaveBeenCalled();
+    expect(addToCartMock).not.toHaveBeenCalled();
   });
 });

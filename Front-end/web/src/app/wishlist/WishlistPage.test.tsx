@@ -74,6 +74,17 @@ jest.mock('@/context/CurrencyContext', () => ({
   }),
 }));
 
+jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
+  useCampaignProductRates: () => ({
+    data: { slug: 'festive', endsAt: null, rates: { '1': { percent: 8, onSaleCapped: false } } },
+  }),
+}));
+
+const mockNotifyAdded = jest.fn();
+jest.mock('@/hooks/useAddedToCartToast', () => ({
+  useAddedToCartToast: () => mockNotifyAdded,
+}));
+
 describe('WishlistPage Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -98,6 +109,19 @@ describe('WishlistPage Component', () => {
             expect(mockAddToCart).toHaveBeenCalledWith('1', 1);
         });
     }
+  });
+
+  // A saved item is high intent — this surface used to say a flat "Item added to
+  // cart" while the PDP told the same shopper what they had saved.
+  it('reports the running campaign rate when adding a saved item', async () => {
+    render(<WishlistPage />);
+    const addToCartButton = screen.queryByText(/Add to Cart/i) || screen.getByTestId('icon-cart').closest('button');
+    fireEvent.click(addToCartButton!);
+    await waitFor(() => {
+      expect(mockNotifyAdded).toHaveBeenCalledWith(
+        expect.objectContaining({ price: 100, campaignPercent: 8 }),
+      );
+    });
   });
 
   it('handles remove from wishlist', async () => {

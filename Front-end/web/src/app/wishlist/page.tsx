@@ -14,6 +14,8 @@ import { productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
+import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 
 export default function WishlistPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -22,6 +24,12 @@ export default function WishlistPage() {
   const { addToCart } = useCart();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  // One batched lookup for the whole list (capped at 60 ids inside the hook), not one
+  // request per saved item.
+  const { data: campaignData } = useCampaignProductRates(
+    wishlistItems.map((item: any) => item?.product?._id).filter(Boolean),
+  );
+  const notifyAdded = useAddedToCartToast();
 
   useRequireAuth();
 
@@ -34,9 +42,15 @@ export default function WishlistPage() {
     catch (err: any) { setError(err.message || 'Failed to load wishlist'); }
   };
 
-  const handleAddToCart = async (productId: string) => {
-    toast.success('Item added to cart');
-    try { await addToCart(productId, 1); }
+  const handleAddToCart = async (product: any) => {
+    // A saved item is high intent, so this is exactly where the campaign should show
+    // up. Optimistic, like every other add-to-cart surface.
+    notifyAdded({
+      price: product?.price ?? 0,
+      originalPrice: product?.originalPrice,
+      campaignPercent: campaignData?.rates?.[product?._id]?.percent,
+    });
+    try { await addToCart(product._id, 1); }
     catch (err: any) { toast.error('Failed to add item to cart'); }
   };
 
@@ -156,7 +170,7 @@ export default function WishlistPage() {
                 </p>
 
                 <button
-                  onClick={() => handleAddToCart(item.product._id)}
+                  onClick={() => handleAddToCart(item.product)}
                   disabled={item.product?.stock === 'out'}
                   className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                 >

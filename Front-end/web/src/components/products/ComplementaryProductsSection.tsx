@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ShoppingCart, SlidersHorizontal } from 'lucide-react';
+import { ShoppingCart, SlidersHorizontal, Gift } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { getStockStatus } from '@/lib/stock';
+import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
+import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
 
 interface Product {
@@ -37,6 +40,23 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
   const [addingId, setAddingId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { addToCart } = useCart();
+  // This rail fetches its own products, so unlike the sticky bar its ids differ from
+  // the PDP's — one extra batched request (identity-free, shared cache, 10min stale)
+  // rather than one per card. A cross-sell rail is exactly where the campaign should
+  // be visible: "add this too and save X%" is the whole pitch.
+  const { data: campaignData } = useCampaignProductRates(products.map((p) => p._id));
+  const campaignBadgeVisible = useCampaignBadgeVisible();
+  const notifyAdded = useAddedToCartToast();
+
+  /**
+   * This product's campaign rate, or 0. Mirrors the badge's own gate below so the
+   * toast can never claim a saving the card above it declined to advertise — a
+   * sold-out item still earns a rate but cannot be checked out with.
+   */
+  const campaignRateFor = (product: Product) =>
+    campaignBadgeVisible && getStockStatus(product) !== 'out'
+      ? campaignData?.rates?.[product._id]?.percent ?? 0
+      : 0;
 
   const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
     // The card is a Link — stop the click from navigating to the PDP.
@@ -55,7 +75,11 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
         images,
         stock: getStockStatus(product),
       });
-      toast.success('Added to cart');
+      notifyAdded({
+        price: product.price,
+        originalPrice: product.originalPrice,
+        campaignPercent: campaignRateFor(product),
+      });
     } catch (err: any) {
       toast.error(err?.message || 'Failed to add to cart');
     } finally {
@@ -213,6 +237,12 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                     {discount && (
                       <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-1 rounded text-xs font-bold">
                         {discount}% OFF
+                      </div>
+                    )}
+                    {campaignRateFor(product) > 0 && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 rounded border border-gold/50 bg-obsidian-deep/85 px-2 py-1 text-xs font-bold text-gold backdrop-blur">
+                        <Gift className="h-3 w-3 shrink-0" aria-hidden />
+                        +{campaignRateFor(product)}% festive
                       </div>
                     )}
                   </div>

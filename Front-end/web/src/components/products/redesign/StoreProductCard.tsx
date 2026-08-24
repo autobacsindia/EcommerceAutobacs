@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import type { ProductRate } from '@/hooks/queries/useCampaignProductRates';
 
 /**
@@ -45,6 +46,9 @@ export default function StoreProductCard({
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
+  // Reads the same cached eligibility answer as the badge/banner, so a whole grid of
+  // these shares one entry — see `useAddedToCartToast`.
+  const notifyAdded = useAddedToCartToast();
 
   const firstImage =
     Array.isArray(product.images) && product.images.length > 0
@@ -109,7 +113,11 @@ export default function StoreProductCard({
     }
     // Optimistic: the cart badge and this toast fire on tap; addToCart rolls the
     // count back and the catch surfaces an error toast if the server rejects.
-    toast.success('Added to cart');
+    notifyAdded({
+      price: product.price,
+      originalPrice: product.originalPrice,
+      campaignPercent,
+    });
     try {
       await addToCart(product._id, 1);
     } catch (err) {
