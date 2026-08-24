@@ -109,6 +109,13 @@ export const validateCampaignMemberQuery = [
   query('q').optional().trim().isLength({ max: 120 }),
 ];
 
+export const validateCampaignRedemptionQuery = [
+  // The cursor is an ObjectId echoed back from the previous page. Validated as one so a
+  // hand-edited value fails here with a 400 rather than deep inside a Mongo cast error.
+  query('cursor').optional().isMongoId().withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1\u2013100'),
+];
+
 export const validateCampaignSimulate = [
   body('cartValues').optional().isArray({ max: 25 }).withMessage('At most 25 cart values'),
   body('cartValues.*').optional().isFloat({ min: 0 }).withMessage('Cart values must be ≥ 0'),

@@ -11,6 +11,7 @@ import { campaignKeys } from '@/hooks/queries/keys';
 import { istStartOfDayISO, istEndOfDayISO, toISTDateInput } from '@/lib/istDate';
 import MemberRosterPanel from '@/components/admin/campaigns/MemberRosterPanel';
 import ProductTierPanel from '@/components/admin/campaigns/ProductTierPanel';
+import RedemptionsPanel from '@/components/admin/campaigns/RedemptionsPanel';
 
 /**
  * Admin — campaign editor.
@@ -86,10 +87,25 @@ interface Campaign {
 
 interface Report {
   members: { invited: number; claimed: number; redeemed: number; total: number };
+  /*
+    COMMITTED, not realised. Incremented inside the order-creation transaction, before
+    payment — it is what `maxRedemptions` is enforced against, and it has to work that
+    way or two simultaneous checkouts could both take the last slot. It therefore counts
+    abandoned checkouts too, which is why `money` below is reported separately rather
+    than this number being quietly redefined.
+  */
   redeemedCount: number;
   maxRedemptions: number | null;
   discountGivenRupees: number;
   remainingExposureRupees: number | null;
+  /** Realised performance, from redemption rows joined to their orders. Null when the
+   *  campaign prices nothing through a managed coupon — an honest "no answer". */
+  money: {
+    paid: { count: number; discount: number; revenue: number; avgOrderValue: number };
+    unpaid: { count: number; discount: number };
+    refunded: { count: number; discount: number };
+    total: number;
+  } | null;
 }
 
 const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
@@ -200,8 +216,49 @@ export default function AdminCampaignEditor() {
               <span className="text-white">{inr(report.remainingExposureRupees)}</span>
             </p>
           )}
+
+          {/*
+            What was actually TAKEN, kept visually apart from the committed counters
+            above. The two disagree by every abandoned checkout, and an operator reading
+            "Redeemed 40" as "40 customers bought" is the mistake this section exists to
+            prevent — so the paid count is stated in its own right rather than left to be
+            inferred.
+          */}
+          {report.money && (
+            <div className="mt-4 border-t border-zinc-800 pt-4">
+              <p className="mb-3 text-xs uppercase tracking-wide text-zinc-500">
+                Actually paid for
+              </p>
+              <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                {([
+                  ['Paid orders', String(report.money.paid.count)],
+                  ['Revenue', inr(report.money.paid.revenue)],
+                  ['Discount given', inr(report.money.paid.discount)],
+                  ['Avg order', inr(Math.round(report.money.paid.avgOrderValue))],
+                ] as const).map(([k, v]) => (
+                  <div key={k}>
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">{k}</p>
+                    <p className="mt-1 text-2xl font-semibold text-white">{v}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                {report.money.unpaid.count} not paid for
+                {report.money.unpaid.count > 0 && ` (${inr(report.money.unpaid.discount)} committed, may still convert or be released)`}
+                {report.money.refunded.count > 0 &&
+                  ` · ${report.money.refunded.count} refunded (${inr(report.money.refunded.discount)})`}
+              </p>
+            </div>
+          )}
         </div>
       )}
+
+      {/*
+        Shown for BOTH audiences, unlike the member roster below. A public campaign never
+        writes a member row, so the roster is empty for it however many people redeem —
+        this is the only complete record of who actually used the offer.
+      */}
+      <RedemptionsPanel slug={slug} />
 
       {/* ── The CART-VALUE ladder — only for a campaign priced that way ─────── */}
       {!isProductMode && (

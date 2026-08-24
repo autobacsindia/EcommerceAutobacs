@@ -14,6 +14,11 @@ dotenv.config();
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGO_URI, {
+      // autoIndex defaults to TRUE, and this script imports models — so merely
+      // connecting would build every declared index against whatever cluster
+      // MONGO_URI points at (which is production). Indexes are a migration, never
+      // a side effect of running a reindex.
+      autoIndex: false,
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

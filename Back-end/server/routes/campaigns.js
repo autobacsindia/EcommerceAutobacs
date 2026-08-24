@@ -5,7 +5,7 @@ import { contactFormRateLimit } from '../middleware/rate-limit/index.js';
 import {
   getMyCampaignStatus, checkCampaignEmail, getCampaignProductRates,
   listCampaigns, getCampaignAdmin, getCampaignReport,
-  createCampaign, updateCampaign, setCampaignStatus,
+  createCampaign, updateCampaign, setCampaignStatus, listCampaignRedemptions,
   importCampaignMembers, listCampaignMembers, simulateCampaign,
   previewProductTier, simulateProductTiers, commitProductTier, listProductTiers,
   getProductTierDrift, unassignProductTier,
@@ -14,6 +14,7 @@ import {
   validateCampaignSlug, validateCampaignId, validateCampaignCreate,
   validateCampaignUpdate, validateCampaignStatus, validateCampaignEmailCheck,
   validateCampaignMembers, validateCampaignMemberQuery, validateCampaignSimulate,
+  validateCampaignRedemptionQuery,
   validateProductTierPreview, validateProductTierSimulate, validateProductTierCommit,
   validateProductTierQuery, validateProductTierCode, validateProductRates,
 } from '../validators/campaign.validator.js';
@@ -51,6 +52,14 @@ router.post('/', protect, admin, validateCampaignCreate, validateRequest, create
 
 router.get('/:slug/admin', protect, admin, validateCampaignSlug, validateRequest, getCampaignAdmin);
 router.get('/:slug/report', protect, admin, validateCampaignSlug, validateRequest, getCampaignReport);
+// Also a `:slug` suffix, for the same reason `/report` is: it cannot be shadowed by the
+// bare public `/:slug/me` above.
+router.get(
+  '/:slug/redemptions',
+  protect, admin,
+  validateCampaignSlug, validateCampaignRedemptionQuery, validateRequest,
+  listCampaignRedemptions,
+);
 
 router.put('/:id', protect, admin, validateCampaignId, validateCampaignUpdate, validateRequest, updateCampaign);
 router.patch('/:id/status', protect, admin, validateCampaignId, validateCampaignStatus, validateRequest, setCampaignStatus);

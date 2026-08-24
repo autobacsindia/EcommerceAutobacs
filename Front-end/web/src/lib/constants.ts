@@ -126,6 +126,9 @@ export const API_ENDPOINTS = {
   CAMPAIGN_CHECK_EMAIL: (slug: string) => `/campaigns/${slug}/check-email`,
   CAMPAIGN_ADMIN: (slug: string) => `/campaigns/${slug}/admin`,
   CAMPAIGN_REPORT: (slug: string) => `/campaigns/${slug}/report`,
+  // Who actually redeemed — the complete record for BOTH audiences, unlike the member
+  // roster, which a public campaign never writes to.
+  CAMPAIGN_REDEMPTIONS: (slug: string) => `/campaigns/${slug}/redemptions`,
   CAMPAIGN_DETAIL: (id: string) => `/campaigns/${id}`,                  // admin update
   CAMPAIGN_STATUS: (id: string) => `/campaigns/${id}/status`,           // the kill switch
   CAMPAIGN_MEMBERS: (id: string) => `/campaigns/${id}/members`,

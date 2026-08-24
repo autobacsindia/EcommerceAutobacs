@@ -2,6 +2,40 @@ import { Client } from '@elastic/elasticsearch';
 import Product from '../models/Product.js';
 import { expand as expandSynonyms, contentTokens } from '../config/searchSynonyms.js';
 
+/**
+ * Build a case-insensitive "field is any of these values" filter.
+ *
+ * The obvious `terms` query is case-SENSITIVE on a keyword field, while the
+ * MongoDB filter these clauses have to agree with matches case-insensitively
+ * (an anchored `^...$` regex with the `i` flag — see services/searchService.js).
+ * Left as `terms`, `?brand=roav 4x4` returns nothing from Elasticsearch and four
+ * products from Mongo, so which engine answered decides what the shopper sees.
+ * That is the same two-engine drift that made every category hub return 0.
+ *
+ * `case_insensitive` is only available on `term`, not `terms`, hence the
+ * should-array. Requires Elasticsearch 7.10+ (this cluster runs 8.x).
+ *
+ * @param {string} field  keyword field to match against
+ * @param {string|string[]} value  a value, an array, or a comma-separated list
+ * @returns {object|null} a bool filter clause, or null when there is nothing to filter on
+ */
+export function anyOfCaseInsensitive(field, value) {
+  const values = (Array.isArray(value) ? value : String(value).split(','))
+    .map(v => String(v ?? '').trim())
+    .filter(Boolean);
+
+  if (values.length === 0) return null;
+
+  return {
+    bool: {
+      should: values.map(v => ({
+        term: { [field]: { value: v, case_insensitive: true } }
+      })),
+      minimum_should_match: 1
+    }
+  };
+}
+
 class ElasticsearchService {
   constructor() {
     // Check if Elasticsearch is enabled
@@ -305,6 +339,10 @@ class ElasticsearchService {
                 },
                 description: { type: 'text', analyzer: 'standard' },
                 shortDescription: { type: 'text', analyzer: 'standard' },
+                // NOTE: `category` (singular) is not what indexProduct writes —
+                // documents carry `categories` (plural). This subdocument is dead
+                // and kept only to avoid an unrelated mapping change; every query
+                // uses `categories.*` below.
                 category: { 
                   type: 'object',
                   properties: {
@@ -313,7 +351,44 @@ class ElasticsearchService {
                     slug: { type: 'keyword' }
                   }
                 },
-                brand: { type: 'keyword' },
+                // Declared explicitly rather than left to dynamic mapping. These
+                // fields carry the category filter AND the category facet, and up
+                // to now they existed only because Elasticsearch happened to infer
+                // text+keyword for them on first index. recreateIndex() warns about
+                // exactly that gamble: an inferred mapping is one indexing order
+                // away from turning a facet field into plain text and silently
+                // emptying the sidebar. text+keyword here reproduces what dynamic
+                // mapping was already producing, so this is a no-op at query time.
+                categories: {
+                  type: 'object',
+                  properties: {
+                    name: {
+                      type: 'text',
+                      analyzer: 'standard',
+                      fields: { keyword: { type: 'keyword', ignore_above: 256 } }
+                    },
+                    slug: {
+                      type: 'text',
+                      analyzer: 'standard',
+                      fields: { keyword: { type: 'keyword', ignore_above: 256 } }
+                    }
+                  }
+                },
+                // Multi-field, exactly like `name` above. The analyzed `brand`
+                // powers free-text recall (a search for "roav" has to match the
+                // brand "Roav 4x4"); `brand.keyword` powers the exact filter and
+                // the facet aggregation. Declaring this as a bare `keyword` broke
+                // BOTH at once: an unanalyzed field only matches the whole exact
+                // string, so "roav" found nothing, and `brand.keyword` did not
+                // exist at all, so the brand filter matched zero documents and the
+                // brand facet returned zero buckets over the entire catalogue.
+                brand: {
+                  type: 'text',
+                  analyzer: 'standard',
+                  fields: {
+                    keyword: { type: 'keyword' }
+                  }
+                },
                 price: { type: 'float' },
                 originalPrice: { type: 'float' },
                 stock: { type: 'keyword' },
@@ -557,6 +632,8 @@ class ElasticsearchService {
       categorySlugs,
       brand,
       vehicleType, // Mapping "Vehicle Type" request to vehicle make
+      vehicleMake, // What the storefront filter sidebar actually sends
+      vehicleModel,
       minPrice,
       maxPrice,
       inStock,
@@ -626,7 +703,11 @@ class ElasticsearchService {
             terms: { field: 'brand.keyword' }
           },
           vehicle_types: {
-            terms: { field: 'vehicle_makes.keyword' }
+            // `vehicle_makes` IS the keyword field (it carries a `.text`
+            // sub-field for search, not the other way round), so there is no
+            // `vehicle_makes.keyword` to aggregate on. Asking for one returned
+            // an empty bucket list for all 930 products.
+            terms: { field: 'vehicle_makes' }
           },
           price_ranges: {
             range: {
@@ -782,17 +863,30 @@ class ElasticsearchService {
       }
 
       if (brand) {
-        const brands = Array.isArray(brand) ? brand : brand.split(',');
-        searchBody.query.function_score.query.bool.filter.push({
-          terms: { 'brand.keyword': brands }
-        });
+        const brandFilter = anyOfCaseInsensitive('brand.keyword', brand);
+        if (brandFilter) {
+          searchBody.query.function_score.query.bool.filter.push(brandFilter);
+        }
       }
 
-      if (vehicleType) {
-        const types = Array.isArray(vehicleType) ? vehicleType : vehicleType.split(',');
-        searchBody.query.function_score.query.bool.filter.push({
-          terms: { 'vehicle_makes.keyword': types }
-        });
+      // `vehicleType` is the legacy param name; the storefront filter sidebar
+      // sends `vehicleMake`. Both mean the same thing and both must filter, or
+      // the sidebar's selection is silently dropped and ES answers with the
+      // whole catalogue as though nothing were selected.
+      const makeParam = vehicleMake || vehicleType;
+      if (makeParam) {
+        // `vehicle_makes` is the keyword field itself — see the aggregation above.
+        const makeFilter = anyOfCaseInsensitive('vehicle_makes', makeParam);
+        if (makeFilter) {
+          searchBody.query.function_score.query.bool.filter.push(makeFilter);
+        }
+      }
+
+      if (vehicleModel) {
+        const modelFilter = anyOfCaseInsensitive('vehicle_models', vehicleModel);
+        if (modelFilter) {
+          searchBody.query.function_score.query.bool.filter.push(modelFilter);
+        }
       }
 
       if (minPrice || maxPrice) {

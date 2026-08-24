@@ -59,6 +59,9 @@ export const campaignKeys = {
   detail: (slug: string) => [...campaignKeys.all, 'detail', slug] as const,
   /** Funnel + spend against the cap. */
   report: (slug: string) => [...campaignKeys.all, 'report', slug] as const,
+  /** One page of redemptions. Keyed on the cursor so pages cache independently. */
+  redemptions: (slug: string, cursor: string | null) =>
+    [...campaignKeys.all, 'redemptions', slug, cursor ?? ''] as const,
   /**
    * Per-user eligibility. Keyed on cart value because the tier — and so the banner
    * copy and the savings meter — changes as the cart grows.
