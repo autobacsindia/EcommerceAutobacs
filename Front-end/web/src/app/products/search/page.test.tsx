@@ -45,6 +45,15 @@ jest.mock('@/context/CurrencyContext', () => ({
   })),
 }));
 
+// ProductGrid batches a campaign-rate lookup per page via react-query; this suite
+// exercises search results, not campaign eligibility, and renders no QueryClientProvider.
+jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
+  useCampaignProductRates: jest.fn(() => ({ data: null })),
+}));
+jest.mock('@/hooks/queries/useCampaign', () => ({
+  useCampaignBadgeVisible: jest.fn(() => true),
+}));
+
 // Mock fetch
 // global.fetch = jest.fn();
 
