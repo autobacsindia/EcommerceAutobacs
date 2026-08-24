@@ -58,6 +58,14 @@ jest.mock('react-hot-toast', () => ({
   },
 }));
 
+jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
+  useCampaignProductRates: () => ({ data: null }),
+}));
+
+jest.mock('@/hooks/queries/useCampaign', () => ({
+  useCampaignBadgeVisible: () => true,
+}));
+
 jest.mock('./redesign/StoreProductCard', () => {
   return function MockStoreProductCard({ product }: { product: any }) {
     return (

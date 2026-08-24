@@ -7,11 +7,14 @@ import { ShoppingCart, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
+import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 
 interface StickyVariant {
   _id: string;
   label: string;
   price: number;
+  originalPrice?: number | null;
   stock: StockStatus;
 }
 
@@ -20,6 +23,7 @@ interface StickyCartBarProps {
     _id: string;
     name: string;
     price: number;
+    originalPrice?: number;
     stock: StockStatus;
   };
   isDark?: boolean;
@@ -40,6 +44,11 @@ export default function StickyCartBar({
 }: StickyCartBarProps) {
   const { addToCart } = useCart();
   const router = useRouter();
+  // Same product id the BuyBox above already asked about, so react-query serves this
+  // from cache — this bar and the buy box are two views of one add-to-cart and must
+  // not congratulate the shopper differently depending on how far they scrolled.
+  const { data: campaignRates } = useCampaignProductRates([product._id]);
+  const notifyAdded = useAddedToCartToast();
   const [isVisible, setIsVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [buyNowLoading, setBuyNowLoading] = useState(false);
@@ -82,7 +91,11 @@ export default function StickyCartBar({
     setLoading(true);
     // Optimistic: badge + toast fire on tap; rolled back with an error toast on
     // a server rejection.
-    toast.success('Added to cart!');
+    notifyAdded({
+      price: activePrice,
+      originalPrice: variant ? variant.originalPrice : product.originalPrice,
+      campaignPercent: campaignRates?.rates?.[product._id]?.percent,
+    });
     try {
       await addToCart(product._id, 1, snapshot(), variant?._id ?? null);
     } catch (error: any) {

@@ -179,12 +179,17 @@ class ProductRepository {
   }
 
   /**
-   * Find products on offer/discount
+   * Find products on offer/discount, paginated. Mirrors the page/skip/count shape
+   * `_searchWithMongoDB` uses for the main listing, so the offers endpoint can return
+   * the same `{total, pages, currentPage, hasNext, hasPrev}` the frontend already
+   * knows how to render (`normalizeProductsResponse` + the shared `Pagination`
+   * component) instead of a bespoke shape.
    */
-  async findOnOffer(limit = 24) {
+  async findOnOffer({ page = 1, limit = 24 } = {}) {
     const now = new Date();
+    const skip = (Number(page) - 1) * Number(limit);
 
-    return Product.find({
+    const query = {
       isActive: true,
       $and: [
         {
@@ -208,12 +213,20 @@ class ProductRepository {
           ]
         }
       ]
-    })
-      .populate('categories', 'name slug')
-      .limit(Number(limit))
-      .sort({ createdAt: -1 })
-      .lean()
-      .maxTimeMS(QUERY_TIMEOUTS.listing);
+    };
+
+    const [products, total] = await Promise.all([
+      Product.find(query)
+        .populate('categories', 'name slug')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean()
+        .maxTimeMS(QUERY_TIMEOUTS.listing),
+      Product.countDocuments(query).maxTimeMS(QUERY_TIMEOUTS.listing)
+    ]);
+
+    return { products, total };
   }
 
   /**

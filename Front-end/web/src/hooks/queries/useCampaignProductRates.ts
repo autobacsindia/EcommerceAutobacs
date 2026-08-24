@@ -34,11 +34,21 @@ interface ProductRates {
   rates: Record<string, ProductRate>;
 }
 
+/**
+ * Mirrors `MAX_RATE_LOOKUP` in `Back-end/server/services/campaignService.js` — the
+ * server only ever reads this many ids off the query string. Capping here too matters
+ * beyond just avoiding wasted lookups: the route's `ids` validator rejects the whole
+ * request past 2000 characters, and a `showAll=true` product grid can hand this hook
+ * 500 ids (~12,500 chars uncapped) — that would 400 the request and blank out every
+ * badge on the page, not just the ones past the server's cap.
+ */
+const MAX_RATE_LOOKUP_IDS = 60;
+
 export function useCampaignProductRates(
   productIds: string[],
   slug: string = ACTIVE_CAMPAIGN_SLUG,
 ) {
-  const ids = [...new Set(productIds.filter(Boolean))];
+  const ids = [...new Set(productIds.filter(Boolean))].slice(0, MAX_RATE_LOOKUP_IDS);
 
   return useQuery({
     queryKey: campaignKeys.productRates(slug, ids),
