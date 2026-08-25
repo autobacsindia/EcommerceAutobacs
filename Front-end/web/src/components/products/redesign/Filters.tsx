@@ -13,6 +13,10 @@ import './redesign.css';
 const PRICE_MIN = 0;
 const PRICE_MAX = 100000;
 
+/** Read a comma-separated URL param as a list of non-empty values. */
+const csvParam = (sp: URLSearchParams | ReturnType<typeof useSearchParams>, key: string): string[] =>
+  (sp.get(key) ?? '').split(',').filter(Boolean);
+
 interface Category { _id: string; name: string; slug: string; parent?: unknown }
 interface Brand { _id: string; name: string }
 interface Vehicle { _id: string; make: string; model: string }
@@ -99,23 +103,29 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   const [facetCategories, setFacetCategories] = useState<Record<string, number>>({});
   const [brandsExpanded, setBrandsExpanded] = useState(false);
 
-  // ── selection (initialized from URL) ──
-  const [price, setPrice] = useState<[number, number]>(() => [
-    Number(searchParams.get('minPrice')) || PRICE_MIN,
-    Number(searchParams.get('maxPrice')) || PRICE_MAX,
-  ]);
-  const [selCats, setSelCats] = useState<string[]>(
-    () => searchParams.get('category')?.split(',').filter(Boolean) ?? []
+  // ── selection (DERIVED from the URL — never mirrored into state) ──
+  // The chip strip, the active-filter chips and this sidebar all write the same
+  // query params. Seeding local state from the URL once at mount meant any
+  // navigation by one of the others left this panel showing a stale selection,
+  // which `commit` would then write back and silently revert. The URL is the
+  // single source of truth.
+  const urlMin = Number(searchParams.get('minPrice')) || PRICE_MIN;
+  const urlMax = Number(searchParams.get('maxPrice')) || PRICE_MAX;
+
+  // Price is the one exception: the slider needs local state to stay smooth
+  // while dragging, so it re-syncs from the URL whenever the URL price moves.
+  const [price, setPrice] = useState<[number, number]>([urlMin, urlMax]);
+  useEffect(() => { setPrice([urlMin, urlMax]); }, [urlMin, urlMax]);
+
+  const selCats = useMemo(() => csvParam(searchParams, 'category'), [searchParams]);
+  const selBrands = useMemo(() => csvParam(searchParams, 'brand'), [searchParams]);
+  const ratings = useMemo(
+    () => csvParam(searchParams, 'rating').map(Number).filter((n) => !isNaN(n)),
+    [searchParams]
   );
-  const [selBrands, setSelBrands] = useState<string[]>(
-    () => searchParams.get('brand')?.split(',').filter(Boolean) ?? []
-  );
-  const [ratings, setRatings] = useState<number[]>(
-    () => searchParams.get('rating')?.split(',').map(Number).filter((n) => !isNaN(n)) ?? []
-  );
-  const [inStock, setInStock] = useState(() => searchParams.get('inStock') === 'true');
-  const [make, setMake] = useState(() => searchParams.get('vehicleMake') ?? '');
-  const [model, setModel] = useState(() => searchParams.get('vehicleModel') ?? '');
+  const inStock = searchParams.get('inStock') === 'true';
+  const make = searchParams.get('vehicleMake') ?? '';
+  const model = searchParams.get('vehicleModel') ?? '';
 
   // ── fetch reference data ──
   useEffect(() => {
@@ -169,6 +179,9 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   );
 
   // ── URL writer (live-apply) ──
+  // Patches ONLY the keys it is handed, on top of the CURRENT url. It must not
+  // rebuild the whole query from this component's view of the world, or a
+  // change here would clobber a param another control just set.
   const commit = useCallback(
     (next: {
       price?: [number, number]; cats?: string[]; brands?: string[];
@@ -177,36 +190,53 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
       const p = new URLSearchParams(searchParams.toString());
       p.delete('page'); // any filter change resets pagination
 
-      const pr = next.price ?? price;
-      pr[0] > PRICE_MIN ? p.set('minPrice', String(pr[0])) : p.delete('minPrice');
-      pr[1] < PRICE_MAX ? p.set('maxPrice', String(pr[1])) : p.delete('maxPrice');
-
       const set = (k: string, arr: string[] | number[]) =>
         arr.length ? p.set(k, arr.join(',')) : p.delete(k);
-      set('category', next.cats ?? selCats);
-      set('brand', next.brands ?? selBrands);
-      set('rating', next.ratings ?? ratings);
 
-      (next.inStock ?? inStock) ? p.set('inStock', 'true') : p.delete('inStock');
-
-      const mk = next.make ?? make;
-      const md = next.model ?? model;
-      if (mk) { p.set('vehicleMake', mk); md ? p.set('vehicleModel', md) : p.delete('vehicleModel'); }
-      else { p.delete('vehicleMake'); p.delete('vehicleModel'); }
+      if (next.price) {
+        const [lo, hi] = next.price;
+        lo > PRICE_MIN ? p.set('minPrice', String(lo)) : p.delete('minPrice');
+        hi < PRICE_MAX ? p.set('maxPrice', String(hi)) : p.delete('maxPrice');
+      }
+      if (next.cats) set('category', next.cats);
+      if (next.brands) set('brand', next.brands);
+      if (next.ratings) set('rating', next.ratings);
+      if (next.inStock !== undefined) {
+        next.inStock ? p.set('inStock', 'true') : p.delete('inStock');
+      }
+      // Make and model move together: clearing the make clears the model, and
+      // switching make discards a model that belonged to the previous one.
+      if (next.make !== undefined) {
+        if (next.make) {
+          p.set('vehicleMake', next.make);
+          next.model ? p.set('vehicleModel', next.model) : p.delete('vehicleModel');
+        } else {
+          p.delete('vehicleMake');
+          p.delete('vehicleModel');
+        }
+      } else if (next.model !== undefined) {
+        next.model ? p.set('vehicleModel', next.model) : p.delete('vehicleModel');
+      }
 
       const qs = p.toString();
       router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
       onApplied?.();
     },
-    [searchParams, price, selCats, selBrands, ratings, inStock, make, model, router, onApplied, basePath]
+    [searchParams, router, onApplied, basePath]
   );
+
+  // The debounced price commit fires after the URL may have moved on, so it has
+  // to reach for the LATEST commit rather than the one captured when the drag
+  // started — otherwise releasing the slider writes back a pre-drag query.
+  const commitRef = useRef(commit);
+  useEffect(() => { commitRef.current = commit; });
 
   // Debounce only the price slider so dragging stays smooth.
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onPriceChange = (next: [number, number]) => {
     setPrice(next);
     if (priceTimer.current) clearTimeout(priceTimer.current);
-    priceTimer.current = setTimeout(() => commit({ price: next }), 350);
+    priceTimer.current = setTimeout(() => commitRef.current({ price: next }), 350);
   };
 
   const toggle = <T,>(arr: T[], v: T): T[] =>
@@ -221,7 +251,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
         <div className="space-y-2">
           <select
             value={make}
-            onChange={(e) => { setMake(e.target.value); setModel(''); commit({ make: e.target.value, model: '' }); }}
+            onChange={(e) => commit({ make: e.target.value, model: '' })}
             className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55"
             aria-label="Vehicle make"
           >
@@ -231,7 +261,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
           <select
             value={model}
             disabled={!make}
-            onChange={(e) => { setModel(e.target.value); commit({ model: e.target.value }); }}
+            onChange={(e) => commit({ model: e.target.value })}
             className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55 disabled:opacity-50"
             aria-label="Vehicle model"
           >
@@ -263,7 +293,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
                 label={c.name}
                 count={facetCategories[c._id]}
                 checked={selCats.includes(c._id)}
-                onChange={() => { const n = toggle(selCats, c._id); setSelCats(n); commit({ cats: n }); }}
+                onChange={() => commit({ cats: toggle(selCats, c._id) })}
               />
             ))}
           </div>
@@ -280,7 +310,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
                 label={b.name}
                 count={facetBrands[b.name.toLowerCase()]}
                 checked={selBrands.includes(b.name)}
-                onChange={() => { const n = toggle(selBrands, b.name); setSelBrands(n); commit({ brands: n }); }}
+                onChange={() => commit({ brands: toggle(selBrands, b.name) })}
               />
             ))}
             {brands.length > 6 && (
@@ -303,7 +333,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
             <CheckRow
               key={r}
               checked={ratings.includes(r)}
-              onChange={() => { const n = toggle(ratings, r); setRatings(n); commit({ ratings: n }); }}
+              onChange={() => commit({ ratings: toggle(ratings, r) })}
               label={
                 <span className="flex items-center gap-1.5">
                   <span className="text-gold tracking-[2px]">{'★'.repeat(r)}<span className="text-hairline">{'★'.repeat(5 - r)}</span></span>
@@ -320,7 +350,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
         <CheckRow
           label="In stock only"
           checked={inStock}
-          onChange={() => { const n = !inStock; setInStock(n); commit({ inStock: n }); }}
+          onChange={() => commit({ inStock: !inStock })}
         />
       </Group>
     </div>

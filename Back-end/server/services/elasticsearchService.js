@@ -36,6 +36,170 @@ export function anyOfCaseInsensitive(field, value) {
   };
 }
 
+/**
+ * Index settings and mapping, declared ONCE and shared by createIndex() and the
+ * live-mapping audit (scripts/audit-es-mapping.js). Kept out of createIndex so
+ * "what we intend the index to be" is a value that can be compared against the
+ * cluster, not a literal buried inside a call that only runs when the index is
+ * absent.
+ */
+export const PRODUCT_INDEX_SETTINGS = {
+  number_of_shards: 1,
+  number_of_replicas: 0,
+};
+
+export const PRODUCT_INDEX_MAPPING = {
+  properties: {
+    productId: { type: 'keyword' },
+    name: { 
+      type: 'text',
+      analyzer: 'standard',
+      fields: {
+        keyword: { type: 'keyword' }
+      }
+    },
+    description: { type: 'text', analyzer: 'standard' },
+    shortDescription: { type: 'text', analyzer: 'standard' },
+    // NOTE: `category` (singular) is not what indexProduct writes —
+    // documents carry `categories` (plural). This subdocument is dead
+    // and kept only to avoid an unrelated mapping change; every query
+    // uses `categories.*` below.
+    category: { 
+      type: 'object',
+      properties: {
+        id: { type: 'keyword' },
+        name: { type: 'keyword' },
+        slug: { type: 'keyword' }
+      }
+    },
+    // Declared explicitly rather than left to dynamic mapping. These
+    // fields carry the category filter AND the category facet, and up
+    // to now they existed only because Elasticsearch happened to infer
+    // text+keyword for them on first index. recreateIndex() warns about
+    // exactly that gamble: an inferred mapping is one indexing order
+    // away from turning a facet field into plain text and silently
+    // emptying the sidebar. text+keyword here reproduces what dynamic
+    // mapping was already producing, so this is a no-op at query time.
+    categories: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'text',
+          analyzer: 'standard',
+          fields: { keyword: { type: 'keyword', ignore_above: 256 } }
+        },
+        slug: {
+          type: 'text',
+          analyzer: 'standard',
+          fields: { keyword: { type: 'keyword', ignore_above: 256 } }
+        }
+      }
+    },
+    // Multi-field, exactly like `name` above. The analyzed `brand`
+    // powers free-text recall (a search for "roav" has to match the
+    // brand "Roav 4x4"); `brand.keyword` powers the exact filter and
+    // the facet aggregation. Declaring this as a bare `keyword` broke
+    // BOTH at once: an unanalyzed field only matches the whole exact
+    // string, so "roav" found nothing, and `brand.keyword` did not
+    // exist at all, so the brand filter matched zero documents and the
+    // brand facet returned zero buckets over the entire catalogue.
+    brand: {
+      type: 'text',
+      analyzer: 'standard',
+      fields: {
+        keyword: { type: 'keyword' }
+      }
+    },
+    price: { type: 'float' },
+    originalPrice: { type: 'float' },
+    stock: { type: 'keyword' },
+    sku: { type: 'keyword' },
+    isActive: { type: 'boolean' },
+    isFeatured: { type: 'boolean' },
+    isFastMoving: { type: 'boolean' },
+    averageRating: { type: 'float' },
+    totalReviews: { type: 'integer' },
+    tags: { type: 'keyword' },
+    slug: { type: 'keyword' },
+    createdAt: { type: 'date' },
+    updatedAt: { type: 'date' },
+    vehicle_makes: {
+      type: 'keyword',
+      fields: {
+        text: { type: 'text', analyzer: 'standard' }
+      }
+    },
+    vehicle_models: {
+      type: 'keyword',
+      fields: {
+        text: { type: 'text', analyzer: 'standard' }
+      }
+    }
+  },
+};
+
+/**
+ * Flatten a mapping's `properties` into leaf field paths, so a declared mapping
+ * and a live one can be compared field by field.
+ * @returns {Map<string, {type: string, fields: Record<string, string>}>}
+ */
+export function flattenMapping(properties, prefix = '', out = new Map()) {
+  for (const [key, def] of Object.entries(properties || {})) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (def?.properties) {
+      flattenMapping(def.properties, path, out);
+      continue;
+    }
+    const fields = {};
+    for (const [name, sub] of Object.entries(def?.fields || {})) fields[name] = sub?.type;
+    out.set(path, { type: def?.type, fields });
+  }
+  return out;
+}
+
+/**
+ * Compare the declared mapping against a live one.
+ *
+ * Only checks that everything DECLARED is present and the right shape. Extra
+ * fields in the live index are expected and fine — dynamic mapping legitimately
+ * adds ones we never declared (`priceMin`, `productType`, `images.*`).
+ *
+ * What matters is `type` and the SUB-FIELD names: those are what a filter or an
+ * aggregation resolves against, and Elasticsearch does not error on an unmapped
+ * field — it matches nothing and aggregates to nothing. Cosmetic options like
+ * `ignore_above` are ignored deliberately; they cannot silently empty a facet.
+ *
+ * @returns {{ok: boolean, drift: Array<{path: string, issue: string, declared: string, live: string}>}}
+ */
+export function diffMapping(declaredProperties, liveProperties) {
+  const declared = flattenMapping(declaredProperties);
+  const live = flattenMapping(liveProperties);
+  const drift = [];
+
+  for (const [path, want] of declared) {
+    const got = live.get(path);
+    if (!got) {
+      drift.push({ path, issue: 'missing', declared: want.type, live: '(absent)' });
+      continue;
+    }
+    if (want.type !== got.type) {
+      drift.push({ path, issue: 'type', declared: want.type, live: got.type });
+    }
+    for (const [name, type] of Object.entries(want.fields)) {
+      if (got.fields[name] !== type) {
+        drift.push({
+          path: `${path}.${name}`,
+          issue: 'subfield',
+          declared: type,
+          live: got.fields[name] ?? '(absent)',
+        });
+      }
+    }
+  }
+
+  return { ok: drift.length === 0, drift };
+}
+
 class ElasticsearchService {
   constructor() {
     // Check if Elasticsearch is enabled
@@ -309,114 +473,28 @@ class ElasticsearchService {
   }
 
   /**
-   * Create the products index with proper mapping
+   * Create the products index with the declared mapping — ONLY when it is absent.
+   *
+   * Note what this does NOT do: it never reconciles an index that already exists.
+   * Elasticsearch cannot change an existing field's type in place, so editing
+   * PRODUCT_INDEX_MAPPING has no effect on a live index — the change lands only
+   * on the next recreateIndex() + reindex. That is not a flaw to fix here (an
+   * implicit reindex on boot would be far worse), but it is a silent one: the
+   * `brand` field sat as a bare `keyword` in production long after the code
+   * declared it text+keyword, and every brand filter returned zero. Run
+   * `npm run audit-es-mapping` to compare declared against live.
    */
   async createIndex() {
     try {
       const exists = await this.client.indices.exists({ index: this.indexName });
-      
+
       if (!exists) {
         await this.client.indices.create({
           index: this.indexName,
           body: {
-            // Single-node deployment: one shard, zero replicas. A replica cannot
-            // allocate on a one-node cluster and would leave health permanently
-            // yellow. The index is fully rebuildable from Mongo (reindex-products),
-            // so we don't need in-cluster redundancy here.
-            settings: {
-              number_of_shards: 1,
-              number_of_replicas: 0
-            },
-            mappings: {
-              properties: {
-                productId: { type: 'keyword' },
-                name: { 
-                  type: 'text',
-                  analyzer: 'standard',
-                  fields: {
-                    keyword: { type: 'keyword' }
-                  }
-                },
-                description: { type: 'text', analyzer: 'standard' },
-                shortDescription: { type: 'text', analyzer: 'standard' },
-                // NOTE: `category` (singular) is not what indexProduct writes —
-                // documents carry `categories` (plural). This subdocument is dead
-                // and kept only to avoid an unrelated mapping change; every query
-                // uses `categories.*` below.
-                category: { 
-                  type: 'object',
-                  properties: {
-                    id: { type: 'keyword' },
-                    name: { type: 'keyword' },
-                    slug: { type: 'keyword' }
-                  }
-                },
-                // Declared explicitly rather than left to dynamic mapping. These
-                // fields carry the category filter AND the category facet, and up
-                // to now they existed only because Elasticsearch happened to infer
-                // text+keyword for them on first index. recreateIndex() warns about
-                // exactly that gamble: an inferred mapping is one indexing order
-                // away from turning a facet field into plain text and silently
-                // emptying the sidebar. text+keyword here reproduces what dynamic
-                // mapping was already producing, so this is a no-op at query time.
-                categories: {
-                  type: 'object',
-                  properties: {
-                    name: {
-                      type: 'text',
-                      analyzer: 'standard',
-                      fields: { keyword: { type: 'keyword', ignore_above: 256 } }
-                    },
-                    slug: {
-                      type: 'text',
-                      analyzer: 'standard',
-                      fields: { keyword: { type: 'keyword', ignore_above: 256 } }
-                    }
-                  }
-                },
-                // Multi-field, exactly like `name` above. The analyzed `brand`
-                // powers free-text recall (a search for "roav" has to match the
-                // brand "Roav 4x4"); `brand.keyword` powers the exact filter and
-                // the facet aggregation. Declaring this as a bare `keyword` broke
-                // BOTH at once: an unanalyzed field only matches the whole exact
-                // string, so "roav" found nothing, and `brand.keyword` did not
-                // exist at all, so the brand filter matched zero documents and the
-                // brand facet returned zero buckets over the entire catalogue.
-                brand: {
-                  type: 'text',
-                  analyzer: 'standard',
-                  fields: {
-                    keyword: { type: 'keyword' }
-                  }
-                },
-                price: { type: 'float' },
-                originalPrice: { type: 'float' },
-                stock: { type: 'keyword' },
-                sku: { type: 'keyword' },
-                isActive: { type: 'boolean' },
-                isFeatured: { type: 'boolean' },
-                isFastMoving: { type: 'boolean' },
-                averageRating: { type: 'float' },
-                totalReviews: { type: 'integer' },
-                tags: { type: 'keyword' },
-                slug: { type: 'keyword' },
-                createdAt: { type: 'date' },
-                updatedAt: { type: 'date' },
-                vehicle_makes: {
-                  type: 'keyword',
-                  fields: {
-                    text: { type: 'text', analyzer: 'standard' }
-                  }
-                },
-                vehicle_models: {
-                  type: 'keyword',
-                  fields: {
-                    text: { type: 'text', analyzer: 'standard' }
-                  }
-                }
-              }
-            }
-          }
+            settings: PRODUCT_INDEX_SETTINGS,
+            mappings: PRODUCT_INDEX_MAPPING,
+          },
         });
         console.log(`Created Elasticsearch index: ${this.indexName}`);
       }
@@ -424,6 +502,29 @@ class ElasticsearchService {
       console.error('Error creating Elasticsearch index:', error);
       throw error;
     }
+  }
+
+  /**
+   * Compare PRODUCT_INDEX_MAPPING against the mapping the cluster actually holds.
+   *
+   * This exists because createIndex() is a no-op on an existing index: a mapping
+   * corrected in code stays uncorrected in production until someone reindexes,
+   * and nothing said so. `tests/elasticsearchMappingDrift.test.js` guards the
+   * other half (a query naming a field the declared mapping lacks) — it cannot
+   * see the cluster, so it passed throughout the months the live `brand` field
+   * was a bare keyword and every brand filter returned zero.
+   *
+   * @returns {Promise<{ok: boolean, indexExists: boolean, drift: Array<object>}>}
+   */
+  async verifyMapping() {
+    const exists = await this.client.indices.exists({ index: this.indexName });
+    if (!exists) return { ok: false, indexExists: false, drift: [] };
+
+    const response = await this.client.indices.getMapping({ index: this.indexName });
+    // getMapping keys by CONCRETE index name, which differs from this.indexName
+    // when it resolves through an alias.
+    const live = Object.values(response)[0]?.mappings?.properties ?? {};
+    return { ...diffMapping(PRODUCT_INDEX_MAPPING.properties, live), indexExists: true };
   }
 
   /**

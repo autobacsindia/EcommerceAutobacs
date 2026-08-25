@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -10,14 +10,19 @@ interface Category { _id: string; name: string; parent?: unknown }
 
 /**
  * Sticky horizontal category chip row (MLC reference), obsidian + gold.
- * Single-select: a chip sets `category` to that hub id (replacing sidebar
- * multi-select); "All" clears it. Complements the multi-select sidebar.
+ * Single-select on click: a chip sets `category` to that hub id, replacing any
+ * multi-select made in the sidebar; "All" clears it. The HIGHLIGHT, though, is
+ * membership-based — the sidebar writes a comma-separated `category`, so every
+ * selected hub lights up here rather than none of them.
  */
 export default function CategoryChips() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [cats, setCats] = useState<Category[]>([]);
-  const active = searchParams.get('category') ?? '';
+  const active = useMemo(
+    () => new Set((searchParams.get('category') ?? '').split(',').filter(Boolean)),
+    [searchParams]
+  );
 
   useEffect(() => {
     const ac = new AbortController();
@@ -33,7 +38,10 @@ export default function CategoryChips() {
   const select = (id: string) => {
     const p = new URLSearchParams(searchParams.toString());
     p.delete('page');
-    id ? p.set('category', id) : p.delete('category');
+    // A highlighted chip is expected to undo itself, but only when it IS the
+    // whole selection — clicking one of several selected hubs narrows to it.
+    const clear = !id || (active.has(id) && active.size === 1);
+    clear ? p.delete('category') : p.set('category', id);
     router.replace(`/products?${p.toString()}`, { scroll: false });
   };
 
@@ -56,8 +64,8 @@ export default function CategoryChips() {
 
   return (
     <div className="sf-noscroll flex gap-2.5 overflow-x-auto">
-      {chip('All categories', '', active === '')}
-      {cats.map((c) => chip(c.name, c._id, active === c._id))}
+      {chip('All categories', '', active.size === 0)}
+      {cats.map((c) => chip(c.name, c._id, active.has(c._id)))}
     </div>
   );
 }
