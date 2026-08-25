@@ -160,4 +160,42 @@ describe('declared indexes are buildable', () => {
 
     expect(failures).toEqual([]);
   }, 120000);
+
+  /**
+   * The pass that actually builds prod's indexes, run for real.
+   *
+   * config/db.js wraps ~26 createIndex calls in ONE try/catch, so the first failure
+   * silently skips every index after it. That is not hypothetical: `spinresults.order`
+   * was declared on the schema as `unique: true` (built by autoIndex as `order_1`) AND
+   * in config/db.js as `unique_spin_per_order`. MongoDB rejects the second with
+   * "Index already exists with a different name", which aborted the pass and left the
+   * ENTIRE Spin-to-Win index set — including the unique index that is the whole
+   * one-spin-per-order guarantee — unbuilt, with nothing but one console line to say so.
+   *
+   * Running the real function after the schema indexes are already in place reproduces
+   * exactly the state a non-production boot is in, and fails on any future collision.
+   */
+  it('config/db.js can build every critical index on top of the schema indexes', async () => {
+    const { ensureCriticalIndexes } = await import('../config/db.js');
+
+    // Mirror a dev/test boot: autoIndex has already created the schema indexes, THEN
+    // the explicit safety net runs.
+    for (const model of Object.values(mongoose.models)) {
+      await model.createCollection().catch(() => {});
+      await model.syncIndexes().catch(() => {});
+    }
+
+    const result = await ensureCriticalIndexes();
+    expect(result?.error?.message ?? null).toBeNull();
+    expect(result?.ok).toBe(true);
+  }, 120000);
+
+  it('builds the unique index behind the one-spin-per-order guarantee', async () => {
+    const { ensureCriticalIndexes } = await import('../config/db.js');
+    await ensureCriticalIndexes();
+
+    const indexes = await mongoose.connection.db.collection('spinresults').indexes();
+    const unique = indexes.find((i) => i.unique && i.key && i.key.order === 1);
+    expect(unique).toBeDefined();
+  }, 120000);
 });

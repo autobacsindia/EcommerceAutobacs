@@ -55,6 +55,9 @@ const mockPrizeRepo = {
   findEligiblePool: jest.fn().mockResolvedValue([]),
   findByCampaign: jest.fn().mockResolvedValue([]),
   createMany: jest.fn(),
+  findDocById: jest.fn(),
+  updateById: jest.fn(),
+  countFloorPrizes: jest.fn().mockResolvedValue(0),
 };
 jest.unstable_mockModule('../../../repositories/spinPrizeRepository.js', () => ({
   default: mockPrizeRepo,
@@ -282,5 +285,89 @@ describe('cloning a campaign to open a new window', () => {
       { params: { id: String(SOURCE_ID) }, body: { slug: 'x' }, user: { _id: OWNER_ID } },
       res(),
     )).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+/**
+ * Editing a prize AFTER the campaign is live.
+ *
+ * The publish gate is a one-time check — it runs when the campaign is published and
+ * never again. Every edit after that goes straight to the draw with nothing in between
+ * it and a paying customer, so the invariants the gate protects have to be re-enforced
+ * on the update path. The failure these prevent is quiet and total: strip the guaranteed
+ * prize from a live campaign and checkEligibility starts returning `misconfigured`, so
+ * the wheel simply stops appearing for everyone and nothing says why.
+ */
+describe('editing a prize on a LIVE campaign', () => {
+  const PRIZE_ID = new mongoose.Types.ObjectId();
+  const CAMPAIGN_ID = new mongoose.Types.ObjectId();
+
+  const existingPrize = (over = {}) => ({
+    _id: PRIZE_ID, campaign: CAMPAIGN_ID, name: 'Coupon', kind: 'coupon',
+    isFloorPrize: false, stockTotal: 10, stockRemaining: 5, stockAwarded: 5, ...over,
+  });
+
+  const editReq = (body) => ({ params: { prizeId: String(PRIZE_ID) }, body, user: { _id: OWNER_ID } });
+
+  beforeEach(() => {
+    mockPrizeRepo.findDocById.mockReset();
+    mockPrizeRepo.updateById.mockReset().mockResolvedValue({ _id: PRIZE_ID });
+    mockPrizeRepo.countFloorPrizes.mockReset().mockResolvedValue(0);
+    mockCampaignRepo.findById.mockReset().mockResolvedValue({ _id: CAMPAIGN_ID, status: 'live' });
+  });
+
+  it('lets an admin FIX a wrong coupon amount while the campaign runs', async () => {
+    // The whole point of the edit screen. Correcting the discount must stay possible;
+    // it is only the structural changes below that are refused.
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ isFloorPrize: true, stockTotal: null }));
+    await controller.updatePrize(editReq({ couponValue: 500 }), res());
+    expect(mockPrizeRepo.updateById).toHaveBeenCalledWith(
+      String(PRIZE_ID), expect.objectContaining({ couponValue: 500 }),
+    );
+  });
+
+  it('refuses to demote the ONLY guaranteed prize while live', async () => {
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ isFloorPrize: true, stockTotal: null }));
+    await expect(controller.updatePrize(editReq({ isFloorPrize: false }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
+    expect(mockPrizeRepo.updateById).not.toHaveBeenCalled();
+  });
+
+  it('refuses to promote a SECOND prize to guaranteed', async () => {
+    // findFloorPrize is a findOne — with two, which one backs the draw is whichever the
+    // index happens to yield, so the odds stop matching what the admin was shown.
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize());
+    mockPrizeRepo.countFloorPrizes.mockResolvedValue(1);
+    await expect(controller.updatePrize(editReq({ isFloorPrize: true }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
+    expect(mockPrizeRepo.updateById).not.toHaveBeenCalled();
+  });
+
+  it('refuses to put a stock count on the guaranteed prize', async () => {
+    // A guaranteed prize that can run out is not guaranteed.
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ isFloorPrize: true, stockTotal: null }));
+    await expect(controller.updatePrize(editReq({ stockTotal: 50 }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
+  });
+
+  it('refuses to change a prize TYPE while live', async () => {
+    // A coupon turning into a goodie has no SKU, so the packer gets an order line
+    // naming an item nobody can find on a shelf.
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize());
+    await expect(controller.updatePrize(editReq({ kind: 'goodie' }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
+  });
+
+  it('ALLOWS the same structural edits once the campaign is switched off', async () => {
+    mockCampaignRepo.findById.mockResolvedValue({ _id: CAMPAIGN_ID, status: 'off' });
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ isFloorPrize: true, stockTotal: null }));
+    await controller.updatePrize(editReq({ isFloorPrize: false }), res());
+    expect(mockPrizeRepo.updateById).toHaveBeenCalled();
+  });
+
+  it('still refuses a stock total below what has already been awarded', async () => {
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ stockAwarded: 8 }));
+    await expect(controller.updatePrize(editReq({ stockTotal: 3 }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
   });
 });

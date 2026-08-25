@@ -459,12 +459,11 @@ const OrderSchema = new mongoose.Schema({
 // Indexes for order queries
 // COMPOUND indexes for common query patterns
 OrderSchema.index({ user: 1, createdAt: -1 }); // User order history (sorted by date)
-// Admin orders list: the 🎁 "has an unpacked reward" filter. Partial so it indexes
-// only the small minority of orders that actually won something.
-OrderSchema.index(
-  { "spinReward.fulfilledAt": 1, createdAt: -1 },
-  { partialFilterExpression: { "spinReward.result": { $exists: true } } }
-);
+// Admin orders list: the 🎁 "has an unpacked reward" filter is served by a partial
+// index built in config/db.js as `spin_reward_fulfilment`, NOT declared here.
+// Declaring it in both places makes MongoDB reject the second one ("Index already
+// exists with a different name"), which aborted the whole index-verification pass —
+// see the note on SpinResult.order.
 OrderSchema.index({ user: 1, status: 1 });      // User orders filtered by status (order tracking page)
 OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by status, sort by date)
 

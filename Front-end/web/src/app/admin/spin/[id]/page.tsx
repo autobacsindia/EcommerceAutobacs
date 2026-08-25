@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient, { ApiError } from '@/lib/api';
@@ -62,6 +62,12 @@ export default function SpinCampaignDetailPage() {
 
   const [showPrizeForm, setShowPrizeForm] = useState(false);
   const [prizeForm, setPrizeForm] = useState(emptyPrize());
+  /** null = the form is creating; an id = the form is editing that prize. */
+  const [editingPrizeId, setEditingPrizeId] = useState<string | null>(null);
+  // The prize form is rendered once, inside the Goodies section, and serves the
+  // guaranteed prize too — so opening it from the panel above would otherwise scroll
+  // nothing and look like the button did nothing at all.
+  const prizeFormRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,6 +99,86 @@ export default function SpinCampaignDetailPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (!loading) void loadOdds(); }, [loading, prizes, loadOdds]);
 
+  /**
+   * Load an existing prize into the shared form.
+   *
+   * Until this existed the only edits possible were restock and deactivate, so a coupon
+   * created with the wrong discount could only be fixed by deactivating it and building
+   * a replacement — on a live campaign that briefly leaves the wheel with no guaranteed
+   * prize at all.
+   */
+  const openEdit = (p: SpinPrize) => {
+    setEditingPrizeId(p._id);
+    setShowPrizeForm(true);
+    setError(null);
+    setPrizeForm({
+      name: p.name,
+      shortLabel: p.shortLabel || '',
+      sku: p.sku || '',
+      kind: p.kind,
+      stockTotal: p.stockTotal,
+      minOrderValueRupees: (p.minOrderValuePaise || 0) / 100,
+      maxWinsPerDay: p.maxWinsPerDay ?? null,
+      isFloorPrize: p.isFloorPrize,
+      couponType: p.couponType ?? 'fixed',
+      couponValue: p.couponValue ?? 0,
+      couponValidDays: p.couponValidDays ?? 30,
+      couponMinCartValue: p.couponMinCartValue ?? 0,
+      karmaPoints: p.karmaPoints ?? 0,
+    });
+  };
+
+  useEffect(() => {
+    if (showPrizeForm) {
+      prizeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [showPrizeForm, editingPrizeId]);
+
+  const closePrizeForm = () => {
+    setShowPrizeForm(false);
+    setEditingPrizeId(null);
+    setPrizeForm(emptyPrize());
+  };
+
+  /**
+   * Save an EXISTING prize.
+   *
+   * Deliberately does not send stock: `stockRemaining` is server-owned (the validator
+   * rejects it outright) and `stockTotal` has restock semantics of its own, so stock
+   * stays with the Restock action rather than being silently rewritten by an edit that
+   * was only meant to change a discount. Structural changes the backend refuses on a
+   * live campaign (swapping the prize type, moving the guaranteed flag) surface as the
+   * server's own message rather than being guessed at here.
+   */
+  const updatePrizeFields = async () => {
+    if (!editingPrizeId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiClient.put(API_ENDPOINTS.SPIN_PRIZE_BY_ID(editingPrizeId), {
+        name: prizeForm.name.trim(),
+        shortLabel: prizeForm.shortLabel.trim() || null,
+        sku: prizeForm.kind === 'goodie' ? prizeForm.sku.trim() : null,
+        minOrderValuePaise: Math.round(Number(prizeForm.minOrderValueRupees || 0) * 100),
+        maxWinsPerDay: prizeForm.maxWinsPerDay,
+        ...(prizeForm.kind === 'coupon' ? {
+          couponType: prizeForm.couponType,
+          couponValue: Number(prizeForm.couponValue),
+          couponValidDays: Number(prizeForm.couponValidDays),
+          couponMinCartValue: Number(prizeForm.couponMinCartValue),
+        } : {}),
+        ...(prizeForm.kind === 'karma' ? { karmaPoints: Number(prizeForm.karmaPoints) } : {}),
+      });
+      setMsg('Prize updated. Coupons already issued to past winners keep the old value.');
+      closePrizeForm();
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update prize');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const addPrize = async () => {
     setBusy(true);
     setError(null);
@@ -117,8 +203,7 @@ export default function SpinCampaignDetailPage() {
         karmaPoints: prizeForm.kind === 'karma' ? Number(prizeForm.karmaPoints) : 0,
       });
       setMsg('Prize added.');
-      setShowPrizeForm(false);
-      setPrizeForm(emptyPrize());
+      closePrizeForm();
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add prize');
@@ -273,22 +358,58 @@ export default function SpinCampaignDetailPage() {
 
       {/* ── The guaranteed prize ─────────────────────────────────────────────── */}
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="font-semibold text-gray-900">Guaranteed prize (everyone wins this if they don&apos;t win a goodie)</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">Guaranteed prize (everyone wins this if they don&apos;t win a goodie)</h2>
+          {!floor && (
+            /*
+              This button exists because the only way to create the guaranteed prize used
+              to be the "+ Add prize" button over in the Goodies section, with the Type
+              dropdown switched to "Discount coupon" and a checkbox ticked further down
+              the form. The discount amount only appears once Type is a coupon, so anyone
+              who did not find that dropdown concluded there was no way to set the coupon
+              value at all — and without it the campaign can never pass the publish gate.
+            */
+            <button
+              onClick={() => { setPrizeForm({ ...emptyPrize(), kind: 'coupon', isFloorPrize: true, stockTotal: null }); setShowPrizeForm(true); }}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
+              + Set up the guaranteed prize
+            </button>
+          )}
+        </div>
         {floor ? (
           <div className="mt-3 flex items-center justify-between rounded-lg bg-indigo-50 px-4 py-3">
             <div>
               <div className="font-medium text-indigo-900">{floor.name}</div>
               <div className="text-xs text-indigo-700">
-                {KIND_LABEL[floor.kind]} · unlimited · awarded {floor.stockAwarded} times
+                {KIND_LABEL[floor.kind]}
+                {/* Surfaced so the actual discount is verifiable without reopening a form. */}
+                {floor.kind === 'coupon' && (
+                  <> · {floor.couponType === 'free_shipping'
+                    ? 'free shipping'
+                    : floor.couponType === 'percentage'
+                      ? `${floor.couponValue}% off`
+                      : `₹${floor.couponValue} off`}
+                    {floor.couponMinCartValue ? ` · min cart ₹${floor.couponMinCartValue}` : ''}
+                    {floor.couponValidDays ? ` · valid ${floor.couponValidDays} days` : ''}
+                  </>
+                )}
+                {' '}· unlimited · awarded {floor.stockAwarded} times
               </div>
             </div>
-            <span className="rounded-full bg-indigo-600 px-2.5 py-0.5 text-xs font-semibold text-white">FALLBACK</span>
+            <div className="flex items-center gap-3">
+              {/* The reason this whole edit path exists: a wrong discount here used to be
+                  unfixable without deactivating the guaranteed prize on a live campaign. */}
+              <button onClick={() => openEdit(floor)} className="text-sm font-medium text-indigo-700 hover:underline">
+                Edit
+              </button>
+              <span className="rounded-full bg-indigo-600 px-2.5 py-0.5 text-xs font-semibold text-white">FALLBACK</span>
+            </div>
           </div>
         ) : (
           <p className="mt-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            ⚠️ Missing. Add one prize marked <strong>&ldquo;guaranteed fallback&rdquo;</strong> with unlimited stock —
-            without it the campaign cannot go live, because once the goodies run out the wheel
-            would have nothing to award.
+            ⚠️ Missing. The campaign cannot go live without it — once the goodies run out the
+            wheel would have nothing to award. Use the button above; it is normally a discount
+            coupon, and you set the amount there.
           </p>
         )}
       </section>
@@ -297,14 +418,24 @@ export default function SpinCampaignDetailPage() {
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Goodies ({goodies.length})</h2>
-          <button onClick={() => setShowPrizeForm((v) => !v)}
+          <button onClick={() => (showPrizeForm ? closePrizeForm() : setShowPrizeForm(true))}
             className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
             {showPrizeForm ? 'Cancel' : '+ Add prize'}
           </button>
         </div>
 
         {showPrizeForm && (
-          <div className="mb-4 grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2">
+          <div ref={prizeFormRef} className="mb-4 grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2">
+            <h3 className="sm:col-span-2 font-semibold text-gray-900">
+              {editingPrizeId ? `Editing “${prizeForm.name || 'prize'}”` : 'New prize'}
+            </h3>
+            {editingPrizeId && (
+              <p className="sm:col-span-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Stock is changed with <strong>Restock</strong>, not here. Coupons already sent to
+                past winners keep the value they were issued with — this only changes what future
+                winners get.
+              </p>
+            )}
             <label className="text-sm">
               <span className="mb-1 block font-medium text-gray-700">Prize name</span>
               <input value={prizeForm.name} onChange={(e) => setPrizeForm({ ...prizeForm, name: e.target.value })}
@@ -318,9 +449,16 @@ export default function SpinCampaignDetailPage() {
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-medium text-gray-700">Type</span>
+              {/*
+                Locked on edit. Changing what kind of thing a prize is routes the next
+                winner down a different award path than the one the campaign was
+                published against — the backend refuses it outright on a live campaign,
+                so offering it here would only produce a rejected save.
+              */}
               <select value={prizeForm.kind}
+                disabled={Boolean(editingPrizeId)}
                 onChange={(e) => setPrizeForm({ ...prizeForm, kind: e.target.value as PrizeKind })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2">
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100 disabled:text-gray-500">
                 {(Object.keys(KIND_LABEL) as PrizeKind[]).map((k) => (
                   <option key={k} value={k}>{KIND_LABEL[k]}</option>
                 ))}
@@ -408,16 +546,25 @@ export default function SpinCampaignDetailPage() {
             </label>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <input type="checkbox" checked={prizeForm.isFloorPrize}
+                disabled={Boolean(editingPrizeId)}
                 onChange={(e) => setPrizeForm({ ...prizeForm, isFloorPrize: e.target.checked })} />
               <span className="font-medium text-gray-700">
                 This is the guaranteed fallback (unlimited, everyone who misses a goodie gets it)
               </span>
             </label>
-            <div className="sm:col-span-2">
-              <button onClick={addPrize} disabled={busy || !prizeForm.name.trim()}
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <button
+                onClick={editingPrizeId ? updatePrizeFields : addPrize}
+                disabled={busy || !prizeForm.name.trim()}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-                {busy ? 'Adding…' : 'Add prize'}
+                {busy ? 'Saving…' : editingPrizeId ? 'Save changes' : 'Add prize'}
               </button>
+              {editingPrizeId && (
+                <button onClick={closePrizeForm} disabled={busy}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  Cancel
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -465,6 +612,7 @@ export default function SpinCampaignDetailPage() {
                           if (v !== null) void restock(p, Number(v));
                         }}
                         className="mr-2 text-blue-600 hover:underline">Restock</button>
+                      <button onClick={() => openEdit(p)} className="mr-2 text-blue-600 hover:underline">Edit</button>
                       <button onClick={() => removePrize(p)} className="text-red-600 hover:underline">Remove</button>
                     </td>
                   </tr>

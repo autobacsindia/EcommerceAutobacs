@@ -22,10 +22,17 @@ const SpinResultSchema = new mongoose.Schema({
    * gatewayPaymentId — a pre-check `findOne` alone cannot do it, because under
    * snapshot isolation neither transaction can see the other's uncommitted insert.
    *
-   * The index is declared below AND built explicitly in config/db.js: prod runs
-   * autoIndex:false, so a schema declaration alone would never reach the live cluster.
+   * ⚠️ The unique index is built ONLY in config/db.js (as `unique_spin_per_order`), and
+   * deliberately NOT declared here as `unique: true`.
+   *
+   * Declaring it in both places is not redundancy, it is a silent failure. Outside
+   * production autoIndex is ON, so Mongoose would build this key as `order_1` first;
+   * config/db.js then asks for the same key under a different name and MongoDB rejects
+   * it outright with "Index already exists with a different name". That error aborted
+   * the whole index-verification pass, so EVERY spin index — including this one — was
+   * quietly missing. Same shape as the AuditLog TTL that never got created.
    */
-  order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true, unique: true },
+  order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
 
   /** null for guest orders — they still spin, they just have no account to attach to. */
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },

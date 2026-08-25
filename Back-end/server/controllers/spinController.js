@@ -346,6 +346,52 @@ export const updatePrize = async (req, res) => {
   if (!existing) throw new AppError('Prize not found.', 404);
 
   const patch = { ...req.body };
+
+  // ── Guards against editing a LIVE campaign into an unwinnable state ──────────
+  //
+  // The publish gate only runs at publish. Once a campaign is live an edit goes
+  // straight to the draw with nothing standing between it and a customer, so the same
+  // invariants deactivatePrize protects have to be enforced here too. Without these,
+  // one careless save turns "everyone wins" into a wheel that awards nothing and
+  // silently stops rendering for every buyer (checkEligibility → misconfigured).
+  const campaign = await spinCampaignRepository.findById(existing.campaign);
+  const isLive = campaign?.status === SPIN_STATUS.LIVE;
+
+  // Demoting the only guaranteed prize leaves the draw with no fallback.
+  if (isLive && existing.isFloorPrize && patch.isFloorPrize === false) {
+    throw new AppError(
+      'This is the guaranteed prize for a live campaign. Switch the campaign off before changing that.',
+      422, { expose: true },
+    );
+  }
+  // Promoting a second one makes "which is the fallback" a coin toss (findFloorPrize
+  // takes whichever the index yields first).
+  if (patch.isFloorPrize === true && !existing.isFloorPrize) {
+    const floors = await spinPrizeRepository.countFloorPrizes(existing.campaign);
+    if (floors > 0) {
+      throw new AppError(
+        'This campaign already has a guaranteed prize. Only one is allowed.',
+        422, { expose: true },
+      );
+    }
+  }
+  // A guaranteed prize with a stock count runs out, and then everyone-wins is a lie.
+  const willBeFloor = patch.isFloorPrize ?? existing.isFloorPrize;
+  if (willBeFloor && patch.stockTotal != null) {
+    throw new AppError(
+      'The guaranteed prize must have unlimited stock — leave the stock field empty.',
+      422, { expose: true },
+    );
+  }
+  // Changing what KIND of thing a live prize is mid-campaign means the next winner is
+  // awarded through a different code path than the one the wheel was validated for —
+  // e.g. a coupon becoming a goodie with no SKU for the packer to find.
+  if (isLive && patch.kind && patch.kind !== existing.kind) {
+    throw new AppError(
+      'Cannot change a prize type while the campaign is live — switch the campaign off first.',
+      422, { expose: true },
+    );
+  }
   // stockAwarded is history. A total below what has already gone out would make the
   // remaining count describe inventory that does not exist.
   if (patch.stockTotal != null && patch.stockTotal < (existing.stockAwarded || 0)) {

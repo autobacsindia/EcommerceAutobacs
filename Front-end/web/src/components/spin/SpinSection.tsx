@@ -106,9 +106,16 @@ export default function SpinSection({ orderId }: { orderId: string }) {
         return;
       }
 
+      // Silent to the customer, but never silent to whoever is debugging. Every
+      // non-eligible answer renders exactly nothing, so "no campaign is live", "this
+      // order predates the campaign", "you already used your spin" and "the request
+      // failed" were all indistinguishable from a broken build when the wheel did not
+      // appear on the preview tier.
+      console.debug('[spin] not offered:', res.reason ?? 'unknown', res);
       setPhase('none');
-    } catch {
+    } catch (err) {
       // A confirmation page must never show a broken widget over a successful order.
+      console.debug('[spin] status request failed:', err);
       setPhase('none');
     }
   }, [orderId]);
