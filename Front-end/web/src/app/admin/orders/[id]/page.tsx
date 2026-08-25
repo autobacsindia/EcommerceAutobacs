@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-react';
@@ -56,6 +57,18 @@ interface Order {
     postalCode: string;
     country: string;
   };
+  /**
+   * Spin-to-Win reward. Deliberately NOT a line item — a ₹0 entry in `items` would
+   * corrupt the invoice, the refund maths and every revenue report.
+   */
+  spinReward?: {
+    name: string;
+    sku: string | null;
+    kind: string;
+    wonAt: string;
+    fulfilledAt: string | null;
+    voidedAt: string | null;
+  } | null;
   /** Projected summary from GET /orders/:id — carries methodDetails/emiPlanLabel. */
   payment?: OrderPaymentSummary | string | null;
   subtotal: number;
@@ -276,6 +289,68 @@ export default function AdminOrderDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Order Summary */}
         <div className="lg:col-span-2 space-y-6">
+          {/*
+            Spin-to-Win reward banner. Rendered ABOVE the items so a packer reading top-to-
+            bottom cannot start picking without seeing it. A voided reward (order cancelled
+            or refunded) inverts to a red DO-NOT-PACK rather than disappearing — silently
+            vanishing would leave someone who already read it about to pack a dead prize.
+          */}
+          {order.spinReward && (
+            order.spinReward.voidedAt ? (
+              <div className="rounded-lg border-2 border-red-300 bg-red-50 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🚫</span>
+                  <div>
+                    <div className="font-bold text-red-800">DO NOT PACK — reward cancelled</div>
+                    <div className="text-sm text-red-700">
+                      {order.spinReward.name}
+                      {order.spinReward.sku && <> · <code>{order.spinReward.sku}</code></>}
+                      {' '}— withdrawn because this order was cancelled or refunded.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={`rounded-lg border-2 p-4 ${
+                order.spinReward.fulfilledAt
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-amber-400 bg-amber-50'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🎁</span>
+                  <div className="flex-1">
+                    <div className={`font-bold ${order.spinReward.fulfilledAt ? 'text-green-800' : 'text-amber-900'}`}>
+                      {order.spinReward.fulfilledAt ? 'Reward packed ✓' : 'ADD TO PARCEL'}
+                    </div>
+                    <div className={`text-sm ${order.spinReward.fulfilledAt ? 'text-green-700' : 'text-amber-800'}`}>
+                      <span className="font-semibold">{order.spinReward.name}</span>
+                      {order.spinReward.sku && (
+                        <> · <code className="rounded bg-white/70 px-1.5 py-0.5 text-xs font-semibold">
+                          {order.spinReward.sku}
+                        </code></>
+                      )}
+                      {order.spinReward.kind !== 'goodie' && (
+                        <span className="ml-2 text-xs">(no physical item — {order.spinReward.kind})</span>
+                      )}
+                    </div>
+                  </div>
+                  {!order.spinReward.fulfilledAt && order.spinReward.kind === 'goodie' && (
+                    <div className="flex flex-col gap-1">
+                      <Link href={`/admin/orders/${orderId}/packing-slip`}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-amber-700">
+                        🖨 Packing slip
+                      </Link>
+                      <Link href="/admin/spin/winners"
+                        className="text-center text-xs text-amber-800 underline hover:text-amber-900">
+                        Packing queue →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          )}
+
           {/* Items */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">

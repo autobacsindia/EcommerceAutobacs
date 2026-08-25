@@ -97,8 +97,28 @@ const SpinPrizeSchema = new mongoose.Schema({
   isFloorPrize: { type: Boolean, default: false },
 
   // ── Non-physical payloads ──────────────────────────────────────────────────
-  /** kind='coupon': issued through the existing coupon engine, never a second one. */
-  couponCode: { type: String, default: null, trim: true, maxlength: 40 },
+  /**
+   * kind='coupon' — the discount the ADMIN allots, minted through the EXISTING coupon
+   * engine (models/Coupon.js) so there is never a second discount pipeline.
+   *
+   * ⚠️ Each winner gets their OWN single-use code, not a shared one. That is a deliberate
+   * response to a known production gap: `Coupon.usageLimitPerUser` is NOT enforced (the
+   * unique index backing it was never built), so a shared code posted to a deals forum
+   * could be redeemed without limit. `usageLimit` — the GLOBAL cap — *is* enforced, by an
+   * atomic counter. Minting one coupon per winner with a global limit of 1 therefore
+   * makes a leaked code worth exactly one redemption, using only the guarantee that
+   * actually holds today.
+   */
+  couponPrefix: { type: String, default: 'SPIN', trim: true, maxlength: 12, uppercase: true },
+  couponType: { type: String, enum: ['percentage', 'fixed', 'free_shipping'], default: 'fixed' },
+  /** percentage → 0-100; fixed → rupees off; free_shipping → ignored. */
+  couponValue: { type: Number, default: 0, min: 0 },
+  /** Caps a percentage coupon's rupee value ("10% off, up to ₹500"). null = uncapped. */
+  couponMaxDiscount: { type: Number, default: null, min: 0 },
+  /** Minimum cart subtotal before the coupon applies. */
+  couponMinCartValue: { type: Number, default: 0, min: 0 },
+  /** How long the won coupon stays valid, from the moment it is won. */
+  couponValidDays: { type: Number, default: 30, min: 1 },
   /** kind='karma': credited via karmaService, skipped if the programme is disabled. */
   karmaPoints: { type: Number, default: 0, min: 0 },
 

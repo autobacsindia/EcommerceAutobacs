@@ -19,7 +19,7 @@ const ORDER_ID = new mongoose.Types.ObjectId();
 const OWNER_ID = new mongoose.Types.ObjectId();
 const ATTACKER_ID = new mongoose.Types.ObjectId();
 
-const mockOrder = { findOwnerRef: jest.fn() };
+const mockOrder = { findForSpinEligibility: jest.fn() };
 const mockSpinService = {
   spin: jest.fn(),
   checkEligibility: jest.fn(),
@@ -32,7 +32,7 @@ jest.unstable_mockModule('../../../services/spinService.js', () => ({
   INELIGIBLE: { NOT_PAID: 'not_paid' },
 }));
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({
-  default: { findOwnerRef: mockOrder.findOwnerRef, markSpinRewardFulfilled: jest.fn() },
+  default: { findForSpinEligibility: mockOrder.findForSpinEligibility, markSpinRewardFulfilled: jest.fn() },
 }));
 // NOTE: mocked at the REPOSITORY layer, not the model layer — direct model imports are
 // forbidden outside repositories/ (eslint no-restricted-imports), so that is the seam the
@@ -65,7 +65,7 @@ jest.unstable_mockModule('../../../repositories/spinResultRepository.js', () => 
 
 let controller;
 
-/** orderRepository.findOwnerRef resolves the doc directly — no query chain to fake. */
+/** orderRepository.findForSpinEligibility resolves the doc directly — no query chain to fake. */
 const orderReturning = (doc) => doc;
 
 const res = () => {
@@ -80,13 +80,13 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  mockOrder.findOwnerRef.mockReset();
+  mockOrder.findForSpinEligibility.mockReset();
   mockSpinService.spin.mockReset();
 });
 
 describe('ownership boundary', () => {
   it('refuses to spin an order belonging to a DIFFERENT user', async () => {
-    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findForSpinEligibility.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
 
     const req = { params: { orderId: String(ORDER_ID) }, user: { _id: ATTACKER_ID }, headers: {} };
 
@@ -96,7 +96,7 @@ describe('ownership boundary', () => {
   });
 
   it('answers 404 (not 403) so order ids cannot be probed for existence', async () => {
-    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findForSpinEligibility.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     const req = { params: { orderId: String(ORDER_ID) }, user: { _id: ATTACKER_ID }, headers: {} };
 
     // A 403 would confirm "this order exists but is not yours" to an attacker
@@ -105,7 +105,7 @@ describe('ownership boundary', () => {
   });
 
   it('lets the OWNER spin their own order', async () => {
-    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findForSpinEligibility.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     mockSpinService.spin.mockResolvedValue({
       alreadySpun: false,
       result: {
@@ -126,19 +126,19 @@ describe('ownership boundary', () => {
   it('rejects a malformed order id without touching the database', async () => {
     const req = { params: { orderId: 'not-an-objectid' }, user: { _id: OWNER_ID }, headers: {} };
     await expect(controller.postSpin(req, res())).rejects.toMatchObject({ statusCode: 404 });
-    expect(mockOrder.findOwnerRef).not.toHaveBeenCalled();
+    expect(mockOrder.findForSpinEligibility).not.toHaveBeenCalled();
   });
 
   it('refuses a guest order with no owner rather than defaulting to allow', async () => {
     // A null user must not compare equal to anything — fail closed.
-    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: null }));
+    mockOrder.findForSpinEligibility.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: null }));
     const req = { params: { orderId: String(ORDER_ID) }, user: { _id: OWNER_ID }, headers: {} };
     await expect(controller.postSpin(req, res())).rejects.toMatchObject({ statusCode: 404 });
     expect(mockSpinService.spin).not.toHaveBeenCalled();
   });
 
   it('allows an admin to act on any order', async () => {
-    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findForSpinEligibility.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     mockSpinService.spin.mockResolvedValue({
       alreadySpun: true,
       result: {
@@ -159,7 +159,7 @@ describe('ownership boundary', () => {
 
 describe('client IP for rate limiting and forensics', () => {
   it('prefers cf-connecting-ip over req.ip', async () => {
-    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findForSpinEligibility.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     mockSpinService.spin.mockResolvedValue({
       alreadySpun: false,
       result: {

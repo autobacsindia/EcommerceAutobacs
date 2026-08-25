@@ -320,9 +320,24 @@ class OrderRepository extends BaseRepository {
     return q;
   }
 
-  /** Owner check for the spin routes: just enough to authorise, nothing more. */
-  async findOwnerRef(id) {
-    return Order.findById(id).select('user').lean();
+  /**
+   * The order fields the spin eligibility check actually reads — and nothing else.
+   *
+   * `user` is included so this single read serves BOTH the ownership check and the
+   * eligibility check. The storefront polls the spin status every 3s for up to 90s
+   * while the payment webhook lands, and the two used to be separate reads of the same
+   * document, the second of them unprojected: a full order carries its items array,
+   * both addresses and the payment snapshot, so that was several KB pulled from Atlas
+   * thirty times to answer "is it paid yet".
+   *
+   * Keep this projection in step with checkEligibility — a field read there but missing
+   * here reads as undefined, which for `paymentStatus` would fail CLOSED (no spin) and
+   * for `source` or `state` would fail OPEN. tests/spinService.test.js pins it.
+   */
+  async findForSpinEligibility(id) {
+    return Order.findById(id)
+      .select('user paymentStatus status source createdAt totalAmount shippingAddress.state')
+      .lean();
   }
 
   /**

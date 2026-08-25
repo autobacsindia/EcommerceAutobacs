@@ -25,4 +25,10 @@ export const TTL = {
   USER_CART: 60,
   INVENTORY: 60,
   SEARCH_SUGGESTIONS: 300,
+  // Spin-to-Win's live campaign. Short on purpose: admin writes purge this key
+  // explicitly, so the TTL is only the backstop for the two cases a purge cannot
+  // cover — a campaign whose startsAt arrives with no admin write behind it, and a
+  // purge that failed and was swallowed. 60s bounds both without materially
+  // weakening the cache (a 90s poll window costs at most 2 DB reads instead of 30).
+  SPIN_CAMPAIGN: 60,
 };

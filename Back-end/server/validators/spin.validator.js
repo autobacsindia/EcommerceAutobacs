@@ -103,7 +103,14 @@ const prizeRules = (partial = false) => {
     body('minOrderValuePaise').optional().isInt({ min: 0 }),
     body('maxWinsPerDay').optional({ nullable: true }).isInt({ min: 1 }),
     body('isFloorPrize').optional().isBoolean(),
-    body('couponCode').optional({ nullable: true }).isString().trim().isLength({ max: 40 }),
+    // Coupon prize: the admin allots the discount; the engine mints one single-use
+    // code per winner from this spec (see spinService.mintCouponFor).
+    body('couponPrefix').optional({ nullable: true }).isString().trim().isLength({ max: 12 }),
+    body('couponType').optional().isIn(['percentage', 'fixed', 'free_shipping']),
+    body('couponValue').optional().isFloat({ min: 0 }),
+    body('couponMaxDiscount').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('couponMinCartValue').optional().isFloat({ min: 0 }),
+    body('couponValidDays').optional().isInt({ min: 1, max: 365 }),
     body('karmaPoints').optional().isInt({ min: 0 }),
     body('sortOrder').optional().isInt(),
     // stockRemaining and stockAwarded are server-owned. stockRemaining is derived from

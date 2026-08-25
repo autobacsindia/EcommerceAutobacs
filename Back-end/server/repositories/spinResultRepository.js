@@ -96,6 +96,11 @@ class SpinResultRepository extends BaseRepository {
     );
   }
 
+  /** Stamp the prize-email idempotency flag. Set only after the provider accepts. */
+  async markPrizeEmailed(resultId) {
+    return SpinResult.updateOne({ _id: resultId }, { $set: { prizeEmailedAt: new Date() } });
+  }
+
   async countUnfulfilled(campaignId = null) {
     const query = {
       status: SPIN_RESULT_STATUS.GRANTED,

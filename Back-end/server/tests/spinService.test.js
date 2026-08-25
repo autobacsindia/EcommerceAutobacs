@@ -20,6 +20,7 @@ import Order from '../models/Order.js';
 import SpinCampaign from '../models/SpinCampaign.js';
 import SpinPrize from '../models/SpinPrize.js';
 import SpinResult from '../models/SpinResult.js';
+import Coupon from '../models/Coupon.js';
 import spinService, {
   INELIGIBLE,
   prizeWeight,
@@ -28,6 +29,9 @@ import spinService, {
   buildSegments,
 } from '../services/spinService.js';
 import { SPIN_STATUS, SPIN_RESULT_STATUS, VOID_REASON } from '../config/spin.js';
+import cacheService from '../services/cacheService.js';
+import spinCampaignRepository from '../repositories/spinCampaignRepository.js';
+import { SPIN_LIVE_CAMPAIGN_CACHE_KEY } from '../config/spin.js';
 
 jest.setTimeout(120000);
 
@@ -51,9 +55,11 @@ async function seedCampaign(overrides = {}) {
   });
   const floor = await SpinPrize.create({
     campaign: campaign._id,
-    name: 'Better Luck Coupon',
+    name: '₹200 off your next order',
     kind: 'coupon',
-    couponCode: 'SPIN10',
+    couponType: 'fixed',
+    couponValue: 200,
+    couponValidDays: 30,
     isFloorPrize: true,
     stockTotal: null,
     stockRemaining: null,
@@ -95,13 +101,125 @@ beforeEach(async () => {
   await Promise.all([
     Order.deleteMany({}), SpinCampaign.deleteMany({}),
     SpinPrize.deleteMany({}), SpinResult.deleteMany({}), User.deleteMany({}),
+    Coupon.deleteMany({}),
   ]);
+  // The live campaign is cached (see getLiveCampaignCached). Wiping the collections
+  // does not wipe the cache, so without this every test after the first would draw
+  // against the previous test's campaign id and find no prizes under it.
+  await cacheService.invalidatePattern('public:spin:*');
   // The unique index is the idempotency guarantee, and prod builds it from config/db.js
   // rather than from the schema (autoIndex is off there). Build it explicitly so these
   // tests exercise the same serialization point production relies on.
   await SpinResult.collection.createIndex({ order: 1 }, { unique: true });
   user = await User.create({
     name: 'Spin Buyer', email: `spin-${Date.now()}-${Math.random()}@test.com`, passwordHash: 'x',
+  });
+});
+
+
+// ── Live-campaign cache ───────────────────────────────────────────────────────
+//
+// The storefront polls the spin status every 3s for up to 90s while the payment
+// webhook lands, and "which campaign is live" is the same answer for every customer
+// on the site. It is cached on the RENDER path only. These tests exist because the
+// two ways this cache could go wrong are both silent: it could keep a finished
+// promotion alive, or it could hand out real stock from a campaign an operator had
+// already switched off.
+describe('live-campaign cache', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('serves repeated polls without re-querying Mongo', async () => {
+    await seedCampaign();
+    await spinService.getLiveCampaignCached(); // populate
+
+    const spy = jest.spyOn(spinCampaignRepository, 'findLiveAt');
+    const a = await spinService.getLiveCampaignCached();
+    const b = await spinService.getLiveCampaignCached();
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(String(a._id)).toBe(String(b._id));
+  });
+
+  it('does NOT serve a campaign whose window has closed since it was cached', async () => {
+    // Nothing writes to a campaign when it simply runs out of time, so no purge can
+    // fire. If the cache trusted its own TTL the wheel would keep spinning after the
+    // promotion ended — the cached row must be re-checked against the clock.
+    const { campaign } = await seedCampaign({
+      startsAt: new Date(Date.now() - 86400000),
+      endsAt: new Date(Date.now() + 1000),
+    });
+    expect(String((await spinService.getLiveCampaignCached())._id)).toBe(String(campaign._id));
+
+    const afterItEnds = new Date(Date.now() + 60000);
+    expect(await spinService.getLiveCampaignCached(afterItEnds)).toBeNull();
+  });
+
+  it('does NOT serve a campaign that has not started yet', async () => {
+    await seedCampaign({
+      startsAt: new Date(Date.now() + 3600000),
+      endsAt: new Date(Date.now() + 7200000),
+    });
+    expect(await spinService.getLiveCampaignCached()).toBeNull();
+  });
+
+  it('caches the ABSENCE of a campaign instead of re-querying every time', async () => {
+    // "No campaign" is the answer whenever the feature is off, and it is falsy —
+    // cacheService.get returns null for a miss too, so a bare null would be
+    // indistinguishable from a miss and would never actually cache.
+    expect(await spinService.getLiveCampaignCached()).toBeNull();
+
+    const spy = jest.spyOn(spinCampaignRepository, 'findLiveAt');
+    expect(await spinService.getLiveCampaignCached()).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('the kill switch takes effect immediately, not after the TTL', async () => {
+    const { campaign } = await seedCampaign();
+    const order = await seedOrder();
+    expect((await spinService.checkEligibility(order._id, { userId: user._id })).eligible).toBe(true);
+
+    // Written straight through the model, deliberately: the invalidation must not
+    // depend on the caller having gone through the admin controller.
+    await SpinCampaign.updateOne({ _id: campaign._id }, { status: SPIN_STATUS.OFF });
+
+    const after = await seedOrder();
+    const check = await spinService.checkEligibility(after._id, { userId: user._id });
+    expect(check.eligible).toBe(false);
+    expect(check.reason).toBe(INELIGIBLE.NO_CAMPAIGN);
+  });
+
+  it('a newly published campaign is picked up without waiting for the TTL', async () => {
+    expect(await spinService.getLiveCampaignCached()).toBeNull(); // caches the absence
+    const { campaign } = await seedCampaign();
+    expect(String((await spinService.getLiveCampaignCached())._id)).toBe(String(campaign._id));
+  });
+
+  it('falls back to Mongo when the cache read throws (a Redis outage is not an outage)', async () => {
+    const { campaign } = await seedCampaign();
+    jest.spyOn(cacheService, 'get').mockRejectedValue(new Error('redis down'));
+    jest.spyOn(cacheService, 'set').mockRejectedValue(new Error('redis down'));
+
+    const live = await spinService.getLiveCampaignCached();
+    expect(String(live._id)).toBe(String(campaign._id));
+  });
+
+  it('the DRAW never awards from the cache — it re-reads the campaign in its transaction', async () => {
+    // The safety-critical one. A cached row is fine for deciding whether to RENDER a
+    // wheel; awarding real stock off one would let a switched-off campaign keep giving
+    // prizes away. The draw must see committed state.
+    const { campaign } = await seedCampaign();
+    await seedPrize(campaign);
+    const order = await seedOrder();
+
+    // Cache is warm and says LIVE...
+    expect(String((await spinService.getLiveCampaignCached())._id)).toBe(String(campaign._id));
+    // ...but the row underneath is off, and the cache is force-fed the stale answer
+    // so that only a genuine in-transaction read can catch it.
+    await SpinCampaign.updateOne({ _id: campaign._id }, { status: SPIN_STATUS.OFF });
+    await cacheService.set(SPIN_LIVE_CAMPAIGN_CACHE_KEY, { campaign: campaign.toObject() }, 60);
+
+    await expect(spinService.spin(order._id, { userId: user._id })).rejects.toThrow();
+    expect(await SpinResult.countDocuments({ order: order._id })).toBe(0);
   });
 });
 
@@ -742,5 +860,92 @@ describe('clawback wiring through orderStatusService', () => {
     expect((await SpinPrize.findById(prize._id)).stockRemaining).toBe(2);
     expect((await SpinResult.findOne({ order: order._id })).status)
       .toBe(SPIN_RESULT_STATUS.GRANTED);
+  });
+});
+
+
+// ── 14. The prize must be USABLE, not just recorded ───────────────────────────
+// Every other test asserts the LEDGER is right — correct prize, stock decremented,
+// idempotent. None of them asserted the customer can actually spend what they won, and
+// that gap shipped a floor prize that congratulated people and handed them nothing.
+describe('a won coupon is actually redeemable', () => {
+  it('mints a REAL coupon and puts the code where the customer can see it', async () => {
+    const { campaign, floor } = await seedCampaign({ goodieWinRatePercent: 1 });
+    await seedPrize(campaign, { stockTotal: 0, stockRemaining: 0 }); // force the floor prize
+    const order = await seedOrder();
+
+    const { result } = await spinService.spin(order._id, { userId: user._id });
+    expect(String(result.prize)).toBe(String(floor._id));
+
+    // The code is on the snapshot, so the reveal screen and the email can show it.
+    const code = result.prizeSnapshot.couponCode;
+    expect(code).toBeTruthy();
+    expect(code).toMatch(/^SPIN-[A-Z0-9]+$/);
+
+    // …and it exists as a real, active, redeemable Coupon.
+    const coupon = await Coupon.findOne({ code });
+    expect(coupon).toBeTruthy();
+    expect(coupon.isActive).toBe(true);
+    expect(coupon.type).toBe('fixed');
+    expect(coupon.value).toBe(200);
+    expect(coupon.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(String(result.awardedCoupon)).toBe(String(coupon._id));
+  });
+
+  it('gives every winner their OWN code, never a shared one', async () => {
+    // A shared code is the failure this design avoids: usageLimitPerUser is not enforced
+    // in production, so one leaked code would be redeemable without limit.
+    const { campaign } = await seedCampaign({
+      goodieWinRatePercent: 1, maxSpinsPerUserPerCampaign: null,
+    });
+    await seedPrize(campaign, { stockTotal: 0, stockRemaining: 0 });
+
+    const codes = [];
+    for (let i = 0; i < 4; i += 1) {
+      const o = await seedOrder();
+      const { result } = await spinService.spin(o._id, { userId: user._id });
+      codes.push(result.prizeSnapshot.couponCode);
+    }
+
+    expect(new Set(codes).size).toBe(4); // all distinct
+    // Global cap of 1 is the guarantee that actually holds — a leaked code dies after
+    // one redemption regardless of the unenforced per-user limit.
+    const coupons = await Coupon.find({ code: { $in: codes } });
+    coupons.forEach((c) => expect(c.usageLimit).toBe(1));
+  });
+
+  it('a percentage coupon carries its cap through to the real coupon', async () => {
+    const { campaign, floor } = await seedCampaign({ goodieWinRatePercent: 1 });
+    await SpinPrize.updateOne({ _id: floor._id }, {
+      couponType: 'percentage', couponValue: 10, couponMaxDiscount: 500,
+    });
+    await seedPrize(campaign, { stockTotal: 0, stockRemaining: 0 });
+    const order = await seedOrder();
+
+    const { result } = await spinService.spin(order._id, { userId: user._id });
+    const coupon = await Coupon.findOne({ code: result.prizeSnapshot.couponCode });
+    expect(coupon.type).toBe('percentage');
+    expect(coupon.value).toBe(10);
+    expect(coupon.maxDiscountAmount).toBe(500);
+  });
+
+  it('a GOODIE prize mints no coupon', async () => {
+    const { campaign } = await seedCampaign(); // 100% goodie rate
+    await seedPrize(campaign);
+    const order = await seedOrder();
+
+    const { result } = await spinService.spin(order._id, { userId: user._id });
+    expect(result.prizeSnapshot.kind).toBe('goodie');
+    expect(result.prizeSnapshot.couponCode).toBeNull();
+    expect(await Coupon.countDocuments({})).toBe(0);
+  });
+
+  it('publish is BLOCKED when a coupon prize would discount nothing', async () => {
+    const { campaign, floor } = await seedCampaign();
+    await seedPrize(campaign);
+    await SpinPrize.updateOne({ _id: floor._id }, { couponType: 'fixed', couponValue: 0 });
+
+    const errors = await spinService.validateForPublish(campaign._id);
+    expect(errors.some((e) => String(e.field).endsWith('.couponValue'))).toBe(true);
   });
 });

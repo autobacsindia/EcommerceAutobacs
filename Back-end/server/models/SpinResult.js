@@ -43,6 +43,8 @@ const SpinResultSchema = new mongoose.Schema({
     kind: { type: String, enum: PRIZE_KINDS, required: true },
     imageUrl: { type: String, default: null },
     isFloorPrize: { type: Boolean, default: false },
+    /** The winner's OWN single-use code (kind='coupon'). Shown on the reveal + emailed. */
+    couponCode: { type: String, default: null },
   },
 
   /** Which slice the wheel lands on. Decided server-side with the outcome. */
@@ -61,6 +63,15 @@ const SpinResultSchema = new mongoose.Schema({
   fulfilledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 
   spunAt: { type: Date, default: Date.now },
+
+  /** The Coupon document minted for this winner, so it can be audited or revoked. */
+  awardedCoupon: { type: mongoose.Schema.Types.ObjectId, ref: "Coupon", default: null },
+
+  /**
+   * Idempotency guard for the prize email — one send per win, however many times BullMQ
+   * retries the job. Mirrors Order.invoiceEmailedAt.
+   */
+  prizeEmailedAt: { type: Date, default: null },
 
   /** Hashed like Order.guestIPHash — abuse forensics without storing a raw IP. */
   ipHash: { type: String, default: null },

@@ -1174,3 +1174,66 @@ ${companyName}
 
   return { subject, text, html };
 };
+
+
+/**
+ * Spin-to-Win prize email.
+ *
+ * The coupon code is the payload — it is rendered large, monospaced and selectable,
+ * because the recipient will retype it at checkout. Physical goodies deliberately say
+ * "nothing to do" rather than offering a tracking CTA: the goodie ships inside the order
+ * they already placed, and a second call-to-action would only invite a support ticket.
+ */
+export const spinPrizeEmail = ({ name, orderId, prize, company }) => {
+  const isCoupon = prize?.kind === 'coupon' && prize?.couponCode;
+  const shortId = String(orderId).slice(-8).toUpperCase();
+  const subject = `🎉 You won ${prize?.name || 'a prize'}!`;
+
+  const action = isCoupon
+    ? `Your code: ${prize.couponCode}\nUse it at checkout on your next order.`
+    : prize?.kind === 'goodie'
+      ? `We'll pack it with order #${shortId} — there's nothing you need to do.`
+      : `It has been added to your account.`;
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `You spun and won: ${prize?.name || 'a prize'}`,
+    ``,
+    action,
+    ``,
+    `— ${company?.name || 'Autobacs India'}`,
+  ].join('\n');
+
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
+    <h1 style="font-size:22px;margin:0 0 4px">🎉 You won!</h1>
+    <p style="color:#555;margin:0 0 20px">Hi ${escapeHtml(name)}, thanks for your order.</p>
+
+    <div style="background:#0b1626;color:#f5b32c;border-radius:12px;padding:20px;text-align:center">
+      <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.75">Your prize</div>
+      <div style="font-size:20px;font-weight:bold;margin-top:4px">${escapeHtml(prize?.name || 'A prize')}</div>
+    </div>
+
+    ${isCoupon ? `
+      <div style="margin-top:20px;text-align:center">
+        <div style="font-size:12px;color:#555;margin-bottom:8px">Your personal code</div>
+        <div style="display:inline-block;border:2px dashed #0b1626;border-radius:10px;padding:14px 26px;
+                    font-family:'Courier New',monospace;font-size:24px;font-weight:bold;letter-spacing:2px">
+          ${escapeHtml(prize.couponCode)}
+        </div>
+        <p style="font-size:12px;color:#666;margin-top:12px">
+          Enter it at checkout on your next order. This code is yours alone and can be used once.
+        </p>
+      </div>
+    ` : `
+      <p style="margin-top:20px;font-size:14px;color:#333">${escapeHtml(action)}</p>
+    `}
+
+    <p style="margin-top:28px;font-size:11px;color:#999">
+      Order #${escapeHtml(shortId)} · ${escapeHtml(company?.name || 'Autobacs India')}
+    </p>
+  </div>`;
+
+  return { subject, text, html };
+};

@@ -101,3 +101,14 @@ export const REVIEW_URL_ALLOWED_HOSTS = Object.freeze([
   'www.google.com',
   'maps.app.goo.gl',
 ]);
+
+// ── Cache keys ────────────────────────────────────────────────────────────────
+// Shared so the writer, the reader and the purger cannot drift apart. The key sits
+// UNDER the pattern deliberately: one purge call covers every spin cache entry, and
+// the flush-cache script's `public:*` sweep covers it too.
+
+/** Cache-aside entry for "which campaign is live right now" (services/spinService.js). */
+export const SPIN_LIVE_CAMPAIGN_CACHE_KEY = 'public:spin:live-campaign';
+
+/** Every spin cache entry. Purged after any campaign or prize write. */
+export const SPIN_CACHE_PATTERN = 'public:spin:*';

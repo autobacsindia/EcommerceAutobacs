@@ -16,19 +16,21 @@ import spinCampaignRepository from '../repositories/spinCampaignRepository.js';
 import spinPrizeRepository from '../repositories/spinPrizeRepository.js';
 import spinResultRepository from '../repositories/spinResultRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
-import { SPIN_STATUS } from '../config/spin.js';
-
-const CACHE_PATTERN = 'public:spin:*';
+import { SPIN_STATUS, SPIN_CACHE_PATTERN } from '../config/spin.js';
 
 /**
  * Purge the cached campaign/prize view after any admin write.
  *
  * TTL alone is not acceptable: an operator hitting the kill switch expects the wheel to
  * stop NOW, and a stale prize list would keep offering a goodie that was just retired.
+ *
+ * Campaign writes are ALSO invalidated by a post hook on the model itself, which is
+ * what protects paths that never come through this controller. This call stays because
+ * it additionally covers prize writes and runs inline, before the response is sent.
  */
 const purgeSpinCache = async () => {
   try {
-    await cacheService.invalidatePattern(CACHE_PATTERN);
+    await cacheService.invalidatePattern(SPIN_CACHE_PATTERN);
   } catch (err) {
     console.error('[Spin] cache purge failed:', err?.message);
   }
@@ -42,7 +44,9 @@ const purgeSpinCache = async () => {
  */
 const assertOwnsOrder = async (orderId, req) => {
   if (!mongoose.isValidObjectId(orderId)) throw new AppError('Order not found.', 404);
-  const order = await orderRepository.findOwnerRef(orderId);
+  // Projected to exactly the fields the ownership check and the eligibility check
+  // between them need, so the two do not read the same order twice on every poll.
+  const order = await orderRepository.findForSpinEligibility(orderId);
   if (!order) throw new AppError('Order not found.', 404);
   if (req.user?.role === 'admin') return order;
   if (!order.user || String(order.user) !== String(req.user?._id)) {
@@ -75,9 +79,9 @@ const publicPrize = (p) => ({
  */
 export const getSpinStatus = async (req, res) => {
   const { orderId } = req.params;
-  await assertOwnsOrder(orderId, req);
+  const order = await assertOwnsOrder(orderId, req);
 
-  const check = await spinService.checkEligibility(orderId, { userId: req.user?._id });
+  const check = await spinService.checkEligibility(orderId, { userId: req.user?._id, order });
 
   if (check.alreadySpun) {
     const r = check.result;

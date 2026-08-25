@@ -54,6 +54,17 @@ interface Order {
   createdAt: string;
   status: string;
   paymentStatus?: string;
+  /**
+   * Spin-to-Win reward snapshot. Never a line item — see models/Order.js for why a ₹0
+   * entry in `items` would corrupt invoices, refund maths and revenue reporting.
+   */
+  spinReward?: {
+    name: string;
+    sku: string | null;
+    kind: string;
+    fulfilledAt: string | null;
+    voidedAt: string | null;
+  } | null;
   cancelledBy?: 'admin' | 'customer' | 'system';
   totalAmount: number;
   refundDetails?: {
@@ -196,6 +207,18 @@ function AdminOrdersPageInner() {
     count: number;
   } | null>(null);
 
+  /**
+   * Spin-to-Win reward filter — LIFTED to the page, deliberately not placed inside
+   * OrderFiltersPanel.
+   *
+   * The panel echoes its `filters` prop back down on every parent render, which has
+   * already clobbered in-flight typing in the search box once. A toggle owned here
+   * cannot be caught by that, and it matches how the hide-unpaid filter is handled.
+   */
+  const [rewardFilter, setRewardFilter] = useState<'' | 'unpacked' | 'any'>(
+    (searchParams.get('spinReward') as '' | 'unpacked' | 'any') || ''
+  );
+
   // Initialize filters from URL params
   const [filters, setFilters] = useState<OrderFilters>(() => ({
     search: searchParams.get('search') || '',
@@ -224,6 +247,7 @@ function AdminOrdersPageInner() {
     endDate: filters.endDate || undefined,
     minAmount: filters.minAmount || undefined,
     maxAmount: filters.maxAmount || undefined,
+    spinReward: rewardFilter || undefined,
   });
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: listKey,
@@ -238,6 +262,9 @@ function AdminOrdersPageInner() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
       if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
+      // Server-side + index-backed (config/db.js partial index on spinReward). Filtering
+      // client-side would only ever narrow the CURRENT page, which silently lies.
+      if (rewardFilter) params.append('spinReward', rewardFilter);
       params.append('page', String(currentPage));
       params.append('limit', String(pageSize));
       params.append('sortBy', sortField);
@@ -511,6 +538,20 @@ function AdminOrdersPageInner() {
             Refresh
           </button>
           <button
+            onClick={() => {
+              setRewardFilter((v) => (v === 'unpacked' ? '' : 'unpacked'));
+              setCurrentPage(1); // a narrower filter can leave the current page empty
+            }}
+            title="Only orders whose Spin-to-Win goodie still needs putting in the parcel"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
+              rewardFilter === 'unpacked'
+                ? 'bg-amber-500 text-white border-amber-500'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            🎁 To pack
+          </button>
+          <button
             onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
@@ -616,6 +657,26 @@ function AdminOrdersPageInner() {
                     <div className="text-sm font-medium text-gray-900">
                       #{order.orderNumber || order._id.slice(-8)}
                     </div>
+                    {/* A voided reward shows as struck-through rather than vanishing —
+                        the packer needs to see it was withdrawn, not just its absence. */}
+                    {order.spinReward && (
+                      order.spinReward.voidedAt ? (
+                        <span className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 line-through">
+                          🚫 {order.spinReward.name}
+                        </span>
+                      ) : (
+                        <span
+                          title={`${order.spinReward.name}${order.spinReward.sku ? ` (${order.spinReward.sku})` : ''}`}
+                          className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            order.spinReward.fulfilledAt
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          🎁 {order.spinReward.fulfilledAt ? 'packed' : 'to pack'}
+                        </span>
+                      )
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{order.user?.name || 'N/A'}</div>

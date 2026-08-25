@@ -153,6 +153,25 @@ export const API_ENDPOINTS = {
   PROMO_BANNER_ADMIN_BY_ID: (id: string) => `/promo-banners/admin/${id}`,
   PROMO_BANNER_TOGGLE: (id: string) => `/promo-banners/admin/${id}/toggle`,
 
+  // ── Spin-to-Win (post-purchase reward wheel) ──────────────────────────────
+  // Customer: per-order, authenticated. Never edge-cached.
+  SPIN_ORDER_STATUS: (orderId: string) => `/spin/orders/${orderId}`,
+  SPIN_ORDER_SPIN: (orderId: string) => `/spin/orders/${orderId}`,
+  SPIN_ORDER_REVIEW_CLICKED: (orderId: string) => `/spin/orders/${orderId}/review-clicked`,
+  // Admin: campaigns
+  SPIN_CAMPAIGNS_ADMIN: '/spin/admin/campaigns',
+  SPIN_CAMPAIGN_BY_ID: (id: string) => `/spin/admin/campaigns/${id}`,
+  SPIN_CAMPAIGN_PUBLISH: (id: string) => `/spin/admin/campaigns/${id}/publish`,
+  SPIN_CAMPAIGN_STATUS: (id: string) => `/spin/admin/campaigns/${id}/status`,
+  SPIN_CAMPAIGN_CLONE: (id: string) => `/spin/admin/campaigns/${id}/clone`,
+  SPIN_CAMPAIGN_ODDS: (id: string) => `/spin/admin/campaigns/${id}/odds`,
+  // Admin: prizes
+  SPIN_CAMPAIGN_PRIZES: (id: string) => `/spin/admin/campaigns/${id}/prizes`,
+  SPIN_PRIZE_BY_ID: (prizeId: string) => `/spin/admin/prizes/${prizeId}`,
+  // Admin: the fulfilment queue
+  SPIN_WINNERS: '/spin/admin/winners',
+  SPIN_WINNER_FULFIL: (id: string) => `/spin/admin/winners/${id}/fulfil`,
+
   // Contact
   CONTACT: '/contact',
 

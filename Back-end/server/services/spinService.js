@@ -23,6 +23,7 @@ import AppError from '../utils/AppError.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import {
   SPIN_STATUS,
+  SPIN_LIVE_CAMPAIGN_CACHE_KEY,
   SPIN_RESULT_STATUS,
   PRIZE_KIND,
   VOID_REASON,
@@ -31,10 +32,14 @@ import {
 } from '../config/spin.js';
 
 import orderRepository from '../repositories/orderRepository.js';
+import couponRepository from '../repositories/couponRepository.js';
 import spinCampaignRepository from '../repositories/spinCampaignRepository.js';
 import spinPrizeRepository from '../repositories/spinPrizeRepository.js';
 import spinResultRepository from '../repositories/spinResultRepository.js';
+import cacheService from './cacheService.js';
+import { TTL } from './cache/index.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
+import { getNotificationsQueue } from '../queue/queues.js';
 
 /**
  * Why a spin was refused. Stable machine-readable strings — the storefront maps them to
@@ -179,19 +184,80 @@ export const buildSegments = ({ pool, floorPrize, winner, segmentCount, rng = Ma
 const isClosed = (status) => ['cancelled', 'returned', 'refunded'].includes(status);
 
 /**
+ * The live campaign, cache-aside.
+ *
+ * The key is deliberately global, not per-order: "which campaign is running" is the
+ * same answer for every customer on the site, so one entry serves all of them and the
+ * DB read rate becomes O(1) in traffic rather than O(orders x polls). It sits under
+ * `public:spin:` so the model's write hook and the admin controller's purge both cover
+ * it with a single pattern invalidation.
+ *
+ * ⚠️ RENDER PATH ONLY. The draw re-reads the campaign straight from Mongo inside its
+ * transaction and must keep doing so: awarding real stock off a cached row could hand
+ * out prizes from a campaign an operator had already switched off.
+ *
+ * Two traps this has to dodge, both of which would otherwise be silent:
+ *
+ *  1. The query is TIME-DEPENDENT (`startsAt <= now < endsAt`), and nothing writes to
+ *     the campaign when it expires — so a cached row would outlive its own window and
+ *     keep the wheel spinning after the promotion closed. The window is therefore
+ *     re-checked against `now` on every read, and a cached-but-expired row is treated
+ *     as a miss rather than trusted.
+ *  2. "No live campaign" is the common answer when the feature is off, and it is a
+ *     falsy one. cacheService.get returns null for a miss too, so a bare null could
+ *     never be distinguished from a miss and would never actually cache. The value is
+ *     wrapped in an envelope so the absence itself is cacheable.
+ *
+ * Fails open: any Redis problem degrades to a direct Mongo read. A cache outage must
+ * not take the reward wheel down with it.
+ */
+export const getLiveCampaignCached = async (now = new Date()) => {
+  try {
+    const cached = await cacheService.get(SPIN_LIVE_CAMPAIGN_CACHE_KEY);
+    if (cached && typeof cached === 'object' && 'campaign' in cached) {
+      const c = cached.campaign;
+      if (!c) return null;
+      // Trap 1: honour the window the cached row was selected under, not just its TTL.
+      if (c.status === SPIN_STATUS.LIVE
+        && new Date(c.startsAt) <= now
+        && new Date(c.endsAt) > now) {
+        return c;
+      }
+    }
+  } catch (err) {
+    // cacheService.get swallows Redis errors itself, so reaching here means something
+    // less expected. Either way the answer is the same: go to the source.
+    console.warn('[Spin] live-campaign cache read failed, falling back to Mongo:', err?.message);
+  }
+
+  const fresh = await spinCampaignRepository.findLiveAt(now);
+  try {
+    // Trap 2: envelope, so `null` survives the round trip as a real cached answer.
+    await cacheService.set(SPIN_LIVE_CAMPAIGN_CACHE_KEY, { campaign: fresh || null }, TTL.SPIN_CAMPAIGN);
+  } catch (err) {
+    // A write we could not cache is a slow path, not a wrong one.
+    console.warn('[Spin] live-campaign cache write failed:', err?.message);
+  }
+  return fresh;
+};
+
+/**
  * Can this order spin, and what would it see?
  *
  * Read-only and safe to call on every order-success render. It never reveals or
  * pre-computes the outcome — only whether a spin is on offer.
  */
-export const checkEligibility = async (orderId, { userId = null, now = new Date() } = {}) => {
-  const order = await orderRepository.findLean(orderId);
+export const checkEligibility = async (orderId, { userId = null, now = new Date(), order: prefetchedOrder = null } = {}) => {
+  // `prefetchedOrder` lets the HTTP layer reuse the document it already loaded to
+  // authorise the request instead of reading the same order twice per poll. It must
+  // carry every field read below — see orderRepository.findForSpinEligibility.
+  const order = prefetchedOrder || await orderRepository.findForSpinEligibility(orderId);
   if (!order) return { eligible: false, reason: INELIGIBLE.ORDER_NOT_FOUND };
 
   const existing = await spinResultRepository.findByOrder(orderId);
   if (existing) return { eligible: false, reason: null, alreadySpun: true, result: existing, order };
 
-  const campaign = await spinCampaignRepository.findLiveAt(now);
+  const campaign = await getLiveCampaignCached(now);
   if (!campaign) return { eligible: false, reason: INELIGIBLE.NO_CAMPAIGN, order };
 
   // ── The money gate. The order must ALREADY be paid, which only the signature-
@@ -262,12 +328,71 @@ const filterUnawardablePrizes = async (pool) => {
   return karmaEnabled ? pool : pool.filter((p) => p.kind !== PRIZE_KIND.KARMA);
 };
 
-const snapshotOf = (prize) => ({
+/**
+ * Mint the winner's OWN single-use coupon, inside the draw's transaction.
+ *
+ * WHY ONE CODE PER WINNER rather than a shared code: `Coupon.usageLimitPerUser` is not
+ * enforced in production — the unique index behind it was never built — so a shared code
+ * posted publicly could be redeemed without limit. `usageLimit` (the GLOBAL cap) *is*
+ * enforced by an atomic counter, so a per-winner coupon with `usageLimit: 1` bounds a
+ * leaked code to exactly one redemption using the guarantee that actually holds today.
+ *
+ * Minted IN-TRANSACTION deliberately: a prize the customer can see but cannot redeem is
+ * worse than no prize, so the coupon and the win must commit together or not at all.
+ *
+ * The coupon is NOT bound to a user id, because the Coupon model has no such field —
+ * which is precisely why uniqueness-per-winner plus a global limit of 1 is the mechanism
+ * doing the work here, rather than ownership.
+ *
+ * Collisions are astronomically unlikely but not impossible, and `Coupon.code` is
+ * uniquely indexed — so a duplicate is retried rather than surfaced to a customer who is
+ * looking at a confirmation page.
+ */
+const mintCouponFor = async (prize, { now, session }) => {
+  const prefix = (prize.couponPrefix || 'SPIN').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const validDays = prize.couponValidDays ?? 30;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    // 5 bytes → 8 base32-ish chars. Ambiguous characters are avoided because this code
+    // gets read off a screen and typed by hand.
+    const suffix = crypto.randomBytes(5).toString('hex').toUpperCase().replace(/[01IO]/g, '9').slice(0, 8);
+    const code = `${prefix}-${suffix}`;
+    try {
+      const coupon = await couponRepository.createInSession({
+        code,
+        description: `Spin to Win — ${prize.name}`,
+        type: prize.couponType || 'fixed',
+        value: prize.couponValue || 0,
+        maxDiscountAmount: prize.couponMaxDiscount ?? null,
+        minCartValue: prize.couponMinCartValue || 0,
+        // Never listed on the storefront — it belongs to one winner.
+        visibility: 'hidden',
+        startsAt: now,
+        expiresAt: new Date(now.getTime() + validDays * 86400000),
+        // THE guard. Global cap of 1: even if the code is shared, it dies after one use.
+        usageLimit: 1,
+        usageLimitPerUser: 1,
+        isActive: true,
+      }, session);
+      return coupon;
+    } catch (err) {
+      const duplicate = err?.code === 11000 || /duplicate key/i.test(err?.message || '');
+      if (!duplicate) throw err;
+      // else: regenerate and try again
+    }
+  }
+  throw new AppError('Could not issue your coupon. Please contact support.', 500);
+};
+
+const snapshotOf = (prize, couponCode = null) => ({
   name: prize.name,
   sku: prize.sku || null,
   kind: prize.kind,
   imageUrl: prize.imageUrl || null,
   isFloorPrize: Boolean(prize.isFloorPrize),
+  // Present only for kind='coupon'. Snapshotted so the reveal, the email and order
+  // history all show the same code even if the Coupon doc is later edited.
+  couponCode,
 });
 
 /**
@@ -354,6 +479,14 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         winner = claimedFloor;
       }
 
+      // Non-physical prizes must actually hand something over. A coupon prize mints a
+      // real, redeemable Coupon here; without this the customer is congratulated and
+      // given nothing, which is the failure mode this whole branch exists to prevent.
+      let awardedCoupon = null;
+      if (winner.kind === PRIZE_KIND.COUPON) {
+        awardedCoupon = await mintCouponFor(winner, { now, session });
+      }
+
       const { segmentIndex, labels } = buildSegments({
         pool,
         floorPrize,
@@ -367,10 +500,11 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         user: userId || order.user || null,
         campaign: campaign._id,
         prize: winner._id,
-        prizeSnapshot: snapshotOf(winner),
+        prizeSnapshot: snapshotOf(winner, awardedCoupon?.code ?? null),
         segmentIndex,
         segmentLabels: labels,
         status: SPIN_RESULT_STATUS.GRANTED,
+        awardedCoupon: awardedCoupon?._id ?? null,
         spunAt: now,
         ipHash: hashIp(ip),
       }, session);
@@ -392,6 +526,17 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
 
       created = doc.toObject();
     });
+
+    // ── Prize email (best-effort, POST-COMMIT) ───────────────────────────────
+    // Enqueued only after the transaction commits, so a rolled-back spin can never
+    // email a prize that was not awarded — the same discipline the invoice email uses.
+    // A Redis/queue outage must not fail a spin the customer has already seen resolve;
+    // the email is idempotent and can be re-driven.
+    if (created && process.env.REDIS_URL) {
+      getNotificationsQueue()
+        .add('send-spin-prize-email', { orderId })
+        .catch((err) => console.error(`[Spin] Failed to enqueue prize email for ${orderId}:`, err.message));
+    }
 
     return { result: created, alreadySpun: false };
   } catch (error) {
@@ -545,6 +690,27 @@ export const validateForPublish = async (campaignId) => {
   }
 
   for (const p of prizes) {
+    // ── Payload checks run for EVERY active prize, floor prize included ──────
+    // The floor prize is the one most likely to be a coupon (it is the guaranteed win),
+    // so skipping it here would leave the single highest-volume prize unvalidated — the
+    // exact hole that let a 0-value coupon reach customers.
+    if (p.kind === PRIZE_KIND.COUPON && p.couponType !== 'free_shipping' && !(p.couponValue > 0)) {
+      errors.push({
+        field: `prizes.${p._id}.couponValue`,
+        message: `"${p.name}": set how much the coupon takes off (a 0-value coupon gives the winner nothing).`,
+      });
+    }
+    if (p.kind === PRIZE_KIND.COUPON && p.couponType === 'percentage' && p.couponValue > 100) {
+      errors.push({
+        field: `prizes.${p._id}.couponValue`,
+        message: `"${p.name}": a percentage coupon cannot exceed 100%.`,
+      });
+    }
+    if (p.kind === PRIZE_KIND.KARMA && !(p.karmaPoints > 0)) {
+      errors.push({ field: `prizes.${p._id}.karmaPoints`, message: `"${p.name}": a karma prize needs a positive point value.` });
+    }
+
+    // ── Stock / SKU checks apply only to real goodies ───────────────────────
     if (p.isFloorPrize) continue;
     if (p.stockRemaining === null || p.stockRemaining === undefined) {
       errors.push({ field: `prizes.${p._id}.stockRemaining`, message: `"${p.name}": only the floor prize may have unlimited stock.` });
@@ -556,12 +722,6 @@ export const validateForPublish = async (campaignId) => {
     }
     if (p.kind === PRIZE_KIND.GOODIE && !p.sku) {
       errors.push({ field: `prizes.${p._id}.sku`, message: `"${p.name}": a SKU is required so the packing team can find it.` });
-    }
-    if (p.kind === PRIZE_KIND.COUPON && !p.couponCode) {
-      errors.push({ field: `prizes.${p._id}.couponCode`, message: `"${p.name}": a coupon prize needs a coupon code.` });
-    }
-    if (p.kind === PRIZE_KIND.KARMA && !(p.karmaPoints > 0)) {
-      errors.push({ field: `prizes.${p._id}.karmaPoints`, message: `"${p.name}": a karma prize needs a positive point value.` });
     }
   }
 
@@ -625,6 +785,7 @@ export const previewOdds = async (campaignId, { paidOrdersPerDay = 0 } = {}) => 
 
 export default {
   INELIGIBLE,
+  getLiveCampaignCached,
   checkEligibility,
   spin,
   voidForOrder,

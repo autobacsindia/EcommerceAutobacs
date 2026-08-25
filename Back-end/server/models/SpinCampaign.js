@@ -5,7 +5,9 @@ import {
   DEFAULT_SEGMENT_COUNT,
   MIN_SEGMENT_COUNT,
   MAX_SEGMENT_COUNT,
+  SPIN_CACHE_PATTERN,
 } from "../config/spin.js";
+import cacheService from "../services/cacheService.js";
 
 /**
  * SpinCampaign — one occasion-scoped run of the post-purchase reward wheel.
@@ -135,5 +137,39 @@ const SpinCampaignSchema = new mongoose.Schema({
 // "Is a campaign live right now" — runs on every eligible order-success render that
 // misses the cache. autoIndex is off in prod, so config/db.js builds this for real.
 SpinCampaignSchema.index({ status: 1, startsAt: 1, endsAt: 1 });
+
+/**
+ * Drop the cached "which campaign is live" answer after ANY write to this collection.
+ *
+ * The read cache re-checks a cached row's own status and date window, which catches a
+ * campaign that simply ran out of time. It cannot catch a row that CHANGED underneath
+ * it — flipping status to `off` is the kill switch, and an operator who hits it expects
+ * the wheel to stop now, not up to a TTL later.
+ *
+ * The admin controller also purges `public:spin:*` after its writes. This hook is the
+ * one that cannot be bypassed: a migration script, a cron, or a future controller that
+ * writes the model directly gets correct invalidation for free, and a stale campaign
+ * here means prizes offered on a promotion that is over. Same reasoning as the ES-sync
+ * hooks on Product, and the same caveat — `updateMany`/`bulkWrite` skip Mongoose
+ * middleware entirely, so any bulk path must invalidate explicitly.
+ *
+ * Invalidation is best-effort and never blocks or fails the write: the cached entry is
+ * short-lived, whereas rejecting an admin's save because Redis hiccuped is a real
+ * outage.
+ */
+function invalidateLiveCampaignCache() {
+  cacheService.invalidatePattern(SPIN_CACHE_PATTERN).catch((err) => {
+    console.error('[SpinCampaign] cache invalidation failed:', err?.message);
+  });
+}
+
+SpinCampaignSchema.post('save', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('findOneAndUpdate', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('updateOne', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('updateMany', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('findOneAndDelete', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('deleteOne', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('deleteMany', invalidateLiveCampaignCache);
+SpinCampaignSchema.post('insertMany', invalidateLiveCampaignCache);
 
 export default mongoose.models.SpinCampaign || mongoose.model("SpinCampaign", SpinCampaignSchema);
