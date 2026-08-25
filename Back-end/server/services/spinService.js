@@ -30,8 +30,7 @@ import {
   REVIEW_URL_ALLOWED_HOSTS,
 } from '../config/spin.js';
 
-import SpinResult from '../models/SpinResult.js';
-import Order from '../models/Order.js';
+import orderRepository from '../repositories/orderRepository.js';
 import spinCampaignRepository from '../repositories/spinCampaignRepository.js';
 import spinPrizeRepository from '../repositories/spinPrizeRepository.js';
 import spinResultRepository from '../repositories/spinResultRepository.js';
@@ -186,7 +185,7 @@ const isClosed = (status) => ['cancelled', 'returned', 'refunded'].includes(stat
  * pre-computes the outcome — only whether a spin is on offer.
  */
 export const checkEligibility = async (orderId, { userId = null, now = new Date() } = {}) => {
-  const order = await Order.findById(orderId).lean();
+  const order = await orderRepository.findLean(orderId);
   if (!order) return { eligible: false, reason: INELIGIBLE.ORDER_NOT_FOUND };
 
   const existing = await spinResultRepository.findByOrder(orderId);
@@ -299,7 +298,7 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
 
       // Re-verify inside the transaction. A campaign can be switched off, or an order
       // refunded, between the render that offered the wheel and the click that spins it.
-      const order = await Order.findById(orderId).session(session);
+      const order = await orderRepository.findById(orderId, [], session);
       if (!order) throw new AppError('Order not found.', 404);
       if (order.paymentStatus !== 'paid' || isClosed(order.status)) {
         throw new AppError('Spin unavailable for this order (not_paid).', 400, { expose: true });
@@ -363,7 +362,7 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         rng,
       });
 
-      const [doc] = await SpinResult.create([{
+      const doc = await spinResultRepository.createInSession({
         order: orderId,
         user: userId || order.user || null,
         campaign: campaign._id,
@@ -374,7 +373,7 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         status: SPIN_RESULT_STATUS.GRANTED,
         spunAt: now,
         ipHash: hashIp(ip),
-      }], { session });
+      }, session);
 
       // Denormalise onto the order in the SAME transaction, so the packing team can
       // never see a reward the ledger does not have (or miss one it does).
@@ -389,7 +388,7 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         fulfilledAt: null,
         voidedAt: null,
       };
-      await order.save({ session });
+      await orderRepository.save(order, session);
 
       created = doc.toObject();
     });
@@ -437,25 +436,17 @@ export const voidForOrder = async (orderId, reason = VOID_REASON.ORDER_CANCELLED
 
       // Atomic status flip IS the idempotency guard: only the caller that transitions
       // granted → void proceeds to touch stock.
-      const result = await SpinResult.findOneAndUpdate(
-        { order: orderId, status: SPIN_RESULT_STATUS.GRANTED },
-        { $set: { status: SPIN_RESULT_STATUS.VOID, voidReason: reason, voidedAt: new Date() } },
-        { new: true, session },
-      );
+      const result = await spinResultRepository.markVoid(orderId, reason, session);
       if (!result) return; // no spin, or already void
 
       const alreadyShipped = Boolean(result.fulfilledAt);
       if (!alreadyShipped) {
         await spinPrizeRepository.releaseUnit(result.prize, session);
         result.stockReturned = true;
-        await result.save({ session });
+        await spinResultRepository.save(result, session);
       }
 
-      await Order.updateOne(
-        { _id: orderId, 'spinReward.result': result._id },
-        { $set: { 'spinReward.voidedAt': new Date() } },
-        { session },
-      );
+      await orderRepository.markSpinRewardVoided(orderId, result._id, session);
 
       outcome = { voided: true, stockReturned: !alreadyShipped };
     });

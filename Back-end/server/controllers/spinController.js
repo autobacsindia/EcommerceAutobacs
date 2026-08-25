@@ -15,10 +15,7 @@ import spinService, { INELIGIBLE } from '../services/spinService.js';
 import spinCampaignRepository from '../repositories/spinCampaignRepository.js';
 import spinPrizeRepository from '../repositories/spinPrizeRepository.js';
 import spinResultRepository from '../repositories/spinResultRepository.js';
-import SpinCampaign from '../models/SpinCampaign.js';
-import SpinPrize from '../models/SpinPrize.js';
-import SpinResult from '../models/SpinResult.js';
-import Order from '../models/Order.js';
+import orderRepository from '../repositories/orderRepository.js';
 import { SPIN_STATUS } from '../config/spin.js';
 
 const CACHE_PATTERN = 'public:spin:*';
@@ -45,7 +42,7 @@ const purgeSpinCache = async () => {
  */
 const assertOwnsOrder = async (orderId, req) => {
   if (!mongoose.isValidObjectId(orderId)) throw new AppError('Order not found.', 404);
-  const order = await Order.findById(orderId).select('user').lean();
+  const order = await orderRepository.findOwnerRef(orderId);
   if (!order) throw new AppError('Order not found.', 404);
   if (req.user?.role === 'admin') return order;
   if (!order.user || String(order.user) !== String(req.user?._id)) {
@@ -181,10 +178,7 @@ export const postSpin = async (req, res) => {
 export const postReviewClicked = async (req, res) => {
   const { orderId } = req.params;
   await assertOwnsOrder(orderId, req);
-  await SpinResult.updateOne(
-    { order: orderId, reviewCtaClickedAt: null },
-    { $set: { reviewCtaClickedAt: new Date() } },
-  );
+  await spinResultRepository.markReviewClicked(orderId);
   return res.json({ success: true });
 };
 
@@ -205,16 +199,17 @@ export const listCampaigns = async (req, res) => {
 export const createCampaign = async (req, res) => {
   // A campaign is always born in `draft`. Going live is a separate, gated action, so a
   // malformed create can never immediately start offering prizes.
-  const campaign = await SpinCampaign.create({ ...req.body, status: SPIN_STATUS.DRAFT });
+  const campaign = await spinCampaignRepository.createCampaign({ ...req.body, status: SPIN_STATUS.DRAFT });
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_CAMPAIGN_CREATE', 'SpinCampaign', campaign._id, { slug: campaign.slug });
   return res.status(201).json({ success: true, campaign });
 };
 
 export const updateCampaign = async (req, res) => {
-  // `status` is excluded: it moves only through publish/setStatus, which run the gate.
-  const { status, ...patch } = req.body;
-  const campaign = await SpinCampaign.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true });
+  // `status` is stripped deliberately: it moves only through publish/setStatus, which
+  // run the safety gate. Underscore-prefixed so the linter knows the discard is intent.
+  const { status: _status, ...patch } = req.body;
+  const campaign = await spinCampaignRepository.updateById(req.params.id, patch);
   if (!campaign) throw new AppError('Campaign not found.', 404);
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_CAMPAIGN_UPDATE', 'SpinCampaign', campaign._id, { fields: Object.keys(patch) });
@@ -237,11 +232,7 @@ export const publishCampaign = async (req, res) => {
       errors,
     });
   }
-  const campaign = await SpinCampaign.findByIdAndUpdate(
-    req.params.id,
-    { status: SPIN_STATUS.LIVE },
-    { new: true },
-  );
+  const campaign = await spinCampaignRepository.setStatus(req.params.id, SPIN_STATUS.LIVE);
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_CAMPAIGN_PUBLISH', 'SpinCampaign', campaign._id, { slug: campaign.slug });
   return res.json({ success: true, campaign });
@@ -253,7 +244,7 @@ export const setCampaignStatus = async (req, res) => {
   if (status === SPIN_STATUS.LIVE) {
     throw new AppError('Use the publish endpoint to go live — it runs the safety checks.', 400, { expose: true });
   }
-  const campaign = await SpinCampaign.findByIdAndUpdate(req.params.id, { status }, { new: true });
+  const campaign = await spinCampaignRepository.setStatus(req.params.id, status);
   if (!campaign) throw new AppError('Campaign not found.', 404);
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_CAMPAIGN_STATUS', 'SpinCampaign', campaign._id, { status });
@@ -279,12 +270,13 @@ export const setCampaignStatus = async (req, res) => {
  * then publish (which re-runs the safety gate).
  */
 export const cloneCampaign = async (req, res) => {
-  const source = await SpinCampaign.findById(req.params.id).lean();
+  const source = await spinCampaignRepository.findLeanById(req.params.id);
   if (!source) throw new AppError('Campaign not found.', 404);
 
-  const { _id, createdAt, updatedAt, __v, slug, ...rest } = source;
+  // Identity + timestamps must NOT carry over; underscore marks the discard as intent.
+  const { _id, createdAt: _c, updatedAt: _u, __v: _v, slug: _slug, ...rest } = source;
 
-  const clone = await SpinCampaign.create({
+  const clone = await spinCampaignRepository.createCampaign({
     ...rest,
     slug: req.body.slug,
     name: req.body.name || `${source.name} (copy)`,
@@ -295,8 +287,8 @@ export const cloneCampaign = async (req, res) => {
 
   const prizes = await spinPrizeRepository.findByCampaign(source._id);
   if (prizes.length > 0) {
-    await SpinPrize.insertMany(prizes.map((p) => {
-      const { _id: pid, createdAt: pc, updatedAt: pu, __v: pv, ...prize } = p;
+    await spinPrizeRepository.createMany(prizes.map((p) => {
+      const { _id: _pid, createdAt: _pc, updatedAt: _pu, __v: _pv, ...prize } = p;
       return {
         ...prize,
         campaign: clone._id,
@@ -339,14 +331,14 @@ export const createPrize = async (req, res) => {
   // Stock starts full. Accepting a client-sent stockRemaining would let a typo award
   // more units than exist.
   if (body.stockTotal != null) body.stockRemaining = body.stockTotal;
-  const prize = await SpinPrize.create(body);
+  const prize = await spinPrizeRepository.createPrize(body);
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_PRIZE_CREATE', 'SpinPrize', prize._id, { name: prize.name, stock: prize.stockTotal });
   return res.status(201).json({ success: true, prize });
 };
 
 export const updatePrize = async (req, res) => {
-  const existing = await SpinPrize.findById(req.params.prizeId);
+  const existing = await spinPrizeRepository.findDocById(req.params.prizeId);
   if (!existing) throw new AppError('Prize not found.', 404);
 
   const patch = { ...req.body };
@@ -367,7 +359,7 @@ export const updatePrize = async (req, res) => {
   delete patch.stockAwarded;
   delete patch.campaign;
 
-  const prize = await SpinPrize.findByIdAndUpdate(req.params.prizeId, patch, { new: true, runValidators: true });
+  const prize = await spinPrizeRepository.updateById(req.params.prizeId, patch);
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_PRIZE_UPDATE', 'SpinPrize', prize._id, { fields: Object.keys(patch) });
   return res.json({ success: true, prize });
@@ -380,7 +372,7 @@ export const updatePrize = async (req, res) => {
  * stock that left the building. Removing it would orphan winners.
  */
 export const deactivatePrize = async (req, res) => {
-  const prize = await SpinPrize.findById(req.params.prizeId);
+  const prize = await spinPrizeRepository.findDocById(req.params.prizeId);
   if (!prize) throw new AppError('Prize not found.', 404);
 
   // Pulling the floor prize out from under a live campaign breaks "everyone wins" for
@@ -396,7 +388,7 @@ export const deactivatePrize = async (req, res) => {
   }
 
   prize.active = false;
-  await prize.save();
+  await spinPrizeRepository.saveDoc(prize);
   await purgeSpinCache();
   await auditLogger.logAction(req, 'SPIN_PRIZE_DEACTIVATE', 'SpinPrize', prize._id, { name: prize.name });
   return res.json({ success: true, prize });
@@ -429,21 +421,14 @@ export const listWinners = async (req, res) => {
 export const fulfilWinner = async (req, res) => {
   // Conditional on fulfilledAt being unset, so two admins clicking at once record one
   // fulfilment by one person rather than overwriting each other.
-  const result = await SpinResult.findOneAndUpdate(
-    { _id: req.params.id, fulfilledAt: null },
-    { $set: { fulfilledAt: new Date(), fulfilledBy: req.user._id } },
-    { new: true },
-  );
+  const result = await spinResultRepository.claimFulfilment(req.params.id, req.user._id);
   if (!result) {
-    const existing = await SpinResult.findById(req.params.id).lean();
+    const existing = await spinResultRepository.findLeanById(req.params.id);
     if (!existing) throw new AppError('Spin result not found.', 404);
     return res.json({ success: true, result: existing, alreadyFulfilled: true });
   }
 
-  await Order.updateOne(
-    { _id: result.order, 'spinReward.result': result._id },
-    { $set: { 'spinReward.fulfilledAt': result.fulfilledAt } },
-  );
+  await orderRepository.markSpinRewardFulfilled(result.order, result._id, result.fulfilledAt);
   await auditLogger.logAction(req, 'SPIN_REWARD_FULFIL', 'SpinResult', result._id, {
     prize: result.prizeSnapshot?.name,
     order: String(result.order),

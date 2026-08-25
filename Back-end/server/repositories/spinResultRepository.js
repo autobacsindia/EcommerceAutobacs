@@ -45,6 +45,57 @@ class SpinResultRepository extends BaseRepository {
       .lean();
   }
 
+  /** Create the spin record inside the draw transaction. */
+  async createInSession(doc, session) {
+    const [created] = await SpinResult.create([doc], { session });
+    return created;
+  }
+
+  /**
+   * Atomically flip granted → void. THE clawback idempotency guard: only the caller
+   * that wins this transition proceeds to return stock, so a retried status change
+   * cannot credit the same unit twice.
+   */
+  async markVoid(orderId, reason, session = null) {
+    return SpinResult.findOneAndUpdate(
+      { order: orderId, status: SPIN_RESULT_STATUS.GRANTED },
+      { $set: { status: SPIN_RESULT_STATUS.VOID, voidReason: reason, voidedAt: new Date() } },
+      { new: true, session },
+    );
+  }
+
+  async save(doc, session = null) {
+    return doc.save({ session });
+  }
+
+  async findDocById(id) {
+    return SpinResult.findById(id);
+  }
+
+  async findLeanById(id) {
+    return SpinResult.findById(id).lean();
+  }
+
+  /** Record the Google-review click. Analytics only — never gates a prize. */
+  async markReviewClicked(orderId) {
+    return SpinResult.updateOne(
+      { order: orderId, reviewCtaClickedAt: null },
+      { $set: { reviewCtaClickedAt: new Date() } },
+    );
+  }
+
+  /**
+   * Claim the "packed it" tick. Conditional on fulfilledAt being unset so two admins
+   * clicking at once record one fulfilment by one person.
+   */
+  async claimFulfilment(resultId, adminId) {
+    return SpinResult.findOneAndUpdate(
+      { _id: resultId, fulfilledAt: null },
+      { $set: { fulfilledAt: new Date(), fulfilledBy: adminId } },
+      { new: true },
+    );
+  }
+
   async countUnfulfilled(campaignId = null) {
     const query = {
       status: SPIN_RESULT_STATUS.GRANTED,

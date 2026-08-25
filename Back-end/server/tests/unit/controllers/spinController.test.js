@@ -19,25 +19,29 @@ const ORDER_ID = new mongoose.Types.ObjectId();
 const OWNER_ID = new mongoose.Types.ObjectId();
 const ATTACKER_ID = new mongoose.Types.ObjectId();
 
-const mockOrder = { findById: jest.fn() };
+const mockOrder = { findOwnerRef: jest.fn() };
 const mockSpinService = {
   spin: jest.fn(),
   checkEligibility: jest.fn(),
   buildSegments: jest.fn(() => ({ slices: [], segmentIndex: 0, labels: [] })),
 };
 
-jest.unstable_mockModule('../../../models/Order.js', () => ({ default: mockOrder }));
+
 jest.unstable_mockModule('../../../services/spinService.js', () => ({
   default: mockSpinService,
   INELIGIBLE: { NOT_PAID: 'not_paid' },
 }));
-jest.unstable_mockModule('../../../models/SpinResult.js', () => ({
-  default: { updateOne: jest.fn(), findById: jest.fn(), findOneAndUpdate: jest.fn() },
+jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({
+  default: { findOwnerRef: mockOrder.findOwnerRef, markSpinRewardFulfilled: jest.fn() },
 }));
-const mockCampaign = { findById: jest.fn(), create: jest.fn() };
-const mockPrize = { insertMany: jest.fn() };
-jest.unstable_mockModule('../../../models/SpinCampaign.js', () => ({ default: mockCampaign }));
-jest.unstable_mockModule('../../../models/SpinPrize.js', () => ({ default: mockPrize }));
+// NOTE: mocked at the REPOSITORY layer, not the model layer — direct model imports are
+// forbidden outside repositories/ (eslint no-restricted-imports), so that is the seam the
+// controller actually depends on.
+const mockCampaignRepo = {
+  findById: jest.fn().mockResolvedValue(null),
+  findLeanById: jest.fn(),
+  createCampaign: jest.fn(),
+};
 jest.unstable_mockModule('../../../services/auditLogger.js', () => ({
   default: { logAction: jest.fn() },
 }));
@@ -45,11 +49,12 @@ jest.unstable_mockModule('../../../services/cacheService.js', () => ({
   default: { invalidatePattern: jest.fn() },
 }));
 jest.unstable_mockModule('../../../repositories/spinCampaignRepository.js', () => ({
-  default: { findById: jest.fn().mockResolvedValue(null) },
+  default: mockCampaignRepo,
 }));
 const mockPrizeRepo = {
   findEligiblePool: jest.fn().mockResolvedValue([]),
   findByCampaign: jest.fn().mockResolvedValue([]),
+  createMany: jest.fn(),
 };
 jest.unstable_mockModule('../../../repositories/spinPrizeRepository.js', () => ({
   default: mockPrizeRepo,
@@ -60,8 +65,8 @@ jest.unstable_mockModule('../../../repositories/spinResultRepository.js', () => 
 
 let controller;
 
-/** Chainable Order.findById(...).select(...).lean() */
-const orderReturning = (doc) => ({ select: () => ({ lean: async () => doc }) });
+/** orderRepository.findOwnerRef resolves the doc directly — no query chain to fake. */
+const orderReturning = (doc) => doc;
 
 const res = () => {
   const r = {};
@@ -75,13 +80,13 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  mockOrder.findById.mockReset();
+  mockOrder.findOwnerRef.mockReset();
   mockSpinService.spin.mockReset();
 });
 
 describe('ownership boundary', () => {
   it('refuses to spin an order belonging to a DIFFERENT user', async () => {
-    mockOrder.findById.mockReturnValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
 
     const req = { params: { orderId: String(ORDER_ID) }, user: { _id: ATTACKER_ID }, headers: {} };
 
@@ -91,7 +96,7 @@ describe('ownership boundary', () => {
   });
 
   it('answers 404 (not 403) so order ids cannot be probed for existence', async () => {
-    mockOrder.findById.mockReturnValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     const req = { params: { orderId: String(ORDER_ID) }, user: { _id: ATTACKER_ID }, headers: {} };
 
     // A 403 would confirm "this order exists but is not yours" to an attacker
@@ -100,7 +105,7 @@ describe('ownership boundary', () => {
   });
 
   it('lets the OWNER spin their own order', async () => {
-    mockOrder.findById.mockReturnValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     mockSpinService.spin.mockResolvedValue({
       alreadySpun: false,
       result: {
@@ -121,19 +126,19 @@ describe('ownership boundary', () => {
   it('rejects a malformed order id without touching the database', async () => {
     const req = { params: { orderId: 'not-an-objectid' }, user: { _id: OWNER_ID }, headers: {} };
     await expect(controller.postSpin(req, res())).rejects.toMatchObject({ statusCode: 404 });
-    expect(mockOrder.findById).not.toHaveBeenCalled();
+    expect(mockOrder.findOwnerRef).not.toHaveBeenCalled();
   });
 
   it('refuses a guest order with no owner rather than defaulting to allow', async () => {
     // A null user must not compare equal to anything — fail closed.
-    mockOrder.findById.mockReturnValue(orderReturning({ _id: ORDER_ID, user: null }));
+    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: null }));
     const req = { params: { orderId: String(ORDER_ID) }, user: { _id: OWNER_ID }, headers: {} };
     await expect(controller.postSpin(req, res())).rejects.toMatchObject({ statusCode: 404 });
     expect(mockSpinService.spin).not.toHaveBeenCalled();
   });
 
   it('allows an admin to act on any order', async () => {
-    mockOrder.findById.mockReturnValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     mockSpinService.spin.mockResolvedValue({
       alreadySpun: true,
       result: {
@@ -154,7 +159,7 @@ describe('ownership boundary', () => {
 
 describe('client IP for rate limiting and forensics', () => {
   it('prefers cf-connecting-ip over req.ip', async () => {
-    mockOrder.findById.mockReturnValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
+    mockOrder.findOwnerRef.mockResolvedValue(orderReturning({ _id: ORDER_ID, user: OWNER_ID }));
     mockSpinService.spin.mockResolvedValue({
       alreadySpun: false,
       result: {
@@ -187,27 +192,25 @@ describe('cloning a campaign to open a new window', () => {
   const CLONE_ID = new mongoose.Types.ObjectId();
 
   beforeEach(() => {
-    mockCampaign.findById.mockReset();
-    mockCampaign.create.mockReset();
-    mockPrize.insertMany.mockReset();
+    mockCampaignRepo.findLeanById.mockReset();
+    mockCampaignRepo.createCampaign.mockReset();
+    mockPrizeRepo.createMany.mockReset();
     mockPrizeRepo.findByCampaign.mockReset();
   });
 
   const seedSource = () => {
-    mockCampaign.findById.mockReturnValue({
-      lean: async () => ({
-        _id: SOURCE_ID,
-        slug: 'diwali-2026',
-        name: 'Diwali 2026',
-        status: 'live',
-        startsAt: new Date('2026-11-05'),
-        endsAt: new Date('2026-11-15'),
-        goodieWinRatePercent: 20,
-        maxSpinsPerUserPerCampaign: 1,
-        createdAt: new Date(), updatedAt: new Date(), __v: 0,
-      }),
+    mockCampaignRepo.findLeanById.mockResolvedValue({
+      _id: SOURCE_ID,
+      slug: 'diwali-2026',
+      name: 'Diwali 2026',
+      status: 'live',
+      startsAt: new Date('2026-11-05'),
+      endsAt: new Date('2026-11-15'),
+      goodieWinRatePercent: 20,
+      maxSpinsPerUserPerCampaign: 1,
+      createdAt: new Date(), updatedAt: new Date(), __v: 0,
     });
-    mockCampaign.create.mockImplementation(async (doc) => ({ ...doc, _id: CLONE_ID }));
+    mockCampaignRepo.createCampaign.mockImplementation(async (doc) => ({ ...doc, _id: CLONE_ID }));
   };
 
   it('produces a NEW campaign id, which is what resets the per-user cap', async () => {
@@ -235,7 +238,7 @@ describe('cloning a campaign to open a new window', () => {
       res(),
     );
 
-    expect(mockCampaign.create).toHaveBeenCalledWith(
+    expect(mockCampaignRepo.createCampaign).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'draft', slug: 'diwali-2027' }),
     );
   });
@@ -260,7 +263,7 @@ describe('cloning a campaign to open a new window', () => {
       res(),
     );
 
-    const [cloned] = mockPrize.insertMany.mock.calls[0][0];
+    const [cloned] = mockPrizeRepo.createMany.mock.calls[0][0];
     expect(cloned.campaign).toBe(CLONE_ID);
     // A new window starts from the shelf you have, not last window's leftovers.
     expect(cloned.stockRemaining).toBe(10);
@@ -274,7 +277,7 @@ describe('cloning a campaign to open a new window', () => {
   });
 
   it('404s on an unknown source campaign', async () => {
-    mockCampaign.findById.mockReturnValue({ lean: async () => null });
+    mockCampaignRepo.findLeanById.mockResolvedValue(null);
     await expect(controller.cloneCampaign(
       { params: { id: String(SOURCE_ID) }, body: { slug: 'x' }, user: { _id: OWNER_ID } },
       res(),

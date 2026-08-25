@@ -34,6 +34,22 @@ class SpinCampaignRepository extends BaseRepository {
     return SpinCampaign.findOne({ slug }).lean();
   }
 
+  async createCampaign(doc) {
+    return SpinCampaign.create(doc);
+  }
+
+  async findLeanById(id) {
+    return SpinCampaign.findById(id).lean();
+  }
+
+  async updateById(id, patch) {
+    return SpinCampaign.findByIdAndUpdate(id, patch, { new: true, runValidators: true });
+  }
+
+  async setStatus(id, status) {
+    return SpinCampaign.findByIdAndUpdate(id, { status }, { new: true });
+  }
+
   /** Admin list — keyset-paginated on createdAt. No skip/offset, per the house rule. */
   async findPage({ limit = 50, before = null } = {}) {
     const query = before ? { createdAt: { $lt: before } } : {};

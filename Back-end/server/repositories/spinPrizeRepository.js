@@ -38,6 +38,26 @@ class SpinPrizeRepository extends BaseRepository {
       .lean();
   }
 
+  async createPrize(doc) {
+    return SpinPrize.create(doc);
+  }
+
+  async createMany(docs) {
+    return SpinPrize.insertMany(docs);
+  }
+
+  async findDocById(id) {
+    return SpinPrize.findById(id);
+  }
+
+  async updateById(id, patch) {
+    return SpinPrize.findByIdAndUpdate(id, patch, { new: true, runValidators: true });
+  }
+
+  async saveDoc(doc) {
+    return doc.save();
+  }
+
   async findFloorPrize(campaignId, session = null) {
     let q = SpinPrize.findOne({ campaign: campaignId, isFloorPrize: true, active: true });
     if (session) q = q.session(session);

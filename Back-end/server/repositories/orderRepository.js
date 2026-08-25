@@ -313,6 +313,39 @@ class OrderRepository extends BaseRepository {
     return q;
   }
 
+  /** Plain lean read — for eligibility checks that only inspect fields. */
+  async findLean(id, session = null) {
+    let q = Order.findById(id).lean();
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  /** Owner check for the spin routes: just enough to authorise, nothing more. */
+  async findOwnerRef(id) {
+    return Order.findById(id).select('user').lean();
+  }
+
+  /**
+   * Mark the denormalised Spin-to-Win reward as withdrawn, so the packing screen shows
+   * DO NOT PACK. Matched on the result id too, so a stale clawback cannot stamp a
+   * reward the order no longer carries.
+   */
+  async markSpinRewardVoided(orderId, resultId, session = null) {
+    return Order.updateOne(
+      { _id: orderId, 'spinReward.result': resultId },
+      { $set: { 'spinReward.voidedAt': new Date() } },
+      { session },
+    );
+  }
+
+  /** Mirror the "packed it" tick onto the order snapshot. */
+  async markSpinRewardFulfilled(orderId, resultId, fulfilledAt) {
+    return Order.updateOne(
+      { _id: orderId, 'spinReward.result': resultId },
+      { $set: { 'spinReward.fulfilledAt': fulfilledAt } },
+    );
+  }
+
   async save(order, session = null) {
     if (session) return order.save({ session });
     return order.save();
