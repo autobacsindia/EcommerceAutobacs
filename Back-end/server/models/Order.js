@@ -265,6 +265,40 @@ const OrderSchema = new mongoose.Schema({
   // send-review-request job is idempotent (see services/reviewRequestService.js).
   reviewRequestedAt: Date,
 
+  /**
+   * The post-purchase Spin-to-Win reward, denormalised onto the order so the packing
+   * team physically cannot miss it. Authoritative record is the SpinResult document;
+   * this is a read-optimised snapshot for the admin order screen, the packing slip and
+   * the order-placed alert email.
+   *
+   * ⚠️ DELIBERATELY *NOT* A LINE ITEM. Pushing the goodie into `items` would corrupt
+   * every consumer of the financial record: refundMathService's proration base (which
+   * has already over-refunded discounted orders once), the GST invoice PDF, Meta CAPI
+   * and Google Ads conversion value, units-sold in LTV/analytics, and returns
+   * eligibility — a free gift would become "returnable". Orders are immutable financial
+   * records; a ₹0 prize is not part of what the customer was charged.
+   *
+   * ⚠️ Declared as a single-nested SUBDOCUMENT SCHEMA with `default: null`, never a bare
+   * nested path with per-field defaults. A `default:` on a nested path materialises the
+   * subdocument on EVERY order, and the admin UI then shows a phantom reward on orders
+   * that never spun — the exact bug that produced phantom return/refund subdocs here.
+   */
+  spinReward: {
+    type: new mongoose.Schema({
+      result: { type: mongoose.Schema.Types.ObjectId, ref: "SpinResult", required: true },
+      prize: { type: mongoose.Schema.Types.ObjectId, ref: "SpinPrize", required: true },
+      name: { type: String, required: true },
+      sku: { type: String, default: null },
+      kind: { type: String, required: true },
+      imageUrl: { type: String, default: null },
+      wonAt: { type: Date, required: true },
+      fulfilledAt: { type: Date, default: null },
+      /** Set when the order is cancelled/refunded — renders as DO NOT PACK. */
+      voidedAt: { type: Date, default: null },
+    }, { _id: false }),
+    default: null,
+  },
+
   /*
     Set when an abandoned checkout's MONEY HOLDS were handed back — the coupon's global
     and per-user counters, the campaign redemption slot, and any karma points debited.
@@ -425,6 +459,12 @@ const OrderSchema = new mongoose.Schema({
 // Indexes for order queries
 // COMPOUND indexes for common query patterns
 OrderSchema.index({ user: 1, createdAt: -1 }); // User order history (sorted by date)
+// Admin orders list: the 🎁 "has an unpacked reward" filter. Partial so it indexes
+// only the small minority of orders that actually won something.
+OrderSchema.index(
+  { "spinReward.fulfilledAt": 1, createdAt: -1 },
+  { partialFilterExpression: { "spinReward.result": { $exists: true } } }
+);
 OrderSchema.index({ user: 1, status: 1 });      // User orders filtered by status (order tracking page)
 OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by status, sort by date)
 
