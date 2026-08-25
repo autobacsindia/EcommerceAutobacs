@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { X } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/context/CurrencyContext';
@@ -11,6 +11,7 @@ interface Category { _id: string; name: string }
 /** Dismissible chips summarising the active filters, with a Clear-all. */
 export default function ActiveFilters() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { formatPrice } = useCurrency();
   const [catNames, setCatNames] = useState<Record<string, string>>({});
@@ -35,7 +36,10 @@ export default function ActiveFilters() {
     const p = new URLSearchParams(searchParams.toString());
     mutate(p);
     p.delete('page');
-    router.replace(`/products?${p.toString()}`, { scroll: false });
+    // Keep the user on whatever listing they are on — hardcoding /products here
+    // would bounce them off a category or search page when they drop a chip.
+    const qs = p.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
   // csv params: remove a single value

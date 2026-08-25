@@ -78,6 +78,7 @@
     "fix-cart-indexes": "node scripts/fix-cart-indexes.js",
     "fix-cart-indexes-v2": "node scripts/fix-cart-indexes-v2.js",
     "audit-index-drift": "node scripts/audit-index-drift.js",
+    "audit-es-mapping": "node scripts/audit-es-mapping.js",
     "compact-rate-limit-events": "node scripts/compact-rate-limit-events.js",
     "clear-recommendation-cache": "node scripts/clear-recommendation-cache.js",
     "load-test:quick": "artillery run ../../artillery-quick-test.yml --output ../../quick-report.json",
