@@ -49,8 +49,21 @@ const REASON = {
 };
 
 class CouponRejected extends Error {
-  constructor(reason) { super(reason); this.reason = reason; }
+  /**
+   * @param reason buyer-facing sentence, shown as-is
+   * @param code   optional machine key for the CLASS of refusal. Only 'campaign' is
+   *               emitted today, and it exists for one job: telling the cart that the
+   *               applied code belongs to a campaign this customer cannot use, so the
+   *               cart can quietly drop it instead of parking a red error under the
+   *               promo box forever. That distinction cannot be recovered from `reason`
+   *               — it is prose, and matching on prose breaks the day someone improves
+   *               the wording.
+   */
+  constructor(reason, code = null) { super(reason); this.reason = reason; this.code = code; }
 }
+
+/** Refusals a campaign coupon can raise; see CouponRejected's `code`. */
+const REJECTED_CAMPAIGN = 'campaign';
 
 /*
   effectivePrice now lives in utils/productPrice.js and is re-exported here.
@@ -283,7 +296,7 @@ class PricingService {
     if (coupon.campaign) {
       campaign = await campaignRepository.findById(coupon.campaign, session);
       const evaluated = await campaignService.evaluate(campaign, userId, eligiblePaise, session, now);
-      if (evaluated.reason) throw new CouponRejected(evaluated.reason);
+      if (evaluated.reason) throw new CouponRejected(evaluated.reason, REJECTED_CAMPAIGN);
 
       /*
         Two ladders, and a campaign carries exactly one (campaignService.assertValidConfig
@@ -302,6 +315,17 @@ class PricingService {
         // Eligible, but this cart has not reached any tier yet — a distinct case from
         // being ineligible, and the only place it is a hard rejection is here, where we
         // are being asked to price an actual discount.
+        /*
+          Deliberately NOT tagged as a campaign refusal, unlike every other rejection in
+          this block. The customer IS eligible — their cart simply has not reached a
+          rung yet — so tagging it would have the cart drop the coupon while the
+          auto-apply, which keys on eligibility, immediately put it back: an apply/remove
+          loop for as long as the cart sat below the threshold.
+
+          Leaving it untagged keeps the coupon applied and the honest, actionable message
+          on screen ("add more to your cart to unlock this offer"), which is what this
+          refusal is for.
+        */
         if (!evaluated.tier) throw new CouponRejected(CAMPAIGN_REASON.NO_TIER);
         campaignTier = evaluated.tier;
       }
@@ -320,7 +344,10 @@ class PricingService {
       if (usage && usage.count >= coupon.usageLimitPerUser) {
         // Campaign wording for a campaign coupon — "offer", not "coupon", since the
         // buyer never typed a code; it was applied for them.
-        throw new CouponRejected(coupon.campaign ? CAMPAIGN_REASON.ALREADY_USED : REASON.PER_USER);
+        throw new CouponRejected(
+          coupon.campaign ? CAMPAIGN_REASON.ALREADY_USED : REASON.PER_USER,
+          coupon.campaign ? REJECTED_CAMPAIGN : null,
+        );
       }
     }
 
@@ -367,6 +394,7 @@ class PricingService {
     let shippingWaivePaise = 0;
     let appliedCoupon = null;
     let couponError = null;
+    let couponErrorCode = null;
     let appliedCampaign = null;
     let allowKarma = true;
     let discountLines = null;
@@ -430,7 +458,7 @@ class PricingService {
           discountLines = productTierPricing.lines;
         }
       } catch (err) {
-        if (err instanceof CouponRejected) couponError = err.reason;
+        if (err instanceof CouponRejected) { couponError = err.reason; couponErrorCode = err.code; }
         else throw err;
       }
     }
@@ -516,6 +544,13 @@ class PricingService {
         total: fromPaise(catalogSavingsPaise + goodsCouponPaise + karmaDiscountPaise),
       },
       couponError,
+      /*
+        The machine key for that refusal, when there is one. Present so the cart can tell
+        "this campaign coupon is no longer yours" — which it should silently drop — from
+        "your cart fell below the minimum", which the customer can fix and must be told
+        about. Null for every ordinary coupon rejection.
+      */
+      couponErrorCode,
       karmaPointsUsed,
       karmaPointValue: cfg.pointValueInRupees,
       maxRedeemablePoints,

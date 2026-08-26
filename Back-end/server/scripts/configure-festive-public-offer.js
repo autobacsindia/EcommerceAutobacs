@@ -38,6 +38,10 @@
  *
  *   # go live, once the tier assignments look right in admin
  *   node --import=dotenv/config scripts/configure-festive-public-offer.js --live --apply
+ *
+ *   # restrict the offer to customers who came through the printed card, and back again
+ *   node --import=dotenv/config scripts/configure-festive-public-offer.js --activation-gate=on  --apply
+ *   node --import=dotenv/config scripts/configure-festive-public-offer.js --activation-gate=off --apply
  */
 
 import mongoose from 'mongoose';
@@ -45,18 +49,48 @@ import campaignService from '../services/campaignService.js';
 import Coupon from '../models/Coupon.js';
 import campaignRepository from '../repositories/campaignRepository.js';
 import CampaignProductTier from '../models/CampaignProductTier.js';
+import CampaignMember from '../models/CampaignMember.js';
 import { CAMPAIGN_STATUS, CAMPAIGN_AUDIENCE } from '../config/campaign.js';
 import { istEndOfDay, formatDateTimeIST } from '../utils/datetime.js';
 
 /** The "everything else" rate, for warning copy. */
 const defaultOf = (c) => (c.productTiers || []).find(t => t.isDefault)?.percent ?? '?';
 
+const die = (m) => { console.error(`✗ ${m}`); process.exit(1); };
+
+/**
+ * Read a `--name=value` argument.
+ *
+ * Refuses the space-separated form outright instead of ignoring it, because ignoring it
+ * here is genuinely dangerous. Every `--name=value` option selects a MODE, and each mode
+ * returns early; a value that silently parses as null does not just lose its own
+ * argument, it falls through to the bottom of the script — the full reconfiguration,
+ * which rewrites the tier ladder, the cap and the end date on a LIVE campaign. So
+ * `--activation-gate on` would have flipped no gate and rewritten the offer instead.
+ *
+ * Safe against the `flag()` options (--apply, --live, --revert-to-list, --create, --test)
+ * because no name is read both ways.
+ */
 const arg = (n, d = null) => {
+  if (process.argv.includes(`--${n}`)) {
+    die(`--${n} needs a value: write --${n}=<value>, not --${n} <value>.`);
+  }
   const hit = process.argv.find(a => a.startsWith(`--${n}=`));
   return hit ? hit.slice(n.length + 3) : d;
 };
 const flag = (n) => process.argv.includes(`--${n}`);
-const die = (m) => { console.error(`✗ ${m}`); process.exit(1); };
+
+/**
+ * The command prefix for anything this script PRINTS as a next step or a rollback.
+ *
+ * Carries `--test` forward when that is where we are. A rollback line that silently
+ * drops it is worse than no rollback line at all: the operator is, by definition,
+ * reading it in a hurry after something went wrong, and pasting it would point a
+ * corrective write at PRODUCTION while they believed they were undoing a change on the
+ * test tier.
+ */
+const selfCmd = () =>
+  `node --import=dotenv/config scripts/configure-festive-public-offer.js${flag('test') ? ' --test' : ''}`;
 
 const APPLY  = flag('apply');
 const SLUG   = arg('slug', 'festive-2026');
@@ -68,6 +102,12 @@ const REVERT = flag('revert-to-list');
 const CREATE = flag('create');
 const USE_TEST = flag('test');
 const CODE   = arg('code', 'FESTIVE2026').toUpperCase();
+// 'on' | 'off' — the activation gate, flipped on its own. See the GATE block below.
+// Validated at parse time so a typo cannot fall through to a different mode.
+const GATE   = arg('activation-gate');
+if (GATE !== null && GATE !== 'on' && GATE !== 'off') {
+  die(`--activation-gate must be "on" or "off" (got "${GATE}").`);
+}
 
 /**
  * The agreed ladder. Percentages are the offer; the codes are stable keys that the
@@ -203,7 +243,21 @@ async function main() {
     maxRedemptions: campaign.maxRedemptions,
     redeemedCount: campaign.redeemedCount || 0,
     endsAt: campaign.endsAt,
+    requireActivation: !!campaign.requireActivation,
   };
+
+  /*
+    How many customers have actually come through the card.
+
+    Printed before the gate is flipped because it is the one number that says what
+    turning it on will COST: with the gate on, this is the entire audience. Zero here
+    and a live campaign means switching on would take the offer away from everyone at
+    once, which is a thing to know before doing it rather than after.
+  */
+  const activatedCount = await CampaignMember.countDocuments({
+    campaign: campaign._id,
+    activatedAt: { $ne: null },
+  });
 
   console.log(`Campaign "${campaign.name}" [${campaign.slug}]`);
   console.log(`   status          ${before.status}`);
@@ -211,6 +265,7 @@ async function main() {
   console.log(`   cart tiers      ${before.cartTiers}`);
   console.log(`   product tiers   ${before.productTiers}`);
   console.log(`   cap             ${before.maxRedemptions ?? 'none'}  (redeemed ${before.redeemedCount})`);
+  console.log(`   activation gate ${before.requireActivation ? 'ON — landing-page visitors only' : 'off — every signed-in customer'}  (${activatedCount} activated)`);
   console.log(`   ends            ${before.endsAt ? formatDateTimeIST(before.endsAt) : 'not set'}`);
 
   /*
@@ -282,6 +337,52 @@ async function main() {
     return;
   }
 
+  if (GATE !== null) {
+    /*
+      The activation gate, on its own switch.
+
+      Kept as a standalone mode rather than folded into the main reconfiguration for the
+      same reason --live is: this runs against a campaign that is already LIVE and taking
+      real money, and the operator flipping one boolean must not also re-apply the tier
+      ladder, the cap and the end date as a side effect.
+
+      Order of operations matters and is the house rule: the code that HONOURS this flag
+      ships first and is verified in production, and only then is the flag turned on. The
+      field defaults to false, so a deploy alone changes nothing for anybody.
+
+      ON:  the offer reaches only customers who activated it from the landing page —
+           i.e. who arrived via the printed card. Everyone who signed up through the
+           ordinary registration form loses it, including any who can see it today.
+      OFF: instant rollback to the open behaviour. No deploy, no data change.
+    */
+    const on = GATE === 'on';
+
+    console.log(`\nACTIVATION GATE: ${before.requireActivation ? 'on' : 'off'} → ${on ? 'on' : 'off'}`);
+    if (on) {
+      console.log(`   Only customers who open ${campaign.landingPath || 'the landing page'} while signed in will`);
+      console.log('   get this offer. Ordinary sign-ups stop seeing it everywhere: product cards,');
+      console.log('   the ribbon, the cart, and the checkout discount itself.');
+      console.log(`   ${activatedCount} customer(s) have activated so far.`);
+      if (before.redeemedCount > 0) {
+        console.log(`   ${before.redeemedCount} redemption(s) already banked — those orders are snapshotted`);
+        console.log('   and are NOT affected.');
+      }
+    } else {
+      console.log('   Reverting to the open offer: every signed-in, verified customer gets it again.');
+    }
+
+    if (!APPLY) {
+      console.log('\n--- DRY RUN — nothing written. Re-run with --apply. ---');
+      await mongoose.disconnect();
+      return;
+    }
+    await campaignService.update(campaign._id, { requireActivation: on });
+    console.log(`\n✓ Activation gate is ${on ? 'ON' : 'OFF'}.`);
+    console.log(`  Rollback:  ${selfCmd()} --activation-gate=${on ? 'off' : 'on'} --apply`);
+    await mongoose.disconnect();
+    return;
+  }
+
   if (TESTERS !== null) {
     /*
       TESTING mode: the offer runs on the real site, with real payment, but applies ONLY
@@ -325,7 +426,7 @@ async function main() {
     // campaign, a mislinked coupon, or a campaign with no ladder at all.
     const live = await campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE);
     console.log(`\n✓ ${live.slug} is LIVE. Anyone who scans the card can now redeem once.`);
-    console.log(`  Kill switch:  node --import=dotenv/config scripts/configure-festive-public-offer.js --revert-to-list --apply`);
+    console.log(`  Kill switch:  ${selfCmd()} --revert-to-list --apply`);
     await mongoose.disconnect();
     return;
   }

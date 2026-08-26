@@ -1552,6 +1552,22 @@ export const getAllOrdersAdmin = async (req, res) => {
     }
   }
 
+  // Spin-to-Win: "orders carrying a goodie that still needs packing".
+  //   spinReward=any       → won anything
+  //   spinReward=unpacked  → won something, not yet in a parcel  ← the one that matters
+  // Backed by the partial index on { 'spinReward.fulfilledAt', createdAt } declared in
+  // config/db.js; without that this would COLLSCAN a growing orders collection.
+  const rewardFilter = String(req.query.spinReward || '').trim();
+  if (rewardFilter === 'any') {
+    query['spinReward.result'] = { $exists: true };
+  } else if (rewardFilter === 'unpacked') {
+    query['spinReward.result'] = { $exists: true };
+    query['spinReward.fulfilledAt'] = null;
+    // A voided reward (order cancelled/refunded) must NOT sit in the packing queue —
+    // it is explicitly a do-not-pack.
+    query['spinReward.voidedAt'] = null;
+  }
+
   const sortField = ADMIN_ORDER_SORT_FIELDS.has(req.query.sortBy) ? req.query.sortBy : 'createdAt';
   const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
   const sort = { [sortField]: sortOrder };

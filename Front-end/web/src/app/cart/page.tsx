@@ -66,7 +66,7 @@ function CartPageContent() {
     })),
     [cart?.items]
   );
-  const { quote, loading: quoteLoading, error: quoteError } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
+  const { quote, quotedCouponCode, loading: quoteLoading, error: quoteError } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
 
   // ── Campaign reward ────────────────────────────────────────────────────────
   // An invited customer never types the code — the card tells them the reward is
@@ -109,6 +109,57 @@ function CartPageContent() {
       autoAppliedRef.current = false;
     });
   }, [campaignStatus?.eligible, campaignStatus?.couponCode, cart?.couponCode, cart?.items?.length, applyCoupon]);
+
+  /*
+    ── Dropping an offer that stopped being theirs ────────────────────────────
+
+    A campaign coupon can be sitting on a cart from a previous visit and then cease to
+    apply — the campaign was gated on activation, or switched off, or the customer used
+    it on another order. The server refuses it on every re-quote, so without this the
+    cart shows a permanent red error under the promo box for a code the customer never
+    typed and cannot remove without noticing a link they have no reason to look for.
+
+    Keyed on `couponErrorCode`, not on the message: only 'campaign' refusals are dropped.
+    An ordinary coupon the customer chose themselves is left exactly where it is, error
+    and all — they picked it, and silently deleting someone's coupon is worse than
+    showing them why it did not work. Cart-shaped campaign refusals ("add more to
+    unlock") are untagged by the server for the same reason.
+
+    Cannot fight the auto-apply above: that one requires `eligible`, and every refusal
+    tagged 'campaign' means this customer is not. The ref keeps a failed removal from
+    retrying on every render.
+  */
+  // The code this effect has already acted on, rather than a bare "have I run" boolean.
+  // A boolean cannot distinguish "already handled" from "a different coupon now needs
+  // handling", and it is never cleared on failure: a removal that keeps failing must not
+  // be retried on every render, since `removeCoupon` is a fresh identity on each provider
+  // render and would spin.
+  const staleCouponRef = useRef<string | null>(null);
+  useEffect(() => {
+    const code = cart?.couponCode;
+    if (!code || staleCouponRef.current === code) return;
+    /*
+      Only act on a quote that priced THIS code.
+
+      `quote` is retained across a coupon change (see `quotedCouponCode`), so during the
+      debounce it still carries the previous code's refusal. Without this check, a
+      customer who typed their own coupon immediately after a campaign coupon was refused
+      would have their coupon silently deleted on the strength of the old response.
+    */
+    if (quotedCouponCode !== code) return;
+    if (quote?.couponErrorCode !== 'campaign') return;
+
+    staleCouponRef.current = code;
+    removeCoupon().catch((err) => {
+      // Reported rather than shown. The customer did not ask for this coupon and cannot
+      // act on its removal failing; what matters is that WE find out, because the
+      // visible symptom is an error they cannot clear.
+      Sentry.captureException(err, {
+        tags: { feature: 'campaign', step: 'cart-stale-coupon-removal' },
+        extra: { code },
+      });
+    });
+  }, [cart?.couponCode, quotedCouponCode, quote?.couponErrorCode, removeCoupon]);
 
   const handleApplyCoupon = async () => {
     const code = couponInput.trim().toUpperCase();

@@ -64,6 +64,7 @@ import mediaRoutes from './media.js';
 import uploadRoutes from './uploads.js';
 import pageSeoRoutes from './pageSeo.js';
 import promoBannerRoutes from './promoBanners.js';
+import spinRoutes from './spin.js';
 import scheduledTasksRoutes from './scheduledTasks.js';
 
 import contactRoutes from './contact.js';
@@ -161,6 +162,11 @@ apiRouter.use('/page-seo', publicBrowsingRateLimit, pageSeoRoutes); // Public re
 // Site-wide promo banner: /active is public (read on every storefront page render);
 // admin CRUD guarded in-route.
 apiRouter.use('/promo-banners', publicBrowsingRateLimit, promoBannerRoutes);
+
+// Spin-to-Win. Every route is authenticated and per-order or per-admin, so it gets no
+// public browsing limit and no edge caching; the spin itself carries its own limiter
+// keyed on the real client IP (see routes/spin.js).
+apiRouter.use('/spin', spinRoutes);
 apiRouter.use('/scheduled-tasks', adminRouteRateLimit, scheduledTasksRoutes);
 apiRouter.use('/uploads', adminRouteRateLimit, uploadRoutes); // Admin-only: direct-to-Cloudinary signatures
 

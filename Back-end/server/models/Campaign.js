@@ -87,6 +87,29 @@ const CampaignSchema = new mongoose.Schema({
   // gate on isVerified, so this is what forces proof of mailbox control.
   requireVerifiedEmail: { type: Boolean, default: CAMPAIGN_REQUIRE_VERIFIED_EMAIL_DEFAULT },
 
+  /**
+   * The customer must have ACTIVATED this offer from its landing page before it prices
+   * anything — the second axis to `audience`, and independent of it.
+   *
+   * `audience` asks WHO MAY have the offer; this asks WHETHER THEY ASKED FOR IT. An
+   * 'everyone' campaign with this off is a site-wide sale that every signed-in shopper
+   * gets automatically. With it on, the campaign is still open to anyone — no allowlist,
+   * nothing to be invited to — but it reaches only people who arrived through the
+   * printed card, because `landingPath` is unlinked, noindex and out of the sitemap.
+   *
+   * That distinction is the whole point: a customer who signs up through the ordinary
+   * registration form has not been given this offer and must not see it advertised on
+   * product cards, in the cart, or anywhere else.
+   *
+   * Defaults OFF so every campaign that predates this flag — and every future ordinary
+   * sale — behaves exactly as before. Turning it on is an explicit operator decision.
+   *
+   * Enforced in campaignService.evaluate(), which is the single gate pricingService
+   * consults, so a non-activated customer who types the coupon code by hand is refused
+   * at quote AND at order creation rather than merely being shown less.
+   */
+  requireActivation: { type: Boolean, default: false },
+
   // ── Window ──────────────────────────────────────────────────────────────────
   startsAt: { type: Date, default: null },
   endsAt: { type: Date, default: null },

@@ -124,6 +124,10 @@ export const API_ENDPOINTS = {
   // Identity-free, so unlike CAMPAIGN_ME this one is safe to cache and share.
   CAMPAIGN_PRODUCT_RATES: (slug: string) => `/campaigns/${slug}/product-rates`,
   CAMPAIGN_CHECK_EMAIL: (slug: string) => `/campaigns/${slug}/check-email`,
+  // The signed-in customer claiming the offer off the printed card. Reachable only from
+  // the campaign's landing page, which is unlinked and noindex — that is what makes an
+  // offer public but unadvertised. Returns the same payload as CAMPAIGN_ME.
+  CAMPAIGN_ACTIVATE: (slug: string) => `/campaigns/${slug}/activate`,
   CAMPAIGN_ADMIN: (slug: string) => `/campaigns/${slug}/admin`,
   CAMPAIGN_REPORT: (slug: string) => `/campaigns/${slug}/report`,
   // Who actually redeemed — the complete record for BOTH audiences, unlike the member
@@ -152,6 +156,25 @@ export const API_ENDPOINTS = {
   PROMO_BANNERS_ADMIN: '/promo-banners/admin',            // admin list/create
   PROMO_BANNER_ADMIN_BY_ID: (id: string) => `/promo-banners/admin/${id}`,
   PROMO_BANNER_TOGGLE: (id: string) => `/promo-banners/admin/${id}/toggle`,
+
+  // ── Spin-to-Win (post-purchase reward wheel) ──────────────────────────────
+  // Customer: per-order, authenticated. Never edge-cached.
+  SPIN_ORDER_STATUS: (orderId: string) => `/spin/orders/${orderId}`,
+  SPIN_ORDER_SPIN: (orderId: string) => `/spin/orders/${orderId}`,
+  SPIN_ORDER_REVIEW_CLICKED: (orderId: string) => `/spin/orders/${orderId}/review-clicked`,
+  // Admin: campaigns
+  SPIN_CAMPAIGNS_ADMIN: '/spin/admin/campaigns',
+  SPIN_CAMPAIGN_BY_ID: (id: string) => `/spin/admin/campaigns/${id}`,
+  SPIN_CAMPAIGN_PUBLISH: (id: string) => `/spin/admin/campaigns/${id}/publish`,
+  SPIN_CAMPAIGN_STATUS: (id: string) => `/spin/admin/campaigns/${id}/status`,
+  SPIN_CAMPAIGN_CLONE: (id: string) => `/spin/admin/campaigns/${id}/clone`,
+  SPIN_CAMPAIGN_ODDS: (id: string) => `/spin/admin/campaigns/${id}/odds`,
+  // Admin: prizes
+  SPIN_CAMPAIGN_PRIZES: (id: string) => `/spin/admin/campaigns/${id}/prizes`,
+  SPIN_PRIZE_BY_ID: (prizeId: string) => `/spin/admin/prizes/${prizeId}`,
+  // Admin: the fulfilment queue
+  SPIN_WINNERS: '/spin/admin/winners',
+  SPIN_WINNER_FULFIL: (id: string) => `/spin/admin/winners/${id}/fulfil`,
 
   // Contact
   CONTACT: '/contact',

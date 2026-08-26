@@ -8,6 +8,7 @@ import { formatPriceINR } from '@/utils/priceFormatter';
 import { GOOGLE_ADS_PURCHASE_SEND_TO } from '@/lib/googleAds';
 import { buildPurchasePayload, itemName } from './purchase';
 import PurchaseTracker from './PurchaseTracker';
+import SpinSection from '@/components/spin/SpinSection';
 import ConversionFallback from './ConversionFallback';
 import { formatLongDateIST } from '@/lib/datetime';
 
@@ -182,8 +183,17 @@ export default async function OrderSuccessPage({
           </div>
         </div>
 
+        {/*
+          Spin-to-Win. Mounted BELOW the confirmation summary on purpose: the order
+          confirmation is the job of this page, and a game must never sit between the
+          customer and the receipt they came for. Renders nothing at all when there is no
+          live campaign, when the order is not eligible, or on any error — a confirmation
+          page must never show a broken widget over a successful order.
+        */}
+        <SpinSection orderId={order._id} />
+
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href={`/orders/${order._id}`}
             className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors text-center"

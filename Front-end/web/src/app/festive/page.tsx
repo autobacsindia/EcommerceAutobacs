@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Gift, CheckCircle2, ArrowRight, Clock, ShieldCheck, MailWarning } from 'lucide-react';
-import { useCampaign } from '@/hooks/queries/useCampaign';
+import { useCampaign, useActivateCampaign } from '@/hooks/queries/useCampaign';
 import { useAuth } from '@/context/AuthContext';
 import { trackCampaignOfferViewed } from '@/lib/analytics';
 import { ACTIVE_CAMPAIGN_SLUG } from '@/lib/constants';
@@ -56,6 +56,51 @@ export default function FestivePage() {
   const { data: campaign, isLoading } = useCampaign(0);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const countdown = useCountdown(campaign?.endsAt);
+
+  /*
+    ── Activation: the thing this page is actually for ────────────────────────
+
+    On a campaign that requires it, the offer reaches ONLY customers who have been
+    here. That is a real boundary rather than a formality because this route has no
+    link anywhere on the site, is `noindex`, and is absent from the sitemap — so
+    arriving means arriving from the printed card. A shopper who signs up through the
+    ordinary registration form never reaches this line and never gets the offer.
+
+    Fired from `requiresActivation && !activated` rather than from the refusal code.
+    The refusal code is the wrong signal: an unverified customer is refused for their
+    email BEFORE activation is ever considered, so keying on `not_activated` would skip
+    the exact person who most needs recording — someone who scans, registers, and is
+    sent off to their inbox. Activation and verification are independent, and the
+    server keeps enforcing verification at pricing time regardless.
+
+    A failure is deliberately swallowed to a retry rather than surfaced: the mutation's
+    own error state drives the panel below, and the customer's next move is the same
+    either way.
+  */
+  const activate = useActivateCampaign();
+  const needsActivation = !!campaign?.requiresActivation && !campaign.activated;
+  const activateRef = useRef(false);
+  /*
+    Covers the gap between "we know they need activating" and the response landing,
+    INCLUDING the render before the effect has run — `isPending` alone is false then, and
+    the panel would flash a refusal at someone who is about to be told they are in.
+
+    Ends the moment the mutation SETTLES, either way, and that second clause is
+    load-bearing rather than tidiness. `needsActivation` is derived from the server's
+    `activated`, which evaluate() cannot report on its lifecycle refusals — they return
+    before the member row is ever read. So a campaign that ends while a tab is open
+    reports `activated: false` for a customer who really did activate, `needsActivation`
+    stays true for ever, and without this the page would sit on a pulsing skeleton
+    instead of saying "this offer has ended". Once we have asked once, the answer we got
+    back is what gets rendered.
+  */
+  const activating =
+    isAuthenticated && needsActivation && !activate.isError && !activate.isSuccess;
+  useEffect(() => {
+    if (!isAuthenticated || !needsActivation || activateRef.current) return;
+    activateRef.current = true;
+    activate.mutate();
+  }, [isAuthenticated, needsActivation, activate]);
 
   /*
     The scan signal.
@@ -122,7 +167,11 @@ export default function FestivePage() {
         </div>
 
         {/* ── The claim ────────────────────────────────────────────────────── */}
-        {isLoading || authLoading ? (
+        {/* The activation round-trip is folded into the SAME skeleton as the initial
+            load, deliberately. A cardholder who has just signed in should see one
+            settling moment and then their reward — not "you cannot have this" for half
+            a second while the write lands, which is the version they would screenshot. */}
+        {isLoading || authLoading || activating ? (
           <div className="mt-12 h-44 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/50" />
         ) : offerOver ? (
           /* The campaign 404s when it is off, unconfigured, or past its end date. All
@@ -157,7 +206,11 @@ export default function FestivePage() {
             </Link>
           </div>
         ) : (
-          <Blocked reasonCode={campaign?.reasonCode ?? null} signedIn={isAuthenticated} />
+          <Blocked
+            reasonCode={campaign?.reasonCode ?? null}
+            signedIn={isAuthenticated}
+            onRetry={needsActivation ? () => activate.mutate() : undefined}
+          />
         )}
 
         {/* ── How the rate is decided ──────────────────────────────────────── */}
@@ -214,7 +267,12 @@ function Row({ term, value, note, highlight }: {
  * an unverified customer to a login screen they can already pass would loop them
  * forever. A dead end here is a lost customer holding a printed card.
  */
-function Blocked({ reasonCode, signedIn }: { reasonCode: string | null; signedIn: boolean }) {
+function Blocked({ reasonCode, signedIn, onRetry }: {
+  reasonCode: string | null;
+  signedIn: boolean;
+  /** Present only when the refusal is a failed activation, which is the one a retry fixes. */
+  onRetry?: () => void;
+}) {
   const box = 'mt-12 rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center';
 
   // The commonest case by far: a public offer, and the visitor simply is not signed in.
@@ -240,6 +298,35 @@ function Blocked({ reasonCode, signedIn }: { reasonCode: string | null; signedIn
             Create an account
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  /*
+    Signed in, on the right page, and STILL not activated — so the activation write
+    failed. The only refusal on this page the customer did nothing to cause, and the only
+    one where the fix is simply to try again.
+
+    Worth its own branch rather than falling through to the generic message: they are
+    holding a card, they did everything asked of them, and "this offer has not been
+    activated on your account" with no button would read as the card being worthless.
+  */
+  if (reasonCode === 'not_activated') {
+    return (
+      <div className={box}>
+        <h2 className="text-xl font-semibold">Almost there.</h2>
+        <p className="mt-2 text-zinc-400">
+          We could not activate your reward just now. It is still yours — try once more.
+        </p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-black transition hover:brightness-110"
+          >
+            Activate my reward <ArrowRight size={15} />
+          </button>
+        )}
       </div>
     );
   }

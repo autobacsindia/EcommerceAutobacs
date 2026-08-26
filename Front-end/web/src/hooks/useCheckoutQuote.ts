@@ -49,6 +49,16 @@ export interface CheckoutQuote {
    */
   savings: { catalog: number; coupon: number; karma: number; total: number };
   couponError: string | null;
+  /**
+   * Machine key for the CLASS of coupon refusal — 'campaign' when the applied code
+   * belongs to a promotional campaign this customer cannot use, null otherwise.
+   *
+   * Branch on this, never on `couponError`, which is finished prose. It exists so the
+   * cart can tell a refusal the customer can act on (below the minimum, cart too small)
+   * from one they cannot — an offer that was never theirs — and quietly drop the latter
+   * instead of parking a permanent red error under the promo box.
+   */
+  couponErrorCode: string | null;
   karmaPointsUsed: number;
   karmaPointValue: number;
   maxRedeemablePoints: number;
@@ -68,6 +78,17 @@ export function useCheckoutQuote(
   shippingCost = 0,
 ) {
   const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  /*
+    Which coupon code the CURRENT `quote` was actually priced with.
+
+    Needed because `quote` is deliberately retained across a coupon change — it is not
+    cleared while the 350 ms debounce and the request that follows it are in flight, so
+    the totals on screen do not flicker to nothing on every keystroke. The consequence is
+    that for a moment `quote.couponError` / `couponErrorCode` describe the PREVIOUS code,
+    and a caller acting on them would act on the wrong coupon. Anything that makes a
+    DECISION from the coupon fields must check this first.
+  */
+  const [quotedCouponCode, setQuotedCouponCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seqRef = useRef(0);
@@ -86,6 +107,7 @@ export function useCheckoutQuote(
         );
         if (seq !== seqRef.current) return; // a newer request superseded this one
         setQuote(res.quote);
+        setQuotedCouponCode(couponCode || null);
         setError(null);
       } catch (err: any) {
         if (seq !== seqRef.current) return;
@@ -98,5 +120,5 @@ export function useCheckoutQuote(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsKey, couponCode, redeemKarmaPoints, shippingCost]);
 
-  return { quote, loading, error };
+  return { quote, quotedCouponCode, loading, error };
 }

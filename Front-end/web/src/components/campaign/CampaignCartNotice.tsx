@@ -46,6 +46,22 @@ export default function CampaignCartNotice({
   }
 
   /*
+    An offer this customer was never given — say nothing at all.
+
+    Checked before the per-reason branches below because two of them would otherwise
+    make a promise we cannot keep. A signed-out visitor gets 'login' and would be told
+    "sign in to apply it"; an unverified one gets 'unverified' and would be told to
+    confirm their email. Both are true instructions for an open campaign and both are
+    lies for a gated one — doing either lands them back on this cart with no discount
+    and no explanation, which is worse than never having mentioned it.
+
+    Kept BELOW the applied branch on purpose: `applied` comes from the server's own
+    quote, so if the campaign really did price this bag, confirming it always wins over
+    any reasoning we do here.
+  */
+  if (campaign.requiresActivation && !campaign.activated) return null;
+
+  /*
     Not applied. Which of these it is decides what we ask them to do — and two of them
     are dead ends where any prompt would be a lie, so those stay silent.
   */

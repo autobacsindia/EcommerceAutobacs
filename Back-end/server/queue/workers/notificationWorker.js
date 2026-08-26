@@ -76,6 +76,14 @@ const handlers = {
     await emailReviewRequest(orderId);
   },
 
+  // Spin-to-Win: for a coupon prize this email carries the ONLY durable copy of the
+  // code — the reveal screen is transient. Idempotent via SpinResult.prizeEmailedAt.
+  'send-spin-prize-email': async (job) => {
+    const { orderId } = job.data;
+    const { emailSpinPrize } = await import('../../services/spinPrizeEmailService.js');
+    await emailSpinPrize(orderId);
+  },
+
   'send-magic-link-email': async (job) => {
     const { email, token, orderId } = job.data;
     await emailHandler.sendMagicLinkEmail(email, token, orderId);

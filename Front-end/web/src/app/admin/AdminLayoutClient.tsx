@@ -40,6 +40,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/orders', label: 'Orders', icon: '📦' },
       { href: '/admin/returns', label: 'Returns', icon: '↩️' },
       { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
+      { href: '/admin/spin', label: 'Spin to Win', icon: '🎡' },
+      { href: '/admin/spin/winners', label: 'Goodies to pack', icon: '🎁' },
     ],
   },
   // Inventory (Warehouses) — feature is fully implemented (frontend + backend

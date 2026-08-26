@@ -35,7 +35,7 @@ import {
 } from '../config/campaign.js';
 
 const EDITABLE_FIELDS = [
-  'name', 'description', 'status', 'audience', 'requireVerifiedEmail',
+  'name', 'description', 'status', 'audience', 'requireVerifiedEmail', 'requireActivation',
   'startsAt', 'endsAt', 'tiers', 'resolution', 'maxDiscountPerOrder', 'couponCode', 'productTiers',
   'allowKarmaStacking', 'maxRedemptions', 'landingPath', 'allowNonMonotonicTiers',
 ];
@@ -108,18 +108,61 @@ class CampaignService {
 
     const email = String(user.email || '').toLowerCase().trim();
 
+    /*
+      ── The member row: two independent questions, one lookup ─────────────────
+
+      MAY they have it (`audience`) and DID THEY ASK for it (`requireActivation`) are
+      separate gates that happen to read the same row, so the row is fetched once and
+      both are answered from it. Only fetched when a gate needs it: a public campaign
+      without activation — the ordinary site-wide sale — still does no member lookup at
+      all, exactly as before this flag existed.
+
+      Fetched BEFORE the verification gate below, even though verification refuses
+      first, so that `activated` is known on every path past identity. The landing page
+      decides whether to activate from that flag, and an unverified customer is
+      precisely the one who most needs it: they arrive from the card, register, and are
+      then sent off to their inbox. If activation could not be recorded until after they
+      confirmed, they would have to find their way back to a page reachable only from a
+      printed card, and the ones who did not would silently never receive the offer.
+    */
+    const needsMember = campaign.audience === CAMPAIGN_AUDIENCE.LIST || campaign.requireActivation;
+    const member = needsMember
+      ? await campaignMemberRepository.findByCampaignEmail(campaign._id, email, session)
+      : null;
+    const activated = !!member?.activatedAt;
+
     // Confirmed email is required by default. Load-bearing: registration sets
     // isVerified:false and login does not gate on it, so without this anyone who
     // guessed an invited address could register it and take the offer without ever
     // opening that inbox. Redemption must prove mailbox control.
     if (campaign.requireVerifiedEmail && !user.isVerified) {
-      return { reason: CAMPAIGN_REASON.UNVERIFIED };
+      return { reason: CAMPAIGN_REASON.UNVERIFIED, activated };
     }
 
     // ── Audience ──────────────────────────────────────────────────────────────
-    if (campaign.audience === CAMPAIGN_AUDIENCE.LIST) {
-      const member = await campaignMemberRepository.findByCampaignEmail(campaign._id, email, session);
-      if (!member) return { reason: CAMPAIGN_REASON.NOT_INVITED };
+    if (campaign.audience === CAMPAIGN_AUDIENCE.LIST && !member) {
+      return { reason: CAMPAIGN_REASON.NOT_INVITED, activated };
+    }
+
+    /*
+      ── Activation ────────────────────────────────────────────────────────────
+
+      The customer must have opened the campaign's landing page and asked for the
+      offer. What makes this a real boundary rather than a formality is that
+      `landingPath` is unlinked, noindex and absent from the sitemap — the printed card
+      is the only way anyone arrives there — so "activated" means "came in through the
+      card", which is exactly what a public-but-not-broadcast offer needs.
+
+      Checked HERE, in the one function pricingService consults, and not merely in the
+      UI. A customer who reads the coupon code off a friend's screen and types it into
+      the promo box must be refused the money, not just shown fewer badges.
+
+      Note this reads `activatedAt`, not the existence of the row: an ALLOWLIST campaign
+      already has a row for every invitee, so row-existence would make the gate a no-op
+      for precisely the campaigns that also want it.
+    */
+    if (campaign.requireActivation && !activated) {
+      return { reason: CAMPAIGN_REASON.NOT_ACTIVATED, activated };
     }
 
     // ── Already redeemed ──────────────────────────────────────────────────────
@@ -146,7 +189,7 @@ class CampaignService {
       if (coupon?.usageLimitPerUser != null) {
         const usage = await couponUserUsageRepository.findByCouponUser(coupon._id, userId, session);
         if (usage && usage.count >= coupon.usageLimitPerUser) {
-          return { reason: CAMPAIGN_REASON.ALREADY_USED };
+          return { reason: CAMPAIGN_REASON.ALREADY_USED, activated };
         }
       }
     }
@@ -157,7 +200,7 @@ class CampaignService {
     // is still eligible and must be told so. Conflating the two returned "not eligible"
     // for a zero-value cart, which silently killed the site-wide ribbon and the landing
     // page's success panel — both of which ask about a cart worth nothing.
-    return { eligible: true, tier: resolveTier(campaign, eligiblePaise) };
+    return { eligible: true, activated, tier: resolveTier(campaign, eligiblePaise) };
   }
 
   /**
@@ -282,6 +325,32 @@ class CampaignService {
         than stored so the two can never drift.
       */
       reasonCode: result.reason ? toReasonCode(result.reason) : null,
+      /*
+        ── The activation pair ───────────────────────────────────────────────────
+
+        Published so the landing page can decide whether to activate WITHOUT having to
+        infer it from a refusal code. Inferring was the first draft and it was wrong in
+        the one case that matters most: a customer who scans the card, registers, and is
+        refused for an unconfirmed email never sees `not_activated` at all, because
+        verification refuses first. They would leave for their inbox unactivated, and
+        the offer they were holding a card for would simply never appear.
+
+        `requiresActivation` also keeps the write off campaigns that do not want it —
+        without it the page would POST an activation at every ordinary public sale and
+        quietly fill its member roster with rows the campaign never reads. (activate()
+        refuses those independently; this only saves the round trip.)
+
+        ⚠ `activated` is DETERMINED only once the campaign is live and the visitor is
+        identified. evaluate() refuses a draft/not-yet-open/ended/exhausted campaign, and
+        an anonymous visitor, before it ever reads the member row — so on those paths this
+        reports false without having looked, not false-because-we-checked. Do not treat it
+        as "this customer never came through the card" unless `eligible` is true or the
+        refusal is one of the later, per-customer ones. It is published for the landing
+        page's "should I activate?" decision, and that page is only reachable while the
+        offer is worth activating.
+      */
+      requiresActivation: !!campaign.requireActivation,
+      activated: !!result.activated,
       tier: result.tier || null,
       // The ladder is safe to publish: it is what the card advertises, and it lets
       // the cart meter show "add ₹X more to save ₹Y more" without a second call.
@@ -315,6 +384,101 @@ class CampaignService {
           }
         : null,
     };
+  }
+
+  /**
+   * "I scanned the card, give me this offer" — the landing page's one write.
+   *
+   * Records that this signed-in customer reached the campaign's landing path and asked
+   * for the offer, which is what `requireActivation` then demands at pricing time.
+   *
+   * ── What this is, and is not, protecting ──────────────────────────────────────
+   *
+   * It is not a secret. The landing path is public and a printed QR will be
+   * photographed and forwarded — that is expected, and was the reasoning for making
+   * this campaign's audience 'everyone' in the first place. What activation buys is
+   * that the offer reaches ONLY people who came through the card: someone who signs up
+   * through the ordinary registration form never sees it advertised and cannot redeem
+   * it. Abuse is still bounded by the same three controls as before — the redemption
+   * cap, the verified-email requirement, and usageLimitPerUser on the managed coupon.
+   *
+   * Refuses on a dead campaign rather than silently succeeding. Activating into an
+   * offer that has ended would leave a row claiming the customer holds something they
+   * do not, and the landing page would have to re-derive the bad news anyway. The one
+   * refusal deliberately NOT made here is 'already used': that customer activated
+   * legitimately and re-opening their card should not error at them.
+   *
+   * Idempotent — the landing page calls this on every visit.
+   *
+   * @returns the same shape as statusForUser, so the caller re-renders from one round
+   *          trip instead of activating and then re-fetching.
+   */
+  async activate(slug, userId, now = new Date()) {
+    const campaign = await campaignRepository.findBySlug(slug);
+    if (!campaign) throw new AppError('Campaign not found', 404);
+    if (!userId) throw new AppError('Please sign in to activate this offer', 401);
+
+    /*
+      A campaign that does not gate on activation has nothing to activate.
+
+      Enforced HERE and not only in the landing page's "should I call this?" check: the
+      route is public to any signed-in customer, so without this anyone could POST it at
+      an ordinary site-wide sale and write member rows that campaign never reads —
+      quietly turning its roster, and every funnel count drawn from it, into noise.
+
+      A silent no-op rather than a 4xx, and deliberately so. The honest answer to "give
+      me this offer" on an ungated campaign is "you already have it", which is precisely
+      what the status below says. Erroring would also turn an operator switching the gate
+      OFF into a visible failure for every customer who happened to be on the page.
+    */
+    if (!campaign.requireActivation) return this.statusForUser(slug, userId, 0);
+
+    /*
+      Only the LIFECYCLE refusals block, and the list is deliberately a whitelist of
+      four rather than "anything evaluate() complained about".
+
+      There is nothing to activate into when the campaign is off, has not opened, has
+      closed, or has been fully claimed — a row recorded then would tell the customer
+      they hold something that does not exist. Every OTHER refusal is either what we are
+      about to fix (NOT_ACTIVATED), a condition activation is deliberately independent
+      of (UNVERIFIED — see below), or simply not blocking (ALREADY_USED: they activated
+      properly and spent it; reopening their card must not error at them).
+
+      UNVERIFIED is the important one. The gates are orthogonal on purpose: this records
+      that they came through the card, evaluate() still refuses to price anything until
+      the address is confirmed. Blocking here instead would strand exactly the customer
+      the card is aimed at — scan, register, get sent to an inbox, and never return to a
+      page that has no link anywhere on the site.
+
+      Reusing evaluate() rather than re-reading status/window/cap off the document is
+      what stops this endpoint and the pricing gate drifting apart.
+    */
+    const BLOCKING = [
+      CAMPAIGN_REASON.INACTIVE,
+      CAMPAIGN_REASON.NOT_STARTED,
+      CAMPAIGN_REASON.ENDED,
+      CAMPAIGN_REASON.EXHAUSTED,
+    ];
+    const pre = await this.evaluate(campaign, userId, 0, null, now);
+    if (pre.reason && BLOCKING.includes(pre.reason)) throw new AppError(pre.reason, 400);
+
+    const user = await userRepository.getCampaignIdentity(userId);
+    const email = String(user?.email || '').toLowerCase().trim();
+    if (!email) throw new AppError('Your account has no email address', 400);
+
+    /*
+      An allowlist campaign must not gain a member row from a scan — see
+      activateForUser. A stranger holding a forwarded card gets null back and the same
+      'not invited' refusal the pricing gate would give them, rather than quietly
+      enrolling themselves.
+    */
+    const createIfMissing = campaign.audience !== CAMPAIGN_AUDIENCE.LIST;
+    const member = await campaignMemberRepository.activateForUser(
+      campaign._id, email, userId, { createIfMissing },
+    );
+    if (!member) throw new AppError(CAMPAIGN_REASON.NOT_INVITED, 403);
+
+    return this.statusForUser(slug, userId, 0);
   }
 
   /** Bind an invite to the account that proved control of the address. */

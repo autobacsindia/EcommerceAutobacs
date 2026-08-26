@@ -26,6 +26,8 @@ function mockApi({
   reasonCode = null as string | null,
   percent = 8 as number | null,
   onSaleCapped = false,
+  requiresActivation = false,
+  activated = false,
 }) {
   (apiClient.get as jest.Mock).mockImplementation((url: string) => {
     if (url.includes('/product-rates')) {
@@ -42,6 +44,7 @@ function mockApi({
         slug: 'festive-2026', name: 'Festive', endsAt: null,
         couponCode: eligible ? 'FESTIVE2026' : null,
         eligible, reason: null, reasonCode,
+        requiresActivation, activated,
         tier: null, tiers: [], maxDiscountPerOrder: 50000,
         productLadder: { maxPercent: 8, defaultPercent: 4, onSaleMaxPercent: 2 },
       },
@@ -68,19 +71,44 @@ describe('CampaignRateBadge', () => {
     expect(screen.getByText('₹800')).toBeInTheDocument();
   });
 
-  it('shows to a signed-out visitor, with the reason to sign in', async () => {
-    // The offer is public and the card is printed — a rate on the page is the thing
-    // that makes signing in worth doing.
+  it('says nothing to a signed-out visitor', async () => {
+    /*
+      This used to advertise the rate to anyone, on the reasoning that a visible discount
+      is what makes signing in worth doing. That is true for an offer the whole site is
+      meant to have, and false for one gated on activation: most people who saw the badge
+      would sign in and be charged full price anyway. A promise on a product page has to
+      survive to the invoice.
+    */
     mockApi({ eligible: false, reasonCode: 'login', percent: 8 });
-    renderBadge();
-    expect(await screen.findByText(/save 8% more/i)).toBeInTheDocument();
-    expect(screen.getByText(/sign in to claim it/i)).toBeInTheDocument();
+    const { container } = renderBadge();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('points an unverified shopper at the one thing that unblocks them', async () => {
+  it('says nothing to an unverified shopper', async () => {
     mockApi({ eligible: false, reasonCode: 'unverified', percent: 8 });
+    const { container } = renderBadge();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('says nothing to a customer who never came through the card', async () => {
+    // The case the activation gate exists for: they registered through the ordinary
+    // sign-up form, so the checkout will refuse this discount and the badge must not
+    // promise it.
+    mockApi({
+      eligible: false, reasonCode: 'not_activated', percent: 8,
+      requiresActivation: true, activated: false,
+    });
+    const { container } = renderBadge();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows the rate once that customer has activated', async () => {
+    mockApi({ eligible: true, percent: 8, requiresActivation: true, activated: true });
     renderBadge();
-    expect(await screen.findByText(/confirm your email/i)).toBeInTheDocument();
+    expect(await screen.findByText(/save 8% more/i)).toBeInTheDocument();
   });
 
   it('promises nothing to someone who has already redeemed', async () => {

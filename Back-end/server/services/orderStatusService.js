@@ -6,6 +6,7 @@
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import leadSyncService from './leadSyncService.js';
+import spinService from './spinService.js';
 import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
 
 const LOYALTY_JOB_BY_STATUS = {
@@ -299,6 +300,12 @@ class OrderStatusService {
       // so it's deterministic for callers/tests but never fatal.
       await this._syncCrmOnStatus(order, newStatus);
 
+      // Spin-to-Win clawback: a cancelled or returned order gives its prize back.
+      // Awaited (not queued) for the same reason as the CRM sync — deterministic for
+      // callers and tests — but never fatal, because a reward is not worth failing a
+      // legitimate status transition over.
+      await this._voidSpinRewardOnStatus(order, newStatus);
+
       return {
         success: true,
         order,
@@ -380,6 +387,31 @@ class OrderStatusService {
    * new lead. Wrapped so a CRM hiccup can never fail an order update.
    * @private
    */
+  /**
+   * Withdraw the order's Spin-to-Win prize when the money goes back.
+   *
+   * Closes the obvious abuse: buy → spin → win the expensive goodie → cancel the order
+   * → repeat, which would otherwise be a free warehouse. spinService.voidForOrder is
+   * idempotent (it flips granted → void atomically and only the winning caller touches
+   * stock), so a re-entered transition or a retried job cannot return the same unit
+   * twice.
+   *
+   * Failure is logged, never thrown: a prize clawback must not be able to block a
+   * customer's cancellation or a refund from completing.
+   * @private
+   */
+  async _voidSpinRewardOnStatus(order, newStatus) {
+    if (!['cancelled', 'returned', 'refunded'].includes(newStatus)) return;
+    const reason = newStatus === 'cancelled'
+      ? 'order_cancelled'
+      : (newStatus === 'returned' ? 'order_returned' : 'order_refunded');
+    try {
+      await spinService.voidForOrder(order._id, reason);
+    } catch (err) {
+      console.error('[OrderStatus] Spin reward clawback failed:', err?.message);
+    }
+  }
+
   async _syncCrmOnStatus(order, newStatus) {
     try {
       // `processing` is the first paid fulfillment stage (payment captured), so

@@ -238,7 +238,7 @@ process.on('SIGINT', async () => {
  * Mongoose autoIndex covers schema-declared indexes, but this provides an explicit
  * safety net for production environments where autoIndex may be bypassed.
  */
-async function ensureCriticalIndexes() {
+export async function ensureCriticalIndexes() {
   try {
     const db = mongoose.connection.db;
 
@@ -427,9 +427,80 @@ async function ensureCriticalIndexes() {
       }
     );
     console.log('✓ ReturnRequest unique active-return index confirmed');
+
+    // ── Spin-to-Win ────────────────────────────────────────────────────────────
+    // THE idempotency guarantee for the reward wheel: one spin per order, forever.
+    // spinService pre-checks with a findOne, but under snapshot isolation two
+    // concurrent first-spins cannot see each other's uncommitted insert — this unique
+    // index is the actual serialization point, exactly as payments.gatewayPaymentId is
+    // for duplicate webhook deliveries. autoIndex is off in prod, so a schema-declared
+    // index would NEVER reach the live cluster; this is what builds it.
+    // NOTE: if pre-existing duplicate spins exist this build fails — dedupe first.
+    await db.collection('spinresults').createIndex(
+      { order: 1 },
+      { name: 'unique_spin_per_order', unique: true, background: true }
+    );
+    // The admin fulfilment queue (granted, unpacked goodies, newest first) and the
+    // per-user campaign cap check.
+    await db.collection('spinresults').createIndex(
+      { campaign: 1, status: 1, fulfilledAt: 1, spunAt: -1 },
+      { background: true }
+    );
+    await db.collection('spinresults').createIndex(
+      { user: 1, campaign: 1 },
+      { background: true }
+    );
+    // The draw's candidate-pool query, run inside the spin transaction.
+    await db.collection('spinprizes').createIndex(
+      { campaign: 1, active: 1, stockRemaining: 1 },
+      { background: true }
+    );
+    await db.collection('spinprizes').createIndex(
+      { campaign: 1, isFloorPrize: 1 },
+      { background: true }
+    );
+    // "Which campaign is live right now" — runs on every eligible order-success render
+    // that misses the cache. NOT a TTL on endsAt, and it must never become one: expiry
+    // has to stop the wheel RENDERING, not delete the campaign and orphan every winner
+    // attached to it.
+    await db.collection('spincampaigns').createIndex(
+      { status: 1, startsAt: 1, endsAt: 1 },
+      { background: true }
+    );
+    // The admin orders-list "has an unpacked reward" filter, on the ORDERS collection.
+    // Declared on OrderSchema too, but a schema declaration alone never reaches prod
+    // (autoIndex is off) — without this line the filter would silently COLLSCAN a
+    // growing orders collection. Partial, so it indexes only the small minority of
+    // orders that actually won something. $exists is valid in a partialFilterExpression
+    // (unlike $ne, which MongoDB rejects outright and never tells you about).
+    await db.collection('orders').createIndex(
+      { 'spinReward.fulfilledAt': 1, createdAt: -1 },
+      {
+        name: 'spin_reward_fulfilment',
+        partialFilterExpression: { 'spinReward.result': { $exists: true } },
+        background: true
+      }
+    );
+    console.log('✓ Spin-to-Win indexes confirmed');
+
+    return { ok: true, error: null };
   } catch (err) {
-    // Log but never crash the server over index verification
+    // Log but never crash the server over index verification.
+    //
+    // ⚠️ This catch is around the WHOLE pass, so the first failure silently skips every
+    // index after it. That is how the Spin-to-Win indexes came to be missing entirely:
+    // `spinresults.order` was declared both on the schema (`unique: true`, built by
+    // autoIndex as `order_1`) and here under a different name, MongoDB rejected the
+    // second, and everything below it — including the orders partial index — never ran.
+    //
+    // tests/indexDrift.test.js now runs this whole function against a real MongoDB with
+    // the schema indexes already built, so any new name collision fails CI instead of
+    // going quiet. Do NOT declare an index on a schema AND here; pick one place.
     console.error('✗ ensureCriticalIndexes error:', err.message);
+    // Returned rather than thrown: the only caller is a fire-and-forget listener on
+    // `connected`, so throwing here would surface as an unhandled rejection instead of
+    // a crash we could act on. The return value is what the drift guard asserts.
+    return { ok: false, error: err };
   }
 }
 

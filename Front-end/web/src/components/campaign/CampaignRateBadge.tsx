@@ -2,7 +2,7 @@
 
 import { Gift } from 'lucide-react';
 import { useCurrency } from '@/context/CurrencyContext';
-import { useCampaign } from '@/hooks/queries/useCampaign';
+import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { useCampaignProductRates, lineSavings } from '@/hooks/queries/useCampaignProductRates';
 
 /**
@@ -20,10 +20,16 @@ import { useCampaignProductRates, lineSavings } from '@/hooks/queries/useCampaig
  * show it is per-user, and comes from the private eligibility call the page already
  * makes. Keeping them separate is what lets the expensive-to-cache half stay small.
  *
- * Shown to signed-OUT visitors deliberately: the offer is public, the card is printed,
- * and a rate on the page is the thing that makes signing in worth doing. What it must
- * never do is promise a rate to someone who cannot have it — a shopper who has already
- * redeemed, or an offer fully claimed, sees nothing rather than a tease.
+ * ── Only where the discount will actually be honoured ─────────────────────────
+ *
+ * This used to render for signed-OUT visitors too, on the reasoning that a visible rate
+ * is what makes signing in worth doing. That holds for an offer the whole site is meant
+ * to have. It is exactly wrong for one gated on activation, where the people who would
+ * see the badge and then be charged full price are the majority — anyone who registered
+ * through the ordinary form rather than through the printed card.
+ *
+ * So the badge now follows eligibility, via the same `useCampaignBadgeVisible` rule every
+ * listing uses. A promise made on a product page has to survive to the invoice.
  */
 export default function CampaignRateBadge({
   productId,
@@ -38,21 +44,12 @@ export default function CampaignRateBadge({
   className?: string;
 }) {
   const { formatPrice } = useCurrency();
-  const { data: campaign } = useCampaign(0);
   const { data: rates } = useCampaignProductRates([productId]);
+  const visible = useCampaignBadgeVisible();
 
   const rate = rates?.rates?.[productId];
   if (!rate || rate.percent <= 0) return null;
-
-  /*
-    Refusals that mean "this person will never get it", as opposed to "not yet".
-    'login' and 'unverified' are both fixable in a minute, so those shoppers still see
-    the rate — it is the reason to bother. 'already_used' and 'exhausted' are terminal,
-    and advertising a discount to someone the checkout will refuse is a broken promise
-    dressed as marketing.
-  */
-  const terminal = campaign?.reasonCode === 'already_used' || campaign?.reasonCode === 'exhausted';
-  if (terminal) return null;
+  if (!visible) return null;
 
   const { campaign: saving } = lineSavings({ price, originalPrice, quantity: 1, percent: rate.percent });
   if (saving <= 0) return null;
@@ -71,11 +68,6 @@ export default function CampaignRateBadge({
            so the offer adds a reduced rate on top; a shopper who expects the headline
            rate and is charged less reads the gap as being short-changed. */
         <span className="text-[11px] text-ink-muted">already on offer, so this is the added rate</span>
-      )}
-      {!campaign?.eligible && (
-        <span className="text-[11px] text-ink-muted">
-          {campaign?.reasonCode === 'unverified' ? 'confirm your email to claim it' : 'sign in to claim it'}
-        </span>
       )}
     </div>
   );

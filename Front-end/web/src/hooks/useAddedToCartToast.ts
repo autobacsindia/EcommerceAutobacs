@@ -50,11 +50,15 @@ export function useAddedToCartToast() {
       const qty = Math.max(1, Math.floor(quantity) || 1);
       /*
         The catalogue half of the saving is true for ANYONE, so it always counts. The
-        campaign half counts only when this shopper can actually claim it — the card
-        badge is deliberately shown to signed-out shoppers as a reason to sign in
-        (see `useCampaignBadgeVisible`), but that is an advertised *rate*, not a rupee
-        figure claimed as already banked. Promising a signed-out visitor they "saved
-        ₹240" is a promise the cart refuses to keep.
+        campaign half counts only when this shopper can actually claim it.
+
+        The gate stays here even though `useCampaignBadgeVisible` now hides the badge
+        from everyone ineligible, so callers "should" only ever pass a rate to someone
+        who has it. Callers pass the rate RAW by contract — that is the whole point of
+        this hook — and several do so without consulting the badge rule at all (the
+        wishlist and the sticky bar both read the rates hook directly). One of them
+        forgetting is a rupee figure claimed as banked and then contradicted by the
+        cart, so eligibility is applied once, here, where no call site can skip it.
       */
       const saved = lineSavings({
         price,

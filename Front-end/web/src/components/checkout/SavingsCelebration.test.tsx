@@ -17,7 +17,7 @@ const quote = (over: Partial<CheckoutQuote> = {}): CheckoutQuote => ({
   appliedCoupon: { code: 'FESTIVE', type: 'percentage', value: 0 },
   appliedCampaign: null, discountLines: null,
   savings: { catalog: 2000, coupon: 1000, karma: 0, total: 3000 },
-  couponError: null, karmaPointsUsed: 0, karmaPointValue: 1, maxRedeemablePoints: 0,
+  couponError: null, couponErrorCode: null, karmaPointsUsed: 0, karmaPointValue: 1, maxRedeemablePoints: 0,
   ...over,
 });
 

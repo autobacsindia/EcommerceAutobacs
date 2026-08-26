@@ -71,6 +71,7 @@ interface Campaign {
   status: CampaignStatus;
   audience: 'list' | 'everyone';
   requireVerifiedEmail: boolean;
+  requireActivation: boolean;
   allowKarmaStacking: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -398,6 +399,25 @@ export default function AdminCampaignEditor() {
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               With this off, anyone who guesses an invited customer&apos;s address can register it and
               take the offer without ever opening that inbox. Leave it on unless you have a specific reason.
+            </p>
+          )}
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input type="checkbox" checked={value('requireActivation') ?? false}
+              onChange={(e) => set({ requireActivation: e.target.checked })} />
+            Only customers who activated it on the landing page
+          </label>
+          {value('requireActivation') === true && (
+            /* Stated plainly because the cost is invisible from this screen: switching
+               this on takes the offer away from everyone who has not been to the landing
+               page, including customers who can see it right now. */
+            <p className="flex items-start gap-2 rounded border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              The offer reaches only people who opened{' '}
+              <span className="font-semibold">{value('landingPath') || 'the landing page'}</span>{' '}
+              while signed in — which, since that page has no link anywhere on the site, means
+              people who scanned the printed card. Everyone else stops seeing it entirely: no
+              badges, no ribbon, no discount at checkout. Redemptions already banked are not
+              affected.
             </p>
           )}
           <label className="flex items-center gap-2 text-sm text-zinc-300">

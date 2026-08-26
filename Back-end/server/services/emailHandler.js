@@ -494,6 +494,21 @@ class EmailHandler {
    * @param {Array<{name: string, slug: string, image: string}>} params.products - Reviewable products
    * @returns {Promise<Object>} - Result with success status
    */
+  /**
+   * Spin-to-Win: tell the winner what they won.
+   *
+   * For a coupon prize this email is the ONLY durable copy of the code — the reveal
+   * screen is transient and the customer may have closed the tab. Provider-only, like
+   * every other send here; idempotency lives in spinPrizeEmailService.
+   */
+  async sendSpinPrizeEmail({ email, name, orderId, prize }) {
+    const { spinPrizeEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = spinPrizeEmail({ name, orderId, prize, company: companyInfo });
+
+    return this.sendEmail({ to: email, subject, text, html });
+  }
+
   async sendReviewRequest({ to, order, user = null, products }) {
     const { reviewRequestEmail } = await import('../utils/emailTemplates.js');
     const { companyInfo } = await import('../config/company.js');

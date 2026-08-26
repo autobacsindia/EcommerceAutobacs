@@ -41,6 +41,16 @@ class CouponRepository extends BaseRepository {
   }
 
   /** Active, public, in-date, not-globally-exhausted coupons for the discovery list. */
+  /**
+   * Mint a coupon inside a caller's transaction. Used by the Spin-to-Win draw so a
+   * won coupon and the win itself commit together — a prize the customer can see but
+   * cannot redeem is worse than no prize at all.
+   */
+  async createInSession(doc, session) {
+    const [created] = await Coupon.create([doc], { session });
+    return created;
+  }
+
   async findAvailable(now) {
     return Coupon.find({
       isActive: true,

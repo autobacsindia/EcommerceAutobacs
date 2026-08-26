@@ -75,3 +75,23 @@ export const supportSubmitRateLimit = rateLimit({
   max: 20,
   message: 'Too many support messages. Please wait before sending another.'
 });
+
+/**
+ * Spin-to-Win: the wheel click.
+ *
+ * Deliberately keyed on the REAL client IP, not `req.ip`. Behind Cloudflare `req.ip` is
+ * the edge, so every customer in the country shares one bucket and the limiter silently
+ * does nothing — a house landmine this repo has already documented. The user id comes
+ * first when present; the IP is the fallback that actually has to work.
+ *
+ * The limit is generous because the endpoint is idempotent (a repeat spin returns the
+ * same prize, it does not consume more stock). This exists to stop scripted enumeration
+ * of order ids, not to police an impatient customer double-clicking.
+ */
+export const spinRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 20,
+  message: 'Too many spin requests. Please slow down.',
+  keyGenerator: (req) =>
+    `rate_limit:spin:${req.user?.id || req.headers['cf-connecting-ip'] || req.ip}`,
+});

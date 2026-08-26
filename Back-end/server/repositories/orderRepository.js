@@ -313,6 +313,54 @@ class OrderRepository extends BaseRepository {
     return q;
   }
 
+  /** Plain lean read — for eligibility checks that only inspect fields. */
+  async findLean(id, session = null) {
+    let q = Order.findById(id).lean();
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  /**
+   * The order fields the spin eligibility check actually reads — and nothing else.
+   *
+   * `user` is included so this single read serves BOTH the ownership check and the
+   * eligibility check. The storefront polls the spin status every 3s for up to 90s
+   * while the payment webhook lands, and the two used to be separate reads of the same
+   * document, the second of them unprojected: a full order carries its items array,
+   * both addresses and the payment snapshot, so that was several KB pulled from Atlas
+   * thirty times to answer "is it paid yet".
+   *
+   * Keep this projection in step with checkEligibility — a field read there but missing
+   * here reads as undefined, which for `paymentStatus` would fail CLOSED (no spin) and
+   * for `source` or `state` would fail OPEN. tests/spinService.test.js pins it.
+   */
+  async findForSpinEligibility(id) {
+    return Order.findById(id)
+      .select('user paymentStatus status source createdAt totalAmount shippingAddress.state')
+      .lean();
+  }
+
+  /**
+   * Mark the denormalised Spin-to-Win reward as withdrawn, so the packing screen shows
+   * DO NOT PACK. Matched on the result id too, so a stale clawback cannot stamp a
+   * reward the order no longer carries.
+   */
+  async markSpinRewardVoided(orderId, resultId, session = null) {
+    return Order.updateOne(
+      { _id: orderId, 'spinReward.result': resultId },
+      { $set: { 'spinReward.voidedAt': new Date() } },
+      { session },
+    );
+  }
+
+  /** Mirror the "packed it" tick onto the order snapshot. */
+  async markSpinRewardFulfilled(orderId, resultId, fulfilledAt) {
+    return Order.updateOne(
+      { _id: orderId, 'spinReward.result': resultId },
+      { $set: { 'spinReward.fulfilledAt': fulfilledAt } },
+    );
+  }
+
   async save(order, session = null) {
     if (session) return order.save({ session });
     return order.save();
