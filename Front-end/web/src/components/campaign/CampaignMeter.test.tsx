@@ -30,7 +30,13 @@ const STATUS: CampaignStatus = {
   productLadder: null,
 };
 
-function renderMeter(props: { cartValue: number; appliedDiscount?: number }, status = STATUS) {
+// `appliedDiscount` is nullable on the component — the cart passes null when the quote's
+// coupon is not this campaign's — so the harness has to allow it, or the one test that
+// pins that behaviour cannot typecheck.
+function renderMeter(
+  props: { cartValue: number; appliedDiscount?: number | null },
+  status = STATUS,
+) {
   (apiClient.get as jest.Mock).mockResolvedValue({ success: true, campaign: status });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -90,7 +96,7 @@ describe('CampaignMeter', () => {
 
   it('ignores a null appliedDiscount (an unrelated coupon is applied)', async () => {
     // The cart passes null when the quote's coupon is NOT this campaign's, so another
-    // coupon's discount can never be displayed under the festive label.
+    // coupon's discount can never be displayed under the campaign's label.
     renderMeter({ cartValue: 30000, appliedDiscount: null });
     expect(await screen.findByText('₹10,000')).toBeInTheDocument();
   });
@@ -150,11 +156,26 @@ describe('CampaignMeter — per-product campaign', () => {
     expect(await screen.findByText('₹1,200')).toBeInTheDocument();
   });
 
-  it('publishes the three rates so a small saving reads as the rule, not a short-change', async () => {
+  it('states the enforced ceiling in rupees and quotes no rate at all', async () => {
+    /* The 8/4/2 ladder used to be spelled out here. It is the RULE, and the OUTCOME is
+       already directly above in rupees — quoting three percentages beside it only asks
+       the shopper to check our arithmetic. What is worth adding is the ceiling, because
+       it bounds what the figure above can ever become. */
     renderMeter({ cartValue: 30000, appliedDiscount: 1200 }, PRODUCT_STATUS);
-    expect(await screen.findByText('8%')).toBeInTheDocument();
-    expect(screen.getByText('4%')).toBeInTheDocument();
-    expect(screen.getByText('2%')).toBeInTheDocument();
+    expect(await screen.findByText(/up to ₹50,000 off/i)).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it('drops the ceiling clause rather than falling back to a rate', async () => {
+    /* An uncapped campaign has no honest rupee maximum — the answer would be "as much
+       as the most expensive thing you can buy". Saying nothing beats saying "up to 8%". */
+    renderMeter(
+      { cartValue: 30000, appliedDiscount: 1200 },
+      { ...PRODUCT_STATUS, maxDiscountPerOrder: null },
+    );
+    expect(await screen.findByText(/applied for you, no code to enter/i)).toBeInTheDocument();
+    expect(screen.queryByText(/up to/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
   it('never claims a bigger cart earns more, because it does not', async () => {

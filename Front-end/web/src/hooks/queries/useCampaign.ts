@@ -118,7 +118,7 @@ export function useCampaign(cartValue = 0, slug: string = ACTIVE_CAMPAIGN_SLUG) 
  * redeemed or arrived after the cap ran out — on the reasoning that a visible discount
  * is what makes signing in worth doing. That reasoning holds for a campaign the whole
  * site is meant to see. It is exactly wrong for one gated on activation: a shopper who
- * signed up through the ordinary registration form would be shown "+8% festive" on every
+ * signed up through the ordinary registration form would be shown "+₹1,840 off" on every
  * card and then charged full price, which is a bait-and-switch we would have built on
  * purpose.
  *
@@ -229,4 +229,26 @@ export function nextTier(status: CampaignStatus | undefined, cartValue: number):
     }
   }
   return null;
+}
+
+/**
+ * "up to ₹1,87,000 off" — the offer stated as MONEY, for surfaces holding no product.
+ *
+ * The ribbon, the cart notice and the landing hero all have to describe the offer with
+ * no price in hand, which is the one place a percentage used to be unavoidable. The
+ * figure here is `maxDiscountPerOrder`: not an estimate of what a shopper might save but
+ * the ceiling `apportionCap` actually enforces in pricingService, so "up to ₹X" is true
+ * by construction — nobody can be discounted past it, whatever they put in the bag.
+ *
+ * Returns null when no ceiling is configured, and callers must then say nothing rather
+ * than fall back to a rate. An uncapped campaign has no honest rupee maximum: the answer
+ * would be "as much as the most expensive thing you can buy", which is not a promise.
+ */
+export function campaignCeilingLabel(
+  campaign: CampaignStatus | null | undefined,
+  formatPrice: (value: number) => string,
+): string | null {
+  const cap = campaign?.maxDiscountPerOrder;
+  if (typeof cap !== 'number' || !(cap > 0)) return null;
+  return `up to ${formatPrice(cap)} off`;
 }

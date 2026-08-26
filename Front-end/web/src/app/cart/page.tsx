@@ -22,6 +22,7 @@ import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import CampaignMeter from '@/components/campaign/CampaignMeter';
 import CampaignCartNotice from '@/components/campaign/CampaignCartNotice';
+import CartLineDiscount from '@/components/campaign/CartLineDiscount';
 
 export default function CartPage() {
   return (
@@ -387,34 +388,11 @@ function CartPageContent() {
                               <p className="text-[11px] uppercase tracking-[0.14em] text-gold mt-1">{item.variantLabel}</p>
                             )}
                             <p className="text-sm text-ink-muted font-display mt-1">{formatPrice(unitPrice)} each</p>
-                            {(() => {
-                              /*
-                                What THIS line earns from the applied coupon. Read straight
-                                off the server's per-line breakdown — the browser never
-                                works out a rate — and shown per line because a cart can
-                                now hold several different ones at once. Saying "3%" in a
-                                cart whose total implies 8% is the sort of gap that turns
-                                into a support ticket.
-                              */
-                              const dl = quote?.discountLines?.find(
-                                (l) => l.product === item.product._id
-                                  && (l.variantId ?? null) === (item.variantId ?? null),
-                              );
-                              if (!dl || dl.percent <= 0) return null;
-                              return (
-                                <p className="text-[11px] font-display mt-1 text-gold/80">
-                                  {dl.percent}% off with {quote?.appliedCoupon?.code}
-                                  {dl.onSaleCapped && (
-                                    // Already discounted, so the coupon adds a reduced
-                                    // rate rather than its full one. Said here, next to
-                                    // the item, not only in the popup they may dismiss.
-                                    <span className="text-amber-500/90">
-                                      {' '}— already on offer, so this is the added rate
-                                    </span>
-                                  )}
-                                </p>
-                              );
-                            })()}
+                            <CartLineDiscount
+                              quote={quote}
+                              productId={item.product._id}
+                              variantId={item.variantId}
+                            />
                           </div>
                           <button
                             onClick={() => handleRemoveItem(item.product._id, item.variantId)}
@@ -482,7 +460,7 @@ function CartPageContent() {
               <div className="mb-4">
                 {/* The server's discount is only passed when the quote's applied coupon is
                     the CAMPAIGN's own — otherwise an unrelated coupon's discount would be
-                    displayed under the festive label. */}
+                    displayed under the campaign's label. */}
                 <CampaignMeter
                   cartValue={cartSubtotal}
                   appliedDiscount={quote?.appliedCampaign ? quote.couponDiscount : null}
@@ -500,6 +478,7 @@ function CartPageContent() {
               <CampaignCartNotice
                 applied={Boolean(quote?.appliedCampaign)}
                 discount={quote?.appliedCampaign ? quote.couponDiscount : 0}
+                cartValue={cartSubtotal}
               />
 
               {quoteError && (
@@ -518,9 +497,12 @@ function CartPageContent() {
                   <span>{quote ? formatPrice(quote.subtotal) : '—'}</span>
                 </div>
                 {quote && quote.couponDiscount > 0 && (
+                  /* Exact, because the lines above break this figure down: rounding the
+                     total while the parts keep their paise leaves a shopper adding up
+                     the bag and finding a rupee that is not there. */
                   <div className="flex justify-between text-gold font-display text-sm">
                     <span>Discount ({quote.appliedCoupon?.code})</span>
-                    <span>−{formatPrice(quote.couponDiscount)}</span>
+                    <span>−{formatPrice(quote.couponDiscount, { exact: true })}</span>
                   </div>
                 )}
                 {quote && quote.savings?.total > 0 && (
@@ -528,7 +510,7 @@ function CartPageContent() {
                   // the code added. Server-resolved; nothing here is summed in the browser.
                   <div className="flex justify-between text-emerald-500 font-display text-sm">
                     <span>You save</span>
-                    <span>{formatPrice(quote.savings.total)}</span>
+                    <span>{formatPrice(quote.savings.total, { exact: true })}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-ink/70 font-display text-sm">

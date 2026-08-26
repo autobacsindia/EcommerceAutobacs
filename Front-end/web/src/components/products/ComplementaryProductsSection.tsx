@@ -6,7 +6,12 @@ import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import { useCart } from '@/context/CartContext';
 import { getStockStatus } from '@/lib/stock';
-import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import {
+  useCampaignProductRates,
+  campaignSavingLabel,
+  formatSavingInr,
+  lineSavings,
+} from '@/hooks/queries/useCampaignProductRates';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
@@ -57,6 +62,27 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
     campaignBadgeVisible && getStockStatus(product) !== 'out'
       ? campaignData?.rates?.[product._id]?.percent ?? 0
       : 0;
+
+  /**
+   * The same rate stated as MONEY, for the badge. Shares `campaignSavingLabel` with
+   * StoreProductCard so this rail — which draws its own card rather than reusing that
+   * one — cannot drift into a second way of writing the same offer.
+   */
+  const campaignSavingFor = (product: Product) =>
+    campaignSavingLabel({
+      saving: lineSavings({
+        price: product.price,
+        quantity: 1,
+        percent: campaignRateFor(product),
+      }).campaign,
+      formatPrice: formatSavingInr,
+      /* "From" only when the card itself shows a range — the same test `showsFrom`
+         applies below. A variable product whose variants all cost the same prices
+         flatly, and labelling its saving as a floor would be gratuitously vague. */
+      from: product.productType === 'variable'
+        && product.priceMin != null && product.priceMax != null
+        && product.priceMax > product.priceMin,
+    });
 
   const handleAddToCart = async (e: React.MouseEvent, product: Product) => {
     // The card is a Link — stop the click from navigating to the PDP.
@@ -239,10 +265,10 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                         {discount}% OFF
                       </div>
                     )}
-                    {campaignRateFor(product) > 0 && (
+                    {campaignSavingFor(product) && (
                       <div className="absolute top-2 right-2 flex items-center gap-1 rounded border border-gold/50 bg-obsidian-deep/85 px-2 py-1 text-xs font-bold text-gold backdrop-blur">
                         <Gift className="h-3 w-3 shrink-0" aria-hidden />
-                        +{campaignRateFor(product)}% festive
+                        {campaignSavingFor(product)}
                       </div>
                     )}
                   </div>

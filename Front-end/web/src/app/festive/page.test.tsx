@@ -16,8 +16,16 @@ import { trackCampaignOfferViewed } from '@/lib/analytics';
 
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('@/hooks/queries/useCampaign', () => ({
+  ...jest.requireActual('@/hooks/queries/useCampaign'),
   useCampaign: jest.fn(),
   useActivateCampaign: jest.fn(),
+}));
+jest.mock('@/context/CurrencyContext', () => ({
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 jest.mock('@/lib/analytics', () => ({ trackCampaignOfferViewed: jest.fn() }));
 
@@ -72,33 +80,26 @@ beforeEach(() => {
 });
 
 describe('the offer headline', () => {
-  it('advertises the ladder\'s best rate, read from the campaign', () => {
+  it('quantifies the reward in rupees, not as a rate', () => {
+    /* The visitor has scanned a printed card and has no product in front of them — a
+       percentage is the least actionable figure this page could print. The number is
+       maxDiscountPerOrder, the ceiling pricingService enforces. */
     mockAuth({});
-    mockCampaign({ data: CAMPAIGN });
+    mockCampaign({ data: { ...CAMPAIGN, maxDiscountPerOrder: 187000 } });
     render(<FestivePage />);
-    // Twice by design: once in the hero, once in the breakdown below it. Neither is
-    // hardcoded — both come from productLadder.maxPercent.
-    expect(screen.getAllByText(/up to 8% off/i)).toHaveLength(2);
+    expect(screen.getByText(/up to ₹1,87,000 off/i)).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
-  it('states the default and on-sale rates up front, not at checkout', () => {
-    // A buyer expecting 8% on something that earns 4% — or 2% because it is already
-    // discounted — reads the difference as the site short-changing them.
-    mockAuth({});
-    mockCampaign({ data: CAMPAIGN });
-    render(<FestivePage />);
-
-    expect(screen.getByText(/everything else/i)).toBeInTheDocument();
-    expect(screen.getByText('4% off')).toBeInTheDocument();
-    expect(screen.getByText(/items already on offer/i)).toBeInTheDocument();
-    expect(screen.getByText('2% off')).toBeInTheDocument();
-  });
-
-  it('falls back to a cart-value ladder when the campaign uses one', () => {
+  it('needs no ladder-specific branch — a cart-value campaign reads the same', () => {
+    /* Both shapes used to resolve to a top PERCENTAGE here, each by its own path. The
+       ceiling is one field on the campaign, so neither shape can leave the page blank
+       and there is no second code path to keep in step. */
     mockAuth({});
     mockCampaign({
       data: {
         ...CAMPAIGN,
+        maxDiscountPerOrder: 187000,
         productLadder: null,
         tiers: [
           { id: 'a', label: 'A', minCartValue: 0, percent: 10, maxDiscount: null },
@@ -107,8 +108,32 @@ describe('the offer headline', () => {
       },
     });
     render(<FestivePage />);
-    // Neither kind of campaign should leave this page blank.
-    expect(screen.getByText(/up to 20% off/i)).toBeInTheDocument();
+    expect(screen.getByText(/up to ₹1,87,000 off/i)).toBeInTheDocument();
+  });
+
+  it('still promises the reward when the campaign has no ceiling', () => {
+    /* An uncapped campaign has no honest rupee maximum. Saying the reward is waiting
+       without quantifying it beats inventing a figure or reverting to a rate. */
+    mockAuth({});
+    mockCampaign({ data: { ...CAMPAIGN, maxDiscountPerOrder: null } });
+    render(<FestivePage />);
+    expect(screen.getByText(/your reward is waiting/i)).toBeInTheDocument();
+    expect(screen.queryByText(/up to/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it('points at the product pages instead of publishing the rate table', () => {
+    /* The 8/4/2 breakdown lived here so a smaller-than-expected saving read as the rule.
+       Every card now names the saving on that product in rupees, and the bag itemises it
+       per line, so the rates would only be three numbers to apply by hand. */
+    mockAuth({});
+    mockCampaign({ data: CAMPAIGN });
+    render(<FestivePage />);
+    // Said in the body, and (with no ceiling configured) in the hero too — both point
+    // at the product pages rather than publishing three rates to apply by hand.
+    expect(screen.getAllByText(/shown in rupees on every product/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/everything else/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 });
 

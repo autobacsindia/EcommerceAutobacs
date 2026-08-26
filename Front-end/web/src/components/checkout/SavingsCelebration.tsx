@@ -82,6 +82,13 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
 
   const { savings, discountLines } = frozen;
   const capped = (discountLines || []).filter((l) => l.onSaleCapped);
+  /*
+    What the capped lines actually added, in rupees, summed off the server's own per-line
+    figures. Quoting the reduced RATE here ("adds 2% on top") told the buyer the rule but
+    not the outcome, and left them to do the arithmetic that explains a smaller-than-
+    expected total. The amount is the thing they were trying to work out.
+  */
+  const cappedTotal = capped.reduce((sum, l) => sum + l.discountPaise, 0) / 100;
 
   return (
     <div
@@ -160,8 +167,8 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
              suspected short-change. */
           <p className="mt-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
             {capped.length === 1
-              ? `${capped[0].name} is already on offer, so the coupon adds ${capped[0].percent}% on top rather than its full rate.`
-              : `${capped.length} items in your cart are already on offer, so the coupon adds ${capped[0].percent}% on top of those rather than its full rate.`}
+              ? `${capped[0].name} is already on offer, so the coupon adds ${formatPrice(cappedTotal, { exact: true })} on top rather than its full rate.`
+              : `${capped.length} items in your cart are already on offer, so the coupon adds ${formatPrice(cappedTotal, { exact: true })} on top of those rather than its full rate.`}
           </p>
         )}
 

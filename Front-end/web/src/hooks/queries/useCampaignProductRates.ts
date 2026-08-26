@@ -109,3 +109,83 @@ export function lineSavings({
     total: (catalogPaise + campaignPaise) / 100,
   };
 }
+
+/**
+ * "+₹1,840 off" — one product's campaign saving, written once for every card that shows it.
+ *
+ * The wording lives here rather than in each card because that is exactly how the
+ * add-to-cart toast came to say four different things on four surfaces (see
+ * `useAddedToCartToast`). Four grids quoting the same offer in three phrasings is the
+ * same defect one step earlier in the funnel.
+ *
+ * ── Why a card may show money to someone who cannot yet claim it ────────────────
+ *
+ * This is an ADVERTISED offer, not a banked saving. `useCampaignBadgeVisible` decides who
+ * sees it at all; what this must never do is state the figure as already won — which is
+ * why the toast keeps its own, stricter eligibility gate and this does not duplicate it.
+ *
+ * ── The `from` case ────────────────────────────────────────────────────────────
+ *
+ * A variable product's card prices the CHEAPEST variant ("From ₹23,000"), so its saving is
+ * a floor, not a figure: pick a dearer model and the discount is larger. Stating the floor
+ * flatly would be quietly wrong on every variant but one, so the label borrows the card's
+ * own "from" vocabulary rather than inventing a second way to say the same thing.
+ *
+ * Returns null below `MIN_ADVERTISED_SAVING`, so a caller renders nothing without branching.
+ */
+
+/**
+ * The smallest saving worth putting a badge on a card for.
+ *
+ * A rate applied to a cheap accessory can resolve to 40 paise. Rendered, that was
+ * "+₹0 off" — a badge drawing the eye to nothing — and it stays silly at "+₹0.40 off".
+ * Below a rupee the offer is not a reason to buy, so the card says nothing rather than
+ * spending its most valuable pixels on it.
+ *
+ * Deliberately an ADVERTISING threshold, not an accounting one: the cart still itemises
+ * every paise (see `CartLineDiscount`), because there the figures have to sum.
+ */
+export const MIN_ADVERTISED_SAVING = 1;
+
+/**
+ * Rupee formatter for the two cross-sell rails that predate CurrencyContext and render
+ * their own prices inline.
+ *
+ * Exists so those rails cannot round a saving differently from the cards around them —
+ * keeping paise where they exist, exactly like `formatPrice(v, { exact: true })`. Not a
+ * rival to CurrencyContext: it is the same rule, written once, for the two call sites
+ * that have no provider to ask. Anything with access to `useCurrency` uses that instead.
+ */
+export function formatSavingInr(value: number): string {
+  const hasPaise = Math.round(value * 100) % 100 !== 0;
+  return `₹${value.toLocaleString('en-IN', {
+    minimumFractionDigits: hasPaise ? 2 : 0,
+    maximumFractionDigits: hasPaise ? 2 : 0,
+  })}`;
+}
+
+export function campaignSavingLabel({
+  saving,
+  formatPrice,
+  from = false,
+}: {
+  /** Rupees, as produced by `lineSavings().campaign`. */
+  saving: number;
+  /**
+   * The page's own formatter, so a saving is written like every other figure on it.
+   *
+   * Callers MUST pass one that keeps paise (`formatPrice(v, { exact: true })`). The
+   * default INR formatting rounds to whole rupees and rounds UP — a line charged ₹29.97
+   * off would advertise "₹30 off", and the cart would then contradict the card. The
+   * whole point of showing money instead of a rate is that the two agree.
+   */
+  formatPrice: (value: number) => string;
+  /** True when `saving` was computed from a "From" price and is therefore a floor. */
+  from?: boolean;
+}): string | null {
+  if (!(saving >= MIN_ADVERTISED_SAVING)) return null;
+  // The leading '+' reads as "on top of what you already see", which is what separates
+  // this from the catalogue's own markdown badge sitting directly above it.
+  const amount = `+${formatPrice(saving)} off`;
+  return from ? `From ${amount}` : amount;
+}

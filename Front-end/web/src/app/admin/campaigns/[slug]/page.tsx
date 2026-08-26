@@ -343,6 +343,22 @@ export default function AdminCampaignEditor() {
                 ? 'Ceiling across the whole order, shared out across the discounted lines.'
                 : 'Bounds an uncapped tier on a very large cart.'}
             </p>
+            {value('maxDiscountPerOrder') == null && (
+              /*
+                This field is optional to the validator but load-bearing to the STOREFRONT:
+                it is the only rupee figure the customer-facing copy has, now that rates
+                are no longer quoted. Left blank, the site-wide ribbon, the cart notice,
+                the savings meter and the /festive hero all go numberless together — the
+                offer still works and still discounts correctly, it just stops saying how
+                much it is worth anywhere. That is a silent outcome nothing else reports,
+                so it is said here, next to the empty box that causes it.
+              */
+              <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-300">
+                No ceiling set. The offer will still discount correctly, but the banner,
+                the cart and the landing page will show no &ldquo;up to ₹X off&rdquo;
+                figure — they quote this number and nothing else.
+              </p>
+            )}
           </div>
           <div>
             <label className={label}>Maximum redemptions</label>

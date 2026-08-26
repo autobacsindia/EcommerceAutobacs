@@ -4,11 +4,29 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 
 type Currency = 'INR' | 'USD';
 
+/**
+ * `exact` keeps the paise on a figure that has them.
+ *
+ * The default INR formatting rounds to whole rupees, which is right for a PRICE — the
+ * catalogue does not sell anything at ₹999.47 — and wrong for a DISCOUNT, because
+ * discounts are broken down. A campaign discount of 20,099 paise shown per line as two
+ * ₹100.50 halves rounds to "₹101 + ₹101" against a "₹201" summary, and a shopper adding
+ * up the bag finds a rupee that is not there. Worse, it rounds UP: an item charged
+ * ₹29.97 off advertises "₹30 off", which is a promise the cart then breaks.
+ *
+ * So every figure that is part of a sum, or that a shopper can check against a charge,
+ * asks for `exact`. Whole-rupee values are unaffected — the paise are only printed when
+ * they exist, so "₹1,840" never becomes "₹1,840.00".
+ */
+export interface FormatPriceOptions {
+  exact?: boolean;
+}
+
 interface CurrencyContextType {
   currency: Currency;
   setCurrency: (currency: Currency) => void;
   exchangeRate: number;
-  formatPrice: (price: number) => string;
+  formatPrice: (price: number, options?: FormatPriceOptions) => string;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
@@ -43,13 +61,17 @@ export function CurrencyProvider({ children }: CurrencyProviderProps) {
   };
 
   // Format price based on current currency
-  const formatPrice = (price: number): string => {
+  const formatPrice = (price: number, options?: FormatPriceOptions): string => {
     if (currency === 'INR') {
+      // Paise are printed only when the value actually has them, so an exact-formatted
+      // whole-rupee figure is indistinguishable from an ordinary one.
+      const hasPaise = Math.round(price * 100) % 100 !== 0;
+      const digits = options?.exact && hasPaise ? 2 : 0;
       return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0,
+        maximumFractionDigits: digits,
+        minimumFractionDigits: digits,
       }).format(price);
     } else {
       // Convert INR to USD

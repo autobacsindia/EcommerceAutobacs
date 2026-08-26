@@ -8,7 +8,11 @@ import type { CheckoutQuote } from '@/hooks/useCheckoutQuote';
  * it shows came from the server rather than being added up in the browser.
  */
 jest.mock('@/context/CurrencyContext', () => ({
-  useCurrency: () => ({ formatPrice: (n: number) => `₹${n.toLocaleString('en-IN')}` }),
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 
 const quote = (over: Partial<CheckoutQuote> = {}): CheckoutQuote => ({
@@ -109,12 +113,18 @@ describe('SavingsCelebration', () => {
   it('says which items were capped because they were already on offer', async () => {
     renderIt(quote({ discountLines: [line()] }));
     expect(await screen.findByText(/Profender Storm Kit is already on offer/)).toBeInTheDocument();
-    expect(screen.getByText(/adds 2% on top/)).toBeInTheDocument();
+    // The AMOUNT, not the rate — ₹20,000 of discountPaise, summed by the component
+    // off the server's own per-line figures. The rate told the buyer the rule; the
+    // amount answers the question a smaller-than-expected total actually raises.
+    expect(screen.getByText(/adds ₹200 on top/)).toBeInTheDocument();
+    expect(screen.queryByText(/2%/)).not.toBeInTheDocument();
   });
 
   it('pluralises the already-on-offer note', async () => {
     renderIt(quote({ discountLines: [line(), line({ product: 'p2', name: 'Another Kit' })] }));
     expect(await screen.findByText(/2 items in your cart are already on offer/)).toBeInTheDocument();
+    // Both lines' discountPaise, summed — not one line's rate quoted for the group.
+    expect(screen.getByText(/adds ₹400 on top of those/)).toBeInTheDocument();
   });
 
   it('says nothing about capping when no line was capped', async () => {

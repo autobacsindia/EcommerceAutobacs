@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Gift, CheckCircle2, ArrowRight, Clock, ShieldCheck, MailWarning } from 'lucide-react';
-import { useCampaign, useActivateCampaign } from '@/hooks/queries/useCampaign';
+import { useCampaign, useActivateCampaign, campaignCeilingLabel } from '@/hooks/queries/useCampaign';
+import { useCurrency } from '@/context/CurrencyContext';
 import { useAuth } from '@/context/AuthContext';
 import { trackCampaignOfferViewed } from '@/lib/analytics';
 import { ACTIVE_CAMPAIGN_SLUG } from '@/lib/constants';
@@ -54,6 +55,7 @@ function useCountdown(endsAt: string | null | undefined) {
 
 export default function FestivePage() {
   const { data: campaign, isLoading } = useCampaign(0);
+  const { formatPrice } = useCurrency();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const countdown = useCountdown(campaign?.endsAt);
 
@@ -127,13 +129,20 @@ export default function FestivePage() {
     });
   }, [isLoading, campaign?.slug, campaign?.eligible]);
 
+  /*
+    The headline, as MONEY rather than as a rate.
+
+    Both ladder shapes used to resolve to a top PERCENTAGE here, which on a landing page
+    is the least actionable figure available: the visitor has scanned a printed card and
+    has no product in front of them to apply a rate to. `campaignCeilingLabel` reads the
+    ceiling pricingService enforces, so "up to ₹1,87,000 off" holds for either shape and
+    needs no ladder-specific branch at all.
+
+    Null when the campaign has no ceiling, and then the hero says the reward is waiting
+    without quantifying it — an uncapped campaign has no honest rupee maximum.
+  */
   const ladder = campaign?.productLadder ?? null;
-  // The cart-value ladder's best rung, for a campaign configured the older way. Keeps
-  // this page correct for either kind of campaign rather than silently blank for one.
-  const topCartTier = campaign?.tiers?.length
-    ? campaign.tiers.reduce((a, b) => (b.percent > a.percent ? b : a))
-    : null;
-  const headlinePercent = ladder?.maxPercent ?? topCartTier?.percent ?? null;
+  const ceiling = campaignCeilingLabel(campaign, formatPrice);
 
   // An offer nobody can reach yet, or one that has closed, must not show a claim button.
   const offerOver = !isLoading && !campaign;
@@ -153,9 +162,16 @@ export default function FestivePage() {
           </h1>
 
           <p className="mt-4 text-lg text-zinc-400">
-            {headlinePercent
-              ? <>Your reward is waiting — <span className="text-gold">up to {headlinePercent}% off</span>, applied automatically at checkout.</>
-              : <>Your reward is waiting.</>}
+            {ceiling
+              ? <>Your reward is waiting — <span className="text-gold">{ceiling}</span>, applied automatically at checkout.</>
+              /*
+                No ceiling configured, so there is no honest rupee maximum to print. The
+                hero must still say something a scanner can act on — this page is reached
+                from a printed card that cannot be reissued, and an unquantified promise
+                with no next step is what makes someone put the card down. So it names
+                where the number IS, rather than leaving a sentence with nothing in it.
+              */
+              : <>Your reward is waiting — the saving is shown in rupees on every product, applied automatically at checkout.</>}
           </p>
 
           {countdown && (
@@ -213,28 +229,21 @@ export default function FestivePage() {
           />
         )}
 
-        {/* ── How the rate is decided ──────────────────────────────────────── */}
-        {/* Stated up front rather than discovered at checkout. A buyer who expects the
-            headline rate on a product that earns the default one — or on something
-            already discounted — reads the difference as the site short-changing them. */}
+        {/* ── Where the saving shows up ────────────────────────────────────── */}
+        {/*
+          This was a table of the ladder — 8% on selected products, 4% on everything
+          else, 2% on things already discounted. It existed so a smaller-than-expected
+          saving read as the published rule rather than as a short-change, and that job
+          is now done better and earlier: every card in the catalogue names the saving on
+          that product in rupees, the buy box repeats it, and the bag itemises it per
+          line. A visitor who can see the actual figure on the actual product has no use
+          for three rates they would have to apply themselves.
+        */}
         {ladder && (
-          <div className="mt-12">
-            <h3 className="mb-4 text-center text-sm font-medium uppercase tracking-widest text-zinc-500">
-              How your reward is worked out
-            </h3>
-            <dl className="space-y-2">
-              <Row term="Selected products" value={`up to ${ladder.maxPercent}% off`} highlight />
-              <Row term="Everything else" value={`${ladder.defaultPercent}% off`} />
-              <Row
-                term="Items already on offer"
-                value={`${ladder.onSaleMaxPercent}% off`}
-                note="on top of the sale price"
-              />
-            </dl>
-            <p className="mt-4 text-center text-xs text-zinc-600">
-              Your exact saving is shown in your cart before you pay.
-            </p>
-          </div>
+          <p className="mt-12 text-center text-sm text-zinc-500">
+            The saving is shown in rupees on every product, and again on each item in your
+            bag before you pay. Nothing to enter — it is applied for you.
+          </p>
         )}
 
         <p className="mt-12 flex items-center justify-center gap-2 text-center text-xs text-zinc-600">
@@ -243,20 +252,6 @@ export default function FestivePage() {
         </p>
       </div>
     </main>
-  );
-}
-
-function Row({ term, value, note, highlight }: {
-  term: string; value: string; note?: string; highlight?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-3">
-      <dt className="text-zinc-400">
-        {term}
-        {note && <span className="ml-2 text-xs text-zinc-600">{note}</span>}
-      </dt>
-      <dd className={`font-semibold ${highlight ? 'text-gold' : 'text-zinc-300'}`}>{value}</dd>
-    </div>
   );
 }
 

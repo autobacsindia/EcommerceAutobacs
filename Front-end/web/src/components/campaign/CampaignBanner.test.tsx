@@ -14,13 +14,23 @@ jest.mock('@/hooks/useRewardRibbon', () => ({
 
 const mockCampaign = jest.fn<{ data: CampaignStatus | undefined }, []>();
 jest.mock('@/hooks/queries/useCampaign', () => ({
+  ...jest.requireActual('@/hooks/queries/useCampaign'),
   useCampaign: () => mockCampaign(),
+}));
+
+// The ribbon states the offer in rupees, so it needs the page's own formatter.
+jest.mock('@/context/CurrencyContext', () => ({
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 
 const CAMPAIGN = {
   slug: 'festive-2026', name: 'Festive', endsAt: null, couponCode: 'FESTIVE2026',
   eligible: true, reason: null, reasonCode: null,
-  tier: null, tiers: [],
+  tier: null, tiers: [], maxDiscountPerOrder: 187000,
   productLadder: { maxPercent: 8, defaultPercent: 4, onSaleMaxPercent: 2 },
 } as unknown as CampaignStatus;
 
@@ -32,10 +42,30 @@ function renderBanner(path: string, props: { inHomeSlot?: boolean; className?: s
 }
 
 /** The ribbon's own element — the one carrying its look. */
-const ribbon = () => screen.getByText(/Your festive reward is active/i).closest('div')!.parentElement!;
+const ribbon = () => screen.getByText(/Your reward is active/i).closest('div')!.parentElement!;
 
 describe('CampaignBanner placement', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it('states the ceiling in rupees, and quotes no rate', () => {
+    /* A ribbon sits above the whole site with no product beside it — a percentage there
+       is a number the shopper cannot cash until they find something to apply it to. The
+       figure is maxDiscountPerOrder, the ceiling apportionCap enforces, so it holds
+       whatever ends up in the bag. */
+    renderBanner('/products');
+    expect(screen.getByText(/Up to ₹1,87,000 off/)).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it('drops the figure rather than falling back to a rate when uncapped', () => {
+    mockPathname.mockReturnValue('/products');
+    mockClaimsSlot.mockReturnValue(true);
+    mockCampaign.mockReturnValue({ data: { ...CAMPAIGN, maxDiscountPerOrder: null } });
+    render(<CampaignBanner />);
+    expect(screen.getByText(/Your reward is active/i)).toBeInTheDocument();
+    expect(screen.queryByText(/up to/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
 
   it('stands down on / when mounted by the root layout', () => {
     // The home nav is `position: fixed` and lives inside HomeRedesign, so a ribbon
@@ -46,7 +76,7 @@ describe('CampaignBanner placement', () => {
 
   it('renders on / when the home page places it into its own slot', () => {
     renderBanner('/', { inHomeSlot: true, className: 'hr-promo-slot hr-unscoped' });
-    expect(screen.getByText(/Your festive reward is active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your reward is active/i)).toBeInTheDocument();
   });
 
   it('keeps the slot class OFF the ribbon element, on a wrapper around it', () => {
