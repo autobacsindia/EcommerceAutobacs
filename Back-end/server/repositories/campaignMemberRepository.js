@@ -55,6 +55,93 @@ class CampaignMemberRepository extends BaseRepository {
   }
 
   /**
+   * Stamp this customer as having ACTIVATED the offer from its landing page.
+   *
+   * `createIfMissing` is the allowlist boundary, and the caller must get it right:
+   *   - a PUBLIC campaign has no member rows at all, so activation is what creates one
+   *     (true), and refusing to create would make the gate unsatisfiable;
+   *   - an ALLOWLIST campaign must never gain a row this way (false), or scanning the
+   *     card would enrol anyone and the allowlist would be decorative. A stranger there
+   *     gets null back and the caller refuses them.
+   *
+   * Idempotent in both directions: activatedAt and claimedAt are stamped once and never
+   * rewritten, so reopening the landing page — which the page does on every visit —
+   * neither moves the timestamps nor demotes someone who has already redeemed.
+   *
+   * @returns the member row, or null when there was none and we were not allowed to
+   *          create one.
+   */
+  async activateForUser(campaignId, email, userId, { createIfMissing = false } = {}, session = null) {
+    const normalized = String(email || '').toLowerCase().trim();
+    const filter = { campaign: campaignId, email: normalized };
+
+    // One atomic write, as claimForUser does: a read-then-write here would let two
+    // tabs both see "not activated" and race to insert, and on a unique index the
+    // loser is an unhandled E11000 rather than a no-op.
+    const pipeline = [
+      {
+        $set: {
+          user: userId,
+          status: {
+            $switch: {
+              branches: [
+                // A row created BY this activation: the customer already holds an
+                // account and has just asked for the offer, so they are claimed
+                // outright — there was never an invited stage to pass through.
+                { case: { $eq: [{ $type: '$status' }, 'missing'] }, then: CAMPAIGN_MEMBER_STATUS.CLAIMED },
+                { case: { $eq: ['$status', CAMPAIGN_MEMBER_STATUS.INVITED] }, then: CAMPAIGN_MEMBER_STATUS.CLAIMED },
+              ],
+              // Never demote a redeemer back to 'claimed'.
+              default: '$status',
+            },
+          },
+          claimedAt: { $ifNull: ['$claimedAt', '$$NOW'] },
+          activatedAt: { $ifNull: ['$activatedAt', '$$NOW'] },
+          /*
+            Where this row came from, decided by whether THIS write is creating it.
+
+            `$ifNull` on `$source` was wrong, and wrong in the direction that corrupts
+            the funnel. Every row already on the production cluster was written before
+            this field existed and therefore carries no `source` at all — including all
+            191 posted festive cards. Falling back to 'self' would have relabelled each
+            of those invitees as a walk-in the first time they scanned their own card,
+            which is exactly the mislabeling the field exists to prevent.
+
+            `status` is the reliable creation signal instead: the import always stamps
+            'invited' via $setOnInsert, and activation stamps a status too, so a MISSING
+            status can only mean this pipeline is inserting the row right now. Anything
+            pre-existing came from an import, whether or not that import recorded it.
+          */
+          source: {
+            $cond: [
+              { $eq: [{ $type: '$status' }, 'missing'] },
+              'self',
+              { $ifNull: ['$source', 'invited'] },
+            ],
+          },
+        },
+      },
+    ];
+
+    try {
+      return await CampaignMember.findOneAndUpdate(filter, pipeline, {
+        new: true,
+        upsert: createIfMissing,
+        session,
+      });
+    } catch (err) {
+      // Lost an upsert race against a concurrent activation on the unique
+      // {campaign, email} index. The row the winner wrote is the one we wanted, so
+      // re-run without upsert rather than surfacing a duplicate-key error to someone
+      // who did nothing wrong.
+      if (err?.code === 11000) {
+        return CampaignMember.findOneAndUpdate(filter, pipeline, { new: true, session });
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Record a redemption against the invite. Reporting only — the authoritative
    * "once per customer" guard is the coupon's per-user counter, so this is a
    * denormalised write for the admin dashboard and must never gate a checkout.
@@ -132,6 +219,12 @@ class CampaignMemberRepository extends BaseRepository {
             campaign: campaignId,
             email: String(email).toLowerCase().trim(),
             status: CAMPAIGN_MEMBER_STATUS.INVITED,
+            // Stated explicitly rather than left to the schema default. Mongoose does
+            // currently apply `setDefaultsOnInsert` to a bulkWrite upsert (verified), so
+            // this is belt-and-braces — but what an import means is the import's own
+            // business, not a default that a future Mongoose release or a stray option
+            // could quietly stop supplying.
+            source: 'invited',
           },
         },
         upsert: true,

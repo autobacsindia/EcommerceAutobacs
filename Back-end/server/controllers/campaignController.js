@@ -56,6 +56,26 @@ export const getCampaignProductRates = asyncHandler(async (req, res) => {
   res.json({ success: true, campaign: result });
 });
 
+// @desc    Activate this offer on the signed-in customer's account.
+// @route   POST /campaigns/:slug/activate
+// @access  Private (the landing page calls it once the visitor is signed in)
+//
+// The one WRITE a customer can make against a campaign, and the thing that makes a
+// public-but-unadvertised offer possible: it is reachable only from the campaign's
+// landing path, which carries no inbound link and is excluded from search, so calling
+// it means the customer arrived through the printed card.
+//
+// Returns the full eligibility payload rather than a bare ack, so the landing page
+// re-renders from this one response instead of firing a second /me straight after.
+export const activateCampaign = asyncHandler(async (req, res) => {
+  const status = await campaignService.activate(
+    req.params.slug,
+    req.user?.id || req.user?._id?.toString() || null,
+  );
+  noStore(res);
+  res.json({ success: true, campaign: status });
+});
+
 // @desc    "Am I on the list, and what do I do next?" — the landing page's first step.
 // @route   POST /campaigns/:slug/check-email
 // @access  Public (strictly rate-limited; see campaignService.checkEmail on the trade-off)

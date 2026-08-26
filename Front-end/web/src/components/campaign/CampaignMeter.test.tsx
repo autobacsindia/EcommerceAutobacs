@@ -17,6 +17,8 @@ const STATUS: CampaignStatus = {
   eligible: true,
   reason: null,
   reasonCode: null,
+  requiresActivation: false,
+  activated: false,
   tier: { tierId: 'festive20', label: 'Festive 20', percent: 20, discountPaise: 1000000 },
   tiers: [
     { id: 'festive20', label: 'Festive 20', minCartValue: 0, percent: 20, maxDiscount: 20000 },

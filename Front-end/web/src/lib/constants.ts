@@ -124,6 +124,10 @@ export const API_ENDPOINTS = {
   // Identity-free, so unlike CAMPAIGN_ME this one is safe to cache and share.
   CAMPAIGN_PRODUCT_RATES: (slug: string) => `/campaigns/${slug}/product-rates`,
   CAMPAIGN_CHECK_EMAIL: (slug: string) => `/campaigns/${slug}/check-email`,
+  // The signed-in customer claiming the offer off the printed card. Reachable only from
+  // the campaign's landing page, which is unlinked and noindex — that is what makes an
+  // offer public but unadvertised. Returns the same payload as CAMPAIGN_ME.
+  CAMPAIGN_ACTIVATE: (slug: string) => `/campaigns/${slug}/activate`,
   CAMPAIGN_ADMIN: (slug: string) => `/campaigns/${slug}/admin`,
   CAMPAIGN_REPORT: (slug: string) => `/campaigns/${slug}/report`,
   // Who actually redeemed — the complete record for BOTH audiences, unlike the member

@@ -16,6 +16,7 @@ import apiClient from '@/lib/api';
 const BASE: CampaignStatus = {
   slug: 'festive-2026', name: 'Festive', endsAt: null, couponCode: 'FESTIVE2026',
   eligible: true, reason: null, reasonCode: null,
+  requiresActivation: false, activated: false,
   tier: null, tiers: [], maxDiscountPerOrder: 50000,
   productLadder: { maxPercent: 8, defaultPercent: 4, onSaleMaxPercent: 2 },
 };
@@ -91,5 +92,59 @@ describe('CampaignCartNotice', () => {
     renderNotice({ applied: true, discount: 0 });
     expect(await screen.findByText(/your festive offer is active/i)).toBeInTheDocument();
     expect(screen.queryByText(/festive offer applied/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('an offer this shopper was never given', () => {
+  /*
+    A gated campaign reaches only customers who came through the printed card. For
+    everyone else the notice must be silent — including in the two states where its
+    normal copy would be an actionable-looking lie.
+  */
+  const GATED = { ...BASE, requiresActivation: true, activated: false };
+
+  it('says nothing to a signed-out shopper', async () => {
+    // "Sign in to apply it" is true for an open offer and false for this one: signing in
+    // lands them right back here with no discount and no explanation.
+    const { container } = renderNotice(
+      { applied: false, discount: 0 },
+      { ...GATED, eligible: false, reasonCode: 'login' },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('says nothing to an unverified shopper', async () => {
+    // Same trap: confirming their email will not grant an offer they never activated.
+    const { container } = renderNotice(
+      { applied: false, discount: 0 },
+      { ...GATED, eligible: false, reasonCode: 'unverified' },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('says nothing to a customer who never came through the card', async () => {
+    const { container } = renderNotice(
+      { applied: false, discount: 0 },
+      { ...GATED, eligible: false, reasonCode: 'not_activated' },
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('still confirms a discount the SERVER actually priced', async () => {
+    // `applied` comes from the quote. If the campaign really did price this bag, saying
+    // so always wins over any reasoning this component does about eligibility.
+    renderNotice({ applied: true, discount: 500 }, GATED);
+    expect(await screen.findByText(/festive offer applied/i)).toBeInTheDocument();
+  });
+
+  it('speaks normally once the customer has activated', async () => {
+    renderNotice(
+      { applied: false, discount: 0 },
+      { ...GATED, activated: true, eligible: true },
+    );
+    expect(await screen.findByText(/your festive offer is active/i)).toBeInTheDocument();
   });
 });

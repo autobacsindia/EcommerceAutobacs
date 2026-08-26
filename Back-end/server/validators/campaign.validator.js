@@ -49,6 +49,7 @@ const campaignRules = (partial = false) => {
     body('audience').optional().isIn(CAMPAIGN_AUDIENCES).withMessage('Invalid audience'),
     body('resolution').optional().isIn(TIER_RESOLUTIONS).withMessage('Invalid tier resolution'),
     body('requireVerifiedEmail').optional().isBoolean(),
+    body('requireActivation').optional().isBoolean(),
     body('allowKarmaStacking').optional().isBoolean(),
     body('allowNonMonotonicTiers').optional().isBoolean(),
     body('startsAt').optional({ nullable: true }).isISO8601().withMessage('startsAt must be a date'),

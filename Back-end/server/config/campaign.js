@@ -94,6 +94,15 @@ export const CAMPAIGN_REASON = Object.freeze({
   LOGIN: 'Please log in with the email your offer was sent to',
   LOGIN_OPEN: 'Please sign in to use this offer',
   NOT_INVITED: 'This offer is reserved for invited customers',
+  /**
+   * The offer exists, this person could have it, but they never came through the card.
+   *
+   * Deliberately vague about HOW to fix it. The landing path is printed on a physical
+   * card and is unlinked, noindex and absent from the sitemap — naming the route here
+   * would publish it to everyone who ever loaded a product page while signed out, which
+   * is precisely the audience the activation gate exists to exclude.
+   */
+  NOT_ACTIVATED: 'This offer has not been activated on your account',
   UNVERIFIED: 'Please confirm your email address to use this offer',
   ALREADY_USED: 'You have already used this offer',
   NO_TIER: 'Add more to your cart to unlock this offer',

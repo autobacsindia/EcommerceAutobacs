@@ -28,6 +28,35 @@ const CampaignMemberSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   claimedAt: { type: Date, default: null },
 
+  /**
+   * When this customer ACTIVATED the offer from its landing page.
+   *
+   * Distinct from `claimedAt`, and the two are not interchangeable. `claimedAt` is
+   * passive — it records the moment we could first match an invite to an account, and
+   * it is stamped by merely loading the eligibility endpoint. This is DELIBERATE: the
+   * customer reached the campaign's landing path, which is only reachable from the
+   * printed card, and asked for the offer.
+   *
+   * Null means "not activated". Read as a gate only when the campaign sets
+   * `requireActivation`; otherwise it is a funnel timestamp and nothing more, which is
+   * what keeps the field safe to add to campaigns that predate it.
+   *
+   * Set once and never rewritten, so a customer reopening the landing page keeps their
+   * original activation time — the same rule `claimedAt` follows, for the same reason.
+   */
+  activatedAt: { type: Date, default: null },
+
+  /**
+   * How this row came to exist: imported from an operations spreadsheet ('invited'), or
+   * created by the customer themselves activating a public offer ('self').
+   *
+   * Worth distinguishing because the admin funnel counts mean different things for each
+   * — 'invited' rows have a denominator (the size of the printed run) while 'self' rows
+   * ARE the funnel — and because an import must never silently adopt someone who walked
+   * in off a QR code as though they had been posted a card.
+   */
+  source: { type: String, enum: ["invited", "self"], default: "invited" },
+
   // ── Redemption record (denormalised for the admin dashboard) ─────────────────
   redeemedOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },
   redeemedAt: { type: Date, default: null },

@@ -1,9 +1,9 @@
 import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
-import { contactFormRateLimit } from '../middleware/rate-limit/index.js';
+import { contactFormRateLimit, authenticatedUserRateLimit } from '../middleware/rate-limit/index.js';
 import {
-  getMyCampaignStatus, checkCampaignEmail, getCampaignProductRates,
+  getMyCampaignStatus, checkCampaignEmail, getCampaignProductRates, activateCampaign,
   listCampaigns, getCampaignAdmin, getCampaignReport,
   createCampaign, updateCampaign, setCampaignStatus, listCampaignRedemptions,
   importCampaignMembers, listCampaignMembers, simulateCampaign,
@@ -32,6 +32,20 @@ router.get(
   '/:slug/product-rates',
   validateCampaignSlug, validateProductRates, validateRequest,
   getCampaignProductRates,
+);
+
+// The customer claiming the offer off the printed card. `protect`, not optionalAuth:
+// activation is recorded against an account, so an anonymous caller must get a 401 and
+// be sent to sign in rather than a 200 that recorded nothing (auth failure never
+// returns 200). Idempotent, so the landing page can call it on every visit.
+//
+// Declared before the admin block for the same reason as the routes above — it is a
+// `:slug` suffix and cannot be shadowed by them.
+router.post(
+  '/:slug/activate',
+  protect, authenticatedUserRateLimit,
+  validateCampaignSlug, validateRequest,
+  activateCampaign,
 );
 
 // Reveals whether an address is on the allowlist, so it is an enumeration oracle by
