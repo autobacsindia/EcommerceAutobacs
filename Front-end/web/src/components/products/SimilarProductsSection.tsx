@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { Gift } from 'lucide-react';
 import apiClient from '@/lib/api';
 import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
+import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
+import {
+  useCampaignProductRates,
+  campaignSavingLabel,
+  formatSavingInr,
+  lineSavings,
+} from '@/hooks/queries/useCampaignProductRates';
 
 interface Product {
   _id: string;
@@ -10,6 +18,12 @@ interface Product {
   slug: string;
   price: number;
   originalPrice?: number;
+  /* Needed only to tell a flat price from a "cheapest variant" one — see the badge. */
+  productType?: string;
+  priceMin?: number;
+  priceMax?: number;
+  /** Returned by /similar; read only to keep the campaign badge off sold-out items. */
+  stock?: string;
   images?: Array<{ url: string; alt?: string }> | string[];
   averageRating?: number;
   totalReviews?: number;
@@ -27,6 +41,45 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  /*
+    This rail was the one PDP surface the campaign never reached: the buy box, the
+    cross-sell rail and every listing card announced the offer, and then the row directly
+    beneath them priced the alternatives as if no offer existed. A shopper comparing two
+    products across that boundary is comparing a discounted price with an undiscounted one.
+
+    One batched, identity-free request for the whole rail — the same shared cache entry the
+    rest of the page already holds.
+  */
+  const { data: campaignData } = useCampaignProductRates(products.map((p) => p._id));
+  const campaignBadgeVisible = useCampaignBadgeVisible();
+
+  /**
+   * This product's campaign saving, or null.
+   *
+   * Sold-out items are excluded, mirroring `StoreProductCard` and the cross-sell rail:
+   * they still earn a rate, but advertising a discount nobody can check out with is a
+   * broken promise dressed as marketing. The gate lives on every card surface rather
+   * than in the rates hook because the PDP badge deliberately does NOT apply it — there
+   * the shopper arrived on purpose and the rate explains the price they are looking at.
+   */
+  const campaignSavingFor = (product: Product) =>
+    campaignSavingLabel({
+      saving: lineSavings({
+        price: product.price,
+        quantity: 1,
+        percent:
+          campaignBadgeVisible && product.stock !== 'out'
+            ? campaignData?.rates?.[product._id]?.percent ?? 0
+            : 0,
+      }).campaign,
+      formatPrice: formatSavingInr,
+      /* `product.price` on a variable product is its CHEAPEST variant, so the saving is a
+         floor. Say so rather than state a figure that is wrong for every model but one. */
+      from: product.productType === 'variable'
+        && product.priceMin != null && product.priceMax != null
+        && product.priceMax > product.priceMin,
+    });
 
   useEffect(() => {
     const fetchSimilarProducts = async () => {
@@ -133,6 +186,12 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                   ) : (
                     <div className={`w-full h-full ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} flex items-center justify-center`}>
                       <span className={`${isDark ? 'text-ink-muted' : 'text-ink-muted'} text-sm`}>No image</span>
+                    </div>
+                  )}
+                  {campaignSavingFor(product) && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1 rounded border border-gold/50 bg-obsidian-deep/85 px-2 py-1 text-xs font-bold text-gold backdrop-blur">
+                      <Gift className="h-3 w-3 shrink-0" aria-hidden />
+                      {campaignSavingFor(product)}
                     </div>
                   )}
                 </div>

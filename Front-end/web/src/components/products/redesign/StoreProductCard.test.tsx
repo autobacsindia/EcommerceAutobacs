@@ -35,7 +35,11 @@ jest.mock('@/context/AuthContext', () => ({
 }));
 
 jest.mock('@/context/CurrencyContext', () => ({
-  useCurrency: () => ({ formatPrice: (n: number) => `₹${n}` }),
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 
 jest.mock('react-hot-toast', () => ({
@@ -70,24 +74,72 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
 }
 
 describe('StoreProductCard campaign badge', () => {
-  it('renders the festive rate when campaignRate is provided', () => {
+  it('states the saving in RUPEES, not as a rate', () => {
+    /* 8% of ₹1,000. A percentage on a card is a sum the shopper has to do before they
+       know whether the offer is worth anything, and it reads identically on a ₹900 mat
+       and an ₹8 lakh body kit — the exact comparison a listing exists to make easy. */
     render(<StoreProductCard product={makeProduct()} campaignRate={{ percent: 8, onSaleCapped: false }} />);
-    expect(screen.getByText('+8% festive')).toBeInTheDocument();
+    expect(screen.getByText('+₹80 off')).toBeInTheDocument();
+    expect(screen.queryByText(/8%/)).not.toBeInTheDocument();
+  });
+
+  it('prices the saving off the VARIANT price the card is displaying', () => {
+    /* A variable card shows "From ₹500", so its saving is a floor — flatly claiming the
+       cheapest variant's figure would be wrong for every other model. */
+    render(
+      <StoreProductCard
+        product={makeProduct({ productType: 'variable', priceMin: 500, priceMax: 2000 })}
+        campaignRate={{ percent: 8, onSaleCapped: false }}
+      />,
+    );
+    expect(screen.getByText('From +₹40 off')).toBeInTheDocument();
+  });
+
+  it('shows the paise rather than rounding the promise upward', () => {
+    /* 3% of ₹999 is ₹29.97, and the cart charges exactly that. The site's default INR
+       formatting rounds to whole rupees — which would advertise "₹30 off" and let the
+       cart contradict the card by a paise. The whole reason for showing money instead
+       of a rate is that the two agree, so this asks for the exact figure. */
+    render(
+      <StoreProductCard product={makeProduct({ price: 999 })} campaignRate={{ percent: 3, onSaleCapped: false }} />,
+    );
+    expect(screen.getByText('+₹29.97 off')).toBeInTheDocument();
+  });
+
+  it('does not print paise on a whole-rupee saving', () => {
+    // "₹80.00 off" would be noise; exact formatting shows paise only where they exist.
+    render(<StoreProductCard product={makeProduct()} campaignRate={{ percent: 8, onSaleCapped: false }} />);
+    expect(screen.getByText('+₹80 off')).toBeInTheDocument();
+  });
+
+  it('stays silent on a saving below a rupee, rather than badging "+₹0 off"', () => {
+    /* A rate on a cheap accessory can resolve to 40 paise. Rendered under the site's
+       rounding that was "+₹0 off" — a badge drawing the eye to nothing. Below a rupee
+       the offer is not a reason to buy. The CART still itemises every paise; this is an
+       advertising threshold, not an accounting one. */
+    render(<StoreProductCard product={makeProduct({ price: 40 })} campaignRate={{ percent: 1, onSaleCapped: false }} />);
+    expect(screen.queryByText(/off/i)).not.toBeInTheDocument();
   });
 
   it('renders nothing when campaignRate is null (no campaign, or ineligible user)', () => {
     render(<StoreProductCard product={makeProduct()} campaignRate={null} />);
-    expect(screen.queryByText(/festive/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/off/i)).not.toBeInTheDocument();
   });
 
   it('renders nothing when campaignRate is omitted', () => {
     render(<StoreProductCard product={makeProduct()} />);
-    expect(screen.queryByText(/festive/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/off/i)).not.toBeInTheDocument();
   });
 
   it('renders nothing when the rate is 0%', () => {
     render(<StoreProductCard product={makeProduct()} campaignRate={{ percent: 0, onSaleCapped: false }} />);
-    expect(screen.queryByText(/festive/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/off/i)).not.toBeInTheDocument();
+  });
+
+  it('renders nothing when the rate rounds down to no money at all', () => {
+    // A rate too small to move a cheap line must not print "+₹0 off".
+    render(<StoreProductCard product={makeProduct({ price: 0.4 })} campaignRate={{ percent: 1, onSaleCapped: false }} />);
+    expect(screen.queryByText(/off/i)).not.toBeInTheDocument();
   });
 
   it('hides the badge for a sold-out product even with a positive rate', () => {
@@ -97,7 +149,7 @@ describe('StoreProductCard campaign badge', () => {
         campaignRate={{ percent: 8, onSaleCapped: false }}
       />,
     );
-    expect(screen.queryByText(/festive/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/off/i)).not.toBeInTheDocument();
     expect(screen.getByText('Sold out')).toBeInTheDocument();
   });
 
@@ -108,8 +160,10 @@ describe('StoreProductCard campaign badge', () => {
         campaignRate={{ percent: 2, onSaleCapped: true }}
       />,
     );
+    // The catalogue markdown stays a percentage — it is a different claim from the
+    // campaign's, and keeping the two shapes distinct is what tells them apart.
     expect(screen.getByText('-25%')).toBeInTheDocument();
-    expect(screen.getByText('+2% festive')).toBeInTheDocument();
+    expect(screen.getByText('+₹15 off')).toBeInTheDocument();
   });
 });
 

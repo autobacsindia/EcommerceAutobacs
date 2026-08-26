@@ -5,7 +5,11 @@ import CampaignRateBadge from './CampaignRateBadge';
 // The badge must format money the same way the rest of the page does; the real provider
 // is not the thing under test here.
 jest.mock('@/context/CurrencyContext', () => ({
-  useCurrency: () => ({ formatPrice: (n: number) => `₹${n.toLocaleString('en-IN')}` }),
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -64,11 +68,13 @@ function renderBadge(props: Partial<React.ComponentProps<typeof CampaignRateBadg
 describe('CampaignRateBadge', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('shows the rate and what it is worth on this item', async () => {
+  it('says what the offer is worth on this item, and never quotes the rate', async () => {
+    /* 8% of ₹10,000. The rate is the rule; the amount is the answer, and it is the only
+       one of the two a shopper can weigh against the price beside it. */
     mockApi({ percent: 8 });
     renderBadge();
-    expect(await screen.findByText(/save 8% more/i)).toBeInTheDocument();
-    expect(screen.getByText('₹800')).toBeInTheDocument();
+    expect(await screen.findByText(/save ₹800 more/i)).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
   it('says nothing to a signed-out visitor', async () => {
@@ -105,10 +111,10 @@ describe('CampaignRateBadge', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows the rate once that customer has activated', async () => {
+  it('shows the saving once that customer has activated', async () => {
     mockApi({ eligible: true, percent: 8, requiresActivation: true, activated: true });
     renderBadge();
-    expect(await screen.findByText(/save 8% more/i)).toBeInTheDocument();
+    expect(await screen.findByText(/save ₹800 more/i)).toBeInTheDocument();
   });
 
   it('promises nothing to someone who has already redeemed', async () => {
@@ -131,7 +137,7 @@ describe('CampaignRateBadge', () => {
     mockApi({ percent: 2, onSaleCapped: true });
     renderBadge();
     expect(await screen.findByText(/already on offer/i)).toBeInTheDocument();
-    expect(screen.getByText(/save 2% more/i)).toBeInTheDocument();
+    expect(screen.getByText(/save ₹200 more/i)).toBeInTheDocument();
   });
 
   it('renders nothing when no campaign is running', async () => {

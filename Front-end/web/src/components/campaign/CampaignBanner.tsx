@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Gift, X } from 'lucide-react';
-import { useCampaign } from '@/hooks/queries/useCampaign';
+import { useCampaign, campaignCeilingLabel } from '@/hooks/queries/useCampaign';
+import { useCurrency } from '@/context/CurrencyContext';
 import { useRewardRibbonClaimsSlot } from '@/hooks/useRewardRibbon';
 
 /**
@@ -40,6 +41,7 @@ export default function CampaignBanner({
   className?: string;
 } = {}) {
   const [dismissed, setDismissed] = useState(false);
+  const { formatPrice } = useCurrency();
   const { data: campaign } = useCampaign(0);
   const claimsSlot = useRewardRibbonClaimsSlot();
   const pathname = usePathname();
@@ -64,20 +66,31 @@ export default function CampaignBanner({
     by anything the server did. Money copy is held to the same standard as money maths.
   */
   const ladder = campaign.productLadder;
-  const topPercent = ladder
-    ? ladder.maxPercent
-    : campaign.tiers?.length
-      ? Math.max(...campaign.tiers.map((t) => t.percent))
-      : null;
+
+  /*
+    The offer as MONEY, on the one surface that holds no product at all.
+
+    This used to read "Up to 8% off", which is the least useful place a percentage can
+    appear: a ribbon sits above the whole site, with nothing beside it to apply the rate
+    to, so the shopper is asked to hold a number they cannot cash until they find a
+    product. `campaignCeilingLabel` reads maxDiscountPerOrder — the ceiling apportionCap
+    actually enforces — so "Up to ₹1,87,000 off" is true whatever ends up in the bag.
+
+    Null when the campaign has no ceiling configured, and then the ribbon simply says the
+    offer is active. That is a real state, not a defect: an uncapped campaign has no
+    honest rupee maximum, and reverting to a rate to fill the gap would put the shopper
+    back to doing arithmetic against a product that is not on screen.
+  */
+  const ceiling = campaignCeilingLabel(campaign, formatPrice);
 
   const ribbon = (
     <div className="relative bg-gradient-to-r from-gold/20 via-gold/10 to-transparent border-b border-gold/25">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 text-sm">
         <Gift size={15} className="shrink-0 text-gold" />
         <p className="flex-1 text-ink/90">
-          <span className="font-semibold text-gold">Your festive reward is active.</span>{' '}
+          <span className="font-semibold text-gold">Your reward is active.</span>{' '}
           <span className="hidden sm:inline">
-            {topPercent ? `Up to ${topPercent}% off — ` : ''}
+            {ceiling ? `${ceiling.charAt(0).toUpperCase()}${ceiling.slice(1)} — ` : ''}
             {ladder
               ? 'applied automatically at checkout.'
               : 'add items and your saving grows.'}

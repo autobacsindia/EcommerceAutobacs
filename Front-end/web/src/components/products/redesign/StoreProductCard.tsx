@@ -12,7 +12,11 @@ import { useCurrency } from '@/context/CurrencyContext';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
-import type { ProductRate } from '@/hooks/queries/useCampaignProductRates';
+import {
+  campaignSavingLabel,
+  lineSavings,
+  type ProductRate,
+} from '@/hooks/queries/useCampaignProductRates';
 
 /**
  * Storefront product card (obsidian + gold). Self-contained client island —
@@ -32,7 +36,7 @@ export default function StoreProductCard({
   /** When set (vehicle pages), shows a green "Fits <vehicle>" compatibility pill. */
   fitmentBadge?: string;
   /**
-   * This product's rate under the running festive campaign, batch-fetched by the
+   * This product's rate under the running campaign, batch-fetched by the
    * caller (one request for the whole grid via `useCampaignProductRates`) rather than
    * per-card — see `ProductGrid`. `null`/`undefined` renders no badge, same as "no
    * campaign running" or "this user can no longer claim it".
@@ -82,6 +86,28 @@ export default function StoreProductCard({
   // a card is a discovery surface sitting right next to an explicit "Sold out" badge —
   // showing both reads as a mixed message the PDP doesn't have to worry about.
   const campaignPercent = !outOfStock && campaignRate && campaignRate.percent > 0 ? campaignRate.percent : 0;
+  /*
+    The offer as MONEY, not as a rate.
+
+    A percentage on a card is a sum the shopper has to do before they know whether the
+    offer is worth anything — and 8% reads identically on a ₹900 mat and a ₹8 lakh body
+    kit, which is precisely the comparison a discovery surface exists to make easy.
+
+    Computed from the price this card is DISPLAYING (a variable product shows its cheapest
+    variant), so the badge and the price beneath it always describe the same unit. Both
+    inputs are server-published and `lineSavings` floors paise exactly as the server does,
+    so the figure here cannot drift from what the cart charges.
+  */
+  const campaignSaving = campaignSavingLabel({
+    saving: lineSavings({
+      price: isVariable ? priceMin : product.price,
+      quantity: 1,
+      percent: campaignPercent,
+    }).campaign,
+    // Exact: rounding ₹29.97 up to "₹30 off" is a promise the cart then breaks.
+    formatPrice: (v) => formatPrice(v, { exact: true }),
+    from: showsRange,
+  });
 
   const toggleWish = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -168,10 +194,10 @@ export default function StoreProductCard({
               ★ Top pick
             </span>
           )}
-          {campaignPercent > 0 && (
+          {campaignSaving && (
             <span className="flex items-center gap-1 border border-gold/50 bg-obsidian-deep/85 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-gold backdrop-blur">
               <Gift size={10} className="shrink-0" aria-hidden />
-              +{campaignPercent}% festive
+              {campaignSaving}
             </span>
           )}
         </div>

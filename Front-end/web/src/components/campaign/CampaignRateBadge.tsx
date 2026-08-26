@@ -6,7 +6,7 @@ import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { useCampaignProductRates, lineSavings } from '@/hooks/queries/useCampaignProductRates';
 
 /**
- * "Save 8% on this with the festive offer" — the campaign, on the product page.
+ * "Save ₹1,840 more on this item" — the campaign, on the product page.
  *
  * The reason this exists: the whole scheme used to be invisible until a coupon
  * auto-applied on /cart. A shopper browsing a Thanos product saw nothing anywhere, and a
@@ -19,6 +19,9 @@ import { useCampaignProductRates, lineSavings } from '@/hooks/queries/useCampaig
  * for everyone, and comes from the shared/cacheable product-rates endpoint. WHETHER to
  * show it is per-user, and comes from the private eligibility call the page already
  * makes. Keeping them separate is what lets the expensive-to-cache half stay small.
+ *
+ * Stated in RUPEES, never as the rate. The rate is the rule; the amount is the answer,
+ * and it is the only one of the two a shopper can weigh against the price beside it.
  *
  * ── Only where the discount will actually be honoured ─────────────────────────
  *
@@ -60,8 +63,8 @@ export default function CampaignRateBadge({
     >
       <Gift size={14} className="shrink-0 text-gold" />
       <span className="text-ink">
-        <span className="font-semibold text-gold">Save {rate.percent}% more</span> with the
-        festive offer — <span className="font-semibold">{formatPrice(saving)}</span> off this item
+        <span className="font-semibold text-gold">Save {formatPrice(saving, { exact: true })} more</span> on this
+        item — applied for you at checkout
       </span>
       {rate.onSaleCapped && (
         /* Said here rather than discovered at the cart. This item is already discounted,

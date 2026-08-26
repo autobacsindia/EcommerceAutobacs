@@ -22,7 +22,11 @@ jest.mock('@/hooks/queries/useCampaign', () => ({
 }));
 
 jest.mock('@/context/CurrencyContext', () => ({
-  useCurrency: () => ({ formatPrice: (n: number) => `₹${n.toLocaleString('en-IN')}` }),
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 
 /** Renders the hook with a given eligibility answer and returns the fire function. */

@@ -4,7 +4,11 @@ import CampaignCartNotice from './CampaignCartNotice';
 import type { CampaignStatus } from '@/hooks/queries/useCampaign';
 
 jest.mock('@/context/CurrencyContext', () => ({
-  useCurrency: () => ({ formatPrice: (n: number) => `₹${n.toLocaleString('en-IN')}` }),
+  useCurrency: () => ({
+    // The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      require('@/test-utils/formatPriceMock').formatPriceMock(n, o),
+  }),
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -21,15 +25,17 @@ const BASE: CampaignStatus = {
   productLadder: { maxPercent: 8, defaultPercent: 4, onSaleMaxPercent: 2 },
 };
 
+const BAG = 60000;
+
 function renderNotice(
-  props: { applied: boolean; discount: number },
+  props: { applied: boolean; discount: number; cartValue?: number },
   campaign: CampaignStatus | null = BASE,
 ) {
   (apiClient.get as jest.Mock).mockResolvedValue({ success: true, campaign });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <CampaignCartNotice {...props} />
+      <CampaignCartNotice cartValue={BAG} {...props} />
     </QueryClientProvider>,
   );
 }
@@ -39,14 +45,17 @@ describe('CampaignCartNotice', () => {
 
   it('confirms the offer when the SERVER actually priced it', async () => {
     renderNotice({ applied: true, discount: 10263 });
-    expect(await screen.findByText(/festive offer applied/i)).toBeInTheDocument();
+    expect(await screen.findByText(/offer applied/i)).toBeInTheDocument();
     expect(screen.getByText('₹10,263')).toBeInTheDocument();
   });
 
   it('tells a signed-out shopper what signing in is worth', async () => {
     // The gap that started this: a guest saw no discount and no reason for its absence.
     renderNotice({ applied: false, discount: 0 }, { ...BASE, eligible: false, reasonCode: 'login' });
-    expect(await screen.findByText(/up to 8% off/i)).toBeInTheDocument();
+    // The offer is stated as MONEY, never as a rate: the figure is the ceiling
+    // pricingService enforces, so "up to ₹50,000 off" is true whatever is in the bag.
+    expect(await screen.findByText(/up to ₹50,000 off/i)).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /sign in to apply it/i })).toBeInTheDocument();
   });
 
@@ -59,7 +68,7 @@ describe('CampaignCartNotice', () => {
     /* Eligible and yet unpriced means the auto-apply did not land. Silence here is
        exactly how a working campaign came to look broken. */
     renderNotice({ applied: false, discount: 0 });
-    expect(await screen.findByText(/your festive offer is active/i)).toBeInTheDocument();
+    expect(await screen.findByText(/your offer is active/i)).toBeInTheDocument();
     expect(screen.getByText('FESTIVE2026')).toBeInTheDocument();
   });
 
@@ -87,11 +96,54 @@ describe('CampaignCartNotice', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('withholds a ceiling this bag could not possibly reach', async () => {
+    /* The ceiling is ORDER-wide, and this is the one surface that knows how big the
+       order is. "Up to ₹50,000 off" beside a ₹2,000 bag is not optimistic, it is
+       visibly impossible — a number the shopper can disprove at a glance discredits
+       the offer instead of selling it. */
+    renderNotice(
+      { applied: false, discount: 0, cartValue: 2000 },
+      { ...BASE, eligible: false, reasonCode: 'login' },
+    );
+    expect(await screen.findByRole('link', { name: /sign in to apply it/i })).toBeInTheDocument();
+    expect(screen.queryByText(/₹50,000/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it('shows the ceiling once the bag is large enough to reach it', async () => {
+    renderNotice(
+      { applied: false, discount: 0, cartValue: 50000 },
+      { ...BASE, eligible: false, reasonCode: 'login' },
+    );
+    expect(await screen.findByText(/up to ₹50,000 off/i)).toBeInTheDocument();
+  });
+
+  it('keeps the paise on an applied discount, because the lines break it down', async () => {
+    /* The bag itemises this figure per line. Rounding the total while the parts keep
+       their paise leaves a shopper adding up the bag and finding a rupee that is not
+       there — ₹100.50 + ₹100.50 against a "₹201" summary. */
+    renderNotice({ applied: true, discount: 201.01 });
+    expect(await screen.findByText('₹201.01')).toBeInTheDocument();
+  });
+
+  it('drops the ceiling clause rather than falling back to a rate', async () => {
+    /* An uncapped campaign has no honest rupee maximum, so the sentence simply names the
+       offer. Reverting to "up to 8% off" here would reintroduce the one figure the
+       shopper cannot act on without doing the arithmetic themselves. */
+    renderNotice(
+      { applied: false, discount: 0 },
+      { ...BASE, maxDiscountPerOrder: null },
+    );
+    expect(await screen.findByText(/your offer is active/i)).toBeInTheDocument();
+    expect(screen.queryByText(/up to/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
+
   it('never claims an applied offer worth nothing', async () => {
     // `applied` true with a zero discount would print "you are saving ₹0".
     renderNotice({ applied: true, discount: 0 });
-    expect(await screen.findByText(/your festive offer is active/i)).toBeInTheDocument();
-    expect(screen.queryByText(/festive offer applied/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/your offer is active/i)).toBeInTheDocument();
+    expect(screen.queryByText(/offer applied/i)).not.toBeInTheDocument();
   });
 });
 
@@ -137,7 +189,7 @@ describe('an offer this shopper was never given', () => {
     // `applied` comes from the quote. If the campaign really did price this bag, saying
     // so always wins over any reasoning this component does about eligibility.
     renderNotice({ applied: true, discount: 500 }, GATED);
-    expect(await screen.findByText(/festive offer applied/i)).toBeInTheDocument();
+    expect(await screen.findByText(/offer applied/i)).toBeInTheDocument();
   });
 
   it('speaks normally once the customer has activated', async () => {
@@ -145,6 +197,6 @@ describe('an offer this shopper was never given', () => {
       { applied: false, discount: 0 },
       { ...GATED, activated: true, eligible: true },
     );
-    expect(await screen.findByText(/your festive offer is active/i)).toBeInTheDocument();
+    expect(await screen.findByText(/your offer is active/i)).toBeInTheDocument();
   });
 });

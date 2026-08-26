@@ -1,7 +1,8 @@
 'use client';
 
 import { Gift, TrendingUp } from 'lucide-react';
-import { useCampaign, nextTier } from '@/hooks/queries/useCampaign';
+import { useCampaign, nextTier, campaignCeilingLabel } from '@/hooks/queries/useCampaign';
+import { formatSavingInr } from '@/hooks/queries/useCampaignProductRates';
 
 /**
  * Cart savings meter — the emotional engine of the campaign.
@@ -28,7 +29,7 @@ export default function CampaignMeter({
    * The discount the server's quote granted **for this campaign**, in rupees.
    * Callers must pass this ONLY when the quote's applied coupon is the campaign's own
    * (see the cart page) — otherwise an unrelated coupon's discount would be displayed
-   * under the festive label.
+   * under the campaign's label.
    */
   appliedDiscount?: number | null;
 }) {
@@ -46,7 +47,15 @@ export default function CampaignMeter({
 
   // Nothing to celebrate yet — the cart has not reached any tier.
   if (saving <= 0) return null;
-  const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+  /*
+    Keeps the paise where a saving has them. The bag below itemises the same money per
+    line, so a summary that rounded while the lines did not would not add up under a
+    shopper checking it — the one arithmetic they are most likely to do.
+  */
+  const inr = (n: number) => formatSavingInr(n);
+  // The enforced ceiling, as money. Formatted with this component's own `inr` so the
+  // sentence below is written the same way as the figure above it.
+  const ceiling = campaignCeilingLabel(campaign, inr);
 
   /*
     A PER-PRODUCT campaign has no ladder to climb: the rate follows the product, so
@@ -74,7 +83,15 @@ export default function CampaignMeter({
         <div className="flex items-center gap-2">
           <Gift size={16} className="text-gold" />
           <span className="text-sm font-semibold text-gold">
-            {campaign.tier?.label ?? 'Your festive reward'}
+            {/*
+                Fixed copy, not `campaign.name`.
+
+                `name` is admin free-text and reads as an operator label — the live one is
+                "Festive 2026 — Thank You Reward", which is a title, not something that
+                belongs mid-sentence in a cart summary. A cart-value campaign still shows
+                its TIER label here, because that one is written to be read by the buyer.
+             */}
+            {campaign.tier?.label ?? 'Your reward'}
           </span>
         </div>
         <div className="text-right">
@@ -95,12 +112,25 @@ export default function CampaignMeter({
       )}
 
       {ladder ? (
+        /*
+          The rate ladder used to be spelled out here — 8% / 4% / 2%. It is the rule, not
+          the outcome, and the outcome is already sitting directly above in rupees, per
+          line in the bag below, and on every card that got the shopper here. Quoting
+          three percentages beside a rupee figure only invites the shopper to check our
+          arithmetic; the ceiling, where one is configured, is the one extra fact worth
+          adding because it bounds what the number above can ever become.
+        */
         <p className="mt-2.5 text-xs text-zinc-400">
-          Up to <span className="font-semibold text-white">{ladder.maxPercent}%</span> off selected
-          products, <span className="font-semibold text-white">{ladder.defaultPercent}%</span> on
-          everything else, and{' '}
-          <span className="font-semibold text-white">{ladder.onSaleMaxPercent}%</span> on items
-          already discounted. Applied for you — no code to enter.
+          {ceiling && (
+            <>
+              <span className="font-semibold text-white">
+                {ceiling.charAt(0).toUpperCase() + ceiling.slice(1)}
+              </span>
+              {' — '}
+            </>
+          )}
+          Applied for you, no code to enter. Each item&apos;s share is shown beside it in
+          your bag.
         </p>
       ) : next ? (
         <p className="mt-2.5 flex items-center gap-1.5 text-xs text-zinc-400">
