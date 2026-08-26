@@ -80,6 +80,18 @@ const arg = (n, d = null) => {
 };
 const flag = (n) => process.argv.includes(`--${n}`);
 
+/**
+ * The command prefix for anything this script PRINTS as a next step or a rollback.
+ *
+ * Carries `--test` forward when that is where we are. A rollback line that silently
+ * drops it is worse than no rollback line at all: the operator is, by definition,
+ * reading it in a hurry after something went wrong, and pasting it would point a
+ * corrective write at PRODUCTION while they believed they were undoing a change on the
+ * test tier.
+ */
+const selfCmd = () =>
+  `node --import=dotenv/config scripts/configure-festive-public-offer.js${flag('test') ? ' --test' : ''}`;
+
 const APPLY  = flag('apply');
 const SLUG   = arg('slug', 'festive-2026');
 const ENDS   = arg('ends');
@@ -366,7 +378,7 @@ async function main() {
     }
     await campaignService.update(campaign._id, { requireActivation: on });
     console.log(`\n✓ Activation gate is ${on ? 'ON' : 'OFF'}.`);
-    console.log(`  Rollback:  node --import=dotenv/config scripts/configure-festive-public-offer.js --activation-gate=${on ? 'off' : 'on'} --apply`);
+    console.log(`  Rollback:  ${selfCmd()} --activation-gate=${on ? 'off' : 'on'} --apply`);
     await mongoose.disconnect();
     return;
   }
@@ -414,7 +426,7 @@ async function main() {
     // campaign, a mislinked coupon, or a campaign with no ladder at all.
     const live = await campaignService.setStatus(campaign._id, CAMPAIGN_STATUS.LIVE);
     console.log(`\n✓ ${live.slug} is LIVE. Anyone who scans the card can now redeem once.`);
-    console.log(`  Kill switch:  node --import=dotenv/config scripts/configure-festive-public-offer.js --revert-to-list --apply`);
+    console.log(`  Kill switch:  ${selfCmd()} --revert-to-list --apply`);
     await mongoose.disconnect();
     return;
   }
