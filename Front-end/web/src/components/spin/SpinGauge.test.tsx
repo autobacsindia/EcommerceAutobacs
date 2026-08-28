@@ -102,6 +102,38 @@ describe('SpinGauge', () => {
       expect(screen.getByText(LABELS[0])).toBeInTheDocument();
     });
 
+    it('stacks the icon ABOVE the label, not beside it', () => {
+      // The label reads radially, so an icon offset along the radius lands next to the
+      // words instead of over them. Both must therefore sit in ONE rotated frame with a
+      // perpendicular offset — this asserts exactly that, because the obvious
+      // "simplification" back to two separately-rotated elements reintroduces the bug.
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} images={[withArt[0]]} winningIndex={null} spinning={false} />,
+      );
+      const img = container.querySelector('image')!;
+      const text = container.querySelector('text')!;
+
+      // Same parent = same rotation = the stack survives on every wedge of the dial.
+      expect(img.parentElement).toBe(text.parentElement);
+      expect(img.parentElement?.getAttribute('transform')).toMatch(/^rotate\(/);
+
+      // Pre-rotation coords: the icon's lower edge must clear the label's baseline.
+      const imgBottom = Number(img.getAttribute('y')) + Number(img.getAttribute('height'));
+      expect(imgBottom).toBeLessThan(Number(text.getAttribute('y')));
+    });
+
+    it('leaves the label centred in its wedge when there is no icon', () => {
+      // A slice with no art must not inherit the offset that makes room for one.
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} winningIndex={null} spinning={false} />,
+      );
+      const text = container.querySelector('text')!;
+      const withIcon = render(
+        <SpinGauge labels={[LABELS[0]]} images={[withArt[0]]} winningIndex={null} spinning={false} />,
+      ).container.querySelector('text')!;
+      expect(Number(text.getAttribute('y'))).toBeLessThan(Number(withIcon.getAttribute('y')));
+    });
+
     it('ignores an images array longer than the label list', () => {
       const { container } = render(
         <SpinGauge labels={[LABELS[0]]} images={withArt} winningIndex={null} spinning={false} />,

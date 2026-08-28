@@ -186,12 +186,22 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
           const isWinner = settled && winningIndex === i;
           const mid = start + segAngle / 2;
           const art = images[i] || null;
-          // With artwork the slice carries an icon above its label, so the text moves
-          // inward to make room. Without it the label stays exactly where it was.
-          const textPos = polar(CX, CY, (R_OUTER + R_INNER) / 2 - (art ? 15 : 0), mid);
-          const iconPos = art ? polar(CX, CY, (R_OUTER + R_INNER) / 2 + 10, mid) : null;
           // Keep label text upright on the left half of the dial.
           const flip = mid > 90 || mid < -90;
+          const rot = flip ? mid + 180 : mid;
+          const base = polar(CX, CY, (R_OUTER + R_INNER) / 2, mid);
+          // Icon and label share ONE rotated frame, and stack inside it.
+          //
+          // The offsets below are applied BEFORE the rotation, so they are measured in
+          // the label's own reading frame: -y is "above the words", whichever way round
+          // the dial this wedge sits. Offsetting along the radius instead — the obvious
+          // thing — puts the icon beside the text, because the label reads radially, so
+          // the radius runs along the baseline rather than across it.
+          //
+          // Stacking is tangential, which is also the roomy direction: the wedge is
+          // ~105px across the arc at 8 slices versus a 52px radial band.
+          const iconDy = art ? -(ICON_R + 6) : 0;
+          const textDy = art ? ICON_R - 1 : 0;
           return (
             <g key={`${label}-${i}`}>
               <path
@@ -202,44 +212,45 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
                 filter={isWinner ? 'url(#spin-glow)' : undefined}
                 style={{ transition: 'fill 350ms ease' }}
               />
-              <text
-                x={textPos.x} y={textPos.y}
-                textAnchor="middle" dominantBaseline="middle"
-                fontSize={11}
-                fontWeight={isWinner ? 700 : 500}
-                fill={isWinner ? '#1a1205' : '#c9d6e8'}
-                transform={`rotate(${flip ? mid + 180 : mid} ${textPos.x} ${textPos.y})`}
-                style={{ pointerEvents: 'none' }}
-              >
-                {label.length > 14 ? `${label.slice(0, 13)}…` : label}
-              </text>
-              {art && iconPos && (
-                /*
-                  Rotated with the slice so the icon sits square on its wedge, and
-                  counter-rotated on the left half for the same reason the label is:
-                  otherwise half the prizes appear upside down.
+              {/*
+                One frame for the whole slice's content, counter-rotated on the left half
+                so prizes are never upside down. Because icon and label rotate together,
+                the icon stays directly above the words on every wedge.
 
-                  No onError handling is possible on an SVG <image>; a dead URL simply
-                  paints nothing and the label underneath still names the prize, which is
-                  why the label is never replaced by the icon.
-                */
-                <g transform={`rotate(${flip ? mid + 180 : mid} ${iconPos.x} ${iconPos.y})`}>
-                  <circle
-                    cx={iconPos.x} cy={iconPos.y} r={ICON_R + 2}
-                    fill={isWinner ? '#fff7e0' : '#0d1a2d'}
-                    stroke={isWinner ? '#ffd97a' : '#31435c'}
-                    strokeWidth={1}
-                  />
-                  <image
-                    href={art}
-                    x={iconPos.x - ICON_R} y={iconPos.y - ICON_R}
-                    width={ICON_R * 2} height={ICON_R * 2}
-                    clipPath={`url(#${ICON_CLIP})`}
-                    preserveAspectRatio="xMidYMid slice"
-                    style={{ pointerEvents: 'none' }}
-                  />
-                </g>
-              )}
+                No onError handling is possible on an SVG <image>; a dead URL simply
+                paints nothing and the label underneath still names the prize, which is
+                why the label is never replaced by the icon.
+              */}
+              <g transform={`rotate(${rot} ${base.x} ${base.y})`}>
+                {art && (
+                  <>
+                    <circle
+                      cx={base.x} cy={base.y + iconDy} r={ICON_R + 2}
+                      fill={isWinner ? '#fff7e0' : '#0d1a2d'}
+                      stroke={isWinner ? '#ffd97a' : '#31435c'}
+                      strokeWidth={1}
+                    />
+                    <image
+                      href={art}
+                      x={base.x - ICON_R} y={base.y + iconDy - ICON_R}
+                      width={ICON_R * 2} height={ICON_R * 2}
+                      clipPath={`url(#${ICON_CLIP})`}
+                      preserveAspectRatio="xMidYMid slice"
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </>
+                )}
+                <text
+                  x={base.x} y={base.y + textDy}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={11}
+                  fontWeight={isWinner ? 700 : 500}
+                  fill={isWinner ? '#1a1205' : '#c9d6e8'}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {label.length > 14 ? `${label.slice(0, 13)}…` : label}
+                </text>
+              </g>
             </g>
           );
         })}
