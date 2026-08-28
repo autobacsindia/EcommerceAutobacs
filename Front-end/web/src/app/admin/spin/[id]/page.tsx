@@ -6,6 +6,7 @@ import Link from 'next/link';
 import apiClient, { ApiError } from '@/lib/api';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { PREVIEW_TOOLS_ENABLED } from '@/lib/previewTools';
 import { formatDateTimeIST } from '@/lib/datetime';
 import type { SpinCampaign, SpinPrize, OddsPreview, PublishFieldError, PrizeKind } from '@/types/spin';
 
@@ -352,6 +353,15 @@ export default function SpinCampaignDetailPage() {
             title="Open a NEW window. Never re-run a campaign by editing its dates.">
             ⧉ Clone for next window
           </button>
+          {/* Hidden on production (lib/previewTools). New tab, because losing an
+              in-progress prize edit to a navigation would be its own small disaster. */}
+          {PREVIEW_TOOLS_ENABLED && (
+            <a href={`/dev/spin-preview?campaign=${id}`} target="_blank" rel="noopener noreferrer"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              title="See this campaign's wheel with its real prizes and artwork — no order needed">
+              ◎ Preview wheel
+            </a>
+          )}
         </div>
       </div>
 
