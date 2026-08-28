@@ -281,9 +281,21 @@ class ShipmentService {
    * Idempotent: each transition is matched on the parcel still being `shipped`, so
    * parcels already delivered are skipped rather than re-stamped or re-emailed.
    *
+   * ── WHY THIS TAKES NO `userId`, UNLIKE ITS SIBLINGS ─────────────────────────────
+   * markShipmentDelivered / markShipmentLost / createShipment each end with
+   * `_syncOrderStatus(updated, opts.userId)`, which rolls the order up and attributes
+   * the change. This one deliberately does NOT: its only caller is the admin
+   * "mark the whole order delivered" path, which calls orderStatusService.updateOrderStatus
+   * itself the moment this returns, with the admin's own id. Rolling up here as well
+   * would push a SECOND status-history entry for one action and re-run every side
+   * effect — the same duplicate this file already avoids after createShipment.
+   *
+   * So attribution is the caller's job here, and accepting a `userId` we then ignore
+   * would advertise a guarantee this method does not make.
+   *
    * @returns {Promise<{delivered: number}>} how many parcels this actually moved
    */
-  async deliverAllOutstanding(orderId, opts = {}) {
+  async deliverAllOutstanding(orderId) {
     const order = await orderRepository.findById(orderId);
     if (!order) return { delivered: 0 };
 

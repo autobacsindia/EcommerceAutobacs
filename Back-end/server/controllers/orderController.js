@@ -1064,8 +1064,10 @@ export const updateOrderStatus = async (req, res) => {
     */
     let parcelsDelivered = 0;
     if (status === 'delivered') {
+      // No userId: the updateOrderStatus call directly below records this admin's
+      // action once. See deliverAllOutstanding's note on why it rolls up nothing itself.
       ({ delivered: parcelsDelivered } =
-        await shipmentService.deliverAllOutstanding(req.params.id, { userId: req.user.id }));
+        await shipmentService.deliverAllOutstanding(req.params.id));
     }
 
     result = await orderStatusService.updateOrderStatus(req.params.id, status, {

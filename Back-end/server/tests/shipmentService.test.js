@@ -392,7 +392,7 @@ describe('review regressions', () => {
     const order = await seedOrder();
     await shipmentService.createShipment(order._id.toString(), { trackingNumber: 'A' }, { userId: ADMIN });
 
-    const { delivered } = await shipmentService.deliverAllOutstanding(order._id.toString(), { userId: ADMIN });
+    const { delivered } = await shipmentService.deliverAllOutstanding(order._id.toString());
     expect(delivered).toBe(1);
 
     const saved = await Order.findById(order._id);
@@ -410,7 +410,7 @@ describe('review regressions', () => {
     await shipmentService.createShipment(order._id.toString(), { lines: [{ itemId: wax, quantity: 2 }], trackingNumber: 'A' }, { userId: ADMIN });
     await shipmentService.createShipment(order._id.toString(), { lines: [{ itemId: polish, quantity: 1 }], trackingNumber: 'B', dispatch: false }, { userId: ADMIN });
 
-    await shipmentService.deliverAllOutstanding(order._id.toString(), { userId: ADMIN });
+    await shipmentService.deliverAllOutstanding(order._id.toString());
 
     const saved = await Order.findById(order._id);
     expect(saved.shipments.map((sh) => sh.status)).toEqual(['delivered', 'delivered']);
@@ -420,9 +420,9 @@ describe('review regressions', () => {
   it('is idempotent — re-delivering an already-delivered order moves nothing', async () => {
     const order = await seedOrder();
     await shipmentService.createShipment(order._id.toString(), { trackingNumber: 'A' }, { userId: ADMIN });
-    await shipmentService.deliverAllOutstanding(order._id.toString(), { userId: ADMIN });
+    await shipmentService.deliverAllOutstanding(order._id.toString());
 
-    const again = await shipmentService.deliverAllOutstanding(order._id.toString(), { userId: ADMIN });
+    const again = await shipmentService.deliverAllOutstanding(order._id.toString());
     expect(again.delivered).toBe(0);
   });
 });
