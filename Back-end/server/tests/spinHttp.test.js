@@ -69,6 +69,7 @@ async function seedLiveCampaign(overrides = {}) {
   await SpinPrize.create({
     campaign: campaign._id, name: 'Microfibre Cloth', sku: 'GOODIE-MF', kind: 'goodie',
     stockTotal: 10, stockRemaining: 10,
+    imageUrl: 'https://res.cloudinary.com/demo/image/upload/cloth.png',
   });
   return campaign;
 }
@@ -237,5 +238,75 @@ describe('GET /api/v1/spin/orders/:orderId — what the success page actually ca
     expect(res.body.alreadySpun).toBe(true);
     expect(res.body.result?.prize?.name).toBeTruthy();
     expect(Array.isArray(res.body.result.segmentLabels)).toBe(true);
+  });
+
+  /**
+   * Prize artwork on the wheel.
+   *
+   * `imageUrl` existed on the schema, passed the validator and was returned by the API
+   * for months while nothing set it and nothing drew it. These pin the whole path, because
+   * an image that stops arriving degrades to a text label — the wheel still works, so
+   * nothing fails loudly and the regression would be invisible.
+   */
+  describe('prize artwork reaches the wheel', () => {
+    it('sends each segment its image on the eligible (pre-spin) response', async () => {
+      await seedLiveCampaign();
+      const order = await seedOrder();
+
+      const res = await request(app)
+        .get(`/api/v1/spin/orders/${order._id}`)
+        .set('Cookie', cookie);
+
+      expect(res.body.eligible).toBe(true);
+      const withArt = res.body.segments.filter((s) => s.imageUrl);
+      expect(withArt.length).toBeGreaterThan(0);
+      expect(withArt[0].imageUrl).toMatch(/^https:\/\//);
+    });
+
+    it('returns segmentImages index-aligned with segmentLabels after the spin', async () => {
+      await seedLiveCampaign();
+      const order = await seedOrder();
+      const csrf = await csrfPair();
+
+      const res = await request(app)
+        .post(`/api/v1/spin/orders/${order._id}`)
+        .set('Cookie', [cookie, csrf.cookie])
+        .set('X-XSRF-TOKEN', csrf.token)
+        .send({});
+
+      expect(res.status).toBe(200);
+      // Alignment is the whole contract: the wheel draws image[i] on the slice labelled
+      // label[i], so a length mismatch would paint prizes onto the wrong segments.
+      expect(res.body.result.segmentImages).toHaveLength(res.body.result.segmentLabels.length);
+      expect(res.body.result.segmentImages.some((u) => typeof u === 'string')).toBe(true);
+    });
+
+    it('the won prize carries its image so the reveal can show it', async () => {
+      await seedLiveCampaign();
+      const order = await seedOrder();
+      const csrf = await csrfPair();
+      const res = await request(app)
+        .post(`/api/v1/spin/orders/${order._id}`)
+        .set('Cookie', [cookie, csrf.cookie])
+        .set('X-XSRF-TOKEN', csrf.token)
+        .send({});
+      expect(res.body.result.prize).toHaveProperty('imageUrl');
+    });
+
+    it('a result stored BEFORE images existed still re-renders (empty, not undefined)', async () => {
+      await seedLiveCampaign();
+      const order = await seedOrder();
+      const csrf = await csrfPair();
+      await request(app).post(`/api/v1/spin/orders/${order._id}`)
+        .set('Cookie', [cookie, csrf.cookie]).set('X-XSRF-TOKEN', csrf.token).send({});
+
+      // Simulate a legacy row: the field simply is not there.
+      await SpinResult.collection.updateOne({ order: order._id }, { $unset: { segmentImages: '' } });
+
+      const res = await request(app)
+        .get(`/api/v1/spin/orders/${order._id}`)
+        .set('Cookie', cookie);
+      expect(res.body.result.segmentImages).toEqual([]);
+    });
   });
 });

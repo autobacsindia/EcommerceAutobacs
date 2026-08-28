@@ -13,11 +13,19 @@ jest.unstable_mockModule('../../../queue/queues.js', () => ({
   getOrderQueue: () => ({ add: mockOrderAdd }),
 }));
 
-// The enqueue is gated on REDIS_URL being set (checked at call time, not import).
+const { OrderStatusService } = await import('../../../services/orderStatusService.js');
+
+// The enqueue is gated on REDIS_URL being set, and reads it at CALL time — so set it
+// AFTER the import above, never before.
+//
+// orderStatusService pulls in spinService -> cacheService -> services/redisClient.js,
+// which constructs its ioredis client at MODULE LOAD gated on process.env.REDIS_URL.
+// Setting the variable first therefore dialled a real socket at localhost:6379 with
+// nothing listening; the rejected pending commands surfaced as bare
+// "Connection is closed." attributed to whichever test was running - all 20 here,
+// plus "Test suite failed to run", with no assertion ever evaluated.
 const ORIGINAL_REDIS_URL = process.env.REDIS_URL;
 process.env.REDIS_URL = 'redis://localhost:6379';
-
-const { OrderStatusService } = await import('../../../services/orderStatusService.js');
 const service = new OrderStatusService();
 
 beforeEach(() => {

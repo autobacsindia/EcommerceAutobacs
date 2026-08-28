@@ -19,6 +19,7 @@ class AdaptiveThrottlingService {
     this.checkInterval = setInterval(() => {
       this.checkScheduledProfiles();
     }, 60000);
+    this.checkInterval.unref();
     
     if (process.env.NODE_ENV !== 'test') {
       console.log('✓ Adaptive Throttling Service initialized');

@@ -93,6 +93,9 @@ export const getSpinStatus = async (req, res) => {
         prize: r.prizeSnapshot,
         segmentIndex: r.segmentIndex,
         segmentLabels: r.segmentLabels,
+        // Empty on results written before prize images existed — the wheel falls back
+        // to labels, so an old order still re-renders correctly.
+        segmentImages: r.segmentImages || [],
         status: r.status,
         spunAt: r.spunAt,
       },
@@ -163,6 +166,7 @@ export const postSpin = async (req, res) => {
       prize: result.prizeSnapshot,
       segmentIndex: result.segmentIndex,
       segmentLabels: result.segmentLabels,
+      segmentImages: result.segmentImages || [],
       status: result.status,
       spunAt: result.spunAt,
     },

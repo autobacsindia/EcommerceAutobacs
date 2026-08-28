@@ -298,13 +298,18 @@ class OrderStatusService {
       // CRM side-effects: tag the customer on first payment, and move the lead
       // pipeline (convert on paid, detach on admin-cancel). Best-effort, awaited
       // so it's deterministic for callers/tests but never fatal.
-      await this._syncCrmOnStatus(order, newStatus);
+      //
+      // `session` MUST be forwarded. These writes touch THIS order, and when the
+      // caller wraps us in a transaction (the Razorpay capture path does) a
+      // session-less write to a document the open transaction has already modified
+      // self-deadlocks — see the note on _syncCrmOnStatus.
+      await this._syncCrmOnStatus(order, newStatus, session);
 
       // Spin-to-Win clawback: a cancelled or returned order gives its prize back.
       // Awaited (not queued) for the same reason as the CRM sync — deterministic for
       // callers and tests — but never fatal, because a reward is not worth failing a
       // legitimate status transition over.
-      await this._voidSpinRewardOnStatus(order, newStatus);
+      await this._voidSpinRewardOnStatus(order, newStatus, session);
 
       return {
         success: true,
@@ -400,8 +405,21 @@ class OrderStatusService {
    * customer's cancellation or a refund from completing.
    * @private
    */
-  async _voidSpinRewardOnStatus(order, newStatus) {
+  async _voidSpinRewardOnStatus(order, newStatus, session = null) {
     if (!['cancelled', 'returned', 'refunded'].includes(newStatus)) return;
+    // spinService.voidForOrder opens its OWN transaction and writes this order
+    // (markSpinRewardVoided). Running that inside a caller's transaction would make
+    // it wait on a lock that transaction holds while that transaction waits on us —
+    // the self-deadlock documented on _syncCrmOnStatus. No caller passes a session
+    // for a cancel/return today; refuse loudly rather than let the first one that
+    // does hang the money path for 60s.
+    if (session) {
+      console.error(
+        '[OrderStatus] Spin reward clawback SKIPPED: cannot run inside a caller transaction ' +
+        `(order ${order._id}, status ${newStatus}). Void the reward after the transaction commits.`
+      );
+      return;
+    }
     const reason = newStatus === 'cancelled'
       ? 'order_cancelled'
       : (newStatus === 'returned' ? 'order_returned' : 'order_refunded');
@@ -412,7 +430,31 @@ class OrderStatusService {
     }
   }
 
-  async _syncCrmOnStatus(order, newStatus) {
+  /**
+   * @param {Object} order
+   * @param {string} newStatus
+   * @param {import('mongoose').ClientSession|null} [session] - the caller's open
+   *   transaction, if any. MUST be forwarded to every write that touches THIS order
+   *   or its user.
+   *
+   *   Why it matters: `markPurchaseCountedOnce` updates the same Order document the
+   *   enclosing transaction has already written via `orderRepository.save(order,
+   *   session)`. A session-less write to a document held by an open transaction does
+   *   not fail fast — WiredTiger makes it wait for the lock. The transaction cannot
+   *   commit because it is awaiting that write, and the write cannot proceed because
+   *   the transaction holds the lock. Nothing breaks the tie until the server's
+   *   `transactionLifetimeLimitSeconds` reaper (60s) aborts the transaction; then
+   *   `withTransaction` retries and deadlocks again, until its 120s retry deadline
+   *   expires and the whole capture throws `Transaction ... has been aborted`.
+   *
+   *   That is exactly what happened on the Razorpay capture path: every
+   *   `awaiting_payment → processing` transition inside `processPaymentSuccess`
+   *   stalled ~60s per attempt and took ~180s to fail. `leadSyncService` stays
+   *   OUTSIDE the transaction on purpose — it writes Lead/Consultation documents,
+   *   never this order, so it cannot deadlock, and keeping CRM upserts out of the
+   *   money transaction keeps its write set small.
+   */
+  async _syncCrmOnStatus(order, newStatus, session = null) {
     try {
       // `processing` is the first paid fulfillment stage (payment captured), so
       // that's where we stamp the customer's purchase denorm.
@@ -422,10 +464,10 @@ class OrderStatusService {
         // unconditional. Flip a once-only flag atomically first; only the first
         // caller records the purchase + net LTV. Order.totalAmount is rupees →
         // store integer paise (refunds decrement later, per ADR-006).
-        const firstCount = await orderRepository.markPurchaseCountedOnce(order._id);
+        const firstCount = await orderRepository.markPurchaseCountedOnce(order._id, session);
         if (firstCount) {
           const amountPaise = Math.round((order.totalAmount || 0) * 100);
-          await userRepository.markPurchased(order.user, { amountPaise });
+          await userRepository.markPurchased(order.user, { amountPaise }, session);
         }
       }
       // Reverse net LTV + paid-count when the money goes back: a paid order that is
@@ -433,10 +475,10 @@ class OrderStatusService {
       // orders that were actually counted, so unpaid cancels and retried jobs are
       // no-ops. Mirrors the `processing` increment above. (PAY-2 / ADR-006)
       if (['cancelled', 'returned'].includes(newStatus) && order.user) {
-        const firstReversal = await orderRepository.markPurchaseReversedOnce(order._id);
+        const firstReversal = await orderRepository.markPurchaseReversedOnce(order._id, session);
         if (firstReversal) {
           const amountPaise = Math.round((order.totalAmount || 0) * 100);
-          await userRepository.reversePurchase(order.user, { amountPaise });
+          await userRepository.reversePurchase(order.user, { amountPaise }, session);
         }
       }
       if (['processing', 'delivered', 'cancelled', 'returned'].includes(newStatus)) {

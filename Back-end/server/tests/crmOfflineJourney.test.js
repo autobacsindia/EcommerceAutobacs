@@ -21,9 +21,9 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 // The offline controller enqueues invoice + magic-link emails only when a queue
-// Redis is configured. Turn it on and stub the queue so the token is generated
-// but no real Redis/email is touched.
-process.env.REDIS_URL = 'redis://localhost:6379';
+// Redis is configured. Stub the queue so the token is generated but no real
+// Redis/email is touched. REDIS_URL itself is set AFTER the imports below — see
+// the note there.
 // Plain functions (not jest.fn) so the suite's resetMocks doesn't wipe the
 // resolved-promise implementation between tests. Capture enqueued jobs so a test
 // can read the RAW magic-link token (only the hash is persisted on the user).
@@ -61,6 +61,33 @@ const { default: leadSyncService } = await import('../services/leadSyncService.j
 const { default: leadRepository } = await import('../repositories/leadRepository.js');
 const { default: orderRepository } = await import('../repositories/orderRepository.js');
 const { isSalesRep } = await import('../utils/salesReps.js');
+
+// ⚠️ Set REDIS_URL only AFTER the imports above have run.
+//
+// services/redisClient.js constructs its ioredis client at MODULE LOAD time, gated
+// on process.env.REDIS_URL. Setting the variable before the import chain therefore
+// dials a real socket at localhost:6379, which nothing is listening on locally: the
+// connection errors, sessionStore's circuit breaker opens, and the rejected pending
+// commands surface as bare "Connection is closed." failures attributed to whichever
+// test happened to be running — every test in this file, plus "Test suite failed to
+// run", with no assertion ever evaluated.
+//
+// The controller under test reads process.env.REDIS_URL at CALL time (see
+// orderController createOfflineOrder), so setting it here still exercises the
+// enqueue path. Every other suite that needs a "Redis is configured" world does the
+// same thing.
+const ORIGINAL_REDIS_URL = process.env.REDIS_URL;
+process.env.REDIS_URL = 'redis://localhost:6379';
+
+// process.env is NOT reset between suites (jest resets the module registry, not the
+// process), and detectOpenHandles forces --runInBand, so every later suite in the run
+// inherits whatever we leave here — and any of them whose import graph reaches
+// services/redisClient.js would then build a client against a dead localhost. Restore
+// it rather than leave that landmine for whichever suite happens to run next.
+afterAll(() => {
+  if (ORIGINAL_REDIS_URL === undefined) delete process.env.REDIS_URL;
+  else process.env.REDIS_URL = ORIGINAL_REDIS_URL;
+});
 
 // ── Minimal req/res doubles (controllers take (req, res)) ────────────────────
 const makeRes = () => {

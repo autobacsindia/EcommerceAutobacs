@@ -13,6 +13,14 @@
  * because setup.js started a STANDALONE mongod, which cannot run transactions;
  * setup.js now starts a replica set for every suite, so useTransactionalDb() just
  * reuses it (and warms it up).
+ *
+ * The timeout below is deliberately TIGHT (30s). Every test here settles in well
+ * under a second against the in-memory replica set; the failure mode it guards is a
+ * session-less write inside the capture transaction, which cannot fail faster than
+ * the server's 60s transactionLifetimeLimitSeconds reaper. A generous timeout let
+ * that bug hide for months as "these tests are just slow" — the whole suite took
+ * 362s and the concurrent case timed out, so the idempotency guarantee this file
+ * exists to prove was never actually verified. Do NOT raise it to make a hang pass.
  */
 
 import { jest } from '@jest/globals';
@@ -28,7 +36,7 @@ import User from '../models/User.js';
 import Order from '../models/Order.js';
 import Payment from '../models/Payment.js';
 
-jest.setTimeout(120000);
+jest.setTimeout(30000);
 
 let razorpayService;
 
@@ -123,6 +131,44 @@ describe('Razorpay payment.captured — concurrent delivery', () => {
 
     const total = await Payment.countDocuments({ gatewayPaymentId: paymentId });
     expect(total).toBe(1);
+  });
+
+  // Regression: the `awaiting_payment → processing` transition inside the capture
+  // transaction fans out to CRM side-effects. Those write THIS order
+  // (markPurchaseCountedOnce) and its user (markPurchased). They must join the
+  // caller's session — a session-less write against a document the open transaction
+  // already modified waits on a lock that transaction holds while that transaction
+  // waits on the write, and only the 60s transaction reaper breaks the tie. See
+  // orderStatusService._syncCrmOnStatus.
+  it('commits the CRM purchase denormalization in the same transaction as the capture', async () => {
+    const { user, order } = await seedOrder();
+    const paymentId = `pay_${Date.now()}_crm`;
+
+    await razorpayService.handlePaymentCaptured(capturedPayload(order, paymentId));
+
+    const fresh = await Order.findById(order._id).lean();
+    expect(fresh.paymentStatus).toBe('paid');
+    expect(fresh.status).toBe('processing');
+    // The once-only flag committed WITH the payment, not as orphaned collateral of
+    // an aborted-and-retried attempt.
+    expect(fresh.purchaseCounted).toBe(true);
+
+    const freshUser = await User.findById(user._id).lean();
+    expect(freshUser.hasPurchased).toBe(true);
+    expect(freshUser.paidOrderCount).toBe(1);
+    expect(freshUser.totalSpentPaise).toBe(order.totalAmount * 100);
+  });
+
+  it('counts the purchase exactly once when the same capture is delivered twice', async () => {
+    const { user, order } = await seedOrder();
+    const payload = capturedPayload(order, `pay_${Date.now()}_crm_dup`);
+
+    await razorpayService.handlePaymentCaptured(payload);
+    await razorpayService.handlePaymentCaptured(payload); // Razorpay retry
+
+    const freshUser = await User.findById(user._id).lean();
+    expect(freshUser.paidOrderCount).toBe(1);
+    expect(freshUser.totalSpentPaise).toBe(order.totalAmount * 100);
   });
 
   it('records an unknown gateway method as "other" instead of throwing (money not stranded)', async () => {

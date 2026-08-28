@@ -58,6 +58,16 @@ const SpinResultSchema = new mongoose.Schema({
   segmentIndex: { type: Number, required: true, min: 0 },
   /** The slice labels this customer was shown, so a dispute can be reconstructed. */
   segmentLabels: { type: [String], default: [] },
+  /**
+   * The prize image shown on each slice, index-aligned with segmentLabels.
+   *
+   * A PARALLEL array rather than a richer segmentLabels, because segmentLabels is
+   * already populated on every historical result — turning it into objects would make
+   * every stored row the wrong shape. Entries are null for prizes with no image, and
+   * the array is empty on results written before images existed; the wheel falls back
+   * to the label in both cases.
+   */
+  segmentImages: { type: [String], default: [] },
 
   status: { type: String, enum: SPIN_RESULT_STATUSES, default: SPIN_RESULT_STATUS.GRANTED, index: true },
   voidReason: { type: String, enum: [...VOID_REASONS, null], default: null },

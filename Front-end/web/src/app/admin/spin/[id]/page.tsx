@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient, { ApiError } from '@/lib/api';
+import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatDateTimeIST } from '@/lib/datetime';
 import type { SpinCampaign, SpinPrize, OddsPreview, PublishFieldError, PrizeKind } from '@/types/spin';
@@ -43,6 +44,7 @@ const emptyPrize = () => ({
   couponValidDays: 30,
   couponMinCartValue: 0,
   karmaPoints: 0,
+  imageUrl: null as string | null,
 });
 
 export default function SpinCampaignDetailPage() {
@@ -125,6 +127,7 @@ export default function SpinCampaignDetailPage() {
       couponValidDays: p.couponValidDays ?? 30,
       couponMinCartValue: p.couponMinCartValue ?? 0,
       karmaPoints: p.karmaPoints ?? 0,
+      imageUrl: p.imageUrl ?? null,
     });
   };
 
@@ -133,6 +136,27 @@ export default function SpinCampaignDetailPage() {
       prizeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [showPrizeForm, editingPrizeId]);
+
+  const [uploading, setUploading] = useState(false);
+
+  /**
+   * Upload the prize picture straight to Cloudinary and keep only the URL.
+   *
+   * Same signed direct-upload path the product gallery uses — bytes never cross our API,
+   * which is what keeps this under Vercel's ~4.5 MB request cap.
+   */
+  const uploadPrizeImage = async (file: File) => {
+    setUploading(true);
+    setError(null);
+    try {
+      const img = await uploadImageToCloudinary(file, 'spin');
+      setPrizeForm((f) => ({ ...f, imageUrl: img.url }));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const closePrizeForm = () => {
     setShowPrizeForm(false);
@@ -168,6 +192,7 @@ export default function SpinCampaignDetailPage() {
           couponMinCartValue: Number(prizeForm.couponMinCartValue),
         } : {}),
         ...(prizeForm.kind === 'karma' ? { karmaPoints: Number(prizeForm.karmaPoints) } : {}),
+        imageUrl: prizeForm.imageUrl,
       });
       setMsg('Prize updated. Coupons already issued to past winners keep the old value.');
       closePrizeForm();
@@ -201,6 +226,7 @@ export default function SpinCampaignDetailPage() {
           couponMinCartValue: Number(prizeForm.couponMinCartValue),
         } : {}),
         karmaPoints: prizeForm.kind === 'karma' ? Number(prizeForm.karmaPoints) : 0,
+        imageUrl: prizeForm.imageUrl,
       });
       setMsg('Prize added.');
       closePrizeForm();
@@ -440,6 +466,37 @@ export default function SpinCampaignDetailPage() {
               <span className="mb-1 block font-medium text-gray-700">Prize name</span>
               <input value={prizeForm.name} onChange={(e) => setPrizeForm({ ...prizeForm, name: e.target.value })}
                 placeholder="Microfibre Cloth" className="w-full rounded-lg border border-gray-300 px-3 py-2" />
+            </label>
+            <label className="sm:col-span-2 text-sm">
+              <span className="mb-1 block font-medium text-gray-700">
+                Picture on the wheel <span className="font-normal text-gray-500">(optional — a t-shirt prize shows a t-shirt)</span>
+              </span>
+              <div className="flex items-center gap-3">
+                {prizeForm.imageUrl ? (
+                  <>
+                    {/* Round, because that is exactly how it is clipped on the dial —
+                        a square preview would misrepresent the crop. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={prizeForm.imageUrl} alt=""
+                      className="h-14 w-14 rounded-full border border-gray-300 object-cover" />
+                    <button type="button"
+                      onClick={() => setPrizeForm({ ...prizeForm, imageUrl: null })}
+                      className="text-sm text-red-600 hover:underline">Remove</button>
+                  </>
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-gray-300 text-xs text-gray-400">
+                    none
+                  </div>
+                )}
+                <input type="file" accept="image/*" disabled={uploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadPrizeImage(f); e.target.value = ''; }}
+                  className="text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-200 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-gray-300" />
+                {uploading && <span className="text-sm text-gray-500">Uploading…</span>}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Square images work best — it is cropped to a circle on the dial. Slices with no
+                picture just show their text label.
+              </p>
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-medium text-gray-700">Short label (fits on the dial, ≤24 chars)</span>

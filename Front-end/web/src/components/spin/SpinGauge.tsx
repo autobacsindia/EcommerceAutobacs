@@ -29,6 +29,11 @@ const CX = 200;
 const CY = 190;
 const R_OUTER = 160;
 const R_INNER = 108;
+// Prize icon radius, and the clip that makes it a disc. Sized so the badge (icon + its
+// 2px ring) stays inside R_OUTER at its mounting radius — an icon that overflows the
+// wedge reads as a rendering bug rather than a prize.
+const ICON_R = 13;
+const ICON_CLIP = 'spin-icon-clip';
 
 /** Wedge fills — deliberately not the brand gold, so the winner's highlight can be. */
 const WEDGE_COLORS = [
@@ -60,6 +65,12 @@ const wedgePath = (startDeg: number, endDeg: number) => {
 
 export interface SpinGaugeProps {
   labels: string[];
+  /**
+   * Prize artwork, index-aligned with `labels`. Shorter than `labels`, or holding
+   * nulls, is normal and expected: any slice without art just shows its text label as
+   * before, so a half-configured campaign still renders a complete wheel.
+   */
+  images?: (string | null)[];
   /** Server-decided winner. null = idle. */
   winningIndex: number | null;
   /** True while the POST is in flight — needle free-revs until the answer lands. */
@@ -67,7 +78,7 @@ export interface SpinGaugeProps {
   onSettled?: () => void;
 }
 
-export default function SpinGauge({ labels, winningIndex, spinning, onSettled }: SpinGaugeProps) {
+export default function SpinGauge({ labels, images = [], winningIndex, spinning, onSettled }: SpinGaugeProps) {
   const count = Math.max(labels.length, 1);
   const segAngle = ARC_SWEEP / count;
 
@@ -158,6 +169,13 @@ export default function SpinGauge({ labels, winningIndex, spinning, onSettled }:
             <feGaussianBlur stdDeviation="4" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
+          {/*
+            objectBoundingBox units so ONE clip serves every icon regardless of where it
+            sits on the dial — a user-space circle would need re-declaring per segment.
+          */}
+          <clipPath id={ICON_CLIP} clipPathUnits="objectBoundingBox">
+            <circle cx="0.5" cy="0.5" r="0.5" />
+          </clipPath>
         </defs>
 
         <circle cx={CX} cy={CY} r={R_OUTER + 14} fill="url(#spin-face)" />
@@ -167,7 +185,11 @@ export default function SpinGauge({ labels, winningIndex, spinning, onSettled }:
           const end = start + segAngle;
           const isWinner = settled && winningIndex === i;
           const mid = start + segAngle / 2;
-          const textPos = polar(CX, CY, (R_OUTER + R_INNER) / 2, mid);
+          const art = images[i] || null;
+          // With artwork the slice carries an icon above its label, so the text moves
+          // inward to make room. Without it the label stays exactly where it was.
+          const textPos = polar(CX, CY, (R_OUTER + R_INNER) / 2 - (art ? 15 : 0), mid);
+          const iconPos = art ? polar(CX, CY, (R_OUTER + R_INNER) / 2 + 10, mid) : null;
           // Keep label text upright on the left half of the dial.
           const flip = mid > 90 || mid < -90;
           return (
@@ -191,6 +213,33 @@ export default function SpinGauge({ labels, winningIndex, spinning, onSettled }:
               >
                 {label.length > 14 ? `${label.slice(0, 13)}…` : label}
               </text>
+              {art && iconPos && (
+                /*
+                  Rotated with the slice so the icon sits square on its wedge, and
+                  counter-rotated on the left half for the same reason the label is:
+                  otherwise half the prizes appear upside down.
+
+                  No onError handling is possible on an SVG <image>; a dead URL simply
+                  paints nothing and the label underneath still names the prize, which is
+                  why the label is never replaced by the icon.
+                */
+                <g transform={`rotate(${flip ? mid + 180 : mid} ${iconPos.x} ${iconPos.y})`}>
+                  <circle
+                    cx={iconPos.x} cy={iconPos.y} r={ICON_R + 2}
+                    fill={isWinner ? '#fff7e0' : '#0d1a2d'}
+                    stroke={isWinner ? '#ffd97a' : '#31435c'}
+                    strokeWidth={1}
+                  />
+                  <image
+                    href={art}
+                    x={iconPos.x - ICON_R} y={iconPos.y - ICON_R}
+                    width={ICON_R * 2} height={ICON_R * 2}
+                    clipPath={`url(#${ICON_CLIP})`}
+                    preserveAspectRatio="xMidYMid slice"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                </g>
+              )}
             </g>
           );
         })}

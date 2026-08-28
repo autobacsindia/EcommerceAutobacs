@@ -267,8 +267,9 @@ function cleanupCache() {
   }
 }
 
-// Periodic cache cleanup (every minute)
-setInterval(cleanupCache, 60000);
+// Periodic cache cleanup (every minute). Module-scope, so it starts on import —
+// .unref() keeps it from holding the process (or a Jest worker) open on its own.
+setInterval(cleanupCache, 60000).unref();
 
 export default {
   introspectToken,

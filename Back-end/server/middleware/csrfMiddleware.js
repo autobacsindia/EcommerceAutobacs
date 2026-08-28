@@ -14,7 +14,7 @@ let fallbackCleanupScheduled = false;
 function scheduleFallbackCleanup() {
   if (fallbackCleanupScheduled) return;
   fallbackCleanupScheduled = true;
-  setInterval(() => fallbackCounts.clear(), CSRF_WINDOW_SEC * 1000);
+  setInterval(() => fallbackCounts.clear(), CSRF_WINDOW_SEC * 1000).unref();
 }
 
 async function trackCsrfFailure(clientIP) {

@@ -236,7 +236,10 @@ class CacheService {
 
   startTagCleanup() {
     if (!this.isCleanupLeader && redisClient) return;
-    setInterval(() => this.cleanupExpiredTags(), 900000);
+    // .unref() — housekeeping must never hold the event loop open: it would block a
+    // graceful SIGTERM shutdown, and in Jest it keeps the worker alive past the last
+    // assertion (logging "after tests are done") until forceExit papers over it.
+    setInterval(() => this.cleanupExpiredTags(), 900000).unref();
   }
 
   cleanupExpiredTags() {
@@ -421,6 +424,7 @@ class CacheService {
         this.stopLockHeartbeat(lockKey);
       }
     }, CACHE_CONFIG.LOCK_HEARTBEAT_INTERVAL);
+    heartbeatInterval.unref();
     this.lockHeartbeats.set(lockKey, heartbeatInterval);
   }
 
@@ -450,7 +454,7 @@ class CacheService {
   // ── Cluster-Safe Cleanup ──────────────────────────────────────────────────
 
   async startClusterSafeCleanup() {
-    setInterval(() => this.tryBecomeCleanupLeader(), 900000);
+    setInterval(() => this.tryBecomeCleanupLeader(), 900000).unref();
     await this.tryBecomeCleanupLeader();
   }
 
@@ -542,7 +546,7 @@ class CacheService {
     setInterval(() => {
       const metrics = this.getMetrics();
       console.log(`[CacheService] Metrics: hitRate=${metrics.hitRate}, hits=${metrics.hits}, misses=${metrics.misses}`);
-    }, 30000);
+    }, 30000).unref();
   }
 
   resetMetrics() {
@@ -568,7 +572,7 @@ class CacheService {
       for (const [key, entry] of this.cache.entries()) {
         if (now > entry.expiry) this.cache.delete(key);
       }
-    }, 60000);
+    }, 60000).unref();
   }
 }
 

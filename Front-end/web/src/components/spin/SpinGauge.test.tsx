@@ -60,4 +60,53 @@ describe('SpinGauge', () => {
   it('survives an empty label list without dividing by zero', () => {
     expect(() => render(<SpinGauge labels={[]} winningIndex={null} spinning={false} />)).not.toThrow();
   });
+
+  /**
+   * Prize artwork. The wheel is configured per campaign, so a half-filled `images`
+   * array is the normal state, not an error — these pin that a missing picture costs
+   * you an icon and nothing else.
+   */
+  describe('prize artwork', () => {
+    const withArt = ['https://cdn.test/tshirt.png', 'https://cdn.test/cup.png'];
+
+    it('draws one icon per slice that has a picture', () => {
+      const { container } = render(
+        <SpinGauge labels={LABELS} images={withArt} winningIndex={null} spinning={false} />,
+      );
+      const images = container.querySelectorAll('image');
+      expect(images).toHaveLength(2);
+      expect(images[0]).toHaveAttribute('href', withArt[0]);
+    });
+
+    it('keeps the text label even when a slice has a picture', () => {
+      // The icon supplements the name, never replaces it: a dead image URL paints
+      // nothing on an SVG <image> and there is no onError to catch it, so a wheel
+      // relying on art alone would show blank wedges.
+      render(<SpinGauge labels={LABELS} images={withArt} winningIndex={null} spinning={false} />);
+      expect(screen.getByText(LABELS[0])).toBeInTheDocument();
+    });
+
+    it('renders slices with no picture as plain labels', () => {
+      const { container } = render(
+        <SpinGauge labels={LABELS} images={[withArt[0], null]} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelectorAll('image')).toHaveLength(1);
+      expect(screen.getByText(LABELS[1])).toBeInTheDocument();
+    });
+
+    it('renders unchanged when images is omitted entirely (legacy results)', () => {
+      const { container } = render(
+        <SpinGauge labels={LABELS} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelectorAll('image')).toHaveLength(0);
+      expect(screen.getByText(LABELS[0])).toBeInTheDocument();
+    });
+
+    it('ignores an images array longer than the label list', () => {
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} images={withArt} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelectorAll('image')).toHaveLength(1);
+    });
+  });
 });
