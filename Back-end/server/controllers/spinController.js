@@ -217,6 +217,45 @@ export const updateCampaign = async (req, res) => {
   // `status` is stripped deliberately: it moves only through publish/setStatus, which
   // run the safety gate. Underscore-prefixed so the linter knows the discard is intent.
   const { status: _status, ...patch } = req.body;
+
+  /*
+    ── REOPENING A CLOSED WINDOW IS THE ONE EDIT WE REFUSE ────────────────────────────
+    Dates and the goodie rate are otherwise freely editable: fixing a typo, extending a
+    campaign that is still running, or repricing the odds all only affect future spins.
+
+    Pushing `endsAt` into the future on a campaign that has ALREADY CLOSED and already
+    has spins is different, and it fails silently in a way nobody would connect to the
+    edit. The per-user cap counts granted spins per CAMPAIGN for all time
+    (spinResultRepository.countGrantedForUser), so every customer who spun in the first
+    window is instantly over their cap in the second: they see no wheel at all, with no
+    error, while new customers spin freely. The prize stock is shared across both windows
+    too, so the second window inherits whatever the first left behind.
+
+    Cloning gives a fresh campaign id, which resets both. That is why the Clone button
+    exists, and why this is a refusal rather than a warning.
+  */
+  if (patch.endsAt) {
+    const existing = await spinCampaignRepository.findById(req.params.id);
+    if (!existing) throw new AppError('Campaign not found.', 404);
+
+    const now = new Date();
+    const alreadyClosed = existing.endsAt && new Date(existing.endsAt) < now;
+    const beingExtended = new Date(patch.endsAt) > new Date(existing.endsAt);
+
+    if (alreadyClosed && beingExtended) {
+      const spins = await spinResultRepository.countGrantedForCampaign(req.params.id);
+      if (spins > 0) {
+        throw new AppError(
+          'This campaign has already closed and been spun ' + spins + ' time(s), so its window cannot be reopened. '
+          + 'Everyone who spun the first time would be silently locked out by the per-customer cap, '
+          + 'and the leftover prize stock would carry over. Use "Clone for next window" instead.',
+          409,
+          { expose: true },
+        );
+      }
+    }
+  }
+
   const campaign = await spinCampaignRepository.updateById(req.params.id, patch);
   if (!campaign) throw new AppError('Campaign not found.', 404);
   await purgeSpinCache();
