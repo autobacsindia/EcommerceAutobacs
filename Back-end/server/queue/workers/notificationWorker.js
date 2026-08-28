@@ -4,6 +4,7 @@
  * Job names:
  *   send-order-invoice       { orderId }          — generate + email the invoice/receipt (idempotent)
  *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
+ *   send-shipment-email      { orderId, shipmentId, kind } — ONE parcel of a split shipment (idempotent per parcel)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
  *   notify-back-in-stock       { productId, variantId } — fan out to everyone waiting on a recovered item
@@ -69,6 +70,14 @@ const handlers = {
   'send-order-status-email': async (job) => {
     const { orderId, status } = job.data;
     await emailOrderStatusUpdate(orderId, status);
+  },
+
+  // One parcel of a split shipment. Same sender as the order-level email, but keyed on
+  // the shipment id — which is the only reason a SECOND parcel's "shipped" email is
+  // sent at all rather than swallowed by the order-level idempotency guard.
+  'send-shipment-email': async (job) => {
+    const { orderId, shipmentId, kind } = job.data;
+    await emailOrderStatusUpdate(orderId, kind, { shipmentId });
   },
 
   'send-review-request': async (job) => {

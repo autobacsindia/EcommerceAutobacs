@@ -5,6 +5,8 @@ import userRepository from '../repositories/userRepository.js';
 import orderService from '../services/orderService.js';
 import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
+import shipmentService from '../services/shipmentService.js';
+import { remainingToShip, fulfilmentSummary } from '../utils/orderFulfilment.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { remainingRefundable } from '../services/refundMathService.js';
@@ -973,9 +975,20 @@ export const updateOrderStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: check.message });
       }
 
+      /*
+        The public id used to be `slip-<orderId>.pdf`, i.e. one slot per ORDER. With
+        several parcels per order, uploading parcel 2's slip overwrote parcel 1's at the
+        same Cloudinary id — and because parcel 1's stored URL points at that id, it then
+        served parcel 2's PDF. Anyone opening parcel 1's slip, or the customer receiving
+        it by email, got the wrong courier paperwork.
+
+        A random suffix gives every parcel its own object. Cloudinary ids are otherwise
+        opaque, so nothing reads them back by convention.
+      */
+      const slipNonce = crypto.randomBytes(6).toString('hex');
       const uploaded = await uploadRawToCloudinary(req.file.buffer, {
         folder: process.env.SHIPPING_SLIP_CLOUDINARY_FOLDER || 'shipping-slips',
-        publicId: `slip-${req.params.id}.pdf`,
+        publicId: `slip-${req.params.id}-${slipNonce}.pdf`,
       });
       shippingSlip = { url: uploaded.secure_url, publicId: uploaded.public_id, uploadedAt: new Date() };
     }
@@ -996,15 +1009,79 @@ export const updateOrderStatus = async (req, res) => {
     };
   }
 
-  const result = await orderStatusService.updateOrderStatus(req.params.id, status, {
-    userId: req.user.id,
-    isAdmin: true,
-    cancelledBy: 'admin', // only consumed when status === 'cancelled'
-    reason,
-    notes,
-    metadata,
-    shipping,
-  });
+  /*
+    A `shipped` transition now goes through the parcel model.
+
+    With no `lines` in the body this creates ONE parcel containing everything the order
+    still owes — byte-for-byte the old behaviour ("mark the whole order shipped"), but
+    recorded as a shipment so tracking, the slip and the delivery date belong to a box
+    rather than to the order. Every other status keeps the original path.
+
+    The order-level trackingNumber/carrier/slip are still written by orderStatusService
+    (via `shipping`) for the single-parcel case, so existing readers — the customer
+    tracking panel, orderTrackingService — keep working untouched.
+  */
+  let result;
+  if (status === 'shipped') {
+    const created = await shipmentService.createShipment(req.params.id, {
+      lines: Array.isArray(req.body.lines) && req.body.lines.length ? req.body.lines : undefined,
+      includesReward: req.body.includesReward,
+      trackingNumber: shipping.trackingNumber,
+      carrier: shipping.carrier,
+      estimatedDelivery: shipping.estimatedDelivery,
+      shippingSlip: shipping.shippingSlip,
+      notes,
+    }, { userId: req.user.id });
+
+    if (!created.success) {
+      if (shipping?.shippingSlip?.publicId) {
+        await deleteFromCloudinary(shipping.shippingSlip.publicId, 'raw').catch(() => {});
+      }
+      return res.status(400).json({ success: false, message: created.message });
+    }
+
+    /*
+      No second status call here, deliberately. createShipment already rolled the order
+      up to `shipped` through orderStatusService (which is what writes status history,
+      fulfilment metrics and the CRM sync), and it mirrored the tracking fields onto the
+      order in the same atomic write as the parcel. Calling updateOrderStatus again to
+      "persist the tracking" would push a duplicate status-history entry and re-run every
+      side effect on every single dispatch.
+    */
+    result = { success: true, message: created.message, order: created.order };
+  } else {
+    /*
+      Marking the whole order delivered has to deliver its PARCELS too.
+
+      Once an order has parcels, the per-line return window reads their delivery dates,
+      not the order's. Flipping only `Order.status` left every parcel at `shipped`, so
+      `deliveredAtForItem` returned null for every line and the return window never
+      opened — the order said "delivered" while the customer's Return button stayed
+      hidden and the backend refused every request.
+
+      Idempotent, and runs BEFORE the status change so the roll-up it triggers agrees
+      with what the admin asked for. Orders with no parcels are untouched.
+    */
+    let parcelsDelivered = 0;
+    if (status === 'delivered') {
+      ({ delivered: parcelsDelivered } =
+        await shipmentService.deliverAllOutstanding(req.params.id, { userId: req.user.id }));
+    }
+
+    result = await orderStatusService.updateOrderStatus(req.params.id, status, {
+      userId: req.user.id,
+      isAdmin: true,
+      cancelledBy: 'admin', // only consumed when status === 'cancelled'
+      reason,
+      notes,
+      metadata,
+      shipping,
+      // Each parcel just emailed its own "delivered"; an order-level email on top would
+      // be a second notification for the same event. Suppressed only when parcels
+      // actually sent one, so a parcel-less order still gets its single email.
+      suppressStatusEmail: parcelsDelivered > 0,
+    });
+  }
 
   if (!result.success) {
     // The slip was uploaded before the service re-validated (needed so the URL is
@@ -1016,6 +1093,142 @@ export const updateOrderStatus = async (req, res) => {
     return res.status(400).json({ success: false, message: result.message });
   }
 
+  res.json({ success: true, message: result.message, order: result.order });
+};
+
+/**
+ * List the parcels on an order, what is still owed, and the derived fulfilment label.
+ * Owner or admin — the customer needs this to see "parcel 1 of 2 arriving Tuesday".
+ *
+ * @route GET /orders/:id/shipments
+ */
+export const getShipments = async (req, res) => {
+  // Projected lean read: this runs on every customer and admin order-page view, and the
+  // full document carries unbounded statusHistory/trackingEvents this view never reads.
+  // See orderRepository.findForFulfilment for the measurement.
+  const order = await orderRepository.findForFulfilment(req.params.id);
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+  const isOwner = order.user?.toString() === req.user.id;
+  if (!isOwner && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
+  }
+
+  res.json({
+    success: true,
+    shipments: order.shipments || [],
+    remaining: remainingToShip(order),
+    summary: fulfilmentSummary(order),
+  });
+};
+
+/**
+ * Create one parcel from a chosen subset of the order's outstanding lines.
+ *
+ * @route POST /orders/:id/shipments
+ * @access Private/Admin
+ */
+export const createShipment = async (req, res) => {
+  const { lines, includesReward, trackingNumber, carrierCode, carrierName, estimatedDelivery, notes, dispatch } = req.body;
+
+  const { carrier, error: carrierError } = orderTrackingService.resolveCarrier(carrierCode, carrierName);
+  if (!carrier) return res.status(400).json({ success: false, message: carrierError });
+
+  const trimmedTracking = String(trackingNumber || '').trim();
+  if (!trimmedTracking) {
+    return res.status(400).json({ success: false, message: 'A tracking number is required for a parcel.' });
+  }
+
+  // ETA: honour an explicit date, else derive from the carrier's SLA so the parcel
+  // email always carries an estimate — same rule as the single-parcel path.
+  let eta = estimatedDelivery ? new Date(estimatedDelivery) : null;
+  if (!eta && carrier.estimatedDeliveryDays) {
+    eta = new Date();
+    eta.setDate(eta.getDate() + carrier.estimatedDeliveryDays);
+  }
+
+  /*
+    Same guard the `shipped` branch already carries. `lines` is client-supplied and is
+    handed straight to `.map()` downstream, so a string (or any non-array) becomes a
+    500 instead of a 400. `undefined` is meaningful — it means "everything outstanding" —
+    so only a present-but-wrong-shaped value is rejected.
+  */
+  if (lines !== undefined && !Array.isArray(lines)) {
+    return res.status(400).json({ success: false, message: '`lines` must be an array of { itemId, quantity }.' });
+  }
+
+  const result = await shipmentService.createShipment(req.params.id, {
+    lines,
+    includesReward,
+    trackingNumber: trimmedTracking,
+    carrier: orderTrackingService.buildCarrierSubdoc(carrier, trimmedTracking),
+    estimatedDelivery: eta || undefined,
+    notes,
+    dispatch,
+  }, { userId: req.user.id });
+
+  if (!result.success) return res.status(400).json({ success: false, message: result.message });
+  res.status(201).json({ success: true, message: result.message, shipment: result.shipment, order: result.order });
+};
+
+/**
+ * Mark one parcel delivered. Idempotent — a double-click reports the parcel as already
+ * delivered rather than re-stamping the date and re-emailing the customer.
+ *
+ * @route PATCH /orders/:id/shipments/:shipmentId/delivered
+ * @access Private/Admin
+ */
+export const markShipmentDelivered = async (req, res) => {
+  const result = await shipmentService.markShipmentDelivered(
+    req.params.id, req.params.shipmentId, { userId: req.user.id },
+  );
+  if (!result.success) return res.status(400).json({ success: false, message: result.message });
+  res.json({ success: true, message: result.message, order: result.order });
+};
+
+/**
+ * Hand an already-packed parcel to the courier.
+ *
+ * @route PATCH /orders/:id/shipments/:shipmentId/dispatch
+ * @access Private/Admin
+ */
+export const dispatchShipment = async (req, res) => {
+  const { trackingNumber, carrierCode, carrierName, estimatedDelivery } = req.body || {};
+
+  // Tracking may be supplied now (packed first, courier chosen later) or already be on
+  // the parcel from when it was built. Only resolve a carrier if one was actually sent.
+  let carrier;
+  if (carrierCode) {
+    const resolved = orderTrackingService.resolveCarrier(carrierCode, carrierName);
+    if (!resolved.carrier) {
+      return res.status(400).json({ success: false, message: resolved.error });
+    }
+    carrier = orderTrackingService.buildCarrierSubdoc(resolved.carrier, String(trackingNumber || '').trim());
+  }
+
+  const result = await shipmentService.dispatchShipment(req.params.id, req.params.shipmentId, {
+    trackingNumber: trackingNumber ? String(trackingNumber).trim() : undefined,
+    carrier,
+    estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : undefined,
+  }, { userId: req.user.id });
+
+  if (!result.success) return res.status(400).json({ success: false, message: result.message });
+  res.json({ success: true, message: result.message, order: result.order });
+};
+
+/**
+ * Write off a parcel the courier lost. Its units return to the remaining-to-ship pool
+ * so a replacement can be sent.
+ *
+ * @route PATCH /orders/:id/shipments/:shipmentId/lost
+ * @access Private/Admin
+ */
+export const markShipmentLost = async (req, res) => {
+  const result = await shipmentService.markShipmentLost(req.params.id, req.params.shipmentId, {
+    userId: req.user.id,
+    notes: req.body?.notes,
+  });
+  if (!result.success) return res.status(400).json({ success: false, message: result.message });
   res.json({ success: true, message: result.message, order: result.order });
 };
 

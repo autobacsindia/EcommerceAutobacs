@@ -125,7 +125,7 @@ export default function SpinCampaignsPage() {
         </div>
         <div className="flex gap-2">
           <Link
-            href="/admin/spin/winners"
+            href="/admin/orders?spinReward=unpacked"
             className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             🎁 Goodies to pack

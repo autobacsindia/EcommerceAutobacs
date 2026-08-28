@@ -9,6 +9,23 @@ export const validateIdParam = [
   validateRequest
 ];
 
+/**
+ * Validate BOTH `:id` and `:shipmentId` — for the split-shipment routes, where the
+ * parcel id is a second path parameter.
+ *
+ * Without this a malformed parcel id reaches Mongo, throws a CastError and surfaces as
+ * a 500. A bad id in the URL is a client mistake and must read as 400.
+ */
+export const validateShipmentParams = [
+  param('id')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid ID format'),
+  param('shipmentId')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid parcel ID format'),
+  validateRequest
+];
+
 export const validatePagination = [
   query('page')
     .optional()

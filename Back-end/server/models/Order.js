@@ -318,6 +318,77 @@ const OrderSchema = new mongoose.Schema({
     either (CRM lead classification reads paymentStatus).
   */
   holdsReleasedAt: { type: Date, default: null },
+
+  /**
+   * PARCELS. An order can leave in more than one box — stock arrives at different
+   * times, an oversized item goes by a different courier — and each parcel has its own
+   * courier, AWB, slip and delivery date.
+   *
+   * ⚠️ `Order.status` REMAINS THE SIX-VALUE ENUM and is DERIVED from this array by
+   * utils/orderFulfilment.js `rollUpStatus`. We deliberately did not add a
+   * `partially_shipped` value: it would ripple through every consumer that switches on
+   * status (admin filters, the {status,createdAt} index, CRM lead classification,
+   * analytics reports) and buys nothing the roll-up cannot express. Partiality is a
+   * DISPLAY label from `fulfilmentSummary`, never stored state.
+   *
+   * ⚠️ LEGACY ORDERS CARRY NONE OF THIS, deliberately. Every order placed before split
+   * shipments existed has an empty array plus the flat `trackingNumber`/`carrier`/
+   * `shippingSlip` fields below, and readers synthesize a single virtual parcel from
+   * those (see `legacyShipment`). There is no backfill: rewriting historical financial
+   * records to fit a new shape is risk with no reward, and `rollUpStatus` refuses to
+   * recompute an order that has no shipments — so a delivered order can never be
+   * dragged backwards into "pending" by this feature.
+   *
+   * Embedded rather than a separate collection: parcels are few per order, are always
+   * read with the order, and are never queried on their own at scale.
+   */
+  shipments: [{
+    // Human-facing parcel number within the order ("Parcel 2 of 3"). Assigned on push.
+    sequence: { type: Number, required: true },
+    status: {
+      type: String,
+      enum: ["packed", "shipped", "delivered", "lost"],
+      default: "packed"
+    },
+    /**
+     * Which order lines, and how many of each, are physically in THIS box.
+     * `itemId` refers to an `Order.items[]._id`. The sum across all non-lost parcels
+     * may never exceed the ordered quantity — enforced atomically at write time by
+     * services/shipmentService.js, because two admins shipping at once would each
+     * pass a read-then-write check and together over-ship.
+     */
+    lines: [{
+      itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      quantity: { type: Number, required: true, min: 1 },
+      _id: false
+    }],
+    /**
+     * The won Spin-to-Win goodie travels in exactly ONE parcel. Set true on the box the
+     * packer puts it in; the service refuses a second. Until it is set on some parcel
+     * the order is NOT fully shipped — which is what makes "don't forget the goodie" a
+     * structural guarantee rather than a banner someone has to read.
+     */
+    includesReward: { type: Boolean, default: false },
+    trackingNumber: String,
+    carrier: {
+      name: String,
+      code: String,
+      trackingUrl: String
+    },
+    // Per-parcel courier slip (PDF on Cloudinary, resource_type 'raw'), attached to
+    // that parcel's shipped email.
+    shippingSlip: {
+      url: String,
+      publicId: String,
+      uploadedAt: Date
+    },
+    estimatedDelivery: Date,
+    shippedAt: Date,
+    deliveredAt: Date,
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    notes: String
+  }],
+
   trackingNumber: String,
   carrier: {
     name: String,

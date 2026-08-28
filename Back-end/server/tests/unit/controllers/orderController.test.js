@@ -28,6 +28,15 @@ const mockOrderStatusService = {
   getFulfillmentMetrics: jest.fn(),
 };
 
+// Split shipments: a `shipped` transition now builds a PARCEL rather than only
+// flipping the order's status, so the controller depends on this service.
+const mockShipmentService = {
+  createShipment: jest.fn(),
+  markShipmentDelivered: jest.fn(),
+  markShipmentLost: jest.fn(),
+  getFulfilment: jest.fn(),
+};
+
 const mockOrderTrackingService = {
   generateTrackingNumber: jest.fn(),
   addTrackingInfo: jest.fn(),
@@ -47,6 +56,7 @@ jest.unstable_mockModule('../../../models/Order.js', () => ({ default: mockOrder
 jest.unstable_mockModule('../../../models/Cart.js', () => ({ default: mockCart }));
 jest.unstable_mockModule('../../../models/Product.js', () => ({ default: mockProduct }));
 jest.unstable_mockModule('../../../services/orderStatusService.js', () => ({ default: mockOrderStatusService }));
+jest.unstable_mockModule('../../../services/shipmentService.js', () => ({ default: mockShipmentService }));
 jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({
   default: mockOrderTrackingService,
   OTHER_CARRIER_CODE: 'OTHER',
@@ -355,27 +365,34 @@ describe('OrderController Unit Tests', () => {
       });
 
       const resultOrder = { _id: 'order-id', status: 'shipped', trackingNumber: '12345' };
-      mockOrderStatusService.updateOrderStatus.mockResolvedValue({
+      mockShipmentService.createShipment.mockResolvedValue({
         success: true,
         order: resultOrder,
-        message: 'Status updated',
+        shipment: { _id: 'ship-1', sequence: 1 },
+        message: 'Parcel 1 created',
       });
 
       await updateOrderStatus(req, res);
 
-      // Tracking + carrier are threaded to the service (which persists them before
-      // the email is enqueued) — the controller no longer mutates the order itself.
-      expect(mockOrderStatusService.updateOrderStatus).toHaveBeenCalledWith(
+      /*
+        A `shipped` transition creates a PARCEL carrying the resolved tracking + carrier.
+        With no `lines` in the body it covers everything the order still owes, which is
+        the old whole-order behaviour — now recorded as a shipment so the AWB, slip and
+        delivery date belong to a box rather than to the order.
+      */
+      expect(mockShipmentService.createShipment).toHaveBeenCalledWith(
         'order-id',
-        'shipped',
         expect.objectContaining({
-          isAdmin: true,
-          shipping: expect.objectContaining({
-            trackingNumber: '12345',
-            carrier: expect.objectContaining({ code: 'DELHIVERY', trackingUrl: 'https://d.example/12345' }),
-          }),
-        })
+          lines: undefined, // "everything outstanding"
+          trackingNumber: '12345',
+          carrier: expect.objectContaining({ code: 'DELHIVERY', trackingUrl: 'https://d.example/12345' }),
+        }),
+        expect.objectContaining({ userId: req.user.id }),
       );
+
+      // The status roll-up happens INSIDE createShipment. Calling the status service
+      // again here would double-write status history on every dispatch.
+      expect(mockOrderStatusService.updateOrderStatus).not.toHaveBeenCalled();
 
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
@@ -396,6 +413,7 @@ describe('OrderController Unit Tests', () => {
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(mockOrderStatusService.updateOrderStatus).not.toHaveBeenCalled();
+      expect(mockShipmentService.createShipment).not.toHaveBeenCalled();
     });
 
     it('ships with the "Other" carrier using the admin-typed courier name', async () => {
@@ -417,20 +435,21 @@ describe('OrderController Unit Tests', () => {
         name: 'Trackon Couriers',
         code: 'OTHER',
       });
-      mockOrderStatusService.updateOrderStatus.mockResolvedValue({
+      mockShipmentService.createShipment.mockResolvedValue({
         success: true,
         order: { _id: 'order-id', status: 'shipped' },
-        message: 'Status updated',
+        shipment: { _id: 'ship-1', sequence: 1 },
+        message: 'Parcel 1 created',
       });
 
       await updateOrderStatus(req, res);
 
       expect(mockOrderTrackingService.resolveCarrier).toHaveBeenCalledWith('OTHER', 'Trackon Couriers');
-      const shipping = mockOrderStatusService.updateOrderStatus.mock.calls[0][2].shipping;
-      expect(shipping.carrier).toEqual({ name: 'Trackon Couriers', code: 'OTHER' });
-      expect(shipping.carrier.trackingUrl).toBeUndefined();
+      const parcel = mockShipmentService.createShipment.mock.calls[0][1];
+      expect(parcel.carrier).toEqual({ name: 'Trackon Couriers', code: 'OTHER' });
+      expect(parcel.carrier.trackingUrl).toBeUndefined();
       // No SLA for an unknown courier → no invented ETA in the customer email.
-      expect(shipping.estimatedDelivery).toBeUndefined();
+      expect(parcel.estimatedDelivery).toBeUndefined();
     });
 
     it('rejects the "Other" carrier without a courier name', async () => {

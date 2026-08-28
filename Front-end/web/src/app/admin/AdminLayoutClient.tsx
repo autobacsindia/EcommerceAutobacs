@@ -41,7 +41,17 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/returns', label: 'Returns', icon: '↩️' },
       { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
       { href: '/admin/spin', label: 'Spin to Win', icon: '🎡' },
-      { href: '/admin/spin/winners', label: 'Goodies to pack', icon: '🎁' },
+      /*
+        Points at the ORDERS queue, not a standalone goodies screen.
+
+        The dedicated page existed as a backstop against a forgotten gift. That job is now
+        done structurally: a won goodie is a fulfilment unit, so an order cannot reach
+        `delivered` until the gift is in a parcel (utils/orderFulfilment.js). An order
+        that owes one simply stays open. This filter is server-side and index-backed, so
+        it answers the same "what do I pack today" question from the record that is now
+        authoritative.
+      */
+      { href: '/admin/orders?spinReward=unpacked', label: 'Goodies to pack', icon: '🎁' },
     ],
   },
   // Inventory (Warehouses) — feature is fully implemented (frontend + backend

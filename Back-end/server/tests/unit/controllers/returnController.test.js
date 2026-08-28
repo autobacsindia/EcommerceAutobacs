@@ -754,3 +754,107 @@ describe('markReceived — the courier step cannot be skipped', () => {
     expect(error.message).toMatch(/after the courier is booked/i);
   });
 });
+
+/**
+ * Split shipments and the return window.
+ *
+ * The window runs from delivery. When an order arrives in several parcels there is no
+ * single delivery date, so measuring every line from the order's date is wrong for at
+ * least one of them: an item that arrived first gets a window that runs long, and an
+ * item that arrived last can have its window expire before the customer ever held it.
+ */
+describe('createReturnRequest — per-line return window (split shipments)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockGetResource.mockImplementation(async (publicId, type) => ({
+      bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg',
+    }));
+    mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-1', ...doc }));
+  });
+
+  const body = (productId = 'prod-1') => ({
+    orderId: 'order-1',
+    items: [{ productId, quantity: 1, reason: 'manufacturing_defect' }],
+    problemDescription: 'It rattles',
+    video: { publicId: 'autobacs/returns/abc/vid', resourceType: 'video' },
+    proofOfPurchase: { publicId: 'autobacs/returns/abc/proof.jpg', resourceType: 'image' },
+  });
+
+  /** Two lines, each in its own parcel, delivered `aDays` and `bDays` ago. */
+  const splitOrder = ({ aDays, bDays, bDelivered = true, status = 'delivered' }) => makeOrder({
+    status,
+    items: [
+      { _id: 'item-a', product: { _id: 'prod-1', name: 'Wiper', returnPolicy: { returnable: true } }, quantity: 1, price: 500, variantId: null },
+      { _id: 'item-b', product: { _id: 'prod-2', name: 'Polish', returnPolicy: { returnable: true } }, quantity: 1, price: 500, variantId: null },
+    ],
+    shipments: [
+      { _id: 's1', sequence: 1, status: 'delivered', deliveredAt: daysAgo(aDays), lines: [{ itemId: 'item-a', quantity: 1 }] },
+      bDelivered
+        ? { _id: 's2', sequence: 2, status: 'delivered', deliveredAt: daysAgo(bDays), lines: [{ itemId: 'item-b', quantity: 1 }] }
+        : { _id: 's2', sequence: 2, status: 'shipped', lines: [{ itemId: 'item-b', quantity: 1 }] },
+    ],
+    // The order-level date reflects the LAST parcel, as the roll-up would leave it.
+    deliveredAt: daysAgo(bDelivered ? Math.min(aDays, bDays) : aDays),
+    fulfillmentMetrics: { deliveredAt: daysAgo(bDelivered ? Math.min(aDays, bDays) : aDays) },
+  });
+
+  // The bug: parcel A landed 9 days ago and is long out of window, but the order's own
+  // date is 1 day old because parcel B arrived yesterday. Measuring from the order
+  // would ACCEPT this return, ~5 days late.
+  it('rejects a line whose OWN parcel is out of window, even though the order looks recent', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(splitOrder({ aDays: 9, bDays: 1 }));
+    const { status, error } = await run(createReturnRequest, { body: body('prod-1'), user: { _id: 'u1' } });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/window closed for "Wiper"/i);
+  });
+
+  // The mirror image: parcel B is well inside its own window and must be accepted even
+  // though parcel A is ancient.
+  it('accepts a line whose own parcel is in window, even though another line is stale', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(splitOrder({ aDays: 9, bDays: 1 }));
+    const { error } = await run(createReturnRequest, { body: body('prod-2'), user: { _id: 'u1' } });
+    expect(error).toBeUndefined();
+    expect(mockReturnRepo.create).toHaveBeenCalled();
+  });
+
+  it('refuses a line that has not been delivered at all', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(
+      splitOrder({ aDays: 1, bDays: 0, bDelivered: false, status: 'shipped' }));
+    const { status, error } = await run(createReturnRequest, { body: body('prod-2'), user: { _id: 'u1' } });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/hasn't been delivered yet/i);
+  });
+
+  /*
+    A split order sits at `shipped` until the LAST parcel lands. Gating on the order
+    status alone would refuse a return for an item delivered days ago — and its 4-day
+    window could expire before the final parcel ever flipped the order to `delivered`.
+  */
+  it('allows a return on a still-shipping order for a line that HAS arrived', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(
+      splitOrder({ aDays: 1, bDays: 0, bDelivered: false, status: 'shipped' }));
+    const { error } = await run(createReturnRequest, { body: body('prod-1'), user: { _id: 'u1' } });
+    expect(error).toBeUndefined();
+    expect(mockReturnRepo.create).toHaveBeenCalled();
+  });
+
+  it('still refuses a return on a shipped order that has NO parcels (legacy shape)', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ status: 'shipped', shipments: [] }));
+    const { status, error } = await run(createReturnRequest, { body: body('prod-1'), user: { _id: 'u1' } });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/Only delivered orders/i);
+  });
+
+  // ── THE LEGACY GUARANTEE ───────────────────────────────────────────────────
+  it('measures a parcel-less order from its order-level date, exactly as before', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(
+      makeOrder({ shipments: [], deliveredAt: daysAgo(9), fulfillmentMetrics: { deliveredAt: daysAgo(9) } }));
+    const { status, error } = await run(createReturnRequest, {
+      body: { ...body('prod-1'), items: [{ productId: 'prod-1', quantity: 2, reason: 'manufacturing_defect' }] },
+      user: { _id: 'u1' },
+    });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/window closed/i);
+  });
+});
