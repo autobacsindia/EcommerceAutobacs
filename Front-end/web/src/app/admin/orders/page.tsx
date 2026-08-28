@@ -188,6 +188,8 @@ function AdminOrdersPageInner() {
     orderNumber: string;
     from: string;
     to: string;
+    /** Units on the order — the dialog names how many ship together in one parcel. */
+    unitCount: number;
   } | null>(null);
   const [pendingBulk, setPendingBulk] = useState<{
     status: string;
@@ -272,6 +274,15 @@ function AdminOrdersPageInner() {
       orderNumber: order.orderNumber,
       from: order.status,
       to: newStatus,
+      /*
+        Units on the order, so the dialog can say what shipping from HERE actually does.
+        This screen keeps its one-click path deliberately — it is for working through
+        many orders quickly — but that path puts EVERYTHING in a single parcel, which is
+        only right by accident on a multi-item order. Naming the count is what stops it
+        being a silent decision; splitting is done from the order's Parcels panel.
+      */
+      unitCount: (order.items ?? []).reduce(
+        (n: number, i: { quantity?: number }) => n + (i?.quantity ?? 1), 0),
     });
   };
 
@@ -754,6 +765,8 @@ function AdminOrdersPageInner() {
           orderNumber={pendingChange.orderNumber}
           currentStatus={pendingChange.from}
           newStatus={pendingChange.to}
+          shipsEverythingCount={pendingChange.unitCount}
+          orderHref={`/admin/orders/${pendingChange.orderId}`}
           notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingChange.to)}
           onConfirm={confirmStatusChange}
           onClose={() => setPendingChange(null)}

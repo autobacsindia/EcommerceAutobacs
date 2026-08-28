@@ -154,3 +154,46 @@ describe('OrderShipments', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+/**
+ * Picking "Shipped" from the order's status dropdown routes here instead of flipping the
+ * whole order, because that one-click path ships every outstanding unit in a single box —
+ * only ever right by accident on a multi-item order.
+ */
+describe('opening from the status dropdown', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('opens the create-parcel form when the signal fires', async () => {
+    seed();
+    const { rerender } = render(
+      <OrderShipments orderId="order-1" itemNames={{ a: 'Ceramic Wax' }} openFormSignal={0} />);
+    await screen.findByText('Preparing');
+    expect(screen.queryByRole('button', { name: /Create parcel/i })).not.toBeInTheDocument();
+
+    rerender(<OrderShipments orderId="order-1" itemNames={{ a: 'Ceramic Wax' }} openFormSignal={1} />);
+    expect(await screen.findByRole('button', { name: /Create parcel/i })).toBeInTheDocument();
+  });
+
+  // A counter, not a boolean: a boolean would latch true, so closing the form and picking
+  // "Shipped" again would do nothing at all.
+  it('re-opens on a second signal after the form was closed', async () => {
+    seed();
+    const props = { orderId: 'order-1', itemNames: { a: 'Ceramic Wax' } };
+    const { rerender } = render(<OrderShipments {...props} openFormSignal={1} />);
+    await screen.findByRole('button', { name: /Create parcel/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+    expect(screen.queryByRole('button', { name: /Create parcel/i })).not.toBeInTheDocument();
+
+    rerender(<OrderShipments {...props} openFormSignal={2} />);
+    expect(await screen.findByRole('button', { name: /Create parcel/i })).toBeInTheDocument();
+  });
+
+  // An empty picker on a fully-shipped order looks broken rather than informative.
+  it('does not open when there is nothing left to ship', async () => {
+    seed({ remaining: [], shipments: [], summary: summary({ owesGoodie: false }) });
+    render(<OrderShipments orderId="order-1" itemNames={{}} openFormSignal={1} />);
+    await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Create parcel/i })).not.toBeInTheDocument();
+  });
+});

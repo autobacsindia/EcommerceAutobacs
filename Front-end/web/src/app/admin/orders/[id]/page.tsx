@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
@@ -126,6 +126,10 @@ export default function AdminOrderDetailPage() {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
   const [packingReward, setPackingReward] = useState(false);
+  // Set when the admin picks "Shipped": scrolls to the Parcels panel and opens its
+  // create-parcel form, so they choose what goes in the box.
+  const [openParcelForm, setOpenParcelForm] = useState(0);
+  const parcelsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (orderId) {
@@ -440,7 +444,9 @@ export default function AdminOrderDetailPage() {
             when" — and because the order's status is DERIVED from these, an admin
             reading top-to-bottom sees the contents first and their dispatch second.
           */}
+          <div ref={parcelsRef}>
           <OrderShipments
+            openFormSignal={openParcelForm}
             orderId={orderId}
             itemNames={Object.fromEntries(
               order.items
@@ -450,6 +456,7 @@ export default function AdminOrderDetailPage() {
             rewardName={order.spinReward && !order.spinReward.voidedAt ? order.spinReward.name : null}
             onChanged={fetchOrder}
           />
+          </div>
 
           {/* Shipping Address */}
           <div className="bg-white rounded-lg shadow">
@@ -572,7 +579,26 @@ export default function AdminOrderDetailPage() {
                 ) : (
                   <select
                     value={order.status}
-                    onChange={(e) => setPendingStatus(e.target.value)}
+                    onChange={(e) => {
+                      /*
+                        "Shipped" no longer flips the whole order in one step.
+
+                        Sending everything outstanding in a single box is only ever right
+                        by accident on a multi-item order — pick "Shipped" on a 3-item
+                        order where 2 are in stock and all 3 are recorded as gone. The
+                        Parcels panel is where you choose what is actually in the box, so
+                        that is where this now goes. Every other status keeps the dialog.
+                      */
+                      if (e.target.value === 'shipped') {
+                        e.target.value = order.status; // leave the select on its real value
+                        setOpenParcelForm((n) => n + 1);
+                        // Optional-called: scrollIntoView is absent in jsdom, and a
+                        // missing scroll must never break the actual state change.
+                        parcelsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        return;
+                      }
+                      setPendingStatus(e.target.value);
+                    }}
                     disabled={updating}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >

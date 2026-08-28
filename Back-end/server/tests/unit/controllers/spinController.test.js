@@ -404,6 +404,40 @@ describe('updateCampaign — window + rate edits', () => {
     expect(mockResultRepo.countGrantedForCampaign).not.toHaveBeenCalled();
   });
 
+  // Everything on the settings card reaches the database. These were all creation-only
+  // in the admin UI until the card existed, so an order placed under the wrong name or
+  // the wrong per-customer cap could only be fixed by cloning the whole campaign.
+  it('saves the editable settings — name, segments, cap and terms', async () => {
+    const r = res();
+    await controller.updateCampaign(req({
+      name: 'Diwali Spin 2026',
+      segmentCount: 10,
+      maxSpinsPerUserPerCampaign: 2,
+      terms: 'One spin per paid order.',
+    }), r);
+
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', {
+      name: 'Diwali Spin 2026',
+      segmentCount: 10,
+      maxSpinsPerUserPerCampaign: 2,
+      terms: 'One spin per paid order.',
+    });
+  });
+
+  it('accepts a null per-customer cap, meaning unlimited', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ maxSpinsPerUserPerCampaign: null }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { maxSpinsPerUserPerCampaign: null });
+  });
+
+  // `status` moves only through publish/setStatus, which run the safety gate. A rename
+  // must never be able to smuggle a campaign live.
+  it('never lets a settings save change the status', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ name: 'Renamed', status: 'live' }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { name: 'Renamed' });
+  });
+
   it('extends a campaign that is still running', async () => {
     mockCampaignRepo.findById.mockResolvedValue({ _id: 'camp-1', endsAt: new Date(Date.now() + DAY) });
     const r = res();

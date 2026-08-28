@@ -66,7 +66,15 @@ export default function SpinCampaignDetailPage() {
     clobber an edit in progress — the same parent-prop-echo trap that once ate in-flight
     typing in the admin orders search box.
   */
-  const [settings, setSettings] = useState({ startsAt: '', endsAt: '', goodieWinRatePercent: 20 });
+  const [settings, setSettings] = useState({
+    name: '',
+    startsAt: '',
+    endsAt: '',
+    goodieWinRatePercent: 20,
+    segmentCount: 8,
+    maxSpinsPerUserPerCampaign: 1 as number | null,
+    terms: '',
+  });
   const [savingSettings, setSavingSettings] = useState(false);
   const [prizes, setPrizes] = useState<SpinPrize[]>([]);
   const [odds, setOdds] = useState<OddsPreview | null>(null);
@@ -98,9 +106,13 @@ export default function SpinCampaignDetailPage() {
       setCampaign(found);
       if (found) {
         setSettings({
+          name: found.name ?? '',
           startsAt: toLocalInput(found.startsAt),
           endsAt: toLocalInput(found.endsAt),
           goodieWinRatePercent: found.goodieWinRatePercent ?? 20,
+          segmentCount: found.segmentCount ?? 8,
+          maxSpinsPerUserPerCampaign: found.maxSpinsPerUserPerCampaign ?? null,
+          terms: found.terms ?? '',
         });
       }
       setPrizes(pRes.prizes ?? []);
@@ -309,13 +321,21 @@ export default function SpinCampaignDetailPage() {
       setError('The campaign must end after it starts.');
       return;
     }
+    if (!settings.name.trim()) {
+      setError('The campaign needs a name.');
+      return;
+    }
     setSavingSettings(true);
     setError(null);
     try {
       await apiClient.put(API_ENDPOINTS.SPIN_CAMPAIGN_BY_ID(id), {
+        name: settings.name.trim(),
         startsAt: new Date(settings.startsAt).toISOString(),
         endsAt: new Date(settings.endsAt).toISOString(),
         goodieWinRatePercent: Number(settings.goodieWinRatePercent),
+        segmentCount: Number(settings.segmentCount),
+        maxSpinsPerUserPerCampaign: settings.maxSpinsPerUserPerCampaign,
+        terms: settings.terms.trim() || null,
       });
       await load();
       await loadOdds();
@@ -445,6 +465,33 @@ export default function SpinCampaignDetailPage() {
       */}
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-gray-900">Campaign settings</h2>
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">Campaign name</span>
+            <input
+              value={settings.name}
+              maxLength={120}
+              onChange={(e) => setSettings({ ...settings, name: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm">
+            {/*
+              The URL-safe id is deliberately NOT editable. Nothing routes on it, but it
+              is what every audit-log entry for this campaign was written against —
+              renaming it would quietly break the trail back through publish, status and
+              prize changes. The display name above is the thing meant to change.
+            */}
+            <span className="mb-1 block font-medium text-gray-700">
+              Reference <span className="font-normal text-gray-500">(fixed)</span>
+            </span>
+            <input
+              value={campaign.slug}
+              disabled
+              className="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500"
+            />
+          </label>
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="text-sm">
             <span className="mb-1 block font-medium text-gray-700">Starts</span>
@@ -482,6 +529,60 @@ export default function SpinCampaignDetailPage() {
             </span>
           </label>
         </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">Wheel segments</span>
+            <input
+              type="number"
+              min={4}
+              max={12}
+              value={settings.segmentCount}
+              onChange={(e) => setSettings({ ...settings, segmentCount: Number(e.target.value) })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              How many slices the wheel is drawn with. Past results keep the wheel they
+              were spun on, so changing this never rewrites anyone&apos;s history.
+            </span>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">
+              Spins per customer <span className="font-normal text-gray-500">(blank = unlimited)</span>
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={settings.maxSpinsPerUserPerCampaign ?? ''}
+              onChange={(e) => setSettings({
+                ...settings,
+                maxSpinsPerUserPerCampaign: e.target.value === '' ? null : Number(e.target.value),
+              })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            {/*
+              Lowering this is retroactive: the cap counts spins already granted, so
+              anyone at or above the new number is immediately locked out with no error.
+              Raising it, or clearing it, is always safe.
+            */}
+            <span className="mt-1 block text-xs text-amber-700">
+              Counts spins already taken — lowering it locks out anyone already at the new limit.
+            </span>
+          </label>
+        </div>
+
+        <label className="mt-4 block text-sm">
+          <span className="mb-1 block font-medium text-gray-700">
+            Terms <span className="font-normal text-gray-500">(shown to the customer, optional)</span>
+          </span>
+          <textarea
+            rows={3}
+            maxLength={5000}
+            value={settings.terms}
+            onChange={(e) => setSettings({ ...settings, terms: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </label>
+
         <button
           onClick={saveSettings}
           disabled={savingSettings}

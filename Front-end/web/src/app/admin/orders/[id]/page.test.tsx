@@ -113,32 +113,40 @@ describe('AdminOrderDetailPage', () => {
 
     const select = screen.getByRole('combobox');
     // Selecting a status opens the confirmation modal — it must NOT fire the API yet.
-    fireEvent.change(select, { target: { value: 'shipped' } });
+    fireEvent.change(select, { target: { value: 'delivered' } });
     expect(apiClient.put).not.toHaveBeenCalled();
 
-    // Shipping requires a tracking number + carrier before it will submit.
-    fireEvent.change(screen.getByPlaceholderText(/123456789012/), {
-      target: { value: 'TRK123456789' },
-    });
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Delhivery' })).toBeInTheDocument();
-    });
-    fireEvent.change(screen.getByLabelText(/carrier/i), { target: { value: 'DELHIVERY' } });
-
-    // Confirm in the modal → the API fires with the chosen status + tracking details.
+    // Confirm in the modal → the API fires with the chosen status.
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
 
     await waitFor(() => {
       expect(apiClient.put).toHaveBeenCalledWith(
         '/orders/order123/status',
-        expect.objectContaining({
-          status: 'shipped',
-          reason: 'admin_update',
-          trackingNumber: 'TRK123456789',
-          carrierCode: 'DELHIVERY',
-        })
+        expect.objectContaining({ status: 'delivered', reason: 'admin_update' })
       );
     });
+  });
+
+  /*
+    "Shipped" is deliberately NOT a status-dialog action on this page any more.
+
+    That dialog only ever collected a tracking number, and the server then put every
+    outstanding unit in ONE parcel — right by accident on a multi-item order, and a
+    silent over-ship the rest of the time. Choosing what is actually in the box belongs
+    to the Parcels panel, so the dropdown routes there instead of flipping the order.
+  */
+  it('does not open the status dialog for "shipped" — parcels own that', async () => {
+    render(<AdminOrderDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'shipped' } });
+
+    // No tracking-number dialog, and above all no status write.
+    expect(screen.queryByPlaceholderText(/123456789012/)).not.toBeInTheDocument();
+    expect(apiClient.put).not.toHaveBeenCalled();
   });
 
   it('does not update status when the modal is cancelled', async () => {
@@ -149,7 +157,7 @@ describe('AdminOrderDetailPage', () => {
     });
 
     const select = screen.getByRole('combobox');
-    fireEvent.change(select, { target: { value: 'shipped' } });
+    fireEvent.change(select, { target: { value: 'delivered' } });
 
     // Dismiss the modal via its Cancel button → no API call.
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));

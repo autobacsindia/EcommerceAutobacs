@@ -68,6 +68,12 @@ interface FulfilmentSummary {
 }
 
 interface Props {
+  /**
+   * Bumped by the parent when the admin picks "Shipped" from the status dropdown.
+   * A counter rather than a boolean so a second pick re-opens the form even if it was
+   * closed in between — a boolean would latch and the second attempt would do nothing.
+   */
+  openFormSignal?: number;
   orderId: string;
   /** Order line names, so a parcel can show what is in it rather than raw ids. */
   itemNames: Record<string, string>;
@@ -84,7 +90,7 @@ const STATUS_STYLE: Record<Shipment['status'], string> = {
   lost: 'bg-red-100 text-red-800',
 };
 
-export default function OrderShipments({ orderId, itemNames, rewardName, onChanged }: Props) {
+export default function OrderShipments({ orderId, itemNames, rewardName, onChanged, openFormSignal = 0 }: Props) {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [remaining, setRemaining] = useState<RemainingLine[]>([]);
   const [summary, setSummary] = useState<FulfilmentSummary | null>(null);
@@ -123,6 +129,16 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
   }, [orderId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Opening on the signal, not on mount, so the panel stays collapsed for the ordinary
+  // "just looking at the order" visit.
+  useEffect(() => {
+    // Only if there is actually something left to put in a box. Opening an empty picker
+    // on a fully-shipped order would look broken rather than informative.
+    if (openFormSignal > 0 && (remaining.length > 0 || (summary?.owesGoodie && !summary.rewardShipped))) {
+      setOpen(true);
+    }
+  }, [openFormSignal, remaining.length, summary?.owesGoodie, summary?.rewardShipped]);
 
   useEffect(() => {
     if (!open) return;

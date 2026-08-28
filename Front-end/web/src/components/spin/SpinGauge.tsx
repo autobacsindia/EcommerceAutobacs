@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import cloudinaryLoader from '@/lib/cloudinaryLoader';
 
 /**
  * The speedometer.
@@ -33,6 +34,22 @@ const R_INNER = 108;
 // 2px ring) stays inside R_OUTER at its mounting radius — an icon that overflows the
 // wedge reads as a rendering bug rather than a prize.
 const ICON_R = 13;
+
+/*
+  Prize artwork is stored as Cloudinary's raw `secure_url`, which carries NO delivery
+  transform — so Cloudinary serves the FULL-RESOLUTION original for every request, and
+  the wheel was downloading a multi-megabyte photo to paint a 26px icon. The wheel drew
+  immediately with empty slices while those bytes were still in flight; the artwork only
+  appeared once the browser had them cached, i.e. on a refresh. It read like a caching
+  bug and was the opposite: nothing was cached the first time.
+
+  Sized for the largest sensible device pixel ratio (26 CSS px × 3), so a phone at DPR 3
+  still gets a crisp icon while the transfer drops from megabytes to a few kB. The shared
+  loader also adds `f_auto` (AVIF/WebP) and never upscales past the original, and it
+  leaves non-Cloudinary URLs untouched — so a locally-hosted or external image still works.
+*/
+const ICON_PX = ICON_R * 2 * 3;
+const iconSrc = (url: string) => cloudinaryLoader({ src: url, width: ICON_PX });
 const ICON_CLIP = 'spin-icon-clip';
 
 /** Wedge fills — deliberately not the brand gold, so the winner's highlight can be. */
@@ -231,7 +248,7 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
                       strokeWidth={1}
                     />
                     <image
-                      href={art}
+                      href={iconSrc(art)}
                       x={base.x - ICON_R} y={base.y + iconDy - ICON_R}
                       width={ICON_R * 2} height={ICON_R * 2}
                       clipPath={`url(#${ICON_CLIP})`}

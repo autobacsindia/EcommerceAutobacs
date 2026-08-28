@@ -69,6 +69,39 @@ describe('SpinGauge', () => {
   describe('prize artwork', () => {
     const withArt = ['https://cdn.test/tshirt.png', 'https://cdn.test/cup.png'];
 
+    /*
+      THE REGRESSION THIS GUARDS.
+
+      Prize artwork is stored as Cloudinary's raw secure_url, which carries no delivery
+      transform — so Cloudinary served the full-resolution original to paint a 26px icon.
+      The wheel drew immediately with blank slices while megabytes were still downloading,
+      and the artwork only showed up once the browser had it cached, i.e. after a refresh.
+      It presented as a caching bug and was the exact opposite: nothing was cached yet.
+    */
+    it('requests a small, format-optimised rendition of a Cloudinary image', () => {
+      const stored = 'https://res.cloudinary.com/demo/image/upload/v1783950357/autobacs/spin/tshirt.jpg';
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} images={[stored]} winningIndex={null} spinning={false} />,
+      );
+      const href = container.querySelector('image')?.getAttribute('href') ?? '';
+
+      expect(href).not.toBe(stored);          // the original must never be shipped
+      expect(href).toContain('/image/upload/');
+      expect(href).toContain('f_auto');       // AVIF/WebP where supported
+      expect(href).toContain('c_limit');      // downscale only — never upscaled
+      expect(href).toMatch(/w_\d+/);          // bounded to the icon's real size
+      expect(href).toContain('autobacs/spin/tshirt.jpg'); // same asset, not a new upload
+    });
+
+    // A prize picture hosted anywhere else must still render — the transform is an
+    // optimisation, never a requirement.
+    it('leaves a non-Cloudinary image URL untouched', () => {
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} images={['https://cdn.test/tshirt.png']} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelector('image')).toHaveAttribute('href', 'https://cdn.test/tshirt.png');
+    });
+
     it('draws one icon per slice that has a picture', () => {
       const { container } = render(
         <SpinGauge labels={LABELS} images={withArt} winningIndex={null} spinning={false} />,

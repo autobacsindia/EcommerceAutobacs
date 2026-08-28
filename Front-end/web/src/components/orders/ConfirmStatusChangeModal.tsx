@@ -29,6 +29,16 @@ interface ConfirmStatusChangeModalProps {
   notifiesCustomer: boolean;
   /** When set (>1), renders bulk copy for N orders. */
   count?: number;
+  /**
+   * Units on the order, for a `shipped` change made from the ORDERS LIST.
+   *
+   * That screen ships everything in one parcel — the fast path, kept on purpose for
+   * working through many orders. Saying how many items that covers is what turns it from
+   * a silent decision into a deliberate one; splitting happens on the order's own page.
+   */
+  shipsEverythingCount?: number;
+  /** Link to the order, so "split into parcels" is one click from the dialog. */
+  orderHref?: string;
   /** Runs the actual update. Resolve to close; reject to show an inline error. */
   onConfirm: (payload: ConfirmStatusPayload) => Promise<void>;
   onClose: () => void;
@@ -60,6 +70,8 @@ export default function ConfirmStatusChangeModal({
   newStatus,
   notifiesCustomer,
   count,
+  shipsEverythingCount,
+  orderHref,
   onConfirm,
   onClose,
 }: ConfirmStatusChangeModalProps) {
@@ -191,6 +203,26 @@ export default function ConfirmStatusChangeModal({
               </>
             )}
           </div>
+
+          {/*
+            Shipping from the ORDERS LIST puts every outstanding unit in ONE parcel.
+            That is the intended fast path for this screen, but on a multi-item order it
+            is only right by accident — so say what it will do, and offer the split.
+          */}
+          {isShipping && (shipsEverythingCount ?? 0) > 1 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              This ships <strong>all {shipsEverythingCount} items</strong> together in one parcel.
+              {orderHref && (
+                <>
+                  {' '}Sending them separately?{' '}
+                  <a href={orderHref} className="font-medium underline hover:no-underline">
+                    Open the order
+                  </a>{' '}
+                  and use the Parcels panel.
+                </>
+              )}
+            </div>
+          )}
 
           {/* Shipping details (tracking + carrier + optional slip) */}
           {isShipping && (
