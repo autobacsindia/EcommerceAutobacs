@@ -41,14 +41,20 @@ interface StatusResponse {
   pending?: boolean;
   reason?: string;
   campaign?: { slug: string; name: string; segmentCount: number; terms: string | null };
-  segments?: Array<{ id: string; shortLabel: string; name: string }>;
-  result?: { prize: PrizeSnapshot; segmentIndex: number; segmentLabels: string[]; status: string };
+  segments?: Array<{ id: string; shortLabel: string; name: string; imageUrl: string | null }>;
+  result?: {
+    prize: PrizeSnapshot; segmentIndex: number; segmentLabels: string[];
+    segmentImages?: (string | null)[]; status: string;
+  };
 }
 
 interface SpinResponse {
   success: boolean;
   alreadySpun: boolean;
-  result: { prize: PrizeSnapshot; segmentIndex: number; segmentLabels: string[]; status: string };
+  result: {
+    prize: PrizeSnapshot; segmentIndex: number; segmentLabels: string[];
+    segmentImages?: (string | null)[]; status: string;
+  };
   reviewCta: { headline: string | null; body: string | null; url: string } | null;
 }
 
@@ -59,6 +65,9 @@ const POLL_CEILING_MS = 90_000;
 export default function SpinSection({ orderId }: { orderId: string }) {
   const [phase, setPhase] = useState<Phase>('checking');
   const [labels, setLabels] = useState<string[]>([]);
+  // Index-aligned with `labels`. Absent/short arrays are fine — SpinGauge falls back to
+  // the text label for any slice without art, so a prize with no image still renders.
+  const [images, setImages] = useState<(string | null)[]>([]);
   const [terms, setTerms] = useState<string | null>(null);
   const [prize, setPrize] = useState<PrizeSnapshot | null>(null);
   const [winningIndex, setWinningIndex] = useState<number | null>(null);
@@ -73,6 +82,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
 
   const applyExistingResult = (r: NonNullable<StatusResponse['result']>) => {
     setLabels(r.segmentLabels ?? []);
+    setImages(r.segmentImages ?? []);
     setPrize(r.prize);
     setWinningIndex(r.segmentIndex);
     setSettled(true);
@@ -88,6 +98,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
 
       if (res.eligible) {
         setLabels((res.segments ?? []).map((s) => s.shortLabel || s.name));
+        setImages((res.segments ?? []).map((s) => s.imageUrl ?? null));
         setTerms(res.campaign?.terms ?? null);
         setPhase('ready');
         return;
@@ -134,6 +145,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
       // The authoritative slice set comes back WITH the outcome — the labels shown before
       // the click were only a preview, so re-render them before the needle settles.
       setLabels(res.result.segmentLabels ?? []);
+      setImages(res.result.segmentImages ?? []);
       setPrize(res.result.prize);
       setWinningIndex(res.result.segmentIndex);
       setReviewCta(res.reviewCta);
@@ -180,6 +192,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
         <>
           <SpinGauge
             labels={labels}
+            images={images}
             winningIndex={winningIndex}
             spinning={phase === 'spinning'}
             onSettled={() => setSettled(true)}
@@ -206,6 +219,14 @@ export default function SpinSection({ orderId }: { orderId: string }) {
             <div className="mt-5 animate-[fadeIn_400ms_ease]">
               <div className="rounded-xl bg-[#f5b32c] px-5 py-4 text-center text-[#1a1205]">
                 <div className="text-xs font-semibold uppercase tracking-wider opacity-70">Your prize</div>
+                {prize.imageUrl && (
+                  /* The picture they just watched land, shown big enough to actually see.
+                     Snapshotted on the result, so it stays right even if the prize is
+                     later re-photographed or retired. */
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={prize.imageUrl} alt=""
+                    className="mx-auto mt-2 h-20 w-20 rounded-full border-2 border-[#1a1205]/20 object-cover" />
+                )}
                 <div className="mt-0.5 text-lg font-bold">{prize.name}</div>
                 <div className="mt-1 text-xs opacity-80">
                   {prize.kind === 'goodie'

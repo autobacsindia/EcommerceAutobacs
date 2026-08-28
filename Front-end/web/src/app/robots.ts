@@ -34,6 +34,9 @@ const DISALLOW = [
   '/festive',
   // The in-store Onam offer — the printed counter QR is the only route in.
   '/onam',
+  // Dev-only visual harnesses. They 404 in production; this is the second line of
+  // defence for preview/test tiers, which are publicly reachable.
+  '/dev',
   '/integration-tests',
   '/_next/static/',
 ]

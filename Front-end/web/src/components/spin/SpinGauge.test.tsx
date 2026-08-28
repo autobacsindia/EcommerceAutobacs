@@ -60,4 +60,85 @@ describe('SpinGauge', () => {
   it('survives an empty label list without dividing by zero', () => {
     expect(() => render(<SpinGauge labels={[]} winningIndex={null} spinning={false} />)).not.toThrow();
   });
+
+  /**
+   * Prize artwork. The wheel is configured per campaign, so a half-filled `images`
+   * array is the normal state, not an error — these pin that a missing picture costs
+   * you an icon and nothing else.
+   */
+  describe('prize artwork', () => {
+    const withArt = ['https://cdn.test/tshirt.png', 'https://cdn.test/cup.png'];
+
+    it('draws one icon per slice that has a picture', () => {
+      const { container } = render(
+        <SpinGauge labels={LABELS} images={withArt} winningIndex={null} spinning={false} />,
+      );
+      const images = container.querySelectorAll('image');
+      expect(images).toHaveLength(2);
+      expect(images[0]).toHaveAttribute('href', withArt[0]);
+    });
+
+    it('keeps the text label even when a slice has a picture', () => {
+      // The icon supplements the name, never replaces it: a dead image URL paints
+      // nothing on an SVG <image> and there is no onError to catch it, so a wheel
+      // relying on art alone would show blank wedges.
+      render(<SpinGauge labels={LABELS} images={withArt} winningIndex={null} spinning={false} />);
+      expect(screen.getByText(LABELS[0])).toBeInTheDocument();
+    });
+
+    it('renders slices with no picture as plain labels', () => {
+      const { container } = render(
+        <SpinGauge labels={LABELS} images={[withArt[0], null]} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelectorAll('image')).toHaveLength(1);
+      expect(screen.getByText(LABELS[1])).toBeInTheDocument();
+    });
+
+    it('renders unchanged when images is omitted entirely (legacy results)', () => {
+      const { container } = render(
+        <SpinGauge labels={LABELS} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelectorAll('image')).toHaveLength(0);
+      expect(screen.getByText(LABELS[0])).toBeInTheDocument();
+    });
+
+    it('stacks the icon ABOVE the label, not beside it', () => {
+      // The label reads radially, so an icon offset along the radius lands next to the
+      // words instead of over them. Both must therefore sit in ONE rotated frame with a
+      // perpendicular offset — this asserts exactly that, because the obvious
+      // "simplification" back to two separately-rotated elements reintroduces the bug.
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} images={[withArt[0]]} winningIndex={null} spinning={false} />,
+      );
+      const img = container.querySelector('image')!;
+      const text = container.querySelector('text')!;
+
+      // Same parent = same rotation = the stack survives on every wedge of the dial.
+      expect(img.parentElement).toBe(text.parentElement);
+      expect(img.parentElement?.getAttribute('transform')).toMatch(/^rotate\(/);
+
+      // Pre-rotation coords: the icon's lower edge must clear the label's baseline.
+      const imgBottom = Number(img.getAttribute('y')) + Number(img.getAttribute('height'));
+      expect(imgBottom).toBeLessThan(Number(text.getAttribute('y')));
+    });
+
+    it('leaves the label centred in its wedge when there is no icon', () => {
+      // A slice with no art must not inherit the offset that makes room for one.
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} winningIndex={null} spinning={false} />,
+      );
+      const text = container.querySelector('text')!;
+      const withIcon = render(
+        <SpinGauge labels={[LABELS[0]]} images={[withArt[0]]} winningIndex={null} spinning={false} />,
+      ).container.querySelector('text')!;
+      expect(Number(text.getAttribute('y'))).toBeLessThan(Number(withIcon.getAttribute('y')));
+    });
+
+    it('ignores an images array longer than the label list', () => {
+      const { container } = render(
+        <SpinGauge labels={[LABELS[0]]} images={withArt} winningIndex={null} spinning={false} />,
+      );
+      expect(container.querySelectorAll('image')).toHaveLength(1);
+    });
+  });
 });

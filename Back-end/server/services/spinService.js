@@ -174,6 +174,9 @@ export const buildSegments = ({ pool, floorPrize, winner, segmentCount, rng = Ma
     slices,
     segmentIndex: segmentIndex >= 0 ? segmentIndex : 0,
     labels: slices.map((s) => s.shortLabel || s.name),
+    // Index-aligned with `labels`. null where a prize carries no image, so the wheel
+    // can fall back to its text label per-slice rather than all-or-nothing.
+    images: slices.map((s) => s.imageUrl || null),
   };
 };
 
@@ -487,7 +490,7 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         awardedCoupon = await mintCouponFor(winner, { now, session });
       }
 
-      const { segmentIndex, labels } = buildSegments({
+      const { segmentIndex, labels, images } = buildSegments({
         pool,
         floorPrize,
         winner,
@@ -503,6 +506,7 @@ export const spin = async (orderId, { userId = null, ip = null, rng = Math.rando
         prizeSnapshot: snapshotOf(winner, awardedCoupon?.code ?? null),
         segmentIndex,
         segmentLabels: labels,
+        segmentImages: images,
         status: SPIN_RESULT_STATUS.GRANTED,
         awardedCoupon: awardedCoupon?._id ?? null,
         spunAt: now,
