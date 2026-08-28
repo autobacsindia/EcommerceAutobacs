@@ -94,7 +94,8 @@
     "load-test:track": "node scripts/legacy/track-load-test.js --file",
     "load-test:compare": "node scripts/legacy/track-load-test.js --compare",
     "load-test:history": "node scripts/legacy/track-load-test.js --history",
-    "backfill-campaign-member-addresses": "node --import=dotenv/config scripts/backfill-campaign-member-addresses.js"
+    "backfill-campaign-member-addresses": "node --import=dotenv/config scripts/backfill-campaign-member-addresses.js",
+    "seed-spin-campaign": "node --import=dotenv/config scripts/seed-spin-campaign.js"
   },
   "engines": {
     "node": ">=20.9.0"
