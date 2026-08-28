@@ -184,11 +184,16 @@ export default async function OrderSuccessPage({
         </div>
 
         {/*
-          Spin-to-Win. Mounted BELOW the confirmation summary on purpose: the order
-          confirmation is the job of this page, and a game must never sit between the
-          customer and the receipt they came for. Renders nothing at all when there is no
-          live campaign, when the order is not eligible, or on any error — a confirmation
-          page must never show a broken widget over a successful order.
+          Spin-to-Win. The CARD is mounted below the confirmation summary on purpose: the
+          order confirmation is the job of this page, and the game must never displace the
+          receipt the customer came for. The wheel itself opens in a dismissible dialog
+          over the top — it was missed entirely down here — but the dialog is never gated:
+          Escape, backdrop or close all return the customer to their order, and the card
+          keeps the prize and its coupon code reachable afterwards.
+
+          Renders nothing at all when there is no live campaign, when the order is not
+          eligible, or on any error — a confirmation page must never show a broken widget
+          over a successful order.
         */}
         <SpinSection orderId={order._id} />
 
