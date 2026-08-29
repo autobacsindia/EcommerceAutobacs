@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Bebas_Neue } from 'next/font/google';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -18,6 +19,17 @@ import StoreButton from '@/components/ui/StoreButton';
 import { buildPageMetadata } from '@/lib/pageSeo';
 
 import StatCounters, { type Stat } from './StatCounters';
+import './about.css';
+
+// Self-hosted via next/font (CSP blocks fonts.gstatic.com). Exposed as the
+// --font-bebas variable that .about-display reads — same face and treatment as
+// the careers hero.
+const bebas = Bebas_Neue({
+  variable: '--font-bebas',
+  subsets: ['latin'],
+  weight: '400',
+  display: 'swap',
+});
 
 // Admin-managed SEO (/admin/seo) with the copy deck's positioning as the
 // fallback. The page is a server component now, so metadata lives here rather
@@ -161,12 +173,12 @@ const closingCtas = [
   },
 ];
 
-const sectionHeading = 'text-3xl md:text-4xl font-display font-light text-ink tracking-[-0.01em]';
+const sectionHeading = 'about-display text-[clamp(2.25rem,5vw,4rem)] text-ink';
 const body = 'text-ink/70 font-display leading-relaxed';
 
 export default function AboutUsPage() {
   return (
-    <div className="min-h-screen bg-obsidian-deep">
+    <div className={`${bebas.variable} min-h-screen bg-obsidian-deep`}>
       {/* ── Hero ───────────────────────────────────────────────────────── */}
       <section className="relative bg-obsidian-deep">
         <div className="absolute inset-0">
@@ -183,7 +195,7 @@ export default function AboutUsPage() {
         </div>
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-28 md:py-36">
           <Eyebrow className="mb-4">About Autobacs India</Eyebrow>
-          <h1 className="text-4xl md:text-6xl font-display font-light text-ink tracking-[-0.02em] leading-[1.05] mb-8">
+          <h1 className="about-display text-[clamp(3rem,8.5vw,7.5rem)] text-ink mb-8">
             We didn’t enter the Indian aftermarket.
             <br />
             <span className="text-gold">We built it.</span>

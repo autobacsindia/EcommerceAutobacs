@@ -35,7 +35,14 @@ function ContactPageInner() {
     {
       icon: <MapPin className="h-5 w-5 text-gold" />,
       title: 'Headquarters',
-      details: ['9th Floor, Jomer Symphony', 'Chalikkavattom, Ponnurunni North', 'Vyttila']
+      // One entry per rendered line.
+      details: [
+        'Roavion Automotive Private Limited',
+        'C64, 9th Floor, Jomer Symphony',
+        'No. 48/1744, Ponnurunni North',
+        'Ponnurunni East, Chalikkavattom',
+        'Vyttila, Ernakulam, Kerala 682019',
+      ],
     },
     {
       icon: <Phone className="h-5 w-5 text-gold" />,

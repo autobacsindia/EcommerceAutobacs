@@ -12,6 +12,11 @@ jest.mock('@/components/ui/Reveal', () => ({
   ),
 }));
 
+// next/font is a build-time transform with no runtime implementation under Jest.
+jest.mock('next/font/google', () => ({
+  Bebas_Neue: () => ({ variable: 'font-bebas', className: 'font-bebas' }),
+}));
+
 jest.mock('next/image', () => ({
   __esModule: true,
   // Drop the next/image-only props so React doesn't warn about unknown <img> attributes.
