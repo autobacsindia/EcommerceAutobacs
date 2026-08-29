@@ -475,10 +475,12 @@ class EmailHandler {
    * @param {Array<Object>} [params.attachments] - Postmark attachments (e.g. shipping slip PDF)
    * @returns {Promise<Object>} - Result with success status
    */
-  async sendOrderStatusUpdate({ to, order, status, user = null, attachments, payment = null }) {
+  async sendOrderStatusUpdate({ to, order, status, user = null, attachments, payment = null, shipment = null }) {
     const { orderStatusEmail } = await import('../utils/emailTemplates.js');
     const { companyInfo } = await import('../config/company.js');
-    const { subject, text, html } = orderStatusEmail({ order, user, status, company: companyInfo, payment });
+    // `shipment` present = this email is about ONE parcel of a multi-parcel order, so
+    // the template lists that box's contents and what is still to come.
+    const { subject, text, html } = orderStatusEmail({ order, user, status, company: companyInfo, payment, shipment });
 
     return this.sendEmail({ to, subject, text, html, attachments });
   }

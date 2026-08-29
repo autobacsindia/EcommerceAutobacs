@@ -48,11 +48,34 @@ const emptyPrize = () => ({
   imageUrl: null as string | null,
 });
 
+/** ISO → the value a <input type="datetime-local"> expects, in the admin's own timezone. */
+const toLocalInput = (iso: string | null | undefined) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export default function SpinCampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
   const [campaign, setCampaign] = useState<SpinCampaign | null>(null);
+  /*
+    Editable campaign settings, held separately from `campaign` so a refetch cannot
+    clobber an edit in progress — the same parent-prop-echo trap that once ate in-flight
+    typing in the admin orders search box.
+  */
+  const [settings, setSettings] = useState({
+    name: '',
+    startsAt: '',
+    endsAt: '',
+    goodieWinRatePercent: 20,
+    segmentCount: 8,
+    maxSpinsPerUserPerCampaign: 1 as number | null,
+    terms: '',
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
   const [prizes, setPrizes] = useState<SpinPrize[]>([]);
   const [odds, setOdds] = useState<OddsPreview | null>(null);
   const [ordersPerDay, setOrdersPerDay] = useState(50);
@@ -79,7 +102,19 @@ export default function SpinCampaignDetailPage() {
         apiClient.get<{ success: boolean; campaigns: SpinCampaign[] }>(API_ENDPOINTS.SPIN_CAMPAIGNS_ADMIN),
         apiClient.get<{ success: boolean; prizes: SpinPrize[] }>(API_ENDPOINTS.SPIN_CAMPAIGN_PRIZES(id)),
       ]);
-      setCampaign((cRes.campaigns ?? []).find((c) => c._id === id) ?? null);
+      const found = (cRes.campaigns ?? []).find((c) => c._id === id) ?? null;
+      setCampaign(found);
+      if (found) {
+        setSettings({
+          name: found.name ?? '',
+          startsAt: toLocalInput(found.startsAt),
+          endsAt: toLocalInput(found.endsAt),
+          goodieWinRatePercent: found.goodieWinRatePercent ?? 20,
+          segmentCount: found.segmentCount ?? 8,
+          maxSpinsPerUserPerCampaign: found.maxSpinsPerUserPerCampaign ?? null,
+          terms: found.terms ?? '',
+        });
+      }
       setPrizes(pRes.prizes ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load campaign');
@@ -268,6 +303,49 @@ export default function SpinCampaignDetailPage() {
     }
   };
 
+  /**
+   * Save the campaign window and the goodie rate.
+   *
+   * All three were previously set-once-at-creation and read-only here, which meant a
+   * mistyped end date or a rate that needed tuning could only be fixed by cloning. The
+   * API accepted them all along; the screen simply never offered them.
+   *
+   * The server refuses ONE case — reopening a window that has already closed and been
+   * spun — because the per-customer cap counts spins per campaign for all time, so the
+   * original spinners would be silently locked out. That comes back as a 409 with the
+   * explanation, which is surfaced verbatim rather than flattened into "save failed".
+   */
+  const saveSettings = async () => {
+    if (!campaign) return;
+    if (new Date(settings.endsAt) <= new Date(settings.startsAt)) {
+      setError('The campaign must end after it starts.');
+      return;
+    }
+    if (!settings.name.trim()) {
+      setError('The campaign needs a name.');
+      return;
+    }
+    setSavingSettings(true);
+    setError(null);
+    try {
+      await apiClient.put(API_ENDPOINTS.SPIN_CAMPAIGN_BY_ID(id), {
+        name: settings.name.trim(),
+        startsAt: new Date(settings.startsAt).toISOString(),
+        endsAt: new Date(settings.endsAt).toISOString(),
+        goodieWinRatePercent: Number(settings.goodieWinRatePercent),
+        segmentCount: Number(settings.segmentCount),
+        maxSpinsPerUserPerCampaign: settings.maxSpinsPerUserPerCampaign,
+        terms: settings.terms.trim() || null,
+      });
+      await load();
+      await loadOdds();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not save the campaign settings.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const publish = async () => {
     setBusy(true);
     setError(null);
@@ -375,6 +453,144 @@ export default function SpinCampaignDetailPage() {
           spun permanently locked out, with no error to tell you.
         </div>
       )}
+
+      {/*
+        Campaign settings. These three were previously set only at creation and shown
+        here as read-only text, so a mistyped end date or a rate that needed tuning could
+        only be fixed by cloning the whole campaign. The API accepted them all along.
+
+        The one genuinely dangerous edit — reopening a window that has already closed and
+        been spun — is refused by the server, which returns the reason. See the banner
+        above for why: the per-customer cap counts against this campaign's id forever.
+      */}
+      <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-4 text-sm font-semibold text-gray-900">Campaign settings</h2>
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">Campaign name</span>
+            <input
+              value={settings.name}
+              maxLength={120}
+              onChange={(e) => setSettings({ ...settings, name: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm">
+            {/*
+              The URL-safe id is deliberately NOT editable. Nothing routes on it, but it
+              is what every audit-log entry for this campaign was written against —
+              renaming it would quietly break the trail back through publish, status and
+              prize changes. The display name above is the thing meant to change.
+            */}
+            <span className="mb-1 block font-medium text-gray-700">
+              Reference <span className="font-normal text-gray-500">(fixed)</span>
+            </span>
+            <input
+              value={campaign.slug}
+              disabled
+              className="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500"
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">Starts</span>
+            <input
+              type="datetime-local"
+              value={settings.startsAt}
+              onChange={(e) => setSettings({ ...settings, startsAt: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">Ends</span>
+            <input
+              type="datetime-local"
+              value={settings.endsAt}
+              onChange={(e) => setSettings({ ...settings, endsAt: e.target.value })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">
+              Real-goodie win rate: {settings.goodieWinRatePercent}%
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              value={settings.goodieWinRatePercent}
+              onChange={(e) => setSettings({ ...settings, goodieWinRatePercent: Number(e.target.value) })}
+              className="w-full"
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              Roughly {settings.goodieWinRatePercent} in 100 customers win a physical goodie.
+              Applies to future spins only.
+            </span>
+          </label>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">Wheel segments</span>
+            <input
+              type="number"
+              min={4}
+              max={12}
+              value={settings.segmentCount}
+              onChange={(e) => setSettings({ ...settings, segmentCount: Number(e.target.value) })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              How many slices the wheel is drawn with. Past results keep the wheel they
+              were spun on, so changing this never rewrites anyone&apos;s history.
+            </span>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-gray-700">
+              Spins per customer <span className="font-normal text-gray-500">(blank = unlimited)</span>
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={settings.maxSpinsPerUserPerCampaign ?? ''}
+              onChange={(e) => setSettings({
+                ...settings,
+                maxSpinsPerUserPerCampaign: e.target.value === '' ? null : Number(e.target.value),
+              })}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+            {/*
+              Lowering this is retroactive: the cap counts spins already granted, so
+              anyone at or above the new number is immediately locked out with no error.
+              Raising it, or clearing it, is always safe.
+            */}
+            <span className="mt-1 block text-xs text-amber-700">
+              Counts spins already taken — lowering it locks out anyone already at the new limit.
+            </span>
+          </label>
+        </div>
+
+        <label className="mt-4 block text-sm">
+          <span className="mb-1 block font-medium text-gray-700">
+            Terms <span className="font-normal text-gray-500">(shown to the customer, optional)</span>
+          </span>
+          <textarea
+            rows={3}
+            maxLength={5000}
+            value={settings.terms}
+            onChange={(e) => setSettings({ ...settings, terms: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+        </label>
+
+        <button
+          onClick={saveSettings}
+          disabled={savingSettings}
+          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {savingSettings ? 'Saving…' : 'Save settings'}
+        </button>
+      </div>
 
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {msg && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{msg}</div>}

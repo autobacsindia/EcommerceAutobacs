@@ -5,6 +5,7 @@
 import { formatInvoiceNumber } from './invoiceFormat.js';
 import { formatLongDateIST } from './datetime.js';
 import { describeEmiPlan } from './paymentMethodDetails.js';
+import { buildOrderLines } from './orderLines.js';
 
 /**
  * Escape a value for safe interpolation into HTML text/attribute contexts.
@@ -534,7 +535,6 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
   const name = order.shippingAddress?.fullName || user?.name || 'there';
   const companyName = company.name || 'Autobacs India';
   const supportEmail = company.email || 'support@autobacsindia.com';
-  const items = order.items || [];
 
   // Mirror the invoice PDF: when no shipping charge is on the order (the common
   // case), shipping is collected at delivery — never render it as ₹0.00.
@@ -543,8 +543,19 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
 
   const subject = `Order confirmed — ${invNo}`;
 
-  const itemsText = items
-    .map((it) => `  • ${it.name || 'Item'} × ${it.quantity} — ${inr((it.price || 0) * (it.quantity || 0))}`)
+  /*
+    Lines shown to the customer = paid items + any won Spin-to-Win goodie, so the email
+    matches the parcel and the order page. The goodie is priced FREE and contributes ₹0,
+    so every total below (subtotal, discounts, total paid) is untouched — it is a display
+    line, never an `Order.items` entry. See utils/orderLines.js.
+  */
+  const lines = buildOrderLines(order, { audience: 'customer' });
+  const lineAmount = (line) => (line.isFree ? 'FREE' : inr(line.lineTotal));
+  const lineLabel = (line) =>
+    `${line.name || 'Item'}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''}`;
+
+  const itemsText = lines
+    .map((line) => `  • ${lineLabel(line)} × ${line.quantity} — ${lineAmount(line)}`)
     .join('\n');
 
   const text = `
@@ -569,13 +580,13 @@ Best regards,
 ${companyName}
   `.trim();
 
-  const itemRows = items
+  const itemRows = lines
     .map(
-      (it) => `
+      (line) => `
       <tr>
-        <td style="padding:8px 0;border-bottom:1px solid #eee;">${it.name || 'Item'}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #eee;text-align:center;">${it.quantity}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${inr((it.price || 0) * (it.quantity || 0))}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #eee;">${lineLabel(line)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #eee;text-align:center;">${line.quantity}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #eee;text-align:right;${line.isFree ? 'color:#b45309;font-weight:bold;' : ''}">${lineAmount(line)}</td>
       </tr>`
     )
     .join('');
@@ -748,7 +759,28 @@ const STATUS_COPY = {
  * @param {Object} [params.company] - Company info (name, email)
  * @returns {Object} - { subject, text, html }
  */
-export const orderStatusEmail = ({ order, user = null, status, company = {}, payment = null }) => {
+export const orderStatusEmail = ({ order, user = null, status, company = {}, payment = null, shipment = null }) => {
+  /*
+    PARTIAL SHIPMENT. `shipment` present means this email is about ONE parcel of an
+    order going out in several. The customer must be told which box this is, what is in
+    it, and what is still to come — a bare "your order has shipped" for parcel 2 of 3
+    reads as a duplicate of parcel 1 and teaches people to ignore the emails.
+
+    `isPartial` is false for a single-parcel order even when a shipment is attached, so
+    the ordinary case keeps its familiar wording rather than gaining a pointless
+    "Parcel 1 of 1".
+  */
+  const liveParcels = (order.shipments || []).filter((sh) => sh.status !== 'lost');
+  const parcelCount = liveParcels.length;
+  /*
+    Position among LIVE parcels, not the stored `sequence`. Sequence is a permanent id
+    assigned at creation; once a parcel is written off as lost, sequence 2 of two
+    remaining boxes would print as "Parcel 2 of 1".
+  */
+  const parcelIndex = shipment
+    ? liveParcels.findIndex((sh) => String(sh._id) === String(shipment._id)) + 1
+    : 0;
+
   const copy = STATUS_COPY[status] || {
     subject: (ref) => `Order update — ${ref}`,
     heading: 'Your order status has been updated',
@@ -758,8 +790,94 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   const name = order.shippingAddress?.fullName || user?.name || 'there';
   const companyName = company.name || 'Autobacs India';
   const supportEmail = company.email || 'support@autobacsindia.com';
-  const items = order.items || [];
-  const showItems = status === 'delivered' && items.length > 0;
+  // Paid items + any won goodie. FREE line, ₹0 — no total in this email is affected.
+  // See utils/orderLines.js.
+  const allLines = buildOrderLines(order, { audience: 'customer' });
+
+  /*
+    When this email is about one parcel, list THAT parcel's contents rather than the
+    whole order. A "shipped" email that lists items still sitting in the warehouse is
+    worse than no list at all — the customer opens the box and thinks something was
+    stolen in transit.
+  */
+  const parcelLines = shipment
+    ? (() => {
+        const qty = new Map((shipment.lines || []).map((l) => [String(l.itemId), l.quantity]));
+        const inThisBox = allLines
+          .filter((line) => line.kind === 'sale' && qty.has(String(line.itemId)))
+          .map((line) => ({ ...line, quantity: qty.get(String(line.itemId)) }));
+        // The gift travels in exactly one parcel; only that parcel's email lists it.
+        if (shipment.includesReward) {
+          const gift = allLines.find((line) => line.kind === 'reward');
+          if (gift) inThisBox.push(gift);
+        }
+        return inThisBox;
+      })()
+    : allLines;
+
+  const statusLines = shipment ? parcelLines : allLines;
+
+  /*
+    "Still to come" = what the customer has NOT got yet and is not in this box.
+
+    Note this is deliberately NOT "not yet in any parcel". Whether a colleague has
+    already boxed the remaining item is a warehouse fact the customer neither knows nor
+    cares about — from their side, anything that has not arrived is still coming. Using
+    the warehouse definition made this block render empty exactly when every item was
+    already assigned to a parcel, which is the common case and the one that most needs
+    the explanation.
+  */
+  const stillToCome = shipment
+    ? (() => {
+        const thisParcel = new Map((shipment.lines || []).map((l) => [String(l.itemId), l.quantity || 0]));
+        const deliveredElsewhere = new Map();
+        for (const sh of order.shipments || []) {
+          if (String(sh._id) === String(shipment._id)) continue;
+          if (sh.status !== 'delivered') continue;
+          for (const l of sh.lines || []) {
+            deliveredElsewhere.set(
+              String(l.itemId),
+              (deliveredElsewhere.get(String(l.itemId)) || 0) + (l.quantity || 0));
+          }
+        }
+        const pending = allLines
+          .filter((line) => line.kind === 'sale')
+          .map((line) => ({
+            ...line,
+            quantity: line.quantity
+              - (thisParcel.get(String(line.itemId)) || 0)
+              - (deliveredElsewhere.get(String(line.itemId)) || 0),
+          }))
+          .filter((line) => line.quantity > 0);
+
+        // The gift is coming too, unless it is in this box or already arrived.
+        const gift = allLines.find((line) => line.kind === 'reward');
+        if (gift && !shipment.includesReward) {
+          const giftArrived = (order.shipments || []).some(
+            (sh) => sh.includesReward && sh.status === 'delivered');
+          if (!giftArrived) pending.push(gift);
+        }
+        return pending;
+      })()
+    : [];
+
+  /*
+    Is this email about PART of an order?
+
+    Deliberately not "are there several parcels". The first parcel of a split order is
+    created before the second exists, so a parcel count would be 1 at exactly the moment
+    the customer most needs to be told more is coming — they would get the standard
+    "your order has shipped", a short item list, and no explanation for the missing
+    items. What actually makes an email partial is that something is still outstanding.
+  */
+  const isPartial = !!shipment && (parcelCount > 1 || stillToCome.length > 0);
+  const parcelRef = isPartial && parcelIndex > 0
+    ? `Parcel ${parcelIndex}${parcelCount > 1 ? ` of ${parcelCount}` : ''}`
+    : null;
+
+  // A parcel email always lists its contents — that IS the message. The order-level
+  // email keeps its original behaviour of listing only on delivery.
+  const showItems = (shipment ? statusLines.length > 0 : status === 'delivered') && statusLines.length > 0;
 
   // Escape HTML metacharacters before interpolating into the HTML body — the
   // tracking number is admin free-text and would otherwise break out of the
@@ -774,21 +892,58 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
 
   // Shipped emails carry a tracking block (number, carrier, ETA, tracking link)
   // plus a note when the courier slip PDF is attached.
-  const showTracking = status === 'shipped' && !!order.trackingNumber;
-  const carrierName = order.carrier?.name;
-  const trackingUrl = order.carrier?.trackingUrl;
-  const etaText = order.estimatedDelivery ? formatLongDateIST(order.estimatedDelivery) : null;
-  const hasSlip = status === 'shipped' && !!order.shippingSlip?.url;
+  // Tracking comes from THIS parcel when there is one — the order-level fields describe
+  // only the legacy single-parcel case, and using them for parcel 2 would hand the
+  // customer parcel 1's AWB.
+  const src = shipment || order;
+  const showTracking = status === 'shipped' && !!src.trackingNumber;
+  const carrierName = src.carrier?.name;
+  const trackingUrl = src.carrier?.trackingUrl;
+  const etaText = src.estimatedDelivery ? formatLongDateIST(src.estimatedDelivery) : null;
+  const hasSlip = status === 'shipped' && !!src.shippingSlip?.url;
+  const trackingNumber = src.trackingNumber;
 
-  const subject = copy.subject(ref);
+  const subject = isPartial && parcelRef
+    ? (status === 'delivered'
+        ? `${parcelRef} delivered — ${ref}`
+        : `${parcelRef} is on its way — ${ref}`)
+    : copy.subject(ref);
 
   const itemsText = showItems
-    ? '\n\nItems:\n' + items.map((it) => `  • ${it.name || 'Item'} × ${it.quantity}`).join('\n')
+    ? '\n\nItems:\n' +
+      statusLines
+        .map((line) =>
+          `  • ${line.name || 'Item'}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''} × ${line.quantity}`)
+        .join('\n')
     : '';
+
+  /*
+    "Still to come" is the half of a partial-shipment email that stops a support call.
+    Without it the customer opens a box with 2 of their 3 items and assumes something
+    was lost; with it, the short delivery is expected.
+  */
+  const stillToComeText = isPartial && stillToCome.length
+    ? '\n\nStill to come in a separate parcel:\n' +
+      stillToCome
+        .map((line) =>
+          `  • ${line.name || 'Item'}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''} × ${line.quantity}`)
+        .join('\n')
+    : '';
+
+  // Partial parcels get their own wording; a single-parcel order keeps the copy it
+  // always had.
+  const heading = isPartial && parcelRef
+    ? (status === 'delivered' ? `${parcelRef} delivered ✅` : `${parcelRef} is on its way 🚚`)
+    : copy.heading;
+  const blurb = isPartial && parcelRef
+    ? (status === 'delivered'
+        ? `Part of your order has arrived — this is ${parcelRef.toLowerCase()}. Here's what was in it:`
+        : `Your order is coming in more than one parcel. This is ${parcelRef.toLowerCase()}, and the rest follows separately. Here's what's inside:`)
+    : copy.blurb;
 
   const trackingText = showTracking
     ? '\n\nTracking details:' +
-      `\n  • Tracking number: ${order.trackingNumber}` +
+      `\n  • Tracking number: ${trackingNumber}` +
       (carrierName ? `\n  • Carrier: ${carrierName}` : '') +
       (etaText ? `\n  • Estimated delivery: ${etaText}` : '') +
       (trackingUrl ? `\n  • Track your package: ${trackingUrl}` : '') +
@@ -807,9 +962,9 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   const text = `
 Hi ${name},
 
-${copy.blurb}
+${blurb}
 
-Order: ${ref}${trackingText}${itemsText}${emiText}
+Order: ${ref}${trackingText}${itemsText}${stillToComeText}${emiText}
 
 Questions? Contact us at ${supportEmail}.
 
@@ -818,15 +973,15 @@ ${companyName}
   `.trim();
 
   const itemRows = showItems
-    ? items
+    ? statusLines
         .map(
-          (it) => `
+          (line) => `
       <tr>
         <td style="padding:10px 0;border-bottom:1px solid #eee;width:56px;">
-          ${it.image ? `<img src="${it.image}" alt="" width="48" height="48" style="border-radius:6px;object-fit:cover;display:block;">` : ''}
+          ${line.image ? `<img src="${esc(line.image)}" alt="" width="48" height="48" style="border-radius:6px;object-fit:cover;display:block;">` : (line.kind === 'reward' ? '<span style="font-size:28px;line-height:1;">&#127873;</span>' : '')}
         </td>
-        <td style="padding:10px 0;border-bottom:1px solid #eee;">${it.name || 'Item'}</td>
-        <td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;color:#555;">× ${it.quantity}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;">${esc(line.name || 'Item')}${line.kind === 'reward' ? ' <span style="color:#b45309;font-weight:bold;">(free gift you won)</span>' : ''}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;color:#555;">&times; ${line.quantity}</td>
       </tr>`
         )
         .join('')
@@ -836,11 +991,19 @@ ${companyName}
     ? `<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;"><tbody>${itemRows}</tbody></table>`
     : '';
 
+  // HTML twin of stillToComeText — see the note there for why it earns its place.
+  const stillToComeTable = isPartial && stillToCome.length
+    ? `<div style="margin-top:20px;padding:14px 18px;background:#fbfbfb;border:1px dashed #ddd;border-radius:8px;">
+        <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">Still to come in a separate parcel</p>
+        ${stillToCome.map((line) => `<p style="margin:2px 0;font-size:14px;color:#555;">${esc(line.name || 'Item')}${line.kind === 'reward' ? ' (free gift you won)' : ''} &times; ${line.quantity}</p>`).join('')}
+      </div>`
+    : '';
+
   const trackingBlock = showTracking
     ? `
       <div style="margin-top:20px;padding:16px 20px;background:#f7f7f7;border-radius:8px;border:1px solid #eee;">
         <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">Tracking details</p>
-        <p style="margin:4px 0;font-size:14px;">Tracking number: <strong>${esc(order.trackingNumber)}</strong></p>
+        <p style="margin:4px 0;font-size:14px;">Tracking number: <strong>${esc(trackingNumber)}</strong></p>
         ${carrierName ? `<p style="margin:4px 0;font-size:14px;">Carrier: <strong>${esc(carrierName)}</strong></p>` : ''}
         ${etaText ? `<p style="margin:4px 0;font-size:14px;">Estimated delivery: <strong>${esc(etaText)}</strong></p>` : ''}
         ${trackingUrl ? `<p style="margin:16px 0 4px;"><a href="${esc(trackingUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">Track your package</a></p>` : ''}
@@ -862,20 +1025,21 @@ ${companyName}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${copy.heading}</title>
+  <title>${heading}</title>
 </head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
   <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
     <div style="background:#111;padding:24px 30px;">
-      <h1 style="color:#fff;margin:0;font-size:22px;">${copy.heading}</h1>
+      <h1 style="color:#fff;margin:0;font-size:22px;">${heading}</h1>
     </div>
     <div style="padding:30px;">
       <p>Hi ${name},</p>
-      <p>${copy.blurb}</p>
+      <p>${blurb}</p>
       <p style="color:#555;">Order: <strong>${ref}</strong></p>
       ${emiBlock}
       ${trackingBlock}
       ${itemsTable}
+      ${stillToComeTable}
       <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
     </div>
     <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">

@@ -29,18 +29,53 @@ const downloadToBuffer = async (url) => {
 };
 
 /**
- * Send the status-update email for an order, once per status.
+ * The idempotency key stored in `Order.notifiedStatuses`.
+ *
+ * ⚠️ THIS IS THE FIX FOR A REAL SWALLOWED EMAIL. The guard used to be the bare status
+ * word, and the send is skipped when the array already contains it — so the moment an
+ * order shipped in two parcels, the SECOND "your order has shipped" email was silently
+ * dropped and the customer was never told about their other box. Keying on the parcel
+ * makes each one notifiable exactly once.
+ *
+ * Order-level events (cancelled, refunded, and every historical order) keep the bare
+ * word, so nothing already sent is ever re-sent after this change ships.
+ *
+ * @param {string} status
+ * @param {string|null} [shipmentId]
+ * @returns {string}
+ */
+export const notificationKey = (status, shipmentId = null) =>
+  shipmentId ? `${status}:${shipmentId}` : status;
+
+/**
+ * Send the status-update email for an order, once per status (or once per parcel).
  * Idempotent via Order.notifiedStatuses so BullMQ retries never double-send.
  * @param {string} orderId
  * @param {string} status - New status (shipped|delivered|cancelled|refunded)
+ * @param {object} [opts]
+ * @param {string} [opts.shipmentId] - notify about ONE parcel rather than the order
  * @returns {Promise<{status: 'sent'|'skipped'|'no-recipient'|'not-found'}>}
  */
-export const emailOrderStatusUpdate = async (orderId, status) => {
+export const emailOrderStatusUpdate = async (orderId, status, opts = {}) => {
+  const { shipmentId = null } = opts;
   const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
   if (!order) return { status: 'not-found' };
 
-  // Idempotency: skip if we've already notified the customer for this status.
-  if (order.notifiedStatuses?.includes(status)) return { status: 'skipped' };
+  // Idempotency: skip if we've already notified the customer for this exact event.
+  // For a parcel that means (status, shipmentId) — so parcel 2's "shipped" email is a
+  // different key from parcel 1's and actually goes out.
+  const key = notificationKey(status, shipmentId);
+  if (order.notifiedStatuses?.includes(key)) return { status: 'skipped' };
+
+  // The parcel this email is about, and what is still to come after it. Both are
+  // undefined for an order-level email, which renders exactly as it always did.
+  const shipment = shipmentId
+    ? (order.shipments || []).find((s) => String(s._id) === String(shipmentId))
+    : null;
+  if (shipmentId && !shipment) {
+    console.warn(`[StatusEmail] Parcel ${shipmentId} not found on order ${orderId} — skipping`);
+    return { status: 'not-found' };
+  }
 
   const user = order.user && typeof order.user === 'object' ? order.user : null;
   const to = user?.email || order.guestEmail;
@@ -53,9 +88,13 @@ export const emailOrderStatusUpdate = async (orderId, status) => {
   // if the download fails we still send the (tracking-only) email rather than block
   // the notification — a missing attachment shouldn't strand the customer.
   let attachments;
-  if (status === 'shipped' && order.shippingSlip?.url) {
+  // A parcel's own slip wins over the order-level one: with several boxes in flight,
+  // attaching the order's single legacy slip to every email would send the wrong
+  // paperwork for every parcel but the first.
+  const slipUrl = shipment ? shipment.shippingSlip?.url : order.shippingSlip?.url;
+  if (status === 'shipped' && slipUrl) {
     try {
-      const buffer = await downloadToBuffer(order.shippingSlip.url);
+      const buffer = await downloadToBuffer(slipUrl);
       const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
       attachments = [{
         Name: `shipping-slip-${ref}.pdf`,
@@ -79,19 +118,21 @@ export const emailOrderStatusUpdate = async (orderId, status) => {
     }
   }
 
-  const result = await emailHandler.sendOrderStatusUpdate({ to, order, status, user, attachments, payment });
+  const result = await emailHandler.sendOrderStatusUpdate({
+    to, order, status, user, attachments, payment, shipment,
+  });
 
   // Only mark as notified when the provider actually accepted it, so a transient
   // failure lets BullMQ retry rather than silently dropping the notification.
   if (result?.success) {
-    order.notifiedStatuses = [...(order.notifiedStatuses || []), status];
+    order.notifiedStatuses = [...(order.notifiedStatuses || []), key];
     await orderRepository.save(order);
     return { status: 'sent' };
   }
 
   throw new Error(
-    `Status email failed for order ${orderId} (${status}): ${result?.error || 'unknown error'}`
+    `Status email failed for order ${orderId} (${key}): ${result?.error || 'unknown error'}`
   );
 };
 
-export default { emailOrderStatusUpdate };
+export default { emailOrderStatusUpdate, notificationKey };

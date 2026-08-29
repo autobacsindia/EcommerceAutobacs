@@ -29,6 +29,27 @@ interface ConfirmStatusChangeModalProps {
   notifiesCustomer: boolean;
   /** When set (>1), renders bulk copy for N orders. */
   count?: number;
+  /**
+   * Units on the order, for a `shipped` change made from the ORDERS LIST.
+   *
+   * That screen ships everything in one parcel — the fast path, kept on purpose for
+   * working through many orders. Saying how many items that covers is what turns it from
+   * a silent decision into a deliberate one; splitting happens on the order's own page.
+   */
+  shipsEverythingCount?: number;
+  /**
+   * Parcels still awaiting delivery, for a `delivered` change.
+   *
+   * The mirror image of `shipsEverythingCount`. Marking the order delivered runs
+   * `deliverAllOutstanding` server-side, which lands EVERY outstanding parcel at once —
+   * necessary, because the per-line return window reads parcel dates and would never
+   * open otherwise. But on a multi-parcel order that is a real decision (each parcel
+   * also emails the customer its own "delivered"), and it was being made silently
+   * while the shipping equivalent right above got a warning.
+   */
+  deliversParcelCount?: number;
+  /** Link to the order, so "split into parcels" is one click from the dialog. */
+  orderHref?: string;
   /** Runs the actual update. Resolve to close; reject to show an inline error. */
   onConfirm: (payload: ConfirmStatusPayload) => Promise<void>;
   onClose: () => void;
@@ -60,6 +81,9 @@ export default function ConfirmStatusChangeModal({
   newStatus,
   notifiesCustomer,
   count,
+  shipsEverythingCount,
+  deliversParcelCount,
+  orderHref,
   onConfirm,
   onClose,
 }: ConfirmStatusChangeModalProps) {
@@ -70,6 +94,9 @@ export default function ConfirmStatusChangeModal({
   const isBulk = typeof count === 'number' && count > 1;
   // Shipping details are only captured for a single order moving to `shipped`.
   const isShipping = !isBulk && newStatus === 'shipped';
+  // Bulk excluded deliberately: a bulk delivered-change spans many orders with
+  // different parcel counts, so there is no single honest number to quote.
+  const isDelivering = !isBulk && newStatus === 'delivered';
 
   const [trackingNumber, setTrackingNumber] = useState('');
   const [carrierCode, setCarrierCode] = useState('');
@@ -191,6 +218,47 @@ export default function ConfirmStatusChangeModal({
               </>
             )}
           </div>
+
+          {/*
+            Shipping from the ORDERS LIST puts every outstanding unit in ONE parcel.
+            That is the intended fast path for this screen, but on a multi-item order it
+            is only right by accident — so say what it will do, and offer the split.
+          */}
+          {isShipping && (shipsEverythingCount ?? 0) > 1 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              This ships <strong>all {shipsEverythingCount} items</strong> together in one parcel.
+              {orderHref && (
+                <>
+                  {' '}Sending them separately?{' '}
+                  <a href={orderHref} className="font-medium underline hover:no-underline">
+                    Open the order
+                  </a>{' '}
+                  and use the Parcels panel.
+                </>
+              )}
+            </div>
+          )}
+
+          {/*
+            Delivering from a LIST marks every outstanding parcel delivered in one go.
+            Same fast path as shipping, same obligation to say so — and the same escape
+            hatch, since the Parcels panel can land them one at a time.
+          */}
+          {isDelivering && (deliversParcelCount ?? 0) > 1 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              This marks <strong>all {deliversParcelCount} parcels</strong> delivered, and emails
+              the customer once per parcel.
+              {orderHref && (
+                <>
+                  {' '}Only some of them arrived?{' '}
+                  <a href={orderHref} className="font-medium underline hover:no-underline">
+                    Open the order
+                  </a>{' '}
+                  and mark them one at a time.
+                </>
+              )}
+            </div>
+          )}
 
           {/* Shipping details (tracking + carrier + optional slip) */}
           {isShipping && (

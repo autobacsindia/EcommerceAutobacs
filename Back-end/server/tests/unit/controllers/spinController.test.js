@@ -41,6 +41,7 @@ const mockCampaignRepo = {
   findById: jest.fn().mockResolvedValue(null),
   findLeanById: jest.fn(),
   createCampaign: jest.fn(),
+  updateById: jest.fn(),
 };
 jest.unstable_mockModule('../../../services/auditLogger.js', () => ({
   default: { logAction: jest.fn() },
@@ -62,8 +63,13 @@ const mockPrizeRepo = {
 jest.unstable_mockModule('../../../repositories/spinPrizeRepository.js', () => ({
   default: mockPrizeRepo,
 }));
+const mockResultRepo = {
+  findFulfilmentQueue: jest.fn(),
+  countUnfulfilled: jest.fn(),
+  countGrantedForCampaign: jest.fn().mockResolvedValue(0),
+};
 jest.unstable_mockModule('../../../repositories/spinResultRepository.js', () => ({
-  default: { findFulfilmentQueue: jest.fn(), countUnfulfilled: jest.fn() },
+  default: mockResultRepo,
 }));
 
 let controller;
@@ -369,5 +375,117 @@ describe('editing a prize on a LIVE campaign', () => {
     mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ stockAwarded: 8 }));
     await expect(controller.updatePrize(editReq({ stockTotal: 3 }), res()))
       .rejects.toMatchObject({ statusCode: 422 });
+  });
+});
+
+/**
+ * Editing a campaign's window and goodie rate.
+ *
+ * All three used to be creation-only in the admin UI — the API accepted them, the screen
+ * never offered them, so a mistyped end date could only be fixed by cloning. They are
+ * editable now, with ONE refusal.
+ */
+describe('updateCampaign — window + rate edits', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const req = (body, id = 'camp-1') => ({ params: { id }, body, user: { _id: 'admin-1' } });
+  const res = () => ({ json: jest.fn(), status: jest.fn().mockReturnThis() });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockResultRepo.countGrantedForCampaign.mockResolvedValue(0);
+    mockCampaignRepo.updateById.mockImplementation(async (id, patch) => ({ _id: id, ...patch }));
+  });
+
+  it('saves the goodie rate without touching the dates', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ goodieWinRatePercent: 35 }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { goodieWinRatePercent: 35 });
+    // No date in the patch → no need to look the campaign up at all.
+    expect(mockResultRepo.countGrantedForCampaign).not.toHaveBeenCalled();
+  });
+
+  // Everything on the settings card reaches the database. These were all creation-only
+  // in the admin UI until the card existed, so an order placed under the wrong name or
+  // the wrong per-customer cap could only be fixed by cloning the whole campaign.
+  it('saves the editable settings — name, segments, cap and terms', async () => {
+    const r = res();
+    await controller.updateCampaign(req({
+      name: 'Diwali Spin 2026',
+      segmentCount: 10,
+      maxSpinsPerUserPerCampaign: 2,
+      terms: 'One spin per paid order.',
+    }), r);
+
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', {
+      name: 'Diwali Spin 2026',
+      segmentCount: 10,
+      maxSpinsPerUserPerCampaign: 2,
+      terms: 'One spin per paid order.',
+    });
+  });
+
+  it('accepts a null per-customer cap, meaning unlimited', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ maxSpinsPerUserPerCampaign: null }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { maxSpinsPerUserPerCampaign: null });
+  });
+
+  // `status` moves only through publish/setStatus, which run the safety gate. A rename
+  // must never be able to smuggle a campaign live.
+  it('never lets a settings save change the status', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ name: 'Renamed', status: 'live' }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { name: 'Renamed' });
+  });
+
+  it('extends a campaign that is still running', async () => {
+    mockCampaignRepo.findById.mockResolvedValue({ _id: 'camp-1', endsAt: new Date(Date.now() + DAY) });
+    const r = res();
+    const later = new Date(Date.now() + 10 * DAY).toISOString();
+    await controller.updateCampaign(req({ endsAt: later }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { endsAt: later });
+  });
+
+  it('shortens a closed campaign — nothing is reopened, so it is allowed', async () => {
+    mockCampaignRepo.findById.mockResolvedValue({ _id: 'camp-1', endsAt: new Date(Date.now() - DAY) });
+    mockResultRepo.countGrantedForCampaign.mockResolvedValue(50);
+    const r = res();
+    const earlier = new Date(Date.now() - 5 * DAY).toISOString();
+    await controller.updateCampaign(req({ endsAt: earlier }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalled();
+  });
+
+  it('reopens a closed campaign that was never spun', async () => {
+    mockCampaignRepo.findById.mockResolvedValue({ _id: 'camp-1', endsAt: new Date(Date.now() - DAY) });
+    mockResultRepo.countGrantedForCampaign.mockResolvedValue(0);
+    const r = res();
+    await controller.updateCampaign(req({ endsAt: new Date(Date.now() + DAY).toISOString() }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalled();
+  });
+
+  /*
+    THE REFUSAL. The per-customer cap counts granted spins per campaign for all time, so
+    reopening a spent window locks every original spinner out with no error of any kind —
+    they simply see no wheel. Cloning gives a fresh id and resets both the cap and stock.
+  */
+  it('REFUSES to reopen a closed campaign that has already been spun', async () => {
+    mockCampaignRepo.findById.mockResolvedValue({ _id: 'camp-1', endsAt: new Date(Date.now() - DAY) });
+    mockResultRepo.countGrantedForCampaign.mockResolvedValue(37);
+    const r = res();
+
+    await expect(controller.updateCampaign(
+      req({ endsAt: new Date(Date.now() + DAY).toISOString() }), r,
+    )).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(mockCampaignRepo.updateById).not.toHaveBeenCalled();
+  });
+
+  it('names the spin count and points at Clone, so the refusal is actionable', async () => {
+    mockCampaignRepo.findById.mockResolvedValue({ _id: 'camp-1', endsAt: new Date(Date.now() - DAY) });
+    mockResultRepo.countGrantedForCampaign.mockResolvedValue(37);
+    const r = res();
+    await expect(controller.updateCampaign(
+      req({ endsAt: new Date(Date.now() + DAY).toISOString() }), r,
+    )).rejects.toThrow(/37 time\(s\)[\s\S]*Clone for next window/);
   });
 });

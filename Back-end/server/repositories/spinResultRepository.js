@@ -24,6 +24,17 @@ class SpinResultRepository extends BaseRepository {
   }
 
   /**
+   * Has anyone actually spun this campaign? Used to decide whether reopening a closed
+   * window would be unfair (see spinController.updateCampaign).
+   */
+  async countGrantedForCampaign(campaignId) {
+    return SpinResult.countDocuments({
+      campaign: campaignId,
+      status: SPIN_RESULT_STATUS.GRANTED,
+    });
+  }
+
+  /**
    * The admin fulfilment queue — granted, physical, not yet packed.
    *
    * Cursor-paginated on spunAt: this collection only grows, and skip/offset both

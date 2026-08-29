@@ -41,7 +41,15 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/returns', label: 'Returns', icon: '↩️' },
       { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
       { href: '/admin/spin', label: 'Spin to Win', icon: '🎡' },
-      { href: '/admin/spin/winners', label: 'Goodies to pack', icon: '🎁' },
+      /*
+        There is deliberately NO "Goodies to pack" entry here.
+
+        A won goodie is a fulfilment unit: an order cannot reach `delivered` until the
+        gift is in a parcel (utils/orderFulfilment.js), so an order that still owes one
+        simply stays open in the ordinary Orders queue. A separate nav item would be a
+        second place to look for work that the Orders screen already surfaces — via the
+        🎁 filter and the per-row chip — and a second list to forget to check.
+      */
     ],
   },
   // Inventory (Warehouses) — feature is fully implemented (frontend + backend

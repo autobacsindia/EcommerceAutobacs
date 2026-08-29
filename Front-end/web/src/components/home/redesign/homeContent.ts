@@ -298,7 +298,7 @@ export const brands: string[] = [
 export const transformation = {
   eyebrow: 'Before & After',
   titleTop: 'The',
-  titleAccent: 'Autobaacs',
+  titleAccent: 'Autobacs',
   titleBottom: 'Effect.',
   before:
     'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1920/v1782907582/before_bmw_hlwaqs.jpg',
@@ -309,7 +309,7 @@ export const transformation = {
 export const testimonials: TestimonialItem[] = [
   {
     quote:
-      "Autobaacs transformed my track car into something I genuinely can't stop driving. The HKS kit arrived perfectly packaged, and their install partner in Pune was world-class.",
+      "Autobacs transformed my track car into something I genuinely can't stop driving. The HKS kit arrived perfectly packaged, and their install partner in Pune was world-class.",
     name: 'Rahul Desai',
     detail: 'Honda Civic Type R · Mumbai',
     avatar:
@@ -317,7 +317,7 @@ export const testimonials: TestimonialItem[] = [
   },
   {
     quote:
-      "I've been building cars for 15 years and Autobaacs is the only platform I trust for sourcing genuine performance parts. Delivery was faster than I expected — even to Bangalore.",
+      "I've been building cars for 15 years and Autobacs is the only platform I trust for sourcing genuine performance parts. Delivery was faster than I expected — even to Bangalore.",
     name: 'Arjun Krishnan',
     detail: 'Subaru WRX STI · Bengaluru',
     avatar:
@@ -333,7 +333,7 @@ export const testimonials: TestimonialItem[] = [
   },
   {
     quote:
-      'Sourced my Akrapovič exhaust through Autobaacs and the difference is night and day. Genuine product, great price, incredibly smooth process. Will return for my next build.',
+      'Sourced my Akrapovič exhaust through Autobacs and the difference is night and day. Genuine product, great price, incredibly smooth process. Will return for my next build.',
     name: 'Vikram Shah',
     detail: 'Porsche 911 GTS · Ahmedabad',
     avatar:

@@ -23,7 +23,6 @@ const QUARANTINED = [
   'src/app/integration-tests/product-listing.test.tsx',
   'src/app/integration-tests/user-journey.test.tsx',
   'src/app/login/page.test.tsx',
-  'src/app/orders/\\[id\\]/page.test.tsx',
   'src/app/page.test.tsx',
   'src/app/products/page.test.tsx',
   'src/app/register/page.test.tsx',

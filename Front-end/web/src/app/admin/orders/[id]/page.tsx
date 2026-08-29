@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
@@ -11,6 +11,10 @@ import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/ord
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
+import { buildOrderLines } from '@/lib/orderLines';
+import OrderShipments from '@/components/admin/OrderShipments';
+import { outstandingParcels } from '@/lib/orderFulfilment';
+import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import type { OrderPaymentSummary } from '@/lib/types';
 
 // Fulfillment stages an admin can move to (mirrors the list page + backend rules).
@@ -31,6 +35,8 @@ function getAdminNextStatuses(currentStatus: string): string[] {
 const AWAITING_PAYMENT = 'awaiting_payment';
 
 interface OrderItem {
+  /** Order-line id. Parcels reference these (`shipments[].lines[].itemId`). */
+  _id: string;
   product: {
     _id: string;
     name: string;
@@ -38,6 +44,8 @@ interface OrderItem {
   };
   quantity: number;
   price: number;
+  /** Name snapshotted at purchase; authoritative over the live product name. */
+  name?: string;
 }
 
 interface Order {
@@ -47,6 +55,13 @@ interface Order {
   status: string;
   paymentStatus?: string;
   items: OrderItem[];
+  /**
+   * Parcels. Already on the wire (GET /orders/:id returns the whole document), and
+   * read here ONLY to size the "this delivers every parcel" warning. The Parcels panel
+   * fetches its own authoritative copy from the fulfilment endpoint — this is not a
+   * second source of truth for what is in a box.
+   */
+  shipments?: ShipmentSummary[];
   shippingAddress: {
     fullName: string;
     phone: string;
@@ -58,13 +73,17 @@ interface Order {
     country: string;
   };
   /**
-   * Spin-to-Win reward. Deliberately NOT a line item — a ₹0 entry in `items` would
-   * corrupt the invoice, the refund maths and every revenue report.
+   * Spin-to-Win reward. Stored beside the order, never inside `items` — a ₹0 entry
+   * in `items` would corrupt the invoice, the refund maths and every revenue report.
+   * It is RENDERED as a line by `buildOrderLines`, which is a display concern only.
    */
   spinReward?: {
+    /** SpinResult id — what PATCH /spin/admin/winners/:id/fulfil is keyed by. */
+    result: string;
     name: string;
     sku: string | null;
     kind: string;
+    imageUrl?: string | null;
     wonAt: string;
     fulfilledAt: string | null;
     voidedAt: string | null;
@@ -115,6 +134,11 @@ export default function AdminOrderDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
+  const [packingReward, setPackingReward] = useState(false);
+  // Set when the admin picks "Shipped": scrolls to the Parcels panel and opens its
+  // create-parcel form, so they choose what goes in the box.
+  const [openParcelForm, setOpenParcelForm] = useState(0);
+  const parcelsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (orderId) {
@@ -169,6 +193,29 @@ export default function AdminOrderDetailPage() {
       toast.error(err?.message || 'Failed to process refund.');
     } finally {
       setRefunding(false);
+    }
+  };
+
+  /**
+   * Mark the won goodie as physically in the parcel.
+   *
+   * Hits the same endpoint the fulfilment queue uses, so the SpinResult ledger stays
+   * the single source of truth and the two screens can never disagree. The backend
+   * claim is conditional on `fulfilledAt` being unset, so two admins clicking at once
+   * record one fulfilment by one person rather than overwriting each other — we just
+   * refetch and show whatever the server decided.
+   */
+  const handleMarkRewardPacked = async () => {
+    if (!order?.spinReward?.result) return;
+    setPackingReward(true);
+    try {
+      await apiClient.patch(API_ENDPOINTS.SPIN_WINNER_FULFIL(order.spinReward.result), {});
+      toast.success('Goodie marked as packed.');
+      await fetchOrder();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to mark the goodie packed.');
+    } finally {
+      setPackingReward(false);
     }
   };
 
@@ -273,12 +320,25 @@ export default function AdminOrderDetailPage() {
         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
           {getStatusLabel(order.status)}
         </span>
+        {/*
+          Packing slip — the printable pick list, now including any won goodie as a
+          tickable row. Lives here rather than inside the (removed) reward banner: the
+          slip is worth printing for every order, and hanging its only link off the
+          reward meant an order without one had no way to reach it at all.
+        */}
+        <Link
+          href={`/admin/orders/${orderId}/packing-slip`}
+          className="ml-auto flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+        >
+          <Package className="h-4 w-4" />
+          Packing slip
+        </Link>
         {['paid', 'refunded'].includes(order.paymentStatus || '') && (
           <a
             href={`/api/v1/orders/${orderId}/invoice`}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-auto flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
             <Download className="h-4 w-4" />
             Download Invoice
@@ -290,99 +350,123 @@ export default function AdminOrderDetailPage() {
         {/* Order Summary */}
         <div className="lg:col-span-2 space-y-6">
           {/*
-            Spin-to-Win reward banner. Rendered ABOVE the items so a packer reading top-to-
-            bottom cannot start picking without seeing it. A voided reward (order cancelled
-            or refunded) inverts to a red DO-NOT-PACK rather than disappearing — silently
-            vanishing would leave someone who already read it about to pack a dead prize.
-          */}
-          {order.spinReward && (
-            order.spinReward.voidedAt ? (
-              <div className="rounded-lg border-2 border-red-300 bg-red-50 p-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🚫</span>
-                  <div>
-                    <div className="font-bold text-red-800">DO NOT PACK — reward cancelled</div>
-                    <div className="text-sm text-red-700">
-                      {order.spinReward.name}
-                      {order.spinReward.sku && <> · <code>{order.spinReward.sku}</code></>}
-                      {' '}— withdrawn because this order was cancelled or refunded.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className={`rounded-lg border-2 p-4 ${
-                order.spinReward.fulfilledAt
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-amber-400 bg-amber-50'
-              }`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🎁</span>
-                  <div className="flex-1">
-                    <div className={`font-bold ${order.spinReward.fulfilledAt ? 'text-green-800' : 'text-amber-900'}`}>
-                      {order.spinReward.fulfilledAt ? 'Reward packed ✓' : 'ADD TO PARCEL'}
-                    </div>
-                    <div className={`text-sm ${order.spinReward.fulfilledAt ? 'text-green-700' : 'text-amber-800'}`}>
-                      <span className="font-semibold">{order.spinReward.name}</span>
-                      {order.spinReward.sku && (
-                        <> · <code className="rounded bg-white/70 px-1.5 py-0.5 text-xs font-semibold">
-                          {order.spinReward.sku}
-                        </code></>
-                      )}
-                      {order.spinReward.kind !== 'goodie' && (
-                        <span className="ml-2 text-xs">(no physical item — {order.spinReward.kind})</span>
-                      )}
-                    </div>
-                  </div>
-                  {!order.spinReward.fulfilledAt && order.spinReward.kind === 'goodie' && (
-                    <div className="flex flex-col gap-1">
-                      <Link href={`/admin/orders/${orderId}/packing-slip`}
-                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-center text-xs font-medium text-white hover:bg-amber-700">
-                        🖨 Packing slip
-                      </Link>
-                      <Link href="/admin/spin/winners"
-                        className="text-center text-xs text-amber-800 underline hover:text-amber-900">
-                        Packing queue →
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          )}
+            Items — including the won Spin-to-Win goodie, rendered as a quantity-1,
+            FREE line by `buildOrderLines`.
 
-          {/* Items */}
+            This REPLACED a separate amber banner above the list. A banner is a second
+            place to look, and the packer was expected to read it before starting to
+            pick; folding the goodie into the list they are already reading puts it in
+            the one place they cannot skip. `audience: 'admin'` keeps a VOIDED reward
+            visible here (as an explicit do-not-pack) — silently dropping it would
+            leave anyone who already read the old instruction about to pack a dead
+            prize. The customer view hides it instead.
+
+            The line is display-only: `spinReward` remains stored beside the order and
+            contributes ₹0, so the totals below are untouched.
+          */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">
               <h2 className="text-xl font-semibold">Items</h2>
             </div>
             <div className="divide-y">
-              {order.items.map((item, index) => (
-                <div key={index} className="p-6 flex items-center gap-4">
-                  {item.product?.images && item.product.images.length > 0 ? (
-                    <img 
-                      src={item.product.images[0].url} 
-                      alt={item.product.name}
-                      className="h-16 w-16 object-cover rounded-md"
-                    />
-                  ) : (
-                    <div className="h-16 w-16 bg-gray-200 rounded-md flex items-center justify-center">
-                      <Package className="h-6 w-6 text-gray-400" />
+              {buildOrderLines(order, { audience: 'admin' }).map((line, index) => {
+                const isReward = line.kind === 'reward';
+                return (
+                  <div
+                    key={line.itemId ?? `line-${index}`}
+                    className={`p-6 flex items-center gap-4 ${
+                      isReward && !line.voided ? 'bg-amber-50' : ''
+                    } ${isReward && line.voided ? 'bg-red-50' : ''}`}
+                  >
+                    {line.image ? (
+                      <img
+                        src={line.image}
+                        alt={line.name ?? ''}
+                        className="h-16 w-16 object-cover rounded-md"
+                      />
+                    ) : (
+                      <div className={`h-16 w-16 rounded-md flex items-center justify-center ${
+                        isReward ? 'bg-amber-100 text-2xl' : 'bg-gray-200'
+                      }`}>
+                        {isReward ? '🎁' : <Package className="h-6 w-6 text-gray-400" />}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className={`font-medium ${line.voided ? 'text-red-800 line-through' : ''}`}>
+                          {line.name ?? '[Product no longer available]'}
+                        </h3>
+                        {isReward && (
+                          line.voided ? (
+                            <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+                              🚫 Do not pack — reward cancelled
+                            </span>
+                          ) : (
+                            <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+                              🎁 Goodie — free gift
+                            </span>
+                          )
+                        )}
+                      </div>
+                      <p className="text-gray-500 text-sm">Qty: {line.quantity}</p>
+                      {isReward && (
+                        <p className="text-sm text-amber-800">
+                          {line.sku
+                            ? <>Pick <code className="rounded bg-white/70 px-1.5 py-0.5 text-xs font-semibold">{line.sku}</code> from the shelf</>
+                            : 'No SKU on this prize — check the spin campaign before packing.'}
+                        </p>
+                      )}
                     </div>
-                  )}
-                  <div className="flex-1">
-                    <h3 className="font-medium">{item.product?.name ?? '[Product no longer available]'}</h3>
-                    <p className="text-gray-500 text-sm">Qty: {item.quantity}</p>
+                    <div className="text-right">
+                      {isReward ? (
+                        <>
+                          <p className="font-medium text-amber-700">FREE</p>
+                          {!line.voided && (
+                            line.packed ? (
+                              <p className="text-sm font-medium text-green-700">✓ Packed</p>
+                            ) : (
+                              <button
+                                onClick={handleMarkRewardPacked}
+                                disabled={packingReward}
+                                className="mt-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                              >
+                                {packingReward ? 'Saving…' : '✓ Mark packed'}
+                              </button>
+                            )
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium">₹{line.lineTotal.toFixed(2)}</p>
+                          <p className="text-gray-500 text-sm">₹{line.unitPrice.toFixed(2)} each</p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">₹{(item.price * item.quantity).toFixed(2)}</p>
-                    <p className="text-gray-500 text-sm">₹{item.price.toFixed(2)} each</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           
+          {/*
+            Parcels. Sits under the items because it answers "which of those went, and
+            when" — and because the order's status is DERIVED from these, an admin
+            reading top-to-bottom sees the contents first and their dispatch second.
+          */}
+          <div ref={parcelsRef}>
+          <OrderShipments
+            openFormSignal={openParcelForm}
+            orderId={orderId}
+            itemNames={Object.fromEntries(
+              order.items
+                .filter((item) => item._id)
+                .map((item) => [String(item._id), item.name ?? item.product?.name ?? 'Item']),
+            )}
+            rewardName={order.spinReward && !order.spinReward.voidedAt ? order.spinReward.name : null}
+            onChanged={fetchOrder}
+          />
+          </div>
+
           {/* Shipping Address */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">
@@ -504,7 +588,26 @@ export default function AdminOrderDetailPage() {
                 ) : (
                   <select
                     value={order.status}
-                    onChange={(e) => setPendingStatus(e.target.value)}
+                    onChange={(e) => {
+                      /*
+                        "Shipped" no longer flips the whole order in one step.
+
+                        Sending everything outstanding in a single box is only ever right
+                        by accident on a multi-item order — pick "Shipped" on a 3-item
+                        order where 2 are in stock and all 3 are recorded as gone. The
+                        Parcels panel is where you choose what is actually in the box, so
+                        that is where this now goes. Every other status keeps the dialog.
+                      */
+                      if (e.target.value === 'shipped') {
+                        e.target.value = order.status; // leave the select on its real value
+                        setOpenParcelForm((n) => n + 1);
+                        // Optional-called: scrollIntoView is absent in jsdom, and a
+                        // missing scroll must never break the actual state change.
+                        parcelsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        return;
+                      }
+                      setPendingStatus(e.target.value);
+                    }}
                     disabled={updating}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -618,6 +721,12 @@ export default function AdminOrderDetailPage() {
           orderNumber={order.orderNumber}
           currentStatus={order.status}
           newStatus={pendingStatus}
+          /*
+            Same disclosure as the orders list: picking `delivered` runs
+            deliverAllOutstanding, landing every parcel still in flight and emailing the
+            customer once per parcel. The Parcels panel above is the one-at-a-time path.
+          */
+          deliversParcelCount={outstandingParcels(order)}
           notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingStatus)}
           onConfirm={confirmStatusChange}
           onClose={() => setPendingStatus(null)}

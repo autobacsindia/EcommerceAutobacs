@@ -8,6 +8,7 @@
 import mongoose from 'mongoose';
 import leadRepository from '../repositories/leadRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
+import { LEAD_HISTORY_FIELDS } from '../repositories/orderProjections.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
@@ -220,7 +221,13 @@ export const getLeadById = async (req, res) => {
   // rep sees purchase history at a glance.
   let orderHistory = [];
   if (lead.linkedUser?._id) {
-    orderHistory = await orderRepository.findByUser(lead.linkedUser._id, { limit: 20 });
+    // Timeline fields only — no `items`, so the product join is skipped entirely.
+    // See OrderHistoryItem in Front-end/web/src/lib/leads.ts for the consumed shape.
+    orderHistory = await orderRepository.findByUser(lead.linkedUser._id, {
+      limit: 20,
+      select: LEAD_HISTORY_FIELDS,
+      withProducts: false,
+    });
   }
 
   res.json({ success: true, lead, orderHistory });

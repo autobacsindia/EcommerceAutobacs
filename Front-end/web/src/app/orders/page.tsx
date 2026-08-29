@@ -11,6 +11,8 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { Package, Eye, Filter, Search, ChevronDown } from 'lucide-react';
 import OrderHistorySkeleton from '@/components/skeletons/OrderHistorySkeleton';
 import { formatLongDateTimeIST } from '@/lib/datetime';
+import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
+import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 interface Order {
   _id: string;
@@ -25,6 +27,11 @@ interface Order {
     price: number;
   }>;
   trackingNumber?: string;
+  /**
+   * Parcels. Already on the wire — the list endpoint returns whole order documents —
+   * so the split-order badge below costs no extra request.
+   */
+  shipments?: ShipmentSummary[];
 }
 
 export default function OrdersPage() {
@@ -263,9 +270,21 @@ export default function OrdersPage() {
                       </p>
                     )}
                   </div>
-                  <span className={`px-3 py-1 rounded-sm text-xs font-display font-bold uppercase tracking-widest border ${getStatusColor(order.status)}`}>
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                  </span>
+                  <div className="flex flex-col items-start md:items-end gap-1.5 shrink-0">
+                    <span className={`px-3 py-1 rounded-sm text-xs font-display font-bold uppercase tracking-widest border ${getStatusColor(order.status)}`}>
+                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    </span>
+                    {/*
+                      Split orders only. `order.status` sits at "Shipped" until the LAST
+                      parcel lands, so a customer already holding one of two boxes was
+                      shown exactly what someone holding nothing was shown. Null for a
+                      single-parcel or legacy order, where the status already says it all.
+                    */}
+                    <ParcelProgressBadge
+                      order={order}
+                      className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-gold/30 text-gold/90"
+                    />
+                  </div>
                 </div>
 
                 <div className="border-t border-hairline pt-4 mb-4">

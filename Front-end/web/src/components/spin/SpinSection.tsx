@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import SpinGauge from './SpinGauge';
+import SpinModal from './SpinModal';
 
 /**
  * Post-purchase reward, on the order-success page.
@@ -20,6 +21,19 @@ import SpinGauge from './SpinGauge';
  *   revealed  → server answered. Needle settles on the segment the server chose.
  *   none      → not eligible (no campaign, already spun elsewhere, cancelled…). Renders
  *               nothing at all rather than an error — this is a confirmation page.
+ *
+ * ── Presentation: an inline card plus a modal ─────────────────────────────────
+ * The wheel is shown in a dialog so it is actually noticed — at the bottom of a long
+ * confirmation page it was below the fold for most customers. The state above lives
+ * HERE, not in the modal, so opening and closing the dialog is free and cannot lose a
+ * result the server has already committed.
+ *
+ * The dialog opens by itself EXACTLY ONCE, and only on the transition into `ready` —
+ * i.e. a spin that is genuinely on offer and not yet taken. Deliberately not on:
+ *   • `pending` — a modal saying "confirming your payment" over a confirmation page
+ *     reads as something having gone wrong with the payment.
+ *   • an already-spun order — every later visit to this order would throw a dialog at
+ *     someone who has already had their prize. The inline card holds it instead.
  */
 
 type Phase = 'checking' | 'pending' | 'ready' | 'spinning' | 'revealed' | 'none';
@@ -58,9 +72,33 @@ interface SpinResponse {
   reviewCta: { headline: string | null; body: string | null; url: string } | null;
 }
 
-/** Poll cadence + ceiling for the "payment still confirming" window. */
-const POLL_MS = 3000;
-const POLL_CEILING_MS = 90_000;
+/**
+ * Poll schedule for the "payment still confirming" window.
+ *
+ * Why a schedule rather than one interval: the order is NOT paid when this page first
+ * renders. /razorpay/verify-payment deliberately writes nothing — the webhook is the sole
+ * writer of payment status — so the wheel can only appear once that webhook lands, plus
+ * however long it takes this client to notice. The second part is the only part we can
+ * shorten, and a flat 3s interval was spending up to 3 extra seconds after the money had
+ * already been confirmed.
+ *
+ * So: poll fast in the window where the webhook almost always arrives, then back off, so
+ * a slow webhook does not cost 100 requests. Roughly 15 requests in the first 15s
+ * (the common case now reveals in about a second), tapering to one every 5s.
+ *
+ * The cost of the fast phase is a projected order read plus a cached campaign lookup —
+ * see spinService.getLiveCampaignCached, which makes "which campaign is live" O(1) in
+ * traffic rather than one DB read per poll.
+ */
+const POLL_SCHEDULE = [
+  { untilMs: 15_000, everyMs: 1000 },
+  { untilMs: 45_000, everyMs: 2500 },
+  { untilMs: 120_000, everyMs: 5000 },
+] as const;
+
+/** Delay before the next poll, or null once we have waited long enough to give up. */
+const nextPollDelay = (elapsedMs: number): number | null =>
+  POLL_SCHEDULE.find((step) => elapsedMs < step.untilMs)?.everyMs ?? null;
 
 export default function SpinSection({ orderId }: { orderId: string }) {
   const [phase, setPhase] = useState<Phase>('checking');
@@ -76,6 +114,10 @@ export default function SpinSection({ orderId }: { orderId: string }) {
   const [settled, setSettled] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  // One-shot: a dialog that reappears after you dismissed it is a dark pattern.
+  const autoOpened = useRef(false);
 
   const startedAt = useRef(Date.now());
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,11 +149,13 @@ export default function SpinSection({ orderId }: { orderId: string }) {
       // Payment still confirming — keep asking, within a bound.
       if (res.pending) {
         setPhase('pending');
-        if (Date.now() - startedAt.current < POLL_CEILING_MS) {
-          pollTimer.current = setTimeout(() => { void check(); }, POLL_MS);
+        const delay = nextPollDelay(Date.now() - startedAt.current);
+        if (delay !== null) {
+          pollTimer.current = setTimeout(() => { void check(); }, delay);
         } else {
           // Gave up waiting. The webhook may still land; the spin is not lost, it just
-          // isn't offered on this render. Say nothing rather than imply failure.
+          // isn't offered on this render — returning to this page re-checks from scratch.
+          // Say nothing rather than imply failure.
           setPhase('none');
         }
         return;
@@ -136,6 +180,14 @@ export default function SpinSection({ orderId }: { orderId: string }) {
     return () => { if (pollTimer.current) clearTimeout(pollTimer.current); };
   }, [check]);
 
+  // Auto-open on the transition into `ready` only — see the note at the top of the file
+  // for the two phases deliberately excluded.
+  useEffect(() => {
+    if (autoOpened.current || phase !== 'ready') return;
+    autoOpened.current = true;
+    setOpen(true);
+  }, [phase]);
+
   const spin = async () => {
     if (phase !== 'ready') return;
     setPhase('spinning');
@@ -156,6 +208,13 @@ export default function SpinSection({ orderId }: { orderId: string }) {
     }
   };
 
+  const copyCode = () => {
+    if (!prize?.couponCode) return;
+    void navigator.clipboard?.writeText(prize.couponCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const openReview = () => {
     if (!reviewCta?.url) return;
     // Fire-and-forget analytics. Must never delay or block opening the link.
@@ -166,9 +225,61 @@ export default function SpinSection({ orderId }: { orderId: string }) {
   if (phase === 'checking' || phase === 'none') return null;
 
   return (
-    <section className="mt-8 overflow-hidden rounded-2xl border border-[#1e3a5f] bg-gradient-to-b from-[#0b1626] to-[#060d18] p-6 text-white shadow-xl">
+    <>
+      {/*
+        The inline card. It stays on the page whether the dialog is open or shut, and is
+        the ONLY way back in once the dialog is dismissed — a reward you can permanently
+        lose sight of by pressing Escape would be worse than no reward. After a win it
+        also carries the coupon code itself, because that code is the thing the customer
+        actually needs and the dialog is transient.
+      */}
+      <section className="mt-8 overflow-hidden rounded-2xl border border-[#1e3a5f] bg-gradient-to-b from-[#0b1626] to-[#060d18] p-5 text-white shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold tracking-tight text-[#f5b32c]">
+              {phase === 'revealed'
+                ? `You won${prize ? `: ${prize.name}` : '!'}`
+                : 'Rev it up — you’ve earned a spin'}
+            </h3>
+            <p className="mt-0.5 text-sm text-[#9fb3cc]">
+              {phase === 'pending'
+                ? 'Confirming your payment…'
+                : phase === 'revealed'
+                  ? 'Your prize is reserved and attached to this order.'
+                  : 'Every spin wins something.'}
+            </p>
+            {phase === 'revealed' && prize?.couponCode && (
+              <button
+                type="button"
+                onClick={copyCode}
+                title="Copy code"
+                className="mt-2 rounded-lg border-2 border-dashed border-[#f5b32c]/50 bg-[#f5b32c]/10 px-3 py-1.5 font-mono text-base font-bold tracking-[0.12em] text-[#f5b32c]"
+              >
+                {prize.couponCode}
+                <span className="ml-2 font-sans text-[10px] font-normal tracking-normal opacity-70">
+                  {copied ? '✓ Copied' : 'tap to copy'}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {phase === 'pending' ? (
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#1e3a5f] border-t-[#f5b32c]" />
+          ) : (
+            <button
+              onClick={() => setOpen(true)}
+              className="rounded-full bg-[#f5b32c] px-6 py-2.5 text-sm font-bold text-[#1a1205] shadow transition hover:bg-[#ffc850] active:scale-95"
+            >
+              {phase === 'revealed' ? 'View your prize' : 'Spin now'}
+            </button>
+          )}
+        </div>
+      </section>
+
+      <SpinModal open={open} onClose={() => setOpen(false)} labelledBy="spin-modal-title">
+        <section className="overflow-hidden rounded-2xl border border-[#1e3a5f] bg-gradient-to-b from-[#0b1626] to-[#060d18] p-6 text-white shadow-xl">
       <div className="mb-4 text-center">
-        <h2 className="text-xl font-bold tracking-tight text-[#f5b32c]">
+        <h2 id="spin-modal-title" className="text-xl font-bold tracking-tight text-[#f5b32c]">
           {phase === 'revealed' ? 'You won!' : 'Rev it up — you’ve earned a spin'}
         </h2>
         <p className="mt-1 text-sm text-[#9fb3cc]">
@@ -245,11 +356,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
                   <div className="mt-3">
                     <button
                       type="button"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(prize.couponCode as string);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      }}
+                      onClick={copyCode}
                       className="w-full rounded-lg border-2 border-dashed border-[#1a1205]/40 bg-white/40 px-4 py-3 font-mono text-xl font-bold tracking-[0.15em] text-[#1a1205] transition hover:bg-white/60"
                       title="Copy code"
                     >
@@ -294,6 +401,8 @@ export default function SpinSection({ orderId }: { orderId: string }) {
           )}
         </>
       )}
-    </section>
+        </section>
+      </SpinModal>
+    </>
   );
 }

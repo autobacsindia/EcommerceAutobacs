@@ -3,6 +3,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
   validateOrder, 
   validateIdParam, 
+  validateShipmentParams,
   validateOrderStatusUpdate, 
   validateOrderCancellation, 
   validateBulkStatusUpdate, 
@@ -36,6 +37,11 @@ import {
   markPaymentFailed,
   deleteOrder,
   updateOrderStatus,
+  getShipments,
+  createShipment,
+  markShipmentDelivered,
+  dispatchShipment,
+  markShipmentLost,
   bulkUpdateStatus,
   bulkDeleteOrders,
   getStatusHistory,
@@ -135,6 +141,57 @@ router.put(
   validatePdfUpload,
   validateOrderStatusUpdate,
   asyncHandler(updateOrderStatus)
+);
+
+// ── Split shipments ─────────────────────────────────────────────────────────
+// An order can leave in several parcels, each with its own courier, AWB and
+// delivery date. The order's `status` stays derived from these (see
+// utils/orderFulfilment.js); these routes write the parcels themselves.
+
+// @route   GET /orders/:id/shipments
+// @desc    Parcels on an order + what is still to ship + the fulfilment label
+// @access  Private (order owner or admin)
+router.get("/:id/shipments", protect, validateIdParam, asyncHandler(getShipments));
+
+// @route   POST /orders/:id/shipments
+// @desc    Create one parcel from a subset of the outstanding lines (Admin only)
+// @access  Private/Admin
+router.post("/:id/shipments", protect, admin, validateIdParam, asyncHandler(createShipment));
+
+// @route   PATCH /orders/:id/shipments/:shipmentId/dispatch
+// @desc    Hand an already-packed parcel to the courier (Admin only). Idempotent.
+// @access  Private/Admin
+// Without this a `packed` parcel is a dead end: its units are consumed from the
+// remaining-to-ship pool, so they can never go in another box, and nothing moves it on.
+router.patch(
+  "/:id/shipments/:shipmentId/dispatch",
+  protect,
+  admin,
+  validateShipmentParams,
+  asyncHandler(dispatchShipment)
+);
+
+// @route   PATCH /orders/:id/shipments/:shipmentId/delivered
+// @desc    Mark one parcel delivered (Admin only). Idempotent.
+// @access  Private/Admin
+router.patch(
+  "/:id/shipments/:shipmentId/delivered",
+  protect,
+  admin,
+  validateShipmentParams,
+  asyncHandler(markShipmentDelivered)
+);
+
+// @route   PATCH /orders/:id/shipments/:shipmentId/lost
+// @desc    Write off a parcel the courier lost (Admin only). Its units return to the
+//          remaining-to-ship pool so a replacement can be sent.
+// @access  Private/Admin
+router.patch(
+  "/:id/shipments/:shipmentId/lost",
+  protect,
+  admin,
+  validateShipmentParams,
+  asyncHandler(markShipmentLost)
 );
 
 // @route   POST /orders/bulk/status

@@ -40,6 +40,7 @@ import { reverseReturnLtvOnce } from '../services/returnRefundLtvService.js';
 import { refundableForLines, remainingRefundable } from '../services/refundMathService.js';
 import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import { toPaise } from '../utils/money.js';
+import { deliveredAtForItem } from '../utils/orderFulfilment.js';
 import { enqueueNotification } from '../queue/queues.js';
 import {
   RETURN_WINDOW_DAYS,
@@ -214,19 +215,27 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   if (!order) {
     throw new AppError('Order not found', 404);
   }
-  // `returned` is accepted alongside `delivered` because an APPROVED return now moves
-  // the order onto the `returned` fulfillment stage (orderRepository.markReturnedOnReturnApproval).
-  // A multi-line order must still be able to raise a return for a DIFFERENT item while
-  // the first one is in flight — the 4-day window below and the per-product active-return
-  // guard further down are what actually bound eligibility.
-  if (!['delivered', 'returned'].includes(order.status)) {
-    throw new AppError('Only delivered orders can be returned.', 400);
-  }
+  /*
+    `returned` is accepted alongside `delivered` because an APPROVED return now moves
+    the order onto the `returned` fulfillment stage (orderRepository.markReturnedOnReturnApproval).
+    A multi-line order must still be able to raise a return for a DIFFERENT item while
+    the first one is in flight — the per-line window below and the per-product
+    active-return guard further down are what actually bound eligibility.
 
-  // 1) 4-day window from delivery.
-  const deliveredAt = order.fulfillmentMetrics?.deliveredAt || order.deliveredAt || order.updatedAt;
-  if (daysSince(deliveredAt) > RETURN_WINDOW_DAYS) {
-    throw new AppError(`Return window closed. Returns must be raised within ${RETURN_WINDOW_DAYS} days of delivery.`, 400);
+    ⚠️ `shipped` is accepted TOO, but only for an order that has parcels. A split order
+    sits at `shipped` until its LAST parcel lands, so gating on the order status alone
+    would refuse a return for an item that has already been in the customer's hands for
+    days — and by the time the final parcel arrived and flipped the order to `delivered`,
+    that item's 4-day window could have expired without them ever being allowed to use
+    it. The real gate is per line: `deliveredAtForItem` below rejects anything that has
+    not actually arrived.
+  */
+  const isSplitOrder = (order.shipments || []).length > 0;
+  const allowedStatuses = isSplitOrder
+    ? ['delivered', 'returned', 'shipped']
+    : ['delivered', 'returned'];
+  if (!allowedStatuses.includes(order.status)) {
+    throw new AppError('Only delivered orders can be returned.', 400);
   }
 
   // 2) Validate + snapshot each requested line.
@@ -235,6 +244,30 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     const orderLine = order.items.find((oi) => String(oi.product?._id || oi.product) === String(item.productId));
     if (!orderLine) {
       throw new AppError('One of the selected items is not part of this order.', 400);
+    }
+
+    /*
+      The 4-day window, measured from when THIS line arrived.
+
+      On a split order that is the delivery date of the parcel it came in, not the
+      order's — see deliveredAtForItem for why a single order-level date is wrong for at
+      least one line whenever an order arrives in pieces. Legacy orders (no parcels) fall
+      back to the order-level date, so their behaviour is byte-for-byte what it was.
+    */
+    const lineDeliveredAt = deliveredAtForItem(order, orderLine._id) ?? (isSplitOrder ? null : order.updatedAt);
+    if (!lineDeliveredAt) {
+      throw new AppError(
+        `"${orderLine.product?.name || 'This item'}" hasn't been delivered yet, so it can't be returned. `
+        + `You'll be able to raise a return once it arrives.`,
+        400,
+      );
+    }
+    if (daysSince(lineDeliveredAt) > RETURN_WINDOW_DAYS) {
+      throw new AppError(
+        `Return window closed for "${orderLine.product?.name || 'this item'}". `
+        + `Returns must be raised within ${RETURN_WINDOW_DAYS} days of that item being delivered.`,
+        400,
+      );
     }
     if (!RETURN_REASONS.includes(item.reason)) {
       throw new AppError('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect.', 400);

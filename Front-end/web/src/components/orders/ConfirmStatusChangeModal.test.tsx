@@ -127,3 +127,108 @@ describe('ConfirmStatusChangeModal — carrier selection', () => {
     });
   });
 });
+
+/**
+ * Shipping from the ORDERS LIST puts every outstanding unit in ONE parcel. That fast path
+ * is deliberate for that screen, but on a multi-item order it is only right by accident,
+ * so the dialog has to say what it will do.
+ */
+describe('multi-item shipping notice', () => {
+  const base = {
+    orderNumber: 'AB-1234',
+    currentStatus: 'processing',
+    newStatus: 'shipped',
+    notifiesCustomer: true,
+    onConfirm: jest.fn().mockResolvedValue(undefined),
+    onClose: jest.fn(),
+  };
+
+  it('names how many items go in the single parcel', () => {
+    render(<ConfirmStatusChangeModal {...base} shipsEverythingCount={3} orderHref="/admin/orders/o1" />);
+    expect(screen.getByText(/all 3 items/i)).toBeInTheDocument();
+  });
+
+  it('offers the order page as the way to split them', () => {
+    render(<ConfirmStatusChangeModal {...base} shipsEverythingCount={3} orderHref="/admin/orders/o1" />);
+    expect(screen.getByRole('link', { name: /Open the order/i })).toHaveAttribute('href', '/admin/orders/o1');
+  });
+
+  // One item cannot be split, so the warning would be noise on the common case.
+  it('stays silent for a single-item order', () => {
+    render(<ConfirmStatusChangeModal {...base} shipsEverythingCount={1} orderHref="/admin/orders/o1" />);
+    expect(screen.queryByText(/in one parcel/i)).not.toBeInTheDocument();
+  });
+
+  it('stays silent for a non-shipping status change', () => {
+    render(<ConfirmStatusChangeModal {...base} newStatus="delivered" shipsEverythingCount={3} />);
+    expect(screen.queryByText(/in one parcel/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The mirror image of the shipping notice above.
+ *
+ * Marking an order delivered runs deliverAllOutstanding server-side — every parcel in
+ * flight lands at once, and each one emails the customer. That is deliberate (the
+ * per-line return window reads parcel dates, so leaving them at `shipped` keeps every
+ * window shut), but it was happening SILENTLY while the shipping equivalent one
+ * transition earlier got a loud warning. Same fast path, same disclosure.
+ */
+describe('multi-parcel delivery notice', () => {
+  const base = {
+    orderNumber: 'AB-1234',
+    currentStatus: 'shipped',
+    newStatus: 'delivered',
+    notifiesCustomer: true,
+    onConfirm: jest.fn().mockResolvedValue(undefined),
+    onClose: jest.fn(),
+  };
+
+  it('names how many parcels this lands at once', () => {
+    render(<ConfirmStatusChangeModal {...base} deliversParcelCount={3} orderHref="/admin/orders/o1" />);
+    expect(screen.getByText(/all 3 parcels/i)).toBeInTheDocument();
+  });
+
+  it('warns that the customer is emailed once per parcel', () => {
+    render(<ConfirmStatusChangeModal {...base} deliversParcelCount={3} />);
+    expect(screen.getByText(/once per parcel/i)).toBeInTheDocument();
+  });
+
+  it('offers the order page as the way to deliver them one at a time', () => {
+    render(<ConfirmStatusChangeModal {...base} deliversParcelCount={2} orderHref="/admin/orders/o1" />);
+    expect(screen.getByRole('link', { name: /Open the order/i })).toHaveAttribute('href', '/admin/orders/o1');
+  });
+
+  // A single parcel cannot be delivered "partly", so the warning would be noise on the
+  // overwhelmingly common case.
+  it('stays silent for a single-parcel order', () => {
+    render(<ConfirmStatusChangeModal {...base} deliversParcelCount={1} />);
+    expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
+  });
+
+  it('stays silent for an order with no parcels at all', () => {
+    render(<ConfirmStatusChangeModal {...base} deliversParcelCount={0} />);
+    expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
+  });
+
+  it('stays silent for a non-delivery status change', () => {
+    render(<ConfirmStatusChangeModal {...base} newStatus="cancelled" deliversParcelCount={3} />);
+    expect(screen.queryByText(/all 3 parcels/i)).not.toBeInTheDocument();
+  });
+
+  // Bulk spans many orders with different parcel counts — there is no single honest
+  // number to quote, so the notice must not appear at all.
+  it('stays silent in bulk mode', () => {
+    render(
+      <ConfirmStatusChangeModal
+        newStatus="delivered"
+        count={5}
+        notifiesCustomer
+        deliversParcelCount={3}
+        onConfirm={jest.fn().mockResolvedValue(undefined)}
+        onClose={jest.fn()}
+      />,
+    );
+    expect(screen.queryByText(/all 3 parcels/i)).not.toBeInTheDocument();
+  });
+});

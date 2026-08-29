@@ -177,6 +177,12 @@ class OrderStatusService {
       //   shippingSlip: {url,publicId,uploadedAt} }. Persisted BEFORE the status
       // email is enqueued so the worker sees the tracking info + slip.
       shipping,
+      // Set by services/shipmentService.js when a parcel event drove this transition.
+      // Each parcel sends its OWN email (one per box), so the order-level status email
+      // would be a duplicate — the roll-up to `shipped` happens once while three
+      // parcels each deserve a notification. The review-request job is NOT suppressed:
+      // it still fires exactly once, on final delivery.
+      suppressStatusEmail = false,
       session = null
     } = options;
 
@@ -290,7 +296,7 @@ class OrderStatusService {
 
       // Customer-facing emails run in the background too: a status-change email for
       // shipped/delivered/cancelled/refunded, plus a delayed review-request on delivery.
-      this._enqueueStatusNotification(order._id.toString(), newStatus);
+      this._enqueueStatusNotification(order._id.toString(), newStatus, { suppressStatusEmail });
 
       // Internal alert to the support inbox when a customer cancels on their own.
       this._enqueueAdminOrderAlert(order, newStatus);
@@ -345,13 +351,15 @@ class OrderStatusService {
    * retry is harmless. Silently skips when Redis isn't configured.
    * @private
    */
-  _enqueueStatusNotification(orderId, newStatus) {
+  _enqueueStatusNotification(orderId, newStatus, { suppressStatusEmail = false } = {}) {
     if (!CUSTOMER_NOTIFIED_STATUSES.has(newStatus) || !process.env.REDIS_URL) return;
 
     const queue = getNotificationsQueue();
-    queue
-      .add('send-order-status-email', { orderId, status: newStatus })
-      .catch(err => console.error(`[OrderStatus] Failed to enqueue send-order-status-email:`, err.message));
+    if (!suppressStatusEmail) {
+      queue
+        .add('send-order-status-email', { orderId, status: newStatus })
+        .catch(err => console.error(`[OrderStatus] Failed to enqueue send-order-status-email:`, err.message));
+    }
 
     // A day after delivery, ask the customer to review what they bought.
     if (newStatus === 'delivered') {

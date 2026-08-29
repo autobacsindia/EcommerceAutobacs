@@ -27,7 +27,18 @@ interface Uploaded { publicId: string; resourceType: ReturnResourceType; fileNam
 interface ReturnRequestModalProps {
   orderId: string;
   orderNumber: string;
+  /**
+   * ELIGIBLE items only — delivered, and still inside their own return window. On a
+   * split order each line's window runs from the parcel it arrived in, so the caller
+   * filters (see lib/orderFulfilment.ts) rather than this modal re-deriving it.
+   */
   items: OrderItem[];
+  /**
+   * How many lines were filtered OUT as ineligible. Shown so a customer looking at a
+   * short list understands why, instead of assuming the form is broken.
+   */
+  excludedCount?: number;
+  /** Delivery date of the OLDEST eligible line — drives the "delivered N days ago" copy. */
   deliveredAt: string;
   /**
    * Debit-card EMI: the bank holds one loan against the whole order and cannot unwind
@@ -46,7 +57,7 @@ const VIDEO_MAX = 60 * MB;
 const PROOF_MAX = 15 * MB;
 const PHOTO_MAX = 10 * MB;
 
-export default function ReturnRequestModal({ orderId, orderNumber, items, deliveredAt, fullRefundOnly = false, paidByLabel, onClose, onSuccess }: ReturnRequestModalProps) {
+export default function ReturnRequestModal({ orderId, orderNumber, items, excludedCount = 0, deliveredAt, fullRefundOnly = false, paidByLabel, onClose, onSuccess }: ReturnRequestModalProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedItems, setSelectedItems] = useState<Map<string, SelectedItem>>(new Map());
   const [returnReason, setReturnReason] = useState('');
@@ -104,6 +115,35 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, delive
           <h3 className="text-xl font-bold text-center mb-2">Return window closed</h3>
           <p className="text-ink-muted text-center mb-6">
             Returns must be raised within {RETURN_WINDOW_DAYS} days of delivery. This order was delivered {daysSinceDelivery} days ago.
+          </p>
+          <button onClick={onClose} className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg font-medium">Close</button>
+        </div>
+      </Shell>
+    );
+  }
+
+  /*
+    Debit-card EMI is all-or-nothing at the bank, so every line must come back — but on
+    a split order a line can fall out of its own window while the others are still in
+    theirs. Those two rules cannot both be satisfied, and letting the customer build a
+    request the server will refuse (or worse, one we collect goods for and then cannot
+    refund) is the wrong failure. Send them to a human instead.
+  */
+  if (fullRefundOnly && excludedCount > 0) {
+    return (
+      <Shell>
+        <div className="p-6 max-w-md">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
+              <AlertCircle className="h-10 w-10 text-red-500" />
+            </div>
+          </div>
+          <h3 className="text-xl font-bold text-center mb-2">This one needs a human</h3>
+          <p className="text-ink-muted text-center mb-6">
+            {paidByLabel ? `${paidByLabel} orders` : 'This order'} can only be refunded in full,
+            so every item has to come back — but {excludedCount === 1 ? 'one item is' : `${excludedCount} items are`}{' '}
+            already outside {excludedCount === 1 ? 'its' : 'their'} return window.
+            Please contact support and we&apos;ll sort it out with you.
           </p>
           <button onClick={onClose} className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg font-medium">Close</button>
         </div>
@@ -270,6 +310,14 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, delive
                   ? 'All items in this order need to be returned together — see below.'
                   : 'Choose which item(s) you want to return.'}
               </p>
+              {/* A short list on a bigger order looks like a bug unless we say why. */}
+              {excludedCount > 0 && (
+                <p className="text-sm text-ink-muted border border-hairline rounded-lg p-3">
+                  {excludedCount === 1 ? '1 item from this order is' : `${excludedCount} items from this order are`}{' '}
+                  not shown: {excludedCount === 1 ? 'it has' : 'they have'} either not been delivered yet,
+                  or {excludedCount === 1 ? 'its' : 'their'} {RETURN_WINDOW_DAYS}-day return window has closed.
+                </p>
+              )}
             </div>
 
             {/* Debit-card EMI: said here, at the first step, so nothing is shipped and no

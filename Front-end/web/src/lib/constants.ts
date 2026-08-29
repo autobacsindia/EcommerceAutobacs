@@ -73,6 +73,15 @@ export const API_ENDPOINTS = {
   ORDER_BULK_DELETE: '/orders/bulk/delete',
   ORDER_ANALYTICS: '/orders/analytics/summary',
   ORDER_STATUS_HISTORY: (id: string) => `/orders/${id}/status-history`,
+  // Split shipments — an order can leave in several parcels, each with its own
+  // courier, AWB and delivery date. See Back-end/server/utils/orderFulfilment.js.
+  ORDER_SHIPMENTS: (id: string) => `/orders/${id}/shipments`,
+  ORDER_SHIPMENT_DISPATCH: (id: string, shipmentId: string) =>
+    `/orders/${id}/shipments/${shipmentId}/dispatch`,
+  ORDER_SHIPMENT_DELIVERED: (id: string, shipmentId: string) =>
+    `/orders/${id}/shipments/${shipmentId}/delivered`,
+  ORDER_SHIPMENT_LOST: (id: string, shipmentId: string) =>
+    `/orders/${id}/shipments/${shipmentId}/lost`,
   
   // Returns — customer
   RETURN_CREATE: '/returns',

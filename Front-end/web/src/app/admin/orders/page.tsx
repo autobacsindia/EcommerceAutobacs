@@ -16,6 +16,9 @@ import BulkActionsBar from '@/components/orders/BulkActionsBar';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatDateIST, formatTimeIST, formatIsoDateIST, formatIsoDateTimeIST } from '@/lib/datetime';
+import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
+import { outstandingParcels } from '@/lib/orderFulfilment';
+import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -54,17 +57,6 @@ interface Order {
   createdAt: string;
   status: string;
   paymentStatus?: string;
-  /**
-   * Spin-to-Win reward snapshot. Never a line item — see models/Order.js for why a ₹0
-   * entry in `items` would corrupt invoices, refund maths and revenue reporting.
-   */
-  spinReward?: {
-    name: string;
-    sku: string | null;
-    kind: string;
-    fulfilledAt: string | null;
-    voidedAt: string | null;
-  } | null;
   cancelledBy?: 'admin' | 'customer' | 'system';
   totalAmount: number;
   refundDetails?: {
@@ -78,6 +70,11 @@ interface Order {
     email: string;
   };
   items: any[];
+  /**
+   * Parcels. Already on the wire — the admin list endpoint returns whole order
+   * documents — so both the split badge and the delivered warning cost no request.
+   */
+  shipments?: ShipmentSummary[];
 }
 
 // Who cancelled the order — mirrors the wording on the order detail page so the list and
@@ -199,6 +196,10 @@ function AdminOrdersPageInner() {
     orderNumber: string;
     from: string;
     to: string;
+    /** Units on the order — the dialog names how many ship together in one parcel. */
+    unitCount: number;
+    /** Outstanding parcels, for the delivered-side warning. */
+    parcelCount: number;
   } | null>(null);
   const [pendingBulk, setPendingBulk] = useState<{
     status: string;
@@ -215,9 +216,6 @@ function AdminOrdersPageInner() {
    * already clobbered in-flight typing in the search box once. A toggle owned here
    * cannot be caught by that, and it matches how the hide-unpaid filter is handled.
    */
-  const [rewardFilter, setRewardFilter] = useState<'' | 'unpacked' | 'any'>(
-    (searchParams.get('spinReward') as '' | 'unpacked' | 'any') || ''
-  );
 
   // Initialize filters from URL params
   const [filters, setFilters] = useState<OrderFilters>(() => ({
@@ -247,7 +245,6 @@ function AdminOrdersPageInner() {
     endDate: filters.endDate || undefined,
     minAmount: filters.minAmount || undefined,
     maxAmount: filters.maxAmount || undefined,
-    spinReward: rewardFilter || undefined,
   });
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: listKey,
@@ -262,9 +259,6 @@ function AdminOrdersPageInner() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
       if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
-      // Server-side + index-backed (config/db.js partial index on spinReward). Filtering
-      // client-side would only ever narrow the CURRENT page, which silently lies.
-      if (rewardFilter) params.append('spinReward', rewardFilter);
       params.append('page', String(currentPage));
       params.append('limit', String(pageSize));
       params.append('sortBy', sortField);
@@ -290,6 +284,23 @@ function AdminOrdersPageInner() {
       orderNumber: order.orderNumber,
       from: order.status,
       to: newStatus,
+      /*
+        Units on the order, so the dialog can say what shipping from HERE actually does.
+        This screen keeps its one-click path deliberately — it is for working through
+        many orders quickly — but that path puts EVERYTHING in a single parcel, which is
+        only right by accident on a multi-item order. Naming the count is what stops it
+        being a silent decision; splitting is done from the order's Parcels panel.
+      */
+      unitCount: (order.items ?? []).reduce(
+        (n: number, i: { quantity?: number }) => n + (i?.quantity ?? 1), 0),
+      /*
+        Parcels this change would land at once. `delivered` runs deliverAllOutstanding
+        server-side, which is required — the per-line return window reads parcel dates,
+        so leaving them at `shipped` would keep every window shut — but on a split order
+        it is a decision worth naming, and it emails the customer once per parcel.
+        Counts only the parcels still in flight; already-delivered ones are no-ops.
+      */
+      parcelCount: outstandingParcels(order),
     });
   };
 
@@ -538,20 +549,6 @@ function AdminOrdersPageInner() {
             Refresh
           </button>
           <button
-            onClick={() => {
-              setRewardFilter((v) => (v === 'unpacked' ? '' : 'unpacked'));
-              setCurrentPage(1); // a narrower filter can leave the current page empty
-            }}
-            title="Only orders whose Spin-to-Win goodie still needs putting in the parcel"
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
-              rewardFilter === 'unpacked'
-                ? 'bg-amber-500 text-white border-amber-500'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            🎁 To pack
-          </button>
-          <button
             onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
@@ -657,26 +654,6 @@ function AdminOrdersPageInner() {
                     <div className="text-sm font-medium text-gray-900">
                       #{order.orderNumber || order._id.slice(-8)}
                     </div>
-                    {/* A voided reward shows as struck-through rather than vanishing —
-                        the packer needs to see it was withdrawn, not just its absence. */}
-                    {order.spinReward && (
-                      order.spinReward.voidedAt ? (
-                        <span className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 line-through">
-                          🚫 {order.spinReward.name}
-                        </span>
-                      ) : (
-                        <span
-                          title={`${order.spinReward.name}${order.spinReward.sku ? ` (${order.spinReward.sku})` : ''}`}
-                          className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                            order.spinReward.fulfilledAt
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          🎁 {order.spinReward.fulfilledAt ? 'packed' : 'to pack'}
-                        </span>
-                      )
-                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{order.user?.name || 'N/A'}</div>
@@ -728,6 +705,16 @@ function AdminOrdersPageInner() {
                             </option>
                           ))}
                         </select>
+                        {/*
+                          Split-order progress. Without it a 1-of-3-delivered order read
+                          exactly like a 0-of-3 one: the dropdown shows `Shipped` for
+                          both, because the order status only flips once the LAST parcel
+                          lands. Self-hiding at one parcel.
+                        */}
+                        <ParcelProgressBadge
+                          order={order}
+                          className="mt-1 block text-[11px] font-medium text-gray-500"
+                        />
                         {/* Cancellation attribution — admin vs customer at a glance, no drill-in. */}
                         {order.status === 'cancelled' && order.cancelledBy && CANCELLED_BY_TEXT[order.cancelledBy] && (
                           <div className="mt-1 text-[11px] text-gray-400">{CANCELLED_BY_TEXT[order.cancelledBy]}</div>
@@ -806,6 +793,9 @@ function AdminOrdersPageInner() {
           orderNumber={pendingChange.orderNumber}
           currentStatus={pendingChange.from}
           newStatus={pendingChange.to}
+          shipsEverythingCount={pendingChange.unitCount}
+          deliversParcelCount={pendingChange.parcelCount}
+          orderHref={`/admin/orders/${pendingChange.orderId}`}
           notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingChange.to)}
           onConfirm={confirmStatusChange}
           onClose={() => setPendingChange(null)}

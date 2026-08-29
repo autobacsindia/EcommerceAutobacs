@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { formatDateTimeIST } from '@/lib/datetime';
+import { buildOrderLines } from '@/lib/orderLines';
 
 /**
  * Printable packing slip.
@@ -45,10 +46,26 @@ interface SlipOrder {
     name: string; sku: string | null; kind: string;
     fulfilledAt: string | null; voidedAt: string | null;
   } | null;
+  shipments?: Array<{
+    _id: string;
+    sequence: number;
+    status: 'packed' | 'shipped' | 'delivered' | 'lost';
+    lines?: Array<{ itemId: string; quantity: number }>;
+    includesReward?: boolean;
+  }>;
 }
 
 export default function PackingSlipPage() {
   const { id } = useParams<{ id: string }>();
+  /*
+    `?shipment=<id>` prints the pick list for ONE parcel.
+
+    Without it a split order printed its whole contents on every slip, so a packer
+    building parcel 2 was handed a list including everything already sent in parcel 1 —
+    they would either double-ship or have to work out the difference by hand. Omitted
+    (the ordinary single-parcel case) still prints the whole order exactly as before.
+  */
+  const shipmentId = useSearchParams().get('shipment');
   const [order, setOrder] = useState<SlipOrder | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,11 +84,45 @@ export default function PackingSlipPage() {
   if (!order) return <div className="p-8 text-gray-500">Order not found.</div>;
 
   const a = order.shippingAddress;
-  // A physical goodie that is still owed. Coupons and karma need no picking, and a voided
-  // reward must never be printed as something to pack.
-  const reward = order.spinReward && !order.spinReward.voidedAt && order.spinReward.kind === 'goodie'
-    ? order.spinReward
+  /*
+    Pick list = paid items + the won goodie, as one list.
+
+    `audience: 'customer'` deliberately, even though this is an admin screen: it drops a
+    VOIDED reward entirely, and a withdrawn gift must never be PRINTED as something to
+    pack. (The on-screen order page uses 'admin' instead, where a do-not-pack line can
+    still be read and understood. Paper cannot be un-read.)
+  */
+  const allLines = buildOrderLines(order, { audience: 'customer' });
+  const parcel = shipmentId
+    ? (order.shipments || []).find((sh) => String(sh._id) === String(shipmentId))
     : null;
+
+  // Narrow to the parcel's own contents when one was requested. The gift is listed only
+  // on the slip for the box that actually carries it.
+  const lines = parcel
+    ? (() => {
+        const qty = new Map((parcel.lines || []).map((l) => [String(l.itemId), l.quantity]));
+        const picked = allLines
+          .filter((l) => l.kind === 'sale' && qty.has(String(l.itemId)))
+          .map((l) => ({ ...l, quantity: qty.get(String(l.itemId)) as number }));
+        if (parcel.includesReward) {
+          const gift = allLines.find((l) => l.kind === 'reward');
+          if (gift) picked.push(gift);
+        }
+        return picked;
+      })()
+    : allLines;
+
+  // A parcel id that matches nothing must NOT silently fall back to the whole order —
+  // that is exactly the double-ship this feature exists to prevent.
+  if (shipmentId && !parcel) {
+    return (
+      <div className="p-8 text-gray-600">
+        That parcel isn&apos;t on this order.{' '}
+        <a href={`/admin/orders/${order._id}`} className="text-blue-600 hover:underline">Back to order</a>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[800px] bg-white p-8 text-black print:p-0">
@@ -101,6 +152,9 @@ export default function PackingSlipPage() {
           <h1 className="text-2xl font-bold">PACKING SLIP</h1>
           <p className="mt-1 text-sm">
             Order <strong>#{order._id.slice(-8).toUpperCase()}</strong>
+            {parcel && (
+              <> · <strong>Parcel {parcel.sequence}</strong> of {(order.shipments || []).filter((sh) => sh.status !== 'lost').length}</>
+            )}
           </p>
           <p className="text-xs text-gray-600">{formatDateTimeIST(order.createdAt)}</p>
         </div>
@@ -121,28 +175,6 @@ export default function PackingSlipPage() {
         </div>
       </div>
 
-      {/*
-        Printed ABOVE the items, not below. A picker works top-to-bottom and stops when the
-        list is satisfied; anything after the last item is the thing that gets missed.
-      */}
-      {reward && (
-        <div className="mt-5 border-[3px] border-black p-4">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em]">
-            ★ Free gift — add to this parcel
-          </div>
-          <div className="mt-1.5 text-xl font-bold">{reward.name}</div>
-          {reward.sku && (
-            <div className="mt-0.5 text-sm">
-              SKU: <span className="font-mono font-bold">{reward.sku}</span>
-            </div>
-          )}
-          <div className="mt-2 flex items-center gap-2 text-xs">
-            <span className="inline-block h-4 w-4 border-2 border-black" aria-hidden />
-            <span>Tick when the gift is in the box</span>
-          </div>
-        </div>
-      )}
-
       <table className="mt-6 w-full text-sm">
         <thead>
           <tr className="border-b-2 border-black text-left">
@@ -152,16 +184,33 @@ export default function PackingSlipPage() {
           </tr>
         </thead>
         <tbody>
-          {order.items.map((item, i) => {
-            const product = typeof item.product === 'object' && item.product ? item.product : null;
+          {lines.map((line, i) => {
+            const isReward = line.kind === 'reward';
             return (
-              <tr key={i} className="border-b border-gray-300">
+              <tr
+                key={line.itemId ?? `line-${i}`}
+                className={isReward ? 'border-b-2 border-black' : 'border-b border-gray-300'}
+              >
                 <td className="py-2.5">
-                  <div className="font-medium">{item.name || product?.name || 'Item'}</div>
-                  {item.variantLabel && <div className="text-xs text-gray-600">{item.variantLabel}</div>}
-                  {product?.sku && <div className="font-mono text-xs text-gray-600">{product.sku}</div>}
+                  <div className={isReward ? 'text-base font-black' : 'font-medium'}>
+                    {isReward && '★ '}{line.name || 'Item'}
+                  </div>
+                  {isReward && (
+                    <div className="text-[11px] font-black uppercase tracking-[0.2em]">
+                      Free gift — add to this parcel
+                    </div>
+                  )}
+                  {line.variantLabel && <div className="text-xs text-gray-600">{line.variantLabel}</div>}
+                  {line.sku && (
+                    <div className="font-mono text-xs text-gray-600">SKU: {line.sku}</div>
+                  )}
+                  {isReward && !line.sku && (
+                    <div className="text-xs font-bold">
+                      No SKU on this prize — ask before packing.
+                    </div>
+                  )}
                 </td>
-                <td className="py-2.5 text-center font-bold">{item.quantity}</td>
+                <td className="py-2.5 text-center font-bold">{line.quantity}</td>
                 <td className="py-2.5 text-center">
                   <span className="inline-block h-4 w-4 border-2 border-black" aria-hidden />
                 </td>
