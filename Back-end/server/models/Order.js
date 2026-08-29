@@ -568,7 +568,11 @@ const OrderSchema = new mongoose.Schema({
     },
     refundMethod: {
       type: String,
-      enum: ["original_payment", "store_credit", "bank_transfer"]
+      // `offline` = the money was handed back outside the gateway (cash at the counter,
+      // NEFT, UPI, cheque) and an admin recorded it. Without this value the mirror write
+      // in returnController threw a validation error AFTER the refund had already been
+      // committed on the ReturnRequest — see initiateReturnRefund.
+      enum: ["original_payment", "store_credit", "bank_transfer", "offline"]
     },
     itemsRefunded: [{
       product: {

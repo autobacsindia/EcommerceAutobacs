@@ -80,9 +80,29 @@ class OrderRepository extends BaseRepository {
   /**
    * Load a user's own order with product docs populated (savable Mongoose doc).
    * Used by the return flow to snapshot line prices + read Product.returnPolicy.
+   *
+   * PROJECTED deliberately. An unprojected `populate('items.product')` pulls whole
+   * catalogue documents — description, gallery, variants, SEO — for every line, and the
+   * return flow reads exactly two fields off them: `name` (for messages) and
+   * `returnPolicy` (the non-returnable gate). Line price, quantity and variant all come
+   * from the ORDER, which is the record of what was charged. Measured on a realistic
+   * 3-line order: 20,070 B → 1,917 B (−90%).
    */
   async findOwnedWithProducts(orderId, userId) {
-    return Order.findOne({ _id: orderId, user: userId }).populate('items.product');
+    return Order.findOne({ _id: orderId, user: userId }).populate('items.product', 'name returnPolicy');
+  }
+
+  /**
+   * Same savable, product-populated shape as findOwnedWithProducts, but WITHOUT the
+   * ownership filter — for an admin recording a return that was handled off-platform.
+   * The ownership check is deliberately absent, not forgotten: the caller is behind
+   * `protect + admin`, and the orders most likely to be settled over the counter are
+   * legacy WooCommerce / guest orders that have no `user` to match on at all.
+   */
+  async findByIdWithProducts(orderId) {
+    // `name` only: the offline path skips the non-returnable gate, so `returnPolicy` is
+    // never read. Same measurement as above — 20,070 B → 1,728 B (−91%) on a 3-line order.
+    return Order.findById(orderId).populate('items.product', 'name');
   }
 
   /** Mirror the return-request status onto the order summary subdoc. */

@@ -25,7 +25,48 @@ class ReturnRequestRepository {
   claimForRefund(id, {
     productValue, listValue, discountShare,
     shippingDeduction, restockingDeduction, finalAmount, initiatedBy,
+    method = 'original_payment', offlineMethod = null, reference = null, paidAt = null,
   }) {
+    const isOffline = method === 'offline';
+    const $set = {
+      // Recomputed from the order at initiation time (the create-time snapshot
+      // predates discount proration and may be a gross figure) — persisted in the
+      // same atomic claim so the stored breakdown always explains finalAmount.
+      'refund.productValue': productValue,
+      'refund.listValue': listValue,
+      'refund.discountShare': discountShare,
+      'refund.shippingDeduction': shippingDeduction,
+      'refund.restockingDeduction': restockingDeduction,
+      'refund.finalAmount': finalAmount,
+      // 'offline' records a payout that already happened outside the gateway. It is
+      // claimed through this SAME atomic gate as a Razorpay refund on purpose: one
+      // serialization point means a double-submit — or one admin recording cash while
+      // another fires a gateway refund — still resolves to exactly one payout.
+      'refund.method': method,
+      // Still `processing` for BOTH methods; the offline caller flips it to `completed`
+      // immediately after. A crash in between therefore leaves a claimed, visibly
+      // incomplete refund rather than a silently missing one.
+      'refund.status': 'processing',
+      'refund.initiatedBy': initiatedBy,
+      'refund.initiatedAt': new Date(),
+      // Fresh attempt → re-arm the once-only payment-record claim, so a retry
+      // after a failed gateway call can still write to the Payment row.
+      'refund.paymentRecorded': false,
+    };
+
+    const update = { $set };
+    if (isOffline) {
+      $set['refund.offlineMethod'] = offlineMethod;
+      $set['refund.reference'] = reference;
+      $set['refund.paidAt'] = paidAt || new Date();
+    } else {
+      // $unset rather than `$set: undefined` (Mongoose strips undefined from an update,
+      // which would silently KEEP the old values) and rather than `$set: null` (null
+      // fails the enum validator on any later doc.save()). A retry that switches from
+      // offline back to the gateway must not leave a stale cash reference behind.
+      update.$unset = { 'refund.offlineMethod': '', 'refund.reference': '', 'refund.paidAt': '' };
+    }
+
     return ReturnRequest.findOneAndUpdate(
       {
         _id: id,
@@ -33,26 +74,7 @@ class ReturnRequestRepository {
         'inspection.passed': true,
         'refund.status': { $nin: ['processing', 'completed'] },
       },
-      {
-        $set: {
-          // Recomputed from the order at initiation time (the create-time snapshot
-          // predates discount proration and may be a gross figure) — persisted in the
-          // same atomic claim so the stored breakdown always explains finalAmount.
-          'refund.productValue': productValue,
-          'refund.listValue': listValue,
-          'refund.discountShare': discountShare,
-          'refund.shippingDeduction': shippingDeduction,
-          'refund.restockingDeduction': restockingDeduction,
-          'refund.finalAmount': finalAmount,
-          'refund.method': 'original_payment',
-          'refund.status': 'processing',
-          'refund.initiatedBy': initiatedBy,
-          'refund.initiatedAt': new Date(),
-          // Fresh attempt → re-arm the once-only payment-record claim, so a retry
-          // after a failed gateway call can still write to the Payment row.
-          'refund.paymentRecorded': false,
-        },
-      },
+      update,
       { new: true }
     );
   }

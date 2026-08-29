@@ -37,7 +37,8 @@ import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import razorpayService from '../services/razorpayService.js';
 import { reverseReturnLtvOnce } from '../services/returnRefundLtvService.js';
-import { refundableForLines, remainingRefundable } from '../services/refundMathService.js';
+import auditLogger from '../services/auditLogger.js';
+import { refundableForLines, remainingRefundable, matchOrderLine } from '../services/refundMathService.js';
 import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import { toPaise } from '../utils/money.js';
 import { deliveredAtForItem } from '../utils/orderFulfilment.js';
@@ -138,11 +139,15 @@ const resolveRefundBasis = async (rr) => {
     throw new AppError('The order for this return no longer exists.', 404);
   }
   const refundable = refundableForLines(order, rr.items);
-  const siblings = await returnRequestRepository.find({ order: order._id }).select('refund').lean();
-  // The Payment row is loaded here (not just at refund time) so the headroom the
-  // operator PREVIEWS already accounts for money the payment knows about — otherwise
-  // the preview and the refund could disagree about what is left.
-  const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+  // Both reads depend only on `order` and not on each other, so they go out together
+  // — one round trip instead of two on every preview AND every refund. The Payment row
+  // is loaded here (not just at refund time) so the headroom the operator PREVIEWS
+  // already accounts for money the payment knows about; otherwise the preview and the
+  // refund could disagree about what is left.
+  const [siblings, payment] = await Promise.all([
+    returnRequestRepository.find({ order: order._id }).select('refund').lean(),
+    order.payment ? paymentRepository.findById(order.payment) : Promise.resolve(null),
+  ]);
   const headroom = remainingRefundable(order, siblings, rr._id, payment);
   return { order, payment, refundable, headroom };
 };
@@ -543,6 +548,270 @@ export const getReturnById = asyncHandler(async (req, res) => {
   res.json({ success: true, request: withSignedEvidence(rr) });
 });
 
+// ── Offline (handled off-platform) ────────────────────────────────────────────
+//
+// Both handlers below exist for returns that never touched the storefront: the
+// customer walked in, called, or dealt with a sales rep, and an admin is RECORDING
+// what already happened rather than driving it.
+//
+// What they deliberately skip: the 4-day window, the mandatory unboxing video and
+// proof of purchase, the non-returnable product classes, the `delivered` order-status
+// gate, and the courier + inspection steps. None of those can be satisfied after the
+// fact, and refusing on them would just push operations into editing Mongo by hand.
+//
+// What they deliberately KEEP — these are arithmetic, not policy:
+//   - the refund base is recomputed server-side from the order (refundableForLines);
+//   - one active return per (order, product), which is a unique index, not a check;
+//   - the headroom cap in initiateReturnRefund, so cash + gateway refunds together can
+//     never exceed what the order captured.
+// Every offline action is written to the audit log with the operator's note.
+
+/**
+ * Snapshot the returned lines off an order. Shape/arithmetic only — no policy.
+ *
+ * Resolution goes through refundMathService.matchOrderLine, the same matcher the refund
+ * arithmetic uses, so the line this snapshots is the line the money is later computed
+ * from. Matching on product id alone is NOT sufficient: an order may legitimately carry
+ * the same product on two lines (two variants of one variable product — 415 variants are
+ * live), and taking the first match silently snapshots the wrong variant, the wrong
+ * charged price, and the wrong quantity cap. The caller passes `itemId` (the order line's
+ * own _id, the unambiguous handle) and/or `variantId`; product id is only the fallback.
+ */
+const snapshotReturnLines = (order, items) => {
+  const seen = new Set();
+  const lines = [];
+  for (const item of items || []) {
+    const orderLine = matchOrderLine(order.items, {
+      itemId: item.itemId,
+      product: item.productId,
+      variantId: item.variantId,
+    });
+    if (!orderLine) {
+      throw new AppError('One of the selected items is not part of this order.', 400);
+    }
+    // Dedupe on the resolved ORDER LINE, not on the requested product: two variants of
+    // one product are two distinct lines and both may be returned, while the same line
+    // entered twice would silently double the refund base (the unique index is multikey
+    // and dedupes keys WITHIN a document, so it cannot catch that).
+    const lineKey = String(orderLine._id || `${orderLine.product?._id || orderLine.product}:${orderLine.variantId || ''}`);
+    if (seen.has(lineKey)) {
+      throw new AppError('The same order line is listed twice — combine it into one line with the full quantity.', 400);
+    }
+    seen.add(lineKey);
+
+    if (!RETURN_REASONS.includes(item.reason)) {
+      throw new AppError('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect.', 400);
+    }
+    const productId = orderLine.product?._id || orderLine.product;
+    if (!productId) {
+      // Legacy WooCommerce lines may carry no product ref at all (Order.items.product is
+      // only required when source !== 'woocommerce'), and ReturnRequest.items.product is
+      // required — so this cannot be recorded as a return at all. Say why.
+      throw new AppError(
+        `"${orderLine.name || 'One of these items'}" is an imported line with no catalogue product on it, so a return cannot be recorded against it. Refund it from the order instead.`,
+        422,
+      );
+    }
+    lines.push({
+      product: productId,
+      variantId: orderLine.variantId || null,
+      // Clamped to what was actually bought — the refund base is Σ(unitPrice × qty),
+      // so an over-entered quantity is an over-refund.
+      quantity: Math.min(Number(item.quantity) || 1, orderLine.quantity),
+      reason: item.reason,
+      unitPrice: money(orderLine.price),
+    });
+  }
+  return lines;
+};
+
+// @desc    Record a return that was handled off-platform (Admin)
+// @route   POST /returns/admin
+// @access  Private/Admin
+export const createOfflineReturn = asyncHandler(async (req, res) => {
+  const { orderId, items, note, shippingBorneBy, notifyCustomer } = req.body;
+  // Default TRUE: the normal case is that the goods are already back in our hands —
+  // that is what "handled offline" means. Pass false to record one still in transit.
+  const markReturned = req.body.markReturned !== false;
+
+  const order = await orderRepository.findByIdWithProducts(orderId);
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+  const desc = typeof note === 'string' ? note.trim() : '';
+  if (!desc) {
+    throw new AppError('A note describing what happened is required — it is the only record of an offline return.', 400);
+  }
+
+  const returnItems = snapshotReturnLines(order, items);
+  if (returnItems.length === 0) {
+    throw new AppError('Select at least one item to return.', 400);
+  }
+
+  // The duplicate guard is kept: it is the DB unique index made friendly, and an
+  // admin recording a second return for a line already in flight is a real mistake.
+  //
+  // ONE query for all lines, not one per line. The index is multikey on
+  // (order, items.product), so `$in` uses exactly the same index the per-line lookup
+  // did — it just stops paying a round trip per item. Measured on a 5-line return:
+  // 5 lookups → 1.
+  const productIds = returnItems.map((l) => l.product);
+  const clash = await returnRequestRepository.findOne({
+    order: orderId,
+    'items.product': { $in: productIds },
+    status: { $in: ACTIVE_RETURN_STATUSES },
+  });
+  if (clash) {
+    // Name the offending line when we can — with one query the clash is no longer
+    // implicit in the loop position, so it has to be read back off the match.
+    const wanted = new Set(productIds.map(String));
+    const clashedId = (clash.items || []).map((it) => String(it.product)).find((id) => wanted.has(id));
+    const name = order.items.find((oi) => String(oi.product?._id || oi.product) === clashedId)?.product?.name;
+    throw new AppError(`A return request already exists for "${name || 'one of these items'}".`, 409);
+  }
+
+  const { grossRupees, netRupees, discountShareRupees } = refundableForLines(order, returnItems);
+  const now = new Date();
+
+  const returnRequest = await returnRequestRepository.create({
+    order: orderId,
+    // Absent on legacy WooCommerce / guest orders; the schema allows it for this origin.
+    user: order.user || undefined,
+    items: returnItems,
+    type: 'return',
+    origin: 'admin_offline',
+    createdBy: req.user._id,
+    status: markReturned ? 'received' : 'pending',
+    problemDescription: desc,
+    // No evidence: there was no upload step. Left null rather than faked.
+    video: null,
+    proofOfPurchase: null,
+    images: [],
+    shippingBorneBy: ['roavion', 'customer'].includes(shippingBorneBy) ? shippingBorneBy : 'roavion',
+    // Recording it as received IS the inspection — an operator had the goods in hand.
+    // Setting it here (rather than leaving null) is what lets the refund claim, whose
+    // gate is `received` + `inspection.passed`, stay completely unchanged.
+    inspection: markReturned
+      ? { passed: true, notes: `Handled offline: ${desc}`, at: now, by: req.user._id }
+      : { passed: null },
+    refund: {
+      productValue: netRupees,
+      listValue: grossRupees,
+      discountShare: discountShareRupees,
+      finalAmount: netRupees,
+      status: 'pending',
+    },
+    adminNotes: desc,
+    timeline: [{
+      status: markReturned ? 'received' : 'pending',
+      note: markReturned ? `Offline return recorded — goods received. ${desc}` : `Offline return recorded. ${desc}`,
+      updatedBy: req.user._id,
+      timestamp: now,
+    }],
+  });
+
+  // Mirror onto the order exactly as the customer path does, so the order screen and
+  // the admin queue read the same summary regardless of where the return came from.
+  //
+  // `returnRequest` is a Mongoose NESTED PATH, not a subdocument: assigning an object
+  // merges leaf-by-leaf rather than replacing, so a previous return's `approvedAt` /
+  // `rejectedReason` / `itemReceivedAt` would survive and be read as this one's. Every
+  // leaf this write does not set is therefore cleared explicitly.
+  order.returnRequest = {
+    requestedAt: now,
+    requestedBy: req.user._id,
+    status: markReturned ? 'item_received' : 'pending',
+    items: returnItems.map((it) => ({ product: it.product, quantity: it.quantity, reason: it.reason })),
+    adminNotes: desc,
+    itemReceivedAt: markReturned ? now : undefined,
+    approvedBy: undefined,
+    approvedAt: undefined,
+    rejectedReason: undefined,
+    returnShippingLabel: undefined,
+    inspectionNotes: undefined,
+    reason: undefined,
+    images: [],
+  };
+  await order.save();
+
+  if (markReturned) {
+    // Fulfilment axis: the customer path flips this at approval. An offline return has
+    // no approval step, so do it here. Compare-and-set on `delivered`, so it no-ops on
+    // an order an admin already moved by hand.
+    await orderRepository.markReturnedOnReturnApproval(
+      orderId, req.user._id, `Offline return ${returnRequest._id} recorded`,
+    );
+  }
+
+  // Silent by default: the customer handed the goods over in person, and the storefront
+  // acknowledgement ("we'll review this in 3-5 working days") would contradict that.
+  if (notifyCustomer && order.user) {
+    enqueueNotification('send-return-submitted', { returnId: returnRequest._id.toString() });
+  }
+
+  await auditLogger.logAction(req, 'RETURN_OFFLINE_CREATE', 'ReturnRequest', returnRequest._id, {
+    orderId: String(orderId),
+    lines: returnItems.length,
+    markReturned,
+    note: desc,
+  });
+
+  res.status(201).json({ success: true, request: returnRequest });
+});
+
+// @desc    Mark a return received without the courier / inspection steps (Admin)
+// @route   PATCH /returns/admin/:id/offline-received
+// @access  Private/Admin
+//
+// The escape hatch for a return the customer raised online but then settled in person.
+// markReceived deliberately refuses anything but `courier_booked` — skipping the AWB is
+// exactly how a mandatory claim handle gets lost — so this is a SEPARATE, explicitly
+// named, note-required, audit-logged route rather than a `force` flag that would weaken
+// the normal path.
+export const markReturnedOffline = asyncHandler(async (req, res) => {
+  const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
+  if (!note) {
+    throw new AppError('A note is required — it is the only record of why the courier and inspection steps were skipped.', 400);
+  }
+
+  const rr = await returnRequestRepository.findById(req.params.id).populate('user', 'email name');
+  if (!rr) {
+    throw new AppError('Return request not found', 404);
+  }
+  if (['refunded', 'rejected', 'cancelled'].includes(rr.status)) {
+    throw new AppError(`This request is already "${rr.status}" and cannot be reopened.`, 400);
+  }
+  // Idempotent: a double-click must not stack timeline entries or re-stamp the
+  // inspection with a later timestamp.
+  if (rr.status === 'received' && rr.inspection?.passed === true) {
+    return res.json({ success: true, request: rr });
+  }
+
+  const previousStatus = rr.status;
+  rr.inspection = { passed: true, notes: `Handled offline: ${note}`, at: new Date(), by: req.user._id };
+  transition(rr, 'received', `Marked received offline (courier + inspection skipped). ${note}`, req.user._id);
+  await returnRequestRepository.save(rr);
+
+  await orderRepository.setReturnRequestStatus(rr.order, 'item_received');
+  // The return may never have been approved (straight from `pending`), so the
+  // approval-time fulfilment flip has to happen here too. Idempotent by compare-and-set.
+  await orderRepository.markReturnedOnReturnApproval(
+    rr.order, req.user._id, `Return ${rr._id} settled offline`,
+  );
+
+  if (req.body.notifyCustomer && rr.user) {
+    enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'received' });
+  }
+
+  await auditLogger.logAction(req, 'RETURN_OFFLINE_RECEIVED', 'ReturnRequest', rr._id, {
+    orderId: String(rr.order),
+    previousStatus,
+    note,
+  });
+
+  res.json({ success: true, request: rr });
+});
+
 // @desc    Approve or reject a return at review (Admin)
 // @route   PATCH /returns/admin/:id/review
 // @access  Private/Admin
@@ -753,10 +1022,190 @@ export const refundPreview = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Initiate the refund to the original payment method (Admin)
+/** Human label for an offline payout method, for timeline + email copy. */
+const OFFLINE_METHOD_LABELS = Object.freeze({
+  cash: 'cash',
+  bank_transfer: 'bank transfer',
+  upi: 'UPI',
+  cheque: 'cheque',
+  other: 'an offline payout',
+});
+
+/**
+ * Settle a refund that was ALREADY paid outside the gateway.
+ *
+ * Called only after claimForRefund has won the atomic claim, so this owns a return that
+ * no other request can be paying out concurrently.
+ *
+ * ORDERING IS THE WHOLE DESIGN HERE, and it is the opposite of the gateway path's.
+ * There, the money moves last, so a failure before it means nothing was paid. Here the
+ * money moved BEFORE the request arrived — a customer is already holding cash. So:
+ *
+ *   Phase 1 (must succeed)  Write the completed refund to the ReturnRequest. That doc is
+ *                           the system of record and the ONLY thing remainingRefundable
+ *                           counts, so until it lands the payout is invisible and a
+ *                           gateway refund could pay the same money a second time.
+ *   Phase 2 (best-effort)   The order mirror, the Payment row, net LTV, emails. Each is
+ *                           individually guarded: a failure here is logged and reported
+ *                           in `warnings`, and must NEVER walk phase 1 back to `failed`.
+ *                           That rollback is precisely how recorded cash would vanish
+ *                           from the headroom while the pre-check (`status === 'received'`)
+ *                           blocked the retry the operator was told to make.
+ *
+ * Only a phase-1 failure marks the refund `failed`, and it also rewinds `status` to
+ * `received` so claimForRefund can re-claim on a retry.
+ */
+const recordOfflineRefund = async (req, res, { rr, order, payment, finalAmount, offlineMethod, reference, paidAt }) => {
+  const label = OFFLINE_METHOD_LABELS[offlineMethod] || 'an offline payout';
+  const settledAt = paidAt || new Date();
+  const warnings = [];
+
+  /** Run a phase-2 step without letting it fail the recorded payout. */
+  const bestEffort = async (what, fn) => {
+    try {
+      await fn();
+    } catch (err) {
+      warnings.push(what);
+      console.error(`[ReturnRefund] offline refund ${rr._id}: ${what} failed — ${err.message}`);
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('return_refund', { returnId: rr._id.toString(), orderId: String(rr.order), step: what });
+          scope.setTag('payment_action', 'return_refund_offline');
+          scope.setTag('severity', 'high');
+          Sentry.captureException(err);
+        });
+      }
+    }
+  };
+
+  // ── Phase 1 ────────────────────────────────────────────────────────────────
+  try {
+    rr.refund.status = 'completed';
+    rr.refund.completedAt = settledAt;
+    transition(rr, 'refunded', `Refund of ₹${finalAmount} recorded as paid by ${label} (ref ${reference})`, req.user._id);
+    await returnRequestRepository.save(rr);
+  } catch (err) {
+    // Nothing durable was written, so make the return claimable again rather than
+    // stranding it: `received` + a non-terminal refund is what claimForRefund needs.
+    rr.status = 'received';
+    rr.timeline = (rr.timeline || []).filter((t) => t.status !== 'refunded');
+    rr.refund.status = 'failed';
+    rr.refund.failureReason = err.message;
+    try { await returnRequestRepository.save(rr); } catch { /* already failing; nothing more to do */ }
+
+    if (process.env.SENTRY_DSN) {
+      Sentry.withScope((scope) => {
+        scope.setContext('return_refund', { returnId: rr._id.toString(), orderId: String(rr.order), finalAmount, offlineMethod });
+        scope.setTag('payment_action', 'return_refund_offline');
+        scope.setTag('severity', 'high');
+        Sentry.captureException(err);
+      });
+    }
+    throw new AppError(`Could not record the offline refund: ${err.message}. Nothing was recorded — try again.`, 500);
+  }
+
+  // ── Phase 2 ────────────────────────────────────────────────────────────────
+  await bestEffort('order mirror', async () => {
+    order.refundDetails = {
+      requestedAt: rr.refund.initiatedAt,
+      amount: finalAmount,
+      refundType: finalAmount >= order.totalAmount ? 'full' : 'partial',
+      refundMethod: 'offline',
+      itemsRefunded: rr.items.map((it) => ({ product: it.product, quantity: it.quantity, amount: money(it.unitPrice * it.quantity) })),
+      status: 'completed',
+      processedBy: req.user._id,
+      processedAt: settledAt,
+      // The operator's reference IS the transaction id for a payout with no gateway.
+      transactionId: reference,
+      // `remainingRefundable` keys off this prefix to tell a return-sourced summary
+      // apart from a cancellation refund — do not reword without updating it.
+      notes: `Return ${rr._id}`,
+    };
+    // Payment axis, matching applyReturnRefundWebhook exactly: only a refund covering
+    // the whole order value flips it: a partial per-line return leaves the order `paid`.
+    // Without this an offline full refund left the order reading `paid` forever — there
+    // is no webhook coming to do it — so revenue/LTV reporting kept counting it as a sale.
+    if (finalAmount >= order.totalAmount) {
+      order.paymentStatus = 'refunded';
+    }
+    await order.save();
+    await orderRepository.setReturnRequestStatus(rr.order, 'refund_processed');
+  });
+
+  // Only when a Payment row exists — a legacy order may have none, and there is then
+  // nothing to accumulate against.
+  if (payment) {
+    await bestEffort('payment record', async () => {
+      if (await returnRequestRepository.claimPaymentRecord(rr._id)) {
+        await paymentRepository.recordRefund(payment._id, finalAmount, 'return_refund_offline');
+      }
+    });
+  }
+  // reverseReturnLtvOnce swallows its own errors, but wrap it anyway so a future
+  // change there cannot reach back into this path.
+  await bestEffort('LTV reversal', () => reverseReturnLtvOnce(rr._id.toString()));
+
+  // Finance always hears about money leaving. The customer is told only on request —
+  // they were handed the money in person, so an unsolicited "your refund is on its
+  // way, allow 5-9 working days" would be actively wrong.
+  await bestEffort('notifications', async () => {
+    enqueueNotification('send-admin-return-refunded-alert', { returnId: rr._id.toString() });
+    if (req.body.notifyCustomer && rr.user) {
+      enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'refunded' });
+    }
+  });
+
+  await bestEffort('audit log', () => auditLogger.logAction(req, 'RETURN_OFFLINE_REFUND', 'ReturnRequest', rr._id, {
+    orderId: String(rr.order),
+    amount: finalAmount,
+    offlineMethod,
+    reference,
+  }));
+
+  return res.json({
+    success: true,
+    message: warnings.length
+      ? `Recorded ₹${finalAmount} refunded by ${label}. Some follow-up steps need checking: ${warnings.join(', ')}.`
+      : `Recorded ₹${finalAmount} refunded by ${label}.`,
+    refund: { id: reference, status: 'completed', amount: finalAmount, method: 'offline' },
+    ...(warnings.length ? { warnings } : {}),
+    request: rr,
+  });
+};
+
+// @desc    Refund a return — through Razorpay, or record one already paid offline (Admin)
 // @route   POST /returns/admin/:id/refund
 // @access  Private/Admin
+//
+// `method` (default 'original_payment') picks the path:
+//   original_payment → unchanged: verify headroom + instrument constraints, then send a
+//                      real Razorpay refund and let the refund.* webhook settle it.
+//   offline          → the money ALREADY left by hand (cash at the counter, NEFT, UPI,
+//                      cheque). Nothing is sent to the gateway; this records it, with a
+//                      mandatory `reference` because that string is the only evidence.
+//
+// Both go through the SAME atomic claimForRefund, so the two can never both pay out for
+// one return, and both are capped by the same headroom — cash refunded here reduces what
+// a later gateway refund on the same order is allowed to draw.
 export const initiateReturnRefund = asyncHandler(async (req, res) => {
+  const method = req.body.method === 'offline' ? 'offline' : 'original_payment';
+  const isOffline = method === 'offline';
+  const OFFLINE_METHODS = ['cash', 'bank_transfer', 'upi', 'cheque', 'other'];
+  const offlineMethod = isOffline ? String(req.body.offlineMethod || '').trim() : null;
+  const reference = isOffline ? String(req.body.reference || '').trim() : null;
+  if (isOffline) {
+    if (!OFFLINE_METHODS.includes(offlineMethod)) {
+      throw new AppError(`How the money was paid back is required (${OFFLINE_METHODS.join(', ')}).`, 400);
+    }
+    if (!reference) {
+      throw new AppError('A reference (UTR, cheque number, or receipt number) is required — it is the only proof the money moved.', 400);
+    }
+  }
+  const paidAt = isOffline && req.body.paidAt ? new Date(req.body.paidAt) : null;
+  if (paidAt && Number.isNaN(paidAt.getTime())) {
+    throw new AppError('The payout date is not a valid date.', 400);
+  }
+
   const existing = await returnRequestRepository.findById(req.params.id);
   if (!existing) {
     throw new AppError('Return request not found', 404);
@@ -799,21 +1248,39 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
     );
   }
 
-  // Resolve the captured Razorpay payment on the order BEFORE claiming, so an order
-  // that can't be refunded online never leaves a return stranded in `processing`.
+  // Money can only be given back if it was taken in the first place. This gate applies
+  // to BOTH paths: the headroom above is derived from `order.totalAmount`, which is what
+  // the order is WORTH, not what was collected — so without this an unpaid order (an
+  // offline deal whose Razorpay payment link was never paid, sitting at
+  // `awaiting_payment`) would happily accept a full "refund" of money nobody ever sent.
   if (order.paymentStatus !== 'paid') {
-    throw new AppError('This order has no captured online payment to refund. Refund manually.', 422);
-  }
-  if (!payment || !payment.gatewayPaymentId) {
-    throw new AppError('No Razorpay payment id on file — refund manually in the dashboard.', 422);
+    throw new AppError(
+      `This order is not paid (payment status "${order.paymentStatus || 'pending'}"), so there is nothing to refund. ` +
+      'If money was collected outside the system, record the payment on the order first.',
+      422,
+    );
   }
 
-  // Instrument constraint (debit-card EMI = full refund only). Checked HERE, after the
-  // amount is final but before claimForRefund, so a refund the gateway would reject
-  // never leaves the return stranded in `processing`.
-  const blockReason = partialRefundBlockReason(payment, finalAmount, headroom.capturedRupees);
-  if (blockReason) {
-    throw new AppError(blockReason, 422);
+  // The two remaining preconditions are GATEWAY-specific and are skipped for money
+  // already handed back by hand: a paid legacy/imported order can have no Razorpay
+  // payment id to refund against, and the debit-card-EMI constraint belongs to the
+  // ISSUER, which a cash payout never touches. Between them these are what the old code
+  // meant by "settle outside the gateway and record manually" while offering no way to
+  // record it.
+  if (!isOffline) {
+    // Resolve the captured Razorpay payment on the order BEFORE claiming, so an order
+    // that can't be refunded online never leaves a return stranded in `processing`.
+    if (!payment || !payment.gatewayPaymentId) {
+      throw new AppError('No Razorpay payment id on file — refund in the dashboard and record it here as an offline refund.', 422);
+    }
+
+    // Instrument constraint (debit-card EMI = full refund only). Checked HERE, after the
+    // amount is final but before claimForRefund, so a refund the gateway would reject
+    // never leaves the return stranded in `processing`.
+    const blockReason = partialRefundBlockReason(payment, finalAmount, headroom.capturedRupees);
+    if (blockReason) {
+      throw new AppError(blockReason, 422);
+    }
   }
 
   const amountPaise = Math.round(finalAmount * 100);
@@ -827,9 +1294,16 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
     listValue: refundable.grossRupees,
     discountShare: refundable.discountShareRupees,
     shippingDeduction, restockingDeduction, finalAmount, initiatedBy: req.user._id,
+    method, offlineMethod, reference, paidAt,
   });
   if (!rr) {
     throw new AppError('This refund is already being processed.', 409);
+  }
+
+  if (isOffline) {
+    return recordOfflineRefund(req, res, {
+      rr, order, payment, finalAmount, offlineMethod, reference, paidAt,
+    });
   }
 
   try {

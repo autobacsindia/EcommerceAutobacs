@@ -22,7 +22,12 @@ const ReturnRequestSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true
+    // Required for a customer-raised return (it was raised from their account), but NOT
+    // for one an admin records after the fact: legacy WooCommerce and guest orders carry
+    // no user (Order.user has the same conditional shape), and those are exactly the
+    // orders most likely to be settled over the counter. reverseReturnLtvOnce already
+    // no-ops on a userless return, so net LTV is simply not adjusted for one.
+    required: function () { return this.origin !== "admin_offline"; }
   },
   items: [{
     product: {
@@ -55,6 +60,27 @@ const ReturnRequestSchema = new mongoose.Schema({
     enum: ["return"],
     default: "return"
   },
+  // How this record came into being.
+  //   customer     → raised through the storefront, with the mandatory evidence and
+  //                  inside the 4-day window. The normal path.
+  //   admin_offline → the return happened off-platform (walk-in, phone, sales rep) and
+  //                  an admin is RECORDING it. The policy gates (window, unboxing video,
+  //                  proof of purchase, non-returnable classes, courier + inspection)
+  //                  are deliberately not applied — there is nothing to apply them to.
+  //                  The money guards still are: the refund base is recomputed from the
+  //                  order and capped by remainingRefundable exactly as for any return.
+  // Kept as a first-class field so finance can tell recorded-by-hand money apart from
+  // gateway-driven money without inferring it from a missing video.
+  // No `index: true`: nothing queries by origin today, and prod runs autoIndex:false —
+  // a declared-but-never-built index is exactly the drift `npm run audit-index-drift`
+  // exists to catch. Add it with a migration if an origin filter is ever needed.
+  origin: {
+    type: String,
+    enum: ["customer", "admin_offline"],
+    default: "customer"
+  },
+  // The admin who recorded an offline return (null for a customer-raised one).
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   // Lifecycle:
   //   pending        → submitted, awaiting operations review
   //   approved       → operations approved; return courier to be booked by us
@@ -120,7 +146,17 @@ const ReturnRequestSchema = new mongoose.Schema({
     shippingDeduction:    { type: Number, default: 0 }, // manual, variable
     restockingDeduction:  { type: Number, default: 0 }, // 10% on >₹1L (suggested) / oversized (manual)
     finalAmount:          { type: Number, default: 0 },
-    method:               { type: String, enum: ["original_payment"], default: "original_payment" },
+    // original_payment → sent through Razorpay to the instrument that paid.
+    // offline          → money already handed back outside the gateway (cash at the
+    //                    counter, NEFT, UPI, cheque). Nothing is sent to Razorpay; this
+    //                    is a RECORD of a payout that already happened, which is why
+    //                    `reference` is mandatory for it — that string is the only
+    //                    evidence the money moved.
+    method:               { type: String, enum: ["original_payment", "offline"], default: "original_payment" },
+    // Only for method === 'offline'.
+    offlineMethod:        { type: String, enum: ["cash", "bank_transfer", "upi", "cheque", "other"], default: undefined },
+    reference:            String, // UTR / cheque no / receipt no — required when offline
+    paidAt:               Date,   // when the money actually left, if not now
     razorpayRefundId:     String,
     status:               { type: String, enum: ["pending", "processing", "completed", "failed"], default: "pending" },
     initiatedBy:          { type: mongoose.Schema.Types.ObjectId, ref: "User" },

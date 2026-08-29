@@ -602,11 +602,18 @@ export const emailAdminReturnAlert = async (returnId) => {
  * @param {string} returnId
  * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
  */
+/** Best-effort name of whoever initiated a refund, for the finance alert. */
+const req0Email = (rr) => {
+  const by = rr?.refund?.initiatedBy;
+  return by && typeof by === 'object' ? (by.email || by.name || null) : null;
+};
+
 export const emailAdminReturnRefundedAlert = async (returnId) => {
   const rr = await returnRequestRepository
     .findById(returnId)
     .populate('user', 'name email')
-    .populate('order', 'orderNumber');
+    .populate('order', 'orderNumber')
+    .populate('refund.initiatedBy', 'name email');
   if (!rr) return { status: 'not-found' };
 
   const ref = rr.order?.orderNumber || String(rr.order);
@@ -615,8 +622,17 @@ export const emailAdminReturnRefundedAlert = async (returnId) => {
   const refund = rr.refund || {};
   const adminLink = `${appUrl()}/admin/returns`;
 
-  const subject = `Return refunded — ${inr(refund.finalAmount)} — Order #${ref}`;
-  const intro = `A return refund was initiated to the customer's original payment method.`;
+  // An offline refund never touched Razorpay, so the gateway wording and an empty
+  // "Refund id" row are both wrong for it — and finance needs the payout method and the
+  // operator's reference, which are the ONLY evidence that money moved.
+  const isOffline = refund.method === 'offline';
+  const offlineLabels = { cash: 'cash', bank_transfer: 'bank transfer', upi: 'UPI', cheque: 'cheque', other: 'an offline payout' };
+  const how = offlineLabels[refund.offlineMethod] || 'an offline payout';
+
+  const subject = `Return refunded${isOffline ? ' (offline)' : ''} — ${inr(refund.finalAmount)} — Order #${ref}`;
+  const intro = isOffline
+    ? `A return refund was RECORDED as already paid outside the gateway by ${how}. No money was sent through Razorpay — verify the reference below against your own records.`
+    : `A return refund was initiated to the customer's original payment method.`;
 
   const rows = [
     ['Order', ref],
@@ -625,7 +641,13 @@ export const emailAdminReturnRefundedAlert = async (returnId) => {
     ['Shipping deducted', refund.shippingDeduction ? inr(refund.shippingDeduction) : '—'],
     ['Restocking deducted', refund.restockingDeduction ? inr(refund.restockingDeduction) : '—'],
     ['Refunded', inr(refund.finalAmount)],
-    ['Refund id', refund.razorpayRefundId || ''],
+    ...(isOffline
+      ? [
+        ['Paid by', how],
+        ['Reference', refund.reference || ''],
+        ['Recorded by', req0Email(rr) || ''],
+      ]
+      : [['Refund id', refund.razorpayRefundId || '']]),
     ['Status', refund.status || ''],
   ];
 
