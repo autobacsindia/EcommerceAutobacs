@@ -50,6 +50,8 @@ const emptyForm = () => {
     goodieWinRatePercent: 20,
     segmentCount: 8,
     maxSpinsPerUserPerCampaign: 1 as number | null,
+    // Rupees in the input, paise on the wire — matching the prize form's convention.
+    minOrderValueRupees: 0,
     reviewCtaEnabled: true,
     reviewCtaHeadline: 'Loved your order?',
     reviewCtaUrl: '',
@@ -93,6 +95,7 @@ export default function SpinCampaignsPage() {
         startsAt: new Date(form.startsAt).toISOString(),
         endsAt: new Date(form.endsAt).toISOString(),
         goodieWinRatePercent: Number(form.goodieWinRatePercent),
+        minOrderValuePaise: Math.round(Number(form.minOrderValueRupees || 0) * 100),
         segmentCount: Number(form.segmentCount),
         maxSpinsPerUserPerCampaign: form.maxSpinsPerUserPerCampaign,
         reviewCta: {
@@ -189,6 +192,25 @@ export default function SpinCampaignsPage() {
               <span className="mt-1 block text-xs text-gray-500">
                 Roughly {form.goodieWinRatePercent} in 100 customers win a physical goodie.
                 The rest get your guaranteed fallback prize. 100% = goodies until stock runs out.
+              </span>
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-gray-700">
+                Minimum order to spin <span className="font-normal text-gray-500">(₹, 0 = no minimum)</span>
+              </span>
+              <input
+                type="number" min={0}
+                value={form.minOrderValueRupees}
+                onChange={(e) => setForm({ ...form, minOrderValueRupees: Number(e.target.value) })}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              />
+              {/*
+                Campaign-wide gate on whether the wheel appears at all — distinct from
+                the per-prize minimum, which only decides which prizes are in the pool.
+              */}
+              <span className="mt-1 block text-xs text-gray-500">
+                Below this the customer sees no wheel. Set per-prize minimums separately to
+                keep the expensive prizes off small orders.
               </span>
             </label>
             <label className="text-sm">

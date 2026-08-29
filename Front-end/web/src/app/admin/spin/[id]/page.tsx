@@ -73,6 +73,9 @@ export default function SpinCampaignDetailPage() {
     goodieWinRatePercent: 20,
     segmentCount: 8,
     maxSpinsPerUserPerCampaign: 1 as number | null,
+    // Held in RUPEES for the input and converted to paise on save — same convention as
+    // the prize form, so the two money fields on this page behave identically.
+    minOrderValueRupees: 0,
     terms: '',
   });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -112,6 +115,7 @@ export default function SpinCampaignDetailPage() {
           goodieWinRatePercent: found.goodieWinRatePercent ?? 20,
           segmentCount: found.segmentCount ?? 8,
           maxSpinsPerUserPerCampaign: found.maxSpinsPerUserPerCampaign ?? null,
+          minOrderValueRupees: (found.minOrderValuePaise || 0) / 100,
           terms: found.terms ?? '',
         });
       }
@@ -335,6 +339,7 @@ export default function SpinCampaignDetailPage() {
         goodieWinRatePercent: Number(settings.goodieWinRatePercent),
         segmentCount: Number(settings.segmentCount),
         maxSpinsPerUserPerCampaign: settings.maxSpinsPerUserPerCampaign,
+        minOrderValuePaise: Math.round(Number(settings.minOrderValueRupees || 0) * 100),
         terms: settings.terms.trim() || null,
       });
       await load();
@@ -569,6 +574,33 @@ export default function SpinCampaignDetailPage() {
             </span>
           </label>
         </div>
+
+        <label className="mt-4 block text-sm sm:w-1/2 sm:pr-2">
+          <span className="mb-1 block font-medium text-gray-700">
+            Minimum order to spin <span className="font-normal text-gray-500">(₹, 0 = no minimum)</span>
+          </span>
+          <input
+            type="number"
+            min={0}
+            value={settings.minOrderValueRupees}
+            onChange={(e) => setSettings({ ...settings, minOrderValueRupees: Number(e.target.value) })}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+          />
+          {/*
+            Campaign-wide gate on whether the wheel appears AT ALL — distinct from the
+            per-prize minimum below, which only decides which prizes are in the pool. A
+            customer under this figure sees no wheel; one over it sees a wheel that may
+            still exclude the expensive prizes.
+
+            Raising it is not retroactive: spins already granted stand, and it only
+            changes who qualifies from now on.
+          */}
+          <span className="mt-1 block text-xs text-gray-500">
+            Below this, the customer sees no wheel at all. Per-prize minimums are separate
+            and only decide which prizes they can win. Changing this never affects spins
+            already taken.
+          </span>
+        </label>
 
         <label className="mt-4 block text-sm">
           <span className="mb-1 block font-medium text-gray-700">
