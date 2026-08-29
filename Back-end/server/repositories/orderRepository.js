@@ -6,16 +6,36 @@ class OrderRepository extends BaseRepository {
     super(Order);
   }
 
+  /**
+   * A user's orders, newest first.
+   *
+   * @param {object} [options]
+   * @param {string|null} [options.select=null] - projection. Null means the whole
+   *   document, which is what every caller got before and what an un-migrated caller
+   *   keeps getting. Opt in to a narrower shape explicitly.
+   * @param {boolean} [options.withProducts=true] - join `items.product` for name/images.
+   *   The CRM timeline sets this false: it never renders a line item, so the lookup is
+   *   pure cost.
+   */
   async findByUser(userId, options = {}) {
-    const { limit = 10, skip = 0, session = null } = options;
+    const {
+      limit = 10,
+      skip = 0,
+      session = null,
+      select = null,
+      withProducts = true,
+    } = options;
+    // .lean() stays TERMINAL: every conditional clause is applied to the query first.
+    // Chaining after it works in Mongoose but reads as though lean were just another
+    // modifier, and it is the step that stops returning a query you can keep building.
     let q = Order.find({ user: userId })
-      .populate('items.product', 'name images')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
-      .lean();
+      .limit(limit);
+    if (select) q = q.select(select);
+    if (withProducts) q = q.populate('items.product', 'name images');
     if (session) q = q.session(session);
-    return q;
+    return q.lean();
   }
 
   async countByUser(userId, session = null) {
@@ -268,16 +288,19 @@ class OrderRepository extends BaseRepository {
   }
 
   async findAllAdmin(query, options = {}) {
-    const { limit = 20, skip = 0, sort = { createdAt: -1 }, session = null } = options;
+    // Same opt-in rule as findByUser: null = the whole document.
+    const {
+      limit = 20, skip = 0, sort = { createdAt: -1 }, session = null, select = null,
+    } = options;
     let q = Order.find(query)
       .populate('user', 'name email')
       .populate('items.product', 'name')
       .sort(sort)
       .skip(skip)
-      .limit(limit)
-      .lean();
+      .limit(limit);
+    if (select) q = q.select(select);
     if (session) q = q.session(session);
-    return q;
+    return q.lean();
   }
 
   /**

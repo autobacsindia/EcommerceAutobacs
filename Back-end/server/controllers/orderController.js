@@ -1,4 +1,5 @@
 import orderRepository from '../repositories/orderRepository.js';
+import { CUSTOMER_LIST_FIELDS, ADMIN_LIST_FIELDS } from '../repositories/orderProjections.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import userRepository from '../repositories/userRepository.js';
@@ -76,7 +77,11 @@ export const getOrders = async (req, res) => {
   const skip = (Number(page) - 1) * Number(limit);
 
   const [orders, total] = await Promise.all([
-    orderRepository.findByUser(req.user.id, { skip, limit: Number(limit) }),
+    // Projected: the list card renders 7 fields; the whole document averages 1829 B
+    // against 440 B of those. See CUSTOMER_LIST_FIELDS for the measurement.
+    orderRepository.findByUser(req.user.id, {
+      skip, limit: Number(limit), select: CUSTOMER_LIST_FIELDS,
+    }),
     orderRepository.countByUser(req.user.id)
   ]);
 
@@ -1788,7 +1793,10 @@ export const getAllOrdersAdmin = async (req, res) => {
   const sort = { [sortField]: sortOrder };
 
   const [orders, total] = await Promise.all([
-    orderRepository.findAllAdmin(query, { skip, limit, sort }),
+    // Projected — see ADMIN_LIST_FIELDS. Covers the table, the status control, the
+    // refund badge and both CSV exports; `statusHistory` (the heaviest field, and one
+    // that grows with every transition) is read by none of them.
+    orderRepository.findAllAdmin(query, { skip, limit, sort, select: ADMIN_LIST_FIELDS }),
     orderRepository.count(query)
   ]);
 

@@ -152,4 +152,57 @@ describe('OrdersPage', () => {
         expect(screen.queryByText(/Product 2/i)).not.toBeInTheDocument();
     });
   });
+
+  /**
+   * The split-order badge.
+   *
+   * `order.status` is a roll-up: it sits at "Shipped" until the LAST parcel lands. On a
+   * list that is the only signal, so a customer already holding one of two boxes was
+   * shown exactly what a customer holding nothing was shown.
+   */
+  describe('split-order progress badge', () => {
+    const withShipments = (shipments: unknown[]) => ({
+      ...mockOrders,
+      orders: [{ ...mockOrders.orders[0], status: 'shipped', shipments }],
+    });
+
+    it('says how many parcels have landed', async () => {
+      (orderService.getUserOrders as jest.Mock).mockResolvedValue(withShipments([
+        { _id: 's1', status: 'delivered', deliveredAt: '2023-01-05T00:00:00Z', lines: [] },
+        { _id: 's2', status: 'shipped', lines: [] },
+      ]));
+      render(<OrdersPage />);
+      await waitFor(() => {
+        expect(screen.getByText('1 of 2 parcels delivered')).toBeInTheDocument();
+      });
+    });
+
+    it('falls back to parcels shipped when none has arrived', async () => {
+      (orderService.getUserOrders as jest.Mock).mockResolvedValue(withShipments([
+        { _id: 's1', status: 'shipped', lines: [] },
+        { _id: 's2', status: 'shipped', lines: [] },
+      ]));
+      render(<OrdersPage />);
+      await waitFor(() => {
+        expect(screen.getByText('2 of 2 parcels shipped')).toBeInTheDocument();
+      });
+    });
+
+    // One box adds nothing the order status has not already said.
+    it('stays quiet for a single-parcel order', async () => {
+      (orderService.getUserOrders as jest.Mock).mockResolvedValue(withShipments([
+        { _id: 's1', status: 'shipped', lines: [] },
+      ]));
+      render(<OrdersPage />);
+      await waitFor(() => screen.getAllByText(/Product 1/i)[0]);
+      expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
+    });
+
+    // Every order placed before split shipments existed carries no parcels at all.
+    it('stays quiet for a legacy parcel-less order', async () => {
+      render(<OrdersPage />);
+      await waitFor(() => screen.getAllByText(/Product 1/i)[0]);
+      expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
+    });
+  });
 });

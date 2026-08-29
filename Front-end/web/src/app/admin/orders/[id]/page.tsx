@@ -13,6 +13,8 @@ import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
 import { buildOrderLines } from '@/lib/orderLines';
 import OrderShipments from '@/components/admin/OrderShipments';
+import { outstandingParcels } from '@/lib/orderFulfilment';
+import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import type { OrderPaymentSummary } from '@/lib/types';
 
 // Fulfillment stages an admin can move to (mirrors the list page + backend rules).
@@ -53,6 +55,13 @@ interface Order {
   status: string;
   paymentStatus?: string;
   items: OrderItem[];
+  /**
+   * Parcels. Already on the wire (GET /orders/:id returns the whole document), and
+   * read here ONLY to size the "this delivers every parcel" warning. The Parcels panel
+   * fetches its own authoritative copy from the fulfilment endpoint — this is not a
+   * second source of truth for what is in a box.
+   */
+  shipments?: ShipmentSummary[];
   shippingAddress: {
     fullName: string;
     phone: string;
@@ -712,6 +721,12 @@ export default function AdminOrderDetailPage() {
           orderNumber={order.orderNumber}
           currentStatus={order.status}
           newStatus={pendingStatus}
+          /*
+            Same disclosure as the orders list: picking `delivered` runs
+            deliverAllOutstanding, landing every parcel still in flight and emailing the
+            customer once per parcel. The Parcels panel above is the one-at-a-time path.
+          */
+          deliversParcelCount={outstandingParcels(order)}
           notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingStatus)}
           onConfirm={confirmStatusChange}
           onClose={() => setPendingStatus(null)}

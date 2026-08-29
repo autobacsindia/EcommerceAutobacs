@@ -16,6 +16,9 @@ import BulkActionsBar from '@/components/orders/BulkActionsBar';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatDateIST, formatTimeIST, formatIsoDateIST, formatIsoDateTimeIST } from '@/lib/datetime';
+import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
+import { outstandingParcels } from '@/lib/orderFulfilment';
+import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -67,6 +70,11 @@ interface Order {
     email: string;
   };
   items: any[];
+  /**
+   * Parcels. Already on the wire — the admin list endpoint returns whole order
+   * documents — so both the split badge and the delivered warning cost no request.
+   */
+  shipments?: ShipmentSummary[];
 }
 
 // Who cancelled the order — mirrors the wording on the order detail page so the list and
@@ -190,6 +198,8 @@ function AdminOrdersPageInner() {
     to: string;
     /** Units on the order — the dialog names how many ship together in one parcel. */
     unitCount: number;
+    /** Outstanding parcels, for the delivered-side warning. */
+    parcelCount: number;
   } | null>(null);
   const [pendingBulk, setPendingBulk] = useState<{
     status: string;
@@ -283,6 +293,14 @@ function AdminOrdersPageInner() {
       */
       unitCount: (order.items ?? []).reduce(
         (n: number, i: { quantity?: number }) => n + (i?.quantity ?? 1), 0),
+      /*
+        Parcels this change would land at once. `delivered` runs deliverAllOutstanding
+        server-side, which is required — the per-line return window reads parcel dates,
+        so leaving them at `shipped` would keep every window shut — but on a split order
+        it is a decision worth naming, and it emails the customer once per parcel.
+        Counts only the parcels still in flight; already-delivered ones are no-ops.
+      */
+      parcelCount: outstandingParcels(order),
     });
   };
 
@@ -687,6 +705,16 @@ function AdminOrdersPageInner() {
                             </option>
                           ))}
                         </select>
+                        {/*
+                          Split-order progress. Without it a 1-of-3-delivered order read
+                          exactly like a 0-of-3 one: the dropdown shows `Shipped` for
+                          both, because the order status only flips once the LAST parcel
+                          lands. Self-hiding at one parcel.
+                        */}
+                        <ParcelProgressBadge
+                          order={order}
+                          className="mt-1 block text-[11px] font-medium text-gray-500"
+                        />
                         {/* Cancellation attribution — admin vs customer at a glance, no drill-in. */}
                         {order.status === 'cancelled' && order.cancelledBy && CANCELLED_BY_TEXT[order.cancelledBy] && (
                           <div className="mt-1 text-[11px] text-gray-400">{CANCELLED_BY_TEXT[order.cancelledBy]}</div>
@@ -766,6 +794,7 @@ function AdminOrdersPageInner() {
           currentStatus={pendingChange.from}
           newStatus={pendingChange.to}
           shipsEverythingCount={pendingChange.unitCount}
+          deliversParcelCount={pendingChange.parcelCount}
           orderHref={`/admin/orders/${pendingChange.orderId}`}
           notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingChange.to)}
           onConfirm={confirmStatusChange}

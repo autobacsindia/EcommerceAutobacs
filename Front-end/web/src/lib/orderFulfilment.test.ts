@@ -7,7 +7,14 @@
  * button at all for something they are entitled to send back.
  */
 
-import { deliveredAtForItem, canReturnItem, daysSince } from './orderFulfilment';
+import {
+  deliveredAtForItem,
+  canReturnItem,
+  daysSince,
+  fulfilmentStateForItem,
+  parcelProgress,
+  outstandingParcels,
+} from './orderFulfilment';
 import type { FulfilmentOrder } from './orderFulfilment';
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
@@ -96,5 +103,133 @@ describe('canReturnItem', () => {
   it('accepts just inside the window', () => {
     const order: FulfilmentOrder = { shipments: [], deliveredAt: daysAgo(3) };
     expect(canReturnItem(order, 'a', WINDOW)).toBe(true);
+  });
+});
+
+describe('fulfilmentStateForItem', () => {
+  // The whole point: on a split order these two lines are in different places, and the
+  // order status ('shipped') is honest about neither of them.
+  it('reports each line independently on a split order', () => {
+    const order: FulfilmentOrder = {
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'a', quantity: 1 }] },
+        { _id: 's2', status: 'shipped', lines: [{ itemId: 'b', quantity: 1 }] },
+      ],
+    };
+    expect(fulfilmentStateForItem(order, 'a')).toBe('delivered');
+    expect(fulfilmentStateForItem(order, 'b')).toBe('shipped');
+    expect(fulfilmentStateForItem(order, 'c')).toBe('pending');
+  });
+
+  it('reports a packed-but-not-dispatched line as packed', () => {
+    const order: FulfilmentOrder = {
+      shipments: [{ _id: 's1', status: 'packed', lines: [{ itemId: 'a', quantity: 1 }] }],
+    };
+    expect(fulfilmentStateForItem(order, 'a')).toBe('packed');
+  });
+
+  // A lost parcel's units go back to the to-ship pool, so the customer is waiting again.
+  // Calling it anything else claims they hold goods the courier destroyed.
+  it('treats a line whose only parcel was lost as pending', () => {
+    const order: FulfilmentOrder = {
+      shipments: [{ _id: 's1', status: 'lost', deliveredAt: daysAgo(1), lines: [{ itemId: 'a', quantity: 1 }] }],
+    };
+    expect(fulfilmentStateForItem(order, 'a')).toBe('pending');
+  });
+
+  // Least-advanced wins. A green "Delivered" over a line where 1 of 2 units is still in
+  // a warehouse hides the missing unit — the expensive direction of this error.
+  it('takes the LEAST advanced state when a line spans parcels', () => {
+    const order: FulfilmentOrder = {
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'a', quantity: 1 }] },
+        { _id: 's2', status: 'shipped', lines: [{ itemId: 'a', quantity: 1 }] },
+      ],
+    };
+    expect(fulfilmentStateForItem(order, 'a', 2)).toBe('shipped');
+  });
+
+  it('is pending when the parcels are short of the ordered quantity', () => {
+    const order: FulfilmentOrder = {
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'a', quantity: 1 }] },
+      ],
+    };
+    // 1 of 3 units delivered: the line is NOT delivered.
+    expect(fulfilmentStateForItem(order, 'a', 3)).toBe('pending');
+    // Without a quantity there is nothing to compare against, so the parcels speak.
+    expect(fulfilmentStateForItem(order, 'a')).toBe('delivered');
+  });
+
+  // Every order placed before parcels existed. A chip on those would be invented state.
+  it('returns null for an order with no parcels', () => {
+    expect(fulfilmentStateForItem({}, 'a')).toBeNull();
+    expect(fulfilmentStateForItem({ shipments: [] }, 'a')).toBeNull();
+  });
+});
+
+describe('parcelProgress', () => {
+  const parcels = (...statuses: Array<'packed' | 'shipped' | 'delivered' | 'lost'>): FulfilmentOrder => ({
+    shipments: statuses.map((status, i) => ({ _id: `s${i}`, status, lines: [] })),
+  });
+
+  // The bug the badge exists to fix: both of these render as "Shipped" on a list.
+  it('distinguishes a partly delivered split order from an untouched one', () => {
+    expect(parcelProgress(parcels('delivered', 'shipped')).label).toBe('1 of 2 parcels delivered');
+    expect(parcelProgress(parcels('shipped', 'shipped')).label).toBe('2 of 2 parcels shipped');
+  });
+
+  it('says so when every parcel has landed', () => {
+    expect(parcelProgress(parcels('delivered', 'delivered')).label).toBe('All 2 parcels delivered');
+  });
+
+  it('reports parcels still being packed', () => {
+    expect(parcelProgress(parcels('packed', 'packed')).label).toBe('2 parcels · preparing');
+  });
+
+  // Lost parcels are excluded: nobody is waiting on a box that was written off, and
+  // counting it would make "1 of 3" understate how much actually shipped.
+  it('excludes lost parcels from the count', () => {
+    const p = parcelProgress(parcels('delivered', 'shipped', 'lost'));
+    expect(p.total).toBe(2);
+    expect(p.label).toBe('1 of 2 parcels delivered');
+  });
+
+  // Self-hiding: one box adds nothing the order status has not already said, and a
+  // legacy order has no boxes at all.
+  it('renders no label for a single-parcel or parcel-less order', () => {
+    expect(parcelProgress(parcels('shipped')).label).toBeNull();
+    expect(parcelProgress(parcels('delivered', 'lost')).label).toBeNull();
+    expect(parcelProgress({}).label).toBeNull();
+    expect(parcelProgress({ shipments: [] }).isSplit).toBe(false);
+  });
+});
+
+describe('outstandingParcels', () => {
+  // Must match the server's deliverAllOutstanding, which moves shipped AND packed.
+  // The count is shown to an admin before an irreversible, customer-emailing action.
+  it('counts parcels in transit and still being packed', () => {
+    expect(outstandingParcels({
+      shipments: [
+        { _id: 's1', status: 'shipped', lines: [] },
+        { _id: 's2', status: 'packed', lines: [] },
+      ],
+    })).toBe(2);
+  });
+
+  // Delivering an already-delivered parcel is a no-op server-side, so quoting it would
+  // overstate what the click does.
+  it('ignores parcels already delivered, and ones written off as lost', () => {
+    expect(outstandingParcels({
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: daysAgo(1), lines: [] },
+        { _id: 's2', status: 'lost', lines: [] },
+        { _id: 's3', status: 'shipped', lines: [] },
+      ],
+    })).toBe(1);
+  });
+
+  it('is zero for an order with no parcels', () => {
+    expect(outstandingParcels({})).toBe(0);
   });
 });

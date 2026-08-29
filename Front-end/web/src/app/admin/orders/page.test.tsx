@@ -251,4 +251,102 @@ describe('AdminOrdersPage', () => {
         });
     }
   });
+
+  /**
+   * Split shipments on the admin list.
+   *
+   * Two gaps, both from the same root cause: `Order.status` is a roll-up that does not
+   * move until the LAST parcel does, so the list could neither SHOW partial progress
+   * nor WARN that "Delivered" lands every parcel at once (and emails the customer once
+   * per parcel). Shipping from this screen already warned; delivering did not.
+   */
+  describe('split shipments', () => {
+    const withParcels = (shipments: unknown[]) => ({
+      ...mockOrders,
+      orders: [{ ...mockOrders.orders[0], status: 'shipped', shipments }],
+    });
+
+    const serve = (payload: unknown) => {
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+          return Promise.resolve({ carriers: [{ name: 'Delhivery', code: 'DELHIVERY' }] });
+        }
+        return Promise.resolve(payload);
+      });
+    };
+
+    it('shows how far a split order has actually got', async () => {
+      serve(withParcels([
+        { _id: 's1', status: 'delivered', deliveredAt: '2023-01-05T00:00:00Z', lines: [] },
+        { _id: 's2', status: 'shipped', lines: [] },
+      ]));
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('1 of 2 parcels delivered')).toBeInTheDocument();
+      });
+    });
+
+    // Without the badge these two rows are indistinguishable — both read "Shipped".
+    it('shows nothing extra for a single-parcel order', async () => {
+      serve(withParcels([{ _id: 's1', status: 'shipped', lines: [] }]));
+      renderPage();
+
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+      expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
+    });
+
+    it('warns that Delivered lands every outstanding parcel at once', async () => {
+      serve(withParcels([
+        { _id: 's1', status: 'shipped', lines: [] },
+        { _id: 's2', status: 'shipped', lines: [] },
+      ]));
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      const row = screen.getByText(/ORD-001/).closest('tr');
+      fireEvent.change(within(row!).getByRole('combobox'), { target: { value: 'delivered' } });
+
+      await waitFor(() => {
+        expect(screen.getByText(/all 2 parcels/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/once per parcel/i)).toBeInTheDocument();
+      // Still a confirmation, not an action: nothing fires until the admin confirms.
+      expect(apiClient.put).not.toHaveBeenCalled();
+    });
+
+    // Already-delivered parcels are no-ops server-side, so quoting them would overstate
+    // what the click actually does.
+    it('counts only the parcels still in flight', async () => {
+      serve(withParcels([
+        { _id: 's1', status: 'delivered', deliveredAt: '2023-01-05T00:00:00Z', lines: [] },
+        { _id: 's2', status: 'shipped', lines: [] },
+        { _id: 's3', status: 'shipped', lines: [] },
+      ]));
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      const row = screen.getByText(/ORD-001/).closest('tr');
+      fireEvent.change(within(row!).getByRole('combobox'), { target: { value: 'delivered' } });
+
+      await waitFor(() => {
+        expect(screen.getByText(/all 2 parcels/i)).toBeInTheDocument();
+      });
+    });
+
+    // A legacy order has no parcels at all; the warning would be meaningless.
+    it('does not warn for a parcel-less order', async () => {
+      serve({ ...mockOrders, orders: [{ ...mockOrders.orders[0], status: 'shipped' }] });
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      const row = screen.getByText(/ORD-001/).closest('tr');
+      fireEvent.change(within(row!).getByRole('combobox'), { target: { value: 'delivered' } });
+
+      await waitFor(() => {
+        expect(screen.getByText(/customer will be emailed/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
+    });
+  });
 });

@@ -71,6 +71,7 @@ jest.unstable_mockModule('../../../services/loyaltyConfigService.js', () => ({
 }));
 
 const { userCartFilter } = await import('../../../repositories/cartRepository.js');
+const { CUSTOMER_LIST_FIELDS } = await import('../../../repositories/orderProjections.js');
 
 // Import controller
 const { 
@@ -122,6 +123,9 @@ describe('OrderController Unit Tests', () => {
         sort: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
+        // The list read is projected — the card renders a handful of fields against a
+        // ~1829 B document. See repositories/orderProjections.js.
+        select: jest.fn().mockReturnThis(),
         lean: jest.fn().mockResolvedValue(mockOrdersList)
       };
       
@@ -137,6 +141,8 @@ describe('OrderController Unit Tests', () => {
       expect(mockChain.sort).toHaveBeenCalledWith({ createdAt: -1 });
       expect(mockChain.skip).toHaveBeenCalledWith(0);
       expect(mockChain.limit).toHaveBeenCalledWith(10);
+      // Projected, not the whole document — `statusHistory` and friends stay out.
+      expect(mockChain.select).toHaveBeenCalledWith(CUSTOMER_LIST_FIELDS);
       
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
