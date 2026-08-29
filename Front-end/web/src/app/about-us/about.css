@@ -1,0 +1,16 @@
+/*
+ * Display typography for /about-us.
+ *
+ * Same treatment as the careers hero: Bebas Neue, condensed all-caps, tight
+ * leading. The face is self-hosted by next/font on the page root (CSP blocks
+ * fonts.gstatic.com — never reintroduce a Google Fonts <link>), and exposed as
+ * --font-bebas. Sizes stay on the elements as Tailwind utilities so each
+ * heading can set its own scale.
+ */
+.about-display {
+  font-family: var(--font-bebas), sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 0.92;
+}
