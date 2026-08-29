@@ -12,6 +12,7 @@ import { Package, Eye, Filter, Search, ChevronDown } from 'lucide-react';
 import OrderHistorySkeleton from '@/components/skeletons/OrderHistorySkeleton';
 import { formatLongDateTimeIST } from '@/lib/datetime';
 import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
+import { hasCancellations } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 interface Order {
@@ -32,6 +33,8 @@ interface Order {
    * so the split-order badge below costs no extra request.
    */
   shipments?: ShipmentSummary[];
+  /** Cancelled lines, for the partial-cancellation badge. Also already on the wire. */
+  cancellations?: Array<{ _id: string; lines?: Array<{ itemId: string; quantity: number }> }>;
 }
 
 export default function OrdersPage() {
@@ -284,6 +287,17 @@ export default function OrdersPage() {
                       order={order}
                       className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-gold/30 text-gold/90"
                     />
+                    {/*
+                      Partly cancelled orders keep a live fulfilment status (`processing`
+                      or `shipped`), so without this the list gives no sign that part of
+                      the order was killed and refunded. Only PARTIAL: a wholly cancelled
+                      order already reads `Cancelled` in the status chip above.
+                    */}
+                    {hasCancellations(order) && order.status.toLowerCase() !== 'cancelled' && (
+                      <span className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-red-500/30 text-red-400">
+                        Part cancelled
+                      </span>
+                    )}
                   </div>
                 </div>
 

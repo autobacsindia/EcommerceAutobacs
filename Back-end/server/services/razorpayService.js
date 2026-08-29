@@ -6,6 +6,7 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import orderRepository from '../repositories/orderRepository.js';
+import { applyCancellationRefundSideEffectsOnce } from './cancellationRefundSideEffects.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderStatusService from './orderStatusService.js';
@@ -412,7 +413,7 @@ class RazorpayService {
    * @param {string} [opts.speed='normal'] - 'normal' (free) or 'optimum' (instant, fee).
    * @returns {Promise<{success: boolean, refundId: string, status: string, amount: number}>}
    */
-  async refundPayment(paymentId, amountPaise, { orderId, returnId, reason, speed = 'normal' } = {}) {
+  async refundPayment(paymentId, amountPaise, { orderId, returnId, cancellationId, reason, speed = 'normal' } = {}) {
     if (!paymentId || !amountPaise) {
       throw new Error('paymentId and amount are required');
     }
@@ -432,6 +433,12 @@ class RazorpayService {
           // Present only for return-refunds; routes the webhook to the authoritative
           // ReturnRequest so multi-return orders reconcile per-return, not per-order.
           ...(returnId ? { returnId } : {}),
+          // Same idea for a PARTIAL cancellation: the authoritative record is the
+          // Order.cancellations[] entry, not order.refundDetails, because one order can
+          // hold several cancellation refunds that would otherwise fight over that
+          // single summary field. Without this the webhook has nothing to route on and
+          // a normal-speed refund never leaves `processing`.
+          ...(cancellationId ? { cancellationId } : {}),
           reason: reason || 'order_cancelled'
         }
       });
@@ -797,6 +804,16 @@ class RazorpayService {
       return this.applyReturnRefundWebhook(refundId, returnId, refundEntity, finalStatus);
     }
 
+    // Same for a partial cancellation: its authoritative record is the
+    // Order.cancellations[] entry. Without this branch the refund falls through to the
+    // order-level path below, mismatches on `refundDetails.transactionId`, and the
+    // cancellation is left in `processing` for ever — with its LTV decrement and its
+    // Payment.refundAmount increment never running.
+    const cancellationId = refundEntity.notes?.cancellationId;
+    if (cancellationId) {
+      return this.applyCancellationRefundWebhook(refundId, cancellationId, refundEntity, finalStatus);
+    }
+
     let order = null;
     if (orderId) {
       order = await orderRepository.findById(orderId);
@@ -874,6 +891,74 @@ class RazorpayService {
           );
       }
     }
+  }
+
+  /**
+   * Apply a terminal refund webhook to a PARTIAL-CANCELLATION refund.
+   *
+   * The authoritative record is `Order.cancellations[].refund`, keyed by
+   * razorpayRefundId — one order can hold several cancellation refunds, and reconciling
+   * them through the single `order.refundDetails` summary would let the last one
+   * overwrite the rest.
+   *
+   * Every write is a CONDITIONAL update matched on the record's current state, so a
+   * replayed webhook, or one racing the controller that initiated the refund, is a
+   * no-op rather than a double-count.
+   *
+   * @param {string} refundId
+   * @param {string} cancellationId - from the refund's notes
+   * @param {Object} refundEntity
+   * @param {'completed'|'failed'} finalStatus
+   */
+  async applyCancellationRefundWebhook(refundId, cancellationId, refundEntity, finalStatus) {
+    const orderId = refundEntity.notes?.orderId;
+    let order = orderId ? await orderRepository.findById(orderId).catch(() => null) : null;
+    if (!order) {
+      order = await orderRepository.findOne({ 'cancellations.refund.razorpayRefundId': refundId })
+        .catch(() => null);
+    }
+    if (!order) {
+      console.error(`[Webhook] cancellation refund.${finalStatus} for unresolvable order | refundId: ${refundId} | cancellationId: ${cancellationId}`);
+      return;
+    }
+
+    const record = (order.cancellations || [])
+      .find((c) => String(c._id) === String(cancellationId));
+    if (!record) {
+      console.error(`[Webhook] cancellation refund.${finalStatus} for unknown cancellation ${cancellationId} on order ${order._id}`);
+      return;
+    }
+
+    // Guard: only act on OUR refund. A mismatched id means a stale or different one.
+    if (record.refund?.razorpayRefundId && record.refund.razorpayRefundId !== refundId) {
+      console.warn(`[Webhook] cancellation refund id mismatch on order ${order._id} | stored: ${record.refund.razorpayRefundId} | webhook: ${refundId}`);
+      return;
+    }
+    // Idempotency: already terminal → nothing to do.
+    if (record.refund?.status === finalStatus) return;
+
+    const settled = await orderRepository.settleCancellationRefund(
+      order._id, record._id, finalStatus,
+      finalStatus === 'completed'
+        ? { razorpayRefundId: refundId }
+        : {
+          razorpayRefundId: refundId,
+          failureReason: refundEntity.error?.description || 'Refund failed at gateway',
+        },
+    );
+    // Matched on `processing`, so null means the controller already settled it — the
+    // instant-refund path. Not an error, just nothing left to do.
+    if (!settled) return;
+
+    if (finalStatus !== 'completed') return;
+
+    /*
+      The two non-idempotent side effects, behind the same once-only claim the
+      controller uses. An instant refund whose webhook lands after the controller has
+      already run them must not count the same money twice.
+    */
+    await applyCancellationRefundSideEffectsOnce(
+      order._id, record._id, order.payment, refundEntity.amount || 0);
   }
 
   /**

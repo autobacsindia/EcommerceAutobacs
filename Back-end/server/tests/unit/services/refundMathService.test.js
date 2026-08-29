@@ -217,3 +217,69 @@ describe('remainingRefundable', () => {
     });
   });
 });
+
+/**
+ * Partial cancellations draw from the same captured payment as returns do.
+ *
+ * Without counting them, an order could be partly cancelled and refunded, then have the
+ * SAME money drawn again by a return or a whole-order cancel. Our own records would say
+ * yes and the gateway would then reject it with an opaque "refund amount provided is
+ * greater than amount captured" — after the second refund had already been claimed.
+ */
+describe('remainingRefundable — partial cancellations', () => {
+  const order = (cancellations) => ({ totalAmount: 1000, cancellations });
+
+  it('subtracts a completed cancellation refund from the headroom', () => {
+    const res = remainingRefundable(order([
+      { _id: 'c1', refund: { status: 'completed', amountPaise: 40000 } },
+    ]));
+    expect(res.alreadyRefundedRupees).toBe(400);
+    expect(res.remainingRupees).toBe(600);
+  });
+
+  // Processing counts too: the money is already on its way to the gateway.
+  it('subtracts one that is still processing', () => {
+    expect(remainingRefundable(order([
+      { _id: 'c1', refund: { status: 'processing', amountPaise: 25000 } },
+    ])).remainingRupees).toBe(750);
+  });
+
+  it('ignores pending, failed and not_applicable records — no money moved', () => {
+    expect(remainingRefundable(order([
+      { _id: 'c1', refund: { status: 'pending', amountPaise: 40000 } },
+      { _id: 'c2', refund: { status: 'failed', amountPaise: 40000 } },
+      { _id: 'c3', refund: { status: 'not_applicable', amountPaise: 40000 } },
+    ])).remainingRupees).toBe(1000);
+  });
+
+  // The record being refunded right now must not count against itself, or its own
+  // claimed amount would halve the headroom it is about to draw from.
+  it('excludes the cancellation currently being refunded', () => {
+    const res = remainingRefundable(
+      order([{ _id: 'c1', refund: { status: 'processing', amountPaise: 40000 } }]),
+      [], null, null, 'c1',
+    );
+    expect(res.remainingRupees).toBe(1000);
+  });
+
+  /*
+    amountPaise is stored in PAISE, unlike ReturnRequest.refund.finalAmount which is
+    rupees. Running it through toPaise() would multiply by 100 and wipe out the entire
+    headroom on the first partial cancel — every later refund would then be refused.
+  */
+  it('treats amountPaise as paise, not rupees', () => {
+    expect(remainingRefundable(order([
+      { _id: 'c1', refund: { status: 'completed', amountPaise: 100 } },
+    ])).remainingRupees).toBe(999);
+  });
+
+  it('never goes negative when refunds exceed the capture', () => {
+    expect(remainingRefundable(order([
+      { _id: 'c1', refund: { status: 'completed', amountPaise: 500000 } },
+    ])).remainingRupees).toBe(0);
+  });
+
+  it('is unchanged for an order that has no cancellations', () => {
+    expect(remainingRefundable({ totalAmount: 1000 }).remainingRupees).toBe(1000);
+  });
+});

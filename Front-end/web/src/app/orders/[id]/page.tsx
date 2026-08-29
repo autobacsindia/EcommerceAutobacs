@@ -31,6 +31,8 @@ import {
   deliveredAtForItem,
   fulfilmentStateForItem,
   parcelProgress,
+  cancelledQuantityForItem,
+  hasCancellations,
 } from '@/lib/orderFulfilment';
 import type { ItemFulfilmentState } from '@/lib/orderFulfilment';
 
@@ -94,6 +96,21 @@ interface OrderDetail {
     lines?: Array<{ itemId: string; quantity: number }>;
     includesReward?: boolean;
     deliveredAt?: string | null;
+  }>;
+  /**
+   * Lines cancelled before delivery, with the refund for each. Already on the wire —
+   * GET /orders/:id returns the whole order document.
+   */
+  cancellations?: Array<{
+    _id: string;
+    lines?: Array<{ itemId: string; quantity: number }>;
+    cancelledAt?: string;
+    refund?: {
+      productValuePaise?: number;
+      amountPaise?: number;
+      status?: 'not_applicable' | 'pending' | 'processing' | 'completed' | 'failed';
+      completedAt?: string;
+    };
   }>;
   /**
    * Won Spin-to-Win reward. Stored beside the order, never inside `items` (a ₹0 entry
@@ -667,6 +684,97 @@ export default function OrderDetailPage() {
           cardClass={cardClass}
         />
 
+        {/*
+          Cancelled lines and the money coming back for them.
+
+          Shown ABOVE the items for the same reason as the parcels: a customer who
+          opened this page after a "we cancelled part of your order" email is asking
+          where their money is, not what they bought.
+
+          ⚠️ The amounts are read from the server's records — `productValuePaise` before
+          the refund is sent, `amountPaise` after. Nothing here multiplies a price by a
+          quantity: the line's list value is not what was paid once a coupon is in play,
+          and showing that figure would promise a refund larger than the one arriving.
+        */}
+        {hasCancellations(order) && (
+          <div className={cardClass}>
+            <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">
+              Cancelled Items
+            </h2>
+            <div className="space-y-4">
+              {(order.cancellations || []).map((cancellation) => {
+                const refund = cancellation.refund;
+                const paise = (refund?.amountPaise || 0) > 0
+                  ? refund!.amountPaise!
+                  : (refund?.productValuePaise || 0);
+                const names = (cancellation.lines || []).map((l) => {
+                  const item = order.items.find((i) => String(i._id) === String(l.itemId));
+                  return `${item?.name || item?.product?.name || 'Item'} × ${l.quantity}`;
+                });
+                return (
+                  <div key={cancellation._id} className="border-b border-hairline pb-4 last:border-b-0 last:pb-0">
+                    <p className="text-ink/70 font-display text-sm">{names.join(', ')}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-display">
+                      {cancellation.cancelledAt && (
+                        <span className="text-ink-muted">
+                          Cancelled {formatLongDateIST(cancellation.cancelledAt)}
+                        </span>
+                      )}
+                      {/*
+                        ⚠️ Only PROMISE money for a refund that is actually moving.
+
+                        `productValuePaise` is computed for every cancellation, including
+                        one on an order that was never paid — where the status is
+                        `not_applicable` and nothing is owed. Falling back to it and
+                        treating anything non-completed as "on its way" told a customer
+                        "₹500.00 refund on its way" for money that was never taken, and
+                        said the same after the gateway had REJECTED the refund.
+                      */}
+                      {(() => {
+                        const status = refund?.status;
+                        if (!paise || status === 'not_applicable') return null;
+                        if (status === 'completed') {
+                          return (
+                            <span className="text-green-400 font-bold">
+                              ₹{(paise / 100).toFixed(2)} refunded
+                            </span>
+                          );
+                        }
+                        if (status === 'failed') {
+                          // Say it plainly rather than silently: the customer is owed
+                          // this and needs to know it has not arrived.
+                          return (
+                            <span className="text-red-400 font-bold">
+                              ₹{(paise / 100).toFixed(2)} refund failed — our team is on it
+                            </span>
+                          );
+                        }
+                        // pending / processing — genuinely on its way.
+                        return (
+                          <span className="text-gold font-bold">
+                            ₹{(paise / 100).toFixed(2)} refund on its way
+                          </span>
+                        );
+                      })()}
+                      {refund?.completedAt && (
+                        <span className="text-ink-muted">
+                          {formatLongDateIST(refund.completedAt)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {(order.cancellations || []).some((c) => c.refund?.status && c.refund.status !== 'not_applicable') && (
+              <p className="mt-4 text-[11px] text-ink-muted font-display">
+                Refunds return to your original payment method and usually settle within 5–7 business days.
+                The order total above is what was originally charged.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Order Items */}
         <div className={cardClass}>
           {/*
@@ -706,13 +814,36 @@ export default function OrderDetailPage() {
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
                     <p className="text-ink-muted font-display text-xs">₹{(item.price || 0).toFixed(2)} each</p>
                     {/*
+                      Cancelled units on this line.
+
+                      The row STAYS, with its original quantity and price. An order is
+                      the record of what was bought and charged — hiding the line would
+                      make the totals below unexplainable, since they are never rewritten
+                      when something is cancelled. The refund is the adjustment, and it
+                      is stated alongside.
+                    */}
+                    {(() => {
+                      const cancelled = cancelledQuantityForItem(order, String(item._id));
+                      if (!cancelled) return null;
+                      const whole = cancelled >= (item.quantity || 0);
+                      return (
+                        <span className="mt-1.5 inline-block px-2 py-0.5 border border-red-500/40 text-red-400 rounded-sm font-display font-bold uppercase tracking-widest text-[10px]">
+                          {whole ? 'Cancelled' : `${cancelled} of ${item.quantity} cancelled`}
+                        </span>
+                      );
+                    })()}
+                    {/*
                       Where THIS line has got to. Renders nothing on an order with no
                       parcels, so every historical order looks exactly as it did.
+                      Suppressed for a fully cancelled line: "Not shipped yet" beside
+                      "Cancelled" reads like something is still coming.
                     */}
-                    <ItemFulfilmentChip
-                      state={fulfilmentStateForItem(order, String(item._id), item.quantity)}
-                      deliveredAt={deliveredAtForItem(order, String(item._id))}
-                    />
+                    {cancelledQuantityForItem(order, String(item._id)) < (item.quantity || 0) && (
+                      <ItemFulfilmentChip
+                        state={fulfilmentStateForItem(order, String(item._id), item.quantity)}
+                        deliveredAt={deliveredAtForItem(order, String(item._id))}
+                      />
+                    )}
                   </div>
                   <div className="text-right flex flex-col items-end gap-2 shrink-0">
                     <p className="font-display font-bold text-gold">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>

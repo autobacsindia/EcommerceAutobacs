@@ -18,6 +18,8 @@ export interface ShipmentSummary {
 
 export interface FulfilmentOrder {
   shipments?: ShipmentSummary[];
+  /** Lines cancelled before delivery — those units are never coming. */
+  cancellations?: Array<{ lines?: Array<{ itemId: string; quantity: number }> }>;
   deliveredAt?: string | null;
   fulfillmentMetrics?: { deliveredAt?: string | null };
 }
@@ -124,14 +126,23 @@ export const fulfilmentStateForItem = (
   const carrying = linesFor(order, itemId);
   if (!carrying.length) return 'pending';
 
-  // Short of the ordered quantity: some units are still owed, whatever the parcels say.
+  /*
+    Short of the LIVE quantity: some units are still owed, whatever the parcels say.
+
+    Live, not ordered — cancelled units are never coming, so counting them here would
+    hold the line at `pending` for ever. A line of 3 with 1 cancelled and 2 delivered is
+    delivered, and gating anything (the Review button, for one) on the ordered figure
+    would keep it permanently unavailable.
+  */
   if (typeof quantity === 'number' && quantity > 0) {
+    const live = Math.max(0, quantity - cancelledQuantityForItem(order, itemId));
+    if (live === 0) return 'pending'; // wholly cancelled — nothing to fulfil
     const committed = carrying.reduce(
       (n, s) => n + (s.lines || [])
         .filter((l) => String(l.itemId) === String(itemId))
         .reduce((m, l) => m + (l.quantity || 0), 0),
       0);
-    if (committed < quantity) return 'pending';
+    if (committed < live) return 'pending';
   }
 
   // Least-advanced parcel wins.
@@ -194,3 +205,50 @@ export const parcelProgress = (order: FulfilmentOrder): ParcelProgress => {
  */
 export const outstandingParcels = (order: FulfilmentOrder): number =>
   (order?.shipments || []).filter((s) => s.status === 'shipped' || s.status === 'packed').length;
+
+/* ─────────────────────────────────────────────────────────────────────────────────
+   Partial cancellation — the client mirror of Back-end/server/utils/orderCancellation.js.
+
+   DISPLAY ONLY. Nothing here decides money or eligibility: the server prices every
+   refund through refundMathService and decides what may be cancelled. These helpers
+   exist so a line can be struck through and labelled without a second request, using
+   `cancellations[]` that the order endpoints already return.
+   ───────────────────────────────────────────────────────────────────────────────── */
+
+export interface CancellationSummaryLine {
+  _id?: string;
+  lines?: Array<{ itemId: string; quantity: number }>;
+  refund?: { status?: string; amountPaise?: number; productValuePaise?: number };
+}
+
+/**
+ * How many units of one order line were cancelled.
+ *
+ * Summed across every cancellation record, because a line can die in stages — two units
+ * when stock ran short, the third a week later when the customer changed their mind.
+ */
+export const cancelledQuantityForItem = (
+  order: { cancellations?: CancellationSummaryLine[] },
+  itemId: string,
+): number =>
+  (order?.cancellations || []).reduce(
+    (n, c) => n + (c.lines || [])
+      .filter((l) => String(l.itemId) === String(itemId))
+      .reduce((m, l) => m + (l.quantity || 0), 0),
+    0);
+
+/**
+ * How many units of a line are still live.
+ *
+ * ⚠️ Floored at 0 rather than trusted. A negative would only arise from inconsistent
+ * data, and rendering "-1 remaining" is worse than rendering nothing.
+ */
+export const liveQuantityForItem = (
+  order: { cancellations?: CancellationSummaryLine[] },
+  itemId: string,
+  orderedQuantity: number,
+): number => Math.max(0, orderedQuantity - cancelledQuantityForItem(order, itemId));
+
+/** Has anything on this order been cancelled? Gates all the cancellation UI. */
+export const hasCancellations = (order: { cancellations?: CancellationSummaryLine[] }): boolean =>
+  (order?.cancellations || []).length > 0;

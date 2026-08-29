@@ -372,3 +372,113 @@ describe('deliveredAtForItem', () => {
     expect(deliveredAtForReward(o)).toEqual(new Date(FRI));
   });
 });
+
+/**
+ * Cancelled units must vanish from every fulfilment question.
+ *
+ * A cancelled line has been refunded and is not owed. Leaving it in these sums does two
+ * kinds of damage: an admin is offered goods to ship that were already paid back, and
+ * the order can never be fully shipped — so it never reaches `delivered`, so karma, the
+ * review-request email and the per-line return window never fire.
+ */
+describe('cancellations', () => {
+  const A = 'itemA';
+  const B = 'itemB';
+
+  const order = (over = {}) => ({
+    items: [
+      { _id: A, name: 'Wax', quantity: 3 },
+      { _id: B, name: 'Polish', quantity: 1 },
+    ],
+    status: 'processing',
+    shipments: [],
+    cancellations: [],
+    ...over,
+  });
+
+  it('takes cancelled units out of remainingToShip', () => {
+    const o = order({ cancellations: [{ lines: [{ itemId: A, quantity: 2 }] }] });
+    expect(remainingToShip(o).find((l) => l.itemId === A).quantity).toBe(1);
+  });
+
+  it('drops a fully cancelled line from remainingToShip entirely', () => {
+    const o = order({ cancellations: [{ lines: [{ itemId: B, quantity: 1 }] }] });
+    expect(remainingToShip(o).map((l) => l.itemId)).toEqual([A]);
+  });
+
+  it('subtracts cancelled and shipped together', () => {
+    const o = order({
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: A, quantity: 1 }] }],
+      cancellations: [{ lines: [{ itemId: A, quantity: 1 }] }],
+    });
+    expect(remainingToShip(o).find((l) => l.itemId === A).quantity).toBe(1);
+  });
+
+  // The case that would otherwise strand the order short of `delivered` forever.
+  it('lets a partly cancelled order be fully shipped and fully delivered', () => {
+    const o = order({
+      cancellations: [{ lines: [{ itemId: A, quantity: 3 }] }],
+      shipments: [{
+        _id: 's1', status: 'delivered', deliveredAt: new Date(),
+        lines: [{ itemId: B, quantity: 1 }],
+      }],
+    });
+    expect(isFullyShipped(o)).toBe(true);
+    expect(isFullyDelivered(o)).toBe(true);
+    expect(rollUpStatus(o)).toBe('delivered');
+  });
+
+  // Nothing arrived, so "fully delivered" would be a lie — even though no unit is owed.
+  it('does not call an order with every line cancelled "fully delivered"', () => {
+    const o = order({
+      cancellations: [{ lines: [{ itemId: A, quantity: 3 }, { itemId: B, quantity: 1 }] }],
+    });
+    expect(isFullyDelivered(o)).toBe(false);
+  });
+
+  it('counts the summary in LIVE units, so the label can reach complete', () => {
+    const o = order({
+      cancellations: [{ lines: [{ itemId: A, quantity: 3 }] }],
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: B, quantity: 1 }] }],
+    });
+    const summary = fulfilmentSummary(o);
+    expect(summary.totalUnits).toBe(1);
+    expect(summary.shippedUnits).toBe(1);
+    expect(summary.label).toBe('Shipped');
+  });
+
+  // Every order that predates partial cancellation carries no `cancellations` at all.
+  it('leaves an order with no cancellations completely unchanged', () => {
+    const o = order();
+    delete o.cancellations;
+    expect(remainingToShip(o)).toEqual([
+      { itemId: A, name: 'Wax', quantity: 3 },
+      { itemId: B, name: 'Polish', quantity: 1 },
+    ]);
+    expect(fulfilmentSummary(o).totalUnits).toBe(4);
+  });
+});
+
+/**
+ * Drift guard.
+ *
+ * orderFulfilment re-derives `cancelledQuantityByItem` locally rather than importing it
+ * from utils/orderCancellation.js, because that module imports SHIPMENT_STATUS from
+ * here and the import would be circular. Two copies of a fold is a cheap price for
+ * breaking the cycle — but only while they agree, so this pins them together.
+ */
+describe('cancelled-quantity fold matches utils/orderCancellation', () => {
+  it('produces the same totals as the shared helper', async () => {
+    const { cancelledQuantityByItem } = await import('../../../utils/orderCancellation.js');
+    const o = {
+      items: [{ _id: 'x', quantity: 5 }],
+      cancellations: [
+        { lines: [{ itemId: 'x', quantity: 2 }] },
+        { lines: [{ itemId: 'x', quantity: 1 }] },
+      ],
+    };
+    // remainingToShip is the local fold's only observable output: 5 − 3 = 2.
+    expect(remainingToShip(o)[0].quantity).toBe(2);
+    expect(cancelledQuantityByItem(o).get('x')).toBe(3);
+  });
+});

@@ -17,7 +17,7 @@ import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/ord
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatDateIST, formatTimeIST, formatIsoDateIST, formatIsoDateTimeIST } from '@/lib/datetime';
 import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
-import { outstandingParcels } from '@/lib/orderFulfilment';
+import { outstandingParcels, hasCancellations } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
@@ -71,10 +71,12 @@ interface Order {
   };
   items: any[];
   /**
-   * Parcels. Already on the wire — the admin list endpoint returns whole order
-   * documents — so both the split badge and the delivered warning cost no request.
+   * Parcels. Projected onto the admin list read (see orderProjections.js), so both the
+   * split badge and the delivered warning cost no extra request.
    */
   shipments?: ShipmentSummary[];
+  /** Cancelled lines, for the part-cancelled badge. */
+  cancellations?: Array<{ _id: string; lines?: Array<{ itemId: string; quantity: number }> }>;
 }
 
 // Who cancelled the order — mirrors the wording on the order detail page so the list and
@@ -715,6 +717,15 @@ function AdminOrdersPageInner() {
                           order={order}
                           className="mt-1 block text-[11px] font-medium text-gray-500"
                         />
+                        {/*
+                          Part-cancelled orders keep a LIVE status (`processing` or
+                          `shipped`), so the dropdown alone gives ops no sign that some
+                          lines were killed and refunded. Only shown while the order is
+                          still live — a wholly cancelled one already reads `Cancelled`.
+                        */}
+                        {hasCancellations(order) && order.status !== 'cancelled' && (
+                          <div className="mt-1 text-[11px] font-medium text-red-600">Part cancelled</div>
+                        )}
                         {/* Cancellation attribution — admin vs customer at a glance, no drill-in. */}
                         {order.status === 'cancelled' && order.cancelledBy && CANCELLED_BY_TEXT[order.cancelledBy] && (
                           <div className="mt-1 text-[11px] text-gray-400">{CANCELLED_BY_TEXT[order.cancelledBy]}</div>

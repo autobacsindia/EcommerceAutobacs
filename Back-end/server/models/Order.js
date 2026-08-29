@@ -389,6 +389,88 @@ const OrderSchema = new mongoose.Schema({
     notes: String
   }],
 
+  /**
+   * Lines cancelled BEFORE they were delivered, each with its own refund record.
+   *
+   * ── WHY AN ARRAY, NOT A FLAG ON EACH ITEM ────────────────────────────────────────
+   * Mirrors `shipments[]` above, deliberately. A cancellation is an EVENT with a time,
+   * an author, a reason and a sum of money — not a boolean on a line. Two partial
+   * cancellations a week apart are two records, and each needs its own refund status
+   * because the first can complete while the second is still processing.
+   *
+   * It also sidesteps the trap this model has already sprung once: a `default:` on a
+   * nested path materialises a phantom subdocument on every order ever written (the
+   * bogus "PENDING / ₹0.00" return/refund cards that needed a cleanup migration). An
+   * array simply starts empty and stays absent from documents that never cancelled.
+   *
+   * ── WHAT IT DOES NOT DO ──────────────────────────────────────────────────────────
+   * It does NOT rewrite `totalAmount` / `subtotal` / `discount`. An order is an
+   * immutable financial record of what was charged; the refund is the adjustment, and
+   * the two together are the truth. Rewriting the totals would leave the order
+   * disagreeing with the invoice AND with what Razorpay actually captured, and would
+   * silently corrupt every historical revenue figure derived from them.
+   *
+   * The order's `status` is likewise untouched until the LAST live line is cancelled —
+   * only then does it roll up to `cancelled`, so the whole-order side effects (coupon
+   * release, karma clawback, spin-prize clawback, CRM detach, customer email) fire
+   * exactly once. See services/cancellationService.js.
+   */
+  cancellations: [{
+    // Human-facing number within the order ("Cancellation 2"). Assigned on push.
+    sequence: { type: Number, required: true },
+    /**
+     * Which order lines, and how many units of each, were cancelled.
+     * `itemId` refers to an `Order.items[]._id`. Cancelled + shipped units may never
+     * exceed the ordered quantity — enforced atomically at write time by
+     * services/cancellationService.js, because two admins cancelling at once would
+     * each pass a read-then-write check and together over-cancel.
+     */
+    lines: [{
+      itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      quantity: { type: Number, required: true, min: 1 },
+      _id: false
+    }],
+    reason: String,
+    notes: String,
+    cancelledAt: Date,
+    // Always an admin: customers cancel whole orders, never single lines.
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    /**
+     * The money for THESE lines.
+     *
+     * `productValuePaise` is the discount-adjusted refundable value computed by
+     * services/refundMathService.js — never Σ(price × qty), which is the list value
+     * before coupon and karma and over-refunds every discounted order. Shipping is
+     * never refunded (signed policy), so this covers goods only.
+     */
+    refund: {
+      productValuePaise: { type: Number, default: 0 },
+      // What was actually sent to the gateway. Equals productValuePaise unless the
+      // headroom cap bit (an earlier return already drew part of the capture).
+      amountPaise: { type: Number, default: 0 },
+      status: {
+        type: String,
+        enum: ["not_applicable", "pending", "processing", "completed", "failed"],
+        default: "pending"
+      },
+      razorpayRefundId: String,
+      initiatedAt: Date,
+      completedAt: Date,
+      failureReason: String,
+      /**
+       * Once-only guards for the two side effects that are NOT idempotent by nature.
+       * A refund webhook can land before this record is persisted, so both the
+       * controller and the webhook must be able to run without doubling up:
+       *   ltvAdjusted        — the customer's totalSpentPaise decrement
+       *   paymentIncremented — the atomic $inc on Payment.refundAmount
+       * Same shape as ReturnRequest.refund, for the same reason.
+       */
+      ltvAdjusted: { type: Boolean, default: false },
+      paymentIncremented: { type: Boolean, default: false }
+    }
+  }],
+
+
   trackingNumber: String,
   carrier: {
     name: String,

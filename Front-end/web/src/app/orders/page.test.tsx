@@ -205,4 +205,38 @@ describe('OrdersPage', () => {
       expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
     });
   });
+
+  /**
+   * A partly cancelled order keeps a LIVE status (`processing` / `shipped`), so without
+   * a badge the list looks identical to an untouched order — even though some of what
+   * the customer bought is never coming and money is on its way back.
+   */
+  describe('part-cancelled badge', () => {
+    const withCancellations = (cancellations: unknown[], status = 'processing') => ({
+      ...mockOrders,
+      orders: [{ ...mockOrders.orders[0], status, cancellations }],
+    });
+
+    it('flags an order with some lines cancelled', async () => {
+      (orderService.getUserOrders as jest.Mock).mockResolvedValue(
+        withCancellations([{ _id: 'c1', lines: [{ itemId: 'i1', quantity: 1 }] }]));
+      render(<OrdersPage />);
+      await waitFor(() => expect(screen.getByText('Part cancelled')).toBeInTheDocument());
+    });
+
+    // A wholly cancelled order already reads "Cancelled" in its status chip.
+    it('does not repeat itself on a wholly cancelled order', async () => {
+      (orderService.getUserOrders as jest.Mock).mockResolvedValue(
+        withCancellations([{ _id: 'c1', lines: [{ itemId: 'i1', quantity: 1 }] }], 'cancelled'));
+      render(<OrdersPage />);
+      await waitFor(() => screen.getAllByText(/Product 1/i)[0]);
+      expect(screen.queryByText('Part cancelled')).not.toBeInTheDocument();
+    });
+
+    it('shows nothing on an order that was never cancelled', async () => {
+      render(<OrdersPage />);
+      await waitFor(() => screen.getAllByText(/Product 1/i)[0]);
+      expect(screen.queryByText('Part cancelled')).not.toBeInTheDocument();
+    });
+  });
 });

@@ -19,7 +19,7 @@ export const STATIC_PAGES = [
   // Company
   { path: '/about-us', label: 'About Us', group: 'Company',
     defaultTitle: 'About Us',
-    defaultDescription: 'Learn about Autobacs India — our story, mission, and the team behind India’s trusted auto accessories retailer.' },
+    defaultDescription: 'We didn’t enter the Indian automotive aftermarket — we built it. Premium parts, custom builds, dealer supply and 42 fitment points across India, since 2015.' },
   { path: '/careers', label: 'Careers', group: 'Company',
     defaultTitle: 'Careers',
     defaultDescription: 'Join the Autobacs India team and help us revolutionize the automotive accessories industry in India.' },
