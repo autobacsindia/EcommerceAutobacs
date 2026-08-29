@@ -424,6 +424,25 @@ describe('updateCampaign — window + rate edits', () => {
     });
   });
 
+  /*
+    The campaign-wide gate on whether the wheel appears AT ALL. Distinct from the
+    per-prize minimum, which only decides which prizes are in the pool: under this
+    figure the customer sees no wheel, over it they see one that may still exclude the
+    expensive prizes. It defaults to 0 and had no admin input until now, so in practice
+    every campaign offered a spin on any paid order however small.
+  */
+  it('saves the campaign-wide minimum order value, in paise', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ minOrderValuePaise: 200000 }), r); // ₹2,000
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { minOrderValuePaise: 200000 });
+  });
+
+  it('accepts 0, meaning no minimum', async () => {
+    const r = res();
+    await controller.updateCampaign(req({ minOrderValuePaise: 0 }), r);
+    expect(mockCampaignRepo.updateById).toHaveBeenCalledWith('camp-1', { minOrderValuePaise: 0 });
+  });
+
   it('accepts a null per-customer cap, meaning unlimited', async () => {
     const r = res();
     await controller.updateCampaign(req({ maxSpinsPerUserPerCampaign: null }), r);
