@@ -26,6 +26,21 @@ export const validateShipmentParams = [
   validateRequest
 ];
 
+/**
+ * Validate BOTH `:id` and `:cancellationId` — same reason as the parcel variant above:
+ * a malformed id would otherwise reach Mongo, throw a CastError and surface as a 500
+ * when it is plainly a 400.
+ */
+export const validateCancellationParams = [
+  param('id')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid ID format'),
+  param('cancellationId')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid cancellation ID format'),
+  validateRequest
+];
+
 export const validatePagination = [
   query('page')
     .optional()

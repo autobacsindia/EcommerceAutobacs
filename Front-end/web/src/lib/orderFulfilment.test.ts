@@ -14,6 +14,9 @@ import {
   fulfilmentStateForItem,
   parcelProgress,
   outstandingParcels,
+  cancelledQuantityForItem,
+  liveQuantityForItem,
+  hasCancellations,
 } from './orderFulfilment';
 import type { FulfilmentOrder } from './orderFulfilment';
 
@@ -231,5 +234,78 @@ describe('outstandingParcels', () => {
 
   it('is zero for an order with no parcels', () => {
     expect(outstandingParcels({})).toBe(0);
+  });
+});
+
+describe('cancelledQuantityForItem / liveQuantityForItem / hasCancellations', () => {
+  const order = (cancellations: any[]): FulfilmentOrder => ({ shipments: [], cancellations } as any);
+
+  it('sums a line cancelled in stages', () => {
+    const o = order([
+      { _id: 'c1', lines: [{ itemId: 'a', quantity: 1 }] },
+      { _id: 'c2', lines: [{ itemId: 'a', quantity: 2 }] },
+    ]);
+    expect(cancelledQuantityForItem(o, 'a')).toBe(3);
+    expect(liveQuantityForItem(o, 'a', 5)).toBe(2);
+  });
+
+  it('ignores other lines', () => {
+    const o = order([{ _id: 'c1', lines: [{ itemId: 'b', quantity: 2 }] }]);
+    expect(cancelledQuantityForItem(o, 'a')).toBe(0);
+  });
+
+  // A negative live count could only come from inconsistent data; rendering "-1
+  // remaining" is worse than rendering nothing.
+  it('floors the live quantity at zero', () => {
+    const o = order([{ _id: 'c1', lines: [{ itemId: 'a', quantity: 9 }] }]);
+    expect(liveQuantityForItem(o, 'a', 2)).toBe(0);
+  });
+
+  it('is zero and false for an order that never cancelled anything', () => {
+    expect(cancelledQuantityForItem({}, 'a')).toBe(0);
+    expect(hasCancellations({})).toBe(false);
+    expect(hasCancellations(order([{ _id: 'c1', lines: [] }]))).toBe(true);
+  });
+});
+
+/**
+ * Cancelled units must not hold a line at `pending`.
+ *
+ * The quantity check compares committed units against what is still OWED. Measuring
+ * against the ordered figure instead leaves a partly-cancelled line permanently
+ * "pending" however much of it arrived — which would, among other things, keep the
+ * Review button hidden for ever on goods the customer is holding.
+ */
+describe('fulfilmentStateForItem — with cancellations', () => {
+  it('is delivered once every LIVE unit has arrived', () => {
+    const o: FulfilmentOrder = {
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'a', quantity: 2 }] },
+      ],
+      cancellations: [{ lines: [{ itemId: 'a', quantity: 1 }] }],
+    } as any;
+    // 3 ordered, 1 cancelled, 2 delivered → delivered.
+    expect(fulfilmentStateForItem(o, 'a', 3)).toBe('delivered');
+  });
+
+  it('is still pending when a live unit is genuinely outstanding', () => {
+    const o: FulfilmentOrder = {
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'a', quantity: 1 }] },
+      ],
+      cancellations: [{ lines: [{ itemId: 'a', quantity: 1 }] }],
+    } as any;
+    // 3 ordered, 1 cancelled, 1 delivered → one still owed.
+    expect(fulfilmentStateForItem(o, 'a', 3)).toBe('pending');
+  });
+
+  // Nothing is being fulfilled, so no parcel state is honest. The UI shows "Cancelled"
+  // instead, from cancelledQuantityForItem.
+  it('is pending for a wholly cancelled line', () => {
+    const o: FulfilmentOrder = {
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'b', quantity: 1 }] }],
+      cancellations: [{ lines: [{ itemId: 'a', quantity: 3 }] }],
+    } as any;
+    expect(fulfilmentStateForItem(o, 'a', 3)).toBe('pending');
   });
 });

@@ -74,21 +74,51 @@ export const deliveredQuantityByItem = (order) =>
   quantityByItem(order, new Set([SHIPMENT_STATUS.DELIVERED]));
 
 /**
+ * Units of each item cancelled before delivery.
+ *
+ * ⚠️ Deliberately a LOCAL re-derivation rather than an import from
+ * utils/orderCancellation.js. That module imports SHIPMENT_STATUS from here, so
+ * importing it back would close a cycle — and this is four lines of summation, not a
+ * rule worth sharing. `orderCancellation.cancelledQuantityByItem` is the same fold and
+ * a test pins the two together.
+ *
+ * @param {object} order
+ * @returns {Map<string, number>} itemId → quantity
+ */
+const cancelledQuantityByItem = (order) => {
+  const totals = new Map();
+  for (const cancellation of order?.cancellations || []) {
+    for (const line of cancellation.lines || []) {
+      const key = idOf(line.itemId);
+      totals.set(key, (totals.get(key) || 0) + (line.quantity || 0));
+    }
+  }
+  return totals;
+};
+
+/**
  * What is still waiting to go in a box.
+ *
+ * ⚠️ Cancelled units are subtracted, not just shipped ones. A cancelled line is not
+ * owed to the customer and has been refunded, so leaving it in this list would (a) let
+ * an admin ship goods that were paid back and (b) hold the order open forever — it
+ * could never be fully shipped, so it could never reach `delivered`, so karma, the
+ * review request and the return window would never fire.
  *
  * @param {object} order
  * @returns {Array<{itemId: string, name: string|null, quantity: number}>} lines with
- *   a non-zero remainder; items fully shipped are omitted.
+ *   a non-zero remainder; items fully shipped or fully cancelled are omitted.
  */
 export const remainingToShip = (order) => {
   const shipped = shippedQuantityByItem(order);
+  const cancelled = cancelledQuantityByItem(order);
   return (order?.items || [])
     .map((item) => {
       const id = idOf(item._id);
       return {
         itemId: id,
         name: item.name || item.product?.name || null,
-        quantity: (item.quantity || 0) - (shipped.get(id) || 0),
+        quantity: (item.quantity || 0) - (shipped.get(id) || 0) - (cancelled.get(id) || 0),
       };
     })
     .filter((line) => line.quantity > 0);
@@ -115,13 +145,31 @@ export const rewardDelivered = (order) => {
 export const isFullyShipped = (order) =>
   remainingToShip(order).length === 0 && rewardShipped(order);
 
-/** Every ordered unit has arrived, and so has the gift. */
+/**
+ * Every unit still OWED has arrived, and so has the gift.
+ *
+ * ⚠️ Measured against the live quantity (ordered − cancelled), not the ordered one. A
+ * cancelled unit is never going to arrive, so requiring it here would leave a partly
+ * cancelled order permanently short of `delivered` — and with it the karma award, the
+ * review request and the per-line return window, all of which hang off that roll-up.
+ *
+ * An order whose every line has been cancelled is NOT "fully delivered": nothing
+ * arrived. That case is caught by the caller (rollUpStatus) before this runs, but the
+ * guard is here too so the predicate is honest on its own.
+ */
 export const isFullyDelivered = (order) => {
   const delivered = deliveredQuantityByItem(order);
-  const everyItemArrived = (order?.items || []).every(
-    (item) => (delivered.get(idOf(item._id)) || 0) >= (item.quantity || 0),
-  );
-  return everyItemArrived && rewardDelivered(order);
+  const cancelled = cancelledQuantityByItem(order);
+
+  let anyLiveUnit = false;
+  const everyItemArrived = (order?.items || []).every((item) => {
+    const id = idOf(item._id);
+    const live = Math.max(0, (item.quantity || 0) - (cancelled.get(id) || 0));
+    if (live > 0) anyLiveUnit = true;
+    return (delivered.get(id) || 0) >= live;
+  });
+
+  return anyLiveUnit && everyItemArrived && rewardDelivered(order);
 };
 
 /** At least one parcel has been handed to a courier. */
@@ -252,12 +300,20 @@ export const fulfilmentSummary = (order) => {
   // The gift counts as one more unit to ship, so "3 of 4 items" tells the truth about
   // a parcel that still owes the goodie.
   const giftUnits = owesGoodie(order) ? 1 : 0;
-  const totalUnits = items.reduce((n, i) => n + (i.quantity || 0), 0) + giftUnits;
+  /*
+    Counts are over LIVE units — ordered minus cancelled. After cancelling one of four
+    items the honest sentence is "2 of 3 items shipped", not "2 of 4": the fourth is
+    never coming and would leave the label permanently short of complete.
+  */
+  const cancelled = cancelledQuantityByItem(order);
+  const liveQty = (i) => Math.max(0, (i.quantity || 0) - (cancelled.get(idOf(i._id)) || 0));
+
+  const totalUnits = items.reduce((n, i) => n + liveQty(i), 0) + giftUnits;
   const shippedUnits =
-    items.reduce((n, i) => n + Math.min(i.quantity || 0, shipped.get(idOf(i._id)) || 0), 0) +
+    items.reduce((n, i) => n + Math.min(liveQty(i), shipped.get(idOf(i._id)) || 0), 0) +
     (giftUnits && rewardShipped(order) ? 1 : 0);
   const deliveredUnits =
-    items.reduce((n, i) => n + Math.min(i.quantity || 0, delivered.get(idOf(i._id)) || 0), 0) +
+    items.reduce((n, i) => n + Math.min(liveQty(i), delivered.get(idOf(i._id)) || 0), 0) +
     (giftUnits && rewardDelivered(order) ? 1 : 0);
 
   const parcelCount = (order?.shipments || []).filter((s) => s.status !== SHIPMENT_STATUS.LOST).length;

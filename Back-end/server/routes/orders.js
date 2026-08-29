@@ -4,6 +4,7 @@ import {
   validateOrder, 
   validateIdParam, 
   validateShipmentParams,
+  validateCancellationParams,
   validateOrderStatusUpdate, 
   validateOrderCancellation, 
   validateBulkStatusUpdate, 
@@ -39,6 +40,9 @@ import {
   updateOrderStatus,
   getShipments,
   createShipment,
+  getCancellations,
+  createCancellation,
+  refundCancellation,
   markShipmentDelivered,
   dispatchShipment,
   markShipmentLost,
@@ -180,6 +184,35 @@ router.patch(
   admin,
   validateShipmentParams,
   asyncHandler(markShipmentDelivered)
+);
+
+// ── Partial cancellation ────────────────────────────────────────────────────
+// Individual lines can die before delivery, each with its own refund. The order's
+// `status` only becomes `cancelled` when the LAST live line goes (see
+// services/cancellationService.js), so the whole-order side effects fire exactly once.
+// Customers still cancel whole orders via PUT /:id/cancel — per-line is admin-only.
+
+// @route   GET /orders/:id/cancellations
+// @desc    Cancellations on an order + what may still be cancelled + the summary
+// @access  Private (order owner or admin)
+router.get("/:id/cancellations", protect, validateIdParam, asyncHandler(getCancellations));
+
+// @route   POST /orders/:id/cancellations
+// @desc    Cancel a subset of the live lines and price the refund (Admin only).
+//          Does NOT send the refund — see the route below.
+// @access  Private/Admin
+router.post("/:id/cancellations", protect, admin, validateIdParam, asyncHandler(createCancellation));
+
+// @route   POST /orders/:id/cancellations/:cancellationId/refund
+// @desc    Send that cancellation's refund to Razorpay (Admin only). Idempotent —
+//          a double-click claims once and the second call is told it is already running.
+// @access  Private/Admin
+router.post(
+  "/:id/cancellations/:cancellationId/refund",
+  protect,
+  admin,
+  validateCancellationParams,
+  asyncHandler(refundCancellation)
 );
 
 // @route   PATCH /orders/:id/shipments/:shipmentId/lost

@@ -82,6 +82,13 @@ export const API_ENDPOINTS = {
     `/orders/${id}/shipments/${shipmentId}/delivered`,
   ORDER_SHIPMENT_LOST: (id: string, shipmentId: string) =>
     `/orders/${id}/shipments/${shipmentId}/lost`,
+
+  // Partial cancellation — individual lines can die before delivery, each with its own
+  // refund. See Back-end/server/services/cancellationService.js. Admin-only writes;
+  // the GET is readable by the order's owner too.
+  ORDER_CANCELLATIONS: (id: string) => `/orders/${id}/cancellations`,
+  ORDER_CANCELLATION_REFUND: (id: string, cancellationId: string) =>
+    `/orders/${id}/cancellations/${cancellationId}/refund`,
   
   // Returns — customer
   RETURN_CREATE: '/returns',

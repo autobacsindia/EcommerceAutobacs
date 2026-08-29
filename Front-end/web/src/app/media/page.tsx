@@ -34,7 +34,7 @@ const TICKER = [
   'Autobacs India', '$1M Revenue Milestone', 'Business Standard', 'ThePrint',
   'Dailyhunt', 'BrandValley Times', 'The Indian Post', 'MyNation',
   'USA News', 'News 18', 'ANI', 'Blunt Times',
-  'Roavion Automotive Pvt. Ltd.', '100+ Installation Locations', 'Premium Aftermarket',
+  'Roavion Automotive Pvt. Ltd.', '42 Installation Locations', 'Premium Aftermarket',
 ];
 
 // Presentation fallbacks when a card leaves tilt/tape unset (matches design).

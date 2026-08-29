@@ -167,11 +167,21 @@ export function refundableForLines(order, returnedLines) {
 }
 
 /**
- * Match a returned line to its order line. Product id alone is ambiguous once a
- * variable product can appear twice in one order under different variants, so the
- * variant is part of the key whenever the return recorded one.
+ * Match a returned (or cancelled) line to its order line.
+ *
+ * `itemId` wins outright when the caller has one. Cancellations reference
+ * `Order.items[]._id` directly, which is exact — where product+variant is only nearly
+ * exact: the same product under the same variant can legitimately appear as two order
+ * lines (re-added to the cart, or an offline order built by hand), and the fallback
+ * below silently picks the first of them. Returns have no item id and keep that
+ * behaviour unchanged.
  */
 function matchOrderLine(orderLines, returnedLine) {
+  if (returnedLine?.itemId) {
+    const wanted = String(returnedLine.itemId);
+    const exact = orderLines.find((ol) => String(ol?._id || '') === wanted);
+    if (exact) return exact;
+  }
   const productId = String(returnedLine.product?._id || returnedLine.product || '');
   const variantId = returnedLine.variantId ? String(returnedLine.variantId) : null;
 
@@ -188,6 +198,12 @@ function matchOrderLine(orderLines, returnedLine) {
  * Reconstructed from the durable per-refund records rather than read from one field:
  *
  *   - every OTHER ReturnRequest on this order whose refund is processing/completed;
+ *   - every PARTIAL-CANCELLATION refund on the order (`Order.cancellations[].refund`)
+ *     that is processing/completed. Without this an order could be partly cancelled and
+ *     refunded, then have the SAME money drawn again by a return or a whole-order
+ *     cancel — the gateway would reject the second draw with an opaque "refund amount
+ *     provided is greater than amount captured", after our own records had already said
+ *     yes. Excluded by id when the caller is refunding one of them right now;
  *   - the order-level cancellation refund, if one exists and did not come from a
  *     return (return refunds also mirror themselves onto `order.refundDetails`,
  *     which would otherwise be double-counted — they stamp `notes: "Return <id>"`,
@@ -210,9 +226,12 @@ function matchOrderLine(orderLines, returnedLine) {
  * @param {Array}  siblingReturns     - ReturnRequests on this order (may include self)
  * @param {string} [excludeReturnId]  - the return being refunded right now
  * @param {Object} [payment]          - the Payment row, when the caller has loaded it
+ * @param {string} [excludeCancellationId] - the cancellation being refunded right now
  * @returns {{ capturedRupees: number, alreadyRefundedRupees: number, remainingRupees: number }}
  */
-export function remainingRefundable(order, siblingReturns = [], excludeReturnId = null, payment = null) {
+export function remainingRefundable(
+  order, siblingReturns = [], excludeReturnId = null, payment = null, excludeCancellationId = null,
+) {
   const capturedPaise = toPaise(order?.totalAmount || 0);
 
   let refundedPaise = 0;
@@ -220,6 +239,19 @@ export function remainingRefundable(order, siblingReturns = [], excludeReturnId 
     if (excludeReturnId && String(rr._id) === String(excludeReturnId)) continue;
     if (!COMMITTED_REFUND_STATUSES.includes(rr?.refund?.status)) continue;
     refundedPaise += toPaise(rr.refund.finalAmount || 0);
+  }
+
+  /*
+    Partial cancellations draw from the same capture as returns do.
+
+    Stored in PAISE already (unlike ReturnRequest.refund.finalAmount, which is rupees),
+    so no conversion — running it through toPaise() would multiply it by 100 and wipe
+    out the entire headroom on the first partial cancel.
+  */
+  for (const c of order?.cancellations || []) {
+    if (excludeCancellationId && String(c._id) === String(excludeCancellationId)) continue;
+    if (!COMMITTED_REFUND_STATUSES.includes(c?.refund?.status)) continue;
+    refundedPaise += Math.max(0, Math.floor(Number(c.refund.amountPaise) || 0));
   }
 
   const rd = order?.refundDetails;

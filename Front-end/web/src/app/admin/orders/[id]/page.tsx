@@ -13,6 +13,8 @@ import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
 import { buildOrderLines } from '@/lib/orderLines';
 import OrderShipments from '@/components/admin/OrderShipments';
+import OrderCancellations from '@/components/admin/OrderCancellations';
+import { cancelledQuantityForItem } from '@/lib/orderFulfilment';
 import { outstandingParcels } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import type { OrderPaymentSummary } from '@/lib/types';
@@ -62,6 +64,14 @@ interface Order {
    * second source of truth for what is in a box.
    */
   shipments?: ShipmentSummary[];
+  /**
+   * Cancelled lines, read here ONLY to strike the item rows through. The Cancellations
+   * panel fetches its own authoritative copy, including the refund records.
+   */
+  cancellations?: Array<{
+    _id: string;
+    lines?: Array<{ itemId: string; quantity: number }>;
+  }>;
   shippingAddress: {
     fullName: string;
     phone: string;
@@ -371,12 +381,24 @@ export default function AdminOrderDetailPage() {
             <div className="divide-y">
               {buildOrderLines(order, { audience: 'admin' }).map((line, index) => {
                 const isReward = line.kind === 'reward';
+                /*
+                  Cancelled units on this line. Shown as "2 of 3 cancelled" rather than
+                  hiding the row: the order is an immutable record of what was bought and
+                  charged, so the line stays visible with its original quantity and price.
+                  A goodie has no order-line id and can never be partly cancelled.
+                */
+                const cancelledQty = isReward || !line.itemId
+                  ? 0
+                  : cancelledQuantityForItem(order, String(line.itemId));
+                const fullyCancelled = cancelledQty >= line.quantity;
                 return (
                   <div
                     key={line.itemId ?? `line-${index}`}
                     className={`p-6 flex items-center gap-4 ${
                       isReward && !line.voided ? 'bg-amber-50' : ''
-                    } ${isReward && line.voided ? 'bg-red-50' : ''}`}
+                    } ${isReward && line.voided ? 'bg-red-50' : ''} ${
+                      fullyCancelled ? 'bg-red-50/60' : ''
+                    }`}
                   >
                     {line.image ? (
                       <img
@@ -409,6 +431,13 @@ export default function AdminOrderDetailPage() {
                         )}
                       </div>
                       <p className="text-gray-500 text-sm">Qty: {line.quantity}</p>
+                      {cancelledQty > 0 && (
+                        <p className="mt-0.5 text-sm font-medium text-red-700">
+                          {fullyCancelled
+                            ? 'Cancelled'
+                            : `${cancelledQty} of ${line.quantity} cancelled`}
+                        </p>
+                      )}
                       {isReward && (
                         <p className="text-sm text-amber-800">
                           {line.sku
@@ -466,6 +495,21 @@ export default function AdminOrderDetailPage() {
             onChanged={fetchOrder}
           />
           </div>
+
+          {/*
+            Cancellations. Below Parcels because the two draw from the same pool of
+            units — an admin reads "what went out" before "what will never go out", and
+            cancelling can edit a packed parcel shown directly above.
+          */}
+          <OrderCancellations
+            orderId={orderId}
+            itemNames={Object.fromEntries(
+              order.items
+                .filter((item) => item._id)
+                .map((item) => [String(item._id), item.name ?? item.product?.name ?? 'Item']),
+            )}
+            onChanged={fetchOrder}
+          />
 
           {/* Shipping Address */}
           <div className="bg-white rounded-lg shadow">

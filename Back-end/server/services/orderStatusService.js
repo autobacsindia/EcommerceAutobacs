@@ -248,11 +248,21 @@ class OrderStatusService {
           }
           order.cancelledBy = cancelledBy || (isAdmin ? 'admin' : 'customer');
 
-          // Money already captured → flag a pending refund for manual processing.
-          // We only RECORD the intent here (the Razorpay refund + post-delivery
-          // return flow are a separate workstream). Idempotent: never overwrite an
-          // existing refund record.
-          if (order.paymentStatus === 'paid' && !order.refundDetails?.requestedAt) {
+          /*
+            Money already captured → flag a pending refund for manual processing.
+            We only RECORD the intent here. Idempotent: never overwrite an existing
+            refund record.
+
+            ⚠️ SKIPPED when the order carries partial cancellations. Those hold their
+            OWN per-line refund records (Order.cancellations[].refund), priced net of
+            the order's discount. Flagging a second, order-level refund for the FULL
+            total alongside them offers the admin two buttons that each pay the customer
+            — and because a `pending` cancellation refund is not yet counted against the
+            headroom, both would succeed. That is a double refund of real money.
+          */
+          if (order.paymentStatus === 'paid'
+              && !order.refundDetails?.requestedAt
+              && !(order.cancellations || []).length) {
             order.refundDetails = {
               requestedAt: new Date(),
               amount: order.totalAmount,

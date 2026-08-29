@@ -1,6 +1,27 @@
 import BaseRepository from './baseRepository.js';
 import Order from '../models/Order.js';
 
+/**
+ * "This array is still exactly N long" — as a compare-and-set condition that also works
+ * on documents written before the field existed.
+ *
+ * ⚠️ `{ field: { $size: 0 } }` does NOT match a document that LACKS the field. Every
+ * order written before `cancellations` was added to the schema has no such key, so the
+ * naive guard matched 0 of 1,599 production orders and the FIRST cancellation on every
+ * existing order would have failed with "another cancellation was recorded at the same
+ * time". Tests could not see it: `Order.create()` materialises `cancellations: []` from
+ * the schema, so the field is always present in a freshly-seeded document.
+ *
+ * @param {string} field
+ * @param {number} expected
+ * @returns {object} a query fragment
+ */
+const arrayUnchanged = (field, expected) => (
+  expected === 0
+    ? { $or: [{ [field]: { $size: 0 } }, { [field]: { $exists: false } }] }
+    : { [field]: { $size: expected } }
+);
+
 class OrderRepository extends BaseRepository {
   constructor() {
     super(Order);
@@ -421,7 +442,10 @@ class OrderRepository extends BaseRepository {
    */
   async findForFulfilment(orderId) {
     return Order.findById(orderId)
-      .select('user items shipments status deliveredAt fulfillmentMetrics.deliveredAt spinReward')
+      // `cancellations` is NOT optional here: remainingToShip / isFullyDelivered /
+      // fulfilmentSummary all subtract cancelled units. Omitting it would make this
+      // read see zero cancellations and offer already-refunded units for shipping.
+      .select('user items shipments cancellations status deliveredAt fulfillmentMetrics.deliveredAt spinReward')
       .lean();
   }
 
@@ -462,6 +486,178 @@ class OrderRepository extends BaseRepository {
     return Order.findOneAndUpdate(
       { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: fromStatus } } },
       { $set: set },
+      { new: true },
+    );
+  }
+
+  /**
+   * Record a partial cancellation, and in the SAME atomic write pull the cancelled
+   * units back out of any unshipped parcel they were sitting in.
+   *
+   * ── WHY BOTH IN ONE WRITE ────────────────────────────────────────────────────────
+   * A `packed` parcel has not left, so its units are cancellable — but they are also
+   * still counted as committed by remainingToShip. Cancelling without editing the
+   * parcel would leave the same unit both cancelled-and-refunded AND in a box a packer
+   * is about to hand to a courier. Two writes would leave a window where exactly that
+   * is true, and a crash between them would make it permanent.
+   *
+   * Conditional on the cancellations array being unchanged since validation, so two
+   * admins cancelling the same line concurrently cannot both pass — the loser re-reads
+   * and re-validates against the winner's write rather than over-cancelling.
+   *
+   * @param {string} orderId
+   * @param {number} expectedCancellationCount - array length seen at validation time
+   * @param {object} cancellation - the record to push
+   * @param {Array<{shipmentId: string, lines: Array}>} [parcelEdits] - replacement
+   *   `lines` for each packed parcel the cancellation touches. An empty `lines` array
+   *   is legitimate: the whole box was cancelled and the parcel is now empty.
+   * @returns {Promise<object|null>} updated order, or null if it lost the race
+   */
+  async pushCancellationIfUnchanged(
+    orderId, expectedCancellationCount, cancellation, parcelEdits = [], expectedShipmentCount = null,
+  ) {
+    const update = { $push: { cancellations: cancellation } };
+    /*
+      Conditions are combined under $and, not spread into one object.
+
+      Both fragments can be an `$or` (the empty-array case), and a second `$or` key
+      would simply overwrite the first — silently dropping one of the two guards. $and
+      keeps both.
+    */
+    const conditions = [arrayUnchanged('cancellations', expectedCancellationCount)];
+
+    /*
+      The guard covers the SHIPMENTS array too, not just cancellations.
+
+      Both arrays consume the same pool of units. Validating "2 units are free", then
+      conditioning the write only on `cancellations` being unchanged, leaves a
+      concurrent createShipment free to commit those very units between the two — so the
+      order both ships and refunds them. Pinning the shipment count as well means that
+      race loses here and re-validates, exactly as a competing cancellation does.
+
+      Null keeps the old single-array behaviour for any caller that has not been updated.
+    */
+    if (expectedShipmentCount !== null) {
+      conditions.push(arrayUnchanged('shipments', expectedShipmentCount));
+    }
+
+    const filter = { _id: orderId, $and: conditions };
+
+    if (parcelEdits.length) {
+      /*
+        Positional-filtered update: `shipments.$[p].lines` for each edited parcel.
+        arrayFilters is what lets ONE write touch several parcels; `shipments.$` would
+        only reach the first match, silently leaving the rest holding cancelled units.
+
+        Each filter pins `status: 'packed'` as well as the id. Without it, a parcel
+        dispatched between our read and this write would have its lines rewritten while
+        in transit — units removed from a box the courier already has, and refunded.
+        With it, the filter matches nothing, the parcel is left intact, and the
+        shipment-count guard above has already failed the write anyway.
+      */
+      update.$set = {};
+      const arrayFilters = [];
+      parcelEdits.forEach((edit, i) => {
+        update.$set[`shipments.$[p${i}].lines`] = edit.lines;
+        arrayFilters.push({ [`p${i}._id`]: edit.shipmentId, [`p${i}.status`]: 'packed' });
+      });
+      return Order.findOneAndUpdate(filter, update, { new: true, arrayFilters });
+    }
+
+    return Order.findOneAndUpdate(filter, update, { new: true });
+  }
+
+  /**
+   * Claim one cancellation's refund for processing — the serialization point that makes
+   * refund initiation idempotent.
+   *
+   * Matched on the refund still being `pending`, so a double-clicked "Refund" or a
+   * retried job matches nothing and returns null rather than sending a SECOND refund to
+   * Razorpay for the same lines. Same compare-and-set shape as the whole-order refund
+   * claim, for the same reason.
+   *
+   * @returns {Promise<object|null>} updated order, or null if it was not pending
+   */
+  async claimCancellationRefund(orderId, cancellationId, amountPaise) {
+    return Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        cancellations: {
+          $elemMatch: {
+            _id: cancellationId,
+            /*
+              `failed` is claimable, not just `pending`. A gateway failure rolls the
+              record back to `failed` precisely so it can be retried — the admin panel
+              shows a "Retry refund" button for it. Matching only `pending` made that
+              button permanently return "already being processed", which is both wrong
+              and the opposite of what happened. Excluded by name rather than by
+              matching a list of allowed values, so a status added later fails closed.
+            */
+            'refund.status': { $nin: ['processing', 'completed', 'not_applicable'] },
+          },
+        },
+      },
+      {
+        $set: {
+          'cancellations.$.refund.status': 'processing',
+          'cancellations.$.refund.amountPaise': amountPaise,
+          'cancellations.$.refund.initiatedAt': new Date(),
+        },
+      },
+      { new: true },
+    );
+  }
+
+  /**
+   * Settle a claimed cancellation refund.
+   *
+   * Matched on `processing` so only the claim above can be settled — a stray call
+   * against an already-completed record no-ops instead of re-stamping it.
+   *
+   * @param {string} status - 'completed' or 'failed'
+   * @param {object} [extra] - refund subfields, keyed WITHOUT the array prefix
+   */
+  async settleCancellationRefund(orderId, cancellationId, status, extra = {}) {
+    const set = { 'cancellations.$.refund.status': status };
+    if (status === 'completed') set['cancellations.$.refund.completedAt'] = new Date();
+    for (const [k, v] of Object.entries(extra)) {
+      if (v !== undefined) set[`cancellations.$.refund.${k}`] = v;
+    }
+    return Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        cancellations: { $elemMatch: { _id: cancellationId, 'refund.status': 'processing' } },
+      },
+      { $set: set },
+      { new: true },
+    );
+  }
+
+  /**
+   * Once-only claim for a completed cancellation refund's non-idempotent side effects:
+   * the atomic `$inc` on Payment.refundAmount and the customer's LTV decrement.
+   *
+   * Both flags flip in ONE conditional write, matched on them still being false, so an
+   * instant refund whose `refund.processed` webhook races the controller cannot count
+   * the same money twice. Returns null when someone else already claimed.
+   */
+  async claimCancellationRefundSideEffects(orderId, cancellationId) {
+    return Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        cancellations: {
+          $elemMatch: {
+            _id: cancellationId,
+            'refund.paymentIncremented': { $ne: true },
+          },
+        },
+      },
+      {
+        $set: {
+          'cancellations.$.refund.paymentIncremented': true,
+          'cancellations.$.refund.ltvAdjusted': true,
+        },
+      },
       { new: true },
     );
   }

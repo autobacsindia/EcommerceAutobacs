@@ -8,6 +8,9 @@ import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import shipmentService from '../services/shipmentService.js';
 import { remainingToShip, fulfilmentSummary } from '../utils/orderFulfilment.js';
+import cancellationService from '../services/cancellationService.js';
+import { remainingCancellable } from '../utils/orderCancellation.js';
+import AppError from '../utils/AppError.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
 import { remainingRefundable } from '../services/refundMathService.js';
@@ -650,6 +653,46 @@ export const cancelOrder = async (req, res) => {
   const { reason, notes } = req.body;
   const isAdmin = req.user.role === 'admin';
 
+  /*
+    An order that has ALREADY had lines cancelled tracks its money per line, not in the
+    order-level `refundDetails`. Cancelling the rest through the plain status transition
+    would move it to `cancelled` while recording no refund at all for the lines still
+    live — orderStatusService skips its auto-flag once cancellations exist (so the
+    per-line records are not double-claimed), and processRefund refuses such orders.
+    The money for the remaining lines would simply never go back.
+
+    So route the remainder through the same per-line path: it prices each line net of
+    the order's discount, records a refund for it, and rolls the order up to `cancelled`
+    itself. `remainingCancellable` is empty when nothing is live — a second call on an
+    already-fully-cancelled order — and we fall through to the normal transition, which
+    is idempotent about the status.
+  */
+  if ((order.cancellations || []).length) {
+    const live = remainingCancellable(order);
+    if (live.length) {
+      const result = await cancellationService.cancelLines(
+        order._id.toString(),
+        {
+          lines: live.map((l) => ({ itemId: l.itemId, quantity: l.quantity })),
+          reason: reason || 'customer_request',
+          notes,
+        },
+        { userId: req.user.id },
+      );
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.message });
+      }
+      return res.json({
+        success: true,
+        message: 'Order cancelled successfully',
+        order: result.order,
+        refundInitiated: result.refund?.status === 'pending',
+        refundAmount: result.refund?.amountRupees ?? 0,
+        refundTimeline: result.refund?.status === 'pending' ? '3-5 business days' : null,
+      });
+    }
+  }
+
   const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'cancelled', {
     userId: req.user.id,
     isAdmin,
@@ -693,6 +736,25 @@ export const processRefund = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: `Refunds are only processed for cancelled orders (order is '${order.status}').`
+    });
+  }
+
+  /*
+    An order with partial cancellations tracks its money per line, in
+    Order.cancellations[].refund — each priced net of the order's discount by
+    refundMathService. This route refunds `order.totalAmount` in one go, which for such
+    an order is both the wrong figure and a second claim on the same capture. Refuse and
+    point at the per-cancellation refunds.
+
+    Belt and braces with the guard in orderStatusService that stops the whole-order
+    refund ever being flagged on these orders: a legacy order flagged before that guard
+    existed would otherwise still offer this button.
+  */
+  if ((order.cancellations || []).length) {
+    return res.status(409).json({
+      success: false,
+      message: 'This order was cancelled line by line. Refund each cancellation from the '
+        + "order's Cancellations panel — those amounts are already net of the order's discount.",
     });
   }
 
@@ -1126,6 +1188,94 @@ export const getShipments = async (req, res) => {
     shipments: order.shipments || [],
     remaining: remainingToShip(order),
     summary: fulfilmentSummary(order),
+  });
+};
+
+/**
+ * Cancellations on an order + what may still be cancelled + the summary label.
+ *
+ * @route GET /orders/:id/cancellations
+ * @access Private (order owner or admin)
+ */
+export const getCancellations = async (req, res) => {
+  const order = await orderRepository.findById(req.params.id);
+  if (!order) throw new AppError('Order not found', 404);
+
+  const isOwner = order.user?.toString() === req.user.id;
+  if (!isOwner && req.user.role !== 'admin') {
+    throw new AppError('Not authorized to view this order', 403);
+  }
+
+  const view = await cancellationService.getCancellations(req.params.id);
+  res.json({
+    success: true,
+    cancellations: view.cancellations,
+    // Only an admin may act on this, and exposing what is cancellable to a customer
+    // would imply a control they do not have.
+    remaining: req.user.role === 'admin' ? view.remaining : [],
+    summary: view.summary,
+  });
+};
+
+/**
+ * Cancel a chosen subset of the order's live lines, and record what they are worth.
+ *
+ * Deliberately does NOT send the refund. Recording is a local, always-correct write;
+ * the gateway call can fail or time out, and a failed refund must leave the
+ * cancellation intact and retryable rather than forcing an undo. The client calls
+ * POST .../cancellations/:cancellationId/refund next.
+ *
+ * @route POST /orders/:id/cancellations
+ * @access Private/Admin
+ */
+export const createCancellation = async (req, res) => {
+  const { lines, reason, notes } = req.body;
+
+  if (!Array.isArray(lines) || !lines.length) {
+    throw new AppError('Select at least one item to cancel.', 400);
+  }
+
+  const result = await cancellationService.cancelLines(
+    req.params.id,
+    { lines, reason, notes },
+    { userId: req.user.id },
+  );
+
+  // 404 only for a genuinely missing order; every other refusal is a rule the admin
+  // broke (over-cancelling, a shipped line, debit EMI) and reads as 400.
+  if (!result.success) {
+    throw new AppError(result.message, result.message === 'Order not found' ? 404 : 400);
+  }
+
+  res.status(201).json({
+    success: true,
+    message: result.message,
+    order: result.order,
+    cancellation: result.cancellation,
+    refund: result.refund,
+  });
+};
+
+/**
+ * Send a recorded cancellation's refund to Razorpay. Idempotent.
+ *
+ * @route POST /orders/:id/cancellations/:cancellationId/refund
+ * @access Private/Admin
+ */
+export const refundCancellation = async (req, res) => {
+  const result = await cancellationService.refundCancellation(
+    req.params.id,
+    req.params.cancellationId,
+    { userId: req.user.id },
+  );
+
+  if (!result.success) throw new AppError(result.message, result.statusCode || 400);
+
+  res.json({
+    success: true,
+    message: result.message,
+    refund: result.refund,
+    alreadyRefunded: Boolean(result.alreadyRefunded),
   });
 };
 

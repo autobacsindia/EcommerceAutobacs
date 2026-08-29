@@ -349,4 +349,51 @@ describe('AdminOrdersPage', () => {
       expect(screen.queryByText(/parcels/i)).not.toBeInTheDocument();
     });
   });
+  /**
+   * Part-cancelled orders keep a LIVE status. Without a badge, ops sees `Processing` on an
+   * order whose lines were half killed and refunded — identical to an untouched one.
+   */
+  describe('part-cancelled badge', () => {
+    const serveOrders = (payload: unknown) => {
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+          return Promise.resolve({ carriers: [{ name: 'Delhivery', code: 'DELHIVERY' }] });
+        }
+        return Promise.resolve(payload);
+      });
+    };
+
+    it('flags an order that was partly cancelled', async () => {
+      serveOrders({
+        ...mockOrders,
+        orders: [{
+          ...mockOrders.orders[0], status: 'processing',
+          cancellations: [{ _id: 'c1', lines: [{ itemId: 'i1', quantity: 1 }] }],
+        }],
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText('Part cancelled')).toBeInTheDocument());
+    });
+
+    // A wholly cancelled order already says `Cancelled` in its status control.
+    it('does not repeat itself on a wholly cancelled order', async () => {
+      serveOrders({
+        ...mockOrders,
+        orders: [{
+          ...mockOrders.orders[0], status: 'cancelled',
+          cancellations: [{ _id: 'c1', lines: [{ itemId: 'i1', quantity: 1 }] }],
+        }],
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+      expect(screen.queryByText('Part cancelled')).not.toBeInTheDocument();
+    });
+
+    it('shows nothing on an order that was never cancelled', async () => {
+      serveOrders(mockOrders);
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+      expect(screen.queryByText('Part cancelled')).not.toBeInTheDocument();
+    });
+  });
 });

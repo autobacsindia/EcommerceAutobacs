@@ -308,4 +308,141 @@ describe('OrderDetailPage', () => {
       expect(screen.getAllByText('Review')).toHaveLength(1);
     });
   });
+
+  /**
+   * Partial cancellation, from the customer's side.
+   *
+   * The row must STAY with its original quantity and price. The order's totals are
+   * never rewritten when a line is cancelled — the refund is the adjustment — so hiding
+   * the line would leave the total below unexplainable.
+   */
+  describe('cancelled lines', () => {
+    const partlyCancelled = {
+      ...mockOrder,
+      status: 'processing',
+      items: [
+        { ...mockOrder.items[0], _id: 'item1', name: 'Kept Item', quantity: 1,
+          product: { _id: 'p1', name: 'Kept Item', price: 100, images: [{ url: 'a.jpg' }] } },
+        { ...mockOrder.items[0], _id: 'item2', name: 'Dropped Item', quantity: 2,
+          product: { _id: 'p2', name: 'Dropped Item', price: 50, images: [{ url: 'b.jpg' }] } },
+      ],
+      cancellations: [{
+        _id: 'c1',
+        lines: [{ itemId: 'item2', quantity: 2 }],
+        cancelledAt: '2026-08-20T00:00:00Z',
+        refund: { productValuePaise: 8000, amountPaise: 8000, status: 'completed',
+          completedAt: '2026-08-21T00:00:00Z' },
+      }],
+    };
+
+    it('keeps the cancelled line visible and marks it cancelled', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(partlyCancelled);
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Dropped Item'));
+
+      expect(screen.getByText('Cancelled')).toBeInTheDocument();
+    });
+
+    it('states a partial cancellation as a count', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue({
+        ...partlyCancelled,
+        cancellations: [{ ...partlyCancelled.cancellations[0], lines: [{ itemId: 'item2', quantity: 1 }] }],
+      });
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Dropped Item'));
+
+      expect(screen.getByText('1 of 2 cancelled')).toBeInTheDocument();
+    });
+
+    /*
+      The refund figure comes from the SERVER's record. It is net of any discount on the
+      order, so it is deliberately NOT price × quantity — showing that would promise a
+      refund bigger than the one actually arriving.
+    */
+    it('shows the refund the server recorded, not the line total', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(partlyCancelled);
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Cancelled Items'));
+
+      // ₹80.00 refunded — NOT the ₹100 list value of 2 × ₹50.
+      expect(screen.getByText(/₹80\.00 refunded/)).toBeInTheDocument();
+    });
+
+    /*
+      Never promise money that is not coming. `productValuePaise` is computed for EVERY
+      cancellation, including one on an order that was never paid — so falling back to
+      it and treating anything non-completed as "on its way" told the customer a refund
+      was coming for money we never took, and said the same after the gateway had
+      REJECTED it.
+    */
+    it('promises nothing on a cancellation with no refund due', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue({
+        ...partlyCancelled,
+        status: 'awaiting_payment',
+        cancellations: [{
+          ...partlyCancelled.cancellations[0],
+          refund: { productValuePaise: 8000, amountPaise: 0, status: 'not_applicable' },
+        }],
+      });
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Cancelled Items'));
+
+      expect(screen.queryByText(/refund on its way/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/settle within/i)).not.toBeInTheDocument();
+    });
+
+    it('says plainly when a refund FAILED, rather than "on its way"', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue({
+        ...partlyCancelled,
+        cancellations: [{
+          ...partlyCancelled.cancellations[0],
+          refund: { productValuePaise: 8000, amountPaise: 8000, status: 'failed' },
+        }],
+      });
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Cancelled Items'));
+
+      expect(screen.queryByText(/refund on its way/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/refund failed/i)).toBeInTheDocument();
+    });
+
+    it('says a refund is on its way before it settles', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue({
+        ...partlyCancelled,
+        cancellations: [{
+          ...partlyCancelled.cancellations[0],
+          refund: { productValuePaise: 8000, amountPaise: 0, status: 'pending' },
+        }],
+      });
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Cancelled Items'));
+
+      expect(screen.getByText(/₹80\.00 refund on its way/)).toBeInTheDocument();
+    });
+
+    // "Not shipped yet" beside "Cancelled" reads as though something is still coming.
+    it('does not show a fulfilment chip on a wholly cancelled line', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue({
+        ...partlyCancelled,
+        shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'item1', quantity: 1 }] }],
+      });
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Dropped Item'));
+
+      expect(screen.queryByText('Not shipped yet')).not.toBeInTheDocument();
+      expect(screen.getByText('On its way')).toBeInTheDocument();
+    });
+
+    // Every order placed before partial cancellation existed carries none.
+    it('shows nothing at all on an order with no cancellations', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue({
+        ...partlyCancelled, cancellations: [],
+      });
+      render(<OrderDetailPage />);
+      await waitFor(() => screen.getByText('Kept Item'));
+
+      expect(screen.queryByText('Cancelled Items')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cancelled')).not.toBeInTheDocument();
+    });
+  });
 });
