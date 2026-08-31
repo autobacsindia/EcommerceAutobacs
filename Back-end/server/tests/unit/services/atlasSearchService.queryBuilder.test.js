@@ -236,12 +236,24 @@ describe('buildSearchStage', () => {
     // ES needed boost_mode:'sum' because the multiplicative default annihilated
     // text relevance for products with no reviews and a 0 rating. An Atlas
     // compound sums its matching clauses, so each signal is its own should.
+    //
+    // NOTE the shape: `score` lives INSIDE the operator. This assertion
+    // originally required it as a sibling — `{ equals: {...}, score: {...} }` —
+    // which Atlas rejects with "unrecognized field score". The test passed, the
+    // production query did not. Asserting the wrong structure in detail is worse
+    // than not asserting it, so the shape is now pinned exactly.
     const stage = buildSearchStage({}, { tokens: ['brake'], cleanedQuery: 'brake' });
-    expect(stage.compound.should).toContainEqual(
-      expect.objectContaining({ equals: { path: 'isFastMoving', value: true } })
+    expect(stage.compound.should).toContainEqual({
+      equals: { path: 'isFastMoving', value: true, score: { constant: { value: 2 } } },
+    });
+
+    const scored = stage.compound.should.filter(
+      (clause) => Object.values(clause)[0]?.score?.function
     );
-    const scored = stage.compound.should.filter((c) => c.score?.function);
     expect(scored.length).toBeGreaterThanOrEqual(2);
+
+    // And nothing may carry `score` beside its operator.
+    expect(stage.compound.should.filter((c) => 'score' in c)).toEqual([]);
   });
 });
 

@@ -178,8 +178,7 @@ export function buildRecall({
 
   if (categoryIds.length > 0) {
     lanes.push({
-      in: { path: 'categories', value: categoryIds },
-      score: { boost: { value: 2 } },
+      in: { path: 'categories', value: categoryIds, score: { boost: { value: 2 } } },
     });
   }
 
@@ -189,8 +188,7 @@ export function buildRecall({
   // literal intent has to win.
   if (synonymCategoryIds.length > 0) {
     lanes.push({
-      in: { path: 'categories', value: synonymCategoryIds },
-      score: { boost: { value: 1.5 } },
+      in: { path: 'categories', value: synonymCategoryIds, score: { boost: { value: 1.5 } } },
     });
   }
 
@@ -204,8 +202,7 @@ export function buildRecall({
 
   if (vehicleIds.length > 0) {
     lanes.push({
-      in: { path: 'compatibleVehicles', value: vehicleIds },
-      score: { boost: { value: 2 } },
+      in: { path: 'compatibleVehicles', value: vehicleIds, score: { boost: { value: 2 } } },
     });
   }
 
@@ -231,28 +228,31 @@ export function buildRankingShould({ cleanedQuery, vehicleIds = [] }) {
     // `exists` is the carrier clause: documents missing the field simply do not
     // match it and score 0, which is exactly ES's `missing: 0`.
     {
-      equals: { path: 'isFastMoving', value: true },
-      score: { constant: { value: 2 } },
+      equals: { path: 'isFastMoving', value: true, score: { constant: { value: 2 } } },
     },
     {
-      exists: { path: 'totalReviews' },
-      score: {
-        function: {
-          multiply: [
-            { log1p: { path: { value: 'totalReviews', undefined: 0 } } },
-            { constant: 0.1 },
-          ],
+      exists: {
+        path: 'totalReviews',
+        score: {
+          function: {
+            multiply: [
+              { log1p: { path: { value: 'totalReviews', undefined: 0 } } },
+              { constant: 0.1 },
+            ],
+          },
         },
       },
     },
     {
-      exists: { path: 'averageRating' },
-      score: {
-        function: {
-          multiply: [
-            { path: { value: 'averageRating', undefined: 0 } },
-            { constant: 0.5 },
-          ],
+      exists: {
+        path: 'averageRating',
+        score: {
+          function: {
+            multiply: [
+              { path: { value: 'averageRating', undefined: 0 } },
+              { constant: 0.5 },
+            ],
+          },
         },
       },
     },
@@ -281,8 +281,7 @@ export function buildRankingShould({ cleanedQuery, vehicleIds = [] }) {
 
   if (vehicleIds.length > 0) {
     should.push({
-      in: { path: 'compatibleVehicles', value: vehicleIds },
-      score: { boost: { value: 2 } },
+      in: { path: 'compatibleVehicles', value: vehicleIds, score: { boost: { value: 2 } } },
     });
   }
 
@@ -955,37 +954,25 @@ class AtlasSearchService {
       ])
       .toArray();
 
-    const suggestions = [];
+    // Collected into TWO lists so the final order is products/brands first and
+    // categories after — the order Elasticsearch produced, because it processed
+    // the product+brand hits before the category hits.
+    //
+    // Order is not cosmetic here: the list is truncated to `limit`. Emitting
+    // categories first let them consume the entire dropdown, so typing "brak"
+    // returned five categories and not one product. Whoever is typing a product
+    // name needs to see products.
+    const productSuggestions = [];
+    const categorySuggestions = [];
     const seenNames = new Set();
     const seenBrands = new Set();
-
-    // Category names come from the in-memory taxonomy cache rather than from
-    // product documents. ES had to read them off indexed products because its
-    // documents carried denormalized category names; here the categories are a
-    // small, already-loaded map, so matching them directly is both cheaper and
-    // complete — a category with no matching product still suggests.
-    if (!categoryMappingService.initialized) await categoryMappingService.initialize();
-    const seenCategories = new Set();
-    for (const category of categoryMappingService.getCategoryMap().values()) {
-      const name = category?.name;
-      if (!name) continue;
-      const key = name.toLowerCase();
-      if (seenCategories.has(key) || !key.includes(lower)) continue;
-      seenCategories.add(key);
-      suggestions.push({
-        id: `category-${key.replace(/\s+/g, '-')}`,
-        text: name,
-        type: 'category',
-        value: name,
-      });
-    }
 
     for (const doc of docs) {
       if (doc.name && !seenNames.has(doc.name.toLowerCase())) {
         seenNames.add(doc.name.toLowerCase());
         const images = normalizeImages(doc.images, doc.name);
         const primary = images.find((img) => img.isPrimary) || images[0];
-        suggestions.push({
+        productSuggestions.push({
           id: `product-${doc._id}`,
           slug: doc.slug || undefined,
           text: doc.name,
@@ -1002,7 +989,7 @@ class AtlasSearchService {
 
       if (doc.brand && !seenBrands.has(doc.brand.toLowerCase())) {
         seenBrands.add(doc.brand.toLowerCase());
-        suggestions.push({
+        productSuggestions.push({
           id: `brand-${doc.brand.toLowerCase().replace(/\s+/g, '-')}`,
           text: doc.brand,
           type: 'brand',
@@ -1011,8 +998,29 @@ class AtlasSearchService {
       }
     }
 
+    // Category names come from the in-memory taxonomy cache rather than from
+    // product documents. ES had to read them off indexed products because its
+    // documents carried denormalized category names; here the categories are a
+    // small, already-loaded map, so matching them directly is both cheaper and
+    // complete — a category with no matching product still suggests.
+    if (!categoryMappingService.initialized) await categoryMappingService.initialize();
+    const seenCategories = new Set();
+    for (const category of categoryMappingService.getCategoryMap().values()) {
+      const name = category?.name;
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seenCategories.has(key) || !key.includes(lower)) continue;
+      seenCategories.add(key);
+      categorySuggestions.push({
+        id: `category-${key.replace(/\s+/g, '-')}`,
+        text: name,
+        type: 'category',
+        value: name,
+      });
+    }
+
     return {
-      suggestions: suggestions.slice(0, limit),
+      suggestions: [...productSuggestions, ...categorySuggestions].slice(0, limit),
       corrections: [],
       total: docs.length,
     };
