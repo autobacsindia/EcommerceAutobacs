@@ -38,8 +38,6 @@ jest.unstable_mockModule('../models/Product.js', async () => {
   return {
     __esModule: true,
     default: mockModel,
-    // Named export used by the cleanup util to re-index bulkWrite'd products in ES.
-    enqueueProductSync: jest.fn(),
     ...mockModel
   };
 });
@@ -104,10 +102,10 @@ describe('WordPress Product Cleanup Integration', () => {
     expect(result.success).toBe(true);
     expect(result.processed).toBe(2);
 
-    // bulkWrite bypasses Mongoose hooks, so the util must enqueue ES re-index
-    // for every affected product id explicitly.
-    const { enqueueProductSync } = await import('../models/Product.js');
-    expect(enqueueProductSync).toHaveBeenCalledWith(['1', '2']);
+    // No search re-index assertion any more. Under Elasticsearch, bulkWrite
+    // bypassed Mongoose hooks so the util HAD to enqueue a sync explicitly.
+    // Atlas Search reads the collection through change streams, so a bulkWrite
+    // is picked up like any other write and there is nothing to enqueue.
   });
 
   test('should handle empty product list', async () => {

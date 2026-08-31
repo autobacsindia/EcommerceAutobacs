@@ -32,7 +32,7 @@ The live site `autobacsindia.com` is still **WooCommerce/WordPress**. This repo 
 
 - **Now (dev):** backend + frontend both on Railway (`*.railway.app`).
 
-- **Target:** backend on Railway → `api.autobacsindia.com`; frontend on **Vercel** → `autobacsindia.com`. Redis/Elasticsearch/Cloudinary/Postmark stay (domain-independent).
+- **Target:** backend on Railway → `api.autobacsindia.com`; frontend on **Vercel** → `autobacsindia.com`. Redis/Cloudinary/Postmark stay (domain-independent); catalog search is Atlas Search, which lives with the database.
 
 - **The move is env-only** — code is env-driven, no host edits needed. Key vars: frontend `NEXT_PUBLIC_API_URL` (→ `https://api.autobacsindia.com`), `NEXT_PUBLIC_APP_URL` (→ `https://autobacsindia.com`), `BACKEND_API_URL` (suggestions route, needs `/api/v1`); backend `FRONTEND_URL`/`FRONTEND_URLS` (CORS), `GOOGLE_CALLBACK_URL`, `NODE_ENV=production`.
 
@@ -58,7 +58,7 @@ These are the standing calls for the platform. They exist so new code is consist
 
 | **Server is the pricing authority** | Never trust client-sent prices, totals, or discounts. **Recompute the cart server-side at checkout** from current catalog prices + server-validated coupons. | Client price fields are display only; anything else is a tampering vector. |
 
-| **Every product write syncs Elasticsearch** | Any path that mutates a product — create, update, **`updateMany`, `bulkWrite`** — must enqueue the ES sync. Mongoose middleware does **not** fire on `updateMany`/`bulkWrite`. | Silent index drift makes search show wrong price/availability. This exact bug bit `brands.js`/`vehicles.js`. |
+| **A search change is not live until a real cluster ran it** | Catalog search is **MongoDB Atlas Search** (`SEARCH_ENGINE=atlas`), which indexes the `products` collection via change streams — so no write path can leave the index stale, and there is no sync to enqueue. What *does* need explicit action: a change to the index **definition** or to the **query builders**. `createSearchIndex` no-ops on an existing index, and the query builders are pure functions whose unit tests pass against shapes Atlas rejects. Run `npm run audit-atlas-search-index` and `npm run verify-atlas-search`. | Both failures are SILENT. `searchService` catches any engine error and serves the MongoDB fallback, so the storefront looks perfectly normal while every search runs a full-collection scan — the shape behind the Atlas query-targeting alert. "Search still works" is not evidence. |
 
 | **Cursor pagination on every list** | Catalog, search results, orders, admin tables — keyset cursors, bounded page size. No `skip`/`offset` on large or growing collections. | Offset degrades linearly and skips/duplicates under concurrent writes; catalog and orders only grow. |
 
@@ -96,21 +96,21 @@ Never trade correctness, financial integrity, security, or reliability for perfo
 
 
 
-The failure mode this repo optimizes against: a change that **runs on the happy path but leaves money, inventory, or search-index edge cases for the human to find by hand** — a payment that double-fulfils on webhook retry, a bulk product update that skips the ES sync, a total the client could tamper with, a catalog page that serves a stale price from cache. Those are exactly what a quick manual smoke test misses. Close them yourself before handing work back.
+The failure mode this repo optimizes against: a change that **runs on the happy path but leaves money, inventory, or search-index edge cases for the human to find by hand** — a payment that double-fulfils on webhook retry, a search query the cluster rejects that is silently served by the Mongo fallback, a total the client could tamper with, a catalog page that serves a stale price from cache. Those are exactly what a quick manual smoke test misses. Close them yourself before handing work back.
 
-1. **Plan before non-trivial code.** For anything beyond a one-liner, first enumerate: the files you'll touch, every input / boundary / state the change must handle (**including empty, error, and retry cases**), and the **invariants** that must hold afterward. For this platform the recurring invariants are: *an order is fulfilled only after a verified payment*; *the server recomputes every total*; *every product write syncs ES*; *payment/order handling is idempotent under retries*; *auth failure never returns 200*; *cache is purged on any catalog/price change*. Surface the list and wait for confirmation **before** writing code. Most leftover bugs are cases that were never named.
+1. **Plan before non-trivial code.** For anything beyond a one-liner, first enumerate: the files you'll touch, every input / boundary / state the change must handle (**including empty, error, and retry cases**), and the **invariants** that must hold afterward. For this platform the recurring invariants are: *an order is fulfilled only after a verified payment*; *the server recomputes every total*; *a search query/index change is proven against a live cluster*; *payment/order handling is idempotent under retries*; *auth failure never returns 200*; *cache is purged on any catalog/price change*. Surface the list and wait for confirmation **before** writing code. Most leftover bugs are cases that were never named.
 
-2. **Tests are the contract, and you run them.** Write or extend tests (jest) covering the cases and invariants from step 1 — not just the happy path. For commerce that specifically means: **webhook idempotency (same event twice → one fulfilment), callback-vs-webhook race, server-side price/coupon recomputation rejecting tampered input, ES-sync enqueued on `updateMany`/`bulkWrite`, cursor pagination boundaries, and cache purged on write.** Run them and iterate until green **before reporting back**. **Run the full local suite, not just CI's curated subset** — CI runs a subset (see [CI](#ci-githubworkflows)), so green CI is not proof the whole suite passes.
+2. **Tests are the contract, and you run them.** Write or extend tests (jest) covering the cases and invariants from step 1 — not just the happy path. For commerce that specifically means: **webhook idempotency (same event twice → one fulfilment), callback-vs-webhook race, server-side price/coupon recomputation rejecting tampered input, the Atlas query shape actually parsing on a live cluster (`npm run verify-atlas-search` — unit tests cannot prove this), cursor pagination boundaries, and cache purged on write.** Run them and iterate until green **before reporting back**. **Run the full local suite, not just CI's curated subset** — CI runs a subset (see [CI](#ci-githubworkflows)), so green CI is not proof the whole suite passes.
 
-3. **Feature and optimization are two separate passes — never the same diff.** Get the change correct and tested first, commit that. *Then* optimize as a distinct change with the tests standing guard: green means behavior was preserved; red means the optimization broke something and you know instantly. (Adding a cache layer, swapping a Mongo regex search to ES, or introducing an index is an *optimization pass*.)
+3. **Feature and optimization are two separate passes — never the same diff.** Get the change correct and tested first, commit that. *Then* optimize as a distinct change with the tests standing guard: green means behavior was preserved; red means the optimization broke something and you know instantly. (Adding a cache layer, swapping a Mongo regex search to Atlas Search, or introducing an index is an *optimization pass*.)
 
-4. **Measure before optimizing.** No speculative caching or query-rewriting. Find the real bottleneck with timing or query data first — the usual suspects here are N+1 Mongoose `populate`, a missing index, an unpaginated catalog/order query, a Mongo regex search that belongs in Elasticsearch, or an un-purged cache serving stale data. Fix that one thing, then re-measure. Caching and fan-out are **earned by a measurement**, never assumed.
+4. **Measure before optimizing.** No speculative caching or query-rewriting. Find the real bottleneck with timing or query data first — the usual suspects here are N+1 Mongoose `populate`, a missing index, an unpaginated catalog/order query, a Mongo regex search that belongs in Atlas Search, or an un-purged cache serving stale data. Fix that one thing, then re-measure. Caching and fan-out are **earned by a measurement**, never assumed.
 
-5. **Fixing a bug → add a regression test** that fails before your fix and passes after. Then check whether the *same class* of bug exists in the files you touched — a missing ES-sync on one bulk-write path is usually missing on its siblings; an un-purged cache key on one controller is usually un-purged on the next.
+5. **Fixing a bug → add a regression test** that fails before your fix and passes after. Then check whether the *same class* of bug exists in the files you touched — a `score` misplaced beside its operator in one Atlas clause was misplaced in every sibling clause too; an un-purged cache key on one controller is usually un-purged on the next.
 
 6. **Keep diffs small.** One feature = one change. Decompose (endpoint + tests → wire the client → edge/error/retry cases) so each piece reaches "done" before the next stacks on top. Large diffs are where regressions hide.
 
-7. **When unsure, stop and ask** rather than guessing — especially on anything touching **payments, order state, money math, or the ES sync**, and any divergence from an [architecture decision above](#architecture-decisions-to-honor-correctness-scale--ux).
+7. **When unsure, stop and ask** rather than guessing — especially on anything touching **payments, order state, money math, or the search index/query builders**, and any divergence from an [architecture decision above](#architecture-decisions-to-honor-correctness-scale--ux).
 
 ### Definition of done
 
@@ -128,7 +128,7 @@ A change is not done until, as applicable:
 
 - [ ] **All money is server-computed**; no client-sent price/total/discount is trusted; coupon validation is server-side.
 
-- [ ] **Every product-mutating path enqueues the ES sync** (including `updateMany`/`bulkWrite`).
+- [ ] **Search index/query changes are verified against a LIVE cluster** (`npm run verify-atlas-search`, `npm run audit-atlas-search-index`) — green unit tests do not prove an Atlas query parses.
 
 - [ ] **List reads are cursor-paginated and bounded**; no `skip`/`offset` on growing collections.
 
@@ -148,7 +148,7 @@ A change is not done until, as applicable:
 
 The detail behind the [decisions table](#architecture-decisions-to-honor-correctness-scale--ux). These are how the platform stays correct, fast, and scalable. New code follows them where applicable; existing code is migrated in dedicated optimization passes, not smuggled into feature diffs. Optimization work identified for the task is a blocker for completion and must be finished before the task is declared done.
 
-> **Prefer what already exists.** The backing infrastructure is chosen and in place — **Razorpay** (payments), **MongoDB/Mongoose** (data), **Elasticsearch** (catalog search), **Redis** (cache/sessions) + **BullMQ** (jobs/queues), **Cloudinary** (media), **Postmark** (email), **Twilio** (SMS), **Cloudflare** (CDN), and the **config-driven SEO system**. Where one of these covers the job, **use it** — do not stand up a second, parallel way of doing the same thing (a rival cache, a hand-rolled search over Mongo regex, a bespoke queue). Named patterns below describe the *target*; if the repo already satisfies one with an equivalent choice, keep it. Replace an established primitive only as a deliberate, **measured** upgrade with a clear win.
+> **Prefer what already exists.** The backing infrastructure is chosen and in place — **Razorpay** (payments), **MongoDB/Mongoose** (data), **MongoDB Atlas Search** (catalog search), **Redis** (cache/sessions) + **BullMQ** (jobs/queues), **Cloudinary** (media), **Postmark** (email), **Twilio** (SMS), **Cloudflare** (CDN), and the **config-driven SEO system**. Where one of these covers the job, **use it** — do not stand up a second, parallel way of doing the same thing (a rival cache, a hand-rolled search over Mongo regex, a bespoke queue). Named patterns below describe the *target*; if the repo already satisfies one with an equivalent choice, keep it. Replace an established primitive only as a deliberate, **measured** upgrade with a clear win.
 
 ### 1. Payments & orders (Razorpay)
 
@@ -184,15 +184,25 @@ The detail behind the [decisions table](#architecture-decisions-to-honor-correct
 
 - **Out-of-stock UX:** an `out` item can't be added or checked out; surface it clearly. If real quantity tracking is ever needed, it's an ADR + migration, not a patch.
 
-### 4. Catalog & search (Elasticsearch)
+### 4. Catalog & search (MongoDB Atlas Search)
 
-- **The sync invariant:** every product write keeps ES in sync. Mongoose hooks cover `save`/`findOneAndUpdate`, but **`updateMany` and `bulkWrite` bypass them** — those paths must **enqueue the ES sync explicitly** (via BullMQ), or the index silently drifts.
+Migrated off Elasticsearch on 2026-08-31 (Elastic Cloud's card payments kept being declined). Atlas Search needs no new vendor — the Atlas bill already clears. `services/atlasSearchService.js`, index definition in `config/atlasSearchIndex.js`.
 
-- **Search goes through Elasticsearch, not Mongo regex** — relevance, fuzziness, and facets belong in ES; Mongo `$regex` scans don't scale and can't rank.
+- **There is no sync to maintain.** Atlas Search indexes the `products` collection itself via change streams. The old rule — "`updateMany`/`bulkWrite` bypass Mongoose hooks, so enqueue the sync explicitly" — is **obsolete**, and the whole class of index-drift bug is structurally gone rather than fixed. Do not reintroduce a sync queue.
 
-- **Reindex is a known, jobbed operation** (BullMQ), not an ad-hoc script against prod. Keep a documented reindex path; treat a manual reindex as a deliberate convention where a write path legitimately can't hook (e.g. the WordPress cleanup bulk-writes).
+- **⚠ `score` goes INSIDE the Atlas operator, never beside it.** `{ in: { path, value, score } }` is correct; `{ in: { path, value }, score }` is rejected with `unrecognized field "score"`. This shipped to production: it was right for `text`/`phrase`/`autocomplete` and wrong for `in`/`equals`/`exists`, so partial correctness hid it.
 
-- **Guard the feature flag:** if search is enabled, its dependencies (Redis for the queue) must be present — validate at boot rather than failing at first query.
+- **A live cluster is the only proof the query parses.** The builders are pure functions, so unit tests assert their output in full detail and pass against a shape Atlas rejects. `npm run verify-atlas-search` runs real queries and exits non-zero. Run it before flipping engines and after any builder change.
+
+- **An index-definition change does not deploy itself.** `createSearchIndex` no-ops on an existing index — the same trap that let an Elasticsearch mapping fix sit unshipped for weeks. `npm run audit-atlas-search-index` compares declared vs live; `npm run create-atlas-search-index -- --apply` pushes.
+
+- **Filters compare ObjectIds, not names.** `categories`/`compatibleVehicles` are ref arrays, and names/slugs resolve to ids at query time. This is why the old ES slug-vs-display-name drift cannot recur — the filter now compares exactly what MongoDB compares.
+
+- **`isActive: true` is an explicit filter on every public query.** Elasticsearch only ever indexed active products, so absence from the index *was* the visibility rule. Atlas indexes drafts too; dropping that filter publishes every unpublished draft.
+
+- **Search goes through Atlas Search, not Mongo regex** — relevance, fuzziness and facets belong in the engine. The Mongo path still exists as the fallback and costs a full-collection scan, so it is a safety net, never a design choice.
+
+- **`SEARCH_ENGINE`** selects the engine and is read per call, so switching is a variable change plus a restart, not a redeploy.
 
 ### 5. Caching & CDN (Redis + Cloudflare)
 
@@ -344,7 +354,9 @@ Because prod runs with `autoIndex: false`, the live index set can silently diver
 
 - **Never trust client-sent prices/totals/discounts** — recompute server-side at checkout; validate coupons server-side.
 
-- **Never let a product write skip the ES sync** — `updateMany`/`bulkWrite` bypass Mongoose hooks; enqueue the sync explicitly.
+- **Never ship a search-query or index-definition change without running it against a live cluster** (`npm run verify-atlas-search`) — pure unit tests pass against shapes Atlas rejects, and the failure is silent: every search quietly becomes a full Mongo scan.
+
+- **Never put `score` beside an Atlas operator** — it belongs inside: `{ in: { path, value, score } }`, not `{ in: {...}, score }`.
 
 - **Never use `skip`/`offset` pagination** on catalog/search/orders — cursor/keyset only, always bounded.
 
@@ -372,9 +384,9 @@ Because prod runs with `autoIndex: false`, the live index set can silently diver
 
 - **Never trust green CI as full coverage** — CI runs a curated subset; run the full suite locally.
 
-- **Never smuggle an optimization** (cache layer, index, ES swap) into a feature diff — separate pass, tests standing guard.
+- **Never smuggle an optimization** (cache layer, index, search-engine swap) into a feature diff — separate pass, tests standing guard.
 
-- **Never introduce a second way to do something already established** (a rival cache, a Mongo-regex search beside ES, a bespoke queue) — use the existing primitive; replace it only as a measured upgrade.
+- **Never introduce a second way to do something already established** (a rival cache, a Mongo-regex search beside Atlas Search, a bespoke queue) — use the existing primitive; replace it only as a measured upgrade.
 
 - **Never hardcode the backend host in the frontend** — everything flows through `NEXT_PUBLIC_API_URL` + `next.config.ts` rewrites.
 

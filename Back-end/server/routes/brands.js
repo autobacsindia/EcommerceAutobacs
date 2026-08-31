@@ -1,6 +1,6 @@
 import express from "express";
 import brandRepository from "../repositories/brandRepository.js";
-import Product, { enqueueProductSync } from "../models/Product.js";
+import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { 
@@ -201,12 +201,13 @@ router.put(
 
       const oldBrandName = brand.name;
       const renameFilter = { brand: { $regex: new RegExp(`^${oldBrandName}$`, 'i') } };
-      // Capture affected ids BEFORE the write — the filter matches on the old
-      // brand name, which this updateMany overwrites, so a post-update query
-      // would return nothing.
-      const renamed = await Product.find(renameFilter, '_id').setOptions({ includeDeleted: true }).lean();
+      // The affected ids used to be captured BEFORE this write, because the
+      // filter matches on the old brand name that updateMany overwrites — a
+      // post-update query would have returned nothing, and Elasticsearch needed
+      // them to enqueue a re-index that `updateMany` bypassed. Atlas Search
+      // reads the collection through change streams, so the bulk write is picked
+      // up on its own and that extra full read of every matching product is gone.
       await Product.updateMany(renameFilter, { $set: { brand: name } });
-      enqueueProductSync(renamed.map(d => d._id));
       brand.name = name;
       brand.slug = generateSlug(name);
     }
@@ -337,7 +338,6 @@ router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandl
   );
 
   // Re-index the mapped products in ES (updateMany bypasses the doc hooks).
-  enqueueProductSync(productIds);
 
   invalidateCache('brands', 'products');
 

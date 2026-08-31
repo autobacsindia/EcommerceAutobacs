@@ -21,9 +21,9 @@ Express + MongoDB (Mongoose) REST API. ESM (`"type": "module"` — use `import`,
 - `models/` — Mongoose schemas (Product, Order, User, Cart, Vehicle, Category, Brand…).
 - `controllers/` — request handlers (note: not every route has one; many routes inline logic).
 - `routes/` — per-domain routers.
-- `services/` — business logic: order, product, search (Elasticsearch), cache (Redis/ioredis), email/SMS, razorpay, locations, imports, cron.
+- `services/` — business logic: order, product, search (**MongoDB Atlas Search** — `atlasSearchService.js`; Elasticsearch was retired 2026-08-31), cache (Redis/ioredis), email/SMS, razorpay, locations, imports, cron.
 - `middleware/` — auth, rate-limit, CSRF, sanitization, caching, security hardening, audit.
-- `queue/` — BullMQ workers (notification, order, search-sync).
+- `queue/` — BullMQ workers (notification, order). No search-sync worker: Atlas Search indexes the collection via change streams, so there is nothing to sync.
 - `config/`, `utils/`, `helpers/`, `validators/`, `repositories/`, `scripts/`.
 
 ## Conventions

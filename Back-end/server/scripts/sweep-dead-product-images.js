@@ -217,13 +217,14 @@ async function findLiveUrls(urls) {
 // ── Elasticsearch ────────────────────────────────────────────────────────────
 
 /**
- * Re-index each cleaned product in Elasticsearch, synchronously.
+ * OBSOLETE since the move to Atlas Search (2026-08-31), kept as a no-op guard.
  *
- * Mirrors searchSyncWorker's 'es-sync-product' handler, including
- * `refresh: 'wait_for'` so each call resolves only once the change is actually
- * searchable — which is what makes the cache flush afterwards safe. Failures
- * are reported loudly, never swallowed: Mongo is already clean by this point,
- * so a lost sync leaves search serving images that no longer exist.
+ * Atlas Search indexes the products collection directly via change streams, so a
+ * cleaned product is searchable with its corrected images without any explicit
+ * re-index step. The Elasticsearch path this mirrored — searchSyncWorker's
+ * 'es-sync-product' handler — no longer exists. The ELASTICSEARCH_ENABLED guard
+ * below is now always false in every environment, so this returns 0 and the
+ * caller's cache flush is still what makes the change visible.
  */
 async function syncSearchIndex(ids) {
   if (!ids.length || process.env.ELASTICSEARCH_ENABLED !== 'true') return 0;
