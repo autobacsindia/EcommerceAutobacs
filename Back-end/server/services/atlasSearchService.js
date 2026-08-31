@@ -40,17 +40,10 @@ import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import Vehicle from '../models/Vehicle.js';
 import categoryMappingService from './categoryMappingService.js';
-import elasticsearchService from './elasticsearchService.js';
 import { expand as expandSynonyms, contentTokens } from '../config/searchSynonyms.js';
+import { normalizeImages, sanitizeQuery } from '../utils/searchHelpers.js';
 import { ATLAS_SEARCH_INDEX_NAME } from '../config/atlasSearchIndex.js';
 import { getRedisClient } from './cacheService.js';
-
-// normalizeImages is a pure static helper on the Elasticsearch service class.
-// Reached via the singleton's constructor — the same access pattern the existing
-// unit test uses — so the helper stays in one place instead of being duplicated
-// or dragged into a refactor this diff has no business making.
-const normalizeImages = (...args) =>
-  elasticsearchService.constructor.normalizeImages(...args);
 
 /**
  * Field weights for free-text recall, carried over verbatim from the
@@ -717,9 +710,9 @@ class AtlasSearchService {
     }
   }
 
-  /** Sanitize free-text input. Mirrors the Elasticsearch service so both engines accept the same queries. */
+  /** Clamp and clean free-text input. Shared helper so every engine accepts the same queries. */
   sanitizeQuery(input, maxLength = 200) {
-    return elasticsearchService.sanitizeQuery(input, maxLength);
+    return sanitizeQuery(input, maxLength);
   }
 
   async searchProducts(params) {

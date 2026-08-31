@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import Product, { enqueueProductSync } from '../models/Product.js';
+import Product from '../models/Product.js';
 import { sanitizeProductDescriptions } from './htmlSanitizer.js';
 import { categorizeProducts } from './productCategorizer.js';
 
@@ -67,15 +67,6 @@ async function cleanupWordPressProducts(batchSize = 50) {
           const result = await Product.bulkWrite(bulkOps);
           updatedCount += result.modifiedCount;
           processedCount += batch.length;
-
-          // bulkWrite bypasses ALL Mongoose middleware (no save/updateMany hook
-          // fires), so the schema's Elasticsearch-sync hooks never run for these
-          // description/category edits. Re-index the affected products explicitly.
-          // Every op filters by a known _id (the update never touches _id), so we
-          // already hold the affected ids — no re-query needed. Enqueuing the full
-          // batch (vs only result.modifiedCount) is safe: no-op edits re-index to
-          // identical data and jobs dedup on productId.
-          enqueueProductSync(bulkOps.map(op => op.updateOne.filter._id));
         }
         
         console.log(`Batch ${Math.floor(i/batchSize) + 1} completed. Updated ${bulkOps.length} products.`);

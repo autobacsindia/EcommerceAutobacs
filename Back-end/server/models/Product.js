@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { getSearchSyncQueue, enqueueNotification } from '../queue/queues.js';
+import { enqueueNotification } from '../queue/queues.js';
 import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
 import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
@@ -371,85 +371,6 @@ ProductSchema.post(/^find/, function (res) {
   else coerceStock(res);
 });
 
-// ── Elasticsearch sync hooks ──────────────────────────────────────────────────
-// Enqueue an async BullMQ job after every write so ES stays in sync with
-// MongoDB without blocking the request. Using jobId = productId deduplicates
-// pending jobs: if multiple writes hit the same product before the worker
-// drains (e.g. rapid stock decrements during concurrent orders), only one
-// sync job remains in the queue and it fetches the latest committed state.
-//
-// Guards: both REDIS_URL and ELASTICSEARCH_ENABLED must be set, otherwise the
-// enqueue is skipped entirely (development / ES-disabled environments).
-
-function enqueueSync(productId) {
-  if (!process.env.REDIS_URL || process.env.ELASTICSEARCH_ENABLED !== 'true') return;
-  const id = productId.toString();
-  getSearchSyncQueue()
-    .add('es-sync-product', { productId: id }, { jobId: id })
-    .catch(err => console.error('[SearchSync] Failed to enqueue sync for', id, ':', err.message));
-}
-
-// Public helper for bulk writes that BYPASS the document hooks below.
-// `Product.updateMany()` fires Mongoose's `updateMany` middleware — which this
-// schema does NOT hook — so callers that bulk-mutate products (brand rename /
-// mapping, vehicle-fitment mapping) must enqueue sync explicitly or ES silently
-// goes stale. Capture the affected _ids BEFORE the updateMany (the filters there
-// match on the field being mutated, so a post-update query returns nothing) and
-// pass them here afterwards. Reuses enqueueSync so the env guard + per-id job
-// dedup stay in one place.
-export function enqueueProductSync(ids) {
-  if (!ids) return;
-  for (const id of Array.isArray(ids) ? ids : [ids]) {
-    if (id != null) enqueueSync(id);
-  }
-}
-
-// Fires after doc.save() — covers creates and full-document updates (including
-// soft-deletes: controller sets deletedAt then calls save()).
-ProductSchema.post('save', function (doc) {
-  enqueueSync(doc._id);
-});
-
-// Fires after findOneAndUpdate / findByIdAndUpdate — covers partial updates,
-// price changes, admin stock edits, atomicDeductStock, etc.
-// `doc` is the query result; we only need _id to identify which product changed.
-ProductSchema.post('findOneAndUpdate', function (doc) {
-  if (!doc) return;
-  enqueueSync(doc._id);
-});
-
-// Fires after findOneAndDelete / findByIdAndDelete — hard-delete path.
-// The worker will find no document for this ID and will call deleteProduct.
-ProductSchema.post('findOneAndDelete', function (doc) {
-  if (!doc) return;
-  enqueueSync(doc._id);
-});
-
-// Fires after updateOne / findByIdAndUpdate-via-query (e.g. productRepository
-// .updateStock which uses Product.updateOne({ _id }, { $inc: { stock } })).
-// `this` is the Query; _id is always present in the filter for these calls.
-ProductSchema.post('updateOne', function () {
-  const id = this.getFilter()._id;
-  if (id) enqueueSync(id);
-});
-
-// Fires after deleteMany — covers the WordPress sync service which bulk-deletes
-// products that no longer exist in WooCommerce. We capture IDs in a pre-hook
-// (before the documents are gone) and enqueue one sync job per deleted product.
-ProductSchema.pre('deleteMany', async function () {
-  const docs = await this.model
-    .find(this.getFilter(), '_id')
-    .setOptions({ includeDeleted: true })
-    .lean();
-  this._idsToSync = docs.map(d => d._id.toString());
-});
-
-ProductSchema.post('deleteMany', function () {
-  for (const id of (this._idsToSync || [])) {
-    enqueueSync(id);
-  }
-});
-
 // ── Back-in-stock notification hooks ──────────────────────────────────────────
 // When an item transitions out → purchasable (in/low), fan out an email to every
 // customer who asked to be notified (see models/StockNotificationRequest.js and
@@ -467,8 +388,8 @@ function enqueueRestock(before, after, productId) {
 
 // Explicit escape hatch for bulk stock writes that BYPASS the document hooks below.
 // `updateMany` / `bulkWrite` fire no per-doc middleware, so a future bulk "mark
-// back in stock" path (there is none today) must enqueue restock itself — the same
-// boundary as enqueueProductSync for ES. Keeps the job name/shape in one place.
+// back in stock" path (there is none today) must enqueue restock itself. Keeps the
+// job name/shape in one place.
 export function notifyRestockForTarget(productId, variantId = null) {
   enqueueNotification('notify-back-in-stock', {
     productId: productId.toString(),
