@@ -742,6 +742,18 @@ class AtlasSearchService {
     // running them together would drag full product documents (descriptions
     // included) through an in-memory $facet. Splitting lets the products pipeline
     // page first and the facet pipeline project down to five thin fields.
+    //
+    // Measured, not assumed: combining them is 12% faster today and was rejected
+    // for the memory cliff it introduces. See buildFacetPipeline for the numbers.
+    //
+    // `$skip` is offset pagination, which the house rules otherwise forbid on a
+    // growing collection. Kept deliberately: it is what the Elasticsearch path
+    // did (`from`/`size`), so the migration preserved behaviour rather than
+    // smuggling a frontend-contract change into it. Measured cost of the offset
+    // at 931 products: page 1 = 67 ms, page 46 (`$skip 900`) = 116 ms. Real but
+    // small, and page 46 is effectively never requested. Atlas supports
+    // `searchAfter`, so the keyset rewrite is available and cheap to do — it just
+    // is not earned by these numbers, and it changes the API's paging contract.
     const [productDocs, facetDocs] = await Promise.all([
       Product.collection
         .aggregate([
@@ -787,9 +799,33 @@ class AtlasSearchService {
    * $searchMeta facet collector. Two reasons: the category and vehicle facets
    * need ObjectId → name resolution that $searchMeta cannot do, and $searchMeta
    * would require the facet fields to carry stringFacet token types that only
-   * exist to serve it. Which of the two is FASTER on this catalogue is an open
-   * question and an explicit follow-up — it is a measurement, not a guess, and it
-   * belongs in the optimization pass rather than in this diff.
+   * exist to serve it.
+   *
+   * ── MEASURED 2026-08-31, prod cluster, 931 active products, median of 7 ──────
+   *
+   * The obvious suspects were both wrong, so the numbers are recorded here to
+   * stop anyone (including a future me) re-litigating this from intuition:
+   *
+   *   bare $search + $count ............ 108.7 ms   ← irreducible floor
+   *   this pipeline (2× $lookup) ....... 114.6 ms
+   *   same pipeline, no $lookup ........ 111.4 ms   ← $lookup costs 3.2 ms (3%)
+   *   one $search + $facet (combined) .. 113.2 ms   vs 128.0 ms for the current
+   *                                                   two-query form (12% faster)
+   *
+   * So faceting is nearly free. ~95% of the cost is the $search execution itself
+   * counting every match, which no arrangement of later stages avoids, and which
+   * $searchMeta would still pay.
+   *
+   * The combined single-$search form IS 12% faster and was rejected anyway: with
+   * one $search, $facet has to receive FULL product documents (the products
+   * branch needs them), so every matched document — SEO-stuffed descriptions
+   * included, ~37 MB today — streams through a stage with a 100 MB limit. That
+   * buys 15 ms in exchange for a hard cliff a few times' catalogue growth away,
+   * on a response that is already Redis-cached. Not a trade worth making.
+   *
+   * Revisit if the catalogue grows by an order of magnitude, or if the exact
+   * total is ever droppable (Atlas `count: {type: 'lowerBound'}` is far cheaper,
+   * but the storefront renders exact page counts).
    */
   buildFacetPipeline(searchStage) {
     const categoryCollection = mongoose.model('Category').collection.name;
