@@ -3,6 +3,7 @@ import Product from "../models/Product.js";
 import Vehicle from "../models/Vehicle.js";
 import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
+import atlasSearchService from "./atlasSearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
 import { expand as expandSynonyms, contentTokens } from "../config/searchSynonyms.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
@@ -23,6 +24,29 @@ import { STOCK_STATUS } from "../utils/stockStatus.js";
  * and when it recovered. `null` = not yet observed.
  */
 let lastEsAvailability = null;
+
+/**
+ * Which search engine backs this deployment.
+ *
+ * `atlas` = MongoDB Atlas Search, `elastic` (default) = Elasticsearch. Both
+ * implement the same six-method contract, so everything below — the fallback
+ * ladder, the subtree expansion, the path metrics — is engine-agnostic and is
+ * deliberately left untouched by the migration.
+ *
+ * Resolved per call rather than captured at import time, so the engine can be
+ * flipped by an environment variable ALONE. That matters operationally: if Atlas
+ * Search misbehaves in production the rollback is a Railway variable change and a
+ * restart, not a revert-and-redeploy, and it stays available for as long as both
+ * engines are provisioned. It also lets a test exercise both paths in one file.
+ */
+export function getSearchEngine() {
+  return process.env.SEARCH_ENGINE === 'atlas' ? atlasSearchService : elasticsearchService;
+}
+
+/** Human-readable engine name, so an outage log names the thing that is actually down. */
+function engineLabel() {
+  return process.env.SEARCH_ENGINE === 'atlas' ? 'Atlas Search' : 'Elasticsearch';
+}
 
 /**
  * How often each search path is actually taken.
@@ -394,13 +418,13 @@ class SearchService {
 
     // Availability is resolved into a variable (rather than inlined into the `if`)
     // so the transition can be reported. See lastEsAvailability above.
-    const esAvailable = includeInactive ? null : await elasticsearchService.isConnected();
+    const esAvailable = includeInactive ? null : await getSearchEngine().isConnected();
     if (esAvailable !== null && esAvailable !== lastEsAvailability) {
       if (esAvailable) {
-        console.log('[SearchService] Elasticsearch is available again; search is back on the index');
+        console.log(`[SearchService] ${engineLabel()} is available again; search is back on the index`);
       } else {
         console.error(
-          '[SearchService] Elasticsearch UNAVAILABLE — every public search is now falling back ' +
+          `[SearchService] ${engineLabel()} UNAVAILABLE — every public search is now falling back ` +
           'to a full MongoDB scan. Expect elevated Atlas query targeting until it returns.'
         );
       }
@@ -420,10 +444,17 @@ class SearchService {
         // resolveCategorySubtree is the same walk the Mongo filter uses, which is
         // what stops the two engines answering the same URL differently.
         if (esParams.category) {
-          const { slugs } = await SearchService.resolveCategorySubtree(esParams.category);
+          // One walk, two projections — now literally serving two engines.
+          // Elasticsearch can only filter on `categories.slug.keyword` because its
+          // documents carry no ObjectId; Atlas Search indexes the real document and
+          // filters on the ObjectIds MongoDB itself uses. Resolving both here, from
+          // the SAME walk, is what stops the engines answering one URL differently —
+          // resolving them separately is exactly how they drifted last time.
+          const { ids, slugs } = await SearchService.resolveCategorySubtree(esParams.category);
           esParams.categorySlugs = slugs;
+          esParams.categoryIds = ids;
         }
-        const esResult = await elasticsearchService.searchProducts(esParams);
+        const esResult = await getSearchEngine().searchProducts(esParams);
         // Empty-index guard: ES does NOT throw when the index is missing/wiped —
         // it just returns zero hits. Without this, an index outage would surface
         // to users as "no products" instead of transparently falling back to
@@ -448,14 +479,14 @@ class SearchService {
         // `null` (unknown — disabled, no client, or the count failed) counts as NOT
         // populated, so an ambiguous signal fails towards the expensive-but-correct
         // scan rather than towards showing an empty catalogue.
-        const indexedDocs = await elasticsearchService.getIndexedDocumentCount();
+        const indexedDocs = await getSearchEngine().getIndexedDocumentCount();
         if (indexedDocs > 0) {
           recordSearchPath('esServedZero');
           return esResult;
         }
 
         console.error(
-          '[SearchService] Elasticsearch returned 0 hits and the index reports ' +
+          `[SearchService] ${engineLabel()} returned 0 hits and the index reports ` +
           (indexedDocs === null ? 'an UNKNOWN document count' : `${indexedDocs} documents`) +
           ' — treating this as an index outage and falling back to MongoDB. ' +
           'Verify with reindex-products.'
@@ -546,9 +577,9 @@ class SearchService {
    */
   static async getSearchSuggestions(query, limit = 10) {
     // Check if Elasticsearch is available
-    if (await elasticsearchService.isConnected()) {
+    if (await getSearchEngine().isConnected()) {
       try {
-        return await elasticsearchService.getSearchSuggestions(query, limit);
+        return await getSearchEngine().getSearchSuggestions(query, limit);
       } catch (error) {
         console.error('Elasticsearch suggestions failed, falling back to MongoDB:', error);
       }
@@ -664,9 +695,9 @@ class SearchService {
    */
   static async getSearchAnalytics(startDate, endDate) {
     // Check if Elasticsearch is available
-    if (await elasticsearchService.isConnected()) {
+    if (await getSearchEngine().isConnected()) {
       try {
-        return await elasticsearchService.getSearchAnalytics(startDate, endDate);
+        return await getSearchEngine().getSearchAnalytics(startDate, endDate);
       } catch (error) {
         console.error('Elasticsearch analytics failed:', error);
       }
@@ -690,8 +721,8 @@ class SearchService {
     try {
       // For now, we'll just log the search query using Elasticsearch if available
       // In a more advanced implementation, we would store this in a database
-      if (await elasticsearchService.isConnected()) {
-        await elasticsearchService.logSearchQuery(term, userId);
+      if (await getSearchEngine().isConnected()) {
+        await getSearchEngine().logSearchQuery(term, userId);
       }
       
       return { success: true };
